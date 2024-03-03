@@ -6,7 +6,7 @@
 $ cargo build
 ```
 
-## Test and Benchmaeking
+## Test and Benchmarking
 
 - 1. Disable system-wide restartable-sequence
 
@@ -24,7 +24,7 @@ static OURSELF: UniAlloc = UniAlloc;
 // more examples in unialloc/examples
 ```
 
-- 3. Unitests
+- 3. Unit tests
 
 ```bash
 $ cargo test
