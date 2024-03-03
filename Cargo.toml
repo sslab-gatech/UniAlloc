@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    "unialloc",
+]
+
+exclude = [
+    "kernel",
+]
+
+[profile.dev]
+opt-level = 1               # Use slightly better optimizations.
+overflow-checks = false     # Disable integer overflow checks.
+panic="abort"
+[profile.release]
+lto = "fat"
+codegen-units = 1
+panic="abort"

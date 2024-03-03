@@ -1,0 +1,47 @@
+# binaries
+secalloc/target/
+/rust-kernel-macros/target/
+shared/*/target
+target
+
+# misc
+.rustc_info.json
+.DS_Store
+__handlers__
+
+# coverage report
+tarparlin*
+*profraw
+*profdata
+perf.data*
+
+#kernel
+rust-linux
+Module.symvers
+*.cpio.gz
+*.cpio
+*.rmeta
+*.mod
+*.cmd
+*.o
+*.o.*
+*.a
+*.s
+*.ko
+*.so
+*.so.dbg
+*.mod.c
+*.i
+*.lst
+*.symtypes
+*.order
+modules.builtin
+*.elf
+*.bin
+*.gz
+*.bz2
+*.lzma
+*.xz
+*.lzo
+*.patch
+*.gcno
