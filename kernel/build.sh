@@ -9,8 +9,8 @@ LINUX=$HOME
 NAME="rust-for-linux"
 LINUX_PATH=$LINUX/$NAME
 
-rustup default nightly-2021-05-29
-rustup component add rust-src
+RUST_TOOLCHAIN=${RUST_TOOLCHAIN:-$(cat "$CUR/../rust-toolchain")}
+rustup component add rust-src --toolchain "$RUST_TOOLCHAIN"
 
 if [[ -d "$LINUX_PATH" ]]; then
 	if [[ ${1---x86} == "--arm" ]]; then
