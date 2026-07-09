@@ -45,3 +45,26 @@ modules.builtin
 *.lzo
 *.patch
 *.gcno
+
+# evaluation generated artifacts
+evaluation/raw/**
+evaluation/results/**
+evaluation/reports/**
+evaluation/paper-targets/**
+evaluation/external/_checkouts/**
+evaluation/external/_deps/**
+evaluation/external/*/workload_config.local.json
+# Materialized paper workload input; reproducible from the audited generator and
+# too large for ordinary Git hosting.
+evaluation/external/R-Polars/inputs/G1_1e7_1e2_5_0.csv
+!evaluation/raw/.gitkeep
+!evaluation/results/.gitkeep
+!evaluation/reports/.gitkeep
+!evaluation/paper-targets/.gitkeep
+
+# local Node dependency installs
+# Generated dependency trees are tooling state, not reviewable project source.
+node_modules/
+
+# local OMX runtime state and durable execution artifacts
+.omx/
