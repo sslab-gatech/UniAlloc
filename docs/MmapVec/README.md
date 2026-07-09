@@ -1,4 +1,0 @@
-# MmapVec
-
-![structure](./Structure.jpeg)
-
