@@ -1,0 +1,99 @@
+{
+  "benchmark_owned_json": false,
+  "benchmarks": [
+    "faf"
+  ],
+  "categories": [
+    "web"
+  ],
+  "claim_grade": false,
+  "command_template": [
+    "./replace-with-real-benchmark-command",
+    "--dataset",
+    "{dataset}",
+    "--benchmark",
+    "{benchmark}",
+    "--allocator",
+    "{allocator}",
+    "--variant-feature",
+    "{variant_feature}",
+    "--run-index",
+    "{run_index}",
+    "--json"
+  ],
+  "configured": false,
+  "cwd": "{real_workload_dir}",
+  "datasets": [
+    "default_performance",
+    "type_isolation",
+    "metadata_segregation",
+    "hugepage_metadata",
+    "pac_authentication",
+    "memory_overhead",
+    "web_performance",
+    "windows_performance",
+    "macos_performance"
+  ],
+  "env": {
+    "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+    "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+    "UNIALLOC_PAPER_DATASET": "{dataset}",
+    "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+    "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+  },
+  "measurement_source": "",
+  "notes": [
+    "This template is not evidence and intentionally sets configured=false.",
+    "Set configured=true only after real_workload_dir points at a real checkout and command_template runs the paper macro benchmark for the requested cell.",
+    "The command/env/cwd template must preserve dataset, benchmark, allocator, variant_feature, and run_index placeholders; the template env exports these as UNIALLOC_PAPER_* values for wrapper harnesses.",
+    "Set benchmark_owned_json=true only after the real benchmark harness itself prints finite JSON timing for the selected cell.",
+    "For the paper faf row, the selected source mapping is TechEmpower FrameworkBenchmarks frameworks/Rust/faf; crates.io faf is rejected as an unrelated 2026 name collision.",
+    "This template remains configured=false and is not timing evidence; use workload_config.local.json for the current non-claim HTTP JSON bridge."
+  ],
+  "paper_source": {
+    "matchers": [
+      "techempower/frameworkbenchmarks",
+      "github.com/techempower/frameworkbenchmarks",
+      "frameworks/Rust/faf",
+      "errantmind/faf",
+      "github.com/errantmind/faf"
+    ],
+    "paper_benchmark": "faf",
+    "paper_project": "TechEmpower FrameworkBenchmarks",
+    "paper_version": null,
+    "ref_candidates": [
+      {
+        "kind": "head",
+        "reason": "rust-alloc-paper data/web-perf.dat names faf and tbl/tbl-benches.tex names TechEmpower, but does not specify a FrameworkBenchmarks round, tag, or commit",
+        "ref": "HEAD"
+      }
+    ],
+    "rejected_candidates": [
+      {
+        "crate_name": "faf",
+        "reason": "crates.io faf is a 2026 Foundational AI-context Format crate and is not the TechEmpower Rust/faf web benchmark represented by the paper row",
+        "source_evidence": "https://crates.io/api/v1/crates/faf",
+        "upstream_url": "https://github.com/Wolfe-Jam/faf"
+      }
+    ],
+    "source_basis": "rust-alloc-paper tbl/tbl-benches.tex names the TechEmpower Framework benchmark suite; data/web-perf.dat names the faf row; TechEmpower stores the implementation under frameworks/Rust/faf",
+    "source_confidence": "techempower_head_only",
+    "source_evidence": [
+      "https://github.com/TechEmpower/FrameworkBenchmarks/tree/master/frameworks/Rust/faf",
+      "../rust-alloc-paper/tbl/tbl-benches.tex",
+      "../rust-alloc-paper/data/web-perf.dat"
+    ],
+    "source_subdir": "frameworks/Rust/faf",
+    "sparse_paths": [
+      "frameworks/Rust/faf"
+    ],
+    "upstream_url": "https://github.com/TechEmpower/FrameworkBenchmarks"
+  },
+  "real_workload_dir": "",
+  "schema_version": 1,
+  "source": "paper-external-workload-adapter-template",
+  "time_fields": [
+    "seconds"
+  ],
+  "workload_id": "external-faf"
+}

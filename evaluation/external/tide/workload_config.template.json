@@ -1,0 +1,59 @@
+{
+  "benchmark_owned_json": false,
+  "benchmarks": [
+    "tide"
+  ],
+  "categories": [
+    "web"
+  ],
+  "claim_grade": false,
+  "command_template": [
+    "./replace-with-real-benchmark-command",
+    "--dataset",
+    "{dataset}",
+    "--benchmark",
+    "{benchmark}",
+    "--allocator",
+    "{allocator}",
+    "--variant-feature",
+    "{variant_feature}",
+    "--run-index",
+    "{run_index}",
+    "--json"
+  ],
+  "configured": false,
+  "cwd": "{real_workload_dir}",
+  "datasets": [
+    "default_performance",
+    "type_isolation",
+    "metadata_segregation",
+    "hugepage_metadata",
+    "pac_authentication",
+    "memory_overhead",
+    "web_performance",
+    "windows_performance",
+    "macos_performance"
+  ],
+  "env": {
+    "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+    "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+    "UNIALLOC_PAPER_DATASET": "{dataset}",
+    "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+    "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+  },
+  "measurement_source": "",
+  "notes": [
+    "This template is not evidence and intentionally sets configured=false.",
+    "Set configured=true only after real_workload_dir points at a real checkout and command_template runs the paper macro benchmark for the requested cell.",
+    "The command/env/cwd template must preserve dataset, benchmark, allocator, variant_feature, and run_index placeholders; the template env exports these as UNIALLOC_PAPER_* values for wrapper harnesses.",
+    "Set benchmark_owned_json=true only after the real benchmark harness itself prints finite JSON timing for the selected cell."
+  ],
+  "paper_source": {},
+  "real_workload_dir": "",
+  "schema_version": 1,
+  "source": "paper-external-workload-adapter-template",
+  "time_fields": [
+    "seconds"
+  ],
+  "workload_id": "external-tide"
+}

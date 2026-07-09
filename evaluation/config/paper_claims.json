@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "paper_dir_default": "../rust-alloc-paper",
+  "methodology": {
+    "runs_per_benchmark": 6,
+    "warmup_runs_discarded": 1,
+    "summary": "geometric_mean_of_last_five",
+    "normalization": "execution_time_normalized_to_unialloc; values greater than 1 mean the compared allocator is slower than UniAlloc"
+  },
+  "benchmarks": {
+    "micro": ["Collections"],
+    "macro_single_thread": ["RJS-Compiler", "RPython", "R-Polars"],
+    "macro_multi_thread": ["R-Oxipng*", "RRedis*"],
+    "web": ["actix", "gothem", "may-minihttp", "nickel", "ntex", "roa", "saphir", "thruster", "tide", "tokio", "warp", "salvo", "faf", "rocket"]
+  },
+  "allocators": {
+    "linux_default": ["jemalloc", "ptmalloc", "mimalloc", "tcmalloc", "snmalloc", "scudo"],
+    "web": ["jemalloc", "ptmalloc", "mimalloc", "tcmalloc", "snmalloc"],
+    "windows": ["mimalloc", "default", "snmalloc"],
+    "macos": ["jemalloc", "default", "mimalloc", "tcmalloc", "snmalloc"]
+  },
+  "paper_data": {
+    "default_performance": "data/default-perf.dat",
+    "memory_overhead": "data/memory.dat",
+    "metadata_segregation": "data/meta-perf.dat",
+    "type_isolation": "data/type-perf.dat",
+    "hugepage_metadata": "data/hugepage-perf.dat",
+    "pac_authentication": "data/pac-perf.dat",
+    "web_performance": "data/web-perf.dat",
+    "windows_performance": "data/win-perf.dat",
+    "macos_performance": "data/mac-perf.dat"
+  },
+  "claims": [
+    {
+      "id": "C001-default-performance",
+      "description": "Default UniAlloc runs within 2% of widely used allocators on the evaluated Linux workloads.",
+      "source": "abstract.tex/eval.tex",
+      "metric": "geomean_delta_percent_vs_unialloc",
+      "dataset": "default_performance",
+      "threshold": {"abs_lte": 2.0},
+      "required_for_overclaim": true
+    },
+    {
+      "id": "C002-type-coverage",
+      "description": "Compiler-assisted extraction covers 72.17% of heap objects in the standard Rust alloc benchmarks without source changes.",
+      "source": "abstract.tex/eval.tex",
+      "metric": "coverage_percent",
+      "expected": 72.17,
+      "threshold": {"gte": 72.17},
+      "requires_current_coverage_file": true,
+      "required_for_overclaim": true
+    },
+    {
+      "id": "C003-type-isolation-cost",
+      "description": "Type-isolated allocation has a 5% to 14% slowdown window on evaluated workloads.",
+      "source": "eval.tex",
+      "metric": "slowdown_percent_range_vs_default_unialloc",
+      "dataset": "type_isolation",
+      "baseline_dataset": "default_performance",
+      "threshold": {"min_gte": 5.0, "max_lte": 14.0},
+      "required_for_overclaim": true
+    },
+    {
+      "id": "C004-metadata-segregation-speedup",
+      "description": "Metadata segregation improves locality/performance by about 4% on average.",
+      "source": "abstract.tex/eval.tex",
+      "metric": "geomean_speedup_percent_vs_baselines",
+      "dataset": "metadata_segregation",
+      "threshold": {"gte": 4.0},
+      "required_for_overclaim": true
+    },
+    {
+      "id": "C005-hugepage-metadata-speedup",
+      "description": "Hugepage-backed metadata improves performance by 2% to 4%.",
+      "source": "abstract.tex/eval.tex",
+      "metric": "geomean_speedup_percent_vs_baselines",
+      "dataset": "hugepage_metadata",
+      "threshold": {"between": [2.0, 4.0]},
+      "required_for_overclaim": true
+    },
+    {
+      "id": "C006-pac-cost",
+      "description": "PAC metadata authentication adds about 1% to 3% slowdown on the tested Apple M1 path.",
+      "source": "eval.tex",
+      "metric": "slowdown_percent_vs_baselines",
+      "dataset": "pac_authentication",
+      "threshold": {"between": [1.0, 3.0]},
+      "required_for_overclaim": false
+    },
+    {
+      "id": "C007-cross-platform-retargeting",
+      "description": "UniAlloc retargets to Windows, macOS, Rust-for-Linux, BlogOS, and Redox with platform-specific evidence.",
+      "source": "abstract.tex/eval.tex/sys.tex",
+      "metric": "platform_evidence_matrix",
+      "platforms": ["windows", "macos", "rust-for-linux", "blogos", "redox"],
+      "required_for_overclaim": true
+    }
+  ]
+}

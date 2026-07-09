@@ -1,0 +1,199 @@
+{
+  "blogos": {
+    "boot_config": "",
+    "claim_grade": false,
+    "complete_for_claim": false,
+    "emulator": "",
+    "evidence": [
+      {
+        "description": "Real blogos build_log artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "build_log",
+        "path": "path/to/blogos/build_log.log"
+      },
+      {
+        "description": "Real blogos boot_cycles artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "boot_cycles",
+        "path": "path/to/blogos/boot_cycles.json"
+      }
+    ],
+    "image": "",
+    "notes": "Generated fill-in template only. Set passed/claim_grade/complete_for_claim true only after replacing every path/to artifact with real target evidence and target/build metadata.",
+    "passed": false,
+    "platform_target": "BlogOS constrained heap target image",
+    "required_evidence_kinds": [
+      "build_log",
+      "boot_cycles"
+    ],
+    "required_metadata_fields": [
+      "image",
+      "target_triple",
+      "platform_target",
+      "emulator",
+      "boot_config",
+      "target_metadata"
+    ],
+    "target": "BlogOS constrained heap target image",
+    "target_metadata": {},
+    "target_triple": ""
+  },
+  "macos": {
+    "claim_grade": false,
+    "complete_for_claim": false,
+    "evidence": [
+      {
+        "description": "Real macos build_log artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "build_log",
+        "path": "path/to/macos/build_log.log"
+      },
+      {
+        "description": "Real macos run_summary artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "run_summary",
+        "path": "path/to/macos/run_summary.json"
+      },
+      {
+        "description": "Real macos performance_data artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "performance_data",
+        "path": "path/to/macos/performance_data.dat"
+      }
+    ],
+    "host": {},
+    "notes": "Generated fill-in template only. Set passed/claim_grade/complete_for_claim true only after replacing every path/to artifact with real target evidence and target/build metadata.",
+    "os_version": "",
+    "passed": false,
+    "platform_target": "macOS Apple Silicon target host",
+    "required_evidence_kinds": [
+      "build_log",
+      "run_summary",
+      "performance_data"
+    ],
+    "required_metadata_fields": [
+      "host",
+      "target_triple",
+      "rust_target",
+      "platform_target",
+      "os_version",
+      "target_metadata"
+    ],
+    "rust_target": "",
+    "target": "macOS Apple Silicon target host",
+    "target_metadata": {},
+    "target_triple": ""
+  },
+  "redox": {
+    "boot_config": "",
+    "claim_grade": false,
+    "complete_for_claim": false,
+    "emulator": "",
+    "evidence": [
+      {
+        "description": "Real redox build_log artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "build_log",
+        "path": "path/to/redox/build_log.log"
+      },
+      {
+        "description": "Real redox boot_cycles artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "boot_cycles",
+        "path": "path/to/redox/boot_cycles.json"
+      }
+    ],
+    "image": "",
+    "notes": "Generated fill-in template only. Set passed/claim_grade/complete_for_claim true only after replacing every path/to artifact with real target evidence and target/build metadata.",
+    "passed": false,
+    "platform_target": "Redox constrained heap target image",
+    "required_evidence_kinds": [
+      "build_log",
+      "boot_cycles"
+    ],
+    "required_metadata_fields": [
+      "image",
+      "target_triple",
+      "platform_target",
+      "emulator",
+      "boot_config",
+      "target_metadata"
+    ],
+    "target": "Redox constrained heap target image",
+    "target_metadata": {},
+    "target_triple": ""
+  },
+  "rust-for-linux": {
+    "claim_grade": false,
+    "complete_for_claim": false,
+    "evidence": [
+      {
+        "description": "Real rust-for-linux kernel_build_log artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "kernel_build_log",
+        "path": "path/to/rust-for-linux/kernel_build_log.log"
+      },
+      {
+        "description": "Real rust-for-linux cycle_counts artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "cycle_counts",
+        "path": "path/to/rust-for-linux/cycle_counts.json"
+      }
+    ],
+    "kernel_config": "",
+    "kernel_tree": "",
+    "kernel_version": "",
+    "notes": "Generated fill-in template only. Set passed/claim_grade/complete_for_claim true only after replacing every path/to artifact with real target evidence and target/build metadata.",
+    "passed": false,
+    "platform_target": "Rust-for-Linux kernel module benchmark target",
+    "required_evidence_kinds": [
+      "kernel_build_log",
+      "cycle_counts"
+    ],
+    "required_metadata_fields": [
+      "kernel_version",
+      "kernel_tree",
+      "kernel_config",
+      "target_triple",
+      "platform_target",
+      "target_metadata"
+    ],
+    "target": "Rust-for-Linux kernel module benchmark target",
+    "target_metadata": {},
+    "target_triple": ""
+  },
+  "windows": {
+    "claim_grade": false,
+    "complete_for_claim": false,
+    "evidence": [
+      {
+        "description": "Real windows build_log artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "build_log",
+        "path": "path/to/windows/build_log.log"
+      },
+      {
+        "description": "Real windows run_summary artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "run_summary",
+        "path": "path/to/windows/run_summary.json"
+      },
+      {
+        "description": "Real windows performance_data artifact; replace this placeholder with a verified file path or URI.",
+        "kind": "performance_data",
+        "path": "path/to/windows/performance_data.dat"
+      }
+    ],
+    "host": {},
+    "notes": "Generated fill-in template only. Set passed/claim_grade/complete_for_claim true only after replacing every path/to artifact with real target evidence and target/build metadata.",
+    "os_version": "",
+    "passed": false,
+    "platform_target": "Windows 10 or newer target host",
+    "required_evidence_kinds": [
+      "build_log",
+      "run_summary",
+      "performance_data"
+    ],
+    "required_metadata_fields": [
+      "host",
+      "target_triple",
+      "rust_target",
+      "platform_target",
+      "os_version",
+      "target_metadata"
+    ],
+    "rust_target": "",
+    "target": "Windows 10 or newer target host",
+    "target_metadata": {},
+    "target_triple": ""
+  }
+}

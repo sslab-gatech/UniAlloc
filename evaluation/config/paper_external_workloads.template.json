@@ -1,0 +1,1735 @@
+{
+  "allow_host_allocator_mismatch": false,
+  "dataset_names": [
+    "default_performance",
+    "type_isolation",
+    "metadata_segregation",
+    "hugepage_metadata",
+    "pac_authentication",
+    "memory_overhead",
+    "web_performance",
+    "windows_performance",
+    "macos_performance"
+  ],
+  "generated_at": null,
+  "notes": [
+    "This bundle template is not performance evidence.",
+    "It defines external workload handoff rules for every paper row that is not locally runnable through the in-tree Collections driver; the default all-paper-data bundle currently includes macro rows plus web/platform rows.",
+    "Leave template_only=true until workload_dir, command_template, allocator selection, and stdout JSON timing have been wired to real benchmark repositories.",
+    "paper_external_workload.py refuses template_only rules and missing workload directories, so this template cannot accidentally produce synthetic timing data.",
+    "Each workload rule embeds paper_source metadata so source/ref audits are reproducible from the bundle artifact, not only from evaluator defaults."
+  ],
+  "paper_dir": "../rust-alloc-paper",
+  "sample_contract": {
+    "claim_grade_rule": "every successful sample must carry command provenance, host/target provenance, verified raw evidence paths or URIs, and sha256 digests for the raw evidence",
+    "example_jsonl_record": {
+      "allocator": "jemalloc",
+      "benchmark": "RJS-Compiler",
+      "command": [
+        "./run-paper-workload",
+        "--benchmark",
+        "RJS-Compiler",
+        "--allocator",
+        "jemalloc"
+      ],
+      "dataset": "default_performance",
+      "evidence": [
+        {
+          "path": "logs/default_performance-RJS-Compiler-jemalloc-run1.stdout.txt",
+          "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        }
+      ],
+      "host": {
+        "machine": "x86_64",
+        "system": "Linux"
+      },
+      "run_index": 1,
+      "seconds": 10.91
+    },
+    "required_fields": [
+      "dataset",
+      "benchmark",
+      "allocator",
+      "run_index",
+      "seconds"
+    ],
+    "required_provenance": [
+      "command",
+      "host_or_target",
+      "raw_evidence_path_or_uri",
+      "raw_evidence_sha256"
+    ],
+    "timing_fields": [
+      "seconds",
+      "wall_seconds",
+      "elapsed_seconds",
+      "ns_per_iter",
+      "time_ns",
+      "nanoseconds",
+      "ms",
+      "milliseconds"
+    ]
+  },
+  "schema_version": 1,
+  "source": "paper-external-workload-bundle-template",
+  "summary": {
+    "benchmark_count": 19,
+    "dataset_external_cell_counts": {
+      "default_performance": 35,
+      "hugepage_metadata": 35,
+      "macos_performance": 24,
+      "memory_overhead": 35,
+      "metadata_segregation": 35,
+      "pac_authentication": 35,
+      "type_isolation": 35,
+      "web_performance": 84,
+      "windows_performance": 20
+    },
+    "external_required_cell_count": 338,
+    "paper_source_embedded_rule_count": 19,
+    "ready_for_runner": false,
+    "target_error_count": 0,
+    "workload_rule_count": 19
+  },
+  "target_errors": [],
+  "workloads": [
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "R-Oxipng*"
+      ],
+      "categories": [
+        "macro_multi_thread"
+      ],
+      "claim_grade": false,
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-R-Oxipng",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "matchers": [
+          "shssoichiro/oxipng",
+          "github.com/shssoichiro/oxipng"
+        ],
+        "paper_benchmark": "R-Oxipng*",
+        "paper_project": "Oxipng",
+        "paper_version": "v4.0.3",
+        "ref_candidates": [
+          {
+            "kind": "exact",
+            "ref": "refs/tags/v4.0.3"
+          },
+          {
+            "kind": "exact",
+            "ref": "v4.0.3"
+          }
+        ],
+        "upstream_url": "https://github.com/shssoichiro/oxipng"
+      },
+      "template_note": "Configured for strict adapter dry-run through a focused upstream Oxipng cargo-bench JSON wrapper; not claim-grade until full R-Oxipng* paper workload, allocator/variant/provenance/repetition gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/R-Oxipng"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "R-Polars"
+      ],
+      "categories": [
+        "macro_single_thread"
+      ],
+      "claim_grade": false,
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-R-Polars",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "matchers": [
+          "pola-rs/polars",
+          "github.com/pola-rs/polars"
+        ],
+        "paper_benchmark": "R-Polars",
+        "paper_project": "Polars",
+        "paper_version": "v0.13.0",
+        "ref_candidates": [
+          {
+            "kind": "exact",
+            "ref": "refs/tags/v0.13.0"
+          },
+          {
+            "kind": "exact",
+            "ref": "refs/tags/0.13.0"
+          },
+          {
+            "kind": "exact",
+            "ref": "refs/tags/py-0.13.0"
+          }
+        ],
+        "upstream_url": "https://github.com/pola-rs/polars"
+      },
+      "template_note": "Configured for strict adapter dry-run through a cargo-bench JSON wrapper; not claim-grade until allocator/variant/provenance/repetition gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/R-Polars"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "RJS-Compiler"
+      ],
+      "categories": [
+        "macro_single_thread"
+      ],
+      "claim_grade": false,
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-RJS-Compiler",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "matchers": [
+          "swc-project/swc",
+          "github.com/swc-project/swc"
+        ],
+        "paper_benchmark": "RJS-Compiler",
+        "paper_project": "SWC",
+        "paper_version": "v1.2.51",
+        "ref_candidates": [
+          {
+            "kind": "exact",
+            "ref": "refs/tags/v1.2.51"
+          },
+          {
+            "kind": "exact",
+            "ref": "v1.2.51"
+          }
+        ],
+        "upstream_url": "https://github.com/swc-project/swc"
+      },
+      "template_note": "Configured for strict adapter dry-run through a cargo-bench JSON wrapper; not claim-grade until allocator/variant/provenance/repetition gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/RJS-Compiler"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "RPython"
+      ],
+      "categories": [
+        "macro_single_thread"
+      ],
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-RPython",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "matchers": [
+          "rustpython/rustpython",
+          "github.com/rustpython/rustpython"
+        ],
+        "paper_benchmark": "RPython",
+        "paper_project": "RustPython",
+        "paper_version": "v0.1.2",
+        "ref_candidates": [
+          {
+            "kind": "exact",
+            "ref": "refs/tags/v0.1.2"
+          },
+          {
+            "kind": "exact",
+            "ref": "refs/tags/0.1.2"
+          },
+          {
+            "kind": "newer",
+            "reason": "User-approved newer RustPython fallback when exact paper v0.1.2/0.1.2 tag is unavailable; must remain labeled non-paper-exact evidence.",
+            "ref": "refs/tags/v0.2.0"
+          },
+          {
+            "kind": "fallback",
+            "reason": "RustPython upstream currently exposes 0.1.0 and v0.2.0 tags but no 0.1.2 tag",
+            "ref": "refs/tags/0.1.0"
+          }
+        ],
+        "upstream_url": "https://github.com/RustPython/RustPython"
+      },
+      "template_note": "RustPython fallback bridge is configured for adapter dry-run coverage only. It uses upstream fallback tag 0.1.0 because the paper v0.1.2/0.1.2 tag is not exposed; not claim-grade until exact provenance, allocator/variant routing, repetitions, and raw evidence gates pass. Newer v0.2.0 is an allowed reproducible fallback path when exact provenance is absent, but remains non-claim-grade unless separately justified.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/RPython"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "RRedis*"
+      ],
+      "categories": [
+        "macro_multi_thread"
+      ],
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-RRedis",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "matchers": [
+          "seppo0010/rsedis",
+          "github.com/seppo0010/rsedis"
+        ],
+        "paper_benchmark": "RRedis*",
+        "paper_project": "Rsedis",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "fallback",
+            "local_checkout": "evaluation/external/_checkouts/external-RRedis-Rsedis",
+            "local_commit_only": true,
+            "observed_head_commit": "e50029606295cb9e0980c04a09f5bf888afa309a",
+            "raw_git_commit_ref": true,
+            "reason": "No reachable git tag exists in the local checkout; the already fetched HEAD commit is a reproducible local snapshot but is not a versioned newer benchmark source.",
+            "ref": "e50029606295cb9e0980c04a09f5bf888afa309a",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "paper table names Rsedis but does not specify a version tag",
+            "ref": "HEAD"
+          }
+        ],
+        "source_confidence": "paper_table_head_only",
+        "upstream_url": "https://github.com/seppo0010/rsedis"
+      },
+      "template_note": "Activated as a non-claim Rsedis RESP JSON adapter bridge: the local RRedis config launches upstream rsedis, runs deterministic stdlib SET/GET load, and emits finite JSON timing for adapter integration only. Keep claim_grade=false until allocator/variant routing, redis-benchmark parity, repetitions, raw evidence, and exact paper provenance are proven.",
+      "template_only": false,
+      "time_field": "seconds",
+      "time_fields": [
+        "seconds",
+        "operations_per_second",
+        "average_latency_seconds"
+      ],
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/RRedis"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "actix"
+      ],
+      "categories": [
+        "web"
+      ],
+      "claim_grade": false,
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-actix",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "actix-web",
+        "matchers": [
+          "actix/actix-web",
+          "github.com/actix/actix-web"
+        ],
+        "paper_benchmark": "actix",
+        "paper_project": "Actix Web",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-actix-Actix-Web",
+            "observed_head_commit": "a1b4165c34b44ac1d09e3f2122088d1d74715771",
+            "observed_tag_commit": "0fb89457eda4a78a4cb7ccb3fdebe49a143ce2d5",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag 'http-v3.12.1' for external-actix; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD a1b4165c34b4 and tag commit 0fb89457eda4; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/http-v3.12.1",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/actix-web"
+        ],
+        "upstream_url": "https://github.com/actix/actix-web"
+      },
+      "template_note": "Activated as a non-claim cargo-bench JSON adapter bridge; keep claim_grade=false until full paper evidence gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/actix"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "faf"
+      ],
+      "categories": [
+        "web"
+      ],
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-faf",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "matchers": [
+          "techempower/frameworkbenchmarks",
+          "github.com/techempower/frameworkbenchmarks",
+          "frameworks/Rust/faf",
+          "errantmind/faf",
+          "github.com/errantmind/faf"
+        ],
+        "paper_benchmark": "faf",
+        "paper_project": "TechEmpower FrameworkBenchmarks",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-faf-TechEmpower-FrameworkBenchmarks",
+            "observed_head_commit": "57d92fbec6f8fd7431bc77326dd0484e60c96e20",
+            "observed_tag_commit": "523534bb61450e3522d775a749ad060753e26e3a",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag 'R23' for external-faf; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD 57d92fbec6f8 and tag commit 523534bb6145; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/R23",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names faf and tbl/tbl-benches.tex names TechEmpower, but does not specify a FrameworkBenchmarks round, tag, or commit",
+            "ref": "HEAD"
+          }
+        ],
+        "rejected_candidates": [
+          {
+            "crate_name": "faf",
+            "reason": "crates.io faf is a 2026 Foundational AI-context Format crate and is not the TechEmpower Rust/faf web benchmark represented by the paper row",
+            "source_evidence": "https://crates.io/api/v1/crates/faf",
+            "upstream_url": "https://github.com/Wolfe-Jam/faf"
+          }
+        ],
+        "source_basis": "rust-alloc-paper tbl/tbl-benches.tex names the TechEmpower Framework benchmark suite; data/web-perf.dat names the faf row; TechEmpower stores the implementation under frameworks/Rust/faf",
+        "source_confidence": "techempower_head_only",
+        "source_evidence": [
+          "https://github.com/TechEmpower/FrameworkBenchmarks/tree/master/frameworks/Rust/faf",
+          "../rust-alloc-paper/tbl/tbl-benches.tex",
+          "../rust-alloc-paper/data/web-perf.dat"
+        ],
+        "source_subdir": "frameworks/Rust/faf",
+        "sparse_paths": [
+          "frameworks/Rust/faf"
+        ],
+        "upstream_url": "https://github.com/TechEmpower/FrameworkBenchmarks"
+      },
+      "template_note": "Activated as a non-claim TechEmpower Rust/faf HTTP JSON adapter bridge: the local faf config points at frameworks/Rust/faf, runs deterministic stdlib plaintext load, and rejects the unrelated 2026 crates.io faf name collision. Keep claim_grade=false until allocator/variant routing, wrk/TechEmpower parity, Linux provenance, repetitions, raw evidence, and exact paper round/commit are proven.",
+      "template_only": false,
+      "time_field": "seconds",
+      "time_fields": [
+        "seconds",
+        "requests_per_second",
+        "average_latency_seconds"
+      ],
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/faf"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "gothem"
+      ],
+      "categories": [
+        "web"
+      ],
+      "claim_grade": false,
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-gothem",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "gotham",
+        "matchers": [
+          "gotham-rs/gotham",
+          "github.com/gotham-rs/gotham"
+        ],
+        "paper_benchmark": "gothem",
+        "paper_project": "Gotham",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-gothem-Gotham",
+            "observed_head_commit": "b2573ba26501e195976efc76f00648e1992e5552",
+            "observed_tag_commit": "b2573ba26501e195976efc76f00648e1992e5552",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag 'gotham-0.8.0' for external-gothem; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD b2573ba26501 and tag commit b2573ba26501; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/gotham-0.8.0",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found; paper row is spelled gothem while the crate and repository use gotham",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/gotham"
+        ],
+        "upstream_url": "https://github.com/gotham-rs/gotham"
+      },
+      "template_note": "Configured for strict adapter dry-run through a cargo-bench JSON wrapper; not claim-grade until allocator/variant/provenance/repetition gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/gothem"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "may-minihttp"
+      ],
+      "categories": [
+        "web"
+      ],
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-may-minihttp",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "may-minihttp",
+        "matchers": [
+          "xudong-huang/may_minihttp",
+          "github.com/xudong-huang/may_minihttp"
+        ],
+        "paper_benchmark": "may-minihttp",
+        "paper_project": "may_minihttp",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-may-minihttp-may_minihttp",
+            "observed_head_commit": "826a761933c53c7927d55e92443691065dcc5b7e",
+            "observed_tag_commit": "562d87e54710bf2c9300027c85c59be85ea0ed8d",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag '0.1.11' for external-may-minihttp; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD 826a761933c5 and tag commit 562d87e54710; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/0.1.11",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/may-minihttp"
+        ],
+        "upstream_url": "https://github.com/Xudong-Huang/may_minihttp.git"
+      },
+      "template_note": "Configured for focused upstream may-minihttp hello-world HTTP load JSON wrapper; remains claim_grade=false until allocator selection, wrk parity, repetitions, provenance, and full paper macro row gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/may-minihttp"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "nickel"
+      ],
+      "categories": [
+        "web"
+      ],
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-nickel",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "nickel",
+        "matchers": [
+          "nickel-org/nickel.rs",
+          "github.com/nickel-org/nickel.rs"
+        ],
+        "paper_benchmark": "nickel",
+        "paper_project": "Nickel",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-nickel-Nickel",
+            "observed_head_commit": "82deeee13afd6c054a9cbf374db9df5ae4482a3c",
+            "observed_tag_commit": "9c0894562cdc6298dafc4c38b22cb449efc6b5b3",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag '0.9.0' for external-nickel; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD 82deeee13afd and tag commit 9c0894562cdc; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/0.9.0",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/nickel"
+        ],
+        "upstream_url": "https://github.com/nickel-org/nickel.rs"
+      },
+      "template_note": "Configured for focused upstream Nickel hello_world HTTP load JSON wrapper; remains claim_grade=false until allocator selection, wrk/load parity, repetitions, provenance, and full paper macro row gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "time_fields": [
+        "seconds",
+        "requests_per_second",
+        "average_latency_seconds"
+      ],
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/nickel"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "ntex"
+      ],
+      "categories": [
+        "web"
+      ],
+      "claim_grade": false,
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-ntex",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "ntex",
+        "matchers": [
+          "ntex-rs/ntex",
+          "github.com/ntex-rs/ntex"
+        ],
+        "paper_benchmark": "ntex",
+        "paper_project": "ntex",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-ntex-ntex",
+            "observed_head_commit": "9d974ac49e86b5198bd7398df6ec5731638fc0e2",
+            "observed_tag_commit": "92e1cd373b0ca20ff9c76a8c3a8d6c4e91cbd0e6",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag 'ntex-v3.9.8' for external-ntex; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD 9d974ac49e86 and tag commit 92e1cd373b0c; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/ntex-v3.9.8",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/ntex"
+        ],
+        "upstream_url": "https://github.com/ntex-rs/ntex"
+      },
+      "template_note": "Configured for strict adapter dry-run through a cargo-bench JSON wrapper; not claim-grade until allocator/variant/provenance/repetition gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/ntex"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "roa"
+      ],
+      "categories": [
+        "web"
+      ],
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-roa",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "roa",
+        "matchers": [
+          "hexilee/roa",
+          "github.com/hexilee/roa"
+        ],
+        "paper_benchmark": "roa",
+        "paper_project": "Roa",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-roa-Roa",
+            "observed_head_commit": "979d9783b9cafd5c4b4caa60255390547c41034b",
+            "observed_tag_commit": "9fa7069f8a503642743a042ef57225598994ad43",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag 'roa-core-v0.6.1' for external-roa; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD 979d9783b9ca and tag commit 9fa7069f8a50; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/roa-core-v0.6.1",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/roa"
+        ],
+        "upstream_url": "https://github.com/Hexilee/roa"
+      },
+      "template_note": "Configured for focused upstream Roa hello-world HTTP load JSON wrapper; remains claim_grade=false until allocator selection, wrk/load parity, repetitions, provenance, and full paper macro row gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "time_fields": [
+        "seconds",
+        "requests_per_second",
+        "average_latency_seconds"
+      ],
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/roa"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "rocket"
+      ],
+      "categories": [
+        "web"
+      ],
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-rocket",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "rocket",
+        "matchers": [
+          "rwf2/rocket",
+          "github.com/rwf2/rocket"
+        ],
+        "paper_benchmark": "rocket",
+        "paper_project": "Rocket",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-rocket-Rocket",
+            "observed_head_commit": "3a54d079aef060a8f732bd04ea54b0581a604087",
+            "observed_tag_commit": "91f6288ea4aeb3d5a502b2f18b2b9677a85463ea",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag 'v0.5.0-rc.3' for external-rocket; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD 3a54d079aef0 and tag commit 91f6288ea4ae; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/v0.5.0-rc.3",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/rocket"
+        ],
+        "upstream_url": "https://github.com/rwf2/Rocket"
+      },
+      "template_note": "Configured for focused upstream Rocket Criterion benchmarks/ cargo-bench JSON wrapper; remains claim_grade=false until allocator selection, repetitions, provenance, and full paper macro row gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/rocket"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "salvo"
+      ],
+      "categories": [
+        "web"
+      ],
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-salvo",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "salvo",
+        "matchers": [
+          "salvo-rs/salvo",
+          "github.com/salvo-rs/salvo"
+        ],
+        "paper_benchmark": "salvo",
+        "paper_project": "Salvo",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-salvo-Salvo",
+            "observed_head_commit": "58a2e66937f0aa3f249f6249dacafffa4e0b573d",
+            "observed_tag_commit": "1471006d8cd471e52abbf518bf8c296b8ad527c5",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag 'v0.93.0' for external-salvo; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD 58a2e66937f0 and tag commit 1471006d8cd4; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/v0.93.0",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/salvo"
+        ],
+        "upstream_url": "https://github.com/salvo-rs/salvo"
+      },
+      "template_note": "Configured for focused upstream Salvo hello HTTP load JSON wrapper; remains claim_grade=false until allocator selection, wrk/load parity, repetitions, provenance, and full paper macro row gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "time_fields": [
+        "seconds",
+        "requests_per_second",
+        "average_latency_seconds"
+      ],
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/salvo"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "saphir"
+      ],
+      "categories": [
+        "web"
+      ],
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-saphir",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "saphir",
+        "matchers": [
+          "richerarc/saphir",
+          "github.com/richerarc/saphir"
+        ],
+        "paper_benchmark": "saphir",
+        "paper_project": "Saphir",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-saphir-Saphir",
+            "observed_head_commit": "765412f3a7e41f8ac87bd3c06640f339e1273386",
+            "observed_tag_commit": "00e23a55a7eb20163dfc59bef85181d60f531090",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag 'v3.1.0' for external-saphir; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD 765412f3a7e4 and tag commit 00e23a55a7eb; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/v3.1.0",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/saphir"
+        ],
+        "upstream_url": "https://github.com/richerarc/saphir"
+      },
+      "template_note": "Configured for focused upstream Saphir basic HTTP load JSON wrapper; remains claim_grade=false until allocator selection, wrk/load parity, repetitions, provenance, and full paper macro row gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "time_fields": [
+        "seconds",
+        "requests_per_second",
+        "average_latency_seconds"
+      ],
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/saphir"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "thruster"
+      ],
+      "categories": [
+        "web"
+      ],
+      "claim_grade": false,
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-thruster",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "thruster",
+        "matchers": [
+          "trezm/thruster",
+          "github.com/trezm/thruster"
+        ],
+        "paper_benchmark": "thruster",
+        "paper_project": "Thruster",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "fallback",
+            "local_checkout": "evaluation/external/_checkouts/external-thruster-Thruster",
+            "local_commit_only": true,
+            "observed_head_commit": "e87cb35cb7f14ce2cb4857d2b6255e6a98393671",
+            "raw_git_commit_ref": true,
+            "reason": "No reachable git tag exists in the local checkout; the already fetched HEAD commit is a reproducible local snapshot but is not a versioned newer benchmark source.",
+            "ref": "e87cb35cb7f14ce2cb4857d2b6255e6a98393671",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/thruster"
+        ],
+        "upstream_url": "https://github.com/trezm/thruster"
+      },
+      "template_note": "Configured for strict adapter dry-run through a cargo-bench JSON wrapper; not claim-grade until allocator/variant/provenance/repetition gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/thruster"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "tide"
+      ],
+      "categories": [
+        "web"
+      ],
+      "claim_grade": false,
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-tide",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "tide",
+        "matchers": [
+          "http-rs/tide",
+          "github.com/http-rs/tide"
+        ],
+        "paper_benchmark": "tide",
+        "paper_project": "Tide",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-tide-Tide",
+            "observed_head_commit": "b32f680d5bd14bc2ce7c81bef9ce99859028b20f",
+            "observed_tag_commit": "0b3ac9c732a1f771c65c65ddafd7be90db8e2928",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag 'v0.17.0-beta.1' for external-tide; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD b32f680d5bd1 and tag commit 0b3ac9c732a1; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/v0.17.0-beta.1",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/tide"
+        ],
+        "upstream_url": "https://github.com/http-rs/tide"
+      },
+      "template_note": "Configured for strict adapter dry-run through a cargo-bench JSON wrapper; not claim-grade until allocator/variant/provenance/repetition gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/tide"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "tokio"
+      ],
+      "categories": [
+        "web"
+      ],
+      "claim_grade": false,
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-tokio",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "tokio",
+        "matchers": [
+          "tokio-rs/tokio",
+          "github.com/tokio-rs/tokio"
+        ],
+        "paper_benchmark": "tokio",
+        "paper_project": "Tokio",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-tokio-Tokio",
+            "observed_head_commit": "da044f27d7470f605dffea94fb2473da06ea2a76",
+            "observed_tag_commit": "d87569164fb61145e79e7ffe0b25783569cc8f93",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag 'tokio-1.52.3' for external-tokio; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD da044f27d747 and tag commit d87569164fb6; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/tokio-1.52.3",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/tokio"
+        ],
+        "upstream_url": "https://github.com/tokio-rs/tokio"
+      },
+      "template_note": "Configured for strict adapter dry-run through a cargo-bench JSON wrapper; not claim-grade until allocator/variant/provenance/repetition gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/tokio"
+    },
+    {
+      "allocator_selection": "command_argument",
+      "allocators": [
+        "*"
+      ],
+      "benchmarks": [
+        "warp"
+      ],
+      "categories": [
+        "web"
+      ],
+      "command_template": [
+        "python3",
+        "{workload_dir}/run_paper_workload.py",
+        "--dataset",
+        "{dataset}",
+        "--benchmark",
+        "{benchmark}",
+        "--allocator",
+        "{allocator}",
+        "--variant-feature",
+        "{variant_feature}",
+        "--run-index",
+        "{run_index}",
+        "--json"
+      ],
+      "cwd": "{workload_dir}",
+      "datasets": [
+        "default_performance",
+        "type_isolation",
+        "metadata_segregation",
+        "hugepage_metadata",
+        "pac_authentication",
+        "memory_overhead",
+        "web_performance",
+        "windows_performance",
+        "macos_performance"
+      ],
+      "env": {
+        "UNIALLOC_PAPER_ALLOCATOR": "{allocator}",
+        "UNIALLOC_PAPER_BENCHMARK": "{benchmark}",
+        "UNIALLOC_PAPER_DATASET": "{dataset}",
+        "UNIALLOC_PAPER_RUN_INDEX": "{run_index}",
+        "UNIALLOC_PAPER_VARIANT_FEATURE": "{variant_feature}"
+      },
+      "id": "external-warp",
+      "measurement": "stdout_json",
+      "paper_source": {
+        "crate_name": "warp",
+        "matchers": [
+          "seanmonstar/warp",
+          "github.com/seanmonstar/warp"
+        ],
+        "paper_benchmark": "warp",
+        "paper_project": "Warp",
+        "paper_version": null,
+        "ref_candidates": [
+          {
+            "kind": "newer",
+            "local_checkout": "evaluation/external/_checkouts/external-warp-Warp",
+            "observed_head_commit": "707866ca367dd7e40082c31fbce88624f7059df0",
+            "observed_tag_commit": "707866ca367dd7e40082c31fbce88624f7059df0",
+            "reason": "User-approved newer benchmark-version candidate from the local checkout tag 'v0.4.3' for external-warp; rust-alloc-paper does not provide an exact version/ref for this row. Observed local HEAD 707866ca367d and tag commit 707866ca367d; this may be used for reproducible non-paper-exact execution, but must not be imported as paper-exact claim-grade evidence.",
+            "ref": "refs/tags/v0.4.3",
+            "source": "audit-paper-external-workload-newer-source-candidates"
+          },
+          {
+            "kind": "head",
+            "reason": "rust-alloc-paper data/web-perf.dat names this web benchmark but does not specify a version/tag; repository is seeded from crates.io crate metadata and therefore remains HEAD-only until exact paper provenance is found",
+            "ref": "HEAD"
+          }
+        ],
+        "source_basis": "crates.io repository metadata plus rust-alloc-paper data/web-perf.dat row name",
+        "source_confidence": "candidate_head_only",
+        "source_evidence": [
+          "https://crates.io/api/v1/crates/warp"
+        ],
+        "upstream_url": "https://github.com/seanmonstar/warp"
+      },
+      "template_note": "Configured for focused upstream warp hello HTTP load JSON wrapper; remains claim_grade=false until allocator selection, wrk/load parity, repetitions, provenance, and full paper macro row gates pass.",
+      "template_only": false,
+      "time_field": "seconds",
+      "time_fields": [
+        "seconds",
+        "requests_per_second",
+        "average_latency_seconds"
+      ],
+      "timeout": 1800,
+      "workload_dir": "evaluation/external/warp"
+    }
+  ]
+}
