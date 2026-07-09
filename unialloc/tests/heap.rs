@@ -1,6 +1,6 @@
 #![feature(allocator_api)]
 #![feature(slice_ptr_get)]
-use std::alloc::{Allocator, Global, Layout, System};
+use std::alloc::{Allocator, Layout, System};
 
 include!("allocator.rs");
 
@@ -17,6 +17,9 @@ fn std_system_heap_overaligned_request() {
 
 #[test]
 fn alloc_tcache_heap_overaligned_request() {
+    #[cfg(feature = "fixed_heap")]
+    init_fixed_heap_for_direct_allocator_tests();
+
     check_overalign_requests(UniAlloc)
 }
 

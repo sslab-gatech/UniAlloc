@@ -2,16 +2,11 @@
 #![feature(binary_heap_into_iter_sorted)]
 #![feature(exact_size_is_empty)]
 #![feature(binary_heap_drain_sorted)]
-#![feature(box_syntax)]
 #![feature(binary_heap_retain)]
 
 #[macro_use]
 extern crate alloc;
 use alloc::boxed::*;
-use alloc::string::*;
-use core::cell::Cell;
-use core::mem::MaybeUninit;
-use core::ptr::NonNull;
 
 use alloc::collections::binary_heap::{Drain, PeekMut};
 use alloc::collections::BinaryHeap;
@@ -200,22 +195,22 @@ fn test_push() {
 
 #[test]
 fn test_push_unique() {
-    let mut heap = BinaryHeap::<Box<_>>::from(vec![box 2, box 4, box 9]);
+    let mut heap = BinaryHeap::<Box<_>>::from(vec![Box::new(2), Box::new(4), Box::new(9)]);
     assert_eq!(heap.len(), 3);
     assert!(**heap.peek().unwrap() == 9);
-    heap.push(box 11);
+    heap.push(Box::new(11));
     assert_eq!(heap.len(), 4);
     assert!(**heap.peek().unwrap() == 11);
-    heap.push(box 5);
+    heap.push(Box::new(5));
     assert_eq!(heap.len(), 5);
     assert!(**heap.peek().unwrap() == 11);
-    heap.push(box 27);
+    heap.push(Box::new(27));
     assert_eq!(heap.len(), 6);
     assert!(**heap.peek().unwrap() == 27);
-    heap.push(box 3);
+    heap.push(Box::new(3));
     assert_eq!(heap.len(), 7);
     assert!(**heap.peek().unwrap() == 27);
-    heap.push(box 103);
+    heap.push(Box::new(103));
     assert_eq!(heap.len(), 8);
     assert!(**heap.peek().unwrap() == 103);
 }
@@ -397,6 +392,8 @@ fn test_extend_specialization() {
     assert_eq!(a.into_sorted_vec(), [-20, -10, 1, 2, 3, 3, 5, 43]);
 }
 
+// Compile-time variance check retained from the upstream BinaryHeap tests.
+#[allow(dead_code)]
 fn assert_covariance() {
     fn drain<'new>(d: Drain<'static, &'static str>) -> Drain<'new, &'new str> {
         d
@@ -428,6 +425,7 @@ fn panic_safe() {
 
     static DROP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+    #[allow(clippy::derive_ord_xor_partial_ord)]
     #[derive(Eq, PartialEq, Ord, Clone, Debug)]
     struct PanicOrd<T>(T, bool);
 

@@ -1,5 +1,4 @@
 #![cfg(not(target_os = "android"))]
-#![feature(btree_drain_filter)]
 #![feature(map_first_last)]
 #![feature(repr_simd)]
 #![feature(slice_partition_dedup)]
@@ -662,7 +661,7 @@ fn bench_map_fast(b: &mut Bencher) {
         for i in 0..data.len() {
             unsafe {
                 *result.as_mut_ptr().add(i) = data[i].0;
-                result.set_len(i);
+                result.set_len(i + 1);
             }
         }
         result

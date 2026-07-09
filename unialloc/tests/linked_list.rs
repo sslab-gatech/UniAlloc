@@ -1,12 +1,3 @@
-#![feature(vec_extend_from_within)]
-#![feature(try_reserve)]
-#![feature(vec_spare_capacity)]
-#![feature(int_bits_const)]
-#![feature(drain_filter)]
-#![feature(box_syntax)]
-#![feature(iter_map_while)]
-#![feature(inplace_iteration)]
-
 extern crate alloc;
 
 use std::collections::hash_map::DefaultHasher;
@@ -29,20 +20,20 @@ fn test_basic() {
     assert_eq!(m.pop_front(), None);
     assert_eq!(m.pop_back(), None);
     assert_eq!(m.pop_front(), None);
-    m.push_front(box 1);
-    assert_eq!(m.pop_front(), Some(box 1));
-    m.push_back(box 2);
-    m.push_back(box 3);
+    m.push_front(Box::new(1));
+    assert_eq!(m.pop_front(), Some(Box::new(1)));
+    m.push_back(Box::new(2));
+    m.push_back(Box::new(3));
     assert_eq!(m.len(), 2);
-    assert_eq!(m.pop_front(), Some(box 2));
-    assert_eq!(m.pop_front(), Some(box 3));
+    assert_eq!(m.pop_front(), Some(Box::new(2)));
+    assert_eq!(m.pop_front(), Some(Box::new(3)));
     assert_eq!(m.len(), 0);
     assert_eq!(m.pop_front(), None);
-    m.push_back(box 1);
-    m.push_back(box 3);
-    m.push_back(box 5);
-    m.push_back(box 7);
-    assert_eq!(m.pop_front(), Some(box 1));
+    m.push_back(Box::new(1));
+    m.push_back(Box::new(3));
+    m.push_back(Box::new(5));
+    m.push_back(Box::new(7));
+    assert_eq!(m.pop_front(), Some(Box::new(1)));
 
     let mut n = LinkedList::new();
     n.push_front(2);
@@ -385,11 +376,11 @@ fn test_contains() {
 }
 
 #[test]
-fn drain_filter_empty() {
+fn extract_if_empty() {
     let mut list: LinkedList<i32> = LinkedList::new();
 
     {
-        let mut iter = list.drain_filter(|_| true);
+        let mut iter = list.extract_if(|_| true);
         assert_eq!(iter.size_hint(), (0, Some(0)));
         assert_eq!(iter.next(), None);
         assert_eq!(iter.size_hint(), (0, Some(0)));
@@ -402,13 +393,13 @@ fn drain_filter_empty() {
 }
 
 #[test]
-fn drain_filter_zst() {
+fn extract_if_zst() {
     let mut list: LinkedList<_> = vec![(), (), (), (), ()].into_iter().collect();
     let initial_len = list.len();
     let mut count = 0;
 
     {
-        let mut iter = list.drain_filter(|_| true);
+        let mut iter = list.extract_if(|_| true);
         assert_eq!(iter.size_hint(), (0, Some(initial_len)));
         while let Some(_) = iter.next() {
             count += 1;
@@ -425,14 +416,14 @@ fn drain_filter_zst() {
 }
 
 #[test]
-fn drain_filter_false() {
+fn extract_if_false() {
     let mut list: LinkedList<_> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].into_iter().collect();
 
     let initial_len = list.len();
     let mut count = 0;
 
     {
-        let mut iter = list.drain_filter(|_| false);
+        let mut iter = list.extract_if(|_| false);
         assert_eq!(iter.size_hint(), (0, Some(initial_len)));
         for _ in iter.by_ref() {
             count += 1;
@@ -451,14 +442,14 @@ fn drain_filter_false() {
 }
 
 #[test]
-fn drain_filter_true() {
+fn extract_if_true() {
     let mut list: LinkedList<_> = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].into_iter().collect();
 
     let initial_len = list.len();
     let mut count = 0;
 
     {
-        let mut iter = list.drain_filter(|_| true);
+        let mut iter = list.extract_if(|_| true);
         assert_eq!(iter.size_hint(), (0, Some(initial_len)));
         while let Some(_) = iter.next() {
             count += 1;
@@ -475,7 +466,7 @@ fn drain_filter_true() {
 }
 
 #[test]
-fn drain_filter_complex() {
+fn extract_if_complex() {
     {
         //                [+xxx++++++xxxxx++++x+x++]
         let mut list = vec![
@@ -485,7 +476,7 @@ fn drain_filter_complex() {
         .into_iter()
         .collect::<LinkedList<_>>();
 
-        let removed = list.drain_filter(|x| *x % 2 == 0).collect::<Vec<_>>();
+        let removed = list.extract_if(|x| *x % 2 == 0).collect::<Vec<_>>();
         assert_eq!(removed.len(), 10);
         assert_eq!(removed, vec![2, 4, 6, 18, 20, 22, 24, 26, 34, 36]);
 
@@ -504,7 +495,7 @@ fn drain_filter_complex() {
         .into_iter()
         .collect::<LinkedList<_>>();
 
-        let removed = list.drain_filter(|x| *x % 2 == 0).collect::<Vec<_>>();
+        let removed = list.extract_if(|x| *x % 2 == 0).collect::<Vec<_>>();
         assert_eq!(removed.len(), 10);
         assert_eq!(removed, vec![2, 4, 6, 18, 20, 22, 24, 26, 34, 36]);
 
@@ -523,7 +514,7 @@ fn drain_filter_complex() {
         .into_iter()
         .collect::<LinkedList<_>>();
 
-        let removed = list.drain_filter(|x| *x % 2 == 0).collect::<Vec<_>>();
+        let removed = list.extract_if(|x| *x % 2 == 0).collect::<Vec<_>>();
         assert_eq!(removed.len(), 10);
         assert_eq!(removed, vec![2, 4, 6, 18, 20, 22, 24, 26, 34, 36]);
 
@@ -542,7 +533,7 @@ fn drain_filter_complex() {
         .into_iter()
         .collect::<LinkedList<_>>();
 
-        let removed = list.drain_filter(|x| *x % 2 == 0).collect::<Vec<_>>();
+        let removed = list.extract_if(|x| *x % 2 == 0).collect::<Vec<_>>();
         assert_eq!(removed.len(), 10);
         assert_eq!(removed, vec![2, 4, 6, 8, 10, 12, 14, 16, 18, 20]);
 
@@ -561,7 +552,7 @@ fn drain_filter_complex() {
         .into_iter()
         .collect::<LinkedList<_>>();
 
-        let removed = list.drain_filter(|x| *x % 2 == 0).collect::<Vec<_>>();
+        let removed = list.extract_if(|x| *x % 2 == 0).collect::<Vec<_>>();
         assert_eq!(removed.len(), 10);
         assert_eq!(removed, vec![2, 4, 6, 8, 10, 12, 14, 16, 18, 20]);
 
@@ -574,7 +565,7 @@ fn drain_filter_complex() {
 }
 
 #[test]
-fn drain_filter_drop_panic_leak() {
+fn extract_if_drop_panic_leak() {
     static mut DROPS: i32 = 0;
 
     struct D(bool);
@@ -601,14 +592,16 @@ fn drain_filter_drop_panic_leak() {
     q.push_front(D(true));
     q.push_front(D(false));
 
-    catch_unwind(AssertUnwindSafe(|| drop(q.drain_filter(|_| true)))).ok();
+    catch_unwind(AssertUnwindSafe(|| q.extract_if(|_| true).for_each(drop))).ok();
 
+    assert_eq!(unsafe { DROPS }, 2);
+    assert_eq!(q.len(), 6);
+    drop(q);
     assert_eq!(unsafe { DROPS }, 8);
-    assert!(q.is_empty());
 }
 
 #[test]
-fn drain_filter_pred_panic_leak() {
+fn extract_if_pred_panic_leak() {
     static mut DROPS: i32 = 0;
 
     #[derive(Debug)]
@@ -633,7 +626,8 @@ fn drain_filter_pred_panic_leak() {
     q.push_front(D(0));
 
     catch_unwind(AssertUnwindSafe(|| {
-        drop(q.drain_filter(|item| if item.0 >= 2 { panic!() } else { true }))
+        q.extract_if(|item| if item.0 >= 2 { panic!() } else { true })
+            .for_each(drop)
     }))
     .ok();
 

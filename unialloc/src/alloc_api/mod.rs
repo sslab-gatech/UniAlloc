@@ -1,70 +1,79 @@
-//! We support different allocation APIS for various usage
-// use crate::prelude::*;
-// use alloc::alloc::{Allocator, GlobalAlloc, Layout};
-// use core::ptr::NonNull;
-//
-// mod cpu_cache;
-//
-// use cpu_cache::GLOBAL_CPU_CACHE as GlobalFrontend;
-//
-// #[derive(Copy, Clone)]
-// pub struct RustAllocator;
-//
-// unsafe impl GlobalAlloc for RustAllocator {
-//     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-//         if let Ok(ptr) = (&mut GlobalFrontend).allocate(layout) {
-//             ptr.as_ptr()
-//         } else {
-//             core::ptr::null_mut()
-//         }
-//     }
-//
-//     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-//         (&mut GlobalFrontend).deallocate(core::ptr::NonNull::new_unchecked(ptr), layout);
-//     }
-//
-//     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-//         let old_slab_idx = get_size_class(layout.size()).index();
-//         let new_slab_idx = get_size_class(new_size).index();
-//
-//         if old_slab_idx == new_slab_idx {
-//             ptr
-//         } else {
-//             let new_layout = Layout::from_size_align_unchecked(new_size, layout.align());
-//             // SAFETY: the caller must ensure that `new_layout` is greater than zero.
-//             let new_ptr = self.alloc(new_layout);
-//             if !new_ptr.is_null() {
-//                 // SAFETY: the previously allocated block cannot overlap the newly allocated block.
-//                 // The safety contract for `dealloc` must be upheld by the caller.
-//                 core::ptr::copy_nonoverlapping(
-//                     ptr,
-//                     new_ptr,
-//                     core::cmp::min(layout.size(), new_size),
-//                 );
-//                 self.dealloc(ptr, layout);
-//             }
-//             new_ptr
-//         }
-//     }
-// }
-//
-// unsafe impl Allocator for RustAllocator {
-//     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, core::alloc::AllocError> {
-//         unsafe {
-//             let p = self.alloc(layout);
-//             // TODO: eliminate redundant overhead
-//             // can we avoid using get_index function?
-//             // let (_, alloc_size) = get_index_and_size(layout.size());
-//             Ok(core::ptr::NonNull::new_unchecked(
-//                 core::slice::from_raw_parts_mut(p, layout.size()),
-//             ))
-//         }
-//     }
-//
-//     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-//         self.dealloc(ptr.as_ptr() as *mut u8, layout);
-//     }
-// }
+//! Allocation APIs exported by UniAlloc.
 
 pub mod type_aware;
 pub mod type_isolation;
+
+pub use type_isolation::{
+    __unialloc_alloc_layout_with_metadata, __unialloc_alloc_layout_with_metadata_hints,
+    __unialloc_alloc_layout_with_metadata_hints_local, __unialloc_alloc_layout_with_metadata_local,
+    __unialloc_alloc_with_metadata, __unialloc_alloc_with_metadata_hints,
+    __unialloc_alloc_with_metadata_hints_local, __unialloc_alloc_with_metadata_local,
+    __unialloc_alloc_zeroed_layout_with_metadata,
+    __unialloc_alloc_zeroed_layout_with_metadata_hints,
+    __unialloc_alloc_zeroed_layout_with_metadata_hints_local,
+    __unialloc_alloc_zeroed_layout_with_metadata_local, __unialloc_dealloc_layout_with_metadata,
+    __unialloc_dealloc_layout_with_metadata_hints,
+    __unialloc_dealloc_layout_with_metadata_hints_local,
+    __unialloc_dealloc_layout_with_metadata_local, __unialloc_dealloc_with_metadata,
+    __unialloc_dealloc_with_metadata_hints, __unialloc_dealloc_with_metadata_hints_local,
+    __unialloc_dealloc_with_metadata_local, __unialloc_realloc_layout_with_metadata,
+    __unialloc_realloc_layout_with_metadata_hints,
+    __unialloc_realloc_layout_with_metadata_hints_local,
+    __unialloc_realloc_layout_with_metadata_local, __unialloc_realloc_with_metadata,
+    __unialloc_realloc_with_metadata_hints, __unialloc_realloc_with_metadata_hints_local,
+    __unialloc_realloc_with_metadata_local, __unialloc_realloc_with_split_metadata,
+    __unialloc_realloc_with_split_metadata_hints,
+    __unialloc_semantic_auto_compiler_metadata_enable,
+    __unialloc_semantic_auto_compiler_metadata_stream_enable,
+    __unialloc_semantic_auto_metadata_disable, __unialloc_semantic_auto_metadata_enable,
+    __unialloc_semantic_fallback_attribution_snapshot,
+    __unialloc_semantic_fallback_attribution_snapshot_abi_version,
+    __unialloc_semantic_fallback_attribution_snapshot_checked,
+    __unialloc_semantic_fallback_attribution_snapshot_size,
+    __unialloc_semantic_metadata_validation_snapshot,
+    __unialloc_semantic_metadata_validation_snapshot_abi_version,
+    __unialloc_semantic_metadata_validation_snapshot_checked,
+    __unialloc_semantic_metadata_validation_snapshot_size,
+    __unialloc_semantic_scope_depth_snapshot, __unialloc_semantic_scope_enter,
+    __unialloc_semantic_scope_enter_hints, __unialloc_semantic_scope_exit,
+    __unialloc_semantic_scope_pop, __unialloc_semantic_scope_push,
+    __unialloc_semantic_scope_push_hints, __unialloc_semantic_scope_push_hints_local,
+    __unialloc_semantic_scope_push_local, __unialloc_semantic_stats_reset,
+    __unialloc_semantic_stats_snapshot, __unialloc_semantic_stats_snapshot_abi_version,
+    __unialloc_semantic_stats_snapshot_checked, __unialloc_semantic_stats_snapshot_size,
+    __unialloc_semantic_type_stats_snapshot, __unialloc_semantic_type_stats_snapshot_abi_version,
+    __unialloc_semantic_type_stats_snapshot_checked,
+    __unialloc_semantic_type_stats_snapshot_record_size, active_allocation_metadata,
+    allocate_semantic_slice, auto_allocation_metadata, auto_deallocation_metadata,
+    delayed_free_snapshot, metadata_pointer_auth_runtime_probe,
+    metadata_segregation_side_cache_snapshot, restore_active_metadata,
+    semantic_auto_compiler_metadata_enable, semantic_auto_compiler_metadata_enabled,
+    semantic_auto_compiler_metadata_stream_enable, semantic_auto_compiler_metadata_stream_enabled,
+    semantic_auto_compiler_metadata_stream_thread_local_recovery_enable,
+    semantic_auto_compiler_metadata_thread_local_recovery_enable, semantic_auto_metadata_disable,
+    semantic_auto_metadata_enable, semantic_auto_metadata_enabled,
+    semantic_auto_metadata_type_id_basis, semantic_fallback_attribution_snapshot,
+    semantic_layout_id, semantic_metadata_validation_snapshot, semantic_runtime_slow_path_enabled,
+    semantic_scope_depth_snapshot, semantic_stats_recording_disable,
+    semantic_stats_recording_enable, semantic_stats_recording_enabled, semantic_stats_reset,
+    semantic_stats_snapshot, semantic_type_id, semantic_type_stats_recording_disable,
+    semantic_type_stats_recording_enable, semantic_type_stats_recording_enabled,
+    semantic_type_stats_snapshot, set_active_metadata, take_auto_deallocation_metadata,
+    type_isolation_side_cache_snapshot, with_rust_type_metadata_at, with_semantic_metadata,
+    AllocationMetadata, DelayedFreeSnapshot, MetadataPointerAuthRuntimeProbe,
+    MetadataSegregationSideCacheSnapshot, SemanticAlloc, SemanticFallbackAttributionSnapshot,
+    SemanticMetadataValidationSnapshot, SemanticScopeDepthSnapshot, SemanticStatsSnapshot,
+    SemanticTypeStatsSnapshot, TypeIsolationSideCacheSnapshot, AUTO_LAYOUT_MODULE_ID,
+    FLAG_DELAYED_FREE, FLAG_FORCE_INITIALIZE, FLAG_GUARD_PAGES, FLAG_HUGEPAGE_METADATA,
+    FLAG_MEMORY_TAGGING, FLAG_METADATA_PROTECTION, FLAG_METADATA_SEGREGATED, FLAG_POINTER_AUTH,
+    FLAG_TYPE_ISOLATED, MIN_TYPE_CACHE_OBJECT_SIZE, PLACEMENT_HINT_CROSS_THREAD_RECOVERY,
+    PLACEMENT_HINT_LOCAL_SCOPE_NO_RECOVERY, SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION,
+    SEMANTIC_METADATA_VALIDATION_SNAPSHOT_ABI_VERSION, SEMANTIC_STATS_SNAPSHOT_ABI_VERSION,
+    SEMANTIC_TYPE_STATS_SNAPSHOT_ABI_VERSION, UNKNOWN_SEMANTIC_ID,
+};
+
+#[cfg(not(feature = "fixed_heap"))]
+pub use type_isolation::{
+    hugepage_metadata_side_cache_backing_snapshot, hugepage_metadata_side_cache_snapshot,
+    HugepageMetadataSideCacheSnapshot,
+};

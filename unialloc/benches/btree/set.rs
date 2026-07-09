@@ -3,6 +3,24 @@ use alloc::collections::BTreeSet;
 use rand::{thread_rng, Rng};
 use test::Bencher;
 
+#[cfg(unialloc_btree_extract_if_range)]
+fn drain_matching_set<T, F>(set: &mut BTreeSet<T>, pred: F) -> usize
+where
+    T: Ord,
+    F: FnMut(&T) -> bool,
+{
+    set.extract_if(.., pred).count()
+}
+
+#[cfg(not(unialloc_btree_extract_if_range))]
+fn drain_matching_set<T, F>(set: &mut BTreeSet<T>, pred: F) -> usize
+where
+    T: Ord,
+    F: FnMut(&T) -> bool,
+{
+    set.drain_filter(pred).count()
+}
+
 fn random(n: usize) -> BTreeSet<usize> {
     let mut rng = thread_rng();
     let mut set = BTreeSet::new();
@@ -69,7 +87,10 @@ pub fn clone_100_and_clear(b: &mut Bencher) {
 #[bench]
 pub fn clone_100_and_drain_all(b: &mut Bencher) {
     let src = slim_set(100);
-    b.iter(|| src.clone().drain_filter(|_| true).count())
+    b.iter(|| {
+        let mut set = src.clone();
+        drain_matching_set(&mut set, |_| true)
+    })
 }
 
 #[bench]
@@ -77,7 +98,7 @@ pub fn clone_100_and_drain_half(b: &mut Bencher) {
     let src = slim_set(100);
     b.iter(|| {
         let mut set = src.clone();
-        assert_eq!(set.drain_filter(|i| i % 2 == 0).count(), 100 / 2);
+        assert_eq!(drain_matching_set(&mut set, |i| i % 2 == 0), 100 / 2);
         assert_eq!(set.len(), 100 / 2);
     })
 }
@@ -140,7 +161,10 @@ pub fn clone_10k_and_clear(b: &mut Bencher) {
 #[bench]
 pub fn clone_10k_and_drain_all(b: &mut Bencher) {
     let src = slim_set(10_000);
-    b.iter(|| src.clone().drain_filter(|_| true).count())
+    b.iter(|| {
+        let mut set = src.clone();
+        drain_matching_set(&mut set, |_| true)
+    })
 }
 
 #[bench]
@@ -148,7 +172,7 @@ pub fn clone_10k_and_drain_half(b: &mut Bencher) {
     let src = slim_set(10_000);
     b.iter(|| {
         let mut set = src.clone();
-        assert_eq!(set.drain_filter(|i| i % 2 == 0).count(), 10_000 / 2);
+        assert_eq!(drain_matching_set(&mut set, |i| i % 2 == 0), 10_000 / 2);
         assert_eq!(set.len(), 10_000 / 2);
     })
 }

@@ -6,6 +6,24 @@ use core::ops::RangeBounds;
 use rand::{seq::SliceRandom, thread_rng, Rng};
 use test::{black_box, Bencher};
 
+#[cfg(unialloc_btree_extract_if_range)]
+fn drain_matching_map<K, V, F>(map: &mut BTreeMap<K, V>, pred: F) -> usize
+where
+    K: Ord,
+    F: FnMut(&K, &mut V) -> bool,
+{
+    map.extract_if(.., pred).count()
+}
+
+#[cfg(not(unialloc_btree_extract_if_range))]
+fn drain_matching_map<K, V, F>(map: &mut BTreeMap<K, V>, pred: F) -> usize
+where
+    K: Ord,
+    F: FnMut(&K, &mut V) -> bool,
+{
+    map.drain_filter(pred).count()
+}
+
 macro_rules! map_insert_rand_bench {
     ($name: ident, $n: expr, $map: ident) => {
         #[bench]
@@ -213,13 +231,18 @@ where
     let map: BTreeMap<_, _> = (0..BENCH_RANGE_SIZE).map(|i| (i, i)).collect();
     b.iter(|| {
         let mut c = 0;
+        let mut entries = 0usize;
         for i in 0..BENCH_RANGE_SIZE {
             for j in i + 1..BENCH_RANGE_SIZE {
-                black_box(map.range(f(i, j)));
+                for entry in map.range(f(i, j)) {
+                    black_box(entry);
+                    entries += 1;
+                }
                 c += 1;
             }
         }
         debug_assert_eq!(c, BENCH_RANGE_COUNT);
+        black_box(entries);
     });
 }
 
@@ -246,9 +269,14 @@ pub fn range_unbounded_unbounded(b: &mut Bencher) {
 fn bench_iter(b: &mut Bencher, repeats: i32, size: i32) {
     let map: BTreeMap<_, _> = (0..size).map(|i| (i, i)).collect();
     b.iter(|| {
+        let mut entries = 0usize;
         for _ in 0..repeats {
-            black_box(map.iter());
+            for entry in map.iter() {
+                black_box(entry);
+                entries += 1;
+            }
         }
+        black_box(entries);
     });
 }
 
@@ -311,7 +339,10 @@ pub fn clone_slim_100_and_clear(b: &mut Bencher) {
 #[bench]
 pub fn clone_slim_100_and_drain_all(b: &mut Bencher) {
     let src = slim_map(100);
-    b.iter(|| src.clone().drain_filter(|_, _| true).count())
+    b.iter(|| {
+        let mut map = src.clone();
+        drain_matching_map(&mut map, |_, _| true)
+    })
 }
 
 #[bench]
@@ -319,7 +350,7 @@ pub fn clone_slim_100_and_drain_half(b: &mut Bencher) {
     let src = slim_map(100);
     b.iter(|| {
         let mut map = src.clone();
-        assert_eq!(map.drain_filter(|i, _| i % 2 == 0).count(), 100 / 2);
+        assert_eq!(drain_matching_map(&mut map, |i, _| i % 2 == 0), 100 / 2);
         assert_eq!(map.len(), 100 / 2);
     })
 }
@@ -382,7 +413,10 @@ pub fn clone_slim_10k_and_clear(b: &mut Bencher) {
 #[bench]
 pub fn clone_slim_10k_and_drain_all(b: &mut Bencher) {
     let src = slim_map(10_000);
-    b.iter(|| src.clone().drain_filter(|_, _| true).count())
+    b.iter(|| {
+        let mut map = src.clone();
+        drain_matching_map(&mut map, |_, _| true)
+    })
 }
 
 #[bench]
@@ -390,7 +424,7 @@ pub fn clone_slim_10k_and_drain_half(b: &mut Bencher) {
     let src = slim_map(10_000);
     b.iter(|| {
         let mut map = src.clone();
-        assert_eq!(map.drain_filter(|i, _| i % 2 == 0).count(), 10_000 / 2);
+        assert_eq!(drain_matching_map(&mut map, |i, _| i % 2 == 0), 10_000 / 2);
         assert_eq!(map.len(), 10_000 / 2);
     })
 }
@@ -453,7 +487,10 @@ pub fn clone_fat_val_100_and_clear(b: &mut Bencher) {
 #[bench]
 pub fn clone_fat_val_100_and_drain_all(b: &mut Bencher) {
     let src = fat_val_map(100);
-    b.iter(|| src.clone().drain_filter(|_, _| true).count())
+    b.iter(|| {
+        let mut map = src.clone();
+        drain_matching_map(&mut map, |_, _| true)
+    })
 }
 
 #[bench]
@@ -461,7 +498,7 @@ pub fn clone_fat_val_100_and_drain_half(b: &mut Bencher) {
     let src = fat_val_map(100);
     b.iter(|| {
         let mut map = src.clone();
-        assert_eq!(map.drain_filter(|i, _| i % 2 == 0).count(), 100 / 2);
+        assert_eq!(drain_matching_map(&mut map, |i, _| i % 2 == 0), 100 / 2);
         assert_eq!(map.len(), 100 / 2);
     })
 }

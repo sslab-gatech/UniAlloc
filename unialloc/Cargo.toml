@@ -3,51 +3,96 @@ name = "unialloc"
 version = "0.1.0"
 authors = ["sslab_gatech <sslab@cc.gatech.edu>"]
 edition = "2018"
+autobenches = false
 
 [dependencies]
-libc = { version = "0.2", default-features = false }
-spin = { version = "0.9.0" }
+libc = { version = "=0.2.183", default-features = false }
+spin = { version = "=0.9.0" }
 alloc_macros = { path = "../alloc_macros" }
+mimalloc = { version = "0.1.25", default-features = false, optional = true }
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.8"
 rand = "0.7"
 bencher = "0.1.4"
 rand_xorshift = "0.2"
 iai = "0.1"
-mimalloc = { version = "0.1.25", default-features = false }
-rusty-hook = "0.11.2"
 cfg-if = "1.0.0"
 
-[target.'cfg(unix)'.dev-dependencies]
-jemallocator = "0.3.2"
-tcmalloc = { version = "0.3.0"}
-snmalloc-rs = { version = "0.2.27"}
+[target.'cfg(unix)'.dependencies]
+jemallocator = { version = "0.3.2", optional = true }
+tcmalloc = { version = "0.3.0", optional = true }
+snmalloc-rs = { version = "0.2.27", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["fibersapi", "fileapi", "handleapi", "memoryapi", "minwindef", "processenv", "synchapi", "sysinfoapi", "winbase", "winnt"] }
+
 [build-dependencies]
-num_cpus = "1.0"
-page_size = "0.4.2"
-libc = "0.2.93"
-cfg_aliases = "0.1.0"
+num_cpus = "=1.13.0"
+page_size = "=0.4.2"
+libc = "=0.2.183"
+cfg_aliases = "=0.1.1"
 
 [[bench]]
 name = "std_bench"
 path = "benches/lib.rs"
 test = true
 
+[[bench]]
+name = "semantic_std"
+path = "benches/semantic_std.rs"
+test = true
+
+[[bench]]
+name = "std_bench_compiler_proto_generated"
+path = "benches/std_bench_compiler_proto_generated.rs"
+test = true
+
+[[bench]]
+name = "std_bench_compiler_exact_dynamic_generated"
+path = "benches/std_bench_compiler_exact_dynamic_generated.rs"
+test = true
+
+[[example]]
+name = "pac_metadata_probe_nostd"
+path = "examples/pac_metadata_probe_nostd.rs"
+test = false
+bench = false
+required-features = ["pac"]
+
 [features]
 default = ["pthread_dtor", "rseq"]
 fixed_heap = []
+# Opt-in slab-class backend switch: default builds keep efficient_sc.
+# When enabled, zone/thread-cache calls are adapted to the bitmap-backed
+# separate size-class/page-management path without changing allocator callers.
+separate_sc_backend = []
 hugepage = []
 rseq = []
 pthread_dtor = []
 static_dtor = []
-bench_jemalloc = []
+bench_jemalloc = ["jemallocator"]
 bench_ourself = []
 bench_ptmalloc = []
-bench_mimalloc = []
-bench_tcmalloc = []
-bench_snmalloc = []
+bench_mimalloc = ["mimalloc"]
+bench_tcmalloc = ["tcmalloc"]
+bench_snmalloc = ["snmalloc-rs"]
+bench_scudo = []
 allow_mem_leak = []
+type_isolation = []
+# The paper "metadata_segregation" variant must exercise an allocator path with
+# separated size-class/page metadata, not only attach a different semantic flag
+# to the same default slab backend.  Keep the backend switch explicit and
+# additive: default builds still use efficient_sc, while this feature selects
+# the bitmap-backed separate_sc adapter used by C004 validation.
+metadata_segregation = ["separate_sc_backend"]
+pac = []
+mte = []
+mpk = []
+guard_pages = []
+quarantine = []
+force_initialize = []
+stats = []
 
 [lib]
 doctest = false

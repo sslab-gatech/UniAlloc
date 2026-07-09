@@ -1,4 +1,4 @@
-use crate::error::Result;
+use crate::error::{AllocError, Result};
 use crate::prelude::*;
 use alloc::vec::Vec;
 use core::slice::SliceIndex;
@@ -43,8 +43,15 @@ impl<T> ArrayLinkedList<T> {
         self.list.capacity()
     }
 
+    pub fn try_reserve(&mut self, additional: usize) -> Result<()> {
+        self.list
+            .try_reserve(additional)
+            .map_err(|_| AllocError::ENOMEM)
+    }
+
     pub fn reserve(&mut self, additional: usize) {
-        self.list.reserve(additional);
+        self.try_reserve(additional)
+            .expect("ArrayLinkedList reserve failed")
     }
 
     pub fn len(&self) -> usize {
@@ -73,6 +80,61 @@ impl<T> ArrayLinkedList<T> {
         self.list[idx].0 = idx;
         self.list[idx].1 = idx;
     }
+
+    #[inline]
+    fn checked_links(&self, idx: usize) -> Result<(usize, usize)> {
+        self.list
+            .get(idx)
+            .map(|node| (node.0, node.1))
+            .ok_or(AllocError::EFATAL)
+    }
+
+    #[inline]
+    pub fn try_reset_links(&mut self, idx: usize) -> Result<()> {
+        let node = self.list.get_mut(idx).ok_or(AllocError::EFATAL)?;
+        node.0 = idx;
+        node.1 = idx;
+        Ok(())
+    }
+
+    pub fn try_remove_node(&mut self, idx: usize) -> Result<()> {
+        let (prev_idx, next_idx) = self.checked_links(idx)?;
+        self.checked_links(prev_idx)?;
+        self.checked_links(next_idx)?;
+
+        self.list[next_idx].0 = prev_idx;
+        self.list[prev_idx].1 = next_idx;
+
+        self.list[idx].0 = idx;
+        self.list[idx].1 = idx;
+        Ok(())
+    }
+
+    pub fn try_insert_to_next(&mut self, base: usize, idx: usize) -> Result<()> {
+        let (_, next_idx) = self.checked_links(base)?;
+        self.checked_links(idx)?;
+        self.checked_links(next_idx)?;
+
+        self.list[next_idx].0 = idx;
+        self.list[base].1 = idx;
+
+        self.list[idx].1 = next_idx;
+        self.list[idx].0 = base;
+        Ok(())
+    }
+
+    pub fn try_insert_to_prev(&mut self, base: usize, idx: usize) -> Result<()> {
+        let (prev_idx, _) = self.checked_links(base)?;
+        self.checked_links(idx)?;
+        self.checked_links(prev_idx)?;
+
+        self.list[prev_idx].1 = idx;
+        self.list[base].0 = idx;
+
+        self.list[idx].1 = base;
+        self.list[idx].0 = prev_idx;
+        Ok(())
+    }
 }
 
 impl<T> Linkedlist for ArrayLinkedList<T> {
@@ -92,16 +154,10 @@ impl<T> Linkedlist for ArrayLinkedList<T> {
     /// Pops the last item from the internal vector
     /// The item is unlinked from the linklist
     fn pop(&mut self) -> Option<Self::Item> {
-        // unlink from the linklist
-        self.remove_node(self.list.len() - 1);
-        let last_item = self.list.pop();
-
-        if let Some(tuple) = last_item {
-            let res = tuple.2;
-            return Some(res);
-        }
-
-        None
+        let last_idx = self.list.len().checked_sub(1)?;
+        // unlink from the linklist before removing the backing slot
+        self.remove_node(last_idx);
+        self.list.pop().map(|tuple| tuple.2)
     }
 
     /// Removes a node from linklist
@@ -146,7 +202,10 @@ impl<T> Linkedlist for ArrayLinkedList<T> {
     /// Gets the `prev` item
     #[inline]
     fn get_prev(&self, idx: usize) -> Result<usize> {
-        Ok(self.list[idx].0)
+        self.list
+            .get(idx)
+            .map(|node| node.0)
+            .ok_or(AllocError::EFATAL)
     }
 
     /// Sets the `prev` item
@@ -158,7 +217,10 @@ impl<T> Linkedlist for ArrayLinkedList<T> {
     /// Gets the `next` item
     #[inline]
     fn get_next(&self, idx: usize) -> Result<usize> {
-        Ok(self.list[idx].1)
+        self.list
+            .get(idx)
+            .map(|node| node.1)
+            .ok_or(AllocError::EFATAL)
     }
 
     /// Sets the `next` item
@@ -172,8 +234,73 @@ impl<T> Linkedlist for ArrayLinkedList<T> {
 mod test {
     use super::*;
 
+    #[cfg(feature = "fixed_heap")]
+    fn init_test_allocator() -> spin::MutexGuard<'static, ()> {
+        crate::sc::fixed_heap_test_guard()
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    fn init_test_allocator() {}
+
     #[test]
     fn arr_linklist_new() {
-        let l = ArrayLinkedList::<usize>::new();
+        let _fixed_heap_guard = init_test_allocator();
+        let list = ArrayLinkedList::<usize>::new();
+        assert_eq!(list.len(), 0);
+    }
+
+    #[test]
+    fn pop_empty_returns_none_without_underflow() {
+        let _fixed_heap_guard = init_test_allocator();
+        let mut list = ArrayLinkedList::<usize>::new();
+
+        assert_eq!(list.pop(), None);
+        assert_eq!(list.len(), 0);
+    }
+
+    #[test]
+    fn try_reserve_reports_impossible_growth_without_mutation() {
+        let _fixed_heap_guard = init_test_allocator();
+        let mut list = ArrayLinkedList::<usize>::new();
+        list.push(1);
+        let len_before = list.len();
+        let capacity_before = list.capacity();
+
+        let err = list
+            .try_reserve(usize::MAX)
+            .expect_err("impossible metadata growth should report ENOMEM");
+
+        assert_eq!(err.to_raw_errno(), AllocError::ENOMEM.to_raw_errno());
+        assert_eq!(list.len(), len_before);
+        assert_eq!(list.capacity(), capacity_before);
+    }
+
+    #[test]
+    fn checked_remove_rejects_invalid_index_without_panic() {
+        let _fixed_heap_guard = init_test_allocator();
+        let mut list = ArrayLinkedList::<usize>::new();
+        list.push(1);
+
+        let err = list
+            .try_remove_node(1)
+            .expect_err("invalid list index must fail closed");
+
+        assert_eq!(err.to_raw_errno(), AllocError::EFATAL.to_raw_errno());
+        assert_eq!(list.len(), 1);
+    }
+
+    #[test]
+    fn checked_insert_rejects_invalid_base_without_panic() {
+        let _fixed_heap_guard = init_test_allocator();
+        let mut list = ArrayLinkedList::<usize>::new();
+        list.push(1);
+        list.push(2);
+
+        let err = list
+            .try_insert_to_prev(9, 1)
+            .expect_err("invalid base must not index out of bounds");
+
+        assert_eq!(err.to_raw_errno(), AllocError::EFATAL.to_raw_errno());
+        assert_eq!(list.len(), 2);
     }
 }

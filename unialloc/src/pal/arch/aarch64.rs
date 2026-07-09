@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 #[cfg(target_arch = "aarch64")]
 pub fn syscall4(nr: usize, args: [usize; 4]) -> isize {
     let ret: isize;

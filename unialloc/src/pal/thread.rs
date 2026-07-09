@@ -16,6 +16,6 @@ mod test {
             42
         });
 
-        let result = computation.join().unwrap();
+        assert_eq!(computation.join().unwrap(), 42);
     }
 }

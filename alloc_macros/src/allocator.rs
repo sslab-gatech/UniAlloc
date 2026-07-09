@@ -180,14 +180,75 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
     let name = expect_ident(&mut it);
     assert_eq!(expect_punct(&mut it), ',');
     let func = expect_ident(&mut it);
+    let tsd_state_name = format!("{}_TSD_STATE", name.to_uppercase());
+    let ensure_tsd_name = format!("{}_ensure_tsd_initialized", name.to_lowercase());
+    let load_tls_name = format!("{}_load_tls_value", name.to_lowercase());
+    let store_tls_name = format!("{}_store_tls_value", name.to_lowercase());
 
     let expanded = format!(
         "
             // The `VALUE` needs to be declared at the outside of [`deref`]
-            // and [`deref_mut`]
+            // and [`deref_mut`].  arm64e current-nightly Mach-O TLV
+            // descriptors can fault before allocator logic in no_std probes,
+            // so that target uses the already-registered pthread key itself as
+            // the per-thread pointer store.  Normal targets keep the fast Rust
+            // `#[thread_local]` path and still save the pointer into the
+            // pthread key for destructor cleanup.
+            #[cfg(not(unialloc_target_arm64e))]
             #[thread_local]
-            static mut {name}_VALUE: * mut {ty} =core::ptr::null_mut();
-            static mut TSD_INITIALIZED: bool = false;
+            static mut {name}_VALUE: * mut {ty} = core::ptr::null_mut();
+            static {tsd_state_name}: core::sync::atomic::AtomicU8 =
+                core::sync::atomic::AtomicU8::new(0);
+
+            #[inline]
+            unsafe fn {ensure_tsd_name}() {{
+                loop {{
+                    match {tsd_state_name}.load(core::sync::atomic::Ordering::Acquire) {{
+                        2 => return,
+                        0 => {{
+                            if {tsd_state_name}.compare_exchange(
+                                0,
+                                1,
+                                core::sync::atomic::Ordering::AcqRel,
+                                core::sync::atomic::Ordering::Acquire,
+                            ).is_ok() {{
+                                register_tls_key({func});
+                                {tsd_state_name}.store(2, core::sync::atomic::Ordering::Release);
+                                return;
+                            }}
+                        }}
+                        _ => core::hint::spin_loop(),
+                    }}
+                }}
+            }}
+
+            #[inline]
+            unsafe fn {load_tls_name}() -> *mut {ty} {{
+                #[cfg(unialloc_target_arm64e)]
+                {{
+                    {ensure_tsd_name}();
+                    load_tls() as *mut {ty}
+                }}
+                #[cfg(not(unialloc_target_arm64e))]
+                {{
+                    {name}_VALUE
+                }}
+            }}
+
+            #[inline]
+            unsafe fn {store_tls_name}(ptr: *mut {ty}) {{
+                #[cfg(unialloc_target_arm64e)]
+                {{
+                    {ensure_tsd_name}();
+                    save_tls(ptr as *mut u8);
+                }}
+                #[cfg(not(unialloc_target_arm64e))]
+                {{
+                    {name}_VALUE = ptr;
+                    {ensure_tsd_name}();
+                    save_tls(ptr as *mut u8);
+                }}
+            }}
 
             // ZST for dereference
             pub struct {name};
@@ -197,25 +258,20 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
 
                 fn deref(&self) -> &{ty} {{
                     extern crate alloc;
-                    use alloc::alloc::GlobalAlloc;
+                    use alloc::alloc::Allocator;
                     unsafe {{
-                        if !{name}_VALUE.is_null() {{
-                            return  {name}_VALUE.as_ref().unwrap();
+                        let mut ptr = {load_tls_name}();
+                        if !ptr.is_null() {{
+                            return ptr.as_ref().unwrap();
                         }}
-                        // let layout = Layout::new::<{ty}>();
-                        // {name}_VALUE = META_BUMP.alloc(layout.size()).expect(\"err\")  as *mut {ty};
-                        // core::ptr::write({name}_VALUE, {ty}::new());
-                        let boxed_ptr:Box<{ty}, MetadataAllocator> =
-                            Box::new_in(
-                                {ty}::new()
-                                , MetadataAllocator  {{ }});
-                        {name}_VALUE = Box::into_raw(boxed_ptr);
-                        if !TSD_INITIALIZED {{
-                            register_tls_key({func});
-                            TSD_INITIALIZED = true;
-                        }}
-                        save_tls({name}_VALUE as *mut u8);
-                        {name}_VALUE.as_ref().unwrap()
+                        let layout = alloc::alloc::Layout::new::<{ty}>();
+                        let allocation = MetadataAllocator  {{ }}
+                            .allocate(layout)
+                            .unwrap_or_else(|_| alloc::alloc::handle_alloc_error(layout));
+                        ptr = allocation.as_non_null_ptr().as_ptr() as *mut {ty};
+                        core::ptr::write(ptr, {ty}::new());
+                        {store_tls_name}(ptr);
+                        ptr.as_ref().unwrap()
                     }}
                 }}
             }}
@@ -223,30 +279,31 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
             impl core::ops::DerefMut for {name} {{
                 fn deref_mut(&mut self) -> &mut {ty} {{
                     extern crate alloc;
-                    use alloc::alloc::GlobalAlloc;
+                    use alloc::alloc::Allocator;
                     unsafe {{
-                        if !{name}_VALUE.is_null() {{
-                            return {name}_VALUE.as_mut().unwrap();
+                        let mut ptr = {load_tls_name}();
+                        if !ptr.is_null() {{
+                            return ptr.as_mut().unwrap();
                         }}
-                        let boxed_ptr:Box<{ty}, MetadataAllocator> =
-                            Box::new_in(
-                                {ty}::new()
-                                , MetadataAllocator {{}}
-                                );
-                        {name}_VALUE = Box::into_raw(boxed_ptr);
-                        if !TSD_INITIALIZED {{
-                            register_tls_key({func});
-                            TSD_INITIALIZED = true;
-                        }}
-                        save_tls({name}_VALUE as *mut u8);
-                        {name}_VALUE.as_mut().unwrap()
+                        let layout = alloc::alloc::Layout::new::<{ty}>();
+                        let allocation = MetadataAllocator {{}}
+                            .allocate(layout)
+                            .unwrap_or_else(|_| alloc::alloc::handle_alloc_error(layout));
+                        ptr = allocation.as_non_null_ptr().as_ptr() as *mut {ty};
+                        core::ptr::write(ptr, {ty}::new());
+                        {store_tls_name}(ptr);
+                        ptr.as_mut().unwrap()
                     }}
                 }}
             }}
         ",
         ty = ty,
         name = name,
-        func = func
+        func = func,
+        tsd_state_name = tsd_state_name,
+        ensure_tsd_name = ensure_tsd_name,
+        load_tls_name = load_tls_name,
+        store_tls_name = store_tls_name,
     );
 
     expanded
@@ -269,10 +326,48 @@ fn gcd(a: usize, b: usize) -> usize {
 }
 
 fn lcm(a: usize, b: usize) -> usize {
-    a * b / gcd(a, b)
+    if a == 0 || b == 0 {
+        return 0;
+    }
+    a / gcd(a, b) * b
 }
 
-/// Calculates the gcd of
+const DEFAULT_TARGET_PAGE_SIZE: usize = 4096;
+const MACOS_AARCH64_PAGE_SIZE: usize = 16 * 1024;
+const RESOLVED_PAGE_SIZE_ENV: &str = "UNIALLOC_RESOLVED_PAGE_SIZE";
+const TARGET_PAGE_SIZE_ENV: &str = "UNIALLOC_TARGET_PAGE_SIZE";
+
+fn parse_power_of_two_usize(value: Option<String>) -> Option<usize> {
+    value
+        .and_then(|raw| raw.trim().parse::<usize>().ok())
+        .filter(|page_size| *page_size != 0 && page_size.is_power_of_two())
+}
+
+fn default_page_size_for_target(target_os: &str, target_arch: &str) -> usize {
+    match (target_os, target_arch) {
+        ("macos", "aarch64") => MACOS_AARCH64_PAGE_SIZE,
+        _ => DEFAULT_TARGET_PAGE_SIZE,
+    }
+}
+
+fn page_size_for_generate_num_pages() -> usize {
+    parse_power_of_two_usize(std::env::var(RESOLVED_PAGE_SIZE_ENV).ok())
+        .or_else(|| parse_power_of_two_usize(std::env::var(TARGET_PAGE_SIZE_ENV).ok()))
+        .unwrap_or_else(|| {
+            let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+            let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+            default_page_size_for_target(&target_os, &target_arch)
+        })
+}
+
+fn num_pages_for_size_class(page_size: usize, size_class: usize) -> usize {
+    if size_class == 0 {
+        return 0;
+    }
+    lcm(page_size, size_class) / page_size
+}
+
+/// Calculates the number of target pages backing each size class.
 pub fn generate_num_pages(input: TokenStream) -> TokenStream {
     let mut it = input.into_iter();
     let mut vals = String::new();
@@ -287,13 +382,16 @@ pub fn generate_num_pages(input: TokenStream) -> TokenStream {
         };
 
         let cl = cl.parse::<usize>().unwrap();
-        // #[cfg(target_arch = "x86_64")]
-        // TODO: check how to determine page size dynamically
-        const PAGE_SIZE: usize = 0x1000;
-        // #[cfg(target_arch = "aarch64")]
-        // let page_size = 0x10000;
-
-        let num_pages = lcm(PAGE_SIZE, cl) / PAGE_SIZE;
+        // Keep this proc-macro's page geometry in lockstep with
+        // `unialloc/build.rs`.  The build script exports the resolved value via
+        // `UNIALLOC_RESOLVED_PAGE_SIZE`; direct macro-crate tests and unusual
+        // compile flows fall back to `UNIALLOC_TARGET_PAGE_SIZE` or a target
+        // default.  Hard-coding 4 KiB here made the dormant MiMalloc-style size
+        // class table over-reserve pages on native Apple Silicon (16 KiB pages),
+        // which is exactly the kind of hidden internal/RSS fragmentation this
+        // allocator work is trying to remove.
+        let page_size = page_size_for_generate_num_pages();
+        let num_pages = num_pages_for_size_class(page_size, cl);
 
         vals.push_str(&format!("{}, ", num_pages));
 
@@ -311,4 +409,27 @@ pub fn generate_num_pages(input: TokenStream) -> TokenStream {
     )
     .parse()
     .expect("Error parsing formatted string into token stream.")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_num_pages_prefers_resolved_page_size() {
+        assert_eq!(
+            parse_power_of_two_usize(Some("16384".to_string())),
+            Some(16 * 1024)
+        );
+        assert_eq!(parse_power_of_two_usize(Some("12288".to_string())), None);
+        assert_eq!(default_page_size_for_target("macos", "aarch64"), 16 * 1024);
+        assert_eq!(default_page_size_for_target("linux", "x86_64"), 4096);
+    }
+
+    #[test]
+    fn num_pages_for_size_class_uses_target_page_geometry() {
+        assert_eq!(num_pages_for_size_class(4096, 40960), 10);
+        assert_eq!(num_pages_for_size_class(16 * 1024, 40960), 5);
+        assert_eq!(num_pages_for_size_class(16 * 1024, 0), 0);
+    }
 }

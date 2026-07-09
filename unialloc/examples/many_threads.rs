@@ -4,10 +4,9 @@ use unialloc::UniAlloc;
 #[global_allocator]
 static A: UniAlloc = UniAlloc;
 
-use alloc::{boxed::Box, vec::Vec};
 use std::thread;
 
-use rand::{thread_rng, Rng};
+use rand::Rng;
 
 const NTHREADS: u32 = 2000;
 

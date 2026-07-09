@@ -30,6 +30,10 @@ cfg_if::cfg_if! {
         use tcmalloc::TCMalloc;
         #[global_allocator]
         static TCMALLOC: TCMalloc = TCMalloc;
+    } else if #[cfg(feature = "bench_scudo")] {
+        use std::alloc::System;
+        #[global_allocator]
+        static SCUDO_SYSTEM: System = System;
     } else {}
 }
 

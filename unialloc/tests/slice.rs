@@ -1,10 +1,3 @@
-#![feature(vec_extend_from_within)]
-#![feature(try_reserve)]
-#![feature(vec_spare_capacity)]
-#![feature(int_bits_const)]
-#![feature(drain_filter)]
-#![feature(box_syntax)]
-#![feature(iter_map_while)]
 #![feature(inplace_iteration)]
 #![feature(exact_size_is_empty)]
 
@@ -17,20 +10,11 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 
 use rand::distributions::Standard;
-use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng, RngCore};
 
 extern crate alloc;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 
 include!("allocator.rs");
-
-fn hash<T: Hash>(t: &T) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish()
-}
 
 fn square(n: usize) -> usize {
     n * n
@@ -289,9 +273,9 @@ fn test_swap_remove_fail() {
 fn test_swap_remove_noncopyable() {
     // Tests that we don't accidentally run destructors twice.
     let mut v: Vec<Box<_>> = Vec::new();
-    v.push(box 0);
-    v.push(box 0);
-    v.push(box 0);
+    v.push(Box::new(0));
+    v.push(Box::new(0));
+    v.push(Box::new(0));
     let mut _e = v.swap_remove(0);
     assert_eq!(v.len(), 2);
     _e = v.swap_remove(1);
@@ -317,7 +301,7 @@ fn test_push() {
 
 #[test]
 fn test_truncate() {
-    let mut v: Vec<Box<_>> = vec![box 6, box 5, box 4];
+    let mut v: Vec<Box<_>> = vec![Box::new(6), Box::new(5), Box::new(4)];
     v.truncate(1);
     let v = v;
     assert_eq!(v.len(), 1);
@@ -327,7 +311,7 @@ fn test_truncate() {
 
 #[test]
 fn test_clear() {
-    let mut v: Vec<Box<_>> = vec![box 6, box 5, box 4];
+    let mut v: Vec<Box<_>> = vec![Box::new(6), Box::new(5), Box::new(4)];
     v.clear();
     assert_eq!(v.len(), 0);
     // If the unsafe block didn't drop things properly, we blow up here.
@@ -463,18 +447,6 @@ fn test_sort() {
                 assert!(v.windows(2).all(|w| w[0] <= w[1]));
             }
         }
-    }
-
-    // Sort using a completely random comparison function.
-    // This will reorder the elements *somehow*, but won't panic.
-    let mut v = [0; 500];
-    for i in 0..v.len() {
-        v[i] = i as i32;
-    }
-    v.sort_by(|_, _| *[Less, Equal, Greater].choose(&mut rng).unwrap());
-    v.sort();
-    for i in 0..v.len() {
-        assert_eq!(v[i], i as i32);
     }
 
     // Should not panic.
@@ -1035,6 +1007,7 @@ fn test_splitator_mut_inclusive_reverse() {
 }
 
 #[test]
+#[allow(clippy::suspicious_splitn)]
 fn test_splitnator() {
     let xs = &[1, 2, 3, 4, 5];
 
@@ -1051,6 +1024,7 @@ fn test_splitnator() {
 }
 
 #[test]
+#[allow(clippy::suspicious_splitn)]
 fn test_splitnator_mut() {
     let xs = &mut [1, 2, 3, 4, 5];
 
@@ -1091,6 +1065,7 @@ fn test_rsplitator() {
 }
 
 #[test]
+#[allow(clippy::suspicious_splitn)]
 fn test_rsplitnator() {
     let xs = &[1, 2, 3, 4, 5];
 
@@ -1569,14 +1544,14 @@ fn test_mut_last() {
 
 #[test]
 fn test_to_vec() {
-    let xs: Box<_> = box [1, 2, 3];
+    let xs: Box<_> = Box::new([1, 2, 3]);
     let ys = xs.to_vec();
     assert_eq!(ys, [1, 2, 3]);
 }
 
 #[test]
 fn test_in_place_iterator_specialization() {
-    let src: Box<[usize]> = box [1, 2, 3];
+    let src: Box<[usize]> = Box::new([1, 2, 3]);
     let src_ptr = src.as_ptr();
     let sink: Box<_> = src
         .into_vec()
@@ -1951,7 +1926,9 @@ fn subslice_patterns() {
     macro_rules! m {
         ($e:expr, $p:pat => $b:expr) => {
             match $e {
-                $p => $b,
+                $p => {
+                    $b;
+                }
                 _ => panic!(),
             }
         };

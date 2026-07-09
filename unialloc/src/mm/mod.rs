@@ -1,6 +1,5 @@
 //! Arena and Backend Allocators
 
-use crate::buddy_system::*;
 use crate::prelude::*;
 use alloc::boxed::Box;
 use core::alloc::{AllocError, Allocator, Layout};

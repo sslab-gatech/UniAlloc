@@ -5,6 +5,7 @@ members = [
 
 exclude = [
     "kernel",
+    "evaluation/external/_checkouts",
 ]
 
 [profile.dev]

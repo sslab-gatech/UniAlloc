@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::time::Duration;
 
 extern crate alloc;
 extern crate rand;

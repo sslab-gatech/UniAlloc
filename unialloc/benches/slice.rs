@@ -127,11 +127,11 @@ fn zero_1kb_set_memory(b: &mut Bencher) {
 fn zero_1kb_loop_set(b: &mut Bencher) {
     b.iter(|| {
         let mut v = Vec::<u8>::with_capacity(1024);
+        for i in 0..1024 {
+            v.spare_capacity_mut()[i].write(0);
+        }
         unsafe {
             v.set_len(1024);
-        }
-        for i in 0..1024 {
-            v[i] = 0;
         }
     });
 }
@@ -140,11 +140,11 @@ fn zero_1kb_loop_set(b: &mut Bencher) {
 fn zero_1kb_mut_iter(b: &mut Bencher) {
     b.iter(|| {
         let mut v = Vec::<u8>::with_capacity(1024);
+        for x in v.spare_capacity_mut() {
+            x.write(0);
+        }
         unsafe {
             v.set_len(1024);
-        }
-        for x in &mut v {
-            *x = 0;
         }
         v
     });
@@ -413,12 +413,8 @@ reverse!(reverse_u8x3, [u8; 3], |x| [
 reverse!(reverse_u32, u32, |x| x as u32);
 reverse!(reverse_u64, u64, |x| x as u64);
 reverse!(reverse_u128, u128, |x| x as u128);
-#[repr(simd)]
-struct F64x4(f64, f64, f64, f64);
-reverse!(reverse_simd_f64x4, F64x4, |x| {
-    let x = x as f64;
-    F64x4(x, x, x, x)
-});
+type F64x4 = std::simd::Simd<f64, 4>;
+reverse!(reverse_simd_f64x4, F64x4, |x| { F64x4::splat(x as f64) });
 
 macro_rules! rotate {
     ($name:ident, $gen:expr, $len:expr, $mid:expr) => {

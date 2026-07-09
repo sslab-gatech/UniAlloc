@@ -1,5 +1,4 @@
 #![cfg(not(target_os = "android"))]
-#![feature(btree_drain_filter)]
 #![feature(map_first_last)]
 #![feature(repr_simd)]
 #![feature(slice_partition_dedup)]
@@ -9,14 +8,6 @@ use test::{black_box, Bencher};
 
 extern crate test;
 include!("allocator.rs");
-
-/// Returns a `rand::Rng` seeded with a consistent seed.
-///
-/// This is done to avoid introducing nondeterminism in benchmark results.
-fn bench_rng() -> rand_xorshift::XorShiftRng {
-    const SEED: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-    rand::SeedableRng::from_seed(SEED)
-}
 
 #[bench]
 fn bench_new(b: &mut Bencher) {

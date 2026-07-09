@@ -8,7 +8,41 @@ fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
 
 #[cfg(target_os = "windows")]
 fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
-    syscall3(1, [fd as usize, buf as usize, len as usize])
+    use core::ptr;
+    use winapi::um::fileapi::WriteFile;
+    use winapi::um::handleapi::INVALID_HANDLE_VALUE;
+    use winapi::um::processenv::GetStdHandle;
+    use winapi::um::winbase::{STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
+
+    if len > u32::MAX as usize {
+        return -1;
+    }
+
+    let handle_id = match fd {
+        1 => STD_OUTPUT_HANDLE,
+        2 => STD_ERROR_HANDLE,
+        _ => return -1,
+    };
+    let handle = unsafe { GetStdHandle(handle_id) };
+    if handle.is_null() || handle == INVALID_HANDLE_VALUE {
+        return -1;
+    }
+
+    let mut written = 0u32;
+    let ok = unsafe {
+        WriteFile(
+            handle,
+            buf as *const _,
+            len as u32,
+            &mut written,
+            ptr::null_mut(),
+        )
+    };
+    if ok == 0 {
+        -1
+    } else {
+        written as isize
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -19,7 +53,13 @@ fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
 
 fn put_char(c: usize) {
     #[cfg(not(feature = "fixed_heap"))]
-    sys_write(2, &c as *const _ as *const u8, 1);
+    {
+        sys_write(2, &c as *const _ as *const u8, 1);
+    }
+    #[cfg(feature = "fixed_heap")]
+    {
+        let _ = c;
+    }
 }
 
 struct Stdout;
