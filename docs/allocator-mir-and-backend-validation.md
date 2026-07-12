@@ -594,11 +594,27 @@ Current key result on this host:
 
 - direct allocator probe: `probe_validated=true`, `allocator_validated=true`,
   `pac_probe_uses_allocated_object=true`, `backend_observation_consistent=true`;
-- current Rust target: `hardware_pac_validated=false`,
-  `software_fallback_validated=true`, `pac_probe_active_key=none`;
+- the default `aarch64-apple-darwin` Rust target uses the safe software
+  fallback (`hardware_pac_validated=false`, `software_fallback_validated=true`);
 - cleanup: the direct probe removed its temporary cargo target directory after
   collecting the audit.
 
-Therefore C006 remains non-claim-grade on this machine: the allocator path is
-real and validated, but the current Rust/aarch64 target observes no hardware PAC
-context binding, so the implementation honestly uses the software fallback.
+Commit `0d00c8d` adds a separate no-std consumer contract so the real allocator
+probe can target `arm64e-apple-darwin` without pulling UniAlloc's std-only
+dev-dependencies:
+
+```sh
+cargo +nightly-2026-06-11 run \
+  -Z build-std=core,alloc,panic_abort \
+  --manifest-path tools/pac-nostd-contract/Cargo.toml \
+  --target arm64e-apple-darwin \
+  --features pac,stats
+```
+
+That current-source arm64e run reports `allocator_validated=true`,
+`hardware_pac_validated=true`, and `context_binding_active=true`; wrong-layout
+and wrong-metadata authentication are rejected, typed-cache insert/hit counts
+are `2/1`, and PAC sign/verification/failure counts are `3/2/0`.  This closes
+the local allocator-runtime PAC functionality lane while preserving the safe
+fallback on non-arm64e targets.  It does not measure PAC cost, so the optional
+C006 performance percentage remains deferred.
