@@ -10,7 +10,7 @@ use alloc::boxed::Box;
 use core::cell::RefCell;
 use core::mem::align_of;
 use core::ptr::null_mut;
-#[cfg(feature = "stats")]
+#[cfg(any(feature = "stats", all(test, windows)))]
 use core::sync::atomic::{AtomicUsize, Ordering};
 use core::{
     alloc::{Allocator, GlobalAlloc, Layout},
@@ -1661,6 +1661,18 @@ use super::*;
 use crate::pal::sync::general_thread_local::{load_tls, register_tls_key, save_tls};
 use alloc_macros::tls_static;
 #[cfg(not(feature = "fixed_heap"))]
+unsafe fn release_thread_cache_storage(ptr: *mut ThreadCache) {
+    let tcache = match ptr.as_mut() {
+        Some(tcache) => tcache,
+        None => return,
+    };
+    tcache.cleanup_cache_unchecked();
+    META_BUMP
+        .lock()
+        .dealloc(ptr as *mut usize, core::mem::size_of::<ThreadCache>());
+}
+
+#[cfg(all(not(feature = "fixed_heap"), not(windows)))]
 unsafe extern "C" fn free_thread_cache(ptr: *mut libc::c_void) {
     let ptr = ptr as *mut ThreadCache;
     if !ptr.is_null() {
@@ -1680,19 +1692,79 @@ unsafe extern "C" fn free_thread_cache(ptr: *mut libc::c_void) {
         // access. Fail closed instead of returning that storage to META_BUMP.
         globaltcache_tls_storage_failure();
     }
-    let tcache = match ptr.as_mut() {
-        Some(tcache) => tcache,
-        None => return,
-    };
-    tcache.cleanup_cache_unchecked();
-    META_BUMP
-        .lock()
-        .dealloc(ptr as *mut usize, core::mem::size_of::<ThreadCache>());
+    release_thread_cache_storage(ptr);
+}
+
+#[cfg(all(not(feature = "fixed_heap"), windows))]
+unsafe extern "C" fn free_thread_cache(ptr: *mut libc::c_void) {
+    let ptr = ptr.cast::<ThreadCache>();
+    if ptr.is_null() {
+        return;
+    }
+
+    // FlsSetValue always targets the calling/current fiber. Windows can invoke
+    // this callback for DeleteFiber(B) while fiber A remains current, so the
+    // callback argument is the only ownership identity that is safe to use.
+    // In particular, clearing GlobalTcache here would clear A rather than B.
+    // Rust semantic retained caches are OS-thread-local rather than fiber-local,
+    // however, so a non-current fiber callback must flush those allocator-owned
+    // objects before its last usable ThreadCache is reclaimed. Live memory-tag,
+    // recovery, scope, and compiler-cursor state still belongs to the thread
+    // and is cleared only by the current-owner thread-exit callback.
+    let current = globaltcache_load_tls_value();
+    let allocator = crate::cache::RustAllocator::new();
+    if current == ptr {
+        let released_count =
+            crate::alloc_api::type_isolation::drain_current_thread_semantic_state(&allocator);
+        #[cfg(test)]
+        {
+            WINDOWS_CURRENT_OWNER_DESTRUCTOR_DRAINS.fetch_add(1, Ordering::Relaxed);
+            WINDOWS_CURRENT_OWNER_DESTRUCTOR_RELEASED.fetch_add(released_count, Ordering::Relaxed);
+        }
+        #[cfg(not(test))]
+        let _ = released_count;
+    } else {
+        // When A has no cache and DeleteFiber(B) invokes B's callback, bind B
+        // just long enough for allocation-free raw deallocation. If either FLS
+        // update fails, retain B's storage: leaking is safer than reclaiming a
+        // cache that the current FLS slot may still expose.
+        let temporarily_bound = current.is_null();
+        if temporarily_bound && globaltcache_store_tls_value(ptr).is_err() {
+            return;
+        }
+
+        let released_count =
+            crate::alloc_api::type_isolation::drain_current_thread_semantic_retained_state(
+                &allocator,
+            );
+
+        if temporarily_bound && globaltcache_store_tls_value(core::ptr::null_mut()).is_err() {
+            return;
+        }
+
+        #[cfg(test)]
+        {
+            WINDOWS_NON_CURRENT_DESTRUCTOR_DRAINS.fetch_add(1, Ordering::Relaxed);
+            WINDOWS_NON_CURRENT_DESTRUCTOR_RELEASED.fetch_add(released_count, Ordering::Relaxed);
+        }
+        #[cfg(not(test))]
+        let _ = released_count;
+    }
+    release_thread_cache_storage(ptr);
 }
 #[cfg(not(feature = "fixed_heap"))]
 tls_static! {
     ThreadCache GlobalTcache, free_thread_cache
 }
+
+#[cfg(all(test, windows, not(feature = "fixed_heap")))]
+static WINDOWS_CURRENT_OWNER_DESTRUCTOR_DRAINS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(all(test, windows, not(feature = "fixed_heap")))]
+static WINDOWS_CURRENT_OWNER_DESTRUCTOR_RELEASED: AtomicUsize = AtomicUsize::new(0);
+#[cfg(all(test, windows, not(feature = "fixed_heap")))]
+static WINDOWS_NON_CURRENT_DESTRUCTOR_DRAINS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(all(test, windows, not(feature = "fixed_heap")))]
+static WINDOWS_NON_CURRENT_DESTRUCTOR_RELEASED: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(test)]
 mod tests {
@@ -1731,12 +1803,48 @@ mod tests {
     }
 
     #[cfg(all(windows, not(feature = "fixed_heap")))]
+    unsafe extern "system" fn global_tcache_fiber_b_semantic_entry(
+        _parameter: *mut winapi::ctypes::c_void,
+    ) {
+        WINDOWS_FIBER_B_INITIAL_TCACHE.store(
+            globaltcache_load_tls_value() as usize,
+            core::sync::atomic::Ordering::Release,
+        );
+
+        let allocator = crate::cache::RustAllocator::new();
+        let layout =
+            Layout::from_size_align(64, align_of::<usize>()).expect("valid semantic cache layout");
+        let metadata = crate::alloc_api::type_isolation::AllocationMetadata::for_type(0xC003_B0B0)
+            .with_module(0xC003)
+            .with_callsite(0xA110_B0B0)
+            .with_flags(crate::alloc_api::type_isolation::FLAG_TYPE_ISOLATED);
+        let ptr = allocator.alloc_with_metadata(layout, metadata);
+        assert!(!ptr.is_null());
+        allocator.dealloc_with_metadata(ptr, layout, metadata);
+
+        WINDOWS_FIBER_B_TCACHE.store(
+            globaltcache_load_tls_value() as usize,
+            core::sync::atomic::Ordering::Release,
+        );
+        loop {
+            winapi::um::winbase::SwitchToFiber(
+                WINDOWS_MAIN_FIBER.load(core::sync::atomic::Ordering::Acquire)
+                    as *mut winapi::ctypes::c_void,
+            );
+        }
+    }
+
+    #[cfg(all(windows, not(feature = "fixed_heap")))]
     #[test]
     #[ignore = "uses the production GlobalTcache FLS slot; run in an isolated Windows process"]
     fn global_thread_cache_values_are_fiber_local_on_windows() {
         unsafe {
             WINDOWS_FIBER_B_INITIAL_TCACHE.store(usize::MAX, core::sync::atomic::Ordering::Relaxed);
             WINDOWS_FIBER_B_TCACHE.store(usize::MAX, core::sync::atomic::Ordering::Relaxed);
+            WINDOWS_CURRENT_OWNER_DESTRUCTOR_DRAINS.store(0, Ordering::Relaxed);
+            WINDOWS_CURRENT_OWNER_DESTRUCTOR_RELEASED.store(0, Ordering::Relaxed);
+            WINDOWS_NON_CURRENT_DESTRUCTOR_DRAINS.store(0, Ordering::Relaxed);
+            WINDOWS_NON_CURRENT_DESTRUCTOR_RELEASED.store(0, Ordering::Relaxed);
 
             let main_fiber = winapi::um::winbase::ConvertThreadToFiber(core::ptr::null_mut());
             assert!(!main_fiber.is_null(), "ConvertThreadToFiber failed");
@@ -1745,6 +1853,20 @@ mod tests {
             let fiber_a_initial = globaltcache_load_tls_value() as usize;
             let _ = (&*GlobalTcache).footprint_snapshot();
             let fiber_a_tcache = globaltcache_load_tls_value() as usize;
+            let allocator = crate::cache::RustAllocator::new();
+            let semantic_layout = Layout::from_size_align(64, align_of::<usize>())
+                .expect("valid semantic cache layout");
+            let semantic_metadata =
+                crate::alloc_api::type_isolation::AllocationMetadata::for_type(0xC003_F1B3)
+                    .with_module(0xC003)
+                    .with_callsite(0xA110_F1B3)
+                    .with_flags(crate::alloc_api::type_isolation::FLAG_TYPE_ISOLATED);
+            let semantic_ptr = allocator.alloc_with_metadata(semantic_layout, semantic_metadata);
+            assert!(!semantic_ptr.is_null());
+            allocator.dealloc_with_metadata(semantic_ptr, semantic_layout, semantic_metadata);
+            let semantic_before_delete =
+                crate::alloc_api::type_isolation::type_isolation_side_cache_snapshot();
+            assert_eq!(semantic_before_delete.occupied_entries, 1);
 
             let fiber_b = winapi::um::winbase::CreateFiber(
                 0,
@@ -1752,6 +1874,13 @@ mod tests {
                 core::ptr::null_mut(),
             );
             if fiber_b.is_null() {
+                let _ = crate::alloc_api::type_isolation::drain_current_thread_semantic_state(
+                    &allocator,
+                );
+                assert!(
+                    globaltcache_store_tls_value(core::ptr::null_mut()).is_ok(),
+                    "failed to clear fiber A's cache after CreateFiber failure"
+                );
                 free_thread_cache(fiber_a_tcache as *mut libc::c_void);
                 let _ = winapi::um::winbase::ConvertFiberToThread();
                 panic!("CreateFiber failed");
@@ -1765,11 +1894,6 @@ mod tests {
 
             winapi::um::winbase::DeleteFiber(fiber_b);
             let fiber_a_after_delete = globaltcache_load_tls_value() as usize;
-            if fiber_a_after_delete == fiber_a_tcache {
-                free_thread_cache(fiber_a_tcache as *mut libc::c_void);
-            }
-            let fiber_a_after_cleanup = globaltcache_load_tls_value() as usize;
-            let converted_to_thread = winapi::um::winbase::ConvertFiberToThread();
 
             assert_eq!(fiber_a_initial, 0, "fiber A started with a stale cache");
             assert_ne!(fiber_a_tcache, 0, "fiber A did not create a cache");
@@ -1787,9 +1911,187 @@ mod tests {
                 fiber_a_after_delete, fiber_a_tcache,
                 "deleting fiber B disturbed fiber A's production cache"
             );
+            let semantic_after_delete =
+                crate::alloc_api::type_isolation::type_isolation_side_cache_snapshot();
+            assert_eq!(
+                semantic_after_delete.occupied_entries, 0,
+                "deleting fiber B left allocator-owned retained state without a guaranteed future callback owner"
+            );
+            assert_eq!(semantic_after_delete.retained_bytes, 0);
+            assert_eq!(
+                WINDOWS_CURRENT_OWNER_DESTRUCTOR_DRAINS.load(Ordering::Relaxed),
+                0,
+                "fiber B's callback was mistaken for current-owner teardown"
+            );
+            assert_eq!(
+                WINDOWS_NON_CURRENT_DESTRUCTOR_DRAINS.load(Ordering::Relaxed),
+                1,
+                "fiber B's callback did not flush shared retained semantic state"
+            );
+            assert_eq!(
+                WINDOWS_NON_CURRENT_DESTRUCTOR_RELEASED.load(Ordering::Relaxed),
+                semantic_before_delete.occupied_entries,
+                "fiber B's callback did not release the retained semantic object"
+            );
+
+            // The FLS destructor deliberately does not mutate the current
+            // fiber's slot. Explicitly detach A before directly reclaiming its
+            // storage in this isolated test.
+            assert_eq!(
+                crate::alloc_api::type_isolation::drain_current_thread_semantic_state(&allocator),
+                0,
+                "non-current callback left allocator-owned retained state for final cleanup"
+            );
+            assert!(
+                globaltcache_store_tls_value(core::ptr::null_mut()).is_ok(),
+                "failed to detach fiber A's cache before test cleanup"
+            );
+            free_thread_cache(fiber_a_tcache as *mut libc::c_void);
+            let fiber_a_after_cleanup = globaltcache_load_tls_value() as usize;
+            let converted_to_thread = winapi::um::winbase::ConvertFiberToThread();
+
             assert_eq!(fiber_a_after_cleanup, 0);
             assert_ne!(converted_to_thread, 0, "ConvertFiberToThread failed");
         }
+    }
+
+    #[cfg(all(windows, not(feature = "fixed_heap")))]
+    #[test]
+    #[ignore = "uses the process-wide production GlobalTcache FLS key; run in an isolated Windows process"]
+    fn windows_delete_fiber_drains_shared_semantic_cache_when_current_fiber_has_no_tcache() {
+        WINDOWS_FIBER_B_INITIAL_TCACHE.store(usize::MAX, Ordering::Relaxed);
+        WINDOWS_FIBER_B_TCACHE.store(usize::MAX, Ordering::Relaxed);
+        WINDOWS_CURRENT_OWNER_DESTRUCTOR_DRAINS.store(0, Ordering::Relaxed);
+        WINDOWS_CURRENT_OWNER_DESTRUCTOR_RELEASED.store(0, Ordering::Relaxed);
+        WINDOWS_NON_CURRENT_DESTRUCTOR_DRAINS.store(0, Ordering::Relaxed);
+        WINDOWS_NON_CURRENT_DESTRUCTOR_RELEASED.store(0, Ordering::Relaxed);
+
+        std::thread::spawn(|| unsafe {
+            let main_fiber = winapi::um::winbase::ConvertThreadToFiber(core::ptr::null_mut());
+            assert!(!main_fiber.is_null(), "ConvertThreadToFiber failed");
+            WINDOWS_MAIN_FIBER.store(main_fiber as usize, Ordering::Release);
+            assert!(
+                globaltcache_load_tls_value().is_null(),
+                "fiber A unexpectedly owned a ThreadCache before fiber B ran"
+            );
+
+            let fiber_b = winapi::um::winbase::CreateFiber(
+                0,
+                Some(global_tcache_fiber_b_semantic_entry),
+                core::ptr::null_mut(),
+            );
+            if fiber_b.is_null() {
+                let _ = winapi::um::winbase::ConvertFiberToThread();
+                panic!("CreateFiber failed");
+            }
+
+            winapi::um::winbase::SwitchToFiber(fiber_b);
+            assert_eq!(
+                WINDOWS_FIBER_B_INITIAL_TCACHE.load(Ordering::Acquire),
+                0,
+                "fiber B inherited a stale ThreadCache"
+            );
+            assert_ne!(
+                WINDOWS_FIBER_B_TCACHE.load(Ordering::Acquire),
+                0,
+                "fiber B did not create a ThreadCache"
+            );
+            assert!(
+                globaltcache_load_tls_value().is_null(),
+                "fiber A acquired fiber B's ThreadCache after switching back"
+            );
+            let retained = crate::alloc_api::type_isolation::type_isolation_side_cache_snapshot();
+            assert_eq!(retained.occupied_entries, 1);
+            assert!(retained.retained_bytes >= 64);
+
+            winapi::um::winbase::DeleteFiber(fiber_b);
+
+            assert!(
+                globaltcache_load_tls_value().is_null(),
+                "temporary callback binding escaped into fiber A"
+            );
+            let after = crate::alloc_api::type_isolation::type_isolation_side_cache_snapshot();
+            assert_eq!(after.occupied_entries, 0);
+            assert_eq!(after.retained_bytes, 0);
+            assert_eq!(
+                WINDOWS_CURRENT_OWNER_DESTRUCTOR_DRAINS.load(Ordering::Relaxed),
+                0,
+                "non-current fiber deletion ran full thread-exit teardown"
+            );
+            assert_eq!(
+                WINDOWS_NON_CURRENT_DESTRUCTOR_DRAINS.load(Ordering::Relaxed),
+                1,
+                "non-current fiber deletion skipped retained-state teardown"
+            );
+            assert_eq!(
+                WINDOWS_NON_CURRENT_DESTRUCTOR_RELEASED.load(Ordering::Relaxed),
+                1,
+                "non-current fiber deletion leaked the retained semantic object"
+            );
+            assert_ne!(
+                winapi::um::winbase::ConvertFiberToThread(),
+                0,
+                "ConvertFiberToThread failed"
+            );
+        })
+        .join()
+        .expect("A-null/B-populated FLS regression worker should exit safely");
+
+        assert_eq!(
+            WINDOWS_CURRENT_OWNER_DESTRUCTOR_DRAINS.load(Ordering::Relaxed),
+            0,
+            "thread exit unexpectedly found a current-fiber cache after temporary binding cleanup"
+        );
+    }
+
+    #[cfg(all(windows, not(feature = "fixed_heap")))]
+    #[test]
+    #[ignore = "uses the process-wide production GlobalTcache FLS key; run in an isolated Windows process"]
+    fn windows_current_owner_thread_exit_drains_semantic_state_once() {
+        WINDOWS_CURRENT_OWNER_DESTRUCTOR_DRAINS.store(0, Ordering::Relaxed);
+        WINDOWS_CURRENT_OWNER_DESTRUCTOR_RELEASED.store(0, Ordering::Relaxed);
+        WINDOWS_NON_CURRENT_DESTRUCTOR_DRAINS.store(0, Ordering::Relaxed);
+        WINDOWS_NON_CURRENT_DESTRUCTOR_RELEASED.store(0, Ordering::Relaxed);
+
+        std::thread::spawn(|| unsafe {
+            let allocator = crate::cache::RustAllocator::new();
+            let layout = Layout::from_size_align(64, align_of::<usize>())
+                .expect("valid semantic cache layout");
+            let metadata =
+                crate::alloc_api::type_isolation::AllocationMetadata::for_type(0xC003_7EAD)
+                    .with_module(0xC003)
+                    .with_callsite(0xA110_7EAD)
+                    .with_flags(crate::alloc_api::type_isolation::FLAG_TYPE_ISOLATED);
+
+            let ptr = allocator.alloc_with_metadata(layout, metadata);
+            assert!(!ptr.is_null());
+            allocator.dealloc_with_metadata(ptr, layout, metadata);
+            let retained = crate::alloc_api::type_isolation::type_isolation_side_cache_snapshot();
+            assert_eq!(retained.occupied_entries, 1);
+            assert!(retained.retained_bytes >= layout.size());
+            assert!(
+                !globaltcache_load_tls_value().is_null(),
+                "semantic allocation did not initialize the worker's production FLS cache"
+            );
+        })
+        .join()
+        .expect("Windows semantic teardown worker should finish");
+
+        assert_eq!(
+            WINDOWS_CURRENT_OWNER_DESTRUCTOR_DRAINS.load(Ordering::Relaxed),
+            1,
+            "ordinary Windows thread exit must run current-owner semantic drain exactly once"
+        );
+        assert_eq!(
+            WINDOWS_CURRENT_OWNER_DESTRUCTOR_RELEASED.load(Ordering::Relaxed),
+            1,
+            "ordinary Windows thread exit leaked the retained semantic cache object"
+        );
+        assert_eq!(
+            WINDOWS_NON_CURRENT_DESTRUCTOR_DRAINS.load(Ordering::Relaxed),
+            0,
+            "ordinary Windows thread exit was mistaken for non-current fiber deletion"
+        );
     }
 
     #[cfg(all(windows, not(feature = "fixed_heap")))]
@@ -1848,7 +2150,7 @@ mod tests {
         }
     }
 
-    #[cfg(not(feature = "fixed_heap"))]
+    #[cfg(all(not(windows), not(feature = "fixed_heap")))]
     #[test]
     fn free_thread_cache_clears_tls_before_storage_reuse() {
         std::thread::spawn(|| unsafe {

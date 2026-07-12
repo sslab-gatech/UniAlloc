@@ -239,6 +239,7 @@ pub mod win_thread_local {
                 SwitchToFiber(fiber_b);
                 let fiber_a_after_switch = load_tls();
                 DeleteFiber(fiber_b);
+                let fiber_a_after_delete = load_tls();
 
                 let fiber_b_initial = FIBER_B_INITIAL_VALUE.load(Ordering::Acquire);
                 let fiber_b_saved = FIBER_B_SAVED_VALUE.load(Ordering::Acquire);
@@ -255,6 +256,10 @@ pub mod win_thread_local {
                 assert_eq!(fiber_b_initial, 0, "new fiber inherited fiber A's value");
                 assert_eq!(fiber_b_saved, fiber_b_value as usize);
                 assert_eq!(fiber_a_after_switch, fiber_a_value);
+                assert_eq!(
+                    fiber_a_after_delete, fiber_a_value,
+                    "DeleteFiber(B) callback disturbed the calling fiber A's FLS value"
+                );
                 assert_eq!(fiber_a_destructor_calls, 0);
                 assert_eq!(fiber_b_destructor_calls, 1);
             }
