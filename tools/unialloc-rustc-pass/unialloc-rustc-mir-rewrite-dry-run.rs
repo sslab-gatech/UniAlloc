@@ -90,7 +90,7 @@ const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const MODULE_ID_ALGORITHM: &str =
     "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))";
 const TYPE_ID_ALGORITHM: &str =
-    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer Vec identity because they can change only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; constructor/factory scopes otherwise attribute identity only from the MIR destination, with exact Result<T, E>/Option<T> destinations selecting only the Ok/Some payload while Result Err owners remain fail-closed hazards; for both shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec capacity-only exception; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer Vec identity because they can change only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; constructor/factory scopes otherwise attribute identity only from the MIR destination, with exact Result<T, E>/Option<T> destinations selecting only the Ok/Some payload while Result Err owners remain fail-closed hazards; for both shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut and str Split/SplitInclusive wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec capacity-only exception; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 
@@ -1879,6 +1879,7 @@ struct HeapObjectTypeScan {
     owners: BTreeSet<String>,
     unresolved: bool,
     borrowed_slice_iterators_are_nonowners: bool,
+    borrowed_str_iterators_are_nonowners: bool,
 }
 
 fn heap_object_type_scan_from_ty<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> HeapObjectTypeScan {
@@ -1893,6 +1894,7 @@ fn heap_object_type_hazard_scan_from_ty<'tcx>(
 ) -> HeapObjectTypeScan {
     let mut scan = HeapObjectTypeScan {
         borrowed_slice_iterators_are_nonowners: true,
+        borrowed_str_iterators_are_nonowners: true,
         ..HeapObjectTypeScan::default()
     };
     collect_heap_object_types_from_ty_inner(tcx, ty, 0, &mut scan);
@@ -2107,6 +2109,15 @@ fn collect_heap_object_types_from_ty_inner<'tcx>(
                 // only when scanning by-value hazards around a separately
                 // attributed destination/receiver.  General and Drop scans
                 // keep inspecting the full field graph and remain fail closed.
+            } else if scan.borrowed_str_iterators_are_nonowners
+                && exact_core_borrowing_str_iterator_def_id(tcx, adt.did())
+            {
+                // Split and SplitInclusive contain raw-pointer-backed string
+                // search state, but borrow rather than own the source str.
+                // As with slice Iter/IterMut, this exception is restricted to
+                // the by-value hazard scan around an independently attributed
+                // destination/receiver. General and Drop scans remain fail
+                // closed.
             } else if clone_known_no_supported_owner_adt(&def_path) {
                 // PhantomData<T> does not store a T. In particular,
                 // PhantomData<Vec<_>> must not manufacture a Vec owner.
@@ -2429,6 +2440,21 @@ fn exact_core_borrowing_slice_iterator_def_path(path: &str) -> bool {
 fn exact_core_borrowing_slice_iterator_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
     tcx.crate_name(def_id.krate).as_str() == "core"
         && exact_core_borrowing_slice_iterator_def_path(&tcx.def_path_str(def_id))
+}
+
+fn exact_core_borrowing_str_iterator_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "core::str::iter::Split"
+            | "core::str::iter::SplitInclusive"
+            | "std::str::Split"
+            | "std::str::SplitInclusive"
+    )
+}
+
+fn exact_core_borrowing_str_iterator_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "core"
+        && exact_core_borrowing_str_iterator_def_path(&tcx.def_path_str(def_id))
 }
 
 fn exact_result_destination_types<'tcx>(
@@ -3845,6 +3871,21 @@ mod tests {
         ));
         assert!(!exact_core_borrowing_slice_iterator_def_path(
             "core::slice::iter::IterMutExtra"
+        ));
+        assert!(exact_core_borrowing_str_iterator_def_path(
+            "core[2f33]::str::iter::Split"
+        ));
+        assert!(exact_core_borrowing_str_iterator_def_path(
+            "core::str::iter::SplitInclusive"
+        ));
+        assert!(exact_core_borrowing_str_iterator_def_path(
+            "std::str::Split"
+        ));
+        assert!(!exact_core_borrowing_str_iterator_def_path(
+            "my_crate::core::str::iter::Split"
+        ));
+        assert!(!exact_core_borrowing_str_iterator_def_path(
+            "core::str::iter::SplitInclusiveExtra"
         ));
         assert!(exact_alloc_box_def_path("alloc[d734]::boxed::Box"));
         assert!(exact_alloc_box_def_path("std::boxed::Box"));
