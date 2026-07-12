@@ -8607,46 +8607,86 @@ impl RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
+        let recorded_metadata = if recover_allocation_record {
+            recover_auto_allocation_record_metadata(ptr, layout, false)
+        } else {
+            None
+        };
+        let dealloc_metadata = match recorded_metadata {
+            Some(recorded_metadata) => {
+                deallocation_metadata_after_recovery_record(metadata, recorded_metadata)
+            }
+            None => metadata,
+        };
+        self.dealloc_with_resolved_metadata(
+            ptr,
+            layout,
+            dealloc_metadata,
+            recorded_metadata.is_some(),
+        );
+    }
+
+    #[inline]
+    unsafe fn dealloc_with_resolved_metadata(
+        &self,
+        ptr: *mut u8,
+        layout: Layout,
+        metadata: AllocationMetadata,
+        consume_recovery_record: bool,
+    ) {
         if layout_derived_raw_only_fast_path(metadata) {
+            if consume_recovery_record {
+                let _ = recover_auto_allocation_record_metadata(ptr, layout, true);
+            }
             self.dealloc_raw(ptr, layout);
             return;
         }
         if compiler_type_isolated_recovery_fast_path(metadata) {
-            return self.dealloc_with_compiler_type_metadata_fast(
-                ptr,
-                layout,
-                metadata,
-                recover_allocation_record,
-            );
-        }
-        let dealloc_metadata = if recover_allocation_record {
-            match recover_auto_allocation_record_metadata(ptr, layout, true) {
-                Some(recorded_metadata) => {
-                    deallocation_metadata_after_recovery_record(metadata, recorded_metadata)
-                }
-                None => metadata,
+            if consume_recovery_record {
+                let _ = recover_auto_allocation_record_metadata(ptr, layout, true);
             }
-        } else {
-            metadata
-        };
-        clear_memory_tagged_allocation(ptr, layout, dealloc_metadata);
-        record_stats_dealloc_layout(dealloc_metadata, layout);
-        if dealloc_guarded(ptr, layout, dealloc_metadata) {
+            return self.dealloc_with_compiler_type_metadata_fast(ptr, layout, metadata, false);
+        }
+        clear_memory_tagged_allocation(ptr, layout, metadata);
+        if consume_recovery_record {
+            // Memory-tag validation is fail-stop and leaves its record intact on
+            // error.  Consume the matching recovery identity only after that
+            // validation commits, while the old address is still owned by this
+            // allocation and cannot be reused by another record.
+            let _ = recover_auto_allocation_record_metadata(ptr, layout, true);
+        }
+        record_stats_dealloc_layout(metadata, layout);
+        if dealloc_guarded(ptr, layout, metadata) {
             return;
         }
-        if dealloc_metadata.requests(FLAG_DELAYED_FREE) {
-            if let Some(slot) = enqueue_delayed_free(self, ptr, layout, dealloc_metadata) {
+        if metadata.requests(FLAG_DELAYED_FREE) {
+            if let Some(slot) = enqueue_delayed_free(self, ptr, layout, metadata) {
                 release_delayed_slot(self, slot);
             }
             return;
         }
-        if cache_semantic_free(self, ptr, layout, dealloc_metadata) {
+        if cache_semantic_free(self, ptr, layout, metadata) {
             return;
         }
-        if !ptr.is_null() && dealloc_metadata.requests(FLAG_FORCE_INITIALIZE) {
+        if !ptr.is_null() && metadata.requests(FLAG_FORCE_INITIALIZE) {
             core::ptr::write_bytes(ptr, 0, layout.size());
         }
         self.dealloc_raw(ptr, layout);
+    }
+
+    /// Complete a deallocation after the caller has non-destructively read the
+    /// exact recovery metadata for `(ptr, layout)`.
+    #[inline]
+    pub(crate) unsafe fn dealloc_with_peeked_recovery_metadata(
+        &self,
+        ptr: *mut u8,
+        layout: Layout,
+        metadata: AllocationMetadata,
+    ) {
+        if ptr.is_null() || layout.size() == 0 {
+            return;
+        }
+        self.dealloc_with_resolved_metadata(ptr, layout, metadata, true);
     }
 
     #[inline]
@@ -8659,10 +8699,7 @@ impl RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
-        if compiler_type_isolated_recovery_fast_path(metadata) {
-            return self.dealloc_with_compiler_type_metadata_fast(ptr, layout, metadata, false);
-        }
-        self.dealloc_with_metadata_inner(ptr, layout, metadata, false);
+        self.dealloc_with_resolved_metadata(ptr, layout, metadata, false);
     }
 }
 
@@ -18233,6 +18270,87 @@ mod tests {
             clear_memory_tagged_allocation(ptr, layout, metadata);
             assert!(find_memory_tag_slot(ptr).is_none());
         }
+    }
+
+    #[test]
+    fn global_dealloc_corrupt_tag_preserves_exact_recovery_for_retry() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_memory_tags_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(size_of::<usize>(), align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0x7A6D_5EED)
+            .with_module(0xC0DE_5EED)
+            .with_callsite(0xA110_5EED)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING);
+
+        let ptr = unsafe { alloc.alloc_with_recovery_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+        assert_eq!(
+            recorded_reallocation_old_metadata(ptr, layout),
+            Some(metadata)
+        );
+        assert_eq!(
+            unsafe { snapshot_static_copy(core::ptr::addr_of!(MEMORY_TAG_RECORD_COUNT)) },
+            1
+        );
+
+        let (valid_tag, corrupt_tag) = unsafe {
+            let slot = find_memory_tag_slot(ptr).expect("memory-tag record");
+            let valid = (*slot).tag;
+            let corrupt = valid ^ 1;
+            (*slot).tag = corrupt;
+            (valid, corrupt)
+        };
+
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }));
+        assert!(failed.is_err(), "corrupt tag must fail-stop");
+
+        unsafe {
+            let slot =
+                find_memory_tag_slot(ptr).expect("failed validation must preserve tag record");
+            assert_eq!(
+                (*slot).tag,
+                corrupt_tag,
+                "failed validation must preserve the exact repairable tag record"
+            );
+        }
+        assert_eq!(
+            unsafe { snapshot_static_copy(core::ptr::addr_of!(MEMORY_TAG_RECORD_COUNT)) },
+            1
+        );
+        assert_eq!(
+            recorded_reallocation_old_metadata(ptr, layout),
+            Some(metadata),
+            "failed tag validation must not consume exact recovery identity"
+        );
+
+        unsafe {
+            let slot = find_memory_tag_slot(ptr).expect("repairable tag record");
+            (*slot).tag = valid_tag;
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+            assert!(find_memory_tag_slot(ptr).is_none());
+        }
+        assert_eq!(
+            unsafe { snapshot_static_copy(core::ptr::addr_of!(MEMORY_TAG_RECORD_COUNT)) },
+            0
+        );
+        assert_eq!(recorded_reallocation_old_metadata(ptr, layout), None);
+        assert_eq!(
+            take_auto_deallocation_metadata(ptr, layout),
+            None,
+            "successful retry must leave no recovery record available for a second consumption"
+        );
     }
 
     #[test]

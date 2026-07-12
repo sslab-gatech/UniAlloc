@@ -3,8 +3,8 @@ use crate::alloc_api::type_isolation::FLAG_DELAYED_FREE;
 use crate::alloc_api::type_isolation::{
     active_allocation_metadata, active_allocation_metadata_requires_recovery_record,
     auto_allocation_metadata, auto_deallocation_metadata, auto_reallocation_old_metadata,
-    deallocation_metadata_after_recovery_record, recorded_reallocation_old_metadata,
-    select_auto_allocation_metadata, semantic_allocation_slow_path_enabled,
+    recorded_reallocation_old_metadata, select_auto_allocation_metadata,
+    semantic_allocation_slow_path_enabled,
     semantic_fallback_attribution_record_raw_alloc_no_metadata,
     semantic_fallback_attribution_record_raw_dealloc_no_metadata,
     semantic_fallback_attribution_record_raw_realloc_moved_dealloc_no_metadata,
@@ -267,14 +267,8 @@ unsafe fn dealloc_with_active_or_recorded_metadata(
     layout: Layout,
     active_metadata: AllocationMetadata,
 ) {
-    if let Some(recorded_metadata) = take_auto_deallocation_metadata(ptr, layout) {
-        // Active compiler drop-site metadata must still pass through the
-        // canonical recovery validation path so real compiler/runtime identity
-        // mismatches are observable before choosing active or recorded metadata.
-        let dealloc_metadata =
-            deallocation_metadata_after_recovery_record(active_metadata, recorded_metadata);
-        return alloc.dealloc_with_recovered_metadata(ptr, layout, dealloc_metadata);
-    }
+    // The canonical metadata path peeks and reconciles the exact allocation
+    // record once, validates any memory tag, and only then consumes recovery.
     alloc.dealloc_with_metadata(ptr, layout, active_metadata);
 }
 
@@ -285,8 +279,8 @@ unsafe fn dealloc_reallocated_old_ptr(
     layout: Layout,
     fallback_metadata: impl FnOnce() -> Option<AllocationMetadata>,
 ) {
-    if let Some(recovered_metadata) = take_auto_deallocation_metadata(ptr, layout) {
-        alloc.dealloc_with_recovered_metadata(ptr, layout, recovered_metadata);
+    if let Some(recovered_metadata) = recorded_reallocation_old_metadata(ptr, layout) {
+        alloc.dealloc_with_peeked_recovery_metadata(ptr, layout, recovered_metadata);
     } else if let Some(metadata) = fallback_metadata() {
         alloc.dealloc_with_metadata(ptr, layout, metadata);
     } else {
@@ -698,8 +692,8 @@ unsafe impl GlobalAlloc for RustAllocator {
             }
             return dealloc_with_active_or_recorded_metadata(self, ptr, layout, metadata);
         }
-        if let Some(metadata) = take_auto_deallocation_metadata(ptr, layout) {
-            return self.dealloc_with_recovered_metadata(ptr, layout, metadata);
+        if let Some(metadata) = recorded_reallocation_old_metadata(ptr, layout) {
+            return self.dealloc_with_peeked_recovery_metadata(ptr, layout, metadata);
         }
         if let Some(metadata) = auto_deallocation_metadata(layout) {
             return self.dealloc_with_metadata(ptr, layout, metadata);
