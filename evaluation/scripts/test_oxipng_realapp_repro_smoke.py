@@ -224,6 +224,13 @@ def valid_contract_audits() -> list[dict]:
                         "std::vec::Vec<fixture::UniAllocAddressOracleWrongType>"
                     ),
                 ),
+                actual_drop_row(
+                    type_id=101,
+                    callsite=3999,
+                    semantic_object_type=(
+                        "std::vec::Vec<fixture::UniAllocAddressOracleProducer>"
+                    ),
+                ),
             ],
             "fail_closed_rows": [fail_closed_row()],
         }
@@ -238,7 +245,7 @@ def valid_contract_totals() -> dict:
         "semantic_scope_unsolved_candidate_count": 1,
         "semantic_scope_drop_unsolved_candidate_count": 0,
         "actual_type_scope_row_count": 4,
-        "actual_drop_scope_row_count": 2,
+        "actual_drop_scope_row_count": 3,
         "fail_closed_semantic_row_count": 1,
         "fail_closed_drop_row_count": 0,
         "fail_closed_multi_owner_drop_row_count": 0,

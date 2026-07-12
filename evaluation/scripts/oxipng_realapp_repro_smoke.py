@@ -812,6 +812,7 @@ def validate_injected_address_oracle(
             raise SmokeError(f"compiler-derived {label} free identity is missing from actual MIR audit")
         total = 0
         seen: set[tuple[int, int, int]] = set()
+        executed = 0
         for row in rows:
             identity = runtime_identity(row, label=f"compiler-derived {label} free")
             if identity in seen:
@@ -821,16 +822,21 @@ def validate_injected_address_oracle(
             if (
                 row.get("rewrite_status") != ACTUAL_SEMANTIC_DROP_STATUS
                 or identity[:2] != allocation_identity[:2]
-                or runtime_row is None
             ):
-                raise SmokeError(f"compiler-derived {label} free lacks an exact actual/runtime row")
+                raise SmokeError(f"compiler-derived {label} free audit identity is invalid")
+            # Rust MIR contains both normal and unwind-cleanup Drop sites.  Every
+            # site must be actually rewritten, but only the branch exercised by
+            # this functional run can have a runtime stats row.
+            if runtime_row is None:
+                continue
+            executed += 1
             total += min(
                 int(runtime_row.get("deallocations") or 0),
                 int(runtime_row.get("cache_inserts") or 0),
             )
-        if total < minimum:
+        if executed == 0 or total < minimum:
             raise SmokeError(f"compiler-derived {label} free lifecycle is incomplete")
-        return len(seen)
+        return executed
 
     producer_drop_count = bind_drops(
         ADDRESS_ORACLE_PRODUCER_MARKER, producer_identity, "producer", 2
