@@ -233,46 +233,59 @@ before spending time on larger benchmark runs.
 
 ### Compiler-driven `Vec` realloc identity and type-isolation probe
 
-Commits `9fad689` and `76dc569` add a focused `Vec<T>` lifecycle probe that
-uses ordinary Rust source and no manual metadata or allocator ABI calls.  The
-source creates `Vec<ProducerPayload>` with capacity 1, forces growth to at least
-capacity 8 through `reserve_exact`, transfers the final vector to another
-thread for Drop, then allocates a same-layout `Vec<ConsumerPayload>` followed by
-another `Vec<ProducerPayload>`.
+Commits `7096fc6`, `f0fe4d1`, and `37ea7cd` strengthen the focused `Vec<T>`
+lifecycle probe.  Its primary lifecycle uses ordinary Rust source and no manual
+metadata or allocator ABI calls.  The creator thread allocates a
+`Vec<ProducerPayload>` with capacity 1 and transfers it before growth.  A
+distinct worker verifies the original pointer, capacity, and payload; grows the
+vector to at least capacity 8 through `reserve_exact`; fills and drops it on the
+worker; then allocates a same-layout `Vec<ConsumerPayload>` followed by another
+`Vec<ProducerPayload>`.
 
 The validator requires real `rustc_driver` evidence and runtime behavior:
 
 - actual semantic-scope and Drop rewrites for the producer and consumer `Vec`
-  object types;
-- a typed replacement allocation for capacity growth, with
-  `growth_raw_realloc_no_metadata=0`;
+  object types, with no unsolved candidate in this probe;
+- creator-thread allocation, transfer to a distinct worker before growth, and
+  worker-side typed realloc with the same nonzero compiler-derived type id;
+- one typed replacement allocation and at most one typed deallocation for
+  growth, with raw-realloc and recorded-old-metadata fallback both zero;
+- exactly one typed worker Drop deallocation with raw-deallocation fallback
+  zero;
 - distinct compiler-derived type ids for the same-layout producer and consumer
   vectors;
-- cross-thread Drop of the grown producer buffer;
 - wrong-type non-reuse by `Vec<ConsumerPayload>`;
 - exact same-type recovery by the next `Vec<ProducerPayload>` allocation;
 - `recovery_identity_mismatches=0` and `side_cache_corrupt_slots=0`.
 
-Accepted one-shot evidence was collected once for the hosted allocator and once
-for `fixed_heap`.  Both runs validated on clean commit `fe9f66a` with
-`rustc 1.98.0-nightly (485ec3fbc 2026-06-10)`, and the docs are now bound to
-the mainline commits `9fad689` / `76dc569`.  Both audit files reported
+A separate standard `alloc`/`dealloc` positive control runs after the lifecycle
+snapshots.  The validator requires exactly two function-bound direct rewrite
+rows with applied/resolved UniAlloc metadata-ABI symbols and a shared nonzero
+identity.  This proves actual direct allocator-call replacement without adding
+events to the primary `Vec` counters; aggregate summary flags alone are not
+accepted.
+
+Current implementation evidence was collected once for the hosted allocator
+and once for `fixed_heap` at clean commit `37ea7cd`.  Both audit files reported two
+direct applied replacements,
 `semantic_scope_rewrite_applied_count=11`,
 `semantic_scope_drop_rewrite_applied_count=4`,
 `semantic_scope_unsolved_candidate_count=0`,
 `semantic_scope_drop_unsolved_candidate_count=0`, and
-`cross_thread_recovery_hint_count=15`.  Both runtime summaries observed
-`initial_capacity=1`, `final_capacity=8`, one typed growth allocation, zero raw
-realloc fallback, wrong-type reuse blocked, same-type producer buffer recovery,
-three recovery identity matches, zero recovery mismatches, and zero corrupt
-side-cache slots.
+`cross_thread_recovery_hint_count=22`.  Both runtime summaries observed
+`initial_capacity=1`, `final_capacity=8`, creator allocation followed by worker
+growth, one typed growth allocation/deallocation, one typed worker Drop
+deallocation, zero raw realloc/dealloc fallback, wrong-type reuse blocked,
+same-type producer buffer recovery, zero recovery mismatches, and zero corrupt
+side-cache slots.  The allocation and growth type ids matched.
 
 Two observations are explicitly not gates: whether the capacity growth moved the
 physical pointer is recorded but not required, and a zero recovery-match count
 would be acceptable only for lifecycles whose allocation-side recovery proves
 the deterministic same-type address recovery.  This probe is functional safety
 evidence only; it makes no timing claim, no paper-performance claim, and no
-universal claim about every `Vec` or collection path.
+universal claim about every `Vec` or collection path.  Durable summaries are in
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/typeisolation-final-safety-37ea7cd-20260712/`.
 
 ### Cross-thread type-changing realloc quarantine invariant
 
@@ -291,6 +304,71 @@ identity mismatch. This is a bounded allocator-mechanism regression for
 cross-thread realloc, delayed free, and cache routing. It does not establish
 that arbitrary forged metadata is safe or that every application realloc path
 has compiler coverage.
+
+### Realloc policy-key separation across physical cache domains
+
+Commits `48cdfcf`, `e5b992d`, and `ae923c6` add a lower-level regression for a
+cross-thread moved realloc whose old allocation requests the hugepage policy
+and whose replacement requests the ordinary metadata-segregated policy.  The
+test requires the old recovery record to be consumed exactly once, the new
+identity to be published, the payload to survive, and each pointer to be
+removed from its cache exactly once before raw cleanup.
+
+On the hosted allocator, direct side-cache snapshots additionally prove that
+the old pointer entered the physical hugepage cache and the replacement entered
+the ordinary inline cache, with the expected old and new metadata keys.  The
+`fixed_heap` backend intentionally maps both policies to the ordinary physical
+domain, so that configuration proves policy-key and metadata-identity
+separation only; it does not claim distinct physical hugepage storage.  Hosted
+and `fixed_heap` focused tests each pass once.  This is a bounded allocator
+mechanism regression, not compiler coverage or performance evidence.
+
+### Cross-thread realloc-to-zero retires the old identity
+
+Commits `909a7ad` and `68749b9` add a regression for an allocation whose
+metadata is published for cross-thread recovery and whose foreign-thread
+realloc requests size zero under a different same-layout type.  The operation
+must return the aligned zero-size sentinel, consume the old global recovery
+record exactly once, publish no replacement record, and leave no stale
+slow-path state.  The distinct type must not observe the retired storage; the
+old type must recover it exactly once with its payload intact, after which one
+owner performs one raw cleanup.
+
+Hosted and `fixed_heap` focused tests each pass once with zero recovery-identity
+mismatch and zero corrupt cache slots.  This test intentionally does not make a
+PAC claim: the lifecycle neither enables pointer authentication nor records PAC
+failure counters.  It proves the ordinary TLS identity-retirement/cache-routing
+path only, not a hugepage physical-domain or universal realloc guarantee.
+
+### Size-negotiated semantic snapshot ABIs
+
+Commit `6fd22fb` adds hosted and `fixed_heap` regressions for the checked
+semantic-stats, fallback-attribution, and metadata-validation snapshot ABIs.
+The tests reject null and undersized output buffers without writing, accept
+exact-size and larger buffers, and verify the returned counters and fields.
+This protects the versioned C-facing inspection boundary used by platform and
+compiler probes; it does not by itself prove an external platform runtime.
+
+### `Layout` fallback provenance remains fail-closed
+
+Commits `f8612de` and `b5b70ed` add a clean-head real-`rustc_driver` probe for a
+`Layout` value selected through `Result`.  The positive control uses
+`Layout::new::<[u64; 4]>().align_to(64).expect(...)`; the actual allocator-call
+rewrite preserves its compiler-derived identity and runtime allocation/
+deallocation shape (`32` bytes, alignment `64`).  The negative control makes
+`align_to(3)` fail and uses `unwrap_or_else` to synthesize a different
+`Layout::new::<[u8; 37]>()`.  The compiler audit must classify that selected
+layout as unknown heap-object type with a direct-callsite fallback identity,
+not inherit the `[u64; 4]` identity.
+
+The clean one-shot run at `b5b70ed` observed distinct nonzero identities,
+two typed allocations, one typed deallocation, zero recovery mismatches, and
+zero corrupt side-cache slots.  The validator also requires the positive
+deallocation size and alignment to be exactly `32` and `64`; a fail-first unit
+test rejects a forged alignment.  Evidence is preserved under
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/typeisolation-policy-layout-b5b70ed-20260712/`.
+This proves only the two bounded `Result` shapes above.  It is not universal
+`Layout`-transformer coverage and contains no benchmark or paper claim.
 
 ### Plain `Clone` candidate classification boundary
 
