@@ -78,7 +78,7 @@ const LOWERING_MODULE_ID: u64 = 0xC002_DA00_0000_0001;
 const DEFAULT_LOWERING_POLICY_FLAGS: u32 = 0x1;
 const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const TYPE_ID_ALGORITHM: &str =
-    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes solve receiver/argument heap-owner types before return types, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; constructor/factory scopes solve destination types first; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes solve only the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; constructor/factory scopes solve the MIR destination and do not inherit arbitrary argument identities; aggregate receiver/destination types with multiple supported heap owners fail closed; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 
@@ -352,6 +352,13 @@ enum PlainCloneHeapClass {
 }
 
 #[derive(Clone, Debug)]
+enum SemanticScopeHeapClass {
+    Single(String),
+    Ambiguous(Vec<String>),
+    Unresolved,
+}
+
+#[derive(Clone, Debug)]
 struct SemanticScopeCandidate<'tcx> {
     bb: BasicBlock,
     original_is_cleanup: bool,
@@ -363,6 +370,7 @@ struct SemanticScopeCandidate<'tcx> {
     destination_type: String,
     semantic_object_type: String,
     plain_clone_heap_class: PlainCloneHeapClass,
+    non_plain_heap_class: Option<SemanticScopeHeapClass>,
     original_target: Option<BasicBlock>,
     original_unwind: MirUnwind,
     original_from_hir_call: MirCallSource,
@@ -2223,6 +2231,47 @@ fn plain_clone_heap_class<'tcx>(
         0 => PlainCloneHeapClass::DefiniteNoSupportedOwner,
         1 => PlainCloneHeapClass::Single(owners.into_iter().next().unwrap()),
         _ => PlainCloneHeapClass::Ambiguous(owners),
+    }
+}
+
+fn semantic_scope_heap_class_from_ty<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    ty: Ty<'tcx>,
+) -> SemanticScopeHeapClass {
+    let stripped = strip_type_indirection(ty);
+    // Inspect the complete supported-owner graph. A directly supported outer
+    // container is not necessarily the only allocator-visible identity used by
+    // one call: for example, Vec<String>::resize may clone and allocate String
+    // elements while it also grows the Vec backing allocation.
+    let owners = heap_object_types_from_ty(tcx, stripped);
+    let owners = owners.into_iter().collect::<Vec<_>>();
+    match owners.len() {
+        0 => SemanticScopeHeapClass::Unresolved,
+        1 => SemanticScopeHeapClass::Single(owners.into_iter().next().unwrap()),
+        _ => SemanticScopeHeapClass::Ambiguous(owners),
+    }
+}
+
+fn non_plain_semantic_scope_heap_class<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+    callee: &str,
+) -> SemanticScopeHeapClass {
+    if semantic_scope_receiver_heap_owner_call(callee) {
+        // MIR keeps the receiver as argument zero. Inspecting later arguments
+        // can attribute an inserted value to the receiver or choose the first
+        // field of an aggregate receiver, so missing/ambiguous receiver proof
+        // is deliberately unresolved rather than falling back elsewhere.
+        match argument_tys.first() {
+            Some(receiver_ty) => semantic_scope_heap_class_from_ty(tcx, *receiver_ty),
+            None => SemanticScopeHeapClass::Unresolved,
+        }
+    } else {
+        // Constructors/factories belong to their destination. In particular,
+        // an owner-typed input does not prove that a unit/scalar/opaque return
+        // owns an allocation, so never scan arbitrary non-receiver arguments.
+        semantic_scope_heap_class_from_ty(tcx, destination_ty)
     }
 }
 
@@ -5276,6 +5325,17 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             .collect::<Vec<_>>();
         let plain_clone_heap_class =
             plain_clone_heap_class(tcx, callee_def_id, &callee, destination_ty);
+        let non_plain_heap_class =
+            if matches!(&plain_clone_heap_class, PlainCloneHeapClass::NotPlainClone) {
+                Some(non_plain_semantic_scope_heap_class(
+                    tcx,
+                    destination_ty,
+                    &argument_tys,
+                    &callee,
+                ))
+            } else {
+                None
+            };
         if target.is_none()
             || (matches!(&plain_clone_heap_class, PlainCloneHeapClass::NotPlainClone)
                 && !semantic_scope_candidate_for_mir(tcx, &callee, destination_ty))
@@ -5292,9 +5352,12 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             PlainCloneHeapClass::DefiniteNoSupportedOwner
             | PlainCloneHeapClass::Ambiguous(_)
             | PlainCloneHeapClass::Unresolved => UNKNOWN_HEAP_OBJECT_TYPE.to_string(),
-            PlainCloneHeapClass::NotPlainClone => {
-                semantic_heap_object_type_from_mir(tcx, destination_ty, &argument_tys, &callee)
-            }
+            PlainCloneHeapClass::NotPlainClone => match &non_plain_heap_class {
+                Some(SemanticScopeHeapClass::Single(owner)) => owner.clone(),
+                Some(SemanticScopeHeapClass::Ambiguous(_))
+                | Some(SemanticScopeHeapClass::Unresolved)
+                | None => UNKNOWN_HEAP_OBJECT_TYPE.to_string(),
+            },
         };
         candidate_blocks.push(SemanticScopeCandidate {
             bb,
@@ -5310,6 +5373,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             destination_type,
             semantic_object_type,
             plain_clone_heap_class,
+            non_plain_heap_class,
             original_target: *target,
             original_unwind,
             original_from_hir_call: from_hir_call,
@@ -5335,6 +5399,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
         destination_type,
         semantic_object_type,
         plain_clone_heap_class,
+        non_plain_heap_class,
         original_target,
         original_unwind,
         original_from_hir_call,
@@ -5410,7 +5475,12 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             });
             continue;
         }
-        if let PlainCloneHeapClass::Ambiguous(owners) = &plain_clone_heap_class {
+        let ambiguous_owners = match (&plain_clone_heap_class, &non_plain_heap_class) {
+            (PlainCloneHeapClass::Ambiguous(owners), _) => Some((owners, true)),
+            (_, Some(SemanticScopeHeapClass::Ambiguous(owners))) => Some((owners, false)),
+            _ => None,
+        };
+        if let Some((owners, plain_clone)) = ambiguous_owners {
             records.push(RewriteRecord {
                 allocation_site_id: format!(
                     "rustc-driver-mir-semantic-scope-ambiguous:{:016x}",
@@ -5444,10 +5514,17 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 },
                 replacement_resolution_status:
                     "rustc_middle_multiple_heap_object_types_not_lowered",
-                replacement_preview: format!(
-                    "Skipped semantic-scope lowering because the Clone result has multiple supported heap owners: {}",
-                    owners.join(", ")
-                ),
+                replacement_preview: if plain_clone {
+                    format!(
+                        "Skipped semantic-scope lowering because the Clone result has multiple supported heap owners: {}",
+                        owners.join(", ")
+                    )
+                } else {
+                    format!(
+                        "Skipped semantic-scope lowering because the selected MIR receiver/destination has multiple supported heap owners: {}",
+                        owners.join(", ")
+                    )
+                },
                 semantic_scope_unwind_pop_inserted: false,
                 metadata_pairing_contract: "audit_only_ambiguous_heap_object_type",
                 lowering_kind: "semantic_scope_unsolved_heap_object_candidate",
