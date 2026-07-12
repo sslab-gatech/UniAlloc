@@ -505,6 +505,34 @@ These are bounded current-rustc functional and safety probes.  They do not
 establish every ownership-consuming standard-library conversion, stable rustc
 compatibility, or performance.
 
+### `Box<str>` to `String` pointer-preserving ownership transfer
+
+Commit `ded36de` closes the symmetric current-rustc ownership-pairing gap for
+ordinary `Box<str, Global>::into_string` source.  Exact allocation-crate DefId
+matching plus a structural `Box<str, Global> -> String` proof reports one
+candidate and applies it (`1/1`) through
+`__unialloc_semantic_boxed_str_into_string`.  The single-run runtime oracle
+reports attempted/applied/rejected `1/1/0`: the pointer, payload, length, and
+capacity remain exact; the compiler-derived Box and String identities are
+distinct and nonzero; the old Box identity cannot reuse the transferred
+storage; and the exact String identity reuses it.  Fallback/raw allocation,
+deallocation, and realloc-without-metadata, recovery mismatch, corrupt-slot,
+and dropped-event counts are all `0`.
+
+`unialloc/tests/boxed_str_into_string_rebind.rs` independently passes once on
+the hosted backend and once on `fixed_heap`.  It covers the accepted path,
+wrong-old-identity rejection, missing recovery state, and an authenticated
+memory-tagged path without fabricating or mutating an untrusted identity.  The
+adjacent current-rustc `String -> Box<str>` and `String -> Vec<u8>` probes also
+remain green; embedded current-pass tests pass `16/16`, and the
+`nightly-2022-07-01` pass still compiles.  Independent verification approved
+the implementation and claim boundary, and the pre-commit suite passed 663
+UniAlloc plus 430 std-bench functional tests.
+
+This is an ordinary-Rust actual-rewrite and bounded isolation-effect probe, not
+an external-application run, universal conversion coverage, performance, or a
+paper percentage.  The preserved Oxipng run was not rerun or rebound.
+
 ### Compiler-driven `Vec` realloc identity and type-isolation probe
 
 Commits `7096fc6`, `f0fe4d1`, and `37ea7cd` strengthen the focused `Vec<T>`
@@ -591,6 +619,23 @@ second owner; the one accepted free remains owned by the allocation identity.
 This closes one concrete cross-thread metadata-mismatch and duplicate-free
 path.  It does not establish hardware memory tagging, arbitrary forged metadata
 handling, universal application coverage, or performance impact.
+
+### Untagged current-thread duplicate quarantine fails closed
+
+Commit `05d18be` closes a caller-metadata bypass in the thread-local
+delayed-free quarantine. Once a pointer is quarantined, a second deallocation
+now checks pointer ownership before raw/compiler fast paths, recovery-record
+consumption, stats, cache mutation, or raw free. The adversarial regression
+zeros the occupancy hint and omits `FLAG_DELAYED_FREE` on the second call; the
+authoritative retained-byte state still forces a slot scan, the duplicate
+fail-stops, quarantine accounting is unchanged, and no type cache is poisoned.
+
+Focused hosted and `fixed_heap` tests pass, as do 11 adjacent delayed-free
+tests and the full pre-commit suite (663 UniAlloc tests plus 430 std-bench
+tests). Independent review approved the repaired ordering and claim boundary.
+This proves current-thread TLS quarantine ownership only. It does not establish
+cross-thread duplicate detection without global memory tagging, universal
+double-free detection, or performance.
 
 ### Realloc policy-key separation across physical cache domains
 
@@ -954,7 +999,7 @@ recovery mismatch/corruption remain `0/0`; `Vec<String>::resize` remains
 fail-closed.  The `427583b` Oxipng artifact predates this change and remains
 exact only for its recorded source snapshot.
 
-### Current-content Oxipng boxed-slice ownership-transfer run
+### Source-bound Oxipng run at `576df61`
 
 The first pinned old-nightly build of the current pass exposed a
 `GenericArg::as_type` compatibility break.  Commit `9bb9f8d` adds only the
@@ -995,7 +1040,7 @@ This was one functional run with no timing loop: it supports no performance or
 paper percentage and does not establish universal compiler or application
 coverage.
 
-### Current-source Oxipng ownership-transfer execution
+### Source-bound Oxipng ownership-transfer run at `38b8b59`
 
 Commits `6d955c0` and `38b8b59` close the concrete optimized `vec!` path that
 materializes boxed-array storage before converting it to `Vec`.  The first
@@ -1030,7 +1075,7 @@ This is one bounded diagnostic functional run.  It is not a timing benchmark,
 whole-program ownership/isolation coverage, universal compiler coverage, a
 paper percentage, or publication-grade performance evidence.
 
-### Presentation-bound current-head Oxipng validation
+### Historical presentation bundle at `a51960d`
 
 The current presentation bundle is bound to clean scoped source HEAD
 `a51960d92a7c72deabaf25fc23e985c3b26c09a5` with scoped fingerprint
@@ -1127,6 +1172,24 @@ identity mismatches in the `a51960d` bundle remain historical observations;
 they cannot be claimed eliminated or rebound to `9240fc6`.  These additions
 strengthen bounded safety and actual-rewrite evidence, not whole-application
 exact pairing, universal compiler coverage, or performance claims.
+
+### Latest preserved Oxipng one-shot before module-id hardening
+
+The latest preserved external Rust application run is bound to source
+`46d5aaa` and an instrumented Oxipng v4.0.3 copy. Build and functional run both
+return zero, and the output SHA-256 is the expected `565f253e...`. The static
+target-crate audit separates 6 direct, 367 semantic-scope, 320 Drop, 12/12
+ownership-transfer candidate/applied, and 529 explicit fail-closed rows. The
+runtime reports 59 type rows, transfer attempted/applied/rejected `3/1/2`,
+whole-run recovery mismatch `0`, and corrupt/dropped `0/0`; the injected oracle
+observes wrong-type non-reuse and exact same-type reuse.
+
+The preserved summary is
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-typeiso-46d5aaa-20260712e/oxipng-realapp-repro-summary.json`
+with SHA-256 `f5b8ad7c...`. Commit `0704852` and later focused fixes postdate
+this run and cannot be rebound to its counts. This was one functional run with
+no timing loop; it does not establish natural-application universal isolation,
+whole-program coverage, a security proof, or performance.
 
 For historical comparison, a source-bound Oxipng v4.0.3 smoke at validator
 commit `e466831` validated the
