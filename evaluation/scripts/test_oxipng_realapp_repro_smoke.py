@@ -57,6 +57,36 @@ def actual_drop_row(
     }
 
 
+def ownership_transfer_row(*, applied: bool) -> dict:
+    return {
+        "mir_function": "fixture::box_into_vec",
+        "callee": (
+            "std::slice::<impl [u8]>::into_vec::<std::alloc::Global>"
+        ),
+        "destination_type": "std::vec::Vec<u8>",
+        "argument_types": ["std::boxed::Box<[u8]>"],
+        "semantic_object_type": "std::vec::Vec<u8>",
+        "type_id": 505,
+        "module_id": 77,
+        "callsite": 7007 if applied else 7008,
+        "flags": smoke.TYPE_ISOLATED,
+        "lowering_kind": smoke.SEMANTIC_OWNERSHIP_TRANSFER_KIND,
+        "rewrite_status": (
+            smoke.ACTUAL_SEMANTIC_OWNERSHIP_TRANSFER_STATUS
+            if applied
+            else "semantic_ownership_transfer_rewrite_skipped_fixture"
+        ),
+        "replacement_symbol": "__unialloc_semantic_box_slice_into_vec",
+        "replacement_resolution_status": (
+            "resolved_unialloc_semantic_box_slice_into_vec"
+            if applied
+            else "fixture_not_resolved"
+        ),
+        "metadata_pairing_contract": "pointer_preserving_owner_identity_rebind",
+        "source_span": "fixture.rs:70:1",
+    }
+
+
 def runtime_type_row(
     *,
     type_id: int,
@@ -240,6 +270,8 @@ def valid_contract_audits() -> list[dict]:
 def valid_contract_totals() -> dict:
     return {
         "direct_rewrite_applied_count": 1,
+        "semantic_ownership_transfer_candidate_count": 0,
+        "semantic_ownership_transfer_rewrite_applied_count": 0,
         "semantic_scope_rewrite_applied_count": 4,
         "semantic_scope_drop_rewrite_applied_count": 1,
         "semantic_scope_unsolved_candidate_count": 1,
@@ -332,6 +364,8 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                                 callsite=2002,
                                 semantic_object_type="Vec<Consumer>",
                             ),
+                            ownership_transfer_row(applied=True),
+                            ownership_transfer_row(applied=False),
                             fail_closed_row(),
                             fail_closed_multi_owner_drop_row(),
                         ],
@@ -345,6 +379,12 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
 
             self.assertEqual(len(audits), 1)
             self.assertEqual(totals["direct_rewrite_applied_count"], 2)
+            self.assertEqual(
+                totals["semantic_ownership_transfer_candidate_count"], 2
+            )
+            self.assertEqual(
+                totals["semantic_ownership_transfer_rewrite_applied_count"], 1
+            )
             self.assertEqual(totals["semantic_scope_rewrite_applied_count"], 2)
             self.assertEqual(totals["semantic_scope_drop_rewrite_applied_count"], 4)
             self.assertEqual(totals["semantic_scope_unsolved_candidate_count"], 1)
@@ -355,6 +395,19 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertEqual(totals["fail_closed_drop_row_count"], 1)
             self.assertEqual(totals["fail_closed_multi_owner_drop_row_count"], 1)
             self.assertEqual(len(audits[0]["actual_type_scope_rows"]), 2)
+            self.assertEqual(
+                len(audits[0]["semantic_ownership_transfer_rows"]), 1
+            )
+            self.assertEqual(
+                audits[0]["semantic_ownership_transfer_rows"][0][
+                    "replacement_symbol"
+                ],
+                "__unialloc_semantic_box_slice_into_vec",
+            )
+            self.assertEqual(
+                audits[0]["semantic_ownership_transfer_rows"][0]["lowering_kind"],
+                smoke.SEMANTIC_OWNERSHIP_TRANSFER_KIND,
+            )
             self.assertEqual(len(audits[0]["fail_closed_rows"]), 2)
             coverage = smoke.compiler_coverage_summary(totals)
             self.assertFalse(coverage["audited_candidates_resolved"])
@@ -364,6 +417,15 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertEqual(coverage["unsolved_candidate_count"], 1)
             self.assertEqual(coverage["fail_closed_candidate_count"], 2)
             self.assertEqual(coverage["multi_owner_drop_fail_closed_count"], 1)
+            self.assertEqual(
+                coverage["semantic_ownership_transfer_candidate_count"], 2
+            )
+            self.assertEqual(
+                coverage[
+                    "semantic_ownership_transfer_rewrite_applied_count"
+                ],
+                1,
+            )
             self.assertNotIn("complete compiler coverage", coverage["claim_boundary"])
 
     def test_zero_unsolved_means_audited_candidates_resolved_not_complete_coverage(self) -> None:

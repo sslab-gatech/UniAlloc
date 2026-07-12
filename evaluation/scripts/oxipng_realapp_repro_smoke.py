@@ -56,6 +56,10 @@ NO_SUPPORTED_DIRECT_REWRITE_STATUS = "no_supported_rewrite_candidates"
 TYPE_ISOLATED = 0x1
 ACTUAL_SEMANTIC_SCOPE_STATUS = "actual_semantic_scope_enter_exit_rewrite_applied"
 ACTUAL_SEMANTIC_DROP_STATUS = "actual_semantic_scope_drop_rewrite_applied"
+SEMANTIC_OWNERSHIP_TRANSFER_KIND = "semantic_ownership_transfer_rewrite"
+ACTUAL_SEMANTIC_OWNERSHIP_TRANSFER_STATUS = (
+    "actual_semantic_ownership_transfer_rewrite_applied"
+)
 ADDRESS_ORACLE_SOURCE = "injected-oxipng-type-isolation-address-oracle"
 ADDRESS_ORACLE_FUNCTION = "unialloc_type_isolation_address_oracle"
 ADDRESS_ORACLE_PRODUCER_HELPER = "unialloc_address_oracle_producer_vec"
@@ -560,6 +564,46 @@ def actual_drop_scope_rows(audit: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def actual_ownership_transfer_rows(audit: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    for candidate in audit.get("rewrite_candidates", []):
+        if not isinstance(candidate, dict):
+            continue
+        if candidate.get("lowering_kind") != SEMANTIC_OWNERSHIP_TRANSFER_KIND:
+            continue
+        if (
+            candidate.get("rewrite_status")
+            != ACTUAL_SEMANTIC_OWNERSHIP_TRANSFER_STATUS
+        ):
+            continue
+        rows.append(
+            {
+                "mir_function": candidate.get("mir_function"),
+                "callee": candidate.get("callee"),
+                "destination_type": candidate.get("destination_type"),
+                "argument_types": candidate.get("argument_types"),
+                "semantic_object_type": candidate.get("semantic_object_type"),
+                "type_id": int(candidate.get("type_id") or 0),
+                "module_id": int(candidate.get("module_id") or 0),
+                "callsite": int(candidate.get("callsite") or 0),
+                "flags": int(candidate.get("flags") or 0),
+                "lowering_kind": candidate.get("lowering_kind"),
+                "rewrite_status": candidate.get("rewrite_status"),
+                "type_id_basis": candidate.get("type_id_basis"),
+                "replacement_symbol": candidate.get("replacement_symbol"),
+                "replacement_resolution_status": candidate.get(
+                    "replacement_resolution_status"
+                ),
+                "metadata_pairing_contract": candidate.get(
+                    "metadata_pairing_contract"
+                ),
+                "replacement_preview": candidate.get("replacement_preview"),
+                "source_span": candidate.get("source_span"),
+            }
+        )
+    return rows
+
+
 def fail_closed_rows(audit: dict[str, Any]) -> list[dict[str, Any]]:
     rows = []
     for candidate in audit.get("rewrite_candidates", []):
@@ -596,6 +640,8 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
     audits: list[dict[str, Any]] = []
     totals = {
         "direct_rewrite_applied_count": 0,
+        "semantic_ownership_transfer_candidate_count": 0,
+        "semantic_ownership_transfer_rewrite_applied_count": 0,
         "semantic_scope_rewrite_applied_count": 0,
         "semantic_scope_drop_rewrite_applied_count": 0,
         "semantic_scope_unsolved_candidate_count": 0,
@@ -615,6 +661,12 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
             continue
         applied_type_rows = actual_type_scope_rows(data)
         applied_drop_rows = actual_drop_scope_rows(data)
+        applied_ownership_transfer_rows = actual_ownership_transfer_rows(data)
+        ownership_transfer_candidate_count = sum(
+            isinstance(candidate, dict)
+            and candidate.get("lowering_kind") == SEMANTIC_OWNERSHIP_TRANSFER_KIND
+            for candidate in data.get("rewrite_candidates", [])
+        )
         unresolved_rows = fail_closed_rows(data)
         row = {
             "file": path.name,
@@ -632,6 +684,10 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
             or summary.get("direct_replacement_resolution_status"),
             "rewrite_candidate_count": int(compiler.get("rewrite_candidate_count", summary.get("rewrite_candidate_count", 0)) or 0),
             "direct_rewrite_applied_count": int(compiler.get("rewrite_applied_count", summary.get("rewrite_applied_count", 0)) or 0),
+            "semantic_ownership_transfer_candidate_count": ownership_transfer_candidate_count,
+            "semantic_ownership_transfer_rewrite_applied_count": len(
+                applied_ownership_transfer_rows
+            ),
             "semantic_scope_rewrite_applied_count": int(
                 compiler.get("semantic_scope_rewrite_applied_count", summary.get("semantic_scope_rewrite_applied_count", 0)) or 0
             ),
@@ -646,6 +702,7 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
             ),
             "actual_type_scope_rows": applied_type_rows,
             "actual_drop_scope_rows": applied_drop_rows,
+            "semantic_ownership_transfer_rows": applied_ownership_transfer_rows,
             "fail_closed_rows": unresolved_rows,
             "actual_type_scope_row_count": len(applied_type_rows),
             "actual_drop_scope_row_count": len(applied_drop_rows),
@@ -1149,6 +1206,14 @@ def compiler_coverage_summary(audit_totals: dict[str, int]) -> dict[str, Any]:
             audit_totals.get("fail_closed_multi_owner_drop_row_count", 0)
         ),
         "direct_rewrite_applied_count": int(audit_totals.get("direct_rewrite_applied_count", 0)),
+        "semantic_ownership_transfer_candidate_count": int(
+            audit_totals.get("semantic_ownership_transfer_candidate_count", 0)
+        ),
+        "semantic_ownership_transfer_rewrite_applied_count": int(
+            audit_totals.get(
+                "semantic_ownership_transfer_rewrite_applied_count", 0
+            )
+        ),
         "semantic_scope_rewrite_applied_count": int(audit_totals.get("semantic_scope_rewrite_applied_count", 0)),
         "semantic_scope_drop_rewrite_applied_count": int(audit_totals.get("semantic_scope_drop_rewrite_applied_count", 0)),
         "claim_boundary": (
