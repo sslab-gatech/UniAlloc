@@ -54,6 +54,7 @@ NON_HEAP_CLONE_FUNCTIONS = (
 NESTED_HEAP_CLONE_FUNCTION = "clone_nested_vec_owner"
 RAW_POINTER_CLONE_FUNCTION = "clone_raw_pointer_wrapper"
 CONST_GENERIC_CLONE_FUNCTION = "clone_const_generic"
+GENERIC_DROP_FUNCTION = "generic_drop"
 
 
 def sha256(path: Path) -> str:
@@ -507,6 +508,73 @@ def validate_allocation_side_recovery_requirement(
     }
 
 
+def validate_generic_drop_recovery_requirement(
+    audit: Dict[str, Any], runtime: Dict[str, Any]
+) -> Dict[str, Any]:
+    helper_rows = [
+        row
+        for row in audit.get("rewrite_candidates") or []
+        if str(row.get("mir_function") or "").endswith(
+            f"::{GENERIC_DROP_FUNCTION}"
+        )
+    ]
+    applied_or_planned = [
+        row
+        for row in helper_rows
+        if row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+        or "applied" in str(row.get("rewrite_status") or "")
+        or "planned" in str(row.get("rewrite_status") or "")
+    ]
+    assert not applied_or_planned, (
+        f"{GENERIC_DROP_FUNCTION} unexpectedly has an applied/planned semantic scope: "
+        f"{applied_or_planned}"
+    )
+    skipped = [
+        row
+        for row in helper_rows
+        if row.get("lowering_kind")
+        == "semantic_scope_drop_generic_type_parameter_skipped"
+    ]
+    assert len(skipped) == 1, (
+        f"{GENERIC_DROP_FUNCTION} must have exactly one generic Drop<T> audit-only "
+        f"skip, got {len(skipped)}"
+    )
+    row = skipped[0]
+    assert (
+        row.get("rewrite_status")
+        == "semantic_scope_drop_rewrite_skipped_generic_type_parameter"
+    ), f"{GENERIC_DROP_FUNCTION} has the wrong generic Drop rewrite status"
+    assert (
+        row.get("replacement_resolution_status")
+        == "rustc_middle_drop_generic_type_parameter_not_lowered"
+    ), f"{GENERIC_DROP_FUNCTION} has the wrong generic Drop resolution status"
+    assert row.get("metadata_pairing_contract") == "audit_only_generic_drop_type", (
+        f"{GENERIC_DROP_FUNCTION} must use the audit-only pairing contract"
+    )
+    assert row.get("semantic_object_type") == "<unknown-heap-object-type>", (
+        f"{GENERIC_DROP_FUNCTION} must not invent a concrete heap-object identity"
+    )
+    assert str(row.get("destination_type") or "") == "T", (
+        f"{GENERIC_DROP_FUNCTION} must audit the unresolved generic destination"
+    )
+
+    expected_deltas = {
+        "generic_drop_typed_deallocations_delta": 4,
+        "generic_drop_fallback_deallocations_delta": 0,
+        "generic_drop_typed_cache_inserts_delta": 4,
+    }
+    for field, expected in expected_deltas.items():
+        actual = int(runtime.get(field) or 0)
+        assert actual == expected, (
+            f"generic Drop runtime delta {field} must be {expected}, got {actual}"
+        )
+    return {
+        "generic_drop_recovery_validated": True,
+        "generic_drop_audit_only_skip_count": len(skipped),
+        **expected_deltas,
+    }
+
+
 def unique_int(rows: List[Dict[str, Any]], field: str, label: str) -> int:
     values = {int(row.get(field) or 0) for row in rows}
     assert len(values) == 1, f"{label} must have one {field}, got {sorted(values)}"
@@ -570,6 +638,7 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         for row in producer_rows
     ), "producer allocation scopes did not record the MIR-visible thread escape"
     recovery_requirement = validate_allocation_side_recovery_requirement(audit, runtime)
+    generic_drop_recovery = validate_generic_drop_recovery_requirement(audit, runtime)
 
     assert runtime.get("wrong_type_reuse_blocked") is True
     assert runtime.get("producer_reuse_complete") is True
@@ -625,6 +694,7 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         "producer_runtime": producer_runtime,
         "consumer_runtime": consumer_runtime,
         "recovery_requirement": recovery_requirement,
+        "generic_drop_recovery": generic_drop_recovery,
     }
 
 
@@ -798,6 +868,7 @@ def main() -> int:
             "The source contains no manual semantic metadata or allocation ABI calls; identities come from actual rustc_driver semantic-scope rewriting.",
             "The runner supplies the TYPE_ISOLATED policy and cross-thread-recovery placement bit uniformly so the compared cache keys differ only by compiler-derived type identity.",
             "The target-type audit contains no ProducerPayload or ConsumerPayload drop/deallocation scope, and runtime reports no requested recovery identity match; allocation-side records are therefore required for the observed typed reuse.",
+            "The generic_drop helper must have exactly one audit-only generic Drop<T> skip and no applied/planned scope; exact four-object runtime deltas bind that skip to typed deallocation and cache insertion without fallback.",
             "Commit-bound evidence requires a clean HEAD, a repository-external output directory, and identical scoped source/toolchain bindings before and after the run.",
             "This covers two same-layout Rust types and one worker lifecycle, not universal UAF prevention or unmodified-toolchain deployment.",
         ],

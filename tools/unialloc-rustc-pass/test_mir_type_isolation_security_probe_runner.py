@@ -94,7 +94,95 @@ def ready_clone_classification_audit() -> dict:
     }
 
 
+def ready_generic_drop_audit() -> dict:
+    return {
+        "rewrite_candidates": [
+            {
+                "mir_function": (
+                    "rustc_driver_mir_type_isolation_security_probe::generic_drop"
+                ),
+                "lowering_kind": (
+                    "semantic_scope_drop_generic_type_parameter_skipped"
+                ),
+                "rewrite_status": (
+                    "semantic_scope_drop_rewrite_skipped_generic_type_parameter"
+                ),
+                "replacement_resolution_status": (
+                    "rustc_middle_drop_generic_type_parameter_not_lowered"
+                ),
+                "metadata_pairing_contract": "audit_only_generic_drop_type",
+                "semantic_object_type": "<unknown-heap-object-type>",
+                "destination_type": "T",
+            }
+        ]
+    }
+
+
+def ready_generic_drop_runtime() -> dict:
+    return {
+        "generic_drop_typed_deallocations_delta": 4,
+        "generic_drop_fallback_deallocations_delta": 0,
+        "generic_drop_typed_cache_inserts_delta": 4,
+    }
+
+
 class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
+    def test_generic_drop_recovery_accepts_exact_audit_and_runtime_delta(self) -> None:
+        evidence = runner.validate_generic_drop_recovery_requirement(
+            ready_generic_drop_audit(), ready_generic_drop_runtime()
+        )
+        self.assertTrue(evidence["generic_drop_recovery_validated"])
+        self.assertEqual(evidence["generic_drop_audit_only_skip_count"], 1)
+
+    def test_generic_drop_recovery_rejects_duplicate_or_applied_scope(self) -> None:
+        duplicate = ready_generic_drop_audit()
+        duplicate["rewrite_candidates"].append(
+            copy.deepcopy(duplicate["rewrite_candidates"][0])
+        )
+        with self.assertRaisesRegex(AssertionError, "exactly one"):
+            runner.validate_generic_drop_recovery_requirement(
+                duplicate, ready_generic_drop_runtime()
+            )
+
+        applied = ready_generic_drop_audit()
+        applied["rewrite_candidates"].append(
+            {
+                "mir_function": (
+                    "rustc_driver_mir_type_isolation_security_probe::generic_drop"
+                ),
+                "lowering_kind": "semantic_scope_enter_exit_rewrite",
+                "rewrite_status": "semantic_scope_enter_exit_rewrite_applied",
+                "metadata_pairing_contract": "scope_enter_original_call_scope_exit",
+            }
+        )
+        with self.assertRaisesRegex(AssertionError, "applied/planned"):
+            runner.validate_generic_drop_recovery_requirement(
+                applied, ready_generic_drop_runtime()
+            )
+
+    def test_generic_drop_recovery_rejects_contract_and_runtime_delta_drift(self) -> None:
+        wrong_contract = ready_generic_drop_audit()
+        wrong_contract["rewrite_candidates"][0]["metadata_pairing_contract"] = (
+            "unexpected_contract"
+        )
+        with self.assertRaisesRegex(AssertionError, "audit-only pairing contract"):
+            runner.validate_generic_drop_recovery_requirement(
+                wrong_contract, ready_generic_drop_runtime()
+            )
+
+        for field, value in (
+            ("generic_drop_typed_deallocations_delta", 3),
+            ("generic_drop_fallback_deallocations_delta", 1),
+            ("generic_drop_typed_cache_inserts_delta", 3),
+        ):
+            with self.subTest(field=field):
+                runtime = ready_generic_drop_runtime()
+                runtime[field] = value
+                with self.assertRaisesRegex(AssertionError, "generic Drop"):
+                    runner.validate_generic_drop_recovery_requirement(
+                        ready_generic_drop_audit(), runtime
+                    )
+
     def test_clone_candidate_classification_accepts_expected_partition(self) -> None:
         evidence = runner.validate_clone_candidate_classification(
             ready_clone_classification_audit()

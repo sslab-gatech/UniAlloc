@@ -38,6 +38,9 @@ struct WorkerEvidence {
     producer_addresses: [usize; OBJECTS],
     consumer_addresses: [usize; OBJECTS],
     recovered_producer_addresses: [usize; OBJECTS],
+    generic_drop_typed_deallocations_delta: usize,
+    generic_drop_fallback_deallocations_delta: usize,
+    generic_drop_typed_cache_inserts_delta: usize,
     side_cache: TypeIsolationSideCacheSnapshot,
 }
 
@@ -67,6 +70,11 @@ fn consumer_box(seed: u64) -> Box<ConsumerPayload> {
         seed ^ 0xDDDD_DDDD_DDDD_DDDD,
         seed ^ 0xEEEE_EEEE_EEEE_EEEE,
     ]))
+}
+
+#[inline(never)]
+fn generic_drop<T>(value: T) {
+    drop(value);
 }
 
 #[inline]
@@ -164,10 +172,29 @@ fn main() {
         // All producer objects are freed on this one foreign worker. The pass'
         // cross-thread placement metadata makes recovery records process-visible,
         // while the recovered producer identity selects the worker's typed cache.
-        drop(p0);
-        drop(p1);
-        drop(p2);
-        drop(p3);
+        // The generic helper cannot carry a monomorphized Drop<T> scope, so these
+        // exact deltas prove that allocation-side records preserve typed identity.
+        let before_generic_drop = semantic_stats_snapshot();
+        generic_drop(p0);
+        generic_drop(p1);
+        generic_drop(p2);
+        generic_drop(p3);
+        let after_generic_drop = semantic_stats_snapshot();
+        let generic_drop_typed_deallocations_delta = after_generic_drop
+            .typed_deallocations
+            .checked_sub(before_generic_drop.typed_deallocations)
+            .expect("typed deallocation counter must be monotonic");
+        let generic_drop_fallback_deallocations_delta = after_generic_drop
+            .fallback_deallocations
+            .checked_sub(before_generic_drop.fallback_deallocations)
+            .expect("fallback deallocation counter must be monotonic");
+        let generic_drop_typed_cache_inserts_delta = after_generic_drop
+            .typed_cache_inserts
+            .checked_sub(before_generic_drop.typed_cache_inserts)
+            .expect("typed cache insert counter must be monotonic");
+        assert_eq!(generic_drop_typed_deallocations_delta, OBJECTS);
+        assert_eq!(generic_drop_fallback_deallocations_delta, 0);
+        assert_eq!(generic_drop_typed_cache_inserts_delta, OBJECTS);
 
         let c0 = consumer_box(0xC003_0000);
         let c1 = consumer_box(0xC003_0001);
@@ -224,6 +251,9 @@ fn main() {
             producer_addresses: produced,
             consumer_addresses,
             recovered_producer_addresses,
+            generic_drop_typed_deallocations_delta,
+            generic_drop_fallback_deallocations_delta,
+            generic_drop_typed_cache_inserts_delta,
             side_cache,
         }
     });
@@ -280,6 +310,9 @@ fn main() {
             "\"typed_cache_hits\":{},",
             "\"typed_cache_inserts\":{},",
             "\"typed_cache_bypasses\":{},",
+            "\"generic_drop_typed_deallocations_delta\":{},",
+            "\"generic_drop_fallback_deallocations_delta\":{},",
+            "\"generic_drop_typed_cache_inserts_delta\":{},",
             "\"semantic_type_stats_dropped_events\":{},",
             "\"recovery_identity_matches\":{},",
             "\"recovery_identity_mismatches\":{},",
@@ -304,6 +337,9 @@ fn main() {
         stats.typed_cache_hits,
         stats.typed_cache_inserts,
         stats.typed_cache_bypasses,
+        evidence.generic_drop_typed_deallocations_delta,
+        evidence.generic_drop_fallback_deallocations_delta,
+        evidence.generic_drop_typed_cache_inserts_delta,
         stats.semantic_type_stats_dropped_events,
         validation.recovery_identity_matches,
         validation.recovery_identity_mismatches,
