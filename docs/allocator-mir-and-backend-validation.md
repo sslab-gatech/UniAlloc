@@ -601,6 +601,31 @@ artifacts; the application was not rerun.  Evidence is under
 This is one-shot functional/diagnostic evidence, not universal coverage,
 performance evidence, or a publication-grade percentage.
 
+Current compiler hardening continues after that one-shot without rebinding its
+counts.  Commit `04b8108` removes the non-Clone first-owner shortcut: receiver
+calls inspect only their first MIR receiver, factory/constructor calls inspect
+only their destination, and the existing bounded supported-owner scan of that
+selected receiver/destination must yield exactly one owner before a semantic
+scope can be applied; multi-owner or unresolved cases fail closed.  Actual-rustc regressions require both
+an aggregate `(Vec<u8>, String)` factory and `Vec<String>::resize` to emit one
+ambiguous fail-closed row and no applied scope while preserving conventional
+runtime results.  The positive direct-local regression, pinned standalone pass
+compile, and all 15 embedded pass tests also pass.  Oxipng was not rerun, so the
+`af342f7` application evidence remains historical to its exact source.
+
+Commit `2ff8770` closes the corresponding runtime layout/auth boundary.
+Recovery lookup now distinguishes missing, mismatched, and exact records across
+the TLS and process-visible tables.  A live pointer presented with a valid but
+wrong layout/auth fails before stats, cache publication, delayed-free routing,
+copying, or raw deallocation.  Deallocation preserves the exact record for a
+correct retry; conservative/recovery-backed FFI single/split realloc ABI
+wrappers return null while preserving the original record and payload.
+Missing-record fallback and local exact ABI
+paths retain their prior contracts.  Focused dealloc/realloc regressions,
+adjacent recovery tests, independent review, and the repository pre-commit
+suite (652 UniAlloc tests plus 430 std-bench tests) pass.  These are
+current-source safety results, not performance or exploit-success evidence.
+
 For historical comparison, a source-bound Oxipng v4.0.3 smoke at validator
 commit `e466831` validated the
 actual rewrite path without running a benchmark loop.  The pinned application

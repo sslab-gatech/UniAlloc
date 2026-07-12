@@ -524,3 +524,16 @@ not rerun Oxipng.  See
 Static rows, runtime events, the bounded oracle, and whole-run corrections must
 retain separate denominators; none is universal coverage or publication-grade
 performance evidence.
+
+Current pass commit `04b8108` is newer than that one-shot evidence.  It removes
+the non-Clone first-owner shortcut: receiver-owned calls inspect only MIR
+argument zero, other calls inspect only their destination, and the existing
+bounded supported-owner scan of that selected receiver/destination must produce
+exactly one owner before scope lowering; multi-owner or unresolved cases fail
+closed.
+`tools/unialloc-rustc-pass/test_mir_nonclone_multi_owner_fail_closed.py` drives
+the real wrapper/pass over both an aggregate `(Vec<u8>, String)` factory and
+`Vec<String>::resize`; each must produce one ambiguous audit-only row and no
+applied/planned semantic scope while the application result remains correct.
+The Oxipng application was not rerun, so its `af342f7` rows are not current-HEAD
+coverage.
