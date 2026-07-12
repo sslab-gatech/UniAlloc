@@ -1558,6 +1558,16 @@ const HEAP_OBJECT_SUPPORT: &[HeapObjectSupport] = &[
         ],
     },
     HeapObjectSupport {
+        type_markers: &["indexmap::IndexMap<", "indexmap::map::IndexMap<"],
+        adt_def_paths: &["indexmap::map::IndexMap"],
+        owned_return_markers: &[") -> indexmap::IndexMap", ") -> indexmap::map::IndexMap"],
+    },
+    HeapObjectSupport {
+        type_markers: &["indexmap::IndexSet<", "indexmap::set::IndexSet<"],
+        adt_def_paths: &["indexmap::set::IndexSet"],
+        owned_return_markers: &[") -> indexmap::IndexSet", ") -> indexmap::set::IndexSet"],
+    },
+    HeapObjectSupport {
         type_markers: &["std::string::String", "alloc::string::String"],
         adt_def_paths: &["alloc::string::String"],
         owned_return_markers: &[") -> std::string::String", ") -> alloc::string::String"],
@@ -1645,11 +1655,12 @@ fn normalized_heap_object_type(value: &str) -> Option<String> {
 }
 
 fn supported_heap_adt_def_path(path: &str) -> bool {
+    let normalized = strip_rustc_crate_disambiguators(path);
     HEAP_OBJECT_SUPPORT.iter().any(|support| {
         support
             .adt_def_paths
             .iter()
-            .any(|candidate| path == *candidate || path.ends_with(candidate))
+            .any(|candidate| normalized == *candidate)
     })
 }
 
@@ -2403,6 +2414,25 @@ mod tests {
         assert!(!plain_clone_trait_call(
             "my_crate::allocation::CloneFactory::clone"
         ));
+    }
+
+    #[test]
+    fn supported_heap_adt_matcher_accepts_exact_indexmap_paths_only() {
+        assert!(supported_heap_adt_def_path("alloc::vec::Vec"));
+        assert!(supported_heap_adt_def_path("alloc[d734]::vec::Vec"));
+        assert!(supported_heap_adt_def_path(
+            "std::collections::hash::map::HashMap"
+        ));
+        assert!(supported_heap_adt_def_path("hashbrown::set::HashSet"));
+        assert!(supported_heap_adt_def_path("indexmap::map::IndexMap"));
+        assert!(supported_heap_adt_def_path("indexmap::set::IndexSet"));
+        assert!(!supported_heap_adt_def_path(
+            "outer::indexmap::map::IndexMap"
+        ));
+        assert!(supported_heap_adt_def_path("indexmap[1a2b]::set::IndexSet"));
+        assert!(!supported_heap_adt_def_path("notindexmap::map::IndexMap"));
+        assert!(!supported_heap_adt_def_path("indexmap::map::IndexMapLike"));
+        assert!(!supported_heap_adt_def_path("indexmap::set::IndexSetExtra"));
     }
 
     #[test]
