@@ -42,6 +42,16 @@ struct RawPointerWrapper(*mut u8);
 #[derive(Clone, Copy)]
 struct ConstGenericClone<const N: usize>([u8; N]);
 
+struct MultiOwnerStruct<L, R> {
+    left: L,
+    right: R,
+}
+
+enum MultiOwnerEnum<L, R> {
+    Left(L),
+    Right(R),
+}
+
 #[inline(never)]
 fn clone_single_heap(value: &Option<Vec<u8>>) -> Option<Vec<u8>> {
     <Option<Vec<u8>> as Clone>::clone(value)
@@ -89,6 +99,16 @@ fn clone_const_generic<const N: usize>(value: &ConstGenericClone<N>) -> ConstGen
     <ConstGenericClone<N> as Clone>::clone(value)
 }
 
+#[inline(never)]
+fn drop_multi_owner_struct(value: MultiOwnerStruct<Vec<u8>, String>) {
+    black_box(&value);
+}
+
+#[inline(never)]
+fn drop_multi_owner_enum(value: MultiOwnerEnum<Vec<u8>, String>) {
+    black_box(&value);
+}
+
 static EMPTY_VEC: Vec<u8> = Vec::new();
 
 fn main() {
@@ -118,4 +138,10 @@ fn main() {
 
     let const_generic = black_box(ConstGenericClone([17_u8; 4]));
     black_box(clone_const_generic(black_box(&const_generic)));
+
+    drop_multi_owner_struct(black_box(MultiOwnerStruct {
+        left: Vec::new(),
+        right: String::new(),
+    }));
+    drop_multi_owner_enum(black_box(MultiOwnerEnum::Left(Vec::new())));
 }

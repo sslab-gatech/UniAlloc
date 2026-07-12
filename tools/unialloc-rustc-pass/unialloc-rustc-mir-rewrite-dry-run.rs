@@ -1893,9 +1893,11 @@ fn collect_heap_object_types_from_ty_inner<'tcx>(
             if supported_heap_adt_def_path(&def_path) || direct_heap_type_marker_matches(&type_text)
             {
                 out.insert(type_text);
-            } else if let Some(normalized) = normalized_heap_object_type(&type_text) {
-                out.insert(normalized);
             }
+            // Do not classify an aggregate as a heap owner merely because its
+            // rendered generic arguments contain `Vec`, `String`, or another
+            // supported marker. The argument/field walk below records the
+            // actual owners and lets multi-owner Drop fail closed precisely.
             for arg_ty in substs.types() {
                 collect_heap_object_types_from_ty_inner(tcx, arg_ty, depth + 1, out);
             }
@@ -5521,18 +5523,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
         let place_ty = place.ty(&body.local_decls, tcx).ty;
         let drop_type = format!("{:?}", place_ty);
         let heap_owner_types = heap_object_types_from_ty(tcx, place_ty);
-        #[cfg(unialloc_rustc_current)]
-        let drop_type_is_closure_or_generator = matches!(
-            strip_type_indirection(place_ty).kind(),
-            ty::Closure(_, _) | ty::Coroutine(_, _) | ty::CoroutineClosure(_, _)
-        );
-        #[cfg(not(unialloc_rustc_current))]
-        let drop_type_is_closure_or_generator = matches!(
-            strip_type_indirection(place_ty).kind(),
-            ty::Closure(_, _) | ty::Generator(_, _, _)
-        );
-        let drop_type_has_multiple_heap_owners =
-            drop_type_is_closure_or_generator && heap_owner_types.len() > 1;
+        let drop_type_has_multiple_heap_owners = heap_owner_types.len() > 1;
         let semantic_object_type = if drop_type_has_multiple_heap_owners {
             format!(
                 "multiple_heap_owners({})",
@@ -5591,12 +5582,11 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
         let policy_flags = lowering_policy_flags();
         let lifetime_hint = lowering_lifetime_hint();
         if drop_type_has_multiple_heap_owners {
-            // A closure/generator Drop may release several independent heap
-            // owners.  A single active metadata scope cannot represent all of
-            // them; wrapping the whole Drop with the first solved owner type
-            // misattributes later frees and is caught by runtime recovery
-            // identity validation.  Keep this as an explicit audit row and let
-            // per-allocation recovery records carry each object identity.
+            // An aggregate Drop may release several independent heap owners. A
+            // single active metadata scope cannot represent all of them;
+            // wrapping the whole Drop with the first solved owner type
+            // misattributes later frees. Keep this as an explicit audit row and
+            // let per-allocation recovery records carry each object identity.
             records.push(RewriteRecord {
                 allocation_site_id: format!(
                     "rustc-driver-mir-semantic-drop-multi-owner:{:016x}",
@@ -5634,7 +5624,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                 },
                 replacement_resolution_status: "rustc_middle_drop_multiple_heap_owners_not_lowered",
                 replacement_preview:
-                    "Skipped drop-scope lowering because one closure/generator Drop releases multiple heap-owner identities; recovery records remain authoritative"
+                    "Skipped drop-scope lowering because one aggregate Drop releases multiple heap-owner identities; recovery records remain authoritative"
                         .to_string(),
                 semantic_scope_unwind_pop_inserted: false,
                 metadata_pairing_contract: "audit_only_multiple_heap_owner_drop_type",

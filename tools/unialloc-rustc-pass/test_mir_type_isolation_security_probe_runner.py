@@ -88,6 +88,31 @@ def ready_clone_classification_audit() -> dict:
             "destination_type": "fixture::ConstGenericClone<N>",
         }
     )
+    for function_name, destination_type in (
+        (
+            "drop_multi_owner_struct",
+            "fixture::MultiOwnerStruct<std::vec::Vec<u8>, std::string::String>",
+        ),
+        (
+            "drop_multi_owner_enum",
+            "fixture::MultiOwnerEnum<std::vec::Vec<u8>, std::string::String>",
+        ),
+    ):
+        rows.append(
+            {
+                "mir_function": f"fixture::{function_name}",
+                "lowering_kind": "semantic_scope_drop_multiple_heap_owners_skipped",
+                "rewrite_status": "semantic_scope_drop_rewrite_skipped_multiple_heap_owners",
+                "replacement_resolution_status": (
+                    "rustc_middle_drop_multiple_heap_owners_not_lowered"
+                ),
+                "metadata_pairing_contract": "audit_only_multiple_heap_owner_drop_type",
+                "semantic_object_type": (
+                    "multiple_heap_owners(std::string::String,std::vec::Vec<u8>)"
+                ),
+                "destination_type": destination_type,
+            }
+        )
     return {
         "summary": {"semantic_scope_unsolved_candidate_count": 3},
         "rewrite_candidates": rows,
@@ -275,6 +300,23 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         self.assertEqual(evidence["raw_pointer_unresolved_count"], 1)
         self.assertEqual(evidence["const_generic_unresolved_count"], 1)
         self.assertEqual(evidence["total_unsolved_count"], 3)
+        self.assertEqual(
+            evidence["multi_owner_drop_rows_by_function"],
+            {"drop_multi_owner_struct": 1, "drop_multi_owner_enum": 1},
+        )
+
+    def test_clone_candidate_classification_rejects_multi_owner_drop_as_applied(self) -> None:
+        audit = ready_clone_classification_audit()
+        row = next(
+            row
+            for row in audit["rewrite_candidates"]
+            if row["mir_function"].endswith("::drop_multi_owner_struct")
+        )
+        row["lowering_kind"] = "semantic_scope_drop_rewrite"
+        row["rewrite_status"] = "actual_semantic_scope_drop_rewrite_applied"
+        row["replacement_resolution_status"] = "resolved_unialloc_semantic_scope_push_local_pop"
+        with self.assertRaisesRegex(AssertionError, "fail closed"):
+            runner.validate_clone_candidate_classification(audit)
 
     def test_clone_candidate_classification_rejects_nonheap_as_unsolved(self) -> None:
         audit = ready_clone_classification_audit()

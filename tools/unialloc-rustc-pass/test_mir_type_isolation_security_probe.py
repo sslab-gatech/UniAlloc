@@ -54,6 +54,10 @@ NON_HEAP_CLONE_FUNCTIONS = (
 NESTED_HEAP_CLONE_FUNCTION = "clone_nested_vec_owner"
 RAW_POINTER_CLONE_FUNCTION = "clone_raw_pointer_wrapper"
 CONST_GENERIC_CLONE_FUNCTION = "clone_const_generic"
+MULTI_OWNER_DROP_FUNCTIONS = (
+    "drop_multi_owner_struct",
+    "drop_multi_owner_enum",
+)
 GENERIC_DROP_FUNCTION = "generic_drop"
 
 
@@ -297,6 +301,21 @@ def clone_classification_rows(
     ]
 
 
+def drop_classification_rows(
+    audit: Dict[str, Any], function_name: str
+) -> List[Dict[str, Any]]:
+    return [
+        row
+        for row in audit.get("rewrite_candidates", [])
+        if isinstance(row, dict)
+        and (
+            str(row.get("mir_function") or "") == function_name
+            or str(row.get("mir_function") or "").endswith(f"::{function_name}")
+        )
+        and str(row.get("lowering_kind") or "").startswith("semantic_scope_drop")
+    ]
+
+
 def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, Any]:
     errors: List[str] = []
 
@@ -441,6 +460,33 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
     if unsolved != 3:
         errors.append(f"semantic_scope_unsolved_candidate_count expected 3, got {unsolved}")
 
+    multi_owner_drop_counts: Dict[str, int] = {}
+    for function_name in MULTI_OWNER_DROP_FUNCTIONS:
+        rows = drop_classification_rows(audit, function_name)
+        multi_owner_drop_counts[function_name] = len(rows)
+        if not rows:
+            errors.append(f"{function_name} has no aggregate Drop audit row")
+            continue
+        for row in rows:
+            if row.get("lowering_kind") != "semantic_scope_drop_multiple_heap_owners_skipped":
+                errors.append(f"{function_name} did not fail closed for multiple owners")
+            if (
+                row.get("rewrite_status")
+                != "semantic_scope_drop_rewrite_skipped_multiple_heap_owners"
+            ):
+                errors.append(f"{function_name} has the wrong multi-owner Drop status")
+            if (
+                row.get("replacement_resolution_status")
+                != "rustc_middle_drop_multiple_heap_owners_not_lowered"
+            ):
+                errors.append(f"{function_name} has the wrong multi-owner Drop resolution")
+            if row.get("metadata_pairing_contract") != "audit_only_multiple_heap_owner_drop_type":
+                errors.append(f"{function_name} has the wrong multi-owner Drop contract")
+            row_text = json.dumps(row, sort_keys=True)
+            for owner in ("std::vec::Vec<u8", "std::string::String"):
+                if owner not in row_text:
+                    errors.append(f"{function_name} omitted owner {owner}")
+
     if errors:
         raise AssertionError(
             "clone candidate classification failed:\n- " + "\n- ".join(errors)
@@ -454,6 +500,7 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
         "raw_pointer_unresolved_count": len(raw_pointer_rows),
         "const_generic_unresolved_count": len(const_generic_rows),
         "total_unsolved_count": unsolved,
+        "multi_owner_drop_rows_by_function": multi_owner_drop_counts,
     }
 
 
