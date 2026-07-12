@@ -299,6 +299,39 @@ crashing the pass.  This strengthens compiler coverage accounting; it does not
 turn skipped, ambiguous, raw, or const-generic Clone candidates into protected
 runtime allocation events.
 
+Commit `374d455` adds a compiler-driven fallback regression for an ordinary
+`Result<Vec<ProducerPayload>, String>::clone` call.  The real rustc audit must
+contain exactly one ambiguous fail-closed row and no applied or planned scope
+for that call.  Hosted and `fixed_heap` runs both observed zero typed Clone
+allocations, one raw fallback allocation and deallocation, correct cloned
+contents, distinct buffers, zero recovery-identity mismatches, and zero corrupt
+side-cache slots.  This proves safe conventional execution for this bounded
+ambiguous path; it does not turn fallback traffic into type-isolation coverage.
+
+
+### Current Oxipng real-application compiler coverage boundary
+
+Commit `88c35fd` adds exact `indexmap::map::IndexMap` and
+`indexmap::set::IndexSet` heap-container identities to the compiler pass.  The
+match is intentionally narrow: rustc crate disambiguators such as
+`indexmap[hash]::set::IndexSet` are normalized, but the final def path must
+exactly match a supported container path.  The pass does not infer arbitrary
+custom ADTs, and the current real-application evidence keeps unsupported
+`png::PngData`, `headers::Headers`, and `crossbeam_channel::Sender<_>` Clone
+results unresolved.
+
+A clean-HEAD Oxipng v4.0.3 smoke at `88c35fd` validated the actual rewrite path
+without running a benchmark loop.  The pinned application built and ran once with
+matching output SHA-256.  Its target-crate MIR audit reported 6 direct allocator
+rewrites, 844 semantic-scope rewrites, 532 Drop rewrites, 4 semantic unresolved
+candidates, and 0 Drop unresolved candidates.  The runtime recording window
+reported 1058 typed allocations out of 1067 total allocation events, 9 fallback
+allocations, and 0 type-isolation corrupt slots.  This is bounded functional
+coverage and regression evidence only; it is not whole-program coverage,
+unmodified-application deployment evidence, or a paper-performance result.
+The durable summaries and target-crate audits for these real-Rust probes are in
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-real-rust-88c35fd-374d455-20260712/`.
+
 ## PAC metadata-auth probes use allocator object addresses
 
 The PAC metadata-auth evidence path now distinguishes three things that should
