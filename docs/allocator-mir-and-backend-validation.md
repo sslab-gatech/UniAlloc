@@ -316,6 +316,20 @@ This is a bounded actual-rewrite/cache-routing safety result.  The 64-bit hash
 still inherits the documented trusted-metadata and collision boundary; this is
 not universal crate coverage, cryptographic identity, or performance evidence.
 
+### Lifetime-hint cache isolation
+
+Commit `eadfa9c` adds a direct metadata-lifecycle regression for the policy
+identity carried by `lifetime_hint`.  With the type id, module id, flags, and
+placement held constant, an object released under lifetime `0x11` must not be
+reused by lifetime `0x22`; returning to lifetime `0x11` must recover the
+original address.  Hosted and `fixed_heap` configurations each pass the same
+one-shot test with zero fallback allocations/deallocations, recovery identity
+mismatches, and corrupt side-cache slots.
+
+This test proves that the current allocator cache key keeps two explicitly
+supplied lifetime classes separate on the covered paths.  It does not establish
+compiler-derived lifetime coverage, universal policy isolation, or performance.
+
 ### Boxed-slice to `Vec` ownership-identity transfer
 
 At `3d08399`,
