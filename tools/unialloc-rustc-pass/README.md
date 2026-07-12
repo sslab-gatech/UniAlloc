@@ -335,6 +335,31 @@ so no selected smoke may be promoted to universal or whole-application coverage.
 Static candidate/applied/fail-closed coverage, dynamic typed/total allocation-event
 coverage, and adversarial isolation-behavior coverage retain separate denominators.
 
+## Multi-crate module isolation identity
+
+Commit `0704852` removes the compiler driver's previous single-module constant
+for external crates.  The pass now derives a nonzero module identity from the
+normalized crate name plus rustc's `-C metadata` disambiguator.  Direct rustc
+invocations without metadata fall back to the canonical primary input path,
+then to the full rustc argv only when no file identity is available.  The
+in-tree `unialloc` probe retains its legacy module id for ABI compatibility.
+The selected id and algorithm are written to both JSON audit and pass log.
+
+Run the bounded actual-rewrite regression with:
+
+```sh
+python3 tools/unialloc-rustc-pass/test_mir_multicrate_module_isolation.py
+```
+
+Two distinct Cargo packages deliberately expose the same rustc crate name and
+identical `Payload` source, producing the same compiler type id.  The run must
+observe distinct module ids, wrong-module non-reuse, same-module reuse, and zero
+recovery mismatch or corrupt slots.  A second no-metadata direct-rustc control
+must also derive distinct ids from distinct primary inputs.  This proves one
+bounded compiler/runtime module-cache boundary; it is not collision-free
+cryptographic naming, whole-application coverage, a benchmark, or a performance
+claim.
+
 ## Direct allocator-call MIR replacement ABI modes
 
 `unialloc-rustc-mir-rewrite-dry-run.rs` can also replace supported

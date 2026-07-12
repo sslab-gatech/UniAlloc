@@ -291,6 +291,31 @@ This proves one compiler-derived `VecDeque` identity-to-reuse lifecycle for two
 same-layout Rust types.  It is not universal container coverage, an exploit
 proof, or performance evidence.
 
+### Actual-rustc multi-crate module isolation
+
+Commit `0704852` closes a compiler/runtime boundary that the allocator already
+treated as security-relevant: external target crates no longer all receive the
+same compiler module id.  The driver hashes normalized crate name with rustc's
+Cargo metadata disambiguator; no-metadata direct-rustc invocations use the
+canonical primary input, with full argv as the last-resort invocation identity.
+The legacy in-tree `unialloc` id is preserved for probe ABI compatibility.
+
+`python3 tools/unialloc-rustc-pass/test_mir_multicrate_module_isolation.py`
+builds two packages whose libraries deliberately have the same rustc crate
+name, identical source, identical semantic object type, and the same nonzero
+compiler type id (`13297006753675728434`).  One current-toolchain run observes
+two different module ids, rejects cross-module address reuse, reuses the
+original address under the original module, and reports zero recovery mismatch
+and corrupt slots.  The same regression separately compiles two same-name
+direct-rustc inputs without `-C metadata` and requires distinct nonzero module
+ids.  Both current and `nightly-2022-07-01` pass binaries compile, and the full
+feature test run passes 738 allocator unit tests plus 432 std-bench functional
+tests.  Independent review returned `APPROVE`.
+
+This is a bounded actual-rewrite/cache-routing safety result.  The 64-bit hash
+still inherits the documented trusted-metadata and collision boundary; this is
+not universal crate coverage, cryptographic identity, or performance evidence.
+
 ### Boxed-slice to `Vec` ownership-identity transfer
 
 At `3d08399`,
