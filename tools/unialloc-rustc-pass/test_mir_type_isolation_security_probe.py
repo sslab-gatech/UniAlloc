@@ -16,11 +16,24 @@ from typing import Any, Dict, Iterable, List
 
 
 ROOT = Path(__file__).resolve().parents[2]
+RUNNER_SOURCE = Path(__file__).resolve()
 PASS_SOURCE = ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
 PROBE_NAME = "rustc_driver_mir_type_isolation_security_probe"
 PROBE_SOURCE = ROOT / "unialloc/src/bin" / f"{PROBE_NAME}.rs"
 TYPE_ISOLATED = 0x1
 CROSS_THREAD_RECOVERY = 0x8000
+SOURCE_BINDING_PATHS = (
+    Path("Cargo.toml"),
+    Path("Cargo.lock"),
+    Path("rust-toolchain"),
+    Path("alloc_macros/Cargo.toml"),
+    Path("alloc_macros/src"),
+    Path("unialloc/Cargo.toml"),
+    Path("unialloc/build.rs"),
+    Path("unialloc/src"),
+    PASS_SOURCE.relative_to(ROOT),
+    RUNNER_SOURCE.relative_to(ROOT),
+)
 
 
 def sha256(path: Path) -> str:
@@ -81,6 +94,85 @@ def checked_output(command: List[str]) -> str:
     return subprocess.check_output(command, cwd=ROOT, text=True).strip()
 
 
+def reject_output_inside_repo(output_dir: Path) -> None:
+    resolved = output_dir.resolve()
+    root = ROOT.resolve()
+    if resolved == root or root in resolved.parents:
+        raise AssertionError(f"output directory must be outside repository: {resolved}")
+
+
+def default_output_dir() -> Path:
+    parent = Path(tempfile.gettempdir()).resolve()
+    reject_output_inside_repo(parent)
+    return Path(
+        tempfile.mkdtemp(prefix="unialloc-mir-typeiso-security-", dir=str(parent))
+    ).resolve()
+
+
+def scoped_source_hashes() -> Dict[str, str]:
+    files: List[Path] = []
+    for relative in SOURCE_BINDING_PATHS:
+        path = ROOT / relative
+        assert path.exists(), f"source-binding path is missing: {relative}"
+        if path.is_dir():
+            files.extend(child for child in path.rglob("*") if child.is_file())
+        else:
+            files.append(path)
+    return {
+        str(path.relative_to(ROOT)): sha256(path)
+        for path in sorted(set(files))
+    }
+
+
+def scoped_source_fingerprint(file_hashes: Dict[str, str]) -> str:
+    digest = hashlib.sha256()
+    for path, file_hash in sorted(file_hashes.items()):
+        digest.update(path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(file_hash.encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def source_binding_snapshot(toolchain: str, rustc: str) -> Dict[str, Any]:
+    status = checked_output(["git", "status", "--short"])
+    assert not status, f"commit-bound evidence requires a clean working tree:\n{status}"
+    file_hashes = scoped_source_hashes()
+    return {
+        "git_head": checked_output(["git", "rev-parse", "HEAD"]),
+        "git_status": status,
+        "clean_head": True,
+        "toolchain": toolchain,
+        "rustc_verbose_version": checked_output([rustc, f"+{toolchain}", "-Vv"]),
+        "sysroot": checked_output([rustc, f"+{toolchain}", "--print", "sysroot"]),
+        "scoped_paths": [str(path) for path in SOURCE_BINDING_PATHS],
+        "scoped_file_count": len(file_hashes),
+        "scoped_file_hashes": file_hashes,
+        "scoped_fingerprint_sha256": scoped_source_fingerprint(file_hashes),
+    }
+
+
+def assert_source_binding_stable(start: Dict[str, Any], end: Dict[str, Any]) -> None:
+    keys = (
+        "git_head",
+        "git_status",
+        "clean_head",
+        "toolchain",
+        "rustc_verbose_version",
+        "sysroot",
+        "scoped_paths",
+        "scoped_file_count",
+        "scoped_file_hashes",
+        "scoped_fingerprint_sha256",
+    )
+    drift = {
+        key: {"start": start.get(key), "end": end.get(key)}
+        for key in keys
+        if start.get(key) != end.get(key)
+    }
+    assert not drift, f"source/toolchain binding drifted during probe: {json.dumps(drift, sort_keys=True)}"
+
+
 def current_rustc_cfg(toolchain: str) -> List[str]:
     normalized = toolchain.lstrip("+").strip()
     if normalized == "nightly" or normalized.startswith(("nightly-2025", "nightly-2026")):
@@ -108,6 +200,57 @@ def applied_type_rows(audit: Dict[str, Any], marker: str) -> List[Dict[str, Any]
         and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
         and row.get("rewrite_status") == "actual_semantic_scope_enter_exit_rewrite_applied"
     ]
+
+
+def target_drop_or_deallocation_rows(
+    audit: Dict[str, Any], marker: str
+) -> List[Dict[str, Any]]:
+    rows = audit.get("rewrite_candidates") or []
+    assert isinstance(rows, list), "rewrite_candidates must be a list"
+    matching: List[Dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        row_text = json.dumps(row, sort_keys=True)
+        scope_text = " ".join(
+            str(row.get(field) or "")
+            for field in (
+                "lowering_kind",
+                "rewrite_status",
+                "callee",
+                "metadata_pairing_contract",
+            )
+        ).lower()
+        if marker in row_text and ("drop" in scope_text or "dealloc" in scope_text):
+            matching.append(row)
+    return matching
+
+
+def validate_allocation_side_recovery_requirement(
+    audit: Dict[str, Any], runtime: Dict[str, Any]
+) -> Dict[str, Any]:
+    target_counts: Dict[str, int] = {}
+    for marker in ("ProducerPayload", "ConsumerPayload"):
+        rows = target_drop_or_deallocation_rows(audit, marker)
+        assert not rows, (
+            f"{marker} unexpectedly has target drop/deallocation scope evidence; "
+            "allocation-side recovery is no longer the proven mechanism"
+        )
+        target_counts[marker] = len(rows)
+    matches = int(runtime.get("recovery_identity_matches") or 0)
+    mismatches = int(runtime.get("recovery_identity_mismatches") or 0)
+    assert matches == 0, (
+        "an active requested deallocation identity matched recovery; "
+        "allocation-side recovery was not required"
+    )
+    assert mismatches == 0, "requested and recorded recovery identities disagreed"
+    return {
+        "allocation_side_recovery_required": True,
+        "producer_target_drop_or_deallocation_scope_rows": target_counts["ProducerPayload"],
+        "consumer_target_drop_or_deallocation_scope_rows": target_counts["ConsumerPayload"],
+        "recovery_identity_matches": matches,
+        "recovery_identity_mismatches": mismatches,
+    }
 
 
 def unique_int(rows: List[Dict[str, Any]], field: str, label: str) -> int:
@@ -172,6 +315,7 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         row.get("placement_hint_basis") == "manual_and_auto_cross_thread_escape"
         for row in producer_rows
     ), "producer allocation scopes did not record the MIR-visible thread escape"
+    recovery_requirement = validate_allocation_side_recovery_requirement(audit, runtime)
 
     assert runtime.get("wrong_type_reuse_blocked") is True
     assert runtime.get("producer_reuse_complete") is True
@@ -192,7 +336,6 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     assert int(runtime.get("typed_cache_hits") or 0) >= 4
     assert int(runtime.get("typed_cache_inserts") or 0) >= 8
     assert int(runtime.get("semantic_type_stats_dropped_events") or 0) == 0
-    assert int(runtime.get("recovery_identity_mismatches") or 0) == 0
     assert int(runtime.get("side_cache_corrupt_slots") or 0) == 0
 
     runtime_rows = runtime.get("type_rows") or []
@@ -227,6 +370,7 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         ),
         "producer_runtime": producer_runtime,
         "consumer_runtime": consumer_runtime,
+        "recovery_requirement": recovery_requirement,
     }
 
 
@@ -247,8 +391,12 @@ def main() -> int:
     output_dir = (
         args.output_dir.resolve()
         if args.output_dir
-        else Path(tempfile.mkdtemp(prefix="unialloc-mir-typeiso-security-")).resolve()
+        else default_output_dir()
     )
+    reject_output_inside_repo(output_dir)
+    rustc = shutil.which("rustc") or "rustc"
+    cargo = shutil.which("cargo") or "cargo"
+    source_binding_start = source_binding_snapshot(toolchain, rustc)
     output_dir.mkdir(parents=True, exist_ok=True)
     if any(output_dir.iterdir()):
         raise SystemExit(f"output directory must be empty: {output_dir}")
@@ -259,9 +407,7 @@ def main() -> int:
     logs_dir.mkdir()
     target_dir.mkdir()
 
-    rustc = shutil.which("rustc") or "rustc"
-    cargo = shutil.which("cargo") or "cargo"
-    sysroot = checked_output([rustc, f"+{toolchain}", "--print", "sysroot"])
+    sysroot = str(source_binding_start["sysroot"])
     pass_binary = output_dir / "unialloc-rustc-mir-rewrite-dry-run"
     build_env = os.environ.copy()
     build_env["RUSTC_BOOTSTRAP"] = "1"
@@ -336,6 +482,8 @@ def main() -> int:
     runtime = load_runtime_event(Path(run["stdout"]))
     validation = validate(audit, runtime)
     shutil.rmtree(target_dir)
+    source_binding_end = source_binding_snapshot(toolchain, rustc)
+    assert_source_binding_stable(source_binding_start, source_binding_end)
 
     summary = {
         "schema_version": 1,
@@ -343,10 +491,16 @@ def main() -> int:
         "validated": True,
         "fixed_heap": args.fixed_heap,
         "toolchain": toolchain,
-        "rustc": checked_output([rustc, f"+{toolchain}", "-Vv"]),
+        "rustc": source_binding_start["rustc_verbose_version"],
         "sysroot": sysroot,
-        "git_head": checked_output(["git", "rev-parse", "HEAD"]),
-        "git_status": checked_output(["git", "status", "--short"]),
+        "git_head": source_binding_start["git_head"],
+        "git_status": source_binding_start["git_status"],
+        "source_binding": {
+            "start": source_binding_start,
+            "end": source_binding_end,
+            "drift_checked": True,
+            "commit_bound": True,
+        },
         "features": features,
         "build": build,
         "run": run,
@@ -367,6 +521,8 @@ def main() -> int:
             "Address values vary by process; the deterministic assertions are set disjointness and complete unique producer reuse.",
             "The source contains no manual semantic metadata or allocation ABI calls; identities come from actual rustc_driver semantic-scope rewriting.",
             "The runner supplies the TYPE_ISOLATED policy and cross-thread-recovery placement bit uniformly so the compared cache keys differ only by compiler-derived type identity.",
+            "The target-type audit contains no ProducerPayload or ConsumerPayload drop/deallocation scope, and runtime reports no requested recovery identity match; allocation-side records are therefore required for the observed typed reuse.",
+            "Commit-bound evidence requires a clean HEAD, a repository-external output directory, and identical scoped source/toolchain bindings before and after the run.",
             "This covers two same-layout Rust types and one worker lifecycle, not universal UAF prevention or unmodified-toolchain deployment.",
         ],
     }
