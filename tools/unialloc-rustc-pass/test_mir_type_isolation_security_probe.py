@@ -18,6 +18,10 @@ from typing import Any, Dict, Iterable, List
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER_SOURCE = Path(__file__).resolve()
 PASS_SOURCE = ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
+CLONE_CLASSIFICATION_SOURCE = (
+    ROOT
+    / "tools/unialloc-rustc-pass/fixtures/mir_clone_candidate_classification.rs"
+)
 PROBE_NAME = "rustc_driver_mir_type_isolation_security_probe"
 PROBE_SOURCE = ROOT / "unialloc/src/bin" / f"{PROBE_NAME}.rs"
 TYPE_ISOLATED = 0x1
@@ -32,7 +36,20 @@ SOURCE_BINDING_PATHS = (
     Path("unialloc/build.rs"),
     Path("unialloc/src"),
     PASS_SOURCE.relative_to(ROOT),
+    CLONE_CLASSIFICATION_SOURCE.relative_to(ROOT),
     RUNNER_SOURCE.relative_to(ROOT),
+)
+
+CALL_CLASSIFICATION_KINDS = {
+    "semantic_scope_enter_exit_rewrite",
+    "semantic_scope_non_heap_object_skipped",
+    "semantic_scope_unsolved_heap_object_candidate",
+}
+NON_HEAP_CLONE_FUNCTIONS = (
+    "clone_nonheap_token",
+    "clone_nonheap_option",
+    "clone_nonheap_result",
+    "clone_nonowning_reference",
 )
 
 
@@ -180,6 +197,64 @@ def current_rustc_cfg(toolchain: str) -> List[str]:
     return []
 
 
+def compile_clone_classification_fixture(
+    *,
+    pass_binary: Path,
+    sysroot: str,
+    output_dir: Path,
+    timeout: int,
+) -> Dict[str, Any]:
+    fixture_dir = output_dir / "clone-classification"
+    fixture_dir.mkdir()
+    audit_path = fixture_dir / "rewrite-audit.json"
+    binary_path = fixture_dir / "fixture"
+    env = os.environ.copy()
+    for variable in ("DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH"):
+        current = env.get(variable)
+        env[variable] = f"{sysroot}/lib" + (os.pathsep + current if current else "")
+    env.update(
+        {
+            "UNIALLOC_ACTUAL_MIR_REWRITE": "0",
+            "UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE": "0",
+            "UNIALLOC_CONTINUE_COMPILATION": "1",
+        }
+    )
+    run = run_logged(
+        [
+            str(pass_binary),
+            "--unialloc-rewrite-audit-out",
+            str(audit_path),
+            "--unialloc-continue-compilation",
+            "--unialloc-dry-run-only",
+            "--",
+            "--sysroot",
+            sysroot,
+            "--crate-name",
+            "mir_clone_candidate_classification",
+            "--edition=2021",
+            str(CLONE_CLASSIFICATION_SOURCE),
+            "-o",
+            str(binary_path),
+        ],
+        label="clone-classification",
+        output_dir=output_dir,
+        timeout=timeout,
+        env=env,
+    )
+    if run["returncode"] != 0:
+        raise AssertionError(
+            f"clone classification fixture compile failed; see {run['stderr']}"
+        )
+    if not audit_path.is_file():
+        raise AssertionError(f"clone classification audit is missing: {audit_path}")
+    return {
+        "run": run,
+        "audit_path": audit_path,
+        "binary_path": binary_path,
+        "audit": json.loads(audit_path.read_text(encoding="utf-8")),
+    }
+
+
 def load_runtime_event(stdout_path: Path) -> Dict[str, Any]:
     for raw in stdout_path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -200,6 +275,112 @@ def applied_type_rows(audit: Dict[str, Any], marker: str) -> List[Dict[str, Any]
         and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
         and row.get("rewrite_status") == "actual_semantic_scope_enter_exit_rewrite_applied"
     ]
+
+
+def clone_classification_rows(
+    audit: Dict[str, Any], function_name: str
+) -> List[Dict[str, Any]]:
+    suffix = f"::{function_name}"
+    return [
+        row
+        for row in audit.get("rewrite_candidates", [])
+        if isinstance(row, dict)
+        and str(row.get("mir_function") or "").endswith(suffix)
+        and row.get("lowering_kind") in CALL_CLASSIFICATION_KINDS
+    ]
+
+
+def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, Any]:
+    errors: List[str] = []
+
+    single_heap_rows = clone_classification_rows(audit, "clone_single_heap")
+    if len(single_heap_rows) != 1:
+        errors.append(
+            f"clone_single_heap expected one call-classification row, got {len(single_heap_rows)}"
+        )
+    else:
+        row = single_heap_rows[0]
+        if row.get("lowering_kind") != "semantic_scope_enter_exit_rewrite":
+            errors.append(
+                "clone_single_heap was not classified as a semantic-scope rewrite"
+            )
+        if row.get("rewrite_status") != "semantic_scope_enter_exit_rewrite_planned":
+            errors.append("clone_single_heap did not remain a planned audit-only rewrite")
+        if row.get("semantic_object_type") != "std::vec::Vec<u8>":
+            errors.append(
+                "clone_single_heap did not resolve the sole nested Vec heap owner"
+            )
+
+    non_heap_counts: Dict[str, int] = {}
+    for function_name in NON_HEAP_CLONE_FUNCTIONS:
+        rows = clone_classification_rows(audit, function_name)
+        non_heap_counts[function_name] = len(rows)
+        if len(rows) != 1:
+            errors.append(
+                f"{function_name} expected one call-classification row, got {len(rows)}"
+            )
+            continue
+        row = rows[0]
+        if row.get("lowering_kind") != "semantic_scope_non_heap_object_skipped":
+            errors.append(f"{function_name} was not classified as a non-heap skip")
+        if row.get("rewrite_status") != "semantic_scope_rewrite_skipped_non_heap_object_type":
+            errors.append(f"{function_name} did not record the non-heap skip status")
+
+    reference_rows = clone_classification_rows(audit, "clone_nonowning_reference")
+    if len(reference_rows) == 1:
+        destination_type = str(reference_rows[0].get("destination_type") or "")
+        if not destination_type.startswith("&") or "std::vec::Vec<u8>" not in destination_type:
+            errors.append(
+                "clone_nonowning_reference did not preserve the borrowed Vec destination type"
+            )
+
+    ambiguous_rows = clone_classification_rows(audit, "clone_ambiguous_result")
+    if len(ambiguous_rows) != 1:
+        errors.append(
+            f"clone_ambiguous_result expected one call-classification row, got {len(ambiguous_rows)}"
+        )
+    else:
+        row = ambiguous_rows[0]
+        if row.get("lowering_kind") != "semantic_scope_unsolved_heap_object_candidate":
+            errors.append("clone_ambiguous_result was not kept fail-closed as unsolved")
+        if row.get("rewrite_status") != "semantic_scope_rewrite_skipped_ambiguous_heap_object_type":
+            errors.append("clone_ambiguous_result did not record the ambiguous skip status")
+        if (
+            row.get("replacement_resolution_status")
+            != "rustc_middle_multiple_heap_object_types_not_lowered"
+        ):
+            errors.append("clone_ambiguous_result did not record the multiple-owner reason")
+        row_text = json.dumps(row, sort_keys=True)
+        for owner in ("std::vec::Vec<u8>", "std::string::String"):
+            if owner not in row_text:
+                errors.append(f"clone_ambiguous_result omitted owner {owner}")
+
+    summary = audit.get("summary") or {}
+    non_heap_skipped = sum(
+        1
+        for function_name in NON_HEAP_CLONE_FUNCTIONS
+        for row in clone_classification_rows(audit, function_name)
+        if row.get("lowering_kind") == "semantic_scope_non_heap_object_skipped"
+    )
+    unsolved = int(summary.get("semantic_scope_unsolved_candidate_count") or 0)
+    if non_heap_skipped != len(NON_HEAP_CLONE_FUNCTIONS):
+        errors.append(
+            "non-heap skipped row count "
+            f"expected {len(NON_HEAP_CLONE_FUNCTIONS)}, got {non_heap_skipped}"
+        )
+    if unsolved != 1:
+        errors.append(f"semantic_scope_unsolved_candidate_count expected 1, got {unsolved}")
+
+    if errors:
+        raise AssertionError(
+            "clone candidate classification failed:\n- " + "\n- ".join(errors)
+        )
+    return {
+        "single_heap_scope_rows": len(single_heap_rows),
+        "non_heap_rows_by_function": non_heap_counts,
+        "non_heap_skipped_count": non_heap_skipped,
+        "ambiguous_unsolved_count": unsolved,
+    }
 
 
 def target_drop_or_deallocation_rows(
@@ -428,6 +609,16 @@ def main() -> int:
     if build["returncode"] != 0:
         raise SystemExit(f"pass build failed; see {build['stderr']}")
 
+    clone_classification = compile_clone_classification_fixture(
+        pass_binary=pass_binary,
+        sysroot=sysroot,
+        output_dir=output_dir,
+        timeout=args.timeout,
+    )
+    clone_classification_validation = validate_clone_candidate_classification(
+        clone_classification["audit"]
+    )
+
     run_env = os.environ.copy()
     for variable in ("DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH"):
         current = run_env.get(variable)
@@ -503,6 +694,18 @@ def main() -> int:
         },
         "features": features,
         "build": build,
+        "clone_candidate_classification": {
+            "run": clone_classification["run"],
+            "validation": clone_classification_validation,
+            "artifacts": {
+                "fixture_source": str(CLONE_CLASSIFICATION_SOURCE),
+                "fixture_source_sha256": sha256(CLONE_CLASSIFICATION_SOURCE),
+                "fixture_binary": str(clone_classification["binary_path"]),
+                "fixture_binary_sha256": sha256(clone_classification["binary_path"]),
+                "rewrite_audit": str(clone_classification["audit_path"]),
+                "rewrite_audit_sha256": sha256(clone_classification["audit_path"]),
+            },
+        },
         "run": run,
         "artifacts": {
             "pass_source": str(PASS_SOURCE),
