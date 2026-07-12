@@ -2137,6 +2137,19 @@ fn exact_alloc_slice_into_vec_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
         && exact_alloc_slice_into_vec_def_path(&tcx.def_path_str(def_id))
 }
 
+#[cfg(unialloc_rustc_current)]
+fn generic_arg_type<'tcx>(arg: &ty::GenericArg<'tcx>) -> Option<Ty<'tcx>> {
+    arg.as_type()
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn generic_arg_type<'tcx>(arg: &ty::GenericArg<'tcx>) -> Option<Ty<'tcx>> {
+    match arg.unpack() {
+        ty::GenericArgKind::Type(ty) => Some(ty),
+        _ => None,
+    }
+}
+
 fn exact_alloc_box_def_path(path: &str) -> bool {
     matches!(
         strip_rustc_crate_disambiguators(path).as_str(),
@@ -2181,12 +2194,12 @@ fn exact_box_slice_into_vec_transfer_proof<'tcx>(
     {
         return None;
     }
-    let source_payload_ty = source_args.get(0)?.as_type()?;
+    let source_payload_ty = generic_arg_type(source_args.get(0)?)?;
     let source_element_ty = match source_payload_ty.kind() {
         ty::Slice(element_ty) => *element_ty,
         _ => return None,
     };
-    let source_allocator_ty = source_args.get(1)?.as_type()?;
+    let source_allocator_ty = generic_arg_type(source_args.get(1)?)?;
 
     let (destination_def, destination_args) = match destination_ty.kind() {
         ty::Adt(def, args) => (def, args),
@@ -2199,8 +2212,8 @@ fn exact_box_slice_into_vec_transfer_proof<'tcx>(
     {
         return None;
     }
-    let destination_element_ty = destination_args.get(0)?.as_type()?;
-    let destination_allocator_ty = destination_args.get(1)?.as_type()?;
+    let destination_element_ty = generic_arg_type(destination_args.get(0)?)?;
+    let destination_allocator_ty = generic_arg_type(destination_args.get(1)?)?;
 
     if source_element_ty != destination_element_ty
         || source_allocator_ty != destination_allocator_ty
