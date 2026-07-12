@@ -51,6 +51,13 @@ fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     syscall3(0x2000004, [fd as usize, buf as usize, len as usize])
 }
 
+#[cfg(target_os = "redox")]
+fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
+    // Redox exposes POSIX file descriptors through relibc.  Use that stable
+    // platform ABI instead of hard-coding a Redox syscall number here.
+    unsafe { libc::write(fd as libc::c_int, buf as *const libc::c_void, len) }
+}
+
 fn put_char(c: usize) {
     #[cfg(not(feature = "fixed_heap"))]
     {
