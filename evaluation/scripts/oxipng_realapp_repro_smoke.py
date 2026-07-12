@@ -30,6 +30,7 @@ DEFAULT_EXPECTED_OUTPUT_SHA256 = "565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8
 DEFAULT_PINNED_CHECKOUT = ROOT / "evaluation" / "external" / "_checkouts" / "external-R-Oxipng-Oxipng"
 PASS_SOURCE = ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewrite-dry-run.rs"
 STATS_PREFIX = "UNIALLOC_STATS_JSON="
+OWNERSHIP_TRANSFER_RUNTIME_SOURCE = "instrumented-oxipng-workload-window"
 SCOPED_STATUS_PATHS = [
     pathlib.Path("Cargo.toml"),
     pathlib.Path("Cargo.lock"),
@@ -212,7 +213,8 @@ def apply_instrumentation(oxipng: pathlib.Path, unialloc_crate: pathlib.Path) ->
     import_line = (
         "use std::fmt::Write as _;\n"
         "use unialloc::{semantic_stats_recording_disable, semantic_stats_recording_enable, "
-        "semantic_metadata_validation_snapshot, semantic_stats_reset, semantic_stats_snapshot, "
+        "semantic_metadata_validation_snapshot, semantic_ownership_transfer_snapshot, "
+        "semantic_stats_reset, semantic_stats_snapshot, "
         "semantic_type_stats_recording_disable, "
         "semantic_type_stats_recording_enable, semantic_type_stats_snapshot, "
         "type_isolation_side_cache_snapshot, SemanticTypeStatsSnapshot, UniAlloc};\n"
@@ -365,10 +367,39 @@ fn unialloc_type_rows_json(
     main_text = insert_after_once(
         main_text,
         "    semantic_type_stats_recording_enable();\n",
-        "    let unialloc_address_oracle = unialloc_type_isolation_address_oracle();\n",
+        "    let unialloc_address_oracle = unialloc_type_isolation_address_oracle();\n"
+        "    let unialloc_ownership_transfer_before = semantic_ownership_transfer_snapshot();\n",
     )
     stats_block = r'''
 
+    let unialloc_ownership_transfer_after = semantic_ownership_transfer_snapshot();
+    let unialloc_ownership_transfer_attempted = unialloc_ownership_transfer_after
+        .attempted
+        .checked_sub(unialloc_ownership_transfer_before.attempted)
+        .expect("UniAlloc ownership-transfer attempted counter regressed");
+    let unialloc_ownership_transfer_applied = unialloc_ownership_transfer_after
+        .applied
+        .checked_sub(unialloc_ownership_transfer_before.applied)
+        .expect("UniAlloc ownership-transfer applied counter regressed");
+    let unialloc_ownership_transfer_rejected = unialloc_ownership_transfer_after
+        .rejected
+        .checked_sub(unialloc_ownership_transfer_before.rejected)
+        .expect("UniAlloc ownership-transfer rejected counter regressed");
+    let unialloc_ownership_transfer_accounting_complete =
+        unialloc_ownership_transfer_attempted
+            == unialloc_ownership_transfer_applied
+                .checked_add(unialloc_ownership_transfer_rejected)
+                .expect("UniAlloc ownership-transfer outcome counters overflowed");
+    assert!(
+        unialloc_ownership_transfer_accounting_complete,
+        "UniAlloc ownership-transfer attempts must equal applied plus rejected",
+    );
+    let unialloc_ownership_transfer_dynamic = unialloc_ownership_transfer_attempted != 0;
+    let unialloc_ownership_transfer_execution_status = if unialloc_ownership_transfer_dynamic {
+        "dynamic_execution_observed"
+    } else {
+        "zero_dynamic_execution_observed"
+    };
     let stats = semantic_stats_snapshot();
     let metadata_validation = semantic_metadata_validation_snapshot();
     let side_cache = type_isolation_side_cache_snapshot();
@@ -378,7 +409,7 @@ fn unialloc_type_rows_json(
     semantic_stats_recording_disable();
     let type_rows_json = unialloc_type_rows_json(&rows, row_count);
     eprintln!(
-        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"recovery_identity_mismatches\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{},\"address_oracle\":{{\"source\":\"injected-oxipng-type-isolation-address-oracle\",\"producer_first_address\":{},\"wrong_type_address\":{},\"producer_recovery_address\":{},\"element_size\":{},\"element_align\":{},\"capacity\":{},\"allocation_size\":{},\"wrong_type_not_reused\":{},\"same_type_reused\":{},\"recovery_identity_mismatches_before\":{},\"recovery_identity_mismatches_after\":{},\"corrupt_slots_after\":{}}},\"type_rows\":{}}}",
+        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"recovery_identity_mismatches\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{},\"semantic_ownership_transfer\":{{\"source\":\"instrumented-oxipng-workload-window\",\"before\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"after\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"delta\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"accounting_complete\":{},\"dynamic_execution_observed\":{},\"execution_status\":\"{}\"}},\"address_oracle\":{{\"source\":\"injected-oxipng-type-isolation-address-oracle\",\"producer_first_address\":{},\"wrong_type_address\":{},\"producer_recovery_address\":{},\"element_size\":{},\"element_align\":{},\"capacity\":{},\"allocation_size\":{},\"wrong_type_not_reused\":{},\"same_type_reused\":{},\"recovery_identity_mismatches_before\":{},\"recovery_identity_mismatches_after\":{},\"corrupt_slots_after\":{}}},\"type_rows\":{}}}",
         stats.total_allocations,
         stats.typed_allocations,
         stats.fallback_allocations,
@@ -395,6 +426,18 @@ fn unialloc_type_rows_json(
         side_cache.occupied_slots,
         side_cache.occupied_entries,
         side_cache.corrupt_slots,
+        unialloc_ownership_transfer_before.attempted,
+        unialloc_ownership_transfer_before.applied,
+        unialloc_ownership_transfer_before.rejected,
+        unialloc_ownership_transfer_after.attempted,
+        unialloc_ownership_transfer_after.applied,
+        unialloc_ownership_transfer_after.rejected,
+        unialloc_ownership_transfer_attempted,
+        unialloc_ownership_transfer_applied,
+        unialloc_ownership_transfer_rejected,
+        unialloc_ownership_transfer_accounting_complete,
+        unialloc_ownership_transfer_dynamic,
+        unialloc_ownership_transfer_execution_status,
         unialloc_address_oracle.producer_first_address,
         unialloc_address_oracle.wrong_type_address,
         unialloc_address_oracle.producer_recovery_address,
@@ -504,6 +547,78 @@ def parse_stats(stderr: str) -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         raise SmokeError(f"invalid UniAlloc stats JSON: {exc}") from exc
     return value
+
+
+def ownership_transfer_counts(value: Any, *, label: str) -> dict[str, int]:
+    if not isinstance(value, dict):
+        raise SmokeError(f"{label} ownership-transfer counters must be an object")
+    counts: dict[str, int] = {}
+    for field in ("attempted", "applied", "rejected"):
+        observed = value.get(field)
+        if isinstance(observed, bool) or not isinstance(observed, int) or observed < 0:
+            raise SmokeError(
+                f"{label} ownership-transfer {field} must be an explicit nonnegative integer"
+            )
+        counts[field] = observed
+    if counts["attempted"] != counts["applied"] + counts["rejected"]:
+        raise SmokeError(
+            f"{label} ownership-transfer attempted must equal applied plus rejected"
+        )
+    return counts
+
+
+def validate_semantic_ownership_transfer_runtime(
+    stats: dict[str, Any],
+) -> dict[str, Any]:
+    runtime = stats.get("semantic_ownership_transfer")
+    if not isinstance(runtime, dict):
+        raise SmokeError(
+            "current runtime stats must explicitly report semantic_ownership_transfer"
+        )
+    if runtime.get("source") != OWNERSHIP_TRANSFER_RUNTIME_SOURCE:
+        raise SmokeError("semantic ownership-transfer runtime source is invalid")
+
+    before = ownership_transfer_counts(runtime.get("before"), label="before-window")
+    after = ownership_transfer_counts(runtime.get("after"), label="after-window")
+    delta = ownership_transfer_counts(runtime.get("delta"), label="workload-window")
+    for field in ("attempted", "applied", "rejected"):
+        if after[field] < before[field]:
+            raise SmokeError(f"semantic ownership-transfer {field} counter regressed")
+        if delta[field] != after[field] - before[field]:
+            raise SmokeError(
+                f"semantic ownership-transfer {field} delta does not match snapshots"
+            )
+
+    if runtime.get("accounting_complete") is not True:
+        raise SmokeError("semantic ownership-transfer accounting_complete must be true")
+    dynamic = delta["attempted"] != 0
+    if runtime.get("dynamic_execution_observed") is not dynamic:
+        raise SmokeError(
+            "semantic ownership-transfer dynamic execution marker does not match attempted delta"
+        )
+    expected_status = (
+        "dynamic_execution_observed"
+        if dynamic
+        else "zero_dynamic_execution_observed"
+    )
+    if runtime.get("execution_status") != expected_status:
+        raise SmokeError(
+            "semantic ownership-transfer execution status does not match attempted delta"
+        )
+
+    return {
+        "validated": True,
+        "source": OWNERSHIP_TRANSFER_RUNTIME_SOURCE,
+        "before": before,
+        "after": after,
+        "delta": delta,
+        "attempted": delta["attempted"],
+        "applied": delta["applied"],
+        "rejected": delta["rejected"],
+        "accounting_complete": True,
+        "dynamic_execution_observed": dynamic,
+        "execution_status": expected_status,
+    }
 
 
 def crate_name_from_rustc_args(args: list[Any]) -> str | None:
@@ -945,6 +1060,7 @@ def validate_realapp_type_isolation(
     audits: list[dict[str, Any]],
     audit_totals: dict[str, int],
 ) -> dict[str, Any]:
+    ownership_transfer_evidence = validate_semantic_ownership_transfer_runtime(stats)
     runtime_rows = stats.get("type_rows")
     if not isinstance(runtime_rows, list):
         raise SmokeError("runtime type-class rows must be explicitly reported")
@@ -1155,6 +1271,7 @@ def validate_realapp_type_isolation(
         "actual_type_scope_row_count": len(compiler_rows),
         "runtime_type_row_count": reported_runtime_rows,
         "matched_lifecycle_row_count": len(matched_lifecycle_rows),
+        "semantic_ownership_transfer_runtime": ownership_transfer_evidence,
         "address_level_functional_oracle": address_oracle_evidence,
         "whole_run_recovery_identity_mismatches": whole_run_recovery_identity_mismatches,
         "whole_run_exact_compiler_identity": whole_run_recovery_identity_mismatches == 0,
@@ -1557,7 +1674,7 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             reference_digest = sha256_file(evidence_path)
 
         summary = {
-            "schema_version": 2,
+            "schema_version": 3,
             "source": "oxipng-realapp-repro-smoke",
             "boundary": (
                 "functional/diagnostic smoke only; no timing loop; no performance claim; "
@@ -1619,6 +1736,9 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             "audit_file_count": len(audits),
             "audit_totals": audit_totals,
             "compiler_coverage": compiler_coverage_summary(audit_totals),
+            "semantic_ownership_transfer_runtime": type_isolation_evidence[
+                "semantic_ownership_transfer_runtime"
+            ],
             "type_isolation_evidence": type_isolation_evidence,
             "audits": audits,
         }

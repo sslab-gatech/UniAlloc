@@ -141,6 +141,28 @@ def fail_closed_multi_owner_drop_row() -> dict:
     }
 
 
+def ownership_transfer_runtime(
+    *,
+    before: tuple[int, int, int] = (0, 0, 0),
+    delta: tuple[int, int, int] = (0, 0, 0),
+) -> dict:
+    after = tuple(left + right for left, right in zip(before, delta))
+    dynamic = delta[0] != 0
+    return {
+        "source": smoke.OWNERSHIP_TRANSFER_RUNTIME_SOURCE,
+        "before": dict(zip(("attempted", "applied", "rejected"), before)),
+        "after": dict(zip(("attempted", "applied", "rejected"), after)),
+        "delta": dict(zip(("attempted", "applied", "rejected"), delta)),
+        "accounting_complete": delta[0] == delta[1] + delta[2],
+        "dynamic_execution_observed": dynamic,
+        "execution_status": (
+            "dynamic_execution_observed"
+            if dynamic
+            else "zero_dynamic_execution_observed"
+        ),
+    }
+
+
 def valid_contract_stats() -> dict:
     rows = [
         runtime_type_row(
@@ -185,6 +207,7 @@ def valid_contract_stats() -> dict:
         "type_stats_rows": len(rows),
         "type_stats_dropped_events": 0,
         "type_rows": rows,
+        "semantic_ownership_transfer": ownership_transfer_runtime(),
         "address_oracle": {
             "source": smoke.ADDRESS_ORACLE_SOURCE,
             "producer_first_address": 0x1000,
@@ -322,6 +345,9 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertIn("fn unialloc_type_isolation_address_oracle()", main)
             self.assertIn("unialloc_address_oracle_producer_vec", main)
             self.assertIn("unialloc_address_oracle_wrong_type_vec", main)
+            self.assertIn("semantic_ownership_transfer_snapshot", main)
+            self.assertIn("unialloc_ownership_transfer_before", main)
+            self.assertIn("unialloc_ownership_transfer_after", main)
             self.assertIn('\\"address_oracle\\"', main)
             self.assertNotIn("0xC002", main)
             self.assertIn("extern crate unialloc;", (oxipng / "src" / "lib.rs").read_text(encoding="utf-8"))
@@ -333,6 +359,69 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             smoke.parse_stats("missing\n")
         with self.assertRaises(smoke.SmokeError):
             smoke.parse_stats("UNIALLOC_STATS_JSON={}\nUNIALLOC_STATS_JSON={}\n")
+
+    def test_ownership_transfer_runtime_distinguishes_zero_and_dynamic_execution(
+        self,
+    ) -> None:
+        zero = smoke.validate_semantic_ownership_transfer_runtime(
+            valid_contract_stats()
+        )
+        self.assertEqual(zero["attempted"], 0)
+        self.assertFalse(zero["dynamic_execution_observed"])
+        self.assertEqual(
+            zero["execution_status"], "zero_dynamic_execution_observed"
+        )
+
+        dynamic_stats = valid_contract_stats()
+        dynamic_stats["semantic_ownership_transfer"] = ownership_transfer_runtime(
+            before=(4, 3, 1),
+            delta=(2, 1, 1),
+        )
+        dynamic = smoke.validate_semantic_ownership_transfer_runtime(dynamic_stats)
+        self.assertEqual(
+            dynamic["delta"], {"attempted": 2, "applied": 1, "rejected": 1}
+        )
+        self.assertTrue(dynamic["dynamic_execution_observed"])
+        self.assertEqual(dynamic["execution_status"], "dynamic_execution_observed")
+
+    def test_current_ownership_transfer_runtime_fails_closed_when_missing(self) -> None:
+        stats = valid_contract_stats()
+        del stats["semantic_ownership_transfer"]
+        with self.assertRaisesRegex(
+            smoke.SmokeError, "explicitly report semantic_ownership_transfer"
+        ):
+            smoke.validate_semantic_ownership_transfer_runtime(stats)
+
+    def test_ownership_transfer_runtime_rejects_incomplete_or_false_delta(self) -> None:
+        incomplete = valid_contract_stats()
+        incomplete["semantic_ownership_transfer"] = ownership_transfer_runtime(
+            delta=(3, 1, 1)
+        )
+        with self.assertRaisesRegex(
+            smoke.SmokeError, "attempted must equal applied plus rejected"
+        ):
+            smoke.validate_semantic_ownership_transfer_runtime(incomplete)
+
+        false_delta = valid_contract_stats()
+        false_delta["semantic_ownership_transfer"] = ownership_transfer_runtime(
+            delta=(2, 1, 1)
+        )
+        false_delta["semantic_ownership_transfer"]["after"]["attempted"] += 1
+        false_delta["semantic_ownership_transfer"]["after"]["applied"] += 1
+        with self.assertRaisesRegex(smoke.SmokeError, "delta does not match snapshots"):
+            smoke.validate_semantic_ownership_transfer_runtime(false_delta)
+
+    def test_legacy_reference_summary_is_loaded_without_backfilled_runtime_fields(
+        self,
+    ) -> None:
+        legacy = {"schema_version": 2, "source": "preserved-oxipng-evidence"}
+        with tempfile.TemporaryDirectory() as td:
+            path = pathlib.Path(td) / "instrumented-oxipng-summary.json"
+            path.write_text(json.dumps(legacy), encoding="utf-8")
+            loaded = smoke.load_reference_summary(path)
+
+        self.assertEqual(loaded, legacy)
+        self.assertNotIn("semantic_ownership_transfer_runtime", loaded)
 
     def test_collect_audits_sums_only_target_crate(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -588,6 +677,12 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         )
         self.assertEqual(pair[0]["observed_size"], pair[1]["observed_size"])
         self.assertEqual(evidence["fail_closed_candidate_count"], 1)
+        transfer = evidence["semantic_ownership_transfer_runtime"]
+        self.assertTrue(transfer["validated"])
+        self.assertEqual(transfer["attempted"], 0)
+        self.assertEqual(
+            transfer["execution_status"], "zero_dynamic_execution_observed"
+        )
         address = evidence["address_level_functional_oracle"]
         self.assertTrue(address["validated"])
         self.assertTrue(address["wrong_type_not_reused"])
