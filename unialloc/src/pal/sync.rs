@@ -76,9 +76,6 @@ pub mod win_thread_local {
     static mut TLS_DESTRUCTOR: Option<unsafe extern "C" fn(*mut libc_c_void)> = None;
     static PKEY_READY: AtomicBool = AtomicBool::new(false);
     static TLS_SAVE_FAILURES: AtomicUsize = AtomicUsize::new(0);
-    #[thread_local]
-    static mut TCACHE: *mut u8 = core::ptr::null_mut();
-
     pub const fn backend_name() -> &'static str {
         "windows_fls_destructor"
     }
@@ -93,10 +90,14 @@ pub mod win_thread_local {
 
     /// # Safety
     ///
-    /// Return the thread-local pointer saved for the current Windows fiber.
+    /// Return the fiber-local pointer saved for the current Windows fiber.
     /// This is only a storage accessor; callers must know the pointee type.
     pub unsafe fn load_tls() -> *mut u8 {
-        TCACHE
+        if PKEY_READY.load(Ordering::Acquire) {
+            fibersapi::FlsGetValue(PKEY).cast::<u8>()
+        } else {
+            core::ptr::null_mut()
+        }
     }
 
     /// # Safety
@@ -115,24 +116,107 @@ pub mod win_thread_local {
         PKEY_READY.store(PKEY != FLS_OUT_OF_INDEXES, Ordering::Release);
     }
 
-    #[inline]
-    unsafe fn save_thread_local_pointer(ptr: *mut u8) -> *mut c_void {
-        TCACHE = ptr;
-        ptr as *mut c_void
-    }
-
     /// # Safety
     ///
     /// put tls ptr into cleanup function chain
-    /// This function is expected to be called once per thread
+    /// This function is expected to be called once per fiber
     pub unsafe fn save_tls(ptr: *mut u8) {
-        let value = save_thread_local_pointer(ptr);
         if PKEY_READY.load(Ordering::Acquire) {
-            if fibersapi::FlsSetValue(PKEY, value) == 0 {
+            if fibersapi::FlsSetValue(PKEY, ptr.cast::<c_void>()) == 0 {
                 TLS_SAVE_FAILURES.fetch_add(1, Ordering::Relaxed);
             }
         } else {
             TLS_SAVE_FAILURES.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use core::ptr;
+        use winapi::um::winbase::{
+            ConvertFiberToThread, ConvertThreadToFiber, CreateFiber, DeleteFiber, SwitchToFiber,
+        };
+
+        static MAIN_FIBER: AtomicUsize = AtomicUsize::new(0);
+        static FIBER_B_INITIAL_VALUE: AtomicUsize = AtomicUsize::new(usize::MAX);
+        static FIBER_B_SAVED_VALUE: AtomicUsize = AtomicUsize::new(usize::MAX);
+        static FIBER_A_DESTRUCTOR_CALLS: AtomicUsize = AtomicUsize::new(0);
+        static FIBER_B_DESTRUCTOR_CALLS: AtomicUsize = AtomicUsize::new(0);
+        static FIBER_A_VALUE: u8 = 0;
+        static FIBER_B_VALUE: u8 = 0;
+
+        unsafe extern "C" fn record_destructor(value: *mut libc_c_void) {
+            if value.cast::<u8>() == ptr::addr_of!(FIBER_A_VALUE).cast_mut() {
+                FIBER_A_DESTRUCTOR_CALLS.fetch_add(1, Ordering::Relaxed);
+            } else if value.cast::<u8>() == ptr::addr_of!(FIBER_B_VALUE).cast_mut() {
+                FIBER_B_DESTRUCTOR_CALLS.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+
+        unsafe extern "system" fn fiber_b_entry(_parameter: *mut c_void) {
+            FIBER_B_INITIAL_VALUE.store(load_tls() as usize, Ordering::Release);
+            save_tls(ptr::addr_of!(FIBER_B_VALUE).cast_mut());
+            FIBER_B_SAVED_VALUE.store(load_tls() as usize, Ordering::Release);
+            SwitchToFiber(MAIN_FIBER.load(Ordering::Acquire) as *mut c_void);
+        }
+
+        #[test]
+        #[ignore = "mutates the process-wide FLS key; run this test in an isolated Windows process"]
+        fn fls_values_and_destructor_ownership_are_fiber_local() {
+            unsafe {
+                FIBER_B_INITIAL_VALUE.store(usize::MAX, Ordering::Relaxed);
+                FIBER_B_SAVED_VALUE.store(usize::MAX, Ordering::Relaxed);
+                FIBER_A_DESTRUCTOR_CALLS.store(0, Ordering::Relaxed);
+                FIBER_B_DESTRUCTOR_CALLS.store(0, Ordering::Relaxed);
+
+                let main_fiber = ConvertThreadToFiber(ptr::null_mut());
+                assert!(!main_fiber.is_null(), "ConvertThreadToFiber failed");
+
+                register_tls_key(record_destructor);
+                if !tls_key_ready() {
+                    let _ = ConvertFiberToThread();
+                    panic!("FlsAlloc failed");
+                }
+
+                let fiber_a_value = ptr::addr_of!(FIBER_A_VALUE).cast_mut();
+                let fiber_b_value = ptr::addr_of!(FIBER_B_VALUE).cast_mut();
+                save_tls(fiber_a_value);
+                MAIN_FIBER.store(main_fiber as usize, Ordering::Release);
+
+                let fiber_b = CreateFiber(0, Some(fiber_b_entry), ptr::null_mut());
+                if fiber_b.is_null() {
+                    let _ = fibersapi::FlsSetValue(PKEY, ptr::null_mut());
+                    let _ = fibersapi::FlsFree(PKEY);
+                    PKEY = FLS_OUT_OF_INDEXES;
+                    PKEY_READY.store(false, Ordering::Release);
+                    TLS_DESTRUCTOR = None;
+                    let _ = ConvertFiberToThread();
+                    panic!("CreateFiber failed");
+                }
+
+                SwitchToFiber(fiber_b);
+                let fiber_a_after_switch = load_tls();
+                DeleteFiber(fiber_b);
+
+                let fiber_b_initial = FIBER_B_INITIAL_VALUE.load(Ordering::Acquire);
+                let fiber_b_saved = FIBER_B_SAVED_VALUE.load(Ordering::Acquire);
+                let fiber_a_destructor_calls = FIBER_A_DESTRUCTOR_CALLS.load(Ordering::Acquire);
+                let fiber_b_destructor_calls = FIBER_B_DESTRUCTOR_CALLS.load(Ordering::Acquire);
+
+                assert_ne!(fibersapi::FlsSetValue(PKEY, ptr::null_mut()), 0);
+                assert_ne!(fibersapi::FlsFree(PKEY), 0);
+                PKEY = FLS_OUT_OF_INDEXES;
+                PKEY_READY.store(false, Ordering::Release);
+                TLS_DESTRUCTOR = None;
+                assert_ne!(ConvertFiberToThread(), 0);
+
+                assert_eq!(fiber_b_initial, 0, "new fiber inherited fiber A's value");
+                assert_eq!(fiber_b_saved, fiber_b_value as usize);
+                assert_eq!(fiber_a_after_switch, fiber_a_value);
+                assert_eq!(fiber_a_destructor_calls, 0);
+                assert_eq!(fiber_b_destructor_calls, 1);
+            }
         }
     }
 }
