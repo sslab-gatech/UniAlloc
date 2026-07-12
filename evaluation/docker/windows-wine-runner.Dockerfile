@@ -1,8 +1,9 @@
 # Docker/Wine runner for UniAlloc Windows platform_allocator_workload evidence.
 # Build example:
 #   docker build --platform linux/amd64 -f evaluation/docker/windows-wine-runner.Dockerfile \
-#     -t unialloc-windows-wine-runner:bookworm evaluation/docker/windows-wine-runner-context
-FROM debian:bookworm-slim
+#     -t unialloc-windows-wine-runner:trixie evaluation/docker/windows-wine-runner-context
+# Wine 10 provides bcryptprimitives.dll, imported by the current Rust Windows runtime.
+FROM debian:trixie-slim
 ENV DEBIAN_FRONTEND=noninteractive
 RUN dpkg --add-architecture i386 \
     && apt-get update \

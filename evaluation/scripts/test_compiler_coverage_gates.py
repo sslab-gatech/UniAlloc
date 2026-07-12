@@ -2468,7 +2468,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                 evaluate,
                 "docker_image_status",
                 return_value={
-                    "image": "unialloc-windows-wine-runner:bookworm",
+                    "image": "unialloc-windows-wine-runner:trixie",
                     "available": True,
                     "docker": "/usr/bin/docker",
                     "image_id": "sha256:test",

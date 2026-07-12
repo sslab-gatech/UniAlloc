@@ -45,9 +45,10 @@ case "$ABS_EXE" in
     ;;
 esac
 
-IMAGE="${UNIALLOC_WINDOWS_WINE_IMAGE:-unialloc-windows-wine-runner:bookworm}"
+IMAGE="${UNIALLOC_WINDOWS_WINE_IMAGE:-unialloc-windows-wine-runner:trixie}"
 PLATFORM="${UNIALLOC_WINDOWS_WINE_PLATFORM:-linux/amd64}"
-WINEPREFIX_VOLUME="${UNIALLOC_WINDOWS_WINEPREFIX_VOLUME:-unialloc-windows-wine-prefix}"
+WINEPREFIX_VOLUME="${UNIALLOC_WINDOWS_WINEPREFIX_VOLUME:-unialloc-windows-wine-prefix-trixie}"
+WINE_ARCH="${UNIALLOC_WINDOWS_WINEARCH:-win64}"
 CONTAINER_EXE="Z:\\work\\${REL_EXE//\//\\}"
 
 # Keep the repo mount read-only: the runner is evidence collection, not a build
@@ -56,6 +57,7 @@ CONTAINER_EXE="Z:\\work\\${REL_EXE//\//\\}"
 exec docker run --rm \
   --platform "$PLATFORM" \
   -e WINEDEBUG="${WINEDEBUG:--all}" \
+  -e WINEARCH="$WINE_ARCH" \
   -e WINEPREFIX=/wineprefix \
   -v "$REPO_ROOT:/work:ro" \
   -v "$WINEPREFIX_VOLUME:/wineprefix" \

@@ -54869,7 +54869,7 @@ def platform_workload_runtime_ready(
 WINDOWS_RUNTIME_RUNNER_ENV = "UNIALLOC_WINDOWS_RUNTIME_RUNNER"
 WINDOWS_LINKER_ENV = "UNIALLOC_WINDOWS_LINKER"
 WINDOWS_DOCKER_WINE_IMAGE_ENV = "UNIALLOC_WINDOWS_WINE_IMAGE"
-WINDOWS_DOCKER_WINE_DEFAULT_IMAGE = "unialloc-windows-wine-runner:bookworm"
+WINDOWS_DOCKER_WINE_DEFAULT_IMAGE = "unialloc-windows-wine-runner:trixie"
 
 
 def docker_image_status(image: str, *, timeout: int = 15) -> Dict[str, Any]:
