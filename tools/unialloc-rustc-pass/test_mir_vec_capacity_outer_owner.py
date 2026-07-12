@@ -16,6 +16,7 @@ PASS_SOURCE = ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-r
 PROBE_NAME = "vec_capacity_outer_owner_probe"
 STRING_RESERVE_FUNCTION = "reserve_strings"
 NESTED_VEC_RESERVE_FUNCTION = "reserve_nested_vecs"
+NESTED_VEC_CONSTRUCTOR_FUNCTION = "construct_nested_vecs"
 RESIZE_FUNCTION = "resize_strings"
 APPLIED_STATUS = "actual_semantic_scope_enter_exit_rewrite_applied"
 AMBIGUOUS_STATUS = "semantic_scope_rewrite_skipped_ambiguous_heap_object_type"
@@ -87,6 +88,11 @@ fn reserve_nested_vecs(values: &mut Vec<Vec<u8>>) {
 }
 
 #[inline(never)]
+fn construct_nested_vecs() -> Vec<Vec<u8>> {
+    Vec::with_capacity(CAPACITY)
+}
+
+#[inline(never)]
 fn resize_strings(values: &mut Vec<String>) {
     values.resize(2, String::new());
 }
@@ -116,7 +122,7 @@ fn main() {
     drop(first);
     let after_first_drop = semantic_stats_snapshot();
 
-    let mut wrong = Vec::<Vec<u8>>::new();
+    let mut wrong = construct_nested_vecs();
     reserve_nested_vecs(&mut wrong);
     assert_eq!(wrong.capacity(), CAPACITY);
     let wrong_buffer = wrong.as_ptr() as usize;
@@ -159,6 +165,8 @@ fn main() {
             "\"recovered_typed_allocations\":{},",
             "\"recovered_cache_hits\":{},",
             "\"recovered_drop_typed_deallocations\":{},",
+            "\"fallback_allocations\":{},",
+            "\"fallback_deallocations\":{},",
             "\"recovery_identity_mismatches\":{},",
             "\"side_cache_corrupt_slots\":{}",
             "}}"
@@ -181,6 +189,8 @@ fn main() {
         after_recovered.typed_allocations.saturating_sub(after_wrong_drop.typed_allocations),
         after_recovered.typed_cache_hits.saturating_sub(after_wrong_drop.typed_cache_hits),
         after_recovered_drop.typed_deallocations.saturating_sub(after_recovered.typed_deallocations),
+        after_recovered_drop.fallback_allocations,
+        after_recovered_drop.fallback_deallocations,
         validation.recovery_identity_mismatches,
         side_cache.corrupt_slots,
     );
@@ -224,10 +234,15 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     nested_rows = function_method_rows(
         audit, NESTED_VEC_RESERVE_FUNCTION, "reserve_exact"
     )
+    constructor_rows = function_method_rows(
+        audit, NESTED_VEC_CONSTRUCTOR_FUNCTION, "with_capacity"
+    )
     assert len(string_rows) == 1, string_rows
     assert len(nested_rows) == 1, nested_rows
+    assert len(constructor_rows) == 1, constructor_rows
     string_row = string_rows[0]
     nested_row = nested_rows[0]
+    constructor_row = constructor_rows[0]
     for row, outer, nested in (
         (string_row, "Vec<std::string::String", "std::string::String"),
         (nested_row, "Vec<std::vec::Vec<u8", "Vec<u8"),
@@ -238,11 +253,24 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         assert nested in json.dumps(row.get("argument_types") or []), row
         assert row.get("metadata_pairing_contract") == "semantic_scope_active_metadata", row
 
+    assert (
+        constructor_row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+    ), constructor_row
+    assert constructor_row.get("rewrite_status") == APPLIED_STATUS, constructor_row
+    assert "Vec<std::vec::Vec<u8" in str(
+        constructor_row.get("semantic_object_type") or ""
+    ), constructor_row
+    assert (
+        constructor_row.get("metadata_pairing_contract")
+        == "semantic_scope_active_metadata"
+    ), constructor_row
+
     string_type_id = int(string_row.get("type_id") or 0)
     nested_type_id = int(nested_row.get("type_id") or 0)
     assert string_type_id != 0, string_row
     assert nested_type_id != 0, nested_row
     assert string_type_id != nested_type_id, (string_row, nested_row)
+    assert int(constructor_row.get("type_id") or 0) == nested_type_id, constructor_row
 
     resize_rows = function_method_rows(audit, RESIZE_FUNCTION, "resize")
     assert len(resize_rows) == 1, resize_rows
@@ -281,6 +309,8 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert int(runtime["recovered_typed_allocations"]) == 1, runtime
     assert int(runtime["recovered_cache_hits"]) == 1, runtime
     assert int(runtime["recovered_drop_typed_deallocations"]) == 1, runtime
+    assert int(runtime["fallback_allocations"]) == 0, runtime
+    assert int(runtime["fallback_deallocations"]) == 0, runtime
     assert int(runtime["recovery_identity_mismatches"]) == 0, runtime
     assert int(runtime["side_cache_corrupt_slots"]) == 0, runtime
 
@@ -296,6 +326,15 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         },
         "nested_vec_reserve": {
             key: nested_row.get(key)
+            for key in (
+                "callee",
+                "semantic_object_type",
+                "type_id",
+                "rewrite_status",
+            )
+        },
+        "nested_vec_constructor": {
+            key: constructor_row.get(key)
             for key in (
                 "callee",
                 "semantic_object_type",

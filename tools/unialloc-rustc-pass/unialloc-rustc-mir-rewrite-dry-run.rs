@@ -88,7 +88,7 @@ const LOWERING_MODULE_ID: u64 = 0xC002_DA00_0000_0001;
 const DEFAULT_LOWERING_POLICY_FLAGS: u32 = 0x1;
 const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const TYPE_ID_ALGORITHM: &str =
-    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer Vec identity because they can change only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; constructor/factory scopes attribute identity only from the MIR destination; for both shapes, remaining by-value argument owner graphs are merged as safety hazards: identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the capacity-only Vec exception; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer Vec identity because they can change only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; constructor/factory scopes otherwise attribute identity only from the MIR destination; for both shapes, remaining by-value argument owner graphs are merged as safety hazards: identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec capacity-only exception; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 
@@ -2274,6 +2274,32 @@ fn exact_alloc_vec_def_path(path: &str) -> bool {
     )
 }
 
+fn exact_alloc_vec_with_capacity_def_path(path: &str) -> bool {
+    let normalized = strip_rustc_crate_disambiguators(path);
+    if matches!(
+        normalized.as_str(),
+        "alloc::vec::Vec::<T, A>::with_capacity"
+            | "std::vec::Vec::<T, A>::with_capacity"
+            | "alloc::vec::Vec::<T>::with_capacity"
+            | "std::vec::Vec::<T>::with_capacity"
+    ) {
+        return true;
+    }
+    let impl_index = match normalized
+        .strip_prefix("alloc::vec::{impl#")
+        .and_then(|rest| rest.strip_suffix("}::with_capacity"))
+    {
+        Some(index) => index,
+        None => return false,
+    };
+    !impl_index.is_empty() && impl_index.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn exact_alloc_vec_with_capacity_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "alloc"
+        && exact_alloc_vec_with_capacity_def_path(&tcx.def_path_str(def_id))
+}
+
 fn exact_alloc_vec_into_iter_def_path(path: &str) -> bool {
     matches!(
         strip_rustc_crate_disambiguators(path).as_str(),
@@ -2984,13 +3010,40 @@ fn direct_outer_vec_receiver_owner<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Opt
     }
 }
 
+fn direct_outer_vec_destination_owner<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<String> {
+    if clone_result_has_unresolved_params(ty) {
+        return None;
+    }
+    match ty.kind() {
+        ty::Adt(adt, _) if exact_alloc_adt_def_id(tcx, adt.did(), exact_alloc_vec_def_path) => {
+            Some(format!("{:?}", ty))
+        }
+        _ => None,
+    }
+}
+
 fn non_plain_semantic_scope_heap_class<'tcx>(
     tcx: TyCtxt<'tcx>,
+    callee_def_id: Option<DefId>,
     destination_ty: Ty<'tcx>,
     argument_tys: &[Ty<'tcx>],
     callee: &str,
 ) -> SemanticScopeHeapClass {
-    if semantic_scope_capacity_only_vec_receiver_call(callee) {
+    if callee_def_id.map_or(false, |def_id| {
+        exact_alloc_vec_with_capacity_def_id(tcx, def_id)
+    }) {
+        // Exact Vec::with_capacity creates only the direct destination Vec
+        // backing. Nested heap-owning element types are not allocated here.
+        // Keep every by-value argument as a fail-closed safety hazard.
+        match direct_outer_vec_destination_owner(tcx, destination_ty) {
+            Some(owner) => semantic_scope_heap_class_with_known_attribution_and_by_value_hazards(
+                tcx,
+                owner,
+                argument_tys,
+            ),
+            None => SemanticScopeHeapClass::Unresolved,
+        }
+    } else if semantic_scope_capacity_only_vec_receiver_call(callee) {
         // These methods can allocate, reallocate, or free only the direct Vec
         // backing buffer; they never clone/drop elements or run element code.
         // Keep the later by-value hazard gate, but do not make nested supported
@@ -6736,6 +6789,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             if matches!(&plain_clone_heap_class, PlainCloneHeapClass::NotPlainClone) {
                 Some(non_plain_semantic_scope_heap_class(
                     tcx,
+                    callee_def_id,
                     destination_ty,
                     &argument_tys,
                     &callee,
