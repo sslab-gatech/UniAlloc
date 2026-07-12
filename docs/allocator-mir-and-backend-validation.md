@@ -233,6 +233,41 @@ These are bounded functionality probes, not the slow paper performance matrix.
 They are intended to catch real compiler/runtime integration regressions quickly
 before spending time on larger benchmark runs.
 
+### Current actual-rustc identity-pairing replay
+
+The three-lane bundle at
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-actual-rustc-2e3c0e2-a7b5f75-20260712/`
+binds the executed Rust source to `2e3c0e2` and the final validators to
+`a7b5f75`.  The three application collectors each ran once
+(`collector_runs=3`, `collector_reruns=0`); validator-only repairs were then
+accepted by deterministic replay of the preserved, hashed audit/log/runtime
+artifacts rather than by rerunning the binaries.
+
+- **Same-class `Layout` shrink.** Actual direct alloc/realloc/dealloc rewrite
+  rows show the allocation establishing a nonzero compiler identity while
+  realloc and dealloc use strict neutral delegation: zero type/module/flags and
+  hints with the recovery-delegated basis.  Runtime maps all three callsites
+  back to the allocation identity.  For the bounded `63 -> 57`, align-64
+  lifecycle, the pointer remains reused and aligned, the payload is preserved,
+  realloc observes typed allocation/deallocation `1/1`, final deallocation is
+  typed once, and fallback/raw-realloc, recovery mismatch, and corrupt-slot
+  counts are all zero.
+- **Partial-coverage non-interference.** The supported seed and recovery helpers
+  each have exactly one actual `Vec::with_capacity` allocation scope and zero
+  target helper Drop/deallocation rows, so allocation-side recovery is the
+  explicit pairing boundary.  The ambiguous raw Clone performs exactly one raw
+  alloc/dealloc pair, cannot consume the protected buffer, and a later supported
+  `Vec<ProducerPayload>` recovers that exact protected address.
+- **Generic helper boundary.** The monomorphized generic helper executes four
+  typed deallocations and four typed-cache insertions with zero fallback
+  deallocations (`4/0/4`).  The current `optimized_mir` provider exposes no
+  separate generic-helper audit row, so the evidence records that observability
+  boundary and does not invent a generic-Drop skip claim.
+
+This bundle is functional actual-rustc evidence only: it is not a benchmark,
+does not support a percentage, and does not establish universal compiler or
+container coverage.
+
 ### Compiler-driven `Vec` realloc identity and type-isolation probe
 
 Commits `7096fc6`, `f0fe4d1`, and `37ea7cd` strengthen the focused `Vec<T>`
