@@ -191,10 +191,11 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
             // and [`deref_mut`].  arm64e current-nightly Mach-O TLV
             // descriptors can fault before allocator logic in no_std probes,
             // so that target uses the already-registered pthread key itself as
-            // the per-thread pointer store.  Normal targets keep the fast Rust
-            // `#[thread_local]` path and still save the pointer into the
-            // pthread key for destructor cleanup.
-            #[cfg(not(unialloc_target_arm64e))]
+            // the per-thread pointer store. Windows also needs its FLS slot to
+            // be authoritative because Rust `#[thread_local]` storage is shared
+            // by all fibers on one thread. Other targets keep the fast Rust TLS
+            // path and still save the pointer into the pthread key for cleanup.
+            #[cfg(not(any(unialloc_target_arm64e, windows)))]
             #[thread_local]
             static mut {name}_VALUE: * mut {ty} = core::ptr::null_mut();
             static {tsd_state_name}: core::sync::atomic::AtomicU8 =
@@ -224,12 +225,12 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
 
             #[inline]
             unsafe fn {load_tls_name}() -> *mut {ty} {{
-                #[cfg(unialloc_target_arm64e)]
+                #[cfg(any(unialloc_target_arm64e, windows))]
                 {{
                     {ensure_tsd_name}();
                     load_tls() as *mut {ty}
                 }}
-                #[cfg(not(unialloc_target_arm64e))]
+                #[cfg(not(any(unialloc_target_arm64e, windows)))]
                 {{
                     {name}_VALUE
                 }}
@@ -237,12 +238,12 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
 
             #[inline]
             unsafe fn {store_tls_name}(ptr: *mut {ty}) {{
-                #[cfg(unialloc_target_arm64e)]
+                #[cfg(any(unialloc_target_arm64e, windows))]
                 {{
                     {ensure_tsd_name}();
                     save_tls(ptr as *mut u8);
                 }}
-                #[cfg(not(unialloc_target_arm64e))]
+                #[cfg(not(any(unialloc_target_arm64e, windows)))]
                 {{
                     {name}_VALUE = ptr;
                     {ensure_tsd_name}();

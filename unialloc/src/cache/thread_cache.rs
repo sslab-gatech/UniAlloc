@@ -1695,6 +1695,98 @@ mod tests {
 
     use super::*;
 
+    #[cfg(all(windows, not(feature = "fixed_heap")))]
+    static WINDOWS_MAIN_FIBER: core::sync::atomic::AtomicUsize =
+        core::sync::atomic::AtomicUsize::new(0);
+    #[cfg(all(windows, not(feature = "fixed_heap")))]
+    static WINDOWS_FIBER_B_INITIAL_TCACHE: core::sync::atomic::AtomicUsize =
+        core::sync::atomic::AtomicUsize::new(usize::MAX);
+    #[cfg(all(windows, not(feature = "fixed_heap")))]
+    static WINDOWS_FIBER_B_TCACHE: core::sync::atomic::AtomicUsize =
+        core::sync::atomic::AtomicUsize::new(usize::MAX);
+
+    #[cfg(all(windows, not(feature = "fixed_heap")))]
+    unsafe extern "system" fn global_tcache_fiber_b_entry(_parameter: *mut winapi::ctypes::c_void) {
+        WINDOWS_FIBER_B_INITIAL_TCACHE.store(
+            globaltcache_load_tls_value() as usize,
+            core::sync::atomic::Ordering::Release,
+        );
+        let _ = (&*GlobalTcache).footprint_snapshot();
+        WINDOWS_FIBER_B_TCACHE.store(
+            globaltcache_load_tls_value() as usize,
+            core::sync::atomic::Ordering::Release,
+        );
+
+        loop {
+            winapi::um::winbase::SwitchToFiber(
+                WINDOWS_MAIN_FIBER.load(core::sync::atomic::Ordering::Acquire)
+                    as *mut winapi::ctypes::c_void,
+            );
+        }
+    }
+
+    #[cfg(all(windows, not(feature = "fixed_heap")))]
+    #[test]
+    #[ignore = "uses the production GlobalTcache FLS slot; run in an isolated Windows process"]
+    fn global_thread_cache_values_are_fiber_local_on_windows() {
+        unsafe {
+            WINDOWS_FIBER_B_INITIAL_TCACHE.store(usize::MAX, core::sync::atomic::Ordering::Relaxed);
+            WINDOWS_FIBER_B_TCACHE.store(usize::MAX, core::sync::atomic::Ordering::Relaxed);
+
+            let main_fiber = winapi::um::winbase::ConvertThreadToFiber(core::ptr::null_mut());
+            assert!(!main_fiber.is_null(), "ConvertThreadToFiber failed");
+            WINDOWS_MAIN_FIBER.store(main_fiber as usize, core::sync::atomic::Ordering::Release);
+
+            let fiber_a_initial = globaltcache_load_tls_value() as usize;
+            let _ = (&*GlobalTcache).footprint_snapshot();
+            let fiber_a_tcache = globaltcache_load_tls_value() as usize;
+
+            let fiber_b = winapi::um::winbase::CreateFiber(
+                0,
+                Some(global_tcache_fiber_b_entry),
+                core::ptr::null_mut(),
+            );
+            if fiber_b.is_null() {
+                free_thread_cache(fiber_a_tcache as *mut libc::c_void);
+                let _ = winapi::um::winbase::ConvertFiberToThread();
+                panic!("CreateFiber failed");
+            }
+
+            winapi::um::winbase::SwitchToFiber(fiber_b);
+            let fiber_b_initial =
+                WINDOWS_FIBER_B_INITIAL_TCACHE.load(core::sync::atomic::Ordering::Acquire);
+            let fiber_b_tcache = WINDOWS_FIBER_B_TCACHE.load(core::sync::atomic::Ordering::Acquire);
+            let fiber_a_after_switch = globaltcache_load_tls_value() as usize;
+
+            winapi::um::winbase::DeleteFiber(fiber_b);
+            let fiber_a_after_delete = globaltcache_load_tls_value() as usize;
+            if fiber_a_after_delete == fiber_a_tcache {
+                free_thread_cache(fiber_a_tcache as *mut libc::c_void);
+            }
+            let fiber_a_after_cleanup = globaltcache_load_tls_value() as usize;
+            let converted_to_thread = winapi::um::winbase::ConvertFiberToThread();
+
+            assert_eq!(fiber_a_initial, 0, "fiber A started with a stale cache");
+            assert_ne!(fiber_a_tcache, 0, "fiber A did not create a cache");
+            assert_eq!(
+                fiber_b_initial, 0,
+                "fiber B inherited fiber A's production thread cache"
+            );
+            assert_ne!(fiber_b_tcache, 0, "fiber B did not create a cache");
+            assert_ne!(
+                fiber_b_tcache, fiber_a_tcache,
+                "two fibers on one thread shared a production thread cache"
+            );
+            assert_eq!(fiber_a_after_switch, fiber_a_tcache);
+            assert_eq!(
+                fiber_a_after_delete, fiber_a_tcache,
+                "deleting fiber B disturbed fiber A's production cache"
+            );
+            assert_eq!(fiber_a_after_cleanup, 0);
+            assert_ne!(converted_to_thread, 0, "ConvertFiberToThread failed");
+        }
+    }
+
     #[cfg(not(feature = "fixed_heap"))]
     #[test]
     fn free_thread_cache_clears_tls_before_storage_reuse() {
