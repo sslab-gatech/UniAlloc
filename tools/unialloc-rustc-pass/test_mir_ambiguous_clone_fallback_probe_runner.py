@@ -233,6 +233,19 @@ class MirAmbiguousCloneFallbackRunnerTests(unittest.TestCase):
         ):
             runner.validate_audit(audit)
 
+    def test_validate_rejects_wrong_kind_duplicate_with_capacity_candidate(self) -> None:
+        audit = valid_audit()
+        duplicate = supported_row(
+            function_name="supported_seed_protected_buffer"
+        )
+        duplicate["lowering_kind"] = "direct_allocator_call_rewrite"
+        duplicate["rewrite_status"] = "actual_allocator_call_replacement_applied"
+        audit["rewrite_candidates"].append(duplicate)
+        with self.assertRaisesRegex(
+            AssertionError, "exactly one supported Vec allocation scope candidate"
+        ):
+            runner.validate_audit(audit)
+
     def test_validate_rejects_duplicate_planned_supported_scope(self) -> None:
         audit = valid_audit()
         planned = supported_row(function_name="supported_seed_protected_buffer")
@@ -269,6 +282,23 @@ class MirAmbiguousCloneFallbackRunnerTests(unittest.TestCase):
             }
         )
         audit["rewrite_candidates"].append(deallocation)
+        with self.assertRaisesRegex(
+            AssertionError, "must not have target Drop/deallocation"
+        ):
+            runner.validate_audit(audit)
+
+    def test_validate_rejects_deallocation_exposed_only_by_replacement_symbol(self) -> None:
+        audit = valid_audit()
+        audit["rewrite_candidates"].append(
+            {
+                "mir_function": "supported_seed_protected_buffer",
+                "callee": "opaque_operation",
+                "lowering_kind": "opaque_operation",
+                "rewrite_status": "opaque_operation",
+                "replacement_symbol": "__unialloc_dealloc_layout_with_metadata_hints",
+                "metadata_pairing_contract": "opaque_operation",
+            }
+        )
         with self.assertRaisesRegex(
             AssertionError, "must not have target Drop/deallocation"
         ):

@@ -102,28 +102,37 @@ def validate_supported_controls(audit: Dict[str,Any]) -> Dict[str,Any]:
             if isinstance(row,dict)
             and probe_function_matches(row,function_name)
         ]
-        scope_rows=[
+        allocation_candidates=[
             row for row in function_rows
-            if row.get('lowering_kind')=='semantic_scope_enter_exit_rewrite'
-            and 'with_capacity' in str(row.get('callee') or '')
-            and 'Vec<ProducerPayload' in json.dumps(row,sort_keys=True)
+            if 'with_capacity' in str(row.get('callee') or '')
+            and 'Vec<ProducerPayload' in ' '.join(
+                str(row.get(field) or '')
+                for field in ('semantic_object_type','destination_type')
+            )
         ]
         target_drop_or_deallocation_rows=[]
         for row in function_rows:
             operation_text=' '.join(
                 str(row.get(field) or '')
-                for field in ('lowering_kind','callee','metadata_pairing_contract')
+                for field in (
+                    'lowering_kind',
+                    'rewrite_status',
+                    'callee',
+                    'replacement_symbol',
+                    'metadata_pairing_contract',
+                )
             ).lower()
             if 'drop' in operation_text or 'dealloc' in operation_text:
                 target_drop_or_deallocation_rows.append(row)
-        assert len(scope_rows)==1, f"{function_name} must have exactly one supported Vec allocation scope candidate, got {len(scope_rows)}"
-        assert scope_rows[0].get('rewrite_status')=='actual_semantic_scope_enter_exit_rewrite_applied', f"{function_name} supported Vec allocation scope was not actually applied: {scope_rows[0]!r}"
+        assert len(allocation_candidates)==1, f"{function_name} must have exactly one supported Vec allocation scope candidate, got {len(allocation_candidates)}"
+        scope_row=allocation_candidates[0]
+        assert scope_row.get('lowering_kind')=='semantic_scope_enter_exit_rewrite', f"{function_name} supported Vec allocation candidate has the wrong lowering kind: {scope_row!r}"
+        assert scope_row.get('rewrite_status')=='actual_semantic_scope_enter_exit_rewrite_applied', f"{function_name} supported Vec allocation scope was not actually applied: {scope_row!r}"
+        assert int(scope_row.get('flags') or 0)&TYPE_ISOLATED, f"{function_name} row is not type isolated: {scope_row!r}"
         assert not target_drop_or_deallocation_rows, f"{function_name} must not have target Drop/deallocation scope evidence; allocation-side recovery is the required mechanism: {target_drop_or_deallocation_rows!r}"
-        for row in scope_rows:
-            assert int(row.get('flags') or 0)&TYPE_ISOLATED, f"{function_name} row is not type isolated: {row!r}"
-        all_rows.extend(scope_rows)
+        all_rows.append(scope_row)
         evidence[function_name]={
-            'allocation_scope_rows':len(scope_rows),
+            'allocation_scope_rows':len(allocation_candidates),
             'target_drop_or_deallocation_rows':len(target_drop_or_deallocation_rows),
             'allocation_side_recovery_required':True,
         }
