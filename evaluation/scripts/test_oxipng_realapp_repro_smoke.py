@@ -482,7 +482,7 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         )
         self.assertTrue(evidence["validated"])
 
-    def test_contract_binds_actual_rewrite_to_same_layout_runtime_classes_and_fail_closed_rows(self) -> None:
+    def test_contract_binds_actual_rewrite_to_runtime_classes_and_fail_closed_rows(self) -> None:
         cmd = smoke.CommandResult(["cmd"], 0, "", "")
         evidence = smoke.assert_contract(
             build=cmd,
@@ -514,21 +514,6 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         self.assertIn("injected functional oracle", evidence["claim_boundary"])
         self.assertIn("not natural application coverage", evidence["claim_boundary"])
 
-        wrong_layout = valid_contract_stats()
-        wrong_layout["type_rows"][5]["observed_alloc_size"] = 32
-        wrong_layout["type_rows"][5]["observed_dealloc_size"] = 32
-        with self.assertRaisesRegex(smoke.SmokeError, "same observed"):
-            smoke.assert_contract(
-                build=cmd,
-                run=cmd,
-                stats=wrong_layout,
-                output_sha256="a",
-                expected_output_sha256="a",
-                audits=valid_contract_audits(),
-                audit_totals=valid_contract_totals(),
-                fallback_note="reported fallback_allocations=0",
-            )
-
     def test_address_oracle_fails_closed_without_compiler_derived_identity(self) -> None:
         cmd = smoke.CommandResult(["cmd"], 0, "", "")
         audits = valid_contract_audits()
@@ -547,6 +532,32 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                 audit_totals=totals,
                 fallback_note="reported fallback_allocations=0",
             )
+
+    def test_valid_oracle_does_not_require_a_natural_same_layout_pair(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        stats = valid_contract_stats()
+        stats["type_rows"] = stats["type_rows"][:4]
+        stats["type_stats_rows"] = 4
+        audits = valid_contract_audits()
+        audits[0]["actual_type_scope_rows"] = audits[0]["actual_type_scope_rows"][:2]
+        totals = valid_contract_totals()
+        totals["actual_type_scope_row_count"] = 2
+        totals["semantic_scope_rewrite_applied_count"] = 2
+
+        evidence = smoke.assert_contract(
+            build=cmd,
+            run=cmd,
+            stats=stats,
+            output_sha256="a",
+            expected_output_sha256="a",
+            audits=audits,
+            audit_totals=totals,
+            fallback_note="reported fallback_allocations=0",
+        )
+
+        self.assertFalse(evidence["natural_same_layout_pair_observed"])
+        self.assertIsNone(evidence["same_layout_distinct_type_pair"])
+        self.assertTrue(evidence["address_level_functional_oracle"]["validated"])
 
     def test_address_oracle_rejects_cross_type_reuse_and_missing_same_type_recovery(self) -> None:
         cmd = smoke.CommandResult(["cmd"], 0, "", "")
