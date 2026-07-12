@@ -384,6 +384,15 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         self.assertTrue(dynamic["dynamic_execution_observed"])
         self.assertEqual(dynamic["execution_status"], "dynamic_execution_observed")
 
+        rejected_only_stats = valid_contract_stats()
+        rejected_only_stats["semantic_ownership_transfer"] = (
+            ownership_transfer_runtime(delta=(1, 0, 1))
+        )
+        with self.assertRaisesRegex(
+            smoke.SmokeError, "must include at least one applied transfer"
+        ):
+            smoke.validate_semantic_ownership_transfer_runtime(rejected_only_stats)
+
     def test_current_ownership_transfer_runtime_fails_closed_when_missing(self) -> None:
         stats = valid_contract_stats()
         del stats["semantic_ownership_transfer"]

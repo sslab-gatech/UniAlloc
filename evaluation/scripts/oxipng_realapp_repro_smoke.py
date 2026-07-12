@@ -592,6 +592,10 @@ def validate_semantic_ownership_transfer_runtime(
     if runtime.get("accounting_complete") is not True:
         raise SmokeError("semantic ownership-transfer accounting_complete must be true")
     dynamic = delta["attempted"] != 0
+    if dynamic and delta["applied"] == 0:
+        raise SmokeError(
+            "semantic ownership-transfer dynamic execution must include at least one applied transfer"
+        )
     if runtime.get("dynamic_execution_observed") is not dynamic:
         raise SmokeError(
             "semantic ownership-transfer dynamic execution marker does not match attempted delta"
