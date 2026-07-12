@@ -474,10 +474,6 @@ pub fn sign_context_bound_pointer(ptr: usize, owner: usize) -> Option<usize> {
 /// instead of treating no-op PAC instructions as protection.
 #[inline]
 pub fn authenticate_context_bound_pointer(ptr: usize, owner: usize) -> Option<usize> {
-    if !context_binding_available() {
-        return None;
-    }
-
     let key = active_context_binding_key()?;
     let unsigned = strip_with_key(key, ptr);
     let auth_res = authenticate_with_key(key, ptr, owner);
