@@ -109,19 +109,53 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
         self.write_delegating_compiler(compiler_dir)
         compiler_log = self.tmp / "cargo-compiler.jsonl"
         project = self.tmp / "cargo-fixture"
+        dependency = project / "dependency"
         (project / "src").mkdir(parents=True)
+        (dependency / "src").mkdir(parents=True)
+        unialloc_path = (ROOT / "unialloc").as_posix()
         (project / "Cargo.toml").write_text(
             "[package]\nname = 'cargo-fixture'\nversion = '0.1.0'\nedition = '2021'\n"
-            "\n[workspace]\n",
+            "\n[dependencies]\n"
+            f"unialloc = {{ path = {unialloc_path!r}, features = ['stats', 'type_isolation'] }}\n"
+            "fixture-dependency = { path = 'dependency' }\n"
+            "\n[workspace]\nmembers = ['dependency']\nresolver = '2'\n",
+            encoding="utf-8",
+        )
+        (dependency / "Cargo.toml").write_text(
+            "[package]\nname = 'fixture-dependency'\nversion = '0.1.0'\nedition = '2021'\n"
+            "\n[lib]\npath = 'src/lib.rs'\n",
+            encoding="utf-8",
+        )
+        (dependency / "src" / "lib.rs").write_text(
+            "#[inline(never)]\n"
+            "pub fn dependency_value() -> u64 {\n"
+            "    let mut values = Vec::with_capacity(1);\n"
+            "    values.push(11_u64);\n"
+            "    values[0]\n"
+            "}\n",
             encoding="utf-8",
         )
         (project / "src" / "main.rs").write_text(
-            "fn main() { let mut values = Vec::new(); values.push(7_u64); "
-            "assert_eq!(values[0], 7); }\n",
+            "use fixture_dependency::dependency_value;\n"
+            "use unialloc::UniAlloc;\n"
+            "#[global_allocator]\nstatic A: UniAlloc = UniAlloc;\n"
+            "#[inline(never)]\n"
+            "fn selected_value() -> u64 {\n"
+            "    let mut values = Vec::with_capacity(1);\n"
+            "    values.push(7_u64);\n"
+            "    values[0]\n"
+            "}\n"
+            "fn main() {\n"
+            "    let target = selected_value();\n"
+            "    let dependency = dependency_value();\n"
+            "    println!(\"target={} dependency={} sum={}\", target, dependency, target + dependency);\n"
+            "}\n",
             encoding="utf-8",
         )
         audits = self.tmp / "cargo-audits"
         audits.mkdir()
+        logs = self.tmp / "cargo-pass-logs"
+        logs.mkdir()
         env = self.wrapper_env()
         env.update(
             {
@@ -130,10 +164,15 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
                 "RUSTC_WRAPPER": str(self.wrapper),
                 "UNIALLOC_RUSTC_TARGET_CRATES": "cargo-fixture",
                 "UNIALLOC_REWRITE_AUDIT_DIR": str(audits),
+                "UNIALLOC_PASS_LOG_DIR": str(logs),
                 "UNIALLOC_CONTINUE_COMPILATION": "1",
+                "UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE": "1",
+                "UNIALLOC_LOWERING_POLICY_FLAGS": "1",
                 "UNIALLOC_RUSTC_SYSROOT": str(self.sysroot),
                 "COMPILER_DRIVER_LOG": str(compiler_log),
                 "CARGO_TARGET_DIR": str(self.tmp / "cargo-target"),
+                "CARGO_NET_OFFLINE": "true",
+                "CARGO_INCREMENTAL": "0",
             }
         )
 
@@ -141,9 +180,12 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
             [
                 shutil.which("cargo") or "cargo",
                 f"+{TOOLCHAIN}",
-                "check",
+                "run",
+                "--quiet",
                 "--manifest-path",
                 str(project / "Cargo.toml"),
+                "-p",
+                "cargo-fixture",
             ],
             cwd=project,
             env=env,
@@ -153,24 +195,62 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "target=7 dependency=11 sum=18")
         self.assertTrue(compiler_log.is_file())
+        compiler_invocations = [
+            json.loads(line)
+            for line in compiler_log.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        invoked_crates = set()
+        for invocation in compiler_invocations:
+            for index, argument in enumerate(invocation):
+                if argument == "--crate-name" and index + 1 < len(invocation):
+                    invoked_crates.add(invocation[index + 1])
+                elif argument.startswith("--crate-name="):
+                    invoked_crates.add(argument.split("=", 1)[1])
+        self.assertIn("fixture_dependency", invoked_crates)
+        # The selected crate is compiled inside the rustc_driver wrapper, so it
+        # must not be delegated through the compiler shim.  Its unique audit
+        # and pass log below are the selected-crate execution evidence.
+        self.assertNotIn("cargo_fixture", invoked_crates)
         audit_payloads = [
             json.loads(path.read_text(encoding="utf-8")) for path in audits.glob("*.json")
         ]
-        self.assertTrue(audit_payloads)
+        self.assertEqual(len(audit_payloads), 1)
+        self.assertEqual(len(list(logs.glob("*.log"))), 1)
+        payload = audit_payloads[0]
         self.assertTrue(
-            any(
-                "cargo_fixture" in payload.get("rustc_args", [])
-                or "--crate-name=cargo_fixture" in payload.get("rustc_args", [])
-                or any(
-                    left == "--crate-name" and right == "cargo_fixture"
-                    for left, right in zip(
-                        payload.get("rustc_args", []), payload.get("rustc_args", [])[1:]
-                    )
+            "--crate-name=cargo_fixture" in payload.get("rustc_args", [])
+            or any(
+                left == "--crate-name" and right == "cargo_fixture"
+                for left, right in zip(
+                    payload.get("rustc_args", []), payload.get("rustc_args", [])[1:]
                 )
-                for payload in audit_payloads
             )
         )
+        summary = payload.get("summary") or {}
+        self.assertTrue(summary.get("actual_semantic_scope_rewrite"))
+        self.assertGreater(int(summary.get("semantic_scope_rewrite_applied_count") or 0), 0)
+        selected_rows = [
+            row
+            for row in payload.get("rewrite_candidates", [])
+            if isinstance(row, dict)
+            and str(row.get("mir_function") or "").endswith("selected_value")
+            and row.get("rewrite_status")
+            == "actual_semantic_scope_enter_exit_rewrite_applied"
+        ]
+        self.assertTrue(selected_rows)
+        dependency_rows = [
+            row
+            for row in payload.get("rewrite_candidates", [])
+            if isinstance(row, dict)
+            and (
+                "fixture_dependency" in str(row.get("mir_function") or "")
+                or "dependency_value" in str(row.get("mir_function") or "")
+            )
+        ]
+        self.assertEqual(dependency_rows, [])
 
     def test_non_target_executes_arbitrary_compiler_with_exact_argv(self) -> None:
         captured = self.tmp / "captured-args.json"
