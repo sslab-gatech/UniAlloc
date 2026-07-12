@@ -54,6 +54,34 @@ fn checksum(values: &[ProducerPayload]) -> u64 {
         })
 }
 
+#[inline(never)]
+fn supported_seed_protected_buffer() -> usize {
+    let mut protected = Vec::<ProducerPayload>::with_capacity(4);
+    for index in 0..4_u64 {
+        protected.push(payload(0x5EED_0000 + index));
+    }
+    assert_ne!(checksum(&protected), 0);
+    let address = protected.as_ptr() as usize;
+    drop(protected);
+    address
+}
+
+#[inline(never)]
+fn supported_recover_protected_buffer(expected_address: usize) -> usize {
+    let mut recovered = Vec::<ProducerPayload>::with_capacity(4);
+    let address = recovered.as_ptr() as usize;
+    assert_eq!(
+        address, expected_address,
+        "supported typed allocation did not recover its protected cache entry"
+    );
+    for index in 0..4_u64 {
+        recovered.push(payload(0xC0DE_0000 + index));
+    }
+    assert_ne!(checksum(&recovered), 0);
+    drop(recovered);
+    address
+}
+
 fn stats_delta(before: SemanticStatsSnapshot, after: SemanticStatsSnapshot, field: &str) -> usize {
     match field {
         "typed_allocations" => after
@@ -68,6 +96,12 @@ fn stats_delta(before: SemanticStatsSnapshot, after: SemanticStatsSnapshot, fiel
         "fallback_deallocations" => after
             .fallback_deallocations
             .saturating_sub(before.fallback_deallocations),
+        "typed_cache_hits" => after
+            .typed_cache_hits
+            .saturating_sub(before.typed_cache_hits),
+        "typed_cache_inserts" => after
+            .typed_cache_inserts
+            .saturating_sub(before.typed_cache_inserts),
         _ => 0,
     }
 }
@@ -104,12 +138,15 @@ fn main() {
     assert_eq!(size_of::<ProducerPayload>(), 64);
     assert_eq!(align_of::<ProducerPayload>(), 8);
 
-    // The binary intentionally uses only ordinary Rust `Result::clone` over a
-    // `Vec`/`String` result.  It does not manually call UniAlloc metadata or
-    // allocator ABIs; the companion runner verifies the compiler pass audits
-    // the call as ambiguous and fail-closed.
+    // The binary intentionally uses only ordinary Rust `Vec` and
+    // `Result::clone` operations. It does not manually call UniAlloc metadata
+    // or allocator ABIs. The companion runner proves the supported Vec seed
+    // and recovery received actual scope/Drop rewrites while the ambiguous
+    // Result clone stayed fail-closed.
     semantic_auto_metadata_disable();
 
+    // Keep the source allocation live so the protected seed below cannot
+    // obtain the same address by ordinary lifetime reuse.
     let mut source_vec = Vec::with_capacity(4);
     for index in 0..4_u64 {
         source_vec.push(payload(0xC10A_E000 + index));
@@ -119,6 +156,41 @@ fn main() {
     let source = Ok::<Vec<ProducerPayload>, String>(source_vec);
 
     semantic_stats_reset();
+
+    let before_seed_stats = semantic_stats_snapshot();
+    let before_seed_fallback = semantic_fallback_attribution_snapshot();
+    let protected_buffer = supported_seed_protected_buffer();
+    let after_seed_stats = semantic_stats_snapshot();
+    let after_seed_fallback = semantic_fallback_attribution_snapshot();
+
+    let seed_typed_allocations =
+        stats_delta(before_seed_stats, after_seed_stats, "typed_allocations");
+    let seed_typed_deallocations =
+        stats_delta(before_seed_stats, after_seed_stats, "typed_deallocations");
+    let seed_typed_cache_inserts =
+        stats_delta(before_seed_stats, after_seed_stats, "typed_cache_inserts");
+    assert_eq!(seed_typed_allocations, 1);
+    assert_eq!(seed_typed_deallocations, 1);
+    assert_eq!(seed_typed_cache_inserts, 1);
+    assert_eq!(
+        fallback_delta(
+            before_seed_fallback,
+            after_seed_fallback,
+            "raw_alloc_no_metadata"
+        ),
+        0
+    );
+    assert_eq!(
+        fallback_delta(
+            before_seed_fallback,
+            after_seed_fallback,
+            "raw_dealloc_no_metadata"
+        ),
+        0
+    );
+    let seed_type_id = after_seed_stats.last_type_id;
+    assert_ne!(seed_type_id, 0);
+
     let before_stats = semantic_stats_snapshot();
     let before_fallback = semantic_fallback_attribution_snapshot();
 
@@ -166,14 +238,15 @@ fn main() {
         clone_typed_allocations, 0,
         "ambiguous Clone must not create typed metadata"
     );
-    assert!(
-        clone_fallback_allocations >= 1,
-        "ambiguous Clone should allocate through fallback"
+    assert_eq!(
+        clone_fallback_allocations, 1,
+        "ambiguous Clone should perform exactly one fallback allocation"
     );
-    assert!(
-        clone_raw_alloc_no_metadata >= 1,
-        "ambiguous Clone allocation should be raw fallback"
+    assert_eq!(
+        clone_raw_alloc_no_metadata, 1,
+        "ambiguous Clone allocation should be exactly one raw fallback"
     );
+    assert_eq!(clone_raw_alloc_no_metadata_bytes, 256);
     assert_eq!(
         clone_raw_realloc_no_metadata, 0,
         "Result::clone should not use raw realloc"
@@ -183,17 +256,88 @@ fn main() {
     drop(cloned);
     let after_drop_stats = semantic_stats_snapshot();
     let after_drop_fallback = semantic_fallback_attribution_snapshot();
-    let validation = semantic_metadata_validation_snapshot();
-    let side_cache = type_isolation_side_cache_snapshot();
-
-    semantic_type_stats_recording_disable();
-    semantic_stats_recording_disable();
 
     let clone_raw_dealloc_no_metadata = fallback_delta(
         after_clone_fallback,
         after_drop_fallback,
         "raw_dealloc_no_metadata",
     );
+    assert_eq!(
+        stats_delta(
+            after_clone_stats,
+            after_drop_stats,
+            "fallback_deallocations"
+        ),
+        1
+    );
+    assert_eq!(clone_raw_dealloc_no_metadata, 1);
+
+    let fallback_avoided_protected_buffer = cloned_buffer != protected_buffer;
+    assert!(
+        fallback_avoided_protected_buffer,
+        "untyped ambiguous fallback reused a protected typed cache entry"
+    );
+
+    let before_recovery_stats = semantic_stats_snapshot();
+    let before_recovery_fallback = semantic_fallback_attribution_snapshot();
+    let recovered_buffer = supported_recover_protected_buffer(protected_buffer);
+    let after_recovery_stats = semantic_stats_snapshot();
+    let after_recovery_fallback = semantic_fallback_attribution_snapshot();
+    let recovery_typed_allocations = stats_delta(
+        before_recovery_stats,
+        after_recovery_stats,
+        "typed_allocations",
+    );
+    let recovery_typed_deallocations = stats_delta(
+        before_recovery_stats,
+        after_recovery_stats,
+        "typed_deallocations",
+    );
+    let recovery_typed_cache_hits = stats_delta(
+        before_recovery_stats,
+        after_recovery_stats,
+        "typed_cache_hits",
+    );
+    let recovery_typed_cache_inserts = stats_delta(
+        before_recovery_stats,
+        after_recovery_stats,
+        "typed_cache_inserts",
+    );
+    assert_eq!(recovery_typed_allocations, 1);
+    assert_eq!(recovery_typed_deallocations, 1);
+    assert_eq!(recovery_typed_cache_hits, 1);
+    assert_eq!(recovery_typed_cache_inserts, 1);
+    assert_eq!(
+        fallback_delta(
+            before_recovery_fallback,
+            after_recovery_fallback,
+            "raw_alloc_no_metadata"
+        ),
+        0
+    );
+    assert_eq!(
+        fallback_delta(
+            before_recovery_fallback,
+            after_recovery_fallback,
+            "raw_dealloc_no_metadata"
+        ),
+        0
+    );
+    let recovery_type_id = after_recovery_stats.last_type_id;
+    assert_eq!(recovery_type_id, seed_type_id);
+    let typed_recovery_preserved = recovered_buffer == protected_buffer;
+    assert!(typed_recovery_preserved);
+
+    let retained_source = match source {
+        Ok(values) => values,
+        Err(_) => unreachable!("probe source is always the Ok variant"),
+    };
+    drop(retained_source);
+    let validation = semantic_metadata_validation_snapshot();
+    let side_cache = type_isolation_side_cache_snapshot();
+
+    semantic_type_stats_recording_disable();
+    semantic_stats_recording_disable();
 
     assert_eq!(
         validation.recovery_identity_mismatches, 0,
@@ -217,8 +361,17 @@ fn main() {
             "\"cloned_len\":{},",
             "\"source_buffer\":{},",
             "\"cloned_buffer\":{},",
+            "\"protected_buffer\":{},",
+            "\"recovered_buffer\":{},",
             "\"buffers_distinct\":true,",
+            "\"fallback_avoided_protected_buffer\":{},",
+            "\"typed_recovery_preserved\":{},",
             "\"checksum\":{},",
+            "\"seed_type_id\":{},",
+            "\"recovery_type_id\":{},",
+            "\"seed_typed_allocations\":{},",
+            "\"seed_typed_deallocations\":{},",
+            "\"seed_typed_cache_inserts\":{},",
             "\"clone_typed_allocations\":{},",
             "\"clone_typed_deallocations\":{},",
             "\"clone_fallback_allocations\":{},",
@@ -229,6 +382,10 @@ fn main() {
             "\"clone_recorded_old_realloc_fallback\":{},",
             "\"drop_fallback_deallocations\":{},",
             "\"drop_raw_dealloc_no_metadata\":{},",
+            "\"recovery_typed_allocations\":{},",
+            "\"recovery_typed_deallocations\":{},",
+            "\"recovery_typed_cache_hits\":{},",
+            "\"recovery_typed_cache_inserts\":{},",
             "\"recovery_identity_matches\":{},",
             "\"recovery_identity_mismatches\":{},",
             "\"side_cache_corrupt_slots\":{}",
@@ -239,7 +396,16 @@ fn main() {
         cloned_len,
         source_buffer,
         cloned_buffer,
+        protected_buffer,
+        recovered_buffer,
+        fallback_avoided_protected_buffer,
+        typed_recovery_preserved,
         source_checksum,
+        seed_type_id,
+        recovery_type_id,
+        seed_typed_allocations,
+        seed_typed_deallocations,
+        seed_typed_cache_inserts,
         clone_typed_allocations,
         stats_delta(before_stats, after_clone_stats, "typed_deallocations"),
         clone_fallback_allocations,
@@ -254,6 +420,10 @@ fn main() {
             "fallback_deallocations"
         ),
         clone_raw_dealloc_no_metadata,
+        recovery_typed_allocations,
+        recovery_typed_deallocations,
+        recovery_typed_cache_hits,
+        recovery_typed_cache_inserts,
         validation.recovery_identity_matches,
         validation.recovery_identity_mismatches,
         side_cache.corrupt_slots,

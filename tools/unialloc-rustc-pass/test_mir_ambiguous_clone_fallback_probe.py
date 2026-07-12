@@ -3,7 +3,7 @@
 from __future__ import annotations
 import argparse, hashlib, json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER_SOURCE = Path(__file__).resolve()
@@ -14,6 +14,11 @@ SOURCE_BINDING_PATHS = (Path("Cargo.toml"), Path("Cargo.lock"), Path("rust-toolc
 AMBIGUOUS_FUNCTION = "Result::clone"
 AMBIGUOUS_STATUS = "semantic_scope_rewrite_skipped_ambiguous_heap_object_type"
 APPLIED_STATUSES = {"actual_semantic_scope_enter_exit_rewrite_applied", "semantic_scope_enter_exit_rewrite_planned", "actual_semantic_scope_drop_rewrite_applied", "semantic_scope_drop_rewrite_planned"}
+TYPE_ISOLATED = 1 << 0
+SUPPORTED_FUNCTIONS = (
+    "supported_seed_protected_buffer",
+    "supported_recover_protected_buffer",
+)
 
 def sha256(path: Path) -> str:
     d=hashlib.sha256()
@@ -84,23 +89,81 @@ def ambiguous_clone_rows(audit: Dict[str,Any]) -> List[Dict[str,Any]]:
             rows.append(row)
     return rows
 
+def probe_function_matches(row: Dict[str,Any], function_name: str) -> bool:
+    mir_function=str(row.get('mir_function') or '')
+    return mir_function==function_name or mir_function.endswith(f"::{function_name}")
+
+def validate_supported_controls(audit: Dict[str,Any]) -> Dict[str,Any]:
+    evidence={}
+    all_rows=[]
+    for function_name in SUPPORTED_FUNCTIONS:
+        rows=[
+            row for row in audit.get('rewrite_candidates',[])
+            if isinstance(row,dict)
+            and probe_function_matches(row,function_name)
+            and 'Vec<ProducerPayload' in str(row.get('semantic_object_type') or '')
+            and row.get('rewrite_status') in APPLIED_STATUSES
+        ]
+        scope_rows=[
+            row for row in rows
+            if row.get('lowering_kind')=='semantic_scope_enter_exit_rewrite'
+            and row.get('rewrite_status')=='actual_semantic_scope_enter_exit_rewrite_applied'
+            and 'with_capacity' in str(row.get('callee') or '')
+        ]
+        drop_rows=[
+            row for row in rows
+            if row.get('lowering_kind')=='semantic_scope_drop_rewrite'
+            and row.get('rewrite_status')=='actual_semantic_scope_drop_rewrite_applied'
+        ]
+        assert len(scope_rows)==1, f"{function_name} must have exactly one actual supported Vec allocation scope, got {len(scope_rows)}"
+        assert len(drop_rows)==1, f"{function_name} must have exactly one actual supported Vec Drop scope, got {len(drop_rows)}"
+        for row in scope_rows+drop_rows:
+            assert int(row.get('flags') or 0)&TYPE_ISOLATED, f"{function_name} row is not type isolated: {row!r}"
+        all_rows.extend(scope_rows+drop_rows)
+        evidence[function_name]={
+            'allocation_scope_rows':len(scope_rows),
+            'drop_scope_rows':len(drop_rows),
+        }
+    type_ids={int(row.get('type_id') or 0) for row in all_rows}
+    assert len(type_ids)==1, f"supported seed/recovery must share one compiler type_id, got {sorted(type_ids)}"
+    type_id=next(iter(type_ids)); assert type_id!=0, "supported compiler type_id must be nonzero"
+    module_ids={int(row.get('module_id') or 0) for row in all_rows}
+    assert len(module_ids)==1, f"supported seed/recovery must share one module_id, got {sorted(module_ids)}"
+    module_id=next(iter(module_ids)); assert module_id!=0, "supported compiler module_id must be nonzero"
+    return {'type_id':type_id,'module_id':module_id,'functions':evidence}
+
 def validate_audit(audit: Dict[str,Any]) -> Dict[str,Any]:
     s=audit.get('summary') or {}; assert s.get('provider_override_installed') is True; assert s.get('body_clone_returned_to_rustc') is True; assert s.get('actual_semantic_scope_rewrite') is True; assert int(s.get('semantic_scope_unsolved_candidate_count') or 0)>=1
     rows=ambiguous_clone_rows(audit); assert rows, f"missing audit row for {AMBIGUOUS_FUNCTION}"
+    applied=[r for r in rows if r.get('rewrite_status') in APPLIED_STATUSES]; assert not applied, f"ambiguous Clone must not receive an applied/planned scope: {applied!r}"
+    assert len(rows)==1, f"expected exactly one ambiguous Clone audit row, got {len(rows)}: {rows!r}"
     amb=[r for r in rows if r.get('lowering_kind')=='semantic_scope_unsolved_heap_object_candidate' and r.get('rewrite_status')==AMBIGUOUS_STATUS and r.get('replacement_resolution_status')=='rustc_middle_multiple_heap_object_types_not_lowered']
     assert len(amb)==1, f"expected one ambiguous fail-closed row, got {len(amb)}: {rows!r}"
     row=amb[0]; assert 'Result' in str(row.get('destination_type'))
     preview=str(row.get('replacement_preview') or ''); assert 'std::vec::Vec' in preview and 'std::string::String' in preview, preview
-    applied=[r for r in rows if r.get('rewrite_status') in APPLIED_STATUSES]; assert not applied, f"ambiguous Clone must not receive an applied/planned scope: {applied!r}"
-    return {'ambiguous_fail_closed_rows':len(amb),'ambiguous_destination_type':row.get('destination_type'),'ambiguous_preview':preview}
+    supported=validate_supported_controls(audit)
+    return {'ambiguous_fail_closed_rows':len(amb),'ambiguous_destination_type':row.get('destination_type'),'ambiguous_preview':preview,'supported_controls':supported}
 
-def validate_runtime(runtime: Dict[str,Any]) -> Dict[str,Any]:
+def validate_runtime(runtime: Dict[str,Any], compiler_type_id: Optional[int]=None) -> Dict[str,Any]:
     assert runtime.get('result_variant')=='Ok'; assert runtime.get('clone_function')==AMBIGUOUS_FUNCTION; assert runtime.get('buffers_distinct') is True; assert int(runtime.get('same_layout_bytes') or 0)==64; assert int(runtime.get('source_len') or 0)==int(runtime.get('cloned_len') or 0)==4
-    assert int(runtime.get('source_buffer') or 0)!=0 and int(runtime.get('cloned_buffer') or 0)!=0 and int(runtime.get('source_buffer') or 0)!=int(runtime.get('cloned_buffer') or 0)
-    assert int(runtime.get('clone_typed_allocations') or 0)==0; assert int(runtime.get('clone_fallback_allocations') or 0)>=1; assert int(runtime.get('clone_raw_alloc_no_metadata') or 0)>=1; assert int(runtime.get('clone_raw_alloc_no_metadata_bytes') or 0)>=256; assert int(runtime.get('clone_raw_realloc_no_metadata') or 0)==0; assert int(runtime.get('clone_recorded_old_realloc_fallback') or 0)==0; assert int(runtime.get('drop_fallback_deallocations') or 0)>=1; assert int(runtime.get('drop_raw_dealloc_no_metadata') or 0)>=1; assert int(runtime.get('recovery_identity_mismatches') or 0)==0; assert int(runtime.get('side_cache_corrupt_slots') or 0)==0
-    return {'clone_fallback_allocations':int(runtime.get('clone_fallback_allocations') or 0),'clone_raw_alloc_no_metadata':int(runtime.get('clone_raw_alloc_no_metadata') or 0),'drop_raw_dealloc_no_metadata':int(runtime.get('drop_raw_dealloc_no_metadata') or 0)}
+    source=int(runtime.get('source_buffer') or 0); fallback=int(runtime.get('cloned_buffer') or 0); protected=int(runtime.get('protected_buffer') or 0); recovered=int(runtime.get('recovered_buffer') or 0)
+    assert source!=0 and fallback!=0 and protected!=0 and recovered!=0
+    assert source!=fallback; assert source!=protected, "protected seed reused the still-live source allocation"
+    assert runtime.get('fallback_avoided_protected_buffer') is True; assert fallback!=protected, "ambiguous fallback reused the protected typed cache entry"
+    assert runtime.get('typed_recovery_preserved') is True; assert recovered==protected, "supported typed recovery did not return the protected cache entry"
+    seed_type_id=int(runtime.get('seed_type_id') or 0); recovery_type_id=int(runtime.get('recovery_type_id') or 0)
+    assert seed_type_id!=0 and recovery_type_id==seed_type_id
+    if compiler_type_id is not None: assert seed_type_id==compiler_type_id, f"runtime type_id {seed_type_id} does not match compiler type_id {compiler_type_id}"
+    assert int(runtime.get('seed_typed_allocations') or 0)==1; assert int(runtime.get('seed_typed_deallocations') or 0)==1; assert int(runtime.get('seed_typed_cache_inserts') or 0)==1
+    assert int(runtime.get('clone_typed_allocations') or 0)==0; assert int(runtime.get('clone_typed_deallocations') or 0)==0; assert int(runtime.get('clone_fallback_allocations') or 0)==1; assert int(runtime.get('clone_fallback_deallocations_before_drop') or 0)==0; assert int(runtime.get('clone_raw_alloc_no_metadata') or 0)==1; assert int(runtime.get('clone_raw_alloc_no_metadata_bytes') or 0)==256; assert int(runtime.get('clone_raw_realloc_no_metadata') or 0)==0; assert int(runtime.get('clone_recorded_old_realloc_fallback') or 0)==0; assert int(runtime.get('drop_fallback_deallocations') or 0)==1; assert int(runtime.get('drop_raw_dealloc_no_metadata') or 0)==1
+    assert int(runtime.get('recovery_typed_allocations') or 0)==1; assert int(runtime.get('recovery_typed_deallocations') or 0)==1; assert int(runtime.get('recovery_typed_cache_hits') or 0)==1; assert int(runtime.get('recovery_typed_cache_inserts') or 0)==1
+    assert int(runtime.get('recovery_identity_mismatches') or 0)==0; assert int(runtime.get('side_cache_corrupt_slots') or 0)==0
+    return {'protected_buffer':protected,'fallback_buffer':fallback,'recovered_buffer':recovered,'fallback_avoided_protected_buffer':True,'typed_recovery_preserved':True,'compiler_type_id':compiler_type_id,'clone_raw_alloc_no_metadata':1,'drop_raw_dealloc_no_metadata':1}
 
-def validate(audit: Dict[str,Any], runtime: Dict[str,Any]) -> Dict[str,Any]: return {'audit':validate_audit(audit),'runtime':validate_runtime(runtime)}
+def validate(audit: Dict[str,Any], runtime: Dict[str,Any]) -> Dict[str,Any]:
+    audit_evidence=validate_audit(audit)
+    compiler_type_id=int(audit_evidence['supported_controls']['type_id'])
+    return {'audit':audit_evidence,'runtime':validate_runtime(runtime,compiler_type_id)}
 
 def parse_args() -> argparse.Namespace:
     p=argparse.ArgumentParser(description=__doc__); p.add_argument('--output-dir',type=Path); p.add_argument('--toolchain'); p.add_argument('--timeout',type=int,default=300); p.add_argument('--fixed-heap',action='store_true'); return p.parse_args()
@@ -124,6 +187,6 @@ def main() -> int:
     paths=sorted(rewrites.glob('*.json'))
     if len(paths)!=1: raise SystemExit(f"expected one target audit, found {len(paths)} in {rewrites}")
     audit=json.loads(paths[0].read_text(encoding='utf-8')); runtime=load_runtime_event(Path(run['stdout'])); validation=validate(audit,runtime); shutil.rmtree(target); end=source_binding_snapshot(toolchain,rustc); assert_source_binding_stable(start,end)
-    summary={'schema_version':1,'source':'mir_ambiguous_clone_fallback_probe_summary','validated':True,'fixed_heap':a.fixed_heap,'toolchain':toolchain,'rustc':start['rustc_verbose_version'],'sysroot':sysroot,'git_head':start['git_head'],'git_status':start['git_status'],'source_binding':{'start':start,'end':end,'drift_checked':True,'commit_bound':True},'features':features,'build':build,'run':run,'artifacts':{'pass_source':str(PASS_SOURCE),'pass_source_sha256':sha256(PASS_SOURCE),'pass_binary':str(pass_bin),'pass_binary_sha256':sha256(pass_bin),'probe_source':str(PROBE_SOURCE),'probe_source_sha256':sha256(PROBE_SOURCE),'rewrite_audit':str(paths[0]),'rewrite_audit_sha256':sha256(paths[0])},'validation':validation,'runtime':runtime,'boundaries':['Functional compiler-pass fail-closed regression only; no benchmark or paper-performance claim.','The Rust source uses ordinary Result::clone and no manual metadata allocator ABI calls.','The pass must audit the ambiguous Vec/String Clone result and skip semantic-scope lowering for that call.','Runtime fallback counters prove the cloned Vec buffer used conventional raw fallback while output contents remained correct.']}
+    summary={'schema_version':1,'source':'mir_ambiguous_clone_fallback_probe_summary','validated':True,'fixed_heap':a.fixed_heap,'toolchain':toolchain,'rustc':start['rustc_verbose_version'],'sysroot':sysroot,'git_head':start['git_head'],'git_status':start['git_status'],'source_binding':{'start':start,'end':end,'drift_checked':True,'commit_bound':True},'features':features,'build':build,'run':run,'artifacts':{'pass_source':str(PASS_SOURCE),'pass_source_sha256':sha256(PASS_SOURCE),'pass_binary':str(pass_bin),'pass_binary_sha256':sha256(pass_bin),'probe_source':str(PROBE_SOURCE),'probe_source_sha256':sha256(PROBE_SOURCE),'rewrite_audit':str(paths[0]),'rewrite_audit_sha256':sha256(paths[0])},'validation':validation,'runtime':runtime,'boundaries':['Functional compiler-pass partial-coverage non-interference regression only; no benchmark or paper-performance claim.','The Rust source uses ordinary Vec and Result::clone operations and no manual metadata allocator ABI calls.','The pass must apply supported Vec seed/recovery scope and Drop rewrites with one compiler identity while auditing the ambiguous Vec/String Clone result as exactly one fail-closed call.','Exact runtime counters and address relations prove the raw fallback could not consume the protected typed cache entry and the subsequent supported Vec recovered it.']}
     sp=out/'summary.json'; sp.write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n',encoding='utf-8'); print(json.dumps({'summary':str(sp),'validated':True},sort_keys=True)); return 0
 if __name__=='__main__': sys.exit(main())
