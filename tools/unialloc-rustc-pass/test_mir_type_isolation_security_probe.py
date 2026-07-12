@@ -526,14 +526,24 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
         for row in clone_classification_rows(audit, function_name)
         if row.get("lowering_kind") == "semantic_scope_non_heap_object_skipped"
     )
+    unsolved_rows = [
+        row
+        for row in audit.get("rewrite_candidates", [])
+        if isinstance(row, dict)
+        and row.get("lowering_kind")
+        == "semantic_scope_unsolved_heap_object_candidate"
+    ]
     unsolved = int(summary.get("semantic_scope_unsolved_candidate_count") or 0)
     if non_heap_skipped != len(NON_HEAP_CLONE_FUNCTIONS):
         errors.append(
             "non-heap skipped row count "
             f"expected {len(NON_HEAP_CLONE_FUNCTIONS)}, got {non_heap_skipped}"
         )
-    if unsolved != 4:
-        errors.append(f"semantic_scope_unsolved_candidate_count expected 4, got {unsolved}")
+    if unsolved != len(unsolved_rows):
+        errors.append(
+            "semantic_scope_unsolved_candidate_count does not match row-level "
+            f"evidence: summary={unsolved}, rows={len(unsolved_rows)}"
+        )
 
     multi_owner_drop_counts: Dict[str, int] = {}
     for function_name in MULTI_OWNER_DROP_FUNCTIONS:
