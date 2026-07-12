@@ -8,6 +8,8 @@
 #![allow(dead_code, stable_features)]
 
 use std::hint::black_box;
+use std::rc::Rc;
+use std::sync::Arc;
 
 struct NonHeapToken(u64);
 
@@ -34,6 +36,24 @@ impl Clone for NonHeapError {
 #[derive(Clone)]
 struct NestedVecOwner {
     values: Vec<u8>,
+}
+
+#[derive(Clone)]
+struct ArcVecOwner {
+    shared: Arc<NonHeapToken>,
+    values: Vec<u8>,
+}
+
+#[derive(Clone)]
+struct RcVecOwner {
+    shared: Rc<NonHeapToken>,
+    values: Vec<u8>,
+}
+
+#[derive(Clone)]
+struct Headers {
+    bytes: Vec<u8>,
+    name: String,
 }
 
 #[derive(Clone, Copy)]
@@ -90,6 +110,31 @@ fn clone_nested_vec_owner(value: &NestedVecOwner) -> NestedVecOwner {
 }
 
 #[inline(never)]
+fn clone_arc_vec_owner(value: &ArcVecOwner) -> ArcVecOwner {
+    <ArcVecOwner as Clone>::clone(value)
+}
+
+#[inline(never)]
+fn clone_rc_vec_owner(value: &RcVecOwner) -> RcVecOwner {
+    <RcVecOwner as Clone>::clone(value)
+}
+
+#[inline(never)]
+fn clone_standalone_arc(value: &Arc<NonHeapToken>) -> Arc<NonHeapToken> {
+    <Arc<NonHeapToken> as Clone>::clone(value)
+}
+
+#[inline(never)]
+fn clone_standalone_rc(value: &Rc<NonHeapToken>) -> Rc<NonHeapToken> {
+    <Rc<NonHeapToken> as Clone>::clone(value)
+}
+
+#[inline(never)]
+fn clone_multi_owner_headers(value: &Headers) -> Headers {
+    <Headers as Clone>::clone(value)
+}
+
+#[inline(never)]
 fn clone_raw_pointer_wrapper(value: &RawPointerWrapper) -> RawPointerWrapper {
     <RawPointerWrapper as Clone>::clone(value)
 }
@@ -132,6 +177,27 @@ fn main() {
 
     let nested = black_box(NestedVecOwner { values: Vec::new() });
     black_box(clone_nested_vec_owner(black_box(&nested)));
+
+    let arc_vec = black_box(ArcVecOwner {
+        shared: Arc::new(NonHeapToken(19)),
+        values: Vec::new(),
+    });
+    black_box(clone_arc_vec_owner(black_box(&arc_vec)));
+
+    let rc_vec = black_box(RcVecOwner {
+        shared: Rc::new(NonHeapToken(23)),
+        values: Vec::new(),
+    });
+    black_box(clone_rc_vec_owner(black_box(&rc_vec)));
+
+    black_box(clone_standalone_arc(black_box(&arc_vec.shared)));
+    black_box(clone_standalone_rc(black_box(&rc_vec.shared)));
+
+    let headers = black_box(Headers {
+        bytes: Vec::new(),
+        name: String::new(),
+    });
+    black_box(clone_multi_owner_headers(black_box(&headers)));
 
     let raw = black_box(RawPointerWrapper(std::ptr::null_mut()));
     black_box(clone_raw_pointer_wrapper(black_box(&raw)));

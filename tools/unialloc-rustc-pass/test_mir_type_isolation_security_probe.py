@@ -50,8 +50,19 @@ NON_HEAP_CLONE_FUNCTIONS = (
     "clone_nonheap_option",
     "clone_nonheap_result",
     "clone_nonowning_reference",
+    "clone_standalone_arc",
+    "clone_standalone_rc",
 )
 NESTED_HEAP_CLONE_FUNCTION = "clone_nested_vec_owner"
+REFCOUNTED_SINGLE_OWNER_CLONE_FUNCTIONS = (
+    "clone_arc_vec_owner",
+    "clone_rc_vec_owner",
+)
+REFCOUNTED_NO_OWNER_CLONE_FUNCTIONS = (
+    "clone_standalone_arc",
+    "clone_standalone_rc",
+)
+MULTI_OWNER_HEADERS_CLONE_FUNCTION = "clone_multi_owner_headers"
 RAW_POINTER_CLONE_FUNCTION = "clone_raw_pointer_wrapper"
 CONST_GENERIC_CLONE_FUNCTION = "clone_const_generic"
 MULTI_OWNER_DROP_FUNCTIONS = (
@@ -378,6 +389,45 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
                 f"{NESTED_HEAP_CLONE_FUNCTION} omitted its stored Vec owner type"
             )
 
+    refcounted_single_owner_counts: Dict[str, int] = {}
+    for function_name in REFCOUNTED_SINGLE_OWNER_CLONE_FUNCTIONS:
+        rows = clone_classification_rows(audit, function_name)
+        refcounted_single_owner_counts[function_name] = len(rows)
+        if len(rows) != 1:
+            errors.append(
+                f"{function_name} expected one call-classification row, got {len(rows)}"
+            )
+            continue
+        row = rows[0]
+        if row.get("lowering_kind") != "semantic_scope_enter_exit_rewrite":
+            errors.append(
+                f"{function_name} did not resolve the Vec field as its sole allocation owner"
+            )
+        if row.get("rewrite_status") != "semantic_scope_enter_exit_rewrite_planned":
+            errors.append(f"{function_name} did not remain a planned fixture rewrite")
+        semantic_object_type = str(row.get("semantic_object_type") or "")
+        if "std::vec::Vec<u8" not in semantic_object_type:
+            errors.append(f"{function_name} omitted its sole Vec allocation owner")
+        if "Arc<" in semantic_object_type or "Rc<" in semantic_object_type:
+            errors.append(
+                f"{function_name} incorrectly treated its reference-counted field as a new owner"
+            )
+
+    for function_name, marker in (
+        ("clone_standalone_arc", "Arc<"),
+        ("clone_standalone_rc", "Rc<"),
+    ):
+        rows = clone_classification_rows(audit, function_name)
+        if len(rows) != 1:
+            continue
+        row = rows[0]
+        if row.get("replacement_resolution_status") != "rustc_middle_no_supported_heap_owner_not_lowered":
+            errors.append(f"{function_name} omitted the exact no-owner resolution")
+        if row.get("metadata_pairing_contract") != "audit_only_no_supported_heap_owner":
+            errors.append(f"{function_name} omitted the audit-only no-owner contract")
+        if marker not in str(row.get("destination_type") or ""):
+            errors.append(f"{function_name} omitted its reference-counted destination type")
+
     raw_pointer_rows = clone_classification_rows(audit, RAW_POINTER_CLONE_FUNCTION)
     if len(raw_pointer_rows) != 1:
         errors.append(
@@ -444,6 +494,31 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
             if owner not in row_text:
                 errors.append(f"clone_ambiguous_result omitted owner {owner}")
 
+    headers_rows = clone_classification_rows(
+        audit, MULTI_OWNER_HEADERS_CLONE_FUNCTION
+    )
+    if len(headers_rows) != 1:
+        errors.append(
+            f"{MULTI_OWNER_HEADERS_CLONE_FUNCTION} expected one call-classification row, "
+            f"got {len(headers_rows)}"
+        )
+    else:
+        row = headers_rows[0]
+        if row.get("lowering_kind") != "semantic_scope_unsolved_heap_object_candidate":
+            errors.append(
+                f"{MULTI_OWNER_HEADERS_CLONE_FUNCTION} was not kept fail-closed"
+            )
+        if row.get("rewrite_status") != "semantic_scope_rewrite_skipped_ambiguous_heap_object_type":
+            errors.append(
+                f"{MULTI_OWNER_HEADERS_CLONE_FUNCTION} omitted the ambiguous-owner status"
+            )
+        row_text = json.dumps(row, sort_keys=True)
+        for owner in ("std::vec::Vec<u8", "std::string::String"):
+            if owner not in row_text:
+                errors.append(
+                    f"{MULTI_OWNER_HEADERS_CLONE_FUNCTION} omitted owner {owner}"
+                )
+
     summary = audit.get("summary") or {}
     non_heap_skipped = sum(
         1
@@ -457,8 +532,8 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
             "non-heap skipped row count "
             f"expected {len(NON_HEAP_CLONE_FUNCTIONS)}, got {non_heap_skipped}"
         )
-    if unsolved != 3:
-        errors.append(f"semantic_scope_unsolved_candidate_count expected 3, got {unsolved}")
+    if unsolved != 4:
+        errors.append(f"semantic_scope_unsolved_candidate_count expected 4, got {unsolved}")
 
     multi_owner_drop_counts: Dict[str, int] = {}
     for function_name in MULTI_OWNER_DROP_FUNCTIONS:
@@ -494,13 +569,77 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
     return {
         "single_heap_scope_rows": len(single_heap_rows),
         "nested_heap_scope_rows": len(nested_heap_rows),
+        "refcounted_single_owner_rows_by_function": refcounted_single_owner_counts,
+        "refcounted_no_owner_rows_by_function": {
+            function_name: len(clone_classification_rows(audit, function_name))
+            for function_name in REFCOUNTED_NO_OWNER_CLONE_FUNCTIONS
+        },
         "non_heap_rows_by_function": non_heap_counts,
         "non_heap_skipped_count": non_heap_skipped,
         "ambiguous_unsolved_count": len(ambiguous_rows),
+        "headers_multi_owner_unsolved_count": len(headers_rows),
         "raw_pointer_unresolved_count": len(raw_pointer_rows),
         "const_generic_unresolved_count": len(const_generic_rows),
         "total_unsolved_count": unsolved,
         "multi_owner_drop_rows_by_function": multi_owner_drop_counts,
+    }
+
+
+def validate_actual_refcounted_clone_classification(
+    audit: Dict[str, Any],
+) -> Dict[str, Any]:
+    errors: List[str] = []
+    applied_counts: Dict[str, int] = {}
+    for function_name in REFCOUNTED_SINGLE_OWNER_CLONE_FUNCTIONS:
+        rows = clone_classification_rows(audit, function_name)
+        applied_counts[function_name] = len(rows)
+        if len(rows) != 1:
+            errors.append(
+                f"actual {function_name} expected one call-classification row, got {len(rows)}"
+            )
+            continue
+        row = rows[0]
+        if row.get("lowering_kind") != "semantic_scope_enter_exit_rewrite":
+            errors.append(f"actual {function_name} was not a semantic-scope rewrite")
+        if row.get("rewrite_status") != "actual_semantic_scope_enter_exit_rewrite_applied":
+            errors.append(f"actual {function_name} did not apply the MIR rewrite")
+        if not str(row.get("replacement_resolution_status") or "").startswith("resolved_unialloc_"):
+            errors.append(f"actual {function_name} did not resolve the UniAlloc scope ABI")
+        semantic_object_type = str(row.get("semantic_object_type") or "")
+        if "std::vec::Vec<u8" not in semantic_object_type:
+            errors.append(f"actual {function_name} omitted its sole Vec owner")
+        if "Arc<" in semantic_object_type or "Rc<" in semantic_object_type:
+            errors.append(
+                f"actual {function_name} forged a reference-counted allocation owner"
+            )
+
+    skipped_counts: Dict[str, int] = {}
+    for function_name in REFCOUNTED_NO_OWNER_CLONE_FUNCTIONS:
+        rows = clone_classification_rows(audit, function_name)
+        skipped_counts[function_name] = len(rows)
+        if len(rows) != 1:
+            errors.append(
+                f"actual {function_name} expected one call-classification row, got {len(rows)}"
+            )
+            continue
+        row = rows[0]
+        if row.get("lowering_kind") != "semantic_scope_non_heap_object_skipped":
+            errors.append(f"actual {function_name} was not an audit-only no-owner row")
+        if row.get("rewrite_status") != "semantic_scope_rewrite_skipped_non_heap_object_type":
+            errors.append(f"actual {function_name} did not skip semantic-scope lowering")
+        if row.get("replacement_resolution_status") != "rustc_middle_no_supported_heap_owner_not_lowered":
+            errors.append(f"actual {function_name} omitted the no-owner resolution")
+        if row.get("metadata_pairing_contract") != "audit_only_no_supported_heap_owner":
+            errors.append(f"actual {function_name} omitted the audit-only contract")
+
+    if errors:
+        raise AssertionError(
+            "actual reference-counted Clone classification failed:\n- "
+            + "\n- ".join(errors)
+        )
+    return {
+        "actual_single_owner_rows_by_function": applied_counts,
+        "actual_no_owner_rows_by_function": skipped_counts,
     }
 
 
@@ -734,6 +873,9 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     assert int(summary.get("semantic_scope_unsolved_candidate_count") or 0) == 0
     assert int(summary.get("semantic_scope_drop_unsolved_candidate_count") or 0) == 0
     assert int(summary.get("cross_thread_recovery_hint_count") or 0) > 0
+    refcounted_clone_classification = (
+        validate_actual_refcounted_clone_classification(audit)
+    )
 
     producer_rows = applied_type_rows(audit, "ProducerPayload")
     consumer_rows = applied_type_rows(audit, "ConsumerPayload")
@@ -810,6 +952,7 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         "consumer_runtime": consumer_runtime,
         "recovery_requirement": recovery_requirement,
         "generic_drop_recovery": generic_drop_recovery,
+        "refcounted_clone_classification": refcounted_clone_classification,
     }
 
 

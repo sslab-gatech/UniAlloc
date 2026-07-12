@@ -2,6 +2,8 @@
 
 use std::fmt::Write as _;
 use std::mem::{align_of, size_of};
+use std::rc::Rc;
+use std::sync::Arc;
 use std::thread;
 
 use unialloc::{
@@ -32,6 +34,21 @@ struct ProducerPayload([u64; 8]);
 
 #[repr(C)]
 struct ConsumerPayload([u64; 8]);
+
+#[derive(Clone)]
+struct RefCountedPayload(u64);
+
+#[derive(Clone)]
+struct ArcVecCloneOwner {
+    shared: Arc<RefCountedPayload>,
+    values: Vec<u8>,
+}
+
+#[derive(Clone)]
+struct RcVecCloneOwner {
+    shared: Rc<RefCountedPayload>,
+    values: Vec<u8>,
+}
 
 #[derive(Clone, Copy, Debug)]
 struct WorkerEvidence {
@@ -75,6 +92,50 @@ fn consumer_box(seed: u64) -> Box<ConsumerPayload> {
 #[inline(never)]
 fn generic_drop<T>(value: T) {
     drop(value);
+}
+
+#[inline(never)]
+fn clone_arc_vec_owner(value: &ArcVecCloneOwner) -> ArcVecCloneOwner {
+    <ArcVecCloneOwner as Clone>::clone(value)
+}
+
+#[inline(never)]
+fn clone_rc_vec_owner(value: &RcVecCloneOwner) -> RcVecCloneOwner {
+    <RcVecCloneOwner as Clone>::clone(value)
+}
+
+#[inline(never)]
+fn clone_standalone_arc(value: &Arc<RefCountedPayload>) -> Arc<RefCountedPayload> {
+    <Arc<RefCountedPayload> as Clone>::clone(value)
+}
+
+#[inline(never)]
+fn clone_standalone_rc(value: &Rc<RefCountedPayload>) -> Rc<RefCountedPayload> {
+    <Rc<RefCountedPayload> as Clone>::clone(value)
+}
+
+#[inline(never)]
+fn expose_refcounted_clone_mir() {
+    // `black_box(false)` keeps the real Clone call sites in optimized MIR while
+    // avoiding any runtime allocation/counter perturbation in this security
+    // probe.  The companion validator binds these functions to row-level actual
+    // rewrite audit evidence from this target crate.
+    if std::hint::black_box(false) {
+        let arc_owner = ArcVecCloneOwner {
+            shared: Arc::new(RefCountedPayload(17)),
+            values: Vec::new(),
+        };
+        let rc_owner = RcVecCloneOwner {
+            shared: Rc::new(RefCountedPayload(19)),
+            values: Vec::new(),
+        };
+        std::mem::forget(clone_arc_vec_owner(&arc_owner));
+        std::mem::forget(clone_rc_vec_owner(&rc_owner));
+        std::mem::forget(clone_standalone_arc(&arc_owner.shared));
+        std::mem::forget(clone_standalone_rc(&rc_owner.shared));
+        std::mem::forget(arc_owner);
+        std::mem::forget(rc_owner);
+    }
 }
 
 #[inline]
@@ -150,6 +211,8 @@ fn main() {
     assert_eq!(size_of::<ProducerPayload>(), size_of::<ConsumerPayload>());
     assert_eq!(align_of::<ProducerPayload>(), align_of::<ConsumerPayload>());
     assert_eq!(size_of::<ProducerPayload>(), 64);
+
+    expose_refcounted_clone_mir();
 
     // The executable contains no manual semantic metadata or allocation ABI
     // calls. Runtime typed activity and cache isolation therefore depend on the

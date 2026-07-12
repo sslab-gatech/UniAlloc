@@ -2019,6 +2019,21 @@ fn clone_known_no_supported_owner_adt(path: &str) -> bool {
         || path.ends_with("::core::time::Duration")
 }
 
+fn clone_reference_counted_field_is_nonallocating(path: &str) -> bool {
+    // This rule is deliberately DefId-path exact and applies only to the
+    // result-owner scan for `Clone::clone`.  Cloning Arc/Rc increments the
+    // existing allocation's reference count; it neither clones `T` nor creates
+    // a new heap allocation owner.  Arc/Rc remain supported heap objects in all
+    // allocation-constructor and Drop analyses outside this plain-Clone scan.
+    let normalized = strip_rustc_crate_disambiguators(path);
+    matches!(
+        normalized.as_str(),
+        // Current rustc reports the std re-export path for std-using crates;
+        // no suffix/substring match is accepted.
+        "alloc::sync::Arc" | "std::sync::Arc" | "alloc::rc::Rc" | "std::rc::Rc"
+    )
+}
+
 #[cfg(unialloc_rustc_current)]
 fn clone_custom_result_is_owner_complete<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
     !clone_result_has_unresolved_params(ty)
@@ -2086,6 +2101,11 @@ fn collect_plain_clone_heap_owners_inner<'tcx>(
         ty::Adt(adt, substs) => {
             let def_path = tcx.def_path_str(adt.did());
             let type_text = format!("{:?}", ty);
+            if clone_reference_counted_field_is_nonallocating(&def_path) {
+                // Do not inspect Arc<T>/Rc<T>'s generic argument: Clone copies
+                // the reference-counted handle and does not invoke T::clone.
+                return;
+            }
             if supported_heap_adt_def_path(&def_path) || direct_heap_type_marker_matches(&type_text)
             {
                 scan.owners.insert(type_text);

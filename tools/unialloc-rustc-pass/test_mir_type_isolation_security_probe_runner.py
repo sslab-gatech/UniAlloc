@@ -59,6 +59,55 @@ def ready_clone_classification_audit() -> dict:
             ),
         }
     )
+    for function_name, destination_type in (
+        ("clone_arc_vec_owner", "fixture::ArcVecOwner"),
+        ("clone_rc_vec_owner", "fixture::RcVecOwner"),
+    ):
+        rows.append(
+            {
+                "mir_function": f"fixture::{function_name}",
+                "lowering_kind": "semantic_scope_enter_exit_rewrite",
+                "rewrite_status": "semantic_scope_enter_exit_rewrite_planned",
+                "semantic_object_type": "std::vec::Vec<u8>",
+                "destination_type": destination_type,
+            }
+        )
+    for function_name, destination_type in (
+        (
+            "clone_standalone_arc",
+            "std::sync::Arc<fixture::NonHeapToken>",
+        ),
+        (
+            "clone_standalone_rc",
+            "std::rc::Rc<fixture::NonHeapToken>",
+        ),
+    ):
+        rows.append(
+            {
+                "mir_function": f"fixture::{function_name}",
+                "lowering_kind": "semantic_scope_non_heap_object_skipped",
+                "rewrite_status": "semantic_scope_rewrite_skipped_non_heap_object_type",
+                "replacement_resolution_status": (
+                    "rustc_middle_no_supported_heap_owner_not_lowered"
+                ),
+                "metadata_pairing_contract": "audit_only_no_supported_heap_owner",
+                "destination_type": destination_type,
+            }
+        )
+    rows.append(
+        {
+            "mir_function": "fixture::clone_multi_owner_headers",
+            "lowering_kind": "semantic_scope_unsolved_heap_object_candidate",
+            "rewrite_status": "semantic_scope_rewrite_skipped_ambiguous_heap_object_type",
+            "replacement_resolution_status": (
+                "rustc_middle_multiple_heap_object_types_not_lowered"
+            ),
+            "semantic_object_type": (
+                "multiple_heap_owners(std::string::String,std::vec::Vec<u8>)"
+            ),
+            "destination_type": "fixture::Headers",
+        }
+    )
     rows.append(
         {
             "mir_function": "fixture::clone_nested_vec_owner",
@@ -114,9 +163,52 @@ def ready_clone_classification_audit() -> dict:
             }
         )
     return {
-        "summary": {"semantic_scope_unsolved_candidate_count": 3},
+        "summary": {"semantic_scope_unsolved_candidate_count": 4},
         "rewrite_candidates": rows,
     }
+
+
+def ready_actual_refcounted_clone_audit() -> dict:
+    rows = []
+    for function_name, destination_type in (
+        ("clone_arc_vec_owner", "fixture::ArcVecCloneOwner"),
+        ("clone_rc_vec_owner", "fixture::RcVecCloneOwner"),
+    ):
+        rows.append(
+            {
+                "mir_function": f"fixture::{function_name}",
+                "lowering_kind": "semantic_scope_enter_exit_rewrite",
+                "rewrite_status": "actual_semantic_scope_enter_exit_rewrite_applied",
+                "replacement_resolution_status": (
+                    "resolved_unialloc_semantic_scope_push_local_pop"
+                ),
+                "semantic_object_type": "std::vec::Vec<u8>",
+                "destination_type": destination_type,
+            }
+        )
+    for function_name, destination_type in (
+        (
+            "clone_standalone_arc",
+            "std::sync::Arc<fixture::RefCountedPayload>",
+        ),
+        (
+            "clone_standalone_rc",
+            "std::rc::Rc<fixture::RefCountedPayload>",
+        ),
+    ):
+        rows.append(
+            {
+                "mir_function": f"fixture::{function_name}",
+                "lowering_kind": "semantic_scope_non_heap_object_skipped",
+                "rewrite_status": "semantic_scope_rewrite_skipped_non_heap_object_type",
+                "replacement_resolution_status": (
+                    "rustc_middle_no_supported_heap_owner_not_lowered"
+                ),
+                "metadata_pairing_contract": "audit_only_no_supported_heap_owner",
+                "destination_type": destination_type,
+            }
+        )
+    return {"rewrite_candidates": rows}
 
 
 def ready_generic_drop_audit() -> dict:
@@ -295,15 +387,70 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         )
         self.assertEqual(evidence["single_heap_scope_rows"], 1)
         self.assertEqual(evidence["nested_heap_scope_rows"], 1)
-        self.assertEqual(evidence["non_heap_skipped_count"], 4)
+        self.assertEqual(evidence["non_heap_skipped_count"], 6)
         self.assertEqual(evidence["ambiguous_unsolved_count"], 1)
+        self.assertEqual(evidence["headers_multi_owner_unsolved_count"], 1)
         self.assertEqual(evidence["raw_pointer_unresolved_count"], 1)
         self.assertEqual(evidence["const_generic_unresolved_count"], 1)
-        self.assertEqual(evidence["total_unsolved_count"], 3)
+        self.assertEqual(evidence["total_unsolved_count"], 4)
+        self.assertEqual(
+            evidence["refcounted_single_owner_rows_by_function"],
+            {"clone_arc_vec_owner": 1, "clone_rc_vec_owner": 1},
+        )
+        self.assertEqual(
+            evidence["refcounted_no_owner_rows_by_function"],
+            {"clone_standalone_arc": 1, "clone_standalone_rc": 1},
+        )
         self.assertEqual(
             evidence["multi_owner_drop_rows_by_function"],
             {"drop_multi_owner_struct": 1, "drop_multi_owner_enum": 1},
         )
+
+    def test_actual_refcounted_clone_classification_accepts_exact_partition(self) -> None:
+        evidence = runner.validate_actual_refcounted_clone_classification(
+            ready_actual_refcounted_clone_audit()
+        )
+        self.assertEqual(
+            evidence["actual_single_owner_rows_by_function"],
+            {"clone_arc_vec_owner": 1, "clone_rc_vec_owner": 1},
+        )
+        self.assertEqual(
+            evidence["actual_no_owner_rows_by_function"],
+            {"clone_standalone_arc": 1, "clone_standalone_rc": 1},
+        )
+
+    def test_actual_refcounted_clone_classification_rejects_forged_rows(self) -> None:
+        mutations = (
+            (
+                "clone_arc_vec_owner",
+                "rewrite_status",
+                "semantic_scope_enter_exit_rewrite_planned",
+                "did not apply",
+            ),
+            (
+                "clone_rc_vec_owner",
+                "semantic_object_type",
+                "std::rc::Rc<fixture::RefCountedPayload>",
+                "sole Vec owner",
+            ),
+            (
+                "clone_standalone_arc",
+                "lowering_kind",
+                "semantic_scope_enter_exit_rewrite",
+                "audit-only no-owner",
+            ),
+        )
+        for function_name, field, value, message in mutations:
+            with self.subTest(function_name=function_name, field=field):
+                audit = ready_actual_refcounted_clone_audit()
+                row = next(
+                    row
+                    for row in audit["rewrite_candidates"]
+                    if row["mir_function"].endswith(f"::{function_name}")
+                )
+                row[field] = value
+                with self.assertRaisesRegex(AssertionError, message):
+                    runner.validate_actual_refcounted_clone_classification(audit)
 
     def test_clone_candidate_classification_rejects_multi_owner_drop_as_applied(self) -> None:
         audit = ready_clone_classification_audit()
@@ -327,7 +474,7 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         )
         row["lowering_kind"] = "semantic_scope_unsolved_heap_object_candidate"
         row["rewrite_status"] = "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
-        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 4
+        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 5
         with self.assertRaisesRegex(AssertionError, "non-heap skip"):
             runner.validate_clone_candidate_classification(audit)
 
@@ -341,7 +488,7 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         row["lowering_kind"] = "semantic_scope_enter_exit_rewrite"
         row["rewrite_status"] = "semantic_scope_enter_exit_rewrite_planned"
         row["replacement_resolution_status"] = "not_requested_dry_run"
-        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 2
+        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 3
         with self.assertRaisesRegex(AssertionError, "fail-closed"):
             runner.validate_clone_candidate_classification(audit)
 
@@ -364,7 +511,7 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         )
         row["lowering_kind"] = "semantic_scope_non_heap_object_skipped"
         row["rewrite_status"] = "semantic_scope_rewrite_skipped_non_heap_object_type"
-        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 2
+        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 3
         with self.assertRaisesRegex(AssertionError, "fail-closed"):
             runner.validate_clone_candidate_classification(audit)
 
@@ -377,7 +524,7 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         )
         row["lowering_kind"] = "semantic_scope_non_heap_object_skipped"
         row["rewrite_status"] = "semantic_scope_rewrite_skipped_non_heap_object_type"
-        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 2
+        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 3
         with self.assertRaisesRegex(AssertionError, "fail-closed"):
             runner.validate_clone_candidate_classification(audit)
 
