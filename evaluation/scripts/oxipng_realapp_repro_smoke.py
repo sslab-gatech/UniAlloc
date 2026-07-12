@@ -715,13 +715,15 @@ def validate_injected_address_oracle(
     allocation_size = int(oracle.get("allocation_size") or 0)
     if size <= 0 or align <= 0 or capacity <= 0 or allocation_size != size * capacity:
         raise SmokeError("injected address oracle layout accounting is invalid")
-    mismatches = (
-        int(stats.get("recovery_identity_mismatches", -1)),
+    oracle_mismatches = (
         int(oracle.get("recovery_identity_mismatches_before", -1)),
         int(oracle.get("recovery_identity_mismatches_after", -1)),
     )
-    if mismatches != (0, 0, 0):
-        raise SmokeError(f"compiler/runtime recovery identity mismatches must be zero: {mismatches}")
+    if oracle_mismatches != (0, 0):
+        raise SmokeError(
+            "injected address oracle recovery identity mismatches must be zero: "
+            f"{oracle_mismatches}"
+        )
     if int(oracle.get("corrupt_slots_after", -1)) != 0:
         raise SmokeError("injected address oracle corrupt slots must be zero")
 
@@ -904,6 +906,13 @@ def validate_realapp_type_isolation(
         audits=audits,
         audit_totals=audit_totals,
     )
+    whole_run_recovery_identity_mismatches = int(
+        stats.get("recovery_identity_mismatches", -1)
+    )
+    if whole_run_recovery_identity_mismatches < 0:
+        raise SmokeError(
+            "whole-run recovery identity mismatch count must be explicitly reported"
+        )
 
     compiler_rows = [
         row
@@ -1090,6 +1099,13 @@ def validate_realapp_type_isolation(
         "runtime_type_row_count": reported_runtime_rows,
         "matched_lifecycle_row_count": len(matched_lifecycle_rows),
         "address_level_functional_oracle": address_oracle_evidence,
+        "whole_run_recovery_identity_mismatches": whole_run_recovery_identity_mismatches,
+        "whole_run_exact_compiler_identity": whole_run_recovery_identity_mismatches == 0,
+        "whole_run_compiler_identity_status": (
+            "exact"
+            if whole_run_recovery_identity_mismatches == 0
+            else "recovery_corrected_non_exact"
+        ),
         "natural_same_layout_pair_observed": pair_summary is not None,
         "same_layout_distinct_type_pair": pair_summary,
         "fail_closed_candidate_count": observed_fail_closed,
@@ -1098,8 +1114,10 @@ def validate_realapp_type_isolation(
             "to complete runtime type-class lifecycle rows, exercises row-level fail-closed "
             "unresolved candidates, and includes a separately labeled injected functional oracle "
             "for the required address-level same-layout sequence; a natural-app same-layout pair "
-            "is reported only when observed and is not a gate; this is not natural application coverage, "
-            "whole-program/address universality, or performance evidence"
+            "is reported only when observed and is not a gate; whole-run recovery identity "
+            "mismatches are preserved as recovery-corrected non-exact compiler attribution and "
+            "prevent an exact whole-application pairing claim; this is not natural application "
+            "coverage, whole-program/address universality, or performance evidence"
         ),
     }
 

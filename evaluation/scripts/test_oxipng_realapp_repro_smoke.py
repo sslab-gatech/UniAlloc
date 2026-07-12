@@ -614,16 +614,69 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                 fallback_note="reported fallback_allocations=0",
             )
 
-    def test_address_oracle_requires_zero_mismatch_and_corruption(self) -> None:
+    def test_global_recovery_corrections_preserve_count_when_oracle_is_exact(
+        self,
+    ) -> None:
         cmd = smoke.CommandResult(["cmd"], 0, "", "")
-        mismatch = valid_contract_stats()
-        mismatch["recovery_identity_mismatches"] = 1
-        mismatch["address_oracle"]["recovery_identity_mismatches_after"] = 1
-        with self.assertRaisesRegex(smoke.SmokeError, "identity mismatches must be zero"):
+        recovery_corrected = valid_contract_stats()
+        recovery_corrected["recovery_identity_mismatches"] = 7
+        evidence = smoke.assert_contract(
+            build=cmd,
+            run=cmd,
+            stats=recovery_corrected,
+            output_sha256="a",
+            expected_output_sha256="a",
+            audits=valid_contract_audits(),
+            audit_totals=valid_contract_totals(),
+            fallback_note="reported fallback_allocations=0",
+        )
+        self.assertEqual(evidence["whole_run_recovery_identity_mismatches"], 7)
+        self.assertFalse(evidence["whole_run_exact_compiler_identity"])
+        self.assertEqual(
+            evidence["whole_run_compiler_identity_status"],
+            "recovery_corrected_non_exact",
+        )
+        self.assertEqual(
+            evidence["address_level_functional_oracle"]["recovery_identity_mismatches"],
+            0,
+        )
+
+    def test_address_oracle_rejects_nonzero_mismatch_before_or_after(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        for field in (
+            "recovery_identity_mismatches_before",
+            "recovery_identity_mismatches_after",
+        ):
+            with self.subTest(field=field):
+                stats = valid_contract_stats()
+                stats["address_oracle"][field] = 1
+                with self.assertRaisesRegex(
+                    smoke.SmokeError,
+                    "address oracle recovery identity mismatches must be zero",
+                ):
+                    smoke.assert_contract(
+                        build=cmd,
+                        run=cmd,
+                        stats=stats,
+                        output_sha256="a",
+                        expected_output_sha256="a",
+                        audits=valid_contract_audits(),
+                        audit_totals=valid_contract_totals(),
+                        fallback_note="reported fallback_allocations=0",
+                    )
+
+    def test_address_oracle_rejects_corrupt_slots(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        stats = valid_contract_stats()
+        stats["address_oracle"]["corrupt_slots_after"] = 1
+
+        with self.assertRaisesRegex(
+            smoke.SmokeError, "address oracle corrupt slots must be zero"
+        ):
             smoke.assert_contract(
                 build=cmd,
                 run=cmd,
-                stats=mismatch,
+                stats=stats,
                 output_sha256="a",
                 expected_output_sha256="a",
                 audits=valid_contract_audits(),
@@ -631,6 +684,27 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                 fallback_note="reported fallback_allocations=0",
             )
 
+    def test_whole_run_rejects_corrupt_slots(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        stats = valid_contract_stats()
+        stats["type_isolation_corrupt_slots"] = 1
+
+        with self.assertRaisesRegex(
+            smoke.SmokeError, "type isolation corrupt slots must be zero"
+        ):
+            smoke.assert_contract(
+                build=cmd,
+                run=cmd,
+                stats=stats,
+                output_sha256="a",
+                expected_output_sha256="a",
+                audits=valid_contract_audits(),
+                audit_totals=valid_contract_totals(),
+                fallback_note="reported fallback_allocations=0",
+            )
+
+    def test_fail_closed_candidates_require_row_level_evidence(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
         missing_fail_closed = valid_contract_audits()
         missing_fail_closed[0]["fail_closed_rows"] = []
         with self.assertRaisesRegex(smoke.SmokeError, "row-level evidence"):
