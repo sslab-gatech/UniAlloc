@@ -128,16 +128,20 @@ fn string_into_bytes_rebinds_exact_identity_and_rejects_untrusted_records() {
     );
     assert_eq!(tagged_bytes.as_ptr(), tagged_ptr);
     drop(tagged_bytes);
-    let tagged_target = vec_with_metadata(tagged_vec_metadata);
-    assert_ne!(tagged_target.as_ptr(), tagged_ptr);
-    drop(tagged_target);
     let retained_tagged_source = string_with_metadata(tagged_string_metadata, 13);
-    assert_eq!(
+    assert_ne!(
         retained_tagged_source.as_ptr(),
         tagged_ptr,
-        "a tagged source must keep its original identity and policy"
+        "a tagged transfer must not return Vec-owned storage to the old String identity"
     );
     drop(retained_tagged_source);
+    let tagged_target = vec_with_metadata(tagged_vec_metadata);
+    assert_eq!(
+        tagged_target.as_ptr(),
+        tagged_ptr,
+        "the rebound tagged Vec identity should recover transferred storage"
+    );
+    drop(tagged_target);
 
     let missing = String::from("missing-record");
     let missing_ptr = missing.as_ptr();
@@ -157,13 +161,13 @@ fn string_into_bytes_rebinds_exact_identity_and_rejects_untrusted_records() {
         transfer_after
             .applied
             .saturating_sub(transfer_before.applied),
-        1
+        2
     );
     assert_eq!(
         transfer_after
             .rejected
             .saturating_sub(transfer_before.rejected),
-        3
+        2
     );
     let validation_after = semantic_metadata_validation_snapshot();
     assert_eq!(

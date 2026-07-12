@@ -2602,6 +2602,8 @@ static AUTO_ALLOCATION_RECORD_COUNT: AtomicUsize = AtomicUsize::new(0);
 static TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_RECOVERY_RECORD_INSERT_PHASE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_IDENTITY_REBIND_RECOVERY_UPDATE_FAIL: AtomicBool = AtomicBool::new(false);
 /// Bitset of global recovery shards with at least one live record.
 ///
 /// The count is still the source of truth for "does any recovery record exist?"
@@ -4672,30 +4674,187 @@ fn exact_auto_allocation_record_for_identity_rebind(
 
 /// Return whether a software memory-tag record exists for `ptr` in either the
 /// current-thread or process-visible table.
-///
-/// Ownership-identity rebinding currently rejects tagged allocations instead
-/// of trying to update the recovery record and tag under two independent locks.
-/// This check also catches an inconsistent live tag whose recovery metadata no
-/// longer advertises `FLAG_MEMORY_TAGGING`.
 unsafe fn memory_tag_record_exists_for_identity_rebind(ptr: *mut u8) -> bool {
-    if current_thread_memory_tag_records_active() && find_memory_tag_slot(ptr).is_some() {
+    let local = exact_local_memory_tag_record_for_identity_rebind(ptr);
+    let mut table = global_memory_tag_table_for_ptr(ptr).lock();
+    let global = exact_global_memory_tag_record_for_identity_rebind(&mut *table, ptr);
+    !matches!(local, MemoryTagIdentityRecordLookup::Missing)
+        || !matches!(global, MemoryTagIdentityRecordLookup::Missing)
+}
+
+enum MemoryTagIdentityRecordLookup {
+    Missing,
+    Unique(*mut TaggedAllocation),
+    Duplicate,
+}
+
+#[inline]
+fn include_memory_tag_identity_record(
+    unique: &mut *mut TaggedAllocation,
+    slot: *mut TaggedAllocation,
+) -> bool {
+    if unique.is_null() {
+        *unique = slot;
+        false
+    } else {
+        true
+    }
+}
+
+/// Exhaustively classify the current thread's tag storage for one pointer.
+///
+/// Identity transfer is cold and security-sensitive, so it scans the complete
+/// fixed tier and every currently allocated overflow page instead of trusting
+/// the hot hint, probe window, or live-record counter. It stops as soon as a
+/// second record proves ambiguity.
+unsafe fn exact_local_memory_tag_record_for_identity_rebind(
+    ptr: *mut u8,
+) -> MemoryTagIdentityRecordLookup {
+    let mut unique = core::ptr::null_mut();
+    let mut idx = 0;
+    while idx < MEMORY_TAG_FAST_SLOTS {
+        let slot = &mut MEMORY_TAGS[idx] as *mut TaggedAllocation;
+        if (*slot).ptr == ptr && include_memory_tag_identity_record(&mut unique, slot) {
+            return MemoryTagIdentityRecordLookup::Duplicate;
+        }
+        idx += 1;
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    {
+        let mut page = MEMORY_TAG_OVERFLOW;
+        while !page.is_null() {
+            let mut entry_idx = 0;
+            while entry_idx < MEMORY_TAG_PAGE_SLOTS {
+                let slot = &mut (*page).entries[entry_idx] as *mut TaggedAllocation;
+                if (*slot).ptr == ptr && include_memory_tag_identity_record(&mut unique, slot) {
+                    return MemoryTagIdentityRecordLookup::Duplicate;
+                }
+                entry_idx += 1;
+            }
+            page = (*page).next;
+        }
+    }
+
+    if unique.is_null() {
+        MemoryTagIdentityRecordLookup::Missing
+    } else {
+        MemoryTagIdentityRecordLookup::Unique(unique)
+    }
+}
+
+/// Classify the complete process-visible tag shard while its lock is held.
+fn exact_global_memory_tag_record_for_identity_rebind(
+    table: &mut GlobalMemoryTagTable,
+    ptr: *mut u8,
+) -> MemoryTagIdentityRecordLookup {
+    let mut unique = core::ptr::null_mut();
+    let mut idx = 0;
+    while idx < GLOBAL_MEMORY_TAG_SHARD_SLOTS {
+        let slot = &mut table.fast[idx] as *mut TaggedAllocation;
+        if unsafe { (*slot).ptr == ptr } && include_memory_tag_identity_record(&mut unique, slot) {
+            return MemoryTagIdentityRecordLookup::Duplicate;
+        }
+        idx += 1;
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    {
+        let mut page = table.overflow;
+        while !page.is_null() {
+            let mut entry_idx = 0;
+            while entry_idx < MEMORY_TAG_PAGE_SLOTS {
+                let slot = unsafe { &mut (*page).entries[entry_idx] as *mut TaggedAllocation };
+                if unsafe { (*slot).ptr == ptr }
+                    && include_memory_tag_identity_record(&mut unique, slot)
+                {
+                    return MemoryTagIdentityRecordLookup::Duplicate;
+                }
+                entry_idx += 1;
+            }
+            page = unsafe { (*page).next };
+        }
+    }
+
+    if unique.is_null() {
+        MemoryTagIdentityRecordLookup::Missing
+    } else {
+        MemoryTagIdentityRecordLookup::Unique(unique)
+    }
+}
+
+/// Replace one exact software memory-tag identity without removing its slot.
+///
+/// The ownership-transfer helper guarantees exclusive ownership of `ptr`, so a
+/// concurrent deallocation is already outside its contract.  Keeping the slot
+/// in place avoids a missing-record window.  The replacement is accepted only
+/// when exactly one correctly placed, authenticated tag record agrees with the
+/// recovery record that authorized the transition.
+unsafe fn try_rebind_memory_tag_identity(
+    ptr: *mut u8,
+    layout: Layout,
+    expected: AllocationMetadata,
+    replacement: AllocationMetadata,
+) -> bool {
+    let local = exact_local_memory_tag_record_for_identity_rebind(ptr);
+    let mut table = global_memory_tag_table_for_ptr(ptr).lock();
+    let global = exact_global_memory_tag_record_for_identity_rebind(&mut *table, ptr);
+    let slot = if memory_tag_requires_global_visibility(expected) {
+        match (local, global) {
+            (
+                MemoryTagIdentityRecordLookup::Missing,
+                MemoryTagIdentityRecordLookup::Unique(slot),
+            ) => slot,
+            _ => return false,
+        }
+    } else {
+        match (local, global) {
+            (
+                MemoryTagIdentityRecordLookup::Unique(slot),
+                MemoryTagIdentityRecordLookup::Missing,
+            ) => slot,
+            _ => return false,
+        }
+    };
+
+    if memory_tag_requires_global_visibility(expected) {
+        let record = *slot;
+        if record.metadata != expected
+            || memory_tag_record_layout(record).ok() != Some(layout)
+            || try_verify_memory_tag_record(record).is_err()
+        {
+            return false;
+        }
+        *slot = TaggedAllocation {
+            tag: derive_memory_tag(ptr, layout, replacement),
+            metadata: replacement,
+            ..record
+        };
         return true;
     }
-    if global_memory_tag_records_active() {
-        let mut table = global_memory_tag_table_for_ptr(ptr).lock();
-        return find_global_memory_tag_slot(&mut *table, ptr).is_some();
+    let record = *slot;
+    if record.metadata != expected
+        || memory_tag_record_layout(record).ok() != Some(layout)
+        || try_verify_memory_tag_record(record).is_err()
+    {
+        return false;
     }
-    false
+    *slot = TaggedAllocation {
+        tag: derive_memory_tag(ptr, layout, replacement),
+        metadata: replacement,
+        ..record
+    };
+    true
 }
 
 /// Change the type component of one live allocation's recovery identity.
 ///
 /// The caller must uniquely own `ptr` for the duration of this operation. The
 /// exact pointer/layout record remains the authority: missing, mismatched,
-/// duplicated, already-transitioned, or memory-tagged records are not changed.
-/// Updating an existing record in its original table recalculates its metadata
-/// authenticator without a remove/insert window, so a failed update leaves the
-/// old record intact.
+/// duplicated, or already-transitioned records are not changed. Tagged records
+/// additionally require one exact authenticated memory-tag record. The tag is
+/// updated in place first, then rolled back if the recovery-record update cannot
+/// commit, so callers never continue after a half-applied transition.
 unsafe fn try_rebind_auto_allocation_type_identity(
     ptr: *mut u8,
     layout: Layout,
@@ -4715,10 +4874,7 @@ unsafe fn try_rebind_auto_allocation_type_identity(
         Some(record) => record,
         None => return false,
     };
-    if recorded.type_id != expected_old_type_id
-        || recorded.requests(FLAG_MEMORY_TAGGING)
-        || memory_tag_record_exists_for_identity_rebind(ptr)
-    {
+    if recorded.type_id != expected_old_type_id {
         return false;
     }
 
@@ -4726,14 +4882,37 @@ unsafe fn try_rebind_auto_allocation_type_identity(
         type_id: new_type_id,
         ..recorded
     };
-    match storage {
-        AutoAllocationRecordStorage::Fast => {
-            record_fast_auto_allocation_metadata_eligible(ptr, layout, rebound)
+    let tagged = recorded.requests(FLAG_MEMORY_TAGGING);
+    if tagged {
+        if !try_rebind_memory_tag_identity(ptr, layout, recorded, rebound) {
+            return false;
         }
-        AutoAllocationRecordStorage::Global => {
-            record_global_auto_allocation_metadata_eligible(ptr, layout, rebound)
-        }
+    } else if memory_tag_record_exists_for_identity_rebind(ptr) {
+        return false;
     }
+
+    #[cfg(test)]
+    let force_recovery_update_failure =
+        TEST_IDENTITY_REBIND_RECOVERY_UPDATE_FAIL.swap(false, Ordering::AcqRel);
+    #[cfg(not(test))]
+    let force_recovery_update_failure = false;
+    let recovery_rebound = !force_recovery_update_failure
+        && match storage {
+            AutoAllocationRecordStorage::Fast => {
+                record_fast_auto_allocation_metadata_eligible(ptr, layout, rebound)
+            }
+            AutoAllocationRecordStorage::Global => {
+                record_global_auto_allocation_metadata_eligible(ptr, layout, rebound)
+            }
+        };
+    if recovery_rebound {
+        return true;
+    }
+
+    if tagged && !try_rebind_memory_tag_identity(ptr, layout, rebound, recorded) {
+        panic!("memory-tag identity rebind rollback failed");
+    }
+    false
 }
 
 /// Convert a boxed slice into a vector while transferring the allocator's live
@@ -4743,8 +4922,9 @@ unsafe fn try_rebind_auto_allocation_type_identity(
 /// This is a compiler-lowering helper, not a general source-level conversion
 /// API. The standard-library conversion preserves the allocation pointer,
 /// length, capacity, and allocator. UniAlloc changes only `type_id` in an exact
-/// recovery record; module, policy flags, lifetime/placement hints, and the
-/// allocation callsite remain bound to the allocation event. If the record is
+/// recovery record and, when enabled, its matching authenticated memory-tag
+/// record; module, policy flags, lifetime/placement hints, and the allocation
+/// callsite remain bound to the allocation event. If either record is
 /// unavailable or cannot be safely rebound, the conversion still succeeds but
 /// the old recovery identity remains authoritative.
 #[doc(hidden)]
@@ -4794,8 +4974,9 @@ pub fn __unialloc_semantic_box_slice_into_vec<T, A: Allocator>(
 /// This compiler-lowering helper follows `String::into_bytes`, whose standard
 /// representation-preserving conversion keeps the allocation pointer, length,
 /// and capacity.  UniAlloc changes only the type component of one exact,
-/// authenticated recovery record. Missing, mismatched, duplicate, zero-sized,
-/// or memory-tagged records fail closed and retain their original identity.
+/// authenticated recovery record and, when enabled, the matching authenticated
+/// memory-tag record. Missing, mismatched, duplicate, zero-sized, or incoherent
+/// records fail closed and retain their original identity.
 #[doc(hidden)]
 pub fn __unialloc_semantic_string_into_bytes(
     value: AllocString,
@@ -4940,9 +5121,10 @@ pub fn __unialloc_semantic_string_into_boxed_str(
 /// `Vec::into_iter` transfers the allocation without reallocating it.  After
 /// verifying that the iterator still exposes the original unconsumed pointer
 /// and length, UniAlloc changes only the type component of one exact,
-/// authenticated, non-tagged recovery record.  Wrong, zero, same, missing,
-/// duplicated, or memory-tagged identities leave the authoritative source
-/// record untouched; the standard conversion succeeds in every case.
+/// authenticated recovery record and its matching memory tag when present.
+/// Wrong, zero, same, missing, duplicated, or incoherent identities leave the
+/// authoritative source record untouched; the standard conversion succeeds in
+/// every case.
 #[doc(hidden)]
 pub fn __unialloc_semantic_vec_into_iter<T, A: Allocator>(
     vec: AllocVec<T, A>,
@@ -13321,7 +13503,7 @@ mod tests {
     }
 
     #[test]
-    fn box_slice_into_vec_rebind_rejects_memory_tagged_record_without_mutation() {
+    fn box_slice_into_vec_rebinds_memory_tagged_record_and_rolls_back_on_failure() {
         let _guard = test_guard();
         unsafe {
             clear_type_cache_for_test();
@@ -13337,24 +13519,130 @@ mod tests {
             .with_module(0xC0DE_0221)
             .with_callsite(0xA110_B521)
             .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING);
+        let new_metadata = AllocationMetadata {
+            type_id: 0x0EC0_D521,
+            ..old_metadata
+        };
         let boxed = boxed_u8_slice_with_metadata(LEN, old_metadata);
         let ptr = boxed.as_ptr() as *mut u8;
         assert!(unsafe { find_memory_tag_slot(ptr).is_some() });
 
-        let vec = __unialloc_semantic_box_slice_into_vec(boxed, old_metadata.type_id, 0x0EC0_D521);
+        let vec = __unialloc_semantic_box_slice_into_vec(
+            boxed,
+            old_metadata.type_id,
+            new_metadata.type_id,
+        );
         assert_eq!(vec.as_ptr() as *mut u8, ptr);
         assert_eq!(
             lookup_auto_allocation_metadata(ptr, layout),
-            Some(old_metadata),
-            "recovery metadata must remain coherent with the unchanged memory tag"
+            Some(new_metadata),
+            "the recovery record must commit the transferred type identity"
         );
-        assert!(unsafe { find_memory_tag_slot(ptr).is_some() });
+        unsafe {
+            let tag = *find_memory_tag_slot(ptr).expect("transferred local memory tag");
+            assert_eq!(tag.metadata, new_metadata);
+            verify_memory_tag_record(tag);
+        }
 
         drop(vec);
         assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
         assert!(unsafe { find_memory_tag_slot(ptr).is_none() });
         unsafe {
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, new_metadata);
+        }
+
+        let rollback_box = boxed_u8_slice_with_metadata(LEN, old_metadata);
+        let rollback_ptr = rollback_box.as_ptr() as *mut u8;
+        TEST_IDENTITY_REBIND_RECOVERY_UPDATE_FAIL.store(true, Ordering::Release);
+        let rollback_vec = __unialloc_semantic_box_slice_into_vec(
+            rollback_box,
+            old_metadata.type_id,
+            new_metadata.type_id,
+        );
+        assert_eq!(rollback_vec.as_ptr() as *mut u8, rollback_ptr);
+        assert_eq!(
+            lookup_auto_allocation_metadata(rollback_ptr, layout),
+            Some(old_metadata),
+            "a failed recovery-record commit must retain the source identity"
+        );
+        unsafe {
+            let tag = *find_memory_tag_slot(rollback_ptr).expect("rolled-back local memory tag");
+            assert_eq!(tag.metadata, old_metadata);
+            verify_memory_tag_record(tag);
+        }
+        drop(rollback_vec);
+        unsafe {
             drain_semantic_cache_for_test(&RustAllocator::new(), layout, old_metadata);
+        }
+        assert_eq!(
+            semantic_metadata_validation_snapshot().recovery_identity_mismatches,
+            0
+        );
+        semantic_stats_recording_disable();
+    }
+
+    #[test]
+    fn box_slice_into_vec_rebinds_global_memory_tagged_identity() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const LEN: usize = 256;
+        let layout = Layout::array::<u8>(LEN).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xB05E_D522)
+            .with_module(0xC0DE_0222)
+            .with_callsite(0xA110_B522)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let new_metadata = AllocationMetadata {
+            type_id: 0x0EC0_D522,
+            ..old_metadata
+        };
+        let boxed = boxed_u8_slice_with_metadata(LEN, old_metadata);
+        let ptr = boxed.as_ptr() as *mut u8;
+        assert!(unsafe { find_memory_tag_slot(ptr).is_none() });
+        {
+            let mut table = global_memory_tag_table_for_ptr(ptr).lock();
+            let tag = unsafe {
+                *find_global_memory_tag_slot(&mut *table, ptr).expect("source global memory tag")
+            };
+            assert_eq!(tag.metadata, old_metadata);
+            unsafe { verify_memory_tag_record(tag) };
+        }
+
+        let vec = __unialloc_semantic_box_slice_into_vec(
+            boxed,
+            old_metadata.type_id,
+            new_metadata.type_id,
+        );
+        assert_eq!(vec.as_ptr() as *mut u8, ptr);
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(new_metadata)
+        );
+        {
+            let mut table = global_memory_tag_table_for_ptr(ptr).lock();
+            let tag = unsafe {
+                *find_global_memory_tag_slot(&mut *table, ptr)
+                    .expect("transferred global memory tag")
+            };
+            assert_eq!(tag.metadata, new_metadata);
+            unsafe { verify_memory_tag_record(tag) };
+        }
+
+        drop(vec);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        {
+            let mut table = global_memory_tag_table_for_ptr(ptr).lock();
+            assert!(find_global_memory_tag_slot(&mut *table, ptr).is_none());
+        }
+        unsafe {
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, new_metadata);
         }
         assert_eq!(
             semantic_metadata_validation_snapshot().recovery_identity_mismatches,
@@ -13498,11 +13786,29 @@ mod tests {
             __unialloc_semantic_vec_into_iter(tagged, tagged_source.type_id, tagged_target.type_id);
         assert_eq!(
             lookup_auto_allocation_metadata(tagged_ptr, layout),
-            Some(tagged_source)
+            Some(tagged_target)
         );
-        assert!(unsafe { find_memory_tag_slot(tagged_ptr).is_some() });
+        unsafe {
+            let tag = *find_memory_tag_slot(tagged_ptr).expect("transferred IntoIter memory tag");
+            assert_eq!(tag.metadata, tagged_target);
+            verify_memory_tag_record(tag);
+        }
         drop(tagged_iter);
         assert!(unsafe { find_memory_tag_slot(tagged_ptr).is_none() });
+
+        let tagged_source_control = with_semantic_metadata(tagged_source, || {
+            Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new())
+        });
+        assert_ne!(tagged_source_control.as_ptr() as *mut u8, tagged_ptr);
+        drop(tagged_source_control);
+        let tagged_target_control = with_semantic_metadata(tagged_target, || {
+            Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new()).into_iter()
+        });
+        assert_eq!(
+            tagged_target_control.as_slice().as_ptr() as *mut u8,
+            tagged_ptr
+        );
+        drop(tagged_target_control);
 
         let missing = {
             let mut vec = Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new());
@@ -13551,8 +13857,8 @@ mod tests {
 
         let after = semantic_ownership_transfer_snapshot();
         assert_eq!(after.attempted.saturating_sub(before.attempted), 8);
-        assert_eq!(after.applied.saturating_sub(before.applied), 1);
-        assert_eq!(after.rejected.saturating_sub(before.rejected), 7);
+        assert_eq!(after.applied.saturating_sub(before.applied), 2);
+        assert_eq!(after.rejected.saturating_sub(before.rejected), 6);
         assert_eq!(
             semantic_metadata_validation_snapshot()
                 .recovery_identity_mismatches
@@ -13569,6 +13875,191 @@ mod tests {
             drain_semantic_cache_for_test(&RustAllocator::new(), layout, duplicate_source);
         }
         semantic_stats_recording_disable();
+    }
+
+    #[test]
+    fn memory_tagged_identity_rebind_rejects_local_global_and_cross_domain_duplicates() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_memory_tags_for_test();
+            clear_delayed_free_for_test();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+
+        const LEN: usize = 256;
+        let layout = Layout::array::<u8>(LEN).unwrap();
+        let local = AllocationMetadata::for_type(0xB05E_D531)
+            .with_module(0xC0DE_0231)
+            .with_callsite(0xA110_B531)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING);
+        let local_target = AllocationMetadata {
+            type_id: 0x0EC0_D531,
+            ..local
+        };
+
+        let local_box = boxed_u8_slice_with_metadata(LEN, local);
+        let local_ptr = local_box.as_ptr() as *mut u8;
+        let (local_original, local_record) = unsafe {
+            match exact_local_memory_tag_record_for_identity_rebind(local_ptr) {
+                MemoryTagIdentityRecordLookup::Unique(slot) => (slot, *slot),
+                _ => panic!("expected one local tag before duplicate injection"),
+            }
+        };
+        let local_duplicate = unsafe {
+            let mut duplicate = core::ptr::null_mut();
+            let mut idx = 0;
+            while idx < MEMORY_TAG_FAST_SLOTS {
+                if MEMORY_TAGS[idx].is_empty() {
+                    duplicate = &mut MEMORY_TAGS[idx] as *mut TaggedAllocation;
+                    break;
+                }
+                idx += 1;
+            }
+            assert!(!duplicate.is_null());
+            *duplicate = local_record;
+            duplicate
+        };
+        assert!(matches!(
+            unsafe { exact_local_memory_tag_record_for_identity_rebind(local_ptr) },
+            MemoryTagIdentityRecordLookup::Duplicate
+        ));
+        assert!(!unsafe {
+            try_rebind_auto_allocation_type_identity(
+                local_ptr,
+                layout,
+                local.type_id,
+                local_target.type_id,
+            )
+        });
+        assert_eq!(
+            lookup_auto_allocation_metadata(local_ptr, layout),
+            Some(local)
+        );
+        unsafe {
+            for slot in [local_original, local_duplicate] {
+                let record = *slot;
+                assert_eq!(record.metadata, local);
+                verify_memory_tag_record(record);
+            }
+        }
+        unsafe { *local_duplicate = TaggedAllocation::empty() };
+        drop(local_box);
+        unsafe { drain_semantic_cache_for_test(&RustAllocator::new(), layout, local) };
+
+        let global = AllocationMetadata::for_type(0xB05E_D532)
+            .with_module(0xC0DE_0232)
+            .with_callsite(0xA110_B532)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let global_target = AllocationMetadata {
+            type_id: 0x0EC0_D532,
+            ..global
+        };
+        let global_box = boxed_u8_slice_with_metadata(LEN, global);
+        let global_ptr = global_box.as_ptr() as *mut u8;
+        let (global_original, global_duplicate) = {
+            let mut table = global_memory_tag_table_for_ptr(global_ptr).lock();
+            let (original, record) =
+                match exact_global_memory_tag_record_for_identity_rebind(&mut *table, global_ptr) {
+                    MemoryTagIdentityRecordLookup::Unique(slot) => unsafe { (slot, *slot) },
+                    _ => panic!("expected one global tag before duplicate injection"),
+                };
+            let duplicate = table
+                .fast
+                .iter_mut()
+                .find(|entry| entry.is_empty())
+                .expect("empty global fast tag slot")
+                as *mut TaggedAllocation;
+            unsafe { *duplicate = record };
+            (original, duplicate)
+        };
+        {
+            let mut table = global_memory_tag_table_for_ptr(global_ptr).lock();
+            assert!(matches!(
+                exact_global_memory_tag_record_for_identity_rebind(&mut *table, global_ptr),
+                MemoryTagIdentityRecordLookup::Duplicate
+            ));
+        }
+        assert!(!unsafe {
+            try_rebind_auto_allocation_type_identity(
+                global_ptr,
+                layout,
+                global.type_id,
+                global_target.type_id,
+            )
+        });
+        assert_eq!(
+            lookup_auto_allocation_metadata(global_ptr, layout),
+            Some(global)
+        );
+        {
+            let _table = global_memory_tag_table_for_ptr(global_ptr).lock();
+            unsafe {
+                for slot in [global_original, global_duplicate] {
+                    let record = *slot;
+                    assert_eq!(record.metadata, global);
+                    verify_memory_tag_record(record);
+                }
+                *global_duplicate = TaggedAllocation::empty();
+            }
+        }
+        drop(global_box);
+        unsafe { drain_semantic_cache_for_test(&RustAllocator::new(), layout, global) };
+
+        let cross = AllocationMetadata::for_type(0xB05E_D533)
+            .with_module(0xC0DE_0233)
+            .with_callsite(0xA110_B533)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING);
+        let cross_target = AllocationMetadata {
+            type_id: 0x0EC0_D533,
+            ..cross
+        };
+        let cross_box = boxed_u8_slice_with_metadata(LEN, cross);
+        let cross_ptr = cross_box.as_ptr() as *mut u8;
+        let (cross_original, cross_record) = unsafe {
+            match exact_local_memory_tag_record_for_identity_rebind(cross_ptr) {
+                MemoryTagIdentityRecordLookup::Unique(slot) => (slot, *slot),
+                _ => panic!("expected one local tag before cross-domain injection"),
+            }
+        };
+        let cross_duplicate = {
+            let mut table = global_memory_tag_table_for_ptr(cross_ptr).lock();
+            let duplicate = table
+                .fast
+                .iter_mut()
+                .find(|entry| entry.is_empty())
+                .expect("empty global fast tag slot")
+                as *mut TaggedAllocation;
+            unsafe { *duplicate = cross_record };
+            duplicate
+        };
+        assert!(!unsafe {
+            try_rebind_auto_allocation_type_identity(
+                cross_ptr,
+                layout,
+                cross.type_id,
+                cross_target.type_id,
+            )
+        });
+        assert_eq!(
+            lookup_auto_allocation_metadata(cross_ptr, layout),
+            Some(cross)
+        );
+        {
+            let _table = global_memory_tag_table_for_ptr(cross_ptr).lock();
+            unsafe {
+                for slot in [cross_original, cross_duplicate] {
+                    let record = *slot;
+                    assert_eq!(record.metadata, cross);
+                    verify_memory_tag_record(record);
+                }
+                *cross_duplicate = TaggedAllocation::empty();
+            }
+        }
+        drop(cross_box);
+        unsafe { drain_semantic_cache_for_test(&RustAllocator::new(), layout, cross) };
     }
 
     #[cfg(not(feature = "fixed_heap"))]
