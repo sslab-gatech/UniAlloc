@@ -610,8 +610,9 @@ scope can be applied; multi-owner or unresolved cases fail closed.  Actual-rustc
 an aggregate `(Vec<u8>, String)` factory and `Vec<String>::resize` to emit one
 ambiguous fail-closed row and no applied scope while preserving conventional
 runtime results.  The positive direct-local regression, pinned standalone pass
-compile, and all 15 embedded pass tests also pass.  Oxipng was not rerun, so the
-`af342f7` application evidence remains historical to its exact source.
+compile, and all 15 embedded pass tests also pass.  That `04b8108` hardening
+round did not rerun Oxipng, so the `af342f7` application evidence remained
+historical to its exact source.
 
 Commit `2ff8770` closes the corresponding runtime layout/auth boundary.
 Recovery lookup now distinguishes missing, mismatched, and exact records across
@@ -625,6 +626,55 @@ paths retain their prior contracts.  Focused dealloc/realloc regressions,
 adjacent recovery tests, independent review, and the repository pre-commit
 suite (652 UniAlloc tests plus 430 std-bench tests) pass.  These are
 current-source safety results, not performance or exploit-success evidence.
+
+### Current hidden/consumed-owner hardening and Oxipng replay
+
+Commit `427583bc69b7fcba09f1c7d6b464b8bd7a9c68b7` closes two additional P0
+compiler-attribution holes.  The current-rustc path now traverses concrete
+custom-ADT fields instead of treating their generic arguments as the complete
+owner graph, so a hidden `String` beside a visible `Vec` cannot be mislabeled as
+the `Vec` identity.  For factory and receiver calls, the selected destination
+or receiver remains the proposed attribution owner, but supported owners in
+consumed by-value arguments are merged as a safety check.  A conflicting or
+unresolved owner graph is audit-only and fail-closed; duplicate same owners are
+deduplicated and remain eligible for lowering.
+
+Minimized actual-`RUSTC_WRAPPER` programs provide fail-first evidence.  Before
+the fix, the hidden custom ADT and the conflicting by-value factory/receiver
+cases each produced a recovery-identity mismatch delta of `1`.  After the fix,
+those calls receive no semantic scope, preserve conventional program results,
+and report mismatch `0`; same-owner factory and receiver controls remain
+actually rewritten and also report mismatch `0`.  The pinned standalone pass
+tests pass `15/15`, and the same pre-commit run passes 652 UniAlloc and 430
+std-bench tests.  These are bounded actual-rustc regressions, not a claim about
+all custom ADTs or all ownership transfer.
+
+The corresponding current-source real-application check builds and runs an
+instrumented Oxipng v4.0.3 copy once with pinned
+`nightly-2022-07-01`.  Both source-binding snapshots record
+`scoped_status=""`, scoped fingerprint
+`5f36c0a7f1bad4284071cd3a8f6d50bb7a894282e5f76726e6f2b095d5bc49e8`, and
+pass-source SHA-256
+`aedef38625f6096e3f5875b35f3d89f839709ac3277d7c79e4df6756da8a1373`.
+The offline build and functional invocation both return zero; the output hash
+matches `565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`.
+The target-crate audit counts 6 direct rewrites, 383 applied semantic scopes,
+320 applied Drop scopes, and 581 fail-closed candidates (462 semantic and 119
+Drop, including 117 multi-owner Drop rows).  The runtime contains 64 type rows,
+zero corrupt slots, and no dropped type events.
+
+The separately labeled bounded address oracle passes: wrong-type storage is
+not reused, the same type recovers its address, the oracle mismatch count is
+zero, and corruption remains zero.  The whole workload nevertheless records 13
+recovery-identity corrections and is therefore
+`recovery_corrected_non_exact`, not exact whole-application compiler pairing.
+Those 13 current-run corrections cannot be mapped to or presented as repairs
+of the historical `af342f7` run's 67 corrections; the old events cannot be
+attributed or rebound across source revisions.  The artifact is
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-current-427583b-20260712a/oxipng-realapp-repro-summary.json`.
+It is a one-shot instrumented functional/diagnostic check, not an unmodified
+application, timing benchmark, performance claim, whole-program coverage
+result, or publication-grade percentage.
 
 For historical comparison, a source-bound Oxipng v4.0.3 smoke at validator
 commit `e466831` validated the

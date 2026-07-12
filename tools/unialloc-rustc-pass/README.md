@@ -535,5 +535,42 @@ closed.
 the real wrapper/pass over both an aggregate `(Vec<u8>, String)` factory and
 `Vec<String>::resize`; each must produce one ambiguous audit-only row and no
 applied/planned semantic scope while the application result remains correct.
-The Oxipng application was not rerun, so its `af342f7` rows are not current-HEAD
-coverage.
+That `04b8108` hardening round did not rerun Oxipng, so its `af342f7` rows were
+not rebound to that source.
+
+Commit `427583bc69b7fcba09f1c7d6b464b8bd7a9c68b7` extends that safety gate to
+hidden owners in current-rustc custom-ADT fields and to heap owners consumed by
+value.  The selected receiver or destination remains the attribution source;
+by-value arguments are merged only as a conflict check.  A distinct owner or an
+unresolved graph fails closed, while a duplicate same owner remains eligible
+and is still actually rewritten.  Minimized actual-`RUSTC_WRAPPER` regressions
+reproduced one recovery-identity mismatch before the fix for the hidden-ADT
+case and for the conflicting consumed factory/receiver cases; the fixed paths
+emit no semantic scope and report mismatch `0`.  Same-owner factory and
+receiver positive controls remain applied with mismatch `0`.  The pinned pass
+tests pass `15/15`, and the repository pre-commit suites pass 652 UniAlloc plus
+430 std-bench tests.
+
+A new one-shot instrumented Oxipng v4.0.3 build/run is bound directly to that
+commit and `nightly-2022-07-01`.  Source binding is clean
+(`scoped_status=""`), with scoped fingerprint
+`5f36c0a7f1bad4284071cd3a8f6d50bb7a894282e5f76726e6f2b095d5bc49e8` and
+pass-source SHA-256
+`aedef38625f6096e3f5875b35f3d89f839709ac3277d7c79e4df6756da8a1373`.
+The offline build and single functional run return zero and reproduce output
+SHA-256 `565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`.
+Its target-crate MIR audit reports 6 direct rewrites, 383 applied semantic
+scopes, 320 applied Drop scopes, and 581 explicitly fail-closed candidates; the
+runtime reports 64 type rows and zero corrupt slots.  The bounded injected
+address oracle passes with wrong-type non-reuse, same-type reuse, zero oracle
+recovery mismatch, and zero corruption.
+
+The same current run records 13 whole-run recovery corrections, so its
+whole-application status is still `recovery_corrected_non_exact`, not exact
+compiler identity pairing.  The 13 are not evidence that any particular subset
+of the older `af342f7` run's 67 corrections was repaired: those historical
+events cannot be attributed to `427583b` or rebound to its source.  This is one
+pinned, instrumented functional run, not an unmodified application, benchmark,
+performance result, or publication-grade coverage percentage.  The durable
+summary is
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-current-427583b-20260712a/oxipng-realapp-repro-summary.json`.
