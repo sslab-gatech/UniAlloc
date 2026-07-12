@@ -2400,6 +2400,9 @@ static mut SEMANTIC_SCOPE_STACK_BASE_HAS_PREVIOUS: bool = false;
 #[thread_local]
 static mut AUTO_ALLOCATION_RECOVERY_RECORDING_DEPTH: usize = 0;
 
+#[thread_local]
+static mut AUTO_METADATA_SELECTION_SUPPRESSION_DEPTH: usize = 0;
+
 static SEMANTIC_TYPE_STATS: [Mutex<SemanticTypeStatsShard>; SEMANTIC_TYPE_STATS_SHARD_COUNT] = [
     Mutex::new(SemanticTypeStatsShard::empty()),
     Mutex::new(SemanticTypeStatsShard::empty()),
@@ -2663,6 +2666,17 @@ impl Drop for AutoAllocationRecoverySuppressionGuard {
     }
 }
 
+struct AutoMetadataSelectionSuppressionGuard;
+
+impl Drop for AutoMetadataSelectionSuppressionGuard {
+    fn drop(&mut self) {
+        unsafe {
+            AUTO_METADATA_SELECTION_SUPPRESSION_DEPTH =
+                AUTO_METADATA_SELECTION_SUPPRESSION_DEPTH.saturating_sub(1);
+        }
+    }
+}
+
 /// Run `f` while semantic allocations create pointer-to-metadata recovery
 /// records for later ordinary `GlobalAlloc` dealloc/realloc calls.
 ///
@@ -2691,6 +2705,26 @@ pub(crate) fn without_auto_allocation_recovery_recording<R>(f: impl FnOnce() -> 
     }
     let _guard = AutoAllocationRecoverySuppressionGuard { previous_depth };
     f()
+}
+
+/// Run `f` without consuming or synthesizing process-wide auto metadata.
+///
+/// Compiler ownership-transfer helpers use this while they either preserve an
+/// authenticated source record or deliberately fall back to raw allocation.
+/// Otherwise a rejected transfer could consume an unrelated compiler-stream
+/// entry or attach layout-derived metadata to the replacement allocation.
+fn without_auto_metadata_selection<R>(f: impl FnOnce() -> R) -> R {
+    unsafe {
+        AUTO_METADATA_SELECTION_SUPPRESSION_DEPTH =
+            AUTO_METADATA_SELECTION_SUPPRESSION_DEPTH.saturating_add(1);
+    }
+    let _guard = AutoMetadataSelectionSuppressionGuard;
+    f()
+}
+
+#[inline]
+fn auto_metadata_selection_suppressed() -> bool {
+    unsafe { AUTO_METADATA_SELECTION_SUPPRESSION_DEPTH != 0 }
 }
 
 #[inline]
@@ -3229,6 +3263,9 @@ fn next_auto_compiler_type_id_index(
 pub(crate) fn select_auto_allocation_metadata(
     layout: Layout,
 ) -> (bool, Option<AllocationMetadata>) {
+    if auto_metadata_selection_suppressed() {
+        return (false, None);
+    }
     let config = AUTO_METADATA_CONFIG.read();
     if config.flags == 0 {
         return (false, None);
@@ -4728,6 +4765,105 @@ pub fn __unialloc_semantic_box_slice_into_vec<T, A: Allocator>(
     }
 
     vec
+}
+
+/// Convert a vector into a boxed slice while transferring the allocator's live
+/// type-isolation identity to the exact boxed-slice type selected by the
+/// compiler.
+///
+/// `Vec::into_boxed_slice` may shrink the allocation before returning.  When
+/// an exact, authenticated source record exists, run that shrink under metadata
+/// derived from the source record with only `type_id` changed.  A moved shrink
+/// then releases the old Vec identity and publishes the new Box identity through
+/// the ordinary split-reallocation path.  If no shrink occurs, update the exact
+/// pointer/layout record in place after the standard conversion.  A trusted but
+/// non-rebindable source record remains active across any shrink so rejection
+/// cannot strip its policy. Missing, mismatched, duplicated, or zero-sized
+/// records run with outer scopes and auto metadata suppressed; they are never
+/// fabricated or partially rebound.  The standard conversion still succeeds
+/// and any non-applied transfer is reported as rejected.
+#[doc(hidden)]
+pub fn __unialloc_semantic_vec_into_boxed_slice<T, A: Allocator>(
+    vec: AllocVec<T, A>,
+    expected_old_type_id: u64,
+    new_type_id: u64,
+) -> AllocBox<[T], A> {
+    let old_ptr = vec.as_ptr() as *mut u8;
+    let old_layout = Layout::array::<T>(vec.capacity()).ok();
+    let new_len = vec.len();
+
+    let source_metadata = old_layout.and_then(|layout| {
+        if layout.size() == 0 {
+            return None;
+        }
+        exact_auto_allocation_record_for_identity_rebind(old_ptr, layout)
+            .map(|(_, recorded)| recorded)
+    });
+    let target_metadata = source_metadata.and_then(|recorded| {
+        if expected_old_type_id == UNKNOWN_SEMANTIC_ID
+            || new_type_id == UNKNOWN_SEMANTIC_ID
+            || expected_old_type_id == new_type_id
+        {
+            return None;
+        }
+        if recorded.type_id != expected_old_type_id
+            || recorded.requests(FLAG_MEMORY_TAGGING)
+            || unsafe { memory_tag_record_exists_for_identity_rebind(old_ptr) }
+        {
+            return None;
+        }
+        Some(AllocationMetadata {
+            type_id: new_type_id,
+            ..recorded
+        })
+    });
+
+    // Always mask any unrelated outer scope.  An authenticated source record
+    // is the conservative metadata for a rejected shrink; otherwise the
+    // replacement must remain raw rather than inheriting an outer scope or
+    // consuming process-wide auto metadata.
+    let conversion_metadata = target_metadata
+        .or(source_metadata)
+        .unwrap_or(AllocationMetadata::unknown());
+    let boxed = without_auto_metadata_selection(|| {
+        with_semantic_metadata(conversion_metadata, move || vec.into_boxed_slice())
+    });
+
+    let new_ptr = boxed.as_ptr() as *mut u8;
+    let new_layout = Layout::array::<T>(new_len).ok();
+    let applied = match (old_layout, new_layout, target_metadata) {
+        (Some(old_layout), Some(new_layout), Some(_target_metadata))
+            if old_ptr == new_ptr
+                && old_layout.size() == new_layout.size()
+                && old_layout.align() == new_layout.align() =>
+        unsafe {
+            try_rebind_auto_allocation_type_identity(
+                new_ptr,
+                new_layout,
+                expected_old_type_id,
+                new_type_id,
+            )
+        },
+        (Some(old_layout), Some(new_layout), Some(target_metadata)) if old_ptr != new_ptr => {
+            let new_record = exact_auto_allocation_record_for_identity_rebind(new_ptr, new_layout)
+                .map(|(_, metadata)| metadata);
+            let old_fast = lookup_fast_auto_allocation_record(old_ptr, old_layout, false);
+            let old_global = lookup_global_auto_allocation_record(old_ptr, old_layout, false);
+            new_record == Some(target_metadata)
+                && matches!(old_fast, AutoAllocationRecordLookup::Missing)
+                && matches!(old_global, AutoAllocationRecordLookup::Missing)
+        }
+        _ => false,
+    };
+    if semantic_stats_recording_enabled() {
+        if applied {
+            SEMANTIC_OWNERSHIP_TRANSFER_APPLIED.fetch_add(1, Ordering::Relaxed);
+        } else {
+            SEMANTIC_OWNERSHIP_TRANSFER_REJECTED.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    boxed
 }
 
 /// Return metadata recorded for this exact allocation pointer without falling
@@ -8564,6 +8700,7 @@ pub(crate) unsafe fn drain_current_thread_semantic_state(alloc: &RustAllocator) 
     AUTO_COMPILER_TYPE_IDS_TLS_CURSOR = 0;
     AUTO_COMPILER_TYPE_IDS_TLS_GENERATION = 0;
     AUTO_ALLOCATION_RECOVERY_RECORDING_DEPTH = 0;
+    AUTO_METADATA_SELECTION_SUPPRESSION_DEPTH = 0;
     ACTIVE_METADATA = AllocationMetadata::unknown();
     SEMANTIC_SCOPE_STACK = [AllocationMetadata::unknown(); SEMANTIC_SCOPE_STACK_CAPACITY];
     SEMANTIC_SCOPE_STACK_DEPTH = 0;
@@ -12373,6 +12510,399 @@ mod tests {
             drain_semantic_cache_for_test(&RustAllocator::new(), layout, boxed_metadata);
             drain_semantic_cache_for_test(&RustAllocator::new(), layout, vec_metadata);
         }
+        semantic_stats_recording_disable();
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn vec_into_boxed_slice_transfers_exact_and_moved_shrink_identities() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const LEN: usize = 256;
+        const SPARE_CAPACITY: usize = 512;
+        let exact_layout = Layout::array::<u8>(LEN).unwrap();
+        let spare_layout = Layout::array::<u8>(SPARE_CAPACITY).unwrap();
+        let exact_old = AllocationMetadata::for_type(0x0EC0_D601)
+            .with_module(0xC0DE_0601)
+            .with_callsite(0xA110_D601)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let exact_new = AllocationMetadata {
+            type_id: 0xB05E_D601,
+            ..exact_old
+        };
+        let moved_old = AllocationMetadata::for_type(0x0EC0_D602)
+            .with_module(0xC0DE_0602)
+            .with_callsite(0xA110_D602)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let moved_new = AllocationMetadata {
+            type_id: 0xB05E_D602,
+            ..moved_old
+        };
+        let before = semantic_ownership_transfer_snapshot();
+
+        let exact_vec = with_semantic_metadata(exact_old, || {
+            let mut vec = Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new());
+            vec.extend((0..LEN).map(|value| value as u8));
+            vec
+        });
+        assert_eq!(exact_vec.capacity(), LEN);
+        let exact_ptr = exact_vec.as_ptr() as *mut u8;
+        let exact_box = __unialloc_semantic_vec_into_boxed_slice(
+            exact_vec,
+            exact_old.type_id,
+            exact_new.type_id,
+        );
+        assert_eq!(exact_box.as_ptr() as *mut u8, exact_ptr);
+        assert_eq!(exact_box.len(), LEN);
+        assert_eq!(
+            lookup_auto_allocation_metadata(exact_ptr, exact_layout),
+            Some(exact_new),
+            "capacity == len must rebind the exact live record in place"
+        );
+        drop(exact_box);
+
+        let wrong_exact = boxed_u8_slice_with_metadata(LEN, exact_old);
+        assert_ne!(
+            wrong_exact.as_ptr() as *mut u8,
+            exact_ptr,
+            "the old Vec identity must not reuse Box-owned storage"
+        );
+        drop(wrong_exact);
+        let same_exact = boxed_u8_slice_with_metadata(LEN, exact_new);
+        assert_eq!(
+            same_exact.as_ptr() as *mut u8,
+            exact_ptr,
+            "the target Box identity should reuse its own cached storage"
+        );
+        drop(same_exact);
+
+        let moved_vec = with_semantic_metadata(moved_old, || {
+            let mut vec = Vec::<u8, _>::with_capacity_in(SPARE_CAPACITY, RustAllocator::new());
+            vec.extend((0..LEN).map(|value| (value as u8).wrapping_mul(3)));
+            vec
+        });
+        assert_eq!(moved_vec.capacity(), SPARE_CAPACITY);
+        let moved_old_ptr = moved_vec.as_ptr() as *mut u8;
+        let expected_payload = moved_vec.clone();
+        let moved_box = __unialloc_semantic_vec_into_boxed_slice(
+            moved_vec,
+            moved_old.type_id,
+            moved_new.type_id,
+        );
+        let moved_new_ptr = moved_box.as_ptr() as *mut u8;
+        assert_ne!(
+            moved_new_ptr, moved_old_ptr,
+            "a type-changing shrink must use the split-metadata moved path"
+        );
+        assert_eq!(moved_box.as_ref(), expected_payload.as_slice());
+        assert_eq!(
+            lookup_auto_allocation_metadata(moved_old_ptr, spare_layout),
+            None
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(moved_new_ptr, exact_layout),
+            Some(moved_new)
+        );
+        drop(moved_box);
+
+        let wrong_moved = with_semantic_metadata(moved_old, || {
+            Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new())
+        });
+        assert_ne!(
+            wrong_moved.as_ptr() as *mut u8,
+            moved_new_ptr,
+            "same-layout storage must remain isolated from the old Vec identity"
+        );
+        drop(wrong_moved);
+        let same_moved = boxed_u8_slice_with_metadata(LEN, moved_new);
+        assert_eq!(
+            same_moved.as_ptr() as *mut u8,
+            moved_new_ptr,
+            "the moved target allocation must route through the Box identity"
+        );
+        drop(same_moved);
+        let recovered_old = with_semantic_metadata(moved_old, || {
+            Vec::<u8, _>::with_capacity_in(SPARE_CAPACITY, RustAllocator::new())
+        });
+        assert_eq!(
+            recovered_old.as_ptr() as *mut u8,
+            moved_old_ptr,
+            "released spare-capacity storage must stay with the old Vec identity"
+        );
+        drop(recovered_old);
+
+        let after = semantic_ownership_transfer_snapshot();
+        assert_eq!(after.attempted.saturating_sub(before.attempted), 2);
+        assert_eq!(after.applied.saturating_sub(before.applied), 2);
+        assert_eq!(after.rejected.saturating_sub(before.rejected), 0);
+        assert_eq!(
+            semantic_metadata_validation_snapshot().recovery_identity_mismatches,
+            0
+        );
+
+        unsafe {
+            drain_semantic_cache_for_test(&RustAllocator::new(), exact_layout, exact_old);
+            drain_semantic_cache_for_test(&RustAllocator::new(), exact_layout, exact_new);
+            drain_semantic_cache_for_test(&RustAllocator::new(), exact_layout, moved_old);
+            drain_semantic_cache_for_test(&RustAllocator::new(), exact_layout, moved_new);
+            drain_semantic_cache_for_test(&RustAllocator::new(), spare_layout, moved_old);
+        }
+        semantic_stats_recording_disable();
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn vec_into_boxed_slice_rejection_preserves_exact_source_policy() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const LEN: usize = 256;
+        const SPARE_CAPACITY: usize = 512;
+        let layout = Layout::array::<u8>(LEN).unwrap();
+        let spare_layout = Layout::array::<u8>(SPARE_CAPACITY).unwrap();
+        let plain = AllocationMetadata::for_type(0x0EC0_D611)
+            .with_module(0xC0DE_0611)
+            .with_callsite(0xA110_D611)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let tagged = AllocationMetadata::for_type(0x0EC0_D612)
+            .with_module(0xC0DE_0612)
+            .with_callsite(0xA110_D612)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING);
+        let plain_spare = AllocationMetadata::for_type(0x0EC0_D613)
+            .with_module(0xC0DE_0613)
+            .with_callsite(0xA110_D613)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let tagged_spare = AllocationMetadata::for_type(0x0EC0_D614)
+            .with_module(0xC0DE_0614)
+            .with_callsite(0xA110_D614)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING);
+        let before = semantic_ownership_transfer_snapshot();
+
+        let wrong_vec = with_semantic_metadata(plain, || {
+            let mut vec = Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new());
+            vec.extend((0..LEN).map(|value| value as u8));
+            vec
+        });
+        let wrong_ptr = wrong_vec.as_ptr() as *mut u8;
+        let wrong_box =
+            __unialloc_semantic_vec_into_boxed_slice(wrong_vec, plain.type_id ^ 1, 0xB05E_D611);
+        assert_eq!(wrong_box.as_ptr() as *mut u8, wrong_ptr);
+        assert_eq!(
+            lookup_auto_allocation_metadata(wrong_ptr, layout),
+            Some(plain),
+            "a wrong expected identity must leave the source record authoritative"
+        );
+        drop(wrong_box);
+
+        let tagged_vec = with_semantic_metadata(tagged, || {
+            let mut vec = Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new());
+            vec.extend((0..LEN).map(|value| value as u8));
+            vec
+        });
+        let tagged_ptr = tagged_vec.as_ptr() as *mut u8;
+        assert!(unsafe { find_memory_tag_slot(tagged_ptr).is_some() });
+        let tagged_box =
+            __unialloc_semantic_vec_into_boxed_slice(tagged_vec, tagged.type_id, 0xB05E_D612);
+        assert_eq!(tagged_box.as_ptr() as *mut u8, tagged_ptr);
+        assert_eq!(
+            lookup_auto_allocation_metadata(tagged_ptr, layout),
+            Some(tagged)
+        );
+        assert!(unsafe { find_memory_tag_slot(tagged_ptr).is_some() });
+        drop(tagged_box);
+        assert_eq!(lookup_auto_allocation_metadata(tagged_ptr, layout), None);
+        assert!(unsafe { find_memory_tag_slot(tagged_ptr).is_none() });
+
+        let wrong_spare_vec = with_semantic_metadata(plain_spare, || {
+            let mut vec = Vec::<u8, _>::with_capacity_in(SPARE_CAPACITY, RustAllocator::new());
+            vec.extend((0..LEN).map(|value| value as u8));
+            vec
+        });
+        let wrong_spare_old_ptr = wrong_spare_vec.as_ptr() as *mut u8;
+        let wrong_spare_box = __unialloc_semantic_vec_into_boxed_slice(
+            wrong_spare_vec,
+            plain_spare.type_id ^ 1,
+            0xB05E_D613,
+        );
+        let wrong_spare_new_ptr = wrong_spare_box.as_ptr() as *mut u8;
+        assert_ne!(wrong_spare_new_ptr, wrong_spare_old_ptr);
+        assert_eq!(
+            lookup_auto_allocation_metadata(wrong_spare_old_ptr, spare_layout),
+            None
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(wrong_spare_new_ptr, layout),
+            Some(plain_spare),
+            "a rejected moved shrink must preserve the authenticated source identity"
+        );
+        drop(wrong_spare_box);
+
+        let tagged_spare_vec = with_semantic_metadata(tagged_spare, || {
+            let mut vec = Vec::<u8, _>::with_capacity_in(SPARE_CAPACITY, RustAllocator::new());
+            vec.extend((0..LEN).map(|value| value as u8));
+            vec
+        });
+        let tagged_spare_old_ptr = tagged_spare_vec.as_ptr() as *mut u8;
+        assert!(unsafe { find_memory_tag_slot(tagged_spare_old_ptr).is_some() });
+        let tagged_spare_box = __unialloc_semantic_vec_into_boxed_slice(
+            tagged_spare_vec,
+            tagged_spare.type_id,
+            0xB05E_D614,
+        );
+        let tagged_spare_new_ptr = tagged_spare_box.as_ptr() as *mut u8;
+        assert_ne!(tagged_spare_new_ptr, tagged_spare_old_ptr);
+        assert_eq!(
+            lookup_auto_allocation_metadata(tagged_spare_old_ptr, spare_layout),
+            None
+        );
+        assert!(unsafe { find_memory_tag_slot(tagged_spare_old_ptr).is_none() });
+        assert_eq!(
+            lookup_auto_allocation_metadata(tagged_spare_new_ptr, layout),
+            Some(tagged_spare),
+            "a rejected tagged shrink must preserve the source type and policy"
+        );
+        assert!(unsafe { find_memory_tag_slot(tagged_spare_new_ptr).is_some() });
+        drop(tagged_spare_box);
+        assert_eq!(
+            lookup_auto_allocation_metadata(tagged_spare_new_ptr, layout),
+            None
+        );
+        assert!(unsafe { find_memory_tag_slot(tagged_spare_new_ptr).is_none() });
+
+        let after = semantic_ownership_transfer_snapshot();
+        assert_eq!(after.attempted.saturating_sub(before.attempted), 4);
+        assert_eq!(after.applied.saturating_sub(before.applied), 0);
+        assert_eq!(after.rejected.saturating_sub(before.rejected), 4);
+        assert_eq!(
+            semantic_metadata_validation_snapshot().recovery_identity_mismatches,
+            0
+        );
+        let fallback = semantic_fallback_attribution_snapshot();
+        assert_eq!(fallback.raw_realloc_no_metadata, 0);
+        assert_eq!(fallback.raw_realloc_moved_dealloc_no_metadata, 0);
+        assert_eq!(fallback.realloc_recorded_old_metadata_new_allocations, 0);
+
+        unsafe {
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, plain);
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, tagged);
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, plain_spare);
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, tagged_spare);
+            drain_semantic_cache_for_test(&RustAllocator::new(), spare_layout, plain_spare);
+            drain_semantic_cache_for_test(&RustAllocator::new(), spare_layout, tagged_spare);
+        }
+        semantic_stats_recording_disable();
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn vec_into_boxed_slice_missing_record_suppresses_outer_and_auto_attribution() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const LEN: usize = 256;
+        const SPARE_CAPACITY: usize = 512;
+        let old_layout = Layout::array::<u8>(SPARE_CAPACITY).unwrap();
+        let new_layout = Layout::array::<u8>(LEN).unwrap();
+        let mut vec = Vec::<u8, _>::with_capacity_in(SPARE_CAPACITY, RustAllocator::new());
+        vec.extend((0..LEN).map(|value| (value as u8).wrapping_mul(5)));
+        let old_ptr = vec.as_ptr() as *mut u8;
+        assert_eq!(lookup_auto_allocation_metadata(old_ptr, old_layout), None);
+
+        let outer = AllocationMetadata::for_type(0x0EC0_D621)
+            .with_module(0xC0DE_0621)
+            .with_callsite(0xA110_D621)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let transfer_before = semantic_ownership_transfer_snapshot();
+        let stats_before = semantic_stats_snapshot();
+        let fallback_before = semantic_fallback_attribution_snapshot();
+        semantic_auto_metadata_enable(0xC0DE_0622, FLAG_TYPE_ISOLATED, 0xA110_D622);
+        let boxed = with_semantic_metadata(outer, || {
+            __unialloc_semantic_vec_into_boxed_slice(vec, 0x0EC0_D622, 0xB05E_D622)
+        });
+        semantic_auto_metadata_disable();
+
+        let new_ptr = boxed.as_ptr() as *mut u8;
+        assert_ne!(new_ptr, old_ptr);
+        assert!(boxed
+            .iter()
+            .enumerate()
+            .all(|(index, value)| *value == (index as u8).wrapping_mul(5)));
+        assert_eq!(lookup_auto_allocation_metadata(old_ptr, old_layout), None);
+        assert_eq!(lookup_auto_allocation_metadata(new_ptr, new_layout), None);
+        assert_eq!(active_allocation_metadata(), None);
+
+        let transfer_after = semantic_ownership_transfer_snapshot();
+        assert_eq!(
+            transfer_after
+                .attempted
+                .saturating_sub(transfer_before.attempted),
+            1
+        );
+        assert_eq!(
+            transfer_after
+                .applied
+                .saturating_sub(transfer_before.applied),
+            0
+        );
+        assert_eq!(
+            transfer_after
+                .rejected
+                .saturating_sub(transfer_before.rejected),
+            1
+        );
+        let stats_after = semantic_stats_snapshot();
+        assert_eq!(
+            stats_after
+                .typed_allocations
+                .saturating_sub(stats_before.typed_allocations),
+            0
+        );
+        assert_eq!(
+            stats_after
+                .fallback_allocations
+                .saturating_sub(stats_before.fallback_allocations),
+            1
+        );
+        let fallback_after = semantic_fallback_attribution_snapshot();
+        assert_eq!(
+            fallback_after
+                .raw_realloc_no_metadata
+                .saturating_sub(fallback_before.raw_realloc_no_metadata),
+            1
+        );
+        assert_eq!(
+            fallback_after
+                .raw_realloc_moved_dealloc_no_metadata
+                .saturating_sub(fallback_before.raw_realloc_moved_dealloc_no_metadata),
+            1
+        );
+        assert_eq!(
+            fallback_after
+                .realloc_recorded_old_metadata_new_allocations
+                .saturating_sub(fallback_before.realloc_recorded_old_metadata_new_allocations,),
+            0
+        );
+
+        drop(boxed);
         semantic_stats_recording_disable();
     }
 
