@@ -8336,6 +8336,9 @@ impl RustAllocator {
         } else {
             self.alloc_raw(layout)
         };
+        if ptr.is_null() {
+            return ptr;
+        }
         if record_recovery && !self.record_fast_recovery_or_global(ptr, layout, metadata) {
             self.dealloc_raw(ptr, layout);
             return core::ptr::null_mut();
@@ -20222,6 +20225,39 @@ mod tests {
         unsafe {
             INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
         }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn compiler_type_metadata_fast_path_does_not_record_failed_allocation() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align((isize::MAX as usize) & !7, 8).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_FA11)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_FA11)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        assert!(compiler_type_isolated_recovery_fast_path(metadata));
+
+        let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert!(ptr.is_null(), "oversized allocation must fail");
+
+        let snap = semantic_stats_snapshot();
+        assert_eq!(snap.total_allocations, 0);
+        assert_eq!(snap.typed_allocations, 0);
+        assert_eq!(snap.total_allocated_bytes, 0);
+        assert_eq!(snap.typed_allocated_bytes, 0);
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert!(!current_thread_fast_auto_allocation_records_active());
     }
 
     #[test]
