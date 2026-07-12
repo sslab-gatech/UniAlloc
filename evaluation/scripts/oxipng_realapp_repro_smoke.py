@@ -55,6 +55,13 @@ REQUIRED_AUDIT_FLAGS = SEMANTIC_AND_BODY_AUDIT_FLAGS + DIRECT_REWRITE_AUDIT_FLAG
 NO_SUPPORTED_DIRECT_REWRITE_STATUS = "no_supported_rewrite_candidates"
 TYPE_ISOLATED = 0x1
 ACTUAL_SEMANTIC_SCOPE_STATUS = "actual_semantic_scope_enter_exit_rewrite_applied"
+ACTUAL_SEMANTIC_DROP_STATUS = "actual_semantic_scope_drop_rewrite_applied"
+ADDRESS_ORACLE_SOURCE = "injected-oxipng-type-isolation-address-oracle"
+ADDRESS_ORACLE_FUNCTION = "unialloc_type_isolation_address_oracle"
+ADDRESS_ORACLE_PRODUCER_HELPER = "unialloc_address_oracle_producer_vec"
+ADDRESS_ORACLE_WRONG_HELPER = "unialloc_address_oracle_wrong_type_vec"
+ADDRESS_ORACLE_PRODUCER_MARKER = "UniAllocAddressOracleProducer"
+ADDRESS_ORACLE_WRONG_MARKER = "UniAllocAddressOracleWrongType"
 FAIL_CLOSED_CONTRACTS = {
     "semantic_scope_unsolved_heap_object_candidate": {
         (
@@ -70,6 +77,12 @@ FAIL_CLOSED_CONTRACTS = {
         (
             "semantic_scope_drop_rewrite_skipped_unresolved_heap_object_type",
             "rustc_middle_drop_heap_object_type_not_solved",
+        ),
+    },
+    "semantic_scope_drop_multiple_heap_owners_skipped": {
+        (
+            "semantic_scope_drop_rewrite_skipped_multiple_heap_owners",
+            "rustc_middle_drop_multiple_heap_owners_not_lowered",
         ),
     },
 }
@@ -195,7 +208,8 @@ def apply_instrumentation(oxipng: pathlib.Path, unialloc_crate: pathlib.Path) ->
     import_line = (
         "use std::fmt::Write as _;\n"
         "use unialloc::{semantic_stats_recording_disable, semantic_stats_recording_enable, "
-        "semantic_stats_reset, semantic_stats_snapshot, semantic_type_stats_recording_disable, "
+        "semantic_metadata_validation_snapshot, semantic_stats_reset, semantic_stats_snapshot, "
+        "semantic_type_stats_recording_disable, "
         "semantic_type_stats_recording_enable, semantic_type_stats_snapshot, "
         "type_isolation_side_cache_snapshot, SemanticTypeStatsSnapshot, UniAlloc};\n"
     )
@@ -210,6 +224,84 @@ def apply_instrumentation(oxipng: pathlib.Path, unialloc_crate: pathlib.Path) ->
         "    semantic_stats_reset();\n    semantic_stats_recording_enable();\n    semantic_type_stats_recording_enable();\n",
     )
     type_rows_helper = r'''
+#[allow(dead_code)]
+#[repr(C)]
+struct UniAllocAddressOracleProducer([usize; 4]);
+
+#[allow(dead_code)]
+#[repr(C)]
+struct UniAllocAddressOracleWrongType([usize; 4]);
+
+struct UniAllocAddressOracleResult {
+    producer_first_address: usize,
+    wrong_type_address: usize,
+    producer_recovery_address: usize,
+    element_size: usize,
+    element_align: usize,
+    capacity: usize,
+    allocation_size: usize,
+    recovery_identity_mismatches_before: usize,
+    recovery_identity_mismatches_after: usize,
+    corrupt_slots_after: usize,
+}
+
+#[inline(never)]
+fn unialloc_address_oracle_producer_vec() -> Vec<UniAllocAddressOracleProducer> {
+    Vec::with_capacity(2)
+}
+
+#[inline(never)]
+fn unialloc_address_oracle_wrong_type_vec() -> Vec<UniAllocAddressOracleWrongType> {
+    Vec::with_capacity(2)
+}
+
+#[inline(never)]
+fn unialloc_type_isolation_address_oracle() -> UniAllocAddressOracleResult {
+    let validation_before = semantic_metadata_validation_snapshot();
+    let producer_first_address = {
+        let producer = unialloc_address_oracle_producer_vec();
+        assert_eq!(producer.capacity(), 2);
+        producer.as_ptr() as usize
+    };
+    let wrong_type_address = {
+        let wrong_type = unialloc_address_oracle_wrong_type_vec();
+        assert_eq!(wrong_type.capacity(), 2);
+        wrong_type.as_ptr() as usize
+    };
+    assert_ne!(
+        producer_first_address,
+        wrong_type_address,
+        "UniAlloc wrong type reused producer storage",
+    );
+    let producer_recovery_address = {
+        let producer = unialloc_address_oracle_producer_vec();
+        assert_eq!(producer.capacity(), 2);
+        producer.as_ptr() as usize
+    };
+    assert_eq!(
+        producer_first_address,
+        producer_recovery_address,
+        "UniAlloc same type did not recover producer storage",
+    );
+    let validation_after = semantic_metadata_validation_snapshot();
+    let side_cache_after = type_isolation_side_cache_snapshot();
+    assert_eq!(validation_before.recovery_identity_mismatches, 0);
+    assert_eq!(validation_after.recovery_identity_mismatches, 0);
+    assert_eq!(side_cache_after.corrupt_slots, 0);
+    UniAllocAddressOracleResult {
+        producer_first_address,
+        wrong_type_address,
+        producer_recovery_address,
+        element_size: std::mem::size_of::<UniAllocAddressOracleProducer>(),
+        element_align: std::mem::align_of::<UniAllocAddressOracleProducer>(),
+        capacity: 2,
+        allocation_size: 2 * std::mem::size_of::<UniAllocAddressOracleProducer>(),
+        recovery_identity_mismatches_before: validation_before.recovery_identity_mismatches,
+        recovery_identity_mismatches_after: validation_after.recovery_identity_mismatches,
+        corrupt_slots_after: side_cache_after.corrupt_slots,
+    }
+}
+
 fn unialloc_type_rows_json(
     rows: &[SemanticTypeStatsSnapshot],
     row_count: usize,
@@ -266,9 +358,15 @@ fn unialloc_type_rows_json(
 
 '''
     main_text = insert_before_once(main_text, "fn main() {\n", type_rows_helper)
+    main_text = insert_after_once(
+        main_text,
+        "    semantic_type_stats_recording_enable();\n",
+        "    let unialloc_address_oracle = unialloc_type_isolation_address_oracle();\n",
+    )
     stats_block = r'''
 
     let stats = semantic_stats_snapshot();
+    let metadata_validation = semantic_metadata_validation_snapshot();
     let side_cache = type_isolation_side_cache_snapshot();
     let mut rows = [SemanticTypeStatsSnapshot::empty(); 256];
     let row_count = semantic_type_stats_snapshot(&mut rows);
@@ -276,7 +374,7 @@ fn unialloc_type_rows_json(
     semantic_stats_recording_disable();
     let type_rows_json = unialloc_type_rows_json(&rows, row_count);
     eprintln!(
-        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{},\"type_rows\":{}}}",
+        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"recovery_identity_mismatches\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{},\"address_oracle\":{{\"source\":\"injected-oxipng-type-isolation-address-oracle\",\"producer_first_address\":{},\"wrong_type_address\":{},\"producer_recovery_address\":{},\"element_size\":{},\"element_align\":{},\"capacity\":{},\"allocation_size\":{},\"wrong_type_not_reused\":{},\"same_type_reused\":{},\"recovery_identity_mismatches_before\":{},\"recovery_identity_mismatches_after\":{},\"corrupt_slots_after\":{}}},\"type_rows\":{}}}",
         stats.total_allocations,
         stats.typed_allocations,
         stats.fallback_allocations,
@@ -286,12 +384,25 @@ fn unialloc_type_rows_json(
         stats.typed_cache_inserts,
         stats.typed_cache_bypasses,
         stats.coverage_basis_points,
+        metadata_validation.recovery_identity_mismatches,
         row_count,
         stats.semantic_type_stats_dropped_events,
         side_cache.inline_occupied,
         side_cache.occupied_slots,
         side_cache.occupied_entries,
         side_cache.corrupt_slots,
+        unialloc_address_oracle.producer_first_address,
+        unialloc_address_oracle.wrong_type_address,
+        unialloc_address_oracle.producer_recovery_address,
+        unialloc_address_oracle.element_size,
+        unialloc_address_oracle.element_align,
+        unialloc_address_oracle.capacity,
+        unialloc_address_oracle.allocation_size,
+        unialloc_address_oracle.producer_first_address != unialloc_address_oracle.wrong_type_address,
+        unialloc_address_oracle.producer_first_address == unialloc_address_oracle.producer_recovery_address,
+        unialloc_address_oracle.recovery_identity_mismatches_before,
+        unialloc_address_oracle.recovery_identity_mismatches_after,
+        unialloc_address_oracle.corrupt_slots_after,
         type_rows_json,
     );
 '''
@@ -425,6 +536,30 @@ def actual_type_scope_rows(audit: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def actual_drop_scope_rows(audit: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    for candidate in audit.get("rewrite_candidates", []):
+        if not isinstance(candidate, dict):
+            continue
+        if candidate.get("lowering_kind") != "semantic_scope_drop_rewrite":
+            continue
+        if candidate.get("rewrite_status") != ACTUAL_SEMANTIC_DROP_STATUS:
+            continue
+        rows.append(
+            {
+                "mir_function": candidate.get("mir_function"),
+                "semantic_object_type": candidate.get("semantic_object_type"),
+                "type_id": int(candidate.get("type_id") or 0),
+                "module_id": int(candidate.get("module_id") or 0),
+                "callsite": int(candidate.get("callsite") or 0),
+                "flags": int(candidate.get("flags") or 0),
+                "rewrite_status": candidate.get("rewrite_status"),
+                "source_span": candidate.get("source_span"),
+            }
+        )
+    return rows
+
+
 def fail_closed_rows(audit: dict[str, Any]) -> list[dict[str, Any]]:
     rows = []
     for candidate in audit.get("rewrite_candidates", []):
@@ -466,8 +601,10 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
         "semantic_scope_unsolved_candidate_count": 0,
         "semantic_scope_drop_unsolved_candidate_count": 0,
         "actual_type_scope_row_count": 0,
+        "actual_drop_scope_row_count": 0,
         "fail_closed_semantic_row_count": 0,
         "fail_closed_drop_row_count": 0,
+        "fail_closed_multi_owner_drop_row_count": 0,
     }
     for path in sorted(audit_dir.glob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -477,6 +614,7 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
         if crate_name != target_crate:
             continue
         applied_type_rows = actual_type_scope_rows(data)
+        applied_drop_rows = actual_drop_scope_rows(data)
         unresolved_rows = fail_closed_rows(data)
         row = {
             "file": path.name,
@@ -507,16 +645,25 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
                 compiler.get("semantic_scope_drop_unsolved_candidate_count", summary.get("semantic_scope_drop_unsolved_candidate_count", 0)) or 0
             ),
             "actual_type_scope_rows": applied_type_rows,
+            "actual_drop_scope_rows": applied_drop_rows,
             "fail_closed_rows": unresolved_rows,
             "actual_type_scope_row_count": len(applied_type_rows),
+            "actual_drop_scope_row_count": len(applied_drop_rows),
             "fail_closed_semantic_row_count": sum(
                 candidate["lowering_kind"]
                 == "semantic_scope_unsolved_heap_object_candidate"
                 for candidate in unresolved_rows
             ),
             "fail_closed_drop_row_count": sum(
+                candidate["lowering_kind"] in {
+                    "semantic_scope_drop_unsolved_heap_object_candidate",
+                    "semantic_scope_drop_multiple_heap_owners_skipped",
+                }
+                for candidate in unresolved_rows
+            ),
+            "fail_closed_multi_owner_drop_row_count": sum(
                 candidate["lowering_kind"]
-                == "semantic_scope_drop_unsolved_heap_object_candidate"
+                == "semantic_scope_drop_multiple_heap_owners_skipped"
                 for candidate in unresolved_rows
             ),
         }
@@ -524,6 +671,207 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
         for key in totals:
             totals[key] += int(row[key])
     return audits, totals
+
+
+def runtime_identity(row: dict[str, Any], *, label: str) -> tuple[int, int, int]:
+    identity = (
+        int(row.get("type_id") or 0),
+        int(row.get("module_id") or 0),
+        int(row.get("callsite") or 0),
+    )
+    if 0 in identity:
+        raise SmokeError(f"{label} has a zero compiler identity component: {row}")
+    return identity
+
+
+def mir_function_leaf(row: dict[str, Any]) -> str:
+    return str(row.get("mir_function") or "").rsplit("::", 1)[-1]
+
+
+def validate_injected_address_oracle(
+    *,
+    stats: dict[str, Any],
+    runtime_rows: list[dict[str, Any]],
+    audits: list[dict[str, Any]],
+    audit_totals: dict[str, int],
+) -> dict[str, Any]:
+    oracle = stats.get("address_oracle")
+    if not isinstance(oracle, dict) or oracle.get("source") != ADDRESS_ORACLE_SOURCE:
+        raise SmokeError("injected address oracle result must be explicitly reported")
+
+    producer_first = int(oracle.get("producer_first_address") or 0)
+    wrong_type = int(oracle.get("wrong_type_address") or 0)
+    producer_recovery = int(oracle.get("producer_recovery_address") or 0)
+    if not all((producer_first, wrong_type, producer_recovery)):
+        raise SmokeError("injected address oracle reported a zero allocation address")
+    if wrong_type == producer_first or oracle.get("wrong_type_not_reused") is not True:
+        raise SmokeError("wrong type reused producer storage in injected address oracle")
+    if producer_recovery != producer_first or oracle.get("same_type_reused") is not True:
+        raise SmokeError("same type did not recover producer storage in injected address oracle")
+
+    size = int(oracle.get("element_size") or 0)
+    align = int(oracle.get("element_align") or 0)
+    capacity = int(oracle.get("capacity") or 0)
+    allocation_size = int(oracle.get("allocation_size") or 0)
+    if size <= 0 or align <= 0 or capacity <= 0 or allocation_size != size * capacity:
+        raise SmokeError("injected address oracle layout accounting is invalid")
+    mismatches = (
+        int(stats.get("recovery_identity_mismatches", -1)),
+        int(oracle.get("recovery_identity_mismatches_before", -1)),
+        int(oracle.get("recovery_identity_mismatches_after", -1)),
+    )
+    if mismatches != (0, 0, 0):
+        raise SmokeError(f"compiler/runtime recovery identity mismatches must be zero: {mismatches}")
+    if int(oracle.get("corrupt_slots_after", -1)) != 0:
+        raise SmokeError("injected address oracle corrupt slots must be zero")
+
+    runtime_by_identity: dict[tuple[int, int, int], dict[str, Any]] = {}
+    for row in runtime_rows:
+        identity = runtime_identity(row, label="runtime type-class row")
+        if identity in runtime_by_identity:
+            raise SmokeError(f"duplicate runtime type-class identity row: {identity}")
+        runtime_by_identity[identity] = row
+    scopes = [
+        row
+        for audit in audits
+        for row in audit.get("actual_type_scope_rows", [])
+        if isinstance(row, dict)
+    ]
+    drops = [
+        row
+        for audit in audits
+        for row in audit.get("actual_drop_scope_rows", [])
+        if isinstance(row, dict)
+    ]
+    if int(audit_totals.get("actual_drop_scope_row_count", -1)) != len(drops):
+        raise SmokeError("actual semantic-drop aggregate is not backed by row-level evidence")
+
+    def bind_alloc(
+        helper: str, marker: str, label: str, minimum_allocations: int
+    ) -> tuple[dict[str, Any], dict[str, Any], tuple[int, int, int]]:
+        rows = [
+            row
+            for row in scopes
+            if mir_function_leaf(row) == helper
+            and marker in str(row.get("semantic_object_type") or "")
+        ]
+        identities = {runtime_identity(row, label=f"compiler-derived {label}"): row for row in rows}
+        if not identities:
+            raise SmokeError(f"compiler-derived {label} identity is missing from actual MIR audit")
+        if len(identities) != 1:
+            raise SmokeError(f"compiler-derived {label} identity is ambiguous")
+        identity, compiler_row = next(iter(identities.items()))
+        runtime_row = runtime_by_identity.get(identity)
+        if (
+            compiler_row.get("rewrite_status") != ACTUAL_SEMANTIC_SCOPE_STATUS
+            or not int(compiler_row.get("flags") or 0) & TYPE_ISOLATED
+            or runtime_row is None
+            or not int(runtime_row.get("policy_flags_seen") or 0) & TYPE_ISOLATED
+            or int(runtime_row.get("allocations") or 0) < minimum_allocations
+        ):
+            raise SmokeError(f"compiler-derived {label} lacks an exact actual/runtime allocation row")
+        return compiler_row, runtime_row, identity
+
+    producer_compiler, producer_runtime, producer_identity = bind_alloc(
+        ADDRESS_ORACLE_PRODUCER_HELPER, ADDRESS_ORACLE_PRODUCER_MARKER, "producer", 2
+    )
+    wrong_compiler, wrong_runtime, wrong_identity = bind_alloc(
+        ADDRESS_ORACLE_WRONG_HELPER,
+        ADDRESS_ORACLE_WRONG_MARKER,
+        "wrong-type consumer",
+        1,
+    )
+    if producer_identity[0] == wrong_identity[0] or producer_identity[1] != wrong_identity[1]:
+        raise SmokeError("compiler-derived oracle types are not distinct classes in one module")
+    producer_layout = (
+        int(producer_runtime.get("observed_alloc_size") or 0),
+        int(producer_runtime.get("observed_alloc_align") or 0),
+    )
+    wrong_layout = (
+        int(wrong_runtime.get("observed_alloc_size") or 0),
+        int(wrong_runtime.get("observed_alloc_align") or 0),
+    )
+    if producer_layout != wrong_layout or producer_layout != (allocation_size, align):
+        raise SmokeError(
+            f"compiler-derived oracle classes do not have the same observed layout: "
+            f"producer={producer_layout}, wrong={wrong_layout}"
+        )
+    if int(producer_runtime.get("cache_hits") or 0) < 1:
+        raise SmokeError("compiler-derived producer did not record same-type cache recovery")
+
+    def bind_drops(
+        marker: str, allocation_identity: tuple[int, int, int], label: str, minimum: int
+    ) -> int:
+        rows = [
+            row
+            for row in drops
+            if mir_function_leaf(row) == ADDRESS_ORACLE_FUNCTION
+            and marker in str(row.get("semantic_object_type") or "")
+        ]
+        if not rows:
+            raise SmokeError(f"compiler-derived {label} free identity is missing from actual MIR audit")
+        total = 0
+        seen: set[tuple[int, int, int]] = set()
+        for row in rows:
+            identity = runtime_identity(row, label=f"compiler-derived {label} free")
+            if identity in seen:
+                continue
+            seen.add(identity)
+            runtime_row = runtime_by_identity.get(identity)
+            if (
+                row.get("rewrite_status") != ACTUAL_SEMANTIC_DROP_STATUS
+                or identity[:2] != allocation_identity[:2]
+                or runtime_row is None
+            ):
+                raise SmokeError(f"compiler-derived {label} free lacks an exact actual/runtime row")
+            total += min(
+                int(runtime_row.get("deallocations") or 0),
+                int(runtime_row.get("cache_inserts") or 0),
+            )
+        if total < minimum:
+            raise SmokeError(f"compiler-derived {label} free lifecycle is incomplete")
+        return len(seen)
+
+    producer_drop_count = bind_drops(
+        ADDRESS_ORACLE_PRODUCER_MARKER, producer_identity, "producer", 2
+    )
+    wrong_drop_count = bind_drops(
+        ADDRESS_ORACLE_WRONG_MARKER, wrong_identity, "wrong-type consumer", 1
+    )
+
+    def identity_summary(
+        compiler_row: dict[str, Any], runtime_row: dict[str, Any]
+    ) -> dict[str, Any]:
+        type_id, module_id, callsite = runtime_identity(
+            compiler_row, label="compiler-derived oracle class"
+        )
+        return {
+            "type_id": type_id,
+            "module_id": module_id,
+            "callsite": callsite,
+            "semantic_object_type": compiler_row.get("semantic_object_type"),
+            "mir_function": compiler_row.get("mir_function"),
+            "allocations": int(runtime_row.get("allocations") or 0),
+            "cache_hits": int(runtime_row.get("cache_hits") or 0),
+        }
+
+    return {
+        "validated": True,
+        "source": ADDRESS_ORACLE_SOURCE,
+        "wrong_type_not_reused": True,
+        "same_type_reused": True,
+        "recovery_identity_mismatches": 0,
+        "corrupt_slots": 0,
+        "producer_compiler_identity": identity_summary(producer_compiler, producer_runtime),
+        "wrong_type_compiler_identity": identity_summary(wrong_compiler, wrong_runtime),
+        "producer_drop_identity_count": producer_drop_count,
+        "wrong_type_drop_identity_count": wrong_drop_count,
+        "claim_boundary": (
+            "one injected Oxipng functional sequence binds concrete Rust allocation/Drop sites "
+            "to actual compiler-generated MIR identities and exact runtime rows; it is not "
+            "natural Oxipng coverage, whole-program/address universality, or performance evidence"
+        ),
+    }
 
 
 def validate_realapp_type_isolation(
@@ -543,6 +891,13 @@ def validate_realapp_type_isolation(
         )
     if int(stats.get("type_stats_dropped_events", -1)) != 0:
         raise SmokeError("runtime type-class stats must report zero dropped events")
+
+    address_oracle_evidence = validate_injected_address_oracle(
+        stats=stats,
+        runtime_rows=runtime_rows,
+        audits=audits,
+        audit_totals=audit_totals,
+    )
 
     compiler_rows = [
         row
@@ -605,6 +960,12 @@ def validate_realapp_type_isolation(
 
     layout_groups: dict[tuple[int, int, int], list[dict[str, Any]]] = {}
     for row in matched_lifecycle_rows:
+        semantic_object_type = str(row.get("semantic_object_type") or "")
+        if (
+            ADDRESS_ORACLE_PRODUCER_MARKER in semantic_object_type
+            or ADDRESS_ORACLE_WRONG_MARKER in semantic_object_type
+        ):
+            continue
         key = (
             int(row.get("module_id") or 0),
             int(row.get("observed_alloc_size") or 0),
@@ -652,9 +1013,45 @@ def validate_realapp_type_isolation(
         )
         if expected is None or observed not in expected:
             raise SmokeError(f"row-level unresolved candidate is not fail-closed: {row}")
-    expected_fail_closed = int(
-        audit_totals.get("semantic_scope_unsolved_candidate_count", 0)
-    ) + int(audit_totals.get("semantic_scope_drop_unsolved_candidate_count", 0))
+    semantic_unsolved = int(audit_totals.get("semantic_scope_unsolved_candidate_count", 0))
+    drop_unsolved = int(
+        audit_totals.get("semantic_scope_drop_unsolved_candidate_count", 0)
+    )
+    row_semantic_unsolved = sum(
+        row.get("lowering_kind") == "semantic_scope_unsolved_heap_object_candidate"
+        for row in fail_closed_evidence
+    )
+    row_drop_unsolved = sum(
+        row.get("lowering_kind") == "semantic_scope_drop_unsolved_heap_object_candidate"
+        for row in fail_closed_evidence
+    )
+    row_drop_multi_owner = sum(
+        row.get("lowering_kind") == "semantic_scope_drop_multiple_heap_owners_skipped"
+        for row in fail_closed_evidence
+    )
+    if semantic_unsolved != row_semantic_unsolved:
+        raise SmokeError(
+            "semantic unresolved aggregate is not backed by exact row-level evidence: "
+            f"aggregate={semantic_unsolved}, rows={row_semantic_unsolved}"
+        )
+    if drop_unsolved not in {
+        row_drop_unsolved,
+        row_drop_unsolved + row_drop_multi_owner,
+    }:
+        raise SmokeError(
+            "Drop unresolved aggregate is not backed by exact row-level evidence: "
+            f"aggregate={drop_unsolved}, unresolved_rows={row_drop_unsolved}, "
+            f"multi_owner_rows={row_drop_multi_owner}"
+        )
+    multi_owner_already_aggregated = (
+        row_drop_multi_owner > 0
+        and drop_unsolved == row_drop_unsolved + row_drop_multi_owner
+    )
+    expected_fail_closed = (
+        semantic_unsolved
+        + drop_unsolved
+        + (0 if multi_owner_already_aggregated else row_drop_multi_owner)
+    )
     aggregate_fail_closed = int(
         audit_totals.get("fail_closed_semantic_row_count", 0)
     ) + int(audit_totals.get("fail_closed_drop_row_count", 0))
@@ -690,13 +1087,15 @@ def validate_realapp_type_isolation(
         "actual_type_scope_row_count": len(compiler_rows),
         "runtime_type_row_count": reported_runtime_rows,
         "matched_lifecycle_row_count": len(matched_lifecycle_rows),
+        "address_level_functional_oracle": address_oracle_evidence,
         "same_layout_distinct_type_pair": pair_summary,
         "fail_closed_candidate_count": observed_fail_closed,
         "claim_boundary": (
             "one pinned Oxipng functional run binds actual target-crate MIR type identities "
-            "to complete runtime type-class lifecycle rows and exercises row-level fail-closed "
-            "unresolved candidates; this is not whole-program coverage, address-level non-reuse, "
-            "or performance evidence"
+            "to complete runtime type-class lifecycle rows, exercises row-level fail-closed "
+            "unresolved candidates, and includes a separately labeled injected functional oracle "
+            "for one address-level same-layout sequence; this is not natural application coverage, "
+            "whole-program/address universality, or performance evidence"
         ),
     }
 
@@ -1058,13 +1457,14 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             reference_digest = sha256_file(evidence_path)
 
         summary = {
-            "schema_version": 1,
+            "schema_version": 2,
             "source": "oxipng-realapp-repro-smoke",
             "boundary": (
                 "functional/diagnostic smoke only; no timing loop; no performance claim; "
-                "same-layout evidence is runtime type-class identity/lifecycle separation, not "
-                "address-level non-reuse; subprocess timeout descendant cleanup is not claimed "
-                "beyond direct fail-closed timeout handling"
+                "one injected oracle exercises an address-level same-layout sequence with "
+                "compiler-derived identities, but this is not natural Oxipng address coverage "
+                "or whole-program/address universality; subprocess timeout descendant cleanup "
+                "is not claimed beyond direct fail-closed timeout handling"
             ),
             "toolchain": args.toolchain,
             "build_toolchain": source_binding_start["build_toolchain"],

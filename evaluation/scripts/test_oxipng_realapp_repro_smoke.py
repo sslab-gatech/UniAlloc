@@ -22,10 +22,14 @@ spec.loader.exec_module(smoke)
 
 
 def actual_scope_row(
-    *, type_id: int, callsite: int, semantic_object_type: str
+    *,
+    type_id: int,
+    callsite: int,
+    semantic_object_type: str,
+    mir_function: str | None = None,
 ) -> dict:
     return {
-        "mir_function": f"fixture::{semantic_object_type}",
+        "mir_function": mir_function or f"fixture::{semantic_object_type}",
         "semantic_object_type": semantic_object_type,
         "type_id": type_id,
         "module_id": 77,
@@ -37,15 +41,39 @@ def actual_scope_row(
     }
 
 
-def runtime_type_row(*, type_id: int, callsite: int) -> dict:
+def actual_drop_row(
+    *, type_id: int, callsite: int, semantic_object_type: str
+) -> dict:
+    return {
+        "mir_function": smoke.ADDRESS_ORACLE_FUNCTION,
+        "semantic_object_type": semantic_object_type,
+        "type_id": type_id,
+        "module_id": 77,
+        "callsite": callsite,
+        "flags": smoke.TYPE_ISOLATED,
+        "lowering_kind": "semantic_scope_drop_rewrite",
+        "rewrite_status": smoke.ACTUAL_SEMANTIC_DROP_STATUS,
+        "source_span": f"fixture.rs:{callsite}:1",
+    }
+
+
+def runtime_type_row(
+    *,
+    type_id: int,
+    callsite: int,
+    allocations: int = 3,
+    deallocations: int = 2,
+    cache_hits: int = 1,
+    cache_inserts: int = 2,
+) -> dict:
     return {
         "type_id": type_id,
         "module_id": 77,
         "callsite": callsite,
-        "allocations": 3,
-        "deallocations": 2,
-        "cache_hits": 1,
-        "cache_inserts": 2,
+        "allocations": allocations,
+        "deallocations": deallocations,
+        "cache_hits": cache_hits,
+        "cache_inserts": cache_inserts,
         "cache_bypasses": 0,
         "observed_alloc_size": 64,
         "observed_alloc_align": 8,
@@ -69,18 +97,79 @@ def fail_closed_row() -> dict:
     }
 
 
+def fail_closed_multi_owner_drop_row() -> dict:
+    return {
+        "mir_function": "fixture::multi_owner_drop",
+        "lowering_kind": "semantic_scope_drop_multiple_heap_owners_skipped",
+        "rewrite_status": "semantic_scope_drop_rewrite_skipped_multiple_heap_owners",
+        "replacement_resolution_status": (
+            "rustc_middle_drop_multiple_heap_owners_not_lowered"
+        ),
+        "destination_type": "(Vec<u8>, String)",
+        "semantic_object_type": "multiple_heap_owners(Vec<u8>,String)",
+        "source_span": "fixture.rs:31:1",
+    }
+
+
 def valid_contract_stats() -> dict:
     rows = [
-        runtime_type_row(type_id=101, callsite=1001),
-        runtime_type_row(type_id=202, callsite=2002),
+        runtime_type_row(
+            type_id=101,
+            callsite=1001,
+            allocations=2,
+            deallocations=2,
+            cache_hits=1,
+        ),
+        runtime_type_row(
+            type_id=202,
+            callsite=2002,
+            allocations=1,
+            deallocations=1,
+            cache_hits=0,
+            cache_inserts=1,
+        ),
+        runtime_type_row(
+            type_id=101,
+            callsite=3003,
+            allocations=0,
+            deallocations=2,
+            cache_hits=0,
+            cache_inserts=2,
+        ),
+        runtime_type_row(
+            type_id=202,
+            callsite=4004,
+            allocations=0,
+            deallocations=1,
+            cache_hits=0,
+            cache_inserts=1,
+        ),
+        runtime_type_row(type_id=303, callsite=5005),
+        runtime_type_row(type_id=404, callsite=6006),
     ]
     return {
-        "typed_allocations": 6,
+        "typed_allocations": 9,
         "fallback_allocations": 0,
+        "recovery_identity_mismatches": 0,
         "type_isolation_corrupt_slots": 0,
         "type_stats_rows": len(rows),
         "type_stats_dropped_events": 0,
         "type_rows": rows,
+        "address_oracle": {
+            "source": smoke.ADDRESS_ORACLE_SOURCE,
+            "producer_first_address": 0x1000,
+            "wrong_type_address": 0x2000,
+            "producer_recovery_address": 0x1000,
+            "element_size": 32,
+            "element_align": 8,
+            "capacity": 2,
+            "allocation_size": 64,
+            "wrong_type_not_reused": True,
+            "same_type_reused": True,
+            "recovery_identity_mismatches_before": 0,
+            "recovery_identity_mismatches_after": 0,
+            "corrupt_slots_after": 0,
+        },
     }
 
 
@@ -96,12 +185,44 @@ def valid_contract_audits() -> list[dict]:
                 actual_scope_row(
                     type_id=101,
                     callsite=1001,
-                    semantic_object_type="Vec<Producer>",
+                    semantic_object_type=(
+                        "std::vec::Vec<fixture::UniAllocAddressOracleProducer>"
+                    ),
+                    mir_function=smoke.ADDRESS_ORACLE_PRODUCER_HELPER,
                 ),
                 actual_scope_row(
                     type_id=202,
                     callsite=2002,
-                    semantic_object_type="Vec<Consumer>",
+                    semantic_object_type=(
+                        "std::vec::Vec<fixture::UniAllocAddressOracleWrongType>"
+                    ),
+                    mir_function=smoke.ADDRESS_ORACLE_WRONG_HELPER,
+                ),
+                actual_scope_row(
+                    type_id=303,
+                    callsite=5005,
+                    semantic_object_type="Vec<NaturalProducer>",
+                ),
+                actual_scope_row(
+                    type_id=404,
+                    callsite=6006,
+                    semantic_object_type="Vec<NaturalConsumer>",
+                ),
+            ],
+            "actual_drop_scope_rows": [
+                actual_drop_row(
+                    type_id=101,
+                    callsite=3003,
+                    semantic_object_type=(
+                        "std::vec::Vec<fixture::UniAllocAddressOracleProducer>"
+                    ),
+                ),
+                actual_drop_row(
+                    type_id=202,
+                    callsite=4004,
+                    semantic_object_type=(
+                        "std::vec::Vec<fixture::UniAllocAddressOracleWrongType>"
+                    ),
                 ),
             ],
             "fail_closed_rows": [fail_closed_row()],
@@ -112,13 +233,15 @@ def valid_contract_audits() -> list[dict]:
 def valid_contract_totals() -> dict:
     return {
         "direct_rewrite_applied_count": 1,
-        "semantic_scope_rewrite_applied_count": 2,
+        "semantic_scope_rewrite_applied_count": 4,
         "semantic_scope_drop_rewrite_applied_count": 1,
         "semantic_scope_unsolved_candidate_count": 1,
         "semantic_scope_drop_unsolved_candidate_count": 0,
-        "actual_type_scope_row_count": 2,
+        "actual_type_scope_row_count": 4,
+        "actual_drop_scope_row_count": 2,
         "fail_closed_semantic_row_count": 1,
         "fail_closed_drop_row_count": 0,
+        "fail_closed_multi_owner_drop_row_count": 0,
     }
 
 
@@ -157,6 +280,11 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertIn("#[global_allocator]", main)
             self.assertIn("type_rows_json", main)
             self.assertIn("SemanticTypeStatsSnapshot::empty(); 256", main)
+            self.assertIn("fn unialloc_type_isolation_address_oracle()", main)
+            self.assertIn("unialloc_address_oracle_producer_vec", main)
+            self.assertIn("unialloc_address_oracle_wrong_type_vec", main)
+            self.assertIn('\\"address_oracle\\"', main)
+            self.assertNotIn("0xC002", main)
             self.assertIn("extern crate unialloc;", (oxipng / "src" / "lib.rs").read_text(encoding="utf-8"))
 
     def test_parse_stats_requires_exactly_one_stats_line(self) -> None:
@@ -198,6 +326,7 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                                 semantic_object_type="Vec<Consumer>",
                             ),
                             fail_closed_row(),
+                            fail_closed_multi_owner_drop_row(),
                         ],
                     }
                 ),
@@ -214,9 +343,12 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertEqual(totals["semantic_scope_unsolved_candidate_count"], 1)
             self.assertEqual(totals["semantic_scope_drop_unsolved_candidate_count"], 0)
             self.assertEqual(totals["actual_type_scope_row_count"], 2)
+            self.assertEqual(totals["actual_drop_scope_row_count"], 0)
             self.assertEqual(totals["fail_closed_semantic_row_count"], 1)
+            self.assertEqual(totals["fail_closed_drop_row_count"], 1)
+            self.assertEqual(totals["fail_closed_multi_owner_drop_row_count"], 1)
             self.assertEqual(len(audits[0]["actual_type_scope_rows"]), 2)
-            self.assertEqual(len(audits[0]["fail_closed_rows"]), 1)
+            self.assertEqual(len(audits[0]["fail_closed_rows"]), 2)
             coverage = smoke.compiler_coverage_summary(totals)
             self.assertFalse(coverage["audited_candidates_resolved"])
             self.assertTrue(coverage["has_unresolved_audited_candidates"])
@@ -245,6 +377,30 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         self.assertIn("audited target-crate MIR", coverage["claim_boundary"])
         self.assertIn("not whole-program or object coverage", coverage["claim_boundary"])
         self.assertNotIn("complete compiler coverage", coverage["claim_boundary"])
+
+    def test_multi_owner_drop_fail_closed_row_is_never_hidden_by_aggregate_shape(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        for aggregate_includes_multi_owner in (False, True):
+            audits = valid_contract_audits()
+            audits[0]["fail_closed_rows"].append(fail_closed_multi_owner_drop_row())
+            totals = valid_contract_totals()
+            totals["fail_closed_drop_row_count"] = 1
+            totals["fail_closed_multi_owner_drop_row_count"] = 1
+            totals["semantic_scope_drop_unsolved_candidate_count"] = int(
+                aggregate_includes_multi_owner
+            )
+
+            evidence = smoke.assert_contract(
+                build=cmd,
+                run=cmd,
+                stats=valid_contract_stats(),
+                output_sha256="a",
+                expected_output_sha256="a",
+                audits=audits,
+                audit_totals=totals,
+                fallback_note="reported fallback_allocations=0",
+            )
+            self.assertEqual(evidence["fail_closed_candidate_count"], 2)
 
     def test_contract_fails_closed_on_missing_direct_rewrite(self) -> None:
         cmd = smoke.CommandResult(["cmd"], 0, "", "")
@@ -340,11 +496,20 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         )
         self.assertEqual(pair[0]["observed_size"], pair[1]["observed_size"])
         self.assertEqual(evidence["fail_closed_candidate_count"], 1)
-        self.assertIn("not whole-program coverage", evidence["claim_boundary"])
+        address = evidence["address_level_functional_oracle"]
+        self.assertTrue(address["validated"])
+        self.assertTrue(address["wrong_type_not_reused"])
+        self.assertTrue(address["same_type_reused"])
+        self.assertEqual(address["producer_compiler_identity"]["type_id"], 101)
+        self.assertEqual(address["wrong_type_compiler_identity"]["type_id"], 202)
+        self.assertEqual(address["producer_drop_identity_count"], 1)
+        self.assertEqual(address["wrong_type_drop_identity_count"], 1)
+        self.assertIn("injected functional oracle", evidence["claim_boundary"])
+        self.assertIn("not natural application coverage", evidence["claim_boundary"])
 
         wrong_layout = valid_contract_stats()
-        wrong_layout["type_rows"][1]["observed_alloc_size"] = 32
-        wrong_layout["type_rows"][1]["observed_dealloc_size"] = 32
+        wrong_layout["type_rows"][5]["observed_alloc_size"] = 32
+        wrong_layout["type_rows"][5]["observed_dealloc_size"] = 32
         with self.assertRaisesRegex(smoke.SmokeError, "same observed"):
             smoke.assert_contract(
                 build=cmd,
@@ -357,9 +522,77 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                 fallback_note="reported fallback_allocations=0",
             )
 
+    def test_address_oracle_fails_closed_without_compiler_derived_identity(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        audits = valid_contract_audits()
+        audits[0]["actual_type_scope_rows"] = audits[0]["actual_type_scope_rows"][1:]
+        totals = valid_contract_totals()
+        totals["actual_type_scope_row_count"] = 3
+
+        with self.assertRaisesRegex(smoke.SmokeError, "compiler-derived producer"):
+            smoke.assert_contract(
+                build=cmd,
+                run=cmd,
+                stats=valid_contract_stats(),
+                output_sha256="a",
+                expected_output_sha256="a",
+                audits=audits,
+                audit_totals=totals,
+                fallback_note="reported fallback_allocations=0",
+            )
+
+    def test_address_oracle_rejects_cross_type_reuse_and_missing_same_type_recovery(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        cross_type = valid_contract_stats()
+        cross_type["address_oracle"]["wrong_type_address"] = 0x1000
+        cross_type["address_oracle"]["wrong_type_not_reused"] = False
+        with self.assertRaisesRegex(smoke.SmokeError, "wrong type reused"):
+            smoke.assert_contract(
+                build=cmd,
+                run=cmd,
+                stats=cross_type,
+                output_sha256="a",
+                expected_output_sha256="a",
+                audits=valid_contract_audits(),
+                audit_totals=valid_contract_totals(),
+                fallback_note="reported fallback_allocations=0",
+            )
+
+        no_recovery = valid_contract_stats()
+        no_recovery["address_oracle"]["producer_recovery_address"] = 0x3000
+        no_recovery["address_oracle"]["same_type_reused"] = False
+        with self.assertRaisesRegex(smoke.SmokeError, "same type did not recover"):
+            smoke.assert_contract(
+                build=cmd,
+                run=cmd,
+                stats=no_recovery,
+                output_sha256="a",
+                expected_output_sha256="a",
+                audits=valid_contract_audits(),
+                audit_totals=valid_contract_totals(),
+                fallback_note="reported fallback_allocations=0",
+            )
+
+    def test_address_oracle_requires_zero_mismatch_and_corruption(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        mismatch = valid_contract_stats()
+        mismatch["recovery_identity_mismatches"] = 1
+        mismatch["address_oracle"]["recovery_identity_mismatches_after"] = 1
+        with self.assertRaisesRegex(smoke.SmokeError, "identity mismatches must be zero"):
+            smoke.assert_contract(
+                build=cmd,
+                run=cmd,
+                stats=mismatch,
+                output_sha256="a",
+                expected_output_sha256="a",
+                audits=valid_contract_audits(),
+                audit_totals=valid_contract_totals(),
+                fallback_note="reported fallback_allocations=0",
+            )
+
         missing_fail_closed = valid_contract_audits()
         missing_fail_closed[0]["fail_closed_rows"] = []
-        with self.assertRaisesRegex(smoke.SmokeError, "row-level fail-closed"):
+        with self.assertRaisesRegex(smoke.SmokeError, "row-level evidence"):
             smoke.assert_contract(
                 build=cmd,
                 run=cmd,
