@@ -292,8 +292,98 @@ regression `box_slice_into_vec_rebind_rejects_memory_tagged_record_without_mutat
 verifies that a memory-tagged record fails closed and retains its old identity
 without mutation.
 
-This is one bounded functional ownership-transfer probe.  It does not establish
+Commit `9c04871` extends that actual-rustc path through an ordinary Rust helper
+that accepts `Result<Option<Box<[u8]>>, u8>`, unwraps it through `?` and
+`Option::expect`, moves the box, and calls `into_vec`.  The audit observes
+exactly two ownership-transfer candidates and applies both (`2/2`: direct and
+wrapped).  The wrapped runtime oracle preserves the allocation pointer and
+payload, rejects wrong-type reuse, permits exact same-Vec-type reuse, and leaves
+recovery mismatches at `0`.
+
+These are bounded functional ownership-transfer probes.  They do not establish
 universal compiler/container coverage, performance, or a paper percentage.
+
+### Cross-thread boxed-slice to `Vec` ownership transfer
+
+Commit `718aab9` adds the cross-thread composition regression.
+`tools/unialloc-rustc-pass/test_mir_cross_thread_box_slice_into_vec_rebind.py`
+compiles and runs an ordinary Rust program that allocates a `Box<[u8]>` on the
+main thread, moves it to a distinct worker, and calls `into_vec` there.  The
+compiler lane uses the explicit cross-thread recovery placement policy; it is
+not an automatic escape-inference test.  The actual-rustc audit finds exactly
+one transfer candidate and applies it (`1/1`).
+Runtime transfer attempted/applied/rejected is `1/1/0`: pointer and payload are
+preserved across the thread boundary, a wrong Box identity cannot reuse the
+released Vec-owned storage, and the same Vec identity reuses it exactly.
+Fallback allocation/deallocation, raw alloc/dealloc/realloc-without-metadata,
+recovery mismatch, corrupt-slot, and dropped-event counts are all `0`.
+
+This is bounded cross-thread functional and safety evidence only.  It does not
+establish universal thread/container coverage, performance, or a paper
+percentage.
+
+### `String` to `Vec<u8>` ownership-identity transfer
+
+The same commit `718aab9` adds the previously missing compiler/runtime transfer
+and its fail-closed safety regression.
+`tools/unialloc-rustc-pass/test_mir_string_into_bytes_rebind.py` compiles and
+runs ordinary Rust `String::with_capacity -> String::into_bytes -> Vec<u8>`
+source.  Exact non-generic `String::into_bytes` structural matching finds one
+candidate and applies it (`1/1`), using distinct compiler-derived identities
+for String (`11507945832468554002`) and Vec (`13513741751600386252`).  Runtime
+transfer attempted/applied/rejected is `1/1/0`: pointer, capacity, and payload
+are preserved; a wrong String identity cannot reuse the transferred storage;
+and the same Vec identity reuses it exactly.  Fallback allocation/deallocation,
+raw alloc/dealloc/realloc-without-metadata, recovery mismatch, corrupt-slot,
+and dropped-event counts are all `0`.
+
+The dedicated integration regression
+`unialloc/tests/string_into_bytes_rebind.rs` separately exercises the accepted
+path plus three fail-closed controls.  A wrong expected source identity, a
+memory-tagged source record, and a missing source record are each rejected
+without mutating a trusted source record, fabricating a missing record, or
+introducing a recovery mismatch; the aggregate transfer result is one applied
+and three rejected (`1/3`).  The same regression passes once on the hosted
+backend and once on `fixed_heap` (`1/1` each).
+
+This is bounded functional and safety evidence only.  It does not establish
+universal string/container coverage, performance, or a paper percentage.
+
+### `Vec` to boxed-slice shrink-aware ownership-identity transfer
+
+Commit `99762a9` adds the reverse actual-rustc ownership-transfer path for
+ordinary `Vec<T, A>::into_boxed_slice` source.  Exact DefId and structural
+`Vec<T, A> -> Box<[T], A>` matching rewrites both the exact-capacity and
+spare-capacity callsites to `__unialloc_semantic_vec_into_boxed_slice`; the
+audit reports exactly two candidates and applies both (`2/2`).  The single-run
+runtime oracle observes the following bounded behavior:
+
+- when `capacity == len`, the allocation pointer and payload remain exact and
+  the conversion emits no allocation/deallocation/cache lifecycle event;
+- when spare capacity forces shrink, the pointer moves but the payload remains
+  exact, the target Box identity is published at the replacement pointer, and
+  the old Vec storage remains recoverable only under its old exact identity;
+- across the two transfers, attempted/applied/rejected is `2/2/0`: a wrong Vec
+  identity cannot reuse the Box storage, the same Box identity can reuse it,
+  and the old spare Vec identity can reuse the released old storage; and
+- fallback allocation/deallocation, raw alloc/dealloc/realloc-without-metadata,
+  recovery mismatch, and corrupt-slot counts are all `0`.
+
+The independent review first found two fail-closed defects in the writer
+version: a rejected wrong-identity or memory-tagged shrink could lose the
+authenticated source policy, and a missing source record under an outer scope
+could falsely attribute the replacement through outer or auto metadata.  The
+accepted repair runs rejected authenticated shrink under the exact source
+metadata (preserving its policy and memory tag), while missing records mask the
+unrelated outer scope and suppress auto selection.  The suppression is RAII
+guarded, so unwind restores the guard depth and a finite compiler metadata
+stream is not consumed.  The three focused runtime regressions pass `3/3` in
+both hosted and `fixed_heap` configurations: wrong/tagged exact and moved
+rejections retain source policy/tag, while missing + outer + auto remains on
+the conventional raw path without fabricated typed attribution.
+
+This is bounded functional and safety evidence only.  It does not establish
+universal container/compiler coverage, performance, or a paper percentage.
 
 ### Compiler-driven `Vec` realloc identity and type-isolation probe
 
@@ -647,6 +737,18 @@ adjacent recovery tests, independent review, and the repository pre-commit
 suite (652 UniAlloc tests plus 430 std-bench tests) pass.  These are
 current-source safety results, not performance or exploit-success evidence.
 
+Commit `0026dfe` applies the same `Missing / Mismatched / Exact` distinction to
+active recovery-required `GlobalAlloc` scopes.  The fail-first regression
+showed a pre-existing raw pointer being attributed to the active scope and sent
+to delayed free (`occupied_slots=1`, expected `0`).  Missing metadata now uses
+the unknown/raw fallback, releases the raw allocation, and accounts the fallback
+exactly once; a moved raw realloc preserves its prefix, gives the replacement a
+new recovery identity, and accounts the old raw release once.  Exact metadata
+uses the recorded identity, while mismatched metadata fails closed without
+consuming or releasing the record so an exact retry remains possible.  Focused
+hosted and fixed-heap filters each pass `2/2`.  This is P0 functional
+correctness evidence, not performance evidence.
+
 ### Current hidden/consumed-owner hardening and Oxipng replay
 
 Commit `427583bc69b7fcba09f1c7d6b464b8bd7a9c68b7` closes two additional P0
@@ -748,6 +850,41 @@ summary SHA-256
 This was one functional run with no timing loop: it supports no performance or
 paper percentage and does not establish universal compiler or application
 coverage.
+
+### Current-source Oxipng ownership-transfer execution
+
+Commits `6d955c0` and `38b8b59` close the concrete optimized `vec!` path that
+materializes boxed-array storage before converting it to `Vec`.  The first
+change preserves the exact immediate `Box<[T; N]>` allocation owner across the
+array-to-slice unsize; the second recognizes the optimized storage markers that
+remain at the actual `into_vec` callsite.  The earlier artifact
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-ownership-runtime-6d955c0-20260712c-failed-after-first-repair/`
+is retained unchanged as failure history: its functional process returned zero,
+but the dynamic transfer delta was attempted/applied/rejected `1/0/1`, so it is
+not promoted to ownership-transfer PASS evidence.
+
+A subsequent single instrumented Oxipng v4.0.3 functional build/run is bound at
+both start and end to source HEAD
+`38b8b59c9748691d07b0ac9c0ad7c6adf94396cf`, pass-source SHA-256
+`c2c83bec49001c0b40d045a32daaed10d4094afb7eea2415685670a756fe6d10`,
+and 60-file scoped fingerprint
+`8609ff8ff261f27998779613eefb739ddfcc0c682ac1a76ddefaf9dadbd2eb29`.
+The target-crate audit contains exactly 6 ownership-transfer candidates and 6
+applied rewrites.  The workload recording window then observes one attempted,
+one applied, and zero rejected transfers (`1/1/0`).  The executed site is
+`png::PngData::output`; its recovered old allocation owner is
+`Box<[u8; 8]>`, with basis `exact_immediate_box_array_unsize`, before the
+pointer-preserving rebind to `Vec<u8>`.  Build and functional run return zero,
+and the output SHA-256 is
+`565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`.
+
+The successful artifact is
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-ownership-runtime-38b8b59-20260712d-success/`;
+its `oxipng-realapp-repro-summary.json` has SHA-256
+`292c8ff8479887f4bfa90fc58b48ce60326e27f89a9f26baf7ac50cce1a0e113`.
+This is one bounded diagnostic functional run.  It is not a timing benchmark,
+whole-program ownership/isolation coverage, universal compiler coverage, a
+paper percentage, or publication-grade performance evidence.
 
 For historical comparison, a source-bound Oxipng v4.0.3 smoke at validator
 commit `e466831` validated the
@@ -853,7 +990,7 @@ This is bounded target/dependency non-interference evidence for that wrapper
 path, not direct allocator-call coverage, arbitrary dependency-graph coverage,
 runtime type-isolation evidence, or performance evidence.
 
-### Windows FLS teardown is compile/link ready, not runtime-validated
+### Windows FLS teardown has bounded Wine runtime evidence
 
 The Windows work is split across three source-bound changes.  Commit `f5c4935`
 provides symmetric PAL `FlsSetValue`/`FlsGetValue` access; `df5f449` makes the
@@ -867,11 +1004,21 @@ code leaks safely rather than risking use-after-free or double-free.
 
 The host retained-only regression passes `1/1`, the host thread-cache filter
 passes `69/69`, the Windows GNU cross-target type-check/cross-build passes, and
-a Windows test executable links through the configured Zig wrapper without
-running.  The A-current/B-delete, A-null/B-populated, and current-owner
-thread-exit regressions have not run on Windows or Wine.  The evidence therefore
-supports source and cross-target compile/link readiness only, not a Windows
-runtime PASS.
+a Windows test executable links through the configured Zig wrapper.  Using the
+Wine 10 runner introduced by `0bd84c1`, a fresh source-bound capture at HEAD
+`38b8b59c9748691d07b0ac9c0ad7c6adf94396cf` runs the exact
+A-current/B-delete, A-null/B-populated, and current-owner thread-exit lifecycle
+tests; all three pass (`3/3`).  The freshly linked test executable has SHA-256
+`7d4e060d7fc08a32134776f30e45550a8a4561373e15e5bcf077844115c8379b`.
+The durable transcripts, source-input hashes, Wine 10.0 image identity, runner
+and Dockerfile hashes, and executable identity are recorded in
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/windows-wine10-fls-38b8b59-20260712b/summary.json`
+(SHA-256
+`d44dbe74b7a5fd30776185ee5be4e7f7254eed2e3be5b5ec9bf08f086835a5a2`).
+The earlier Wine 8 attempt was blocked by its missing `bcryptprimitives.dll`;
+that is a runner dependency gap, not an allocator functional failure.  This
+supports a bounded Wine-based Windows functional path, not native-Windows
+universality or performance.
 
 ## PAC metadata-auth probes use allocator object addresses
 
