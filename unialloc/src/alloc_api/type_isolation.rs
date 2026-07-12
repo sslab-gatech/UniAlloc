@@ -18483,6 +18483,79 @@ mod tests {
     }
 
     #[test]
+    fn memory_tagged_delayed_free_rejects_double_free_before_duplicate_quarantine() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(
+            MAX_TYPE_CACHE_OBJECT_SIZE + align_of::<usize>(),
+            align_of::<usize>(),
+        )
+        .unwrap();
+        assert!(
+            delayed_free_retained_bytes_for_layout(layout) <= MAX_DELAYED_FREE_RETAINED_BYTES,
+            "test object must enter quarantine instead of bypassing it"
+        );
+        let metadata = AllocationMetadata::for_type(0x7A6D_D0B1)
+            .with_module(0xC0DE_D0B1)
+            .with_callsite(0xA110_D0B1)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING | FLAG_DELAYED_FREE);
+
+        let ptr = unsafe { alloc.alloc_with_recovery_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(metadata));
+        unsafe {
+            assert!(find_memory_tag_slot(ptr).is_some());
+            alloc.dealloc_with_metadata(ptr, layout, metadata);
+            assert!(find_memory_tag_slot(ptr).is_none());
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            None,
+            "accepted deallocation must consume the exact recovery identity"
+        );
+
+        let quarantined_once = delayed_free_snapshot();
+        assert_eq!(quarantined_once.occupied_slots, 1);
+        assert_delayed_free_snapshot_accounting(quarantined_once);
+        assert_eq!(type_isolation_side_cache_snapshot().occupied_entries, 0);
+
+        let second_dealloc = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            alloc.dealloc_with_metadata(ptr, layout, metadata);
+        }));
+        assert!(
+            second_dealloc.is_err(),
+            "missing memory-tag ownership must fail-stop a duplicate deallocation"
+        );
+        assert_eq!(
+            delayed_free_snapshot(),
+            quarantined_once,
+            "rejected double free must not enqueue the same pointer twice"
+        );
+        assert_eq!(
+            type_isolation_side_cache_snapshot().occupied_entries,
+            0,
+            "rejected double free must not poison a semantic type cache"
+        );
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+
+        unsafe {
+            // The object is intentionally larger than the semantic cache cap,
+            // so releasing the one valid quarantine record returns it directly
+            // to the raw allocator instead of retaining test-owned storage.
+            release_delayed_free_for_test(&alloc);
+        }
+        assert_eq!(delayed_free_snapshot().occupied_slots, 0);
+    }
+
+    #[test]
     fn memory_tagging_fast_hot_slot_tracks_recent_record() {
         let _guard = test_guard();
         unsafe {
