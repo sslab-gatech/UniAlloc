@@ -75,8 +75,9 @@ use std::{os::unix::fs::PermissionsExt, os::unix::process::CommandExt};
 const PASS_NAME: &str = "unialloc-rustc-driver-mir-rewrite-dry-run";
 const LOWERING_MODULE_ID: u64 = 0xC002_DA00_0000_0001;
 const DEFAULT_LOWERING_POLICY_FLAGS: u32 = 0x1;
+const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const TYPE_ID_ALGORITHM: &str =
-    "direct: fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use fnv1a64(mir-heap-object-type-v1 NUL solved heap object type) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes solve receiver/argument heap-owner types before return types, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; constructor/factory scopes solve destination types first; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes solve receiver/argument heap-owner types before return types, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; constructor/factory scopes solve destination types first; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 
@@ -649,7 +650,7 @@ fn parse_target_crates(value: &str) -> BTreeSet<String> {
 }
 
 fn fnv1a64(bytes: &[u8]) -> u64 {
-    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    let mut hash = FNV1A64_OFFSET_BASIS;
     for byte in bytes {
         hash ^= u64::from(*byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3u64);
@@ -659,6 +660,19 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
 
 fn fnv1a64_text(text: &str) -> u64 {
     fnv1a64(text.as_bytes())
+}
+
+#[inline]
+fn nonzero_fnv1a64(hash: u64) -> u64 {
+    if hash == 0 {
+        FNV1A64_OFFSET_BASIS
+    } else {
+        hash
+    }
+}
+
+fn nonzero_fnv1a64_text(text: &str) -> u64 {
+    nonzero_fnv1a64(fnv1a64_text(text))
 }
 
 fn derived_output_path(dir: &PathBuf, args: &[String], extension: &str) -> PathBuf {
@@ -2425,6 +2439,18 @@ mod tests {
     }
 
     #[test]
+    fn compiler_fnv_ids_normalize_only_zero() {
+        assert_eq!(nonzero_fnv1a64(0), FNV1A64_OFFSET_BASIS);
+        assert_ne!(nonzero_fnv1a64(0), 0);
+        assert_eq!(nonzero_fnv1a64(1), 1);
+        assert_eq!(
+            nonzero_fnv1a64(0xA110_C002_DA11_0001),
+            0xA110_C002_DA11_0001
+        );
+        assert_ne!(nonzero_fnv1a64_text("compiler-generated-id"), 0);
+    }
+
+    #[test]
     fn plain_clone_matcher_is_trait_exact_and_excludes_clone_from() {
         assert!(plain_clone_trait_call(
             "Val(ZeroSized, FnDef(DefId(2:1 ~ core[2f33]::clone::Clone::clone), [u64]))"
@@ -3368,7 +3394,7 @@ fn direct_allocator_semantic_object_type<'tcx>(
 fn semantic_scope_type_id(semantic_object_type: &str, callsite_key: &str) -> (u64, &'static str) {
     if semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE {
         (
-            fnv1a64_text(&format!(
+            nonzero_fnv1a64_text(&format!(
                 "mir-semantic-scope-callsite-fallback-v1\0{}",
                 callsite_key
             )),
@@ -3376,7 +3402,7 @@ fn semantic_scope_type_id(semantic_object_type: &str, callsite_key: &str) -> (u6
         )
     } else {
         (
-            fnv1a64_text(&format!(
+            nonzero_fnv1a64_text(&format!(
                 "mir-heap-object-type-v1\0{}",
                 semantic_object_type
             )),
@@ -3402,13 +3428,13 @@ fn direct_allocator_type_id(
             (0, "direct_allocator_recovery_delegated")
         } else {
             (
-                fnv1a64_text(&format!("mir-rewrite-dry-run-v1\0{}", callsite_key)),
+                nonzero_fnv1a64_text(&format!("mir-rewrite-dry-run-v1\0{}", callsite_key)),
                 "direct_allocator_callsite_key",
             )
         }
     } else {
         (
-            fnv1a64_text(&format!(
+            nonzero_fnv1a64_text(&format!(
                 "mir-heap-object-type-v1\0{}",
                 semantic_object_type
             )),
@@ -4687,7 +4713,7 @@ fn record_or_rewrite_candidates<'tcx>(
             callee,
             call_arguments.join("\0")
         );
-        let callsite = fnv1a64_text(&key);
+        let callsite = nonzero_fnv1a64_text(&key);
         let (type_id, type_id_basis) =
             direct_allocator_type_id(call_kind, &semantic_object_type, solved_type_id_basis, &key);
         let recovery_delegated = type_id_basis == "direct_allocator_recovery_delegated";
@@ -5155,7 +5181,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             semantic_object_type,
             call_arguments.join("\0")
         );
-        let callsite = fnv1a64_text(&key);
+        let callsite = nonzero_fnv1a64_text(&key);
         let (type_id, type_id_basis) = semantic_scope_type_id(&semantic_object_type, &key);
         let policy_flags = lowering_policy_flags();
         let lifetime_hint = lowering_lifetime_hint();
@@ -5560,7 +5586,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             "semantic-drop\0{}\0{}\0{}\0{}\0{}",
             function_name, basic_block, source_span, drop_place, semantic_object_type
         );
-        let callsite = fnv1a64_text(&key);
+        let callsite = nonzero_fnv1a64_text(&key);
         let (type_id, type_id_basis) = semantic_scope_type_id(&semantic_object_type, &key);
         let policy_flags = lowering_policy_flags();
         let lifetime_hint = lowering_lifetime_hint();
