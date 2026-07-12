@@ -574,3 +574,15 @@ pinned, instrumented functional run, not an unmodified application, benchmark,
 performance result, or publication-grade coverage percentage.  The durable
 summary is
 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-current-427583b-20260712a/oxipng-realapp-repro-summary.json`.
+
+Commit `572bfab` is a later, method-specific coverage refinement and is not
+rebound to that Oxipng run.  Only the six capacity-only `Vec` receiver methods
+(`reserve`, `reserve_exact`, `try_reserve`, `try_reserve_exact`, `shrink_to`,
+and `shrink_to_fit`) may use the direct outer `Vec` identity when the receiver
+ADT path is exactly `std::vec::Vec` or `alloc::vec::Vec`; element-affecting
+methods and `Drop` keep the full owner-graph fail-closed rule.  A current-rustc
+`Vec<String>` versus same-layout `Vec<Vec<u8>>` regression observes distinct
+nonzero compiler/runtime identities, wrong-type non-reuse, same-type exact
+recovery, one cache hit, and zero mismatch/corruption, while
+`Vec<String>::resize` remains ambiguous.  This is current-source bounded
+capacity-path evidence, not updated Oxipng coverage or performance evidence.

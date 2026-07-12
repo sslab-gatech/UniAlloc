@@ -676,6 +676,18 @@ It is a one-shot instrumented functional/diagnostic check, not an unmodified
 application, timing benchmark, performance claim, whole-program coverage
 result, or publication-grade percentage.
 
+Commit `572bfab` subsequently restores one precisely bounded coverage class
+without weakening the owner-graph safety gate.  The six capacity-only `Vec`
+receiver methods may select the direct outer `Vec` identity only after an exact
+receiver-ADT path check; `resize`, `extend`, `push`, `clone_from`, `Drop`, and
+factory calls retain their existing full-graph or consumed-owner checks.  In a
+current-rustc same-layout regression, `Vec<String>` and `Vec<Vec<u8>>` receive
+distinct nonzero compiler/runtime identities, the wrong type cannot reuse the
+first buffer, the same type recovers it exactly with one cache hit, and
+recovery mismatch/corruption remain `0/0`; `Vec<String>::resize` remains
+fail-closed.  The Oxipng application was not rerun after `572bfab`, so the
+`427583b` artifact remains exact only for its recorded source snapshot.
+
 For historical comparison, a source-bound Oxipng v4.0.3 smoke at validator
 commit `e466831` validated the
 actual rewrite path without running a benchmark loop.  The pinned application
