@@ -32876,6 +32876,8 @@ def rustc_driver_mir_cross_thread_hint_probe_companion_status(
         }
     summary = audit.get("summary", {}) if isinstance(audit.get("summary"), dict) else {}
     target_rewrite = audit.get("target_rewrite")
+    raw_rewrite_candidates: Optional[List[Any]] = None
+    rewrite_artifact_blockers: List[str] = []
     if not isinstance(target_rewrite, dict):
         blockers.append("cross-thread MIR hint probe is missing target_rewrite provider-override evidence")
         target_rewrite = {}
@@ -32894,14 +32896,63 @@ def rustc_driver_mir_cross_thread_hint_probe_companion_status(
             blockers.append("cross-thread MIR hint probe target_rewrite reports no applied semantic-scope rewrites")
         if target_rewrite.get("semantic_scope_replacement_resolution_status") not in RUSTC_DRIVER_SEMANTIC_SCOPE_RESOLVED_STATUSES:
             blockers.append("cross-thread MIR hint probe target_rewrite did not resolve semantic-scope symbols")
-        blockers.extend(
-            rustc_driver_probe_rewrite_artifact_blockers(
-                target_rewrite,
-                label="cross-thread MIR hint probe",
-                mode="cross_thread_hint",
-                required_source_prefix="unialloc/src/bin/rustc_driver_mir_cross_thread_hint_probe.rs",
-            )
+        rewrite_artifact_blockers = rustc_driver_probe_rewrite_artifact_blockers(
+            target_rewrite,
+            label="cross-thread MIR hint probe",
+            mode="cross_thread_hint",
+            required_source_prefix="unialloc/src/bin/rustc_driver_mir_cross_thread_hint_probe.rs",
         )
+        blockers.extend(rewrite_artifact_blockers)
+        if not rewrite_artifact_blockers:
+            raw_rewrite_path = Path(str(target_rewrite.get("path") or "")).expanduser()
+            if not raw_rewrite_path.is_absolute():
+                raw_rewrite_path = (ROOT / raw_rewrite_path).resolve()
+            raw_rewrite_artifact = read_json_if_exists(raw_rewrite_path)
+            raw_candidates = (
+                raw_rewrite_artifact.get("rewrite_candidates")
+                if isinstance(raw_rewrite_artifact, dict)
+                else None
+            )
+            if isinstance(raw_candidates, list):
+                raw_rewrite_candidates = raw_candidates
+            else:
+                blockers.append("cross-thread MIR hint probe raw rewrite-map candidates are unavailable")
+
+    runtime_event = audit.get("runtime_event")
+    if not isinstance(runtime_event, dict):
+        blockers.append("cross-thread MIR hint probe raw runtime_event is unavailable")
+        runtime_event = None
+    recomputed_multi_owner_pairing: Optional[Dict[str, Any]] = None
+    if raw_rewrite_candidates is not None and runtime_event is not None:
+        recomputed_multi_owner_pairing = rustc_driver_mir_cross_thread_multi_owner_recovery_pairing_summary(
+            raw_rewrite_candidates,
+            raw_rewrite_candidates,
+            runtime_event,
+        )
+        if recomputed_multi_owner_pairing.get("multi_owner_cross_thread_recovery_pairing_validated") is not True:
+            blockers.append("cross-thread MIR hint probe raw Arc/Vec worker-drop recovery pairing is invalid")
+            blockers.extend(
+                f"cross-thread MIR hint probe raw pairing: {blocker}"
+                for blocker in recomputed_multi_owner_pairing.get(
+                    "multi_owner_cross_thread_recovery_pairing_blockers", []
+                )
+            )
+        for key in (
+            "multi_owner_cross_thread_recovery_pairing_validated",
+            "multi_owner_cross_thread_recovery_pairing_blockers",
+            "multi_owner_cross_thread_vec_type_id",
+            "multi_owner_cross_thread_arc_type_id",
+            "multi_owner_cross_thread_module_id",
+            "multi_owner_cross_thread_skip_row_count",
+            "multi_owner_cross_thread_vec_allocations",
+            "multi_owner_cross_thread_vec_deallocations",
+            "multi_owner_cross_thread_arc_allocations",
+            "multi_owner_cross_thread_arc_deallocations",
+        ):
+            if summary.get(key) != recomputed_multi_owner_pairing.get(key):
+                blockers.append(
+                    f"cross-thread MIR hint probe summary {key} does not match recomputed raw evidence"
+                )
     if summary.get("runtime_probe_validated") is not True:
         blockers.append("cross-thread MIR hint probe is not runtime_probe_validated")
     if summary.get("actual_semantic_scope_rewrite") is not True:
@@ -32956,6 +33007,26 @@ def rustc_driver_mir_cross_thread_hint_probe_companion_status(
         blockers.append("cross-thread MIR hint probe reports no lowered deallocation type rows")
     if optional_int(summary.get("arc_cross_thread_type_mapping_record_count")) in (None, 0):
         blockers.append("cross-thread MIR hint probe reports no Arc cross-thread type-mapping rows")
+    if summary.get("multi_owner_cross_thread_recovery_pairing_validated") is not True:
+        blockers.append(
+            "cross-thread MIR hint probe did not validate function-bound Arc/Vec worker-drop recovery pairing"
+        )
+    multi_owner_vec_type_id = optional_int(summary.get("multi_owner_cross_thread_vec_type_id"))
+    multi_owner_arc_type_id = optional_int(summary.get("multi_owner_cross_thread_arc_type_id"))
+    multi_owner_module_id = optional_int(summary.get("multi_owner_cross_thread_module_id"))
+    if multi_owner_vec_type_id in (None, 0) or multi_owner_arc_type_id in (None, 0):
+        blockers.append("cross-thread MIR hint probe does not report nonzero multi-owner Arc/Vec type ids")
+    elif multi_owner_vec_type_id == multi_owner_arc_type_id:
+        blockers.append("cross-thread MIR hint probe reports a colliding multi-owner Arc/Vec type id")
+    if multi_owner_module_id in (None, 0):
+        blockers.append("cross-thread MIR hint probe does not report a nonzero multi-owner module id")
+    if optional_int(summary.get("multi_owner_cross_thread_skip_row_count")) != 1:
+        blockers.append("cross-thread MIR hint probe does not report exactly one expected multi-owner closure skip row")
+    for owner in ("vec", "arc"):
+        if optional_int(summary.get(f"multi_owner_cross_thread_{owner}_allocations")) != 1:
+            blockers.append(f"cross-thread MIR hint probe requires exactly one paired multi-owner {owner} allocation")
+        if optional_int(summary.get(f"multi_owner_cross_thread_{owner}_deallocations")) != 1:
+            blockers.append(f"cross-thread MIR hint probe requires exactly one paired multi-owner {owner} deallocation")
     if optional_int(summary.get("non_escaping_vecdeque_cross_thread_hint_count")) != 0:
         blockers.append("cross-thread MIR hint probe over-tagged non-escaping VecDeque rows")
     if optional_int(summary.get("non_escaping_direct_allocator_cross_thread_hint_count")) != 0:
@@ -32975,6 +33046,182 @@ def rustc_driver_mir_cross_thread_hint_probe_companion_status(
         "summary": summary,
         "target_rewrite": target_rewrite,
         "blockers": unique_strings(blockers),
+    }
+
+
+def rustc_driver_mir_cross_thread_multi_owner_recovery_pairing_summary(
+    type_mapping_rows: Any,
+    rewrite_candidates: Any,
+    runtime_event: Any,
+) -> Dict[str, Any]:
+    """Bind the probe's Arc and Vec MIR identities to worker-side runtime drops.
+
+    The target closure owns both an ``Arc`` and a ``Vec``.  Its Drop terminator
+    cannot safely activate one semantic identity for both owners, so the MIR
+    pass deliberately skips that scope and runtime recovery records must pair
+    each allocation with its own deallocation.  Aggregate typed traffic is not
+    sufficient evidence: unrelated allocations could otherwise make the probe
+    pass while either closure-owned object is missing its worker-side drop.
+    """
+
+    blockers: List[str] = []
+    mapping_rows = [row for row in type_mapping_rows if isinstance(row, dict)] if isinstance(type_mapping_rows, list) else []
+    candidate_rows = [row for row in rewrite_candidates if isinstance(row, dict)] if isinstance(rewrite_candidates, list) else []
+    runtime = runtime_event if isinstance(runtime_event, dict) else {}
+
+    def is_function_bound_hinted_row(row: Dict[str, Any]) -> bool:
+        placement_hint = optional_int(row.get("placement_hint")) or 0
+        replacement_pair = (
+            row.get("replacement_symbol"),
+            row.get("replacement_resolution_status"),
+        )
+        return bool(
+            row.get("mir_function") == "cross_thread_escape_workload"
+            and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+            and row.get("rewrite_status") == "actual_semantic_scope_enter_exit_rewrite_applied"
+            and replacement_pair
+            in {
+                (
+                    "__unialloc_semantic_scope_push_hints",
+                    "resolved_unialloc_semantic_scope_push_hints_pop",
+                ),
+                (
+                    "__unialloc_semantic_scope_push_hints_local",
+                    "resolved_unialloc_semantic_scope_push_hints_local_pop",
+                ),
+            }
+            and row.get("cross_thread_recovery_hint") is True
+            and (placement_hint & 0x8000) != 0
+        )
+
+    function_rows = [row for row in mapping_rows if is_function_bound_hinted_row(row)]
+    vec_rows = [
+        row
+        for row in function_rows
+        if any(marker in str(row.get("semantic_object_type") or "") for marker in ("std::vec::Vec<", "alloc::vec::Vec<"))
+    ]
+    arc_rows = [
+        row
+        for row in function_rows
+        if any(marker in str(row.get("semantic_object_type") or "") for marker in ("std::sync::Arc<", "alloc::sync::Arc<"))
+    ]
+
+    def unique_positive_values(rows: List[Dict[str, Any]], key: str) -> List[int]:
+        return sorted(
+            {
+                value
+                for row in rows
+                for value in [optional_int(row.get(key))]
+                if value is not None and value > 0
+            }
+        )
+
+    vec_type_ids = unique_positive_values(vec_rows, "type_id")
+    arc_type_ids = unique_positive_values(arc_rows, "type_id")
+    vec_module_ids = unique_positive_values(vec_rows, "module_id")
+    arc_module_ids = unique_positive_values(arc_rows, "module_id")
+    if len(vec_type_ids) != 1:
+        blockers.append("expected one function-bound hinted Vec type id")
+    if len(arc_type_ids) != 1:
+        blockers.append("expected one function-bound hinted Arc type id")
+    if len(vec_module_ids) != 1:
+        blockers.append("expected one function-bound hinted Vec module id")
+    if len(arc_module_ids) != 1:
+        blockers.append("expected one function-bound hinted Arc module id")
+
+    vec_type_id = vec_type_ids[0] if len(vec_type_ids) == 1 else None
+    arc_type_id = arc_type_ids[0] if len(arc_type_ids) == 1 else None
+    vec_module_id = vec_module_ids[0] if len(vec_module_ids) == 1 else None
+    arc_module_id = arc_module_ids[0] if len(arc_module_ids) == 1 else None
+    module_id = vec_module_id if vec_module_id is not None and vec_module_id == arc_module_id else None
+    if vec_type_id is not None and vec_type_id == arc_type_id:
+        blockers.append("function-bound hinted Arc and Vec type ids collide")
+    if vec_module_id is not None and arc_module_id is not None and vec_module_id != arc_module_id:
+        blockers.append("function-bound hinted Arc and Vec module ids differ")
+
+    def is_expected_multi_owner_skip(row: Dict[str, Any]) -> bool:
+        semantic_type = str(row.get("semantic_object_type") or "")
+        return bool(
+            row.get("mir_function") == "cross_thread_escape_workload::{closure#1}"
+            and row.get("lowering_kind") == "semantic_scope_drop_multiple_heap_owners_skipped"
+            and row.get("rewrite_status") == "semantic_scope_drop_rewrite_skipped_multiple_heap_owners"
+            and row.get("replacement_symbol")
+            in {
+                "__unialloc_semantic_scope_push_hints",
+                "__unialloc_semantic_scope_push_hints_local",
+            }
+            and row.get("replacement_resolution_status") == "rustc_middle_drop_multiple_heap_owners_not_lowered"
+            and row.get("metadata_pairing_contract") == "audit_only_multiple_heap_owner_drop_type"
+            and semantic_type.startswith("multiple_heap_owners(")
+            and any(marker in semantic_type for marker in ("std::sync::Arc<", "alloc::sync::Arc<"))
+            and any(marker in semantic_type for marker in ("std::vec::Vec<", "alloc::vec::Vec<"))
+            and (module_id is None or optional_int(row.get("module_id")) == module_id)
+        )
+
+    def is_multi_owner_skip_related(row: Dict[str, Any]) -> bool:
+        return bool(
+            row.get("mir_function") == "cross_thread_escape_workload::{closure#1}"
+            and (
+                row.get("lowering_kind") == "semantic_scope_drop_multiple_heap_owners_skipped"
+                or row.get("rewrite_status") == "semantic_scope_drop_rewrite_skipped_multiple_heap_owners"
+                or row.get("replacement_resolution_status") == "rustc_middle_drop_multiple_heap_owners_not_lowered"
+                or row.get("metadata_pairing_contract") == "audit_only_multiple_heap_owner_drop_type"
+                or str(row.get("semantic_object_type") or "").startswith("multiple_heap_owners(")
+                or str(row.get("allocation_site_id") or "").startswith(
+                    "rustc-driver-mir-semantic-drop-multi-owner:"
+                )
+            )
+        )
+
+    skip_rows = [row for row in candidate_rows if is_multi_owner_skip_related(row)]
+    if len(skip_rows) != 1:
+        blockers.append("expected exactly one cross_thread_escape_workload closure#1 multi-owner skip row")
+    elif not is_expected_multi_owner_skip(skip_rows[0]):
+        blockers.append("cross_thread_escape_workload closure#1 multi-owner skip row violates its contract")
+
+    runtime_totals: Dict[Tuple[int, int], Dict[str, int]] = {}
+    runtime_type_rows = runtime.get("type_rows") if isinstance(runtime.get("type_rows"), list) else []
+    for row in runtime_type_rows:
+        if not isinstance(row, dict):
+            continue
+        row_type_id = optional_int(row.get("type_id"))
+        row_module_id = optional_int(row.get("module_id"))
+        if row_type_id is None or row_module_id is None:
+            continue
+        totals = runtime_totals.setdefault((row_type_id, row_module_id), {"allocations": 0, "deallocations": 0})
+        totals["allocations"] += max(0, optional_int(row.get("allocations")) or 0)
+        totals["deallocations"] += max(0, optional_int(row.get("deallocations")) or 0)
+
+    def owner_totals(type_id: Optional[int]) -> Dict[str, int]:
+        if type_id is None or module_id is None:
+            return {"allocations": 0, "deallocations": 0}
+        return runtime_totals.get((type_id, module_id), {"allocations": 0, "deallocations": 0})
+
+    vec_totals = owner_totals(vec_type_id)
+    arc_totals = owner_totals(arc_type_id)
+    for owner, totals in (("Vec", vec_totals), ("Arc", arc_totals)):
+        if totals["allocations"] != 1:
+            blockers.append(
+                f"runtime type rows require exactly one allocation for the function-bound {owner} identity"
+            )
+        if totals["deallocations"] != 1:
+            blockers.append(
+                f"runtime type rows require exactly one deallocation for the function-bound {owner} identity"
+            )
+    if optional_int(runtime.get("recovery_identity_mismatches")) != 0:
+        blockers.append("runtime did not report zero recovery identity mismatches")
+
+    return {
+        "multi_owner_cross_thread_recovery_pairing_validated": not blockers,
+        "multi_owner_cross_thread_recovery_pairing_blockers": unique_strings(blockers),
+        "multi_owner_cross_thread_vec_type_id": vec_type_id,
+        "multi_owner_cross_thread_arc_type_id": arc_type_id,
+        "multi_owner_cross_thread_module_id": module_id,
+        "multi_owner_cross_thread_skip_row_count": len(skip_rows),
+        "multi_owner_cross_thread_vec_allocations": vec_totals["allocations"],
+        "multi_owner_cross_thread_vec_deallocations": vec_totals["deallocations"],
+        "multi_owner_cross_thread_arc_allocations": arc_totals["allocations"],
+        "multi_owner_cross_thread_arc_deallocations": arc_totals["deallocations"],
     }
 
 
@@ -39107,6 +39354,11 @@ def collect_rustc_driver_mir_cross_thread_hint_probe(args: argparse.Namespace) -
     runtime_event = stdout_json_object_with_source(stdout_path, RUSTC_DRIVER_MIR_CROSS_THREAD_HINT_PROBE_EXAMPLE)
     runtime_event = runtime_event if isinstance(runtime_event, dict) else {}
     semantic_metadata_validation = rustc_driver_probe_semantic_metadata_validation_summary(runtime_event)
+    multi_owner_recovery_pairing = rustc_driver_mir_cross_thread_multi_owner_recovery_pairing_summary(
+        type_mapping_rows,
+        target_rewrite_data.get("rewrite_candidates"),
+        runtime_event,
+    )
 
     cargo = shutil.which("cargo") or "cargo"
     toolchain_arg = rust_toolchain_arg(args.toolchain)
@@ -39228,6 +39480,7 @@ def collect_rustc_driver_mir_cross_thread_hint_probe(args: argparse.Namespace) -
         and semantic_scope_drop_unsolved_candidate_count == 0
         and len(hinted_applied_semantic_candidates) > 0
         and len(arc_cross_thread_mapping_rows) > 0
+        and multi_owner_recovery_pairing.get("multi_owner_cross_thread_recovery_pairing_validated") is True
         and len(non_escaping_vecdeque_hinted_rows) == 0
         and len(non_escaping_direct_allocator_hinted_rows) == 0
         and actual_semantic_scope_rewrite
@@ -39247,6 +39500,7 @@ def collect_rustc_driver_mir_cross_thread_hint_probe(args: argparse.Namespace) -
         "stderr": run_result.get("stderr"),
         "runtime_event": runtime_event,
         "semantic_metadata_validation": semantic_metadata_validation,
+        "multi_owner_cross_thread_recovery_pairing": multi_owner_recovery_pairing,
         "no_wrapper_control": no_wrapper_result,
         "no_wrapper_control_validated": no_wrapper_control_validated,
         "cargo_target_cleanup": probe.get("cargo_target_cleanup"),
@@ -39404,6 +39658,7 @@ def collect_rustc_driver_mir_cross_thread_hint_probe(args: argparse.Namespace) -
             "cross_thread_recovery_hint_count": cross_thread_recovery_hint_count,
             "hinted_semantic_scope_rewrite_applied_count": len(hinted_applied_semantic_candidates),
             "arc_cross_thread_type_mapping_record_count": len(arc_cross_thread_mapping_rows),
+            **multi_owner_recovery_pairing,
             "non_escaping_vecdeque_cross_thread_hint_count": len(non_escaping_vecdeque_hinted_rows),
             "direct_allocator_candidate_count": len(direct_allocator_candidates),
             "non_escaping_direct_allocator_cross_thread_hint_count": len(

@@ -609,6 +609,73 @@ def ready_semantic_metadata_validation_fields() -> dict:
     }
 
 
+def ready_multi_owner_cross_thread_pairing_inputs() -> tuple[list[dict], list[dict], dict]:
+    module_id = 0xC002DA0000000001
+    vec_type_id = 0xC002DA0000000011
+    arc_type_id = 0xC002DA0000000022
+    common_mapping = {
+        "mir_function": "cross_thread_escape_workload",
+        "lowering_kind": "semantic_scope_enter_exit_rewrite",
+        "rewrite_status": "actual_semantic_scope_enter_exit_rewrite_applied",
+        "replacement_symbol": "__unialloc_semantic_scope_push_hints",
+        "replacement_resolution_status": "resolved_unialloc_semantic_scope_push_hints_pop",
+        "cross_thread_recovery_hint": True,
+        "placement_hint": 0x8000,
+        "placement_hint_basis": "auto_cross_thread_escape",
+        "module_id": module_id,
+    }
+    type_mapping_rows = [
+        {
+            **common_mapping,
+            "type_id": vec_type_id,
+            "source_span": "unialloc/src/bin/rustc_driver_mir_cross_thread_hint_probe.rs:150:22: 150:44",
+            "semantic_object_type": "std::vec::Vec<u64, std::alloc::Global>",
+        },
+        {
+            **common_mapping,
+            "type_id": arc_type_id,
+            "source_span": "unialloc/src/bin/rustc_driver_mir_cross_thread_hint_probe.rs:156:25: 158:7",
+            "semantic_object_type": "std::sync::Arc<[u64; 8], std::alloc::Global>",
+        },
+    ]
+    rewrite_candidates = [
+        {
+            "mir_function": "cross_thread_escape_workload::{closure#1}",
+            "lowering_kind": "semantic_scope_drop_multiple_heap_owners_skipped",
+            "rewrite_status": "semantic_scope_drop_rewrite_skipped_multiple_heap_owners",
+            "replacement_symbol": "__unialloc_semantic_scope_push_hints",
+            "replacement_resolution_status": "rustc_middle_drop_multiple_heap_owners_not_lowered",
+            "metadata_pairing_contract": "audit_only_multiple_heap_owner_drop_type",
+            "semantic_object_type": (
+                "multiple_heap_owners(std::sync::Arc<[u64; 8], std::alloc::Global>,"
+                "std::vec::Vec<u64, std::alloc::Global>)"
+            ),
+            "destination_type": "Closure(cross_thread_escape_workload::{closure#1}, (Vec, Arc))",
+            "source_span": "unialloc/src/bin/rustc_driver_mir_cross_thread_hint_probe.rs:176:5: 176:6",
+            "allocation_site_id": "rustc-driver-mir-semantic-drop-multi-owner:unit",
+            "module_id": module_id,
+        }
+    ]
+    runtime_event = {
+        "recovery_identity_mismatches": 0,
+        "type_rows": [
+            {
+                "type_id": vec_type_id,
+                "module_id": module_id,
+                "allocations": 1,
+                "deallocations": 1,
+            },
+            {
+                "type_id": arc_type_id,
+                "module_id": module_id,
+                "allocations": 1,
+                "deallocations": 1,
+            },
+        ],
+    }
+    return type_mapping_rows, rewrite_candidates, runtime_event
+
+
 def mark_direct_allocator_probe_as_local_no_recovery(audit: dict) -> dict:
     """Mutate a direct allocator probe audit into the no-recovery local ABI case."""
 
@@ -882,6 +949,15 @@ def write_ready_mir_cross_thread_hint_probe_companion(results: pathlib.Path) -> 
             "placement_hint_basis": "auto_cross_thread_escape",
         },
     )
+    mapping_rows, multi_owner_skip_rows, runtime_event = ready_multi_owner_cross_thread_pairing_inputs()
+    rewrite_artifact = json.loads(rewrite_path.read_text(encoding="utf-8"))
+    rewrite_artifact["rewrite_candidates"] = [*mapping_rows, *multi_owner_skip_rows]
+    write_json(rewrite_path, rewrite_artifact)
+    multi_owner_pairing = evaluate.rustc_driver_mir_cross_thread_multi_owner_recovery_pairing_summary(
+        mapping_rows,
+        multi_owner_skip_rows,
+        runtime_event,
+    )
     write_json(
         path,
         {
@@ -916,6 +992,7 @@ def write_ready_mir_cross_thread_hint_probe_companion(results: pathlib.Path) -> 
                 "lowered_rows": 3,
                 "lowered_deallocation_rows": 3,
                 "arc_cross_thread_type_mapping_record_count": 2,
+                **multi_owner_pairing,
                 "non_escaping_vecdeque_cross_thread_hint_count": 0,
                 "direct_allocator_candidate_count": 1,
                 "non_escaping_direct_allocator_cross_thread_hint_count": 0,
@@ -927,6 +1004,7 @@ def write_ready_mir_cross_thread_hint_probe_companion(results: pathlib.Path) -> 
                 "compiler_site_replay": False,
                 "type_id_basis": "compiler-assigned-allocation-site-object-type-id-rustc-driver-mir-semantic-scope",
             },
+            "runtime_event": runtime_event,
             "target_rewrite": {
                 "provider_override_installed": True,
                 "compiler_pass": {
@@ -4093,6 +4171,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                 summary["fallback_attribution_matches_stats"] = False
                 summary["non_escaping_vecdeque_cross_thread_hint_count"] = 1
                 summary["non_escaping_direct_allocator_cross_thread_hint_count"] = 1
+                summary["multi_owner_cross_thread_recovery_pairing_validated"] = False
                 status = evaluate.rustc_driver_mir_cross_thread_hint_probe_companion_status(audit)
         self.assertFalse(status["ready"])
         joined = " | ".join(status["blockers"])
@@ -4103,6 +4182,128 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         self.assertIn("runtime fallback attribution", joined)
         self.assertIn("non-escaping VecDeque", joined)
         self.assertIn("non-escaping direct allocator rows", joined)
+        self.assertIn("worker-drop recovery pairing", joined)
+
+    def test_mir_cross_thread_multi_owner_pairing_accepts_bound_arc_and_vec(self) -> None:
+        mapping_rows, rewrite_candidates, runtime_event = ready_multi_owner_cross_thread_pairing_inputs()
+        summary = evaluate.rustc_driver_mir_cross_thread_multi_owner_recovery_pairing_summary(
+            mapping_rows,
+            rewrite_candidates,
+            runtime_event,
+        )
+        self.assertTrue(
+            summary["multi_owner_cross_thread_recovery_pairing_validated"],
+            summary["multi_owner_cross_thread_recovery_pairing_blockers"],
+        )
+        self.assertNotEqual(
+            summary["multi_owner_cross_thread_vec_type_id"],
+            summary["multi_owner_cross_thread_arc_type_id"],
+        )
+
+    def test_mir_cross_thread_multi_owner_pairing_accepts_local_hint_pair(self) -> None:
+        mapping_rows, rewrite_candidates, runtime_event = ready_multi_owner_cross_thread_pairing_inputs()
+        for row in mapping_rows:
+            row["replacement_symbol"] = "__unialloc_semantic_scope_push_hints_local"
+            row["replacement_resolution_status"] = (
+                "resolved_unialloc_semantic_scope_push_hints_local_pop"
+            )
+        rewrite_candidates[0]["replacement_symbol"] = "__unialloc_semantic_scope_push_hints_local"
+        summary = evaluate.rustc_driver_mir_cross_thread_multi_owner_recovery_pairing_summary(
+            mapping_rows,
+            rewrite_candidates,
+            runtime_event,
+        )
+        self.assertTrue(
+            summary["multi_owner_cross_thread_recovery_pairing_validated"],
+            summary["multi_owner_cross_thread_recovery_pairing_blockers"],
+        )
+
+    def test_mir_cross_thread_multi_owner_pairing_rejects_unbound_evidence(self) -> None:
+        base_mapping, base_rewrites, base_runtime = ready_multi_owner_cross_thread_pairing_inputs()
+
+        missing_dealloc = (copy.deepcopy(base_mapping), copy.deepcopy(base_rewrites), copy.deepcopy(base_runtime))
+        missing_dealloc[2]["type_rows"][1]["deallocations"] = 0
+
+        overcounted_alloc = (copy.deepcopy(base_mapping), copy.deepcopy(base_rewrites), copy.deepcopy(base_runtime))
+        overcounted_alloc[2]["type_rows"][0]["allocations"] = 2
+
+        tampered_vec_id = (copy.deepcopy(base_mapping), copy.deepcopy(base_rewrites), copy.deepcopy(base_runtime))
+        tampered_vec_id[0][0]["type_id"] ^= 0x100
+
+        tampered_arc_symbol = (copy.deepcopy(base_mapping), copy.deepcopy(base_rewrites), copy.deepcopy(base_runtime))
+        tampered_arc_symbol[0][1]["replacement_symbol"] = "__unialloc_semantic_scope_push"
+
+        missing_arc_symbol = (copy.deepcopy(base_mapping), copy.deepcopy(base_rewrites), copy.deepcopy(base_runtime))
+        missing_arc_symbol[0][1].pop("replacement_symbol")
+
+        cross_paired_arc_symbol = (
+            copy.deepcopy(base_mapping),
+            copy.deepcopy(base_rewrites),
+            copy.deepcopy(base_runtime),
+        )
+        cross_paired_arc_symbol[0][1]["replacement_symbol"] = (
+            "__unialloc_semantic_scope_push_hints_local"
+        )
+
+        missing_skip = (copy.deepcopy(base_mapping), [], copy.deepcopy(base_runtime))
+
+        tampered_skip = (copy.deepcopy(base_mapping), copy.deepcopy(base_rewrites), copy.deepcopy(base_runtime))
+        tampered_skip[1][0]["rewrite_status"] = "actual_semantic_scope_drop_rewrite_applied"
+
+        missing_skip_symbol = (copy.deepcopy(base_mapping), copy.deepcopy(base_rewrites), copy.deepcopy(base_runtime))
+        missing_skip_symbol[1][0].pop("replacement_symbol")
+
+        tampered_skip_symbol = (copy.deepcopy(base_mapping), copy.deepcopy(base_rewrites), copy.deepcopy(base_runtime))
+        tampered_skip_symbol[1][0]["replacement_symbol"] = "__unialloc_semantic_scope_push"
+
+        duplicate_skip = (copy.deepcopy(base_mapping), copy.deepcopy(base_rewrites), copy.deepcopy(base_runtime))
+        duplicate_skip[1].append(copy.deepcopy(duplicate_skip[1][0]))
+
+        colliding_ids = (copy.deepcopy(base_mapping), copy.deepcopy(base_rewrites), copy.deepcopy(base_runtime))
+        colliding_ids[0][1]["type_id"] = colliding_ids[0][0]["type_id"]
+
+        for label, inputs in (
+            ("missing Arc deallocation", missing_dealloc),
+            ("two Vec allocations for one deallocation", overcounted_alloc),
+            ("tampered Vec type id", tampered_vec_id),
+            ("tampered Arc replacement symbol", tampered_arc_symbol),
+            ("missing Arc replacement symbol", missing_arc_symbol),
+            ("cross-paired Arc replacement symbol and resolution", cross_paired_arc_symbol),
+            ("missing multi-owner skip", missing_skip),
+            ("tampered multi-owner skip", tampered_skip),
+            ("missing multi-owner skip replacement symbol", missing_skip_symbol),
+            ("tampered multi-owner skip replacement symbol", tampered_skip_symbol),
+            ("duplicate multi-owner skip", duplicate_skip),
+            ("colliding Arc/Vec ids", colliding_ids),
+        ):
+            with self.subTest(case=label):
+                summary = evaluate.rustc_driver_mir_cross_thread_multi_owner_recovery_pairing_summary(*inputs)
+                self.assertFalse(summary["multi_owner_cross_thread_recovery_pairing_validated"])
+                self.assertTrue(summary["multi_owner_cross_thread_recovery_pairing_blockers"])
+
+    def test_mir_cross_thread_companion_rejects_summary_without_raw_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            results = pathlib.Path(raw_tmp) / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                audit_path = write_ready_mir_cross_thread_hint_probe_companion(results)
+                audit = json.loads(audit_path.read_text(encoding="utf-8"))
+                audit.pop("runtime_event")
+                status = evaluate.rustc_driver_mir_cross_thread_hint_probe_companion_status(audit)
+        self.assertFalse(status["ready"])
+        self.assertIn("raw runtime_event is unavailable", " | ".join(status["blockers"]))
+
+    def test_mir_cross_thread_companion_rejects_summary_tamper_against_raw(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            results = pathlib.Path(raw_tmp) / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                audit_path = write_ready_mir_cross_thread_hint_probe_companion(results)
+                audit = json.loads(audit_path.read_text(encoding="utf-8"))
+                audit["summary"]["multi_owner_cross_thread_vec_type_id"] ^= 0x100
+                status = evaluate.rustc_driver_mir_cross_thread_hint_probe_companion_status(audit)
+        self.assertFalse(status["ready"])
+        self.assertIn("does not match recomputed raw evidence", " | ".join(status["blockers"]))
 
     def test_mir_probe_companions_gate_recovery_identity_mismatches(self) -> None:
         cases = (
