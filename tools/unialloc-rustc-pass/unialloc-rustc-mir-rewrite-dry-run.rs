@@ -14,6 +14,9 @@
 //! - semantic allocation calls such as `Vec::push`/`BTreeMap::insert` can be
 //!   wrapped by inserted MIR calls to the fast `__unialloc_semantic_scope_push/pop`
 //!   ABI, with optional lifetime/placement hints.
+//! - the exact pointer-preserving `Box<[T], A> -> Vec<T, A>` standard-library
+//!   ownership transfer can be retargeted to a UniAlloc metadata-rebind helper
+//!   after DefId, structural type, generic-argument, and symbol proof.
 //!
 //! The JSON remains a conservative compiler-owned evidence artifact: actual
 //! modes are explicit flags, and every artifact keeps `claim_grade=false` until
@@ -248,6 +251,34 @@ struct SemanticScopeAbi {
     push_symbol: &'static str,
     supports_hints: bool,
     local_no_recovery: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct SemanticOwnershipTransferAbi {
+    def_id: DefId,
+}
+
+const SEMANTIC_BOX_SLICE_INTO_VEC_SYMBOL: &str = "__unialloc_semantic_box_slice_into_vec";
+
+#[derive(Clone, Debug)]
+struct BoxSliceIntoVecTransferProof<'tcx> {
+    element_ty: Ty<'tcx>,
+    allocator_ty: Ty<'tcx>,
+    old_owner_type: String,
+    new_owner_type: String,
+}
+
+#[derive(Clone, Debug)]
+struct SemanticOwnershipTransferCandidate<'tcx> {
+    bb: BasicBlock,
+    callee: String,
+    call_arguments: Vec<String>,
+    argument_types: Vec<String>,
+    destination_place: String,
+    destination_type: String,
+    proof: BoxSliceIntoVecTransferProof<'tcx>,
+    source_span: String,
+    fn_span: Span,
 }
 
 fn semantic_scope_resolution_status_for(
@@ -2089,6 +2120,103 @@ fn plain_clone_call(tcx: TyCtxt<'_>, def_id: Option<DefId>, callee: &str) -> boo
         || plain_clone_trait_call(callee)
 }
 
+fn exact_alloc_slice_into_vec_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "alloc::slice::{impl#0}::into_vec" | "std::slice::<impl [T]>::into_vec"
+    )
+}
+
+fn exact_alloc_slice_into_vec_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    // Current rustc's diagnostic DefPath uses the `std` re-export spelling
+    // even though the defining DefId belongs to `alloc`. This path/name check
+    // is only a first filter; the structural proof below also binds the source
+    // to the OwnedBox lang item and requires all three definitions to share
+    // that exact CrateNum.
+    tcx.crate_name(def_id.krate).as_str() == "alloc"
+        && exact_alloc_slice_into_vec_def_path(&tcx.def_path_str(def_id))
+}
+
+fn exact_alloc_box_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "alloc::boxed::Box" | "std::boxed::Box"
+    )
+}
+
+fn exact_alloc_vec_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "alloc::vec::Vec" | "std::vec::Vec"
+    )
+}
+
+fn exact_alloc_adt_def_id(tcx: TyCtxt<'_>, def_id: DefId, exact_path: fn(&str) -> bool) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "alloc" && exact_path(&tcx.def_path_str(def_id))
+}
+
+fn exact_box_slice_into_vec_transfer_proof<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    callee_generic_types: &[Ty<'tcx>],
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<BoxSliceIntoVecTransferProof<'tcx>> {
+    if !exact_alloc_slice_into_vec_def_id(tcx, callee_def_id)
+        || argument_tys.len() != 1
+        || clone_result_has_unresolved_params(destination_ty)
+        || clone_result_has_unresolved_params(argument_tys[0])
+    {
+        return None;
+    }
+
+    let source_ty = argument_tys[0];
+    let (source_def, source_args) = match source_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, source_def.did(), exact_alloc_box_def_path)
+        || tcx.lang_items().owned_box() != Some(source_def.did())
+        || source_args.len() != 2
+    {
+        return None;
+    }
+    let source_payload_ty = source_args.get(0)?.as_type()?;
+    let source_element_ty = match source_payload_ty.kind() {
+        ty::Slice(element_ty) => *element_ty,
+        _ => return None,
+    };
+    let source_allocator_ty = source_args.get(1)?.as_type()?;
+
+    let (destination_def, destination_args) = match destination_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, destination_def.did(), exact_alloc_vec_def_path)
+        || callee_def_id.krate != source_def.did().krate
+        || destination_def.did().krate != source_def.did().krate
+        || destination_args.len() != 2
+    {
+        return None;
+    }
+    let destination_element_ty = destination_args.get(0)?.as_type()?;
+    let destination_allocator_ty = destination_args.get(1)?.as_type()?;
+
+    if source_element_ty != destination_element_ty
+        || source_allocator_ty != destination_allocator_ty
+        || callee_generic_types != [source_element_ty, source_allocator_ty]
+    {
+        return None;
+    }
+
+    Some(BoxSliceIntoVecTransferProof {
+        element_ty: source_element_ty,
+        allocator_ty: source_allocator_ty,
+        old_owner_type: format!("{:?}", source_ty),
+        new_owner_type: format!("{:?}", destination_ty),
+    })
+}
+
 fn clone_transparent_wrapper_def_path(path: &str) -> bool {
     path == "core::option::Option"
         || path.ends_with("::core::option::Option")
@@ -2704,6 +2832,37 @@ mod tests {
         assert!(!plain_clone_trait_call(
             "my_crate::allocation::CloneFactory::clone"
         ));
+    }
+
+    #[test]
+    fn box_slice_into_vec_matcher_is_def_path_exact_and_one_way() {
+        assert!(exact_alloc_slice_into_vec_def_path(
+            "alloc[d734]::slice::{impl#0}::into_vec"
+        ));
+        assert!(exact_alloc_slice_into_vec_def_path(
+            "std::slice::<impl [T]>::into_vec"
+        ));
+        assert!(!exact_alloc_slice_into_vec_def_path(
+            "alloc::slice::{impl#1}::into_vec"
+        ));
+        assert!(!exact_alloc_slice_into_vec_def_path(
+            "alloc::slice::{impl#0}::into_vec_unchecked"
+        ));
+        assert!(!exact_alloc_slice_into_vec_def_path(
+            "alloc::vec::{impl#2}::into_boxed_slice"
+        ));
+        assert!(!exact_alloc_slice_into_vec_def_path(
+            "my_crate::alloc::slice::{impl#0}::into_vec"
+        ));
+        assert!(!exact_alloc_slice_into_vec_def_path(
+            "my_crate::std::slice::<impl [T]>::into_vec"
+        ));
+        assert!(exact_alloc_box_def_path("alloc[d734]::boxed::Box"));
+        assert!(exact_alloc_box_def_path("std::boxed::Box"));
+        assert!(!exact_alloc_box_def_path("my_crate::std::boxed::Box"));
+        assert!(exact_alloc_vec_def_path("alloc[d734]::vec::Vec"));
+        assert!(exact_alloc_vec_def_path("std::vec::Vec"));
+        assert!(!exact_alloc_vec_def_path("my_crate::std::vec::Vec"));
     }
 
     #[test]
@@ -3904,6 +4063,29 @@ fn resolve_unialloc_semantic_scope<'tcx>(
     None
 }
 
+fn resolve_unialloc_semantic_ownership_transfer_in_crate<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    crate_root: DefId,
+) -> Option<SemanticOwnershipTransferAbi> {
+    child_def_id_in_alloc_api_or_type_isolation(tcx, crate_root, SEMANTIC_BOX_SLICE_INTO_VEC_SYMBOL)
+        .map(|def_id| SemanticOwnershipTransferAbi { def_id })
+}
+
+fn resolve_unialloc_semantic_ownership_transfer<'tcx>(
+    tcx: TyCtxt<'tcx>,
+) -> Option<SemanticOwnershipTransferAbi> {
+    for krate in tcx.crates(()).iter().copied() {
+        if tcx.crate_name(krate).as_str() == "unialloc" {
+            if let Some(abi) =
+                resolve_unialloc_semantic_ownership_transfer_in_crate(tcx, krate.as_def_id())
+            {
+                return Some(abi);
+            }
+        }
+    }
+    None
+}
+
 fn semantic_scope_candidate_for_mir<'tcx>(
     tcx: TyCtxt<'tcx>,
     callee: &str,
@@ -4642,6 +4824,28 @@ fn unialloc_function_handle<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId, span: Span) 
     }
 }
 
+fn unialloc_function_handle_with_two_types<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: DefId,
+    first: Ty<'tcx>,
+    second: Ty<'tcx>,
+    span: Span,
+) -> Operand<'tcx> {
+    #[cfg(unialloc_rustc_current)]
+    {
+        Operand::function_handle(tcx, def_id, [first.into(), second.into()], span)
+    }
+    #[cfg(not(unialloc_rustc_current))]
+    {
+        Operand::function_handle(
+            tcx,
+            def_id,
+            tcx.intern_substs(&[first.into(), second.into()]),
+            span,
+        )
+    }
+}
+
 #[cfg(unialloc_rustc_current)]
 fn synthetic_call_source() -> MirCallSource {
     CallSource::Misc
@@ -4996,6 +5200,7 @@ fn record_or_rewrite_candidates<'tcx>(
     semantic_scope_rewrite: bool,
     semantic_scope_abi: Option<SemanticScopeAbi>,
     semantic_scope_local_abi: Option<SemanticScopeAbi>,
+    semantic_ownership_transfer_abi: Option<SemanticOwnershipTransferAbi>,
     records: &mut Vec<RewriteRecord>,
 ) {
     let function_name = tcx.def_path_str(def_id);
@@ -5382,6 +5587,7 @@ fn record_or_rewrite_candidates<'tcx>(
         semantic_scope_rewrite,
         semantic_scope_abi,
         semantic_scope_local_abi,
+        semantic_ownership_transfer_abi,
         records,
     );
     record_or_rewrite_semantic_drop_candidates(
@@ -5440,6 +5646,218 @@ fn push_semantic_scope_pop_block<'tcx>(
     ))
 }
 
+fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: DefId,
+    body: &mut Body<'tcx>,
+    semantic_scope_rewrite: bool,
+    transfer_abi: Option<SemanticOwnershipTransferAbi>,
+    records: &mut Vec<RewriteRecord>,
+) -> BTreeSet<BasicBlock> {
+    let function_name = tcx.def_path_str(def_id);
+    let mut candidates = Vec::new();
+
+    for (bb, data) in body_basic_blocks!(body).iter_enumerated() {
+        let terminator = match &data.terminator {
+            Some(terminator) => terminator,
+            None => continue,
+        };
+        let (func, args, destination, target, fn_span) = match &terminator.kind {
+            TerminatorKind::Call {
+                func,
+                args,
+                destination,
+                target,
+                fn_span,
+                ..
+            } => (func, args, destination, target, fn_span),
+            _ => continue,
+        };
+        if target.is_none() || (semantic_scope_rewrite && transfer_abi.is_none()) {
+            continue;
+        }
+
+        let (callee_def_id, callee_generic_types) = match func.ty(&body.local_decls, tcx).kind() {
+            ty::FnDef(def_id, args) => (*def_id, args.types().collect::<Vec<_>>()),
+            _ => continue,
+        };
+        let arg_operands = call_arg_operands(args);
+        let argument_tys = arg_operands
+            .iter()
+            .map(|arg| arg.ty(&body.local_decls, tcx))
+            .collect::<Vec<_>>();
+        let destination_ty = destination.ty(&body.local_decls, tcx).ty;
+        let proof = match exact_box_slice_into_vec_transfer_proof(
+            tcx,
+            callee_def_id,
+            &callee_generic_types,
+            destination_ty,
+            &argument_tys,
+        ) {
+            Some(proof) => proof,
+            None => continue,
+        };
+
+        candidates.push(SemanticOwnershipTransferCandidate {
+            bb,
+            callee: callee_text(func),
+            call_arguments: arg_operands
+                .iter()
+                .map(|arg| format!("{:?}", arg))
+                .collect(),
+            argument_types: argument_tys
+                .iter()
+                .map(|arg_ty| format!("{:?}", arg_ty))
+                .collect(),
+            destination_place: format!("{:?}", destination),
+            destination_type: format!("{:?}", destination_ty),
+            proof,
+            source_span: tcx.sess.source_map().span_to_diagnostic_string(*fn_span),
+            fn_span: *fn_span,
+        });
+    }
+
+    let mut handled_blocks = BTreeSet::new();
+    for candidate in candidates {
+        let basic_block = format!("{:?}", candidate.bb);
+        let key = format!(
+            "semantic-ownership-transfer\0{}\0{}\0{}\0{}\0{}\0{}",
+            function_name,
+            basic_block,
+            candidate.source_span,
+            candidate.callee,
+            candidate.proof.old_owner_type,
+            candidate.proof.new_owner_type,
+        );
+        let callsite = nonzero_fnv1a64_text(&key);
+        let (old_type_id, _) = semantic_scope_type_id(&candidate.proof.old_owner_type, &key);
+        let (new_type_id, _) = semantic_scope_type_id(&candidate.proof.new_owner_type, &key);
+        let mut rewrite_status = "semantic_ownership_transfer_rewrite_planned";
+        let mut replacement_resolution_status = "not_requested_dry_run";
+
+        if semantic_scope_rewrite {
+            let still_exact = {
+                let terminator = body[candidate.bb].terminator();
+                let (func, args, destination, target) = match &terminator.kind {
+                    TerminatorKind::Call {
+                        func,
+                        args,
+                        destination,
+                        target,
+                        ..
+                    } => (func, args, destination, target),
+                    _ => continue,
+                };
+                if target.is_none() {
+                    false
+                } else {
+                    let (callee_def_id, callee_generic_types) =
+                        match func.ty(&body.local_decls, tcx).kind() {
+                            ty::FnDef(def_id, args) => (*def_id, args.types().collect::<Vec<_>>()),
+                            _ => continue,
+                        };
+                    let arg_operands = call_arg_operands(args);
+                    let argument_tys = arg_operands
+                        .iter()
+                        .map(|arg| arg.ty(&body.local_decls, tcx))
+                        .collect::<Vec<_>>();
+                    let destination_ty = destination.ty(&body.local_decls, tcx).ty;
+                    exact_box_slice_into_vec_transfer_proof(
+                        tcx,
+                        callee_def_id,
+                        &callee_generic_types,
+                        destination_ty,
+                        &argument_tys,
+                    )
+                    .map_or(false, |proof| {
+                        proof.element_ty == candidate.proof.element_ty
+                            && proof.allocator_ty == candidate.proof.allocator_ty
+                            && proof.old_owner_type == candidate.proof.old_owner_type
+                            && proof.new_owner_type == candidate.proof.new_owner_type
+                    })
+                }
+            };
+            if !still_exact {
+                // Do not consume this block. The ordinary semantic-scope scan
+                // below will retain its existing ambiguous fail-closed audit.
+                continue;
+            }
+
+            let abi = match transfer_abi {
+                Some(abi) => abi,
+                None => continue,
+            };
+            let terminator = body[candidate.bb].terminator_mut();
+            let (func, args) = match &mut terminator.kind {
+                TerminatorKind::Call { func, args, .. } if args.len() == 1 => (func, args),
+                _ => continue,
+            };
+            let rewritten_args = vec![
+                clone_call_arg_operand(args, 0),
+                const_u64_operand(tcx, old_type_id, candidate.fn_span),
+                const_u64_operand(tcx, new_type_id, candidate.fn_span),
+            ];
+            *func = unialloc_function_handle_with_two_types(
+                tcx,
+                abi.def_id,
+                candidate.proof.element_ty,
+                candidate.proof.allocator_ty,
+                candidate.fn_span,
+            );
+            *args = make_call_args(rewritten_args, candidate.fn_span);
+            rewrite_status = "actual_semantic_ownership_transfer_rewrite_applied";
+            replacement_resolution_status = "resolved_unialloc_semantic_box_slice_into_vec";
+        }
+
+        records.push(RewriteRecord {
+            allocation_site_id: format!(
+                "rustc-driver-mir-semantic-ownership-transfer:{:016x}",
+                callsite
+            ),
+            type_id: new_type_id,
+            module_id: LOWERING_MODULE_ID,
+            flags: lowering_policy_flags(),
+            lifetime_hint: lowering_lifetime_hint(),
+            placement_hint: lowering_placement_hint(),
+            cross_thread_recovery_hint: false,
+            placement_hint_basis: if lowering_placement_hint() != 0 {
+                "manual_placement_hint"
+            } else {
+                "default"
+            },
+            callsite,
+            mir_function: function_name.clone(),
+            basic_block,
+            source_span: candidate.source_span,
+            callee: candidate.callee,
+            destination_place: candidate.destination_place,
+            destination_type: candidate.destination_type,
+            call_arguments: candidate.call_arguments,
+            argument_types: candidate.argument_types,
+            semantic_object_type: candidate.proof.new_owner_type.clone(),
+            type_id_basis: "rustc_middle_exact_box_slice_into_vec_owner_transfer",
+            size_operand: None,
+            align_operand: None,
+            rewrite_status,
+            replacement_symbol: SEMANTIC_BOX_SLICE_INTO_VEC_SYMBOL,
+            replacement_resolution_status,
+            replacement_preview: format!(
+                "Retarget exact pointer-preserving Box<[T], A> -> Vec<T, A> ownership transfer; old_owner_type={}; old_type_id={}; new_owner_type={}; new_type_id={}",
+                candidate.proof.old_owner_type,
+                old_type_id,
+                candidate.proof.new_owner_type,
+                new_type_id,
+            ),
+            semantic_scope_unwind_pop_inserted: false,
+            metadata_pairing_contract: "pointer_preserving_owner_identity_rebind",
+            lowering_kind: "semantic_ownership_transfer_rewrite",
+        });
+        handled_blocks.insert(candidate.bb);
+    }
+
+    handled_blocks
+}
+
 fn record_or_rewrite_semantic_scope_candidates<'tcx>(
     tcx: TyCtxt<'tcx>,
     def_id: DefId,
@@ -5447,6 +5865,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
     semantic_scope_rewrite: bool,
     semantic_scope_abi: Option<SemanticScopeAbi>,
     semantic_scope_local_abi: Option<SemanticScopeAbi>,
+    semantic_ownership_transfer_abi: Option<SemanticOwnershipTransferAbi>,
     records: &mut Vec<RewriteRecord>,
 ) -> SemanticLocalOwnershipProof {
     let function_name = tcx.def_path_str(def_id);
@@ -5456,8 +5875,19 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
     } else {
         BTreeSet::new()
     };
+    let ownership_transfer_blocks = record_or_rewrite_semantic_ownership_transfers(
+        tcx,
+        def_id,
+        body,
+        semantic_scope_rewrite,
+        semantic_ownership_transfer_abi,
+        records,
+    );
     let mut candidate_blocks = Vec::new();
     for (bb, data) in body_basic_blocks!(body).iter_enumerated() {
+        if ownership_transfer_blocks.contains(&bb) {
+            continue;
+        }
         let terminator = match &data.terminator {
             Some(terminator) => terminator,
             None => continue,
@@ -6340,6 +6770,11 @@ fn optimized_mir_with_rewrite_dry_run<'tcx>(
         } else {
             None
         };
+    let semantic_ownership_transfer_abi = if semantic_scope_rewrite {
+        resolve_unialloc_semantic_ownership_transfer(tcx)
+    } else {
+        None
+    };
     let record_def_id = optimized_mir_def_id_to_def_id(def_id);
     unsafe {
         if let Some(records) = &RECORDS {
@@ -6353,6 +6788,7 @@ fn optimized_mir_with_rewrite_dry_run<'tcx>(
                     semantic_scope_rewrite,
                     semantic_scope_abi,
                     semantic_scope_local_abi,
+                    semantic_ownership_transfer_abi,
                     &mut guard,
                 );
             }
@@ -6496,6 +6932,16 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .iter()
         .filter(|record| record.lowering_kind == "semantic_scope_enter_exit_rewrite")
         .count();
+    let semantic_ownership_transfer_candidate_count = records
+        .iter()
+        .filter(|record| record.lowering_kind == "semantic_ownership_transfer_rewrite")
+        .count();
+    let semantic_ownership_transfer_rewrite_applied_count = records
+        .iter()
+        .filter(|record| {
+            record.rewrite_status == "actual_semantic_ownership_transfer_rewrite_applied"
+        })
+        .count();
     let semantic_scope_deallocation_like_candidate_count = records
         .iter()
         .filter(|record| {
@@ -6577,6 +7023,8 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let actual_allocator_call_replacement = cli.actual_rewrite && rewrite_applied_count > 0;
     let actual_semantic_scope_rewrite =
         cli.semantic_scope_rewrite && semantic_scope_rewrite_applied_count > 0;
+    let actual_semantic_ownership_transfer_rewrite =
+        cli.semantic_scope_rewrite && semantic_ownership_transfer_rewrite_applied_count > 0;
     let direct_replacement_resolution_status = if !cli.actual_rewrite {
         "not_requested_dry_run"
     } else if rewrite_applied_count > 0 {
@@ -6658,10 +7106,21 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     } else {
         "no_supported_semantic_scope_candidates"
     };
+    let semantic_ownership_transfer_replacement_resolution_status = if !cli.semantic_scope_rewrite {
+        "not_requested_dry_run"
+    } else if semantic_ownership_transfer_rewrite_applied_count > 0 {
+        "resolved_unialloc_semantic_box_slice_into_vec"
+    } else {
+        "no_supported_semantic_ownership_transfer_candidates"
+    };
     let replacement_resolution_status = if cli.actual_rewrite {
         direct_replacement_resolution_status
     } else if cli.semantic_scope_rewrite {
-        semantic_scope_replacement_resolution_status
+        if semantic_scope_rewrite_applied_count > 0 {
+            semantic_scope_replacement_resolution_status
+        } else {
+            semantic_ownership_transfer_replacement_resolution_status
+        }
     } else {
         "not_requested_dry_run"
     };
@@ -6683,6 +7142,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let _ = writeln!(
         json,
         "    \"actual_semantic_scope_rewrite_requested\": {},",
+        cli.semantic_scope_rewrite
+    );
+    let _ = writeln!(
+        json,
+        "    \"actual_semantic_ownership_transfer_rewrite_requested\": {},",
         cli.semantic_scope_rewrite
     );
     let _ = writeln!(json, "    \"policy_flags\": {},", cli.policy_flags);
@@ -6730,6 +7194,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(
         json,
+        "    \"actual_semantic_ownership_transfer_rewrite\": {},",
+        actual_semantic_ownership_transfer_rewrite
+    );
+    let _ = writeln!(
+        json,
         "    \"rewrite_applied_count\": {},",
         rewrite_applied_count
     );
@@ -6737,6 +7206,16 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         json,
         "    \"semantic_scope_rewrite_applied_count\": {},",
         semantic_scope_rewrite_applied_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"semantic_ownership_transfer_candidate_count\": {},",
+        semantic_ownership_transfer_candidate_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"semantic_ownership_transfer_rewrite_applied_count\": {},",
+        semantic_ownership_transfer_rewrite_applied_count
     );
     let _ = writeln!(
         json,
@@ -6798,6 +7277,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         "    \"semantic_scope_replacement_resolution_status\": \"{}\",",
         semantic_scope_replacement_resolution_status
     );
+    let _ = writeln!(
+        json,
+        "    \"semantic_ownership_transfer_replacement_resolution_status\": \"{}\",",
+        semantic_ownership_transfer_replacement_resolution_status
+    );
     json.push_str("    \"claim_grade\": false,\n");
     json.push_str("    \"notes\": [\n");
     json.push_str("      \"This installs a real rustc query override and returns cloned MIR bodies to rustc.\",\n");
@@ -6807,6 +7291,7 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     json.push_str("  \"lowering_contract\": {\n");
     json.push_str("    \"target_allocator_abi\": \"__unialloc_alloc_with_metadata[_hints](size, align, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite), Rust-ABI __unialloc_{alloc,alloc_zeroed,realloc,dealloc}_layout_with_metadata[_hints] plus optional no-recovery alloc/alloc_zeroed/realloc/dealloc _local variants for explicit paired Layout lowerings; size/align __unialloc_alloc_with_metadata[_hints] remains recovery-backed because exchange_malloc has no direct paired dealloc rewrite (original Layout operands, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite); explicit GlobalAlloc receiver calls are lowered only when the receiver type is UniAlloc/RustAllocator\",\n");
     json.push_str("    \"semantic_scope_abi\": \"__unialloc_semantic_scope_push[_hints][_local](type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite) / __unialloc_semantic_scope_pop(); _local is selected only for a single normal path with no owner move/call before the exact destination Drop; otherwise recovery-backed\",\n");
+    json.push_str("    \"semantic_ownership_transfer_abi\": \"exact DefId alloc::slice::{impl#0}::into_vec plus structural Box<[T], A> -> Vec<T, A> calls may be retargeted to __unialloc_semantic_box_slice_into_vec::<T, A>(boxed_slice, expected_old_type_id, new_type_id); no semantic allocation scope is inserted and any proof or symbol-resolution failure retains the ordinary ambiguous fail-closed path\",\n");
     json.push_str("    \"size_source\": \"original MIR call arg 0\",\n");
     json.push_str("    \"align_source\": \"original MIR call arg 1\",\n");
     json.push_str("    \"semantic_heap_object_solver\": \"rustc_middle TyKind::Adt destination/argument solver plus MIR ShallowInitBox, Layout::array/new/for_value/for_value_raw constructor provenance, size_of/align_of typed Layout::from_size_align reconstruction, Layout::align_to/pad_to_align transformer provenance, same-source Layout::from_size_align reconstruction provenance, projection-aware/packed Layout::extend/repeat composite provenance tracking, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, and canonicalized MIR place/ref/tuple projection provenance; unsolved candidates are audit-only\",\n");
@@ -6878,6 +7363,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(
         json,
+        "    \"semantic_ownership_transfer_candidate_count\": {},",
+        semantic_ownership_transfer_candidate_count
+    );
+    let _ = writeln!(
+        json,
         "    \"semantic_scope_deallocation_like_candidate_count\": {},",
         semantic_scope_deallocation_like_candidate_count
     );
@@ -6945,6 +7435,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(
         json,
+        "    \"actual_semantic_ownership_transfer_rewrite_requested\": {},",
+        cli.semantic_scope_rewrite
+    );
+    let _ = writeln!(
+        json,
         "    \"actual_allocator_call_replacement\": {},",
         actual_allocator_call_replacement
     );
@@ -6952,6 +7447,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         json,
         "    \"actual_semantic_scope_rewrite\": {},",
         actual_semantic_scope_rewrite
+    );
+    let _ = writeln!(
+        json,
+        "    \"actual_semantic_ownership_transfer_rewrite\": {},",
+        actual_semantic_ownership_transfer_rewrite
     );
     let _ = writeln!(
         json,
@@ -6995,6 +7495,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(
         json,
+        "    \"semantic_ownership_transfer_rewrite_applied_count\": {},",
+        semantic_ownership_transfer_rewrite_applied_count
+    );
+    let _ = writeln!(
+        json,
         "    \"semantic_scope_deallocation_like_rewrite_applied_count\": {},",
         semantic_scope_deallocation_like_rewrite_applied_count
     );
@@ -7017,6 +7522,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         json,
         "    \"semantic_scope_replacement_resolution_status\": \"{}\",",
         semantic_scope_replacement_resolution_status
+    );
+    let _ = writeln!(
+        json,
+        "    \"semantic_ownership_transfer_replacement_resolution_status\": \"{}\",",
+        semantic_ownership_transfer_replacement_resolution_status
     );
     json.push_str("    \"claim_grade\": false,\n");
     json.push_str("    \"complete_for_claim\": false\n");
@@ -7226,6 +7736,16 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .iter()
         .filter(|record| record.lowering_kind == "semantic_scope_enter_exit_rewrite")
         .count();
+    let semantic_ownership_transfer_candidate_count = records
+        .iter()
+        .filter(|record| record.lowering_kind == "semantic_ownership_transfer_rewrite")
+        .count();
+    let semantic_ownership_transfer_rewrite_applied_count = records
+        .iter()
+        .filter(|record| {
+            record.rewrite_status == "actual_semantic_ownership_transfer_rewrite_applied"
+        })
+        .count();
     let semantic_scope_deallocation_like_candidate_count = records
         .iter()
         .filter(|record| {
@@ -7328,6 +7848,11 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         "actual_semantic_scope_rewrite_requested: {}",
         cli.semantic_scope_rewrite
     );
+    let _ = writeln!(
+        text,
+        "actual_semantic_ownership_transfer_rewrite_requested: {}",
+        cli.semantic_scope_rewrite
+    );
     let _ = writeln!(text, "policy_flags: {}", cli.policy_flags);
     let _ = writeln!(text, "lifetime_hint: {}", cli.lifetime_hint);
     let _ = writeln!(text, "placement_hint: {}", cli.placement_hint);
@@ -7349,8 +7874,18 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(
         text,
+        "actual_semantic_ownership_transfer_rewrite: {}",
+        cli.semantic_scope_rewrite && semantic_ownership_transfer_rewrite_applied_count > 0
+    );
+    let _ = writeln!(
+        text,
         "semantic_scope_candidate_count: {}",
         semantic_scope_candidate_count
+    );
+    let _ = writeln!(
+        text,
+        "semantic_ownership_transfer_candidate_count: {}",
+        semantic_ownership_transfer_candidate_count
     );
     let _ = writeln!(
         text,
@@ -7389,6 +7924,11 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(
         text,
+        "semantic_ownership_transfer_rewrite_applied_count: {}",
+        semantic_ownership_transfer_rewrite_applied_count
+    );
+    let _ = writeln!(
+        text,
         "semantic_scope_deallocation_like_rewrite_applied_count: {}",
         semantic_scope_deallocation_like_rewrite_applied_count
     );
@@ -7410,6 +7950,7 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let _ = writeln!(text, "rewrite_candidate_count: {}", records.len());
     text.push_str("target_allocator_abi: __unialloc_alloc_with_metadata[_hints](size, align, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite), Rust-ABI __unialloc_{alloc,alloc_zeroed,realloc,dealloc}_layout_with_metadata[_hints] plus optional no-recovery alloc/alloc_zeroed/realloc/dealloc _local variants for explicit paired Layout lowerings; size/align __unialloc_alloc_with_metadata[_hints] remains recovery-backed because exchange_malloc has no direct paired dealloc rewrite (original Layout operands, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite); explicit GlobalAlloc receiver calls are lowered only when the receiver type is UniAlloc/RustAllocator\n");
     text.push_str("semantic_scope_abi: __unialloc_semantic_scope_push[_hints][_local](type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite) / __unialloc_semantic_scope_pop(); _local is selected only for a single normal path with no owner move/call before the exact destination Drop; otherwise recovery-backed\n");
+    text.push_str("semantic_ownership_transfer_abi: exact DefId alloc::slice::{impl#0}::into_vec plus structural Box<[T], A> -> Vec<T, A> calls may be retargeted to __unialloc_semantic_box_slice_into_vec::<T, A>(boxed_slice, expected_old_type_id, new_type_id); proof or symbol-resolution failure retains the ambiguous fail-closed path\n");
     text.push_str("semantic_heap_object_solver: rustc_middle TyKind::Adt destination/argument solver plus MIR ShallowInitBox, Layout::array/new/for_value/for_value_raw constructor provenance, size_of/align_of typed Layout::from_size_align reconstruction, Layout::align_to/pad_to_align transformer provenance, same-source Layout::from_size_align reconstruction provenance, projection-aware/packed Layout::extend/repeat composite provenance tracking, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, and canonicalized MIR place/ref/tuple projection provenance; unsolved candidates are audit-only\n");
     text.push_str("note: real rustc query override; dry-run by default, optional actual modes rewrite supported direct allocator calls or insert semantic-scope enter/exit calls\n");
     fs::write(path, text).map_err(|err| format!("write {}: {}", path.display(), err))?;

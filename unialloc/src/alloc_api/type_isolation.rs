@@ -8,7 +8,9 @@
 //! evaluation-only layout auto-metadata mode is active, so the coverage
 //! denominator remains honest by default.
 
-use core::alloc::Layout;
+use alloc::boxed::Box as AllocBox;
+use alloc::vec::Vec as AllocVec;
+use core::alloc::{Allocator, Layout};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -4565,6 +4567,143 @@ fn recover_global_auto_allocation_record_metadata(
 
 fn lookup_auto_allocation_metadata(ptr: *mut u8, layout: Layout) -> Option<AllocationMetadata> {
     recover_auto_allocation_record_metadata(ptr, layout, false)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AutoAllocationRecordStorage {
+    Fast,
+    Global,
+}
+
+/// Locate one unambiguous, authenticated recovery record for an owned allocation.
+///
+/// A pointer must not be rebound while duplicate fast/global records exist. Even
+/// if both copies currently agree, changing only one copy could let a later
+/// lookup recover the stale identity. The ordinary allocator should keep one
+/// authoritative record; treating any other state as non-rebindable is the
+/// fail-closed behavior for this ownership transition.
+fn exact_auto_allocation_record_for_identity_rebind(
+    ptr: *mut u8,
+    layout: Layout,
+) -> Option<(AutoAllocationRecordStorage, AllocationMetadata)> {
+    let fast = lookup_fast_auto_allocation_record(ptr, layout, false);
+    let global = lookup_global_auto_allocation_record(ptr, layout, false);
+    match (fast, global) {
+        (AutoAllocationRecordLookup::Exact(metadata), AutoAllocationRecordLookup::Missing) => {
+            Some((AutoAllocationRecordStorage::Fast, metadata))
+        }
+        (AutoAllocationRecordLookup::Missing, AutoAllocationRecordLookup::Exact(metadata)) => {
+            Some((AutoAllocationRecordStorage::Global, metadata))
+        }
+        _ => None,
+    }
+}
+
+/// Return whether a software memory-tag record exists for `ptr` in either the
+/// current-thread or process-visible table.
+///
+/// Ownership-identity rebinding currently rejects tagged allocations instead
+/// of trying to update the recovery record and tag under two independent locks.
+/// This check also catches an inconsistent live tag whose recovery metadata no
+/// longer advertises `FLAG_MEMORY_TAGGING`.
+unsafe fn memory_tag_record_exists_for_identity_rebind(ptr: *mut u8) -> bool {
+    if current_thread_memory_tag_records_active() && find_memory_tag_slot(ptr).is_some() {
+        return true;
+    }
+    if global_memory_tag_records_active() {
+        let mut table = global_memory_tag_table_for_ptr(ptr).lock();
+        return find_global_memory_tag_slot(&mut *table, ptr).is_some();
+    }
+    false
+}
+
+/// Change the type component of one live allocation's recovery identity.
+///
+/// The caller must uniquely own `ptr` for the duration of this operation. The
+/// exact pointer/layout record remains the authority: missing, mismatched,
+/// duplicated, already-transitioned, or memory-tagged records are not changed.
+/// Updating an existing record in its original table recalculates its metadata
+/// authenticator without a remove/insert window, so a failed update leaves the
+/// old record intact.
+unsafe fn try_rebind_auto_allocation_type_identity(
+    ptr: *mut u8,
+    layout: Layout,
+    expected_old_type_id: u64,
+    new_type_id: u64,
+) -> bool {
+    if ptr.is_null()
+        || layout.size() == 0
+        || expected_old_type_id == UNKNOWN_SEMANTIC_ID
+        || new_type_id == UNKNOWN_SEMANTIC_ID
+        || expected_old_type_id == new_type_id
+    {
+        return false;
+    }
+
+    let (storage, recorded) = match exact_auto_allocation_record_for_identity_rebind(ptr, layout) {
+        Some(record) => record,
+        None => return false,
+    };
+    if recorded.type_id != expected_old_type_id
+        || recorded.requests(FLAG_MEMORY_TAGGING)
+        || memory_tag_record_exists_for_identity_rebind(ptr)
+    {
+        return false;
+    }
+
+    let rebound = AllocationMetadata {
+        type_id: new_type_id,
+        ..recorded
+    };
+    match storage {
+        AutoAllocationRecordStorage::Fast => {
+            record_fast_auto_allocation_metadata_eligible(ptr, layout, rebound)
+        }
+        AutoAllocationRecordStorage::Global => {
+            record_global_auto_allocation_metadata_eligible(ptr, layout, rebound)
+        }
+    }
+}
+
+/// Convert a boxed slice into a vector while transferring the allocator's live
+/// type-isolation identity from the exact boxed-slice type to the exact vector
+/// type selected by the compiler.
+///
+/// This is a compiler-lowering helper, not a general source-level conversion
+/// API. The standard-library conversion preserves the allocation pointer,
+/// length, capacity, and allocator. UniAlloc changes only `type_id` in an exact
+/// recovery record; module, policy flags, lifetime/placement hints, and the
+/// allocation callsite remain bound to the allocation event. If the record is
+/// unavailable or cannot be safely rebound, the conversion still succeeds but
+/// the old recovery identity remains authoritative.
+#[doc(hidden)]
+pub fn __unialloc_semantic_box_slice_into_vec<T, A: Allocator>(
+    boxed: AllocBox<[T], A>,
+    expected_old_type_id: u64,
+    new_type_id: u64,
+) -> AllocVec<T, A> {
+    let old_ptr = boxed.as_ptr() as *mut u8;
+    let old_len = boxed.len();
+    let layout = Layout::array::<T>(old_len).ok();
+    let vec = boxed.into_vec();
+
+    if let Some(layout) = layout {
+        // Keep the identity mutation narrower than the standard-library
+        // contract: if a future implementation stops preserving these exact
+        // representation properties, retain the old authoritative record.
+        if layout.size() != 0 && vec.as_ptr() as *mut u8 == old_ptr && vec.capacity() == old_len {
+            unsafe {
+                let _ = try_rebind_auto_allocation_type_identity(
+                    old_ptr,
+                    layout,
+                    expected_old_type_id,
+                    new_type_id,
+                );
+            }
+        }
+    }
+
+    vec
 }
 
 /// Return metadata recorded for this exact allocation pointer without falling
@@ -12015,6 +12154,250 @@ mod tests {
         expected.sort_unstable();
         observed.sort_unstable();
         assert_eq!(observed, expected, "cached object pointer set changed");
+    }
+
+    fn boxed_u8_slice_with_metadata(
+        len: usize,
+        metadata: AllocationMetadata,
+    ) -> Box<[u8], RustAllocator> {
+        let mut boxed = with_semantic_metadata(metadata, || {
+            Box::<[u8], _>::new_uninit_slice_in(len, RustAllocator::new())
+        });
+        for (index, value) in boxed.iter_mut().enumerate() {
+            value.write((index as u8).wrapping_mul(17).wrapping_add(3));
+        }
+        unsafe { boxed.assume_init() }
+    }
+
+    #[test]
+    fn box_slice_into_vec_rebind_preserves_storage_and_routes_new_type_cache() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const LEN: usize = 256;
+        let layout = Layout::array::<u8>(LEN).unwrap();
+        let boxed_metadata = AllocationMetadata::for_type(0xB05E_D501)
+            .with_module(0xC0DE_0201)
+            .with_callsite(0xA110_B051)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_lifetime_hint(0x31)
+            .with_placement_hint(0x42 | PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let vec_type_id = 0x0EC0_D501;
+        let vec_metadata = AllocationMetadata {
+            type_id: vec_type_id,
+            ..boxed_metadata
+        };
+
+        let boxed = boxed_u8_slice_with_metadata(LEN, boxed_metadata);
+        let original_ptr = boxed.as_ptr() as *mut u8;
+        let expected_payload = boxed.to_vec();
+        assert_eq!(
+            lookup_auto_allocation_metadata(original_ptr, layout),
+            Some(boxed_metadata)
+        );
+
+        let vec =
+            __unialloc_semantic_box_slice_into_vec(boxed, boxed_metadata.type_id, vec_type_id);
+        assert_eq!(vec.as_ptr() as *mut u8, original_ptr);
+        assert_eq!(vec.capacity(), LEN);
+        assert_eq!(vec.as_slice(), expected_payload.as_slice());
+        assert_eq!(
+            lookup_auto_allocation_metadata(original_ptr, layout),
+            Some(vec_metadata),
+            "only the live type identity should change"
+        );
+        assert!(
+            !unsafe {
+                try_rebind_auto_allocation_type_identity(
+                    original_ptr,
+                    layout,
+                    boxed_metadata.type_id,
+                    0x0EC0_D502,
+                )
+            },
+            "a second transition using the consumed old identity must fail closed"
+        );
+
+        drop(vec);
+        assert_eq!(lookup_auto_allocation_metadata(original_ptr, layout), None);
+
+        let wrong_type = boxed_u8_slice_with_metadata(LEN, boxed_metadata);
+        let wrong_type_ptr = wrong_type.as_ptr() as *mut u8;
+        assert_ne!(
+            wrong_type_ptr, original_ptr,
+            "the old boxed-slice identity must not reuse a Vec-owned cache entry"
+        );
+        drop(wrong_type);
+
+        let same_type = with_semantic_metadata(vec_metadata, || {
+            Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new())
+        });
+        assert_eq!(
+            same_type.as_ptr() as *mut u8,
+            original_ptr,
+            "the rebound Vec identity should recover its own cached allocation"
+        );
+        drop(same_type);
+
+        let validation = semantic_metadata_validation_snapshot();
+        assert_eq!(validation.recovery_identity_mismatches, 0);
+        let stats = semantic_stats_snapshot();
+        assert_eq!(stats.metadata_pac_auth_failures, 0);
+        assert_eq!(stats.metadata_pac_software_fallback_failures, 0);
+
+        unsafe {
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, boxed_metadata);
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, vec_metadata);
+        }
+        semantic_stats_recording_disable();
+    }
+
+    #[test]
+    fn box_slice_into_vec_rebind_rejects_wrong_missing_and_mismatched_records() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const LEN: usize = 256;
+        let layout = Layout::array::<u8>(LEN).unwrap();
+        let wrong_layout = Layout::array::<u8>(LEN / 2).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xB05E_D511)
+            .with_module(0xC0DE_0211)
+            .with_callsite(0xA110_B511)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let new_type_id = 0x0EC0_D511;
+        let boxed = boxed_u8_slice_with_metadata(LEN, old_metadata);
+        let ptr = boxed.as_ptr() as *mut u8;
+
+        assert!(!unsafe {
+            try_rebind_auto_allocation_type_identity(
+                ptr,
+                layout,
+                old_metadata.type_id ^ 1,
+                new_type_id,
+            )
+        });
+        assert!(!unsafe {
+            try_rebind_auto_allocation_type_identity(
+                ptr,
+                wrong_layout,
+                old_metadata.type_id,
+                new_type_id,
+            )
+        });
+        assert!(!unsafe {
+            try_rebind_auto_allocation_type_identity(
+                0x1234_5000usize as *mut u8,
+                layout,
+                old_metadata.type_id,
+                new_type_id,
+            )
+        });
+        assert!(!unsafe {
+            try_rebind_auto_allocation_type_identity(
+                ptr,
+                layout,
+                old_metadata.type_id,
+                old_metadata.type_id,
+            )
+        });
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(old_metadata),
+            "all rejected transitions must preserve the original record"
+        );
+
+        let vec = __unialloc_semantic_box_slice_into_vec(boxed, old_metadata.type_id, new_type_id);
+        assert_eq!(vec.as_ptr() as *mut u8, ptr);
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout).map(|metadata| metadata.type_id),
+            Some(new_type_id)
+        );
+        assert!(!unsafe {
+            try_rebind_auto_allocation_type_identity(
+                ptr,
+                layout,
+                old_metadata.type_id,
+                new_type_id ^ 2,
+            )
+        });
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout).map(|metadata| metadata.type_id),
+            Some(new_type_id),
+            "a double transition must leave the committed identity intact"
+        );
+
+        drop(vec);
+        unsafe {
+            drain_semantic_cache_for_test(
+                &RustAllocator::new(),
+                layout,
+                AllocationMetadata {
+                    type_id: new_type_id,
+                    ..old_metadata
+                },
+            );
+        }
+        assert_eq!(
+            semantic_metadata_validation_snapshot().recovery_identity_mismatches,
+            0,
+            "fail-closed probes must not be reported as deallocation mismatches"
+        );
+        semantic_stats_recording_disable();
+    }
+
+    #[test]
+    fn box_slice_into_vec_rebind_rejects_memory_tagged_record_without_mutation() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const LEN: usize = 256;
+        let layout = Layout::array::<u8>(LEN).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xB05E_D521)
+            .with_module(0xC0DE_0221)
+            .with_callsite(0xA110_B521)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING);
+        let boxed = boxed_u8_slice_with_metadata(LEN, old_metadata);
+        let ptr = boxed.as_ptr() as *mut u8;
+        assert!(unsafe { find_memory_tag_slot(ptr).is_some() });
+
+        let vec = __unialloc_semantic_box_slice_into_vec(boxed, old_metadata.type_id, 0x0EC0_D521);
+        assert_eq!(vec.as_ptr() as *mut u8, ptr);
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(old_metadata),
+            "recovery metadata must remain coherent with the unchanged memory tag"
+        );
+        assert!(unsafe { find_memory_tag_slot(ptr).is_some() });
+
+        drop(vec);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        assert!(unsafe { find_memory_tag_slot(ptr).is_none() });
+        unsafe {
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, old_metadata);
+        }
+        assert_eq!(
+            semantic_metadata_validation_snapshot().recovery_identity_mismatches,
+            0
+        );
+        semantic_stats_recording_disable();
     }
 
     #[cfg(not(feature = "fixed_heap"))]

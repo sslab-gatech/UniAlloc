@@ -26,7 +26,7 @@ pub use type_isolation::{
     __unialloc_semantic_auto_compiler_metadata_enable,
     __unialloc_semantic_auto_compiler_metadata_stream_enable,
     __unialloc_semantic_auto_metadata_disable, __unialloc_semantic_auto_metadata_enable,
-    __unialloc_semantic_fallback_attribution_snapshot,
+    __unialloc_semantic_box_slice_into_vec, __unialloc_semantic_fallback_attribution_snapshot,
     __unialloc_semantic_fallback_attribution_snapshot_abi_version,
     __unialloc_semantic_fallback_attribution_snapshot_checked,
     __unialloc_semantic_fallback_attribution_snapshot_size,
