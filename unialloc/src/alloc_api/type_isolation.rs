@@ -28860,6 +28860,7 @@ mod tests {
     #[test]
     fn delayed_free_defers_type_cache_reuse_until_eviction() {
         let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
         unsafe {
             clear_type_cache_for_test();
             clear_delayed_free_for_test();
@@ -28902,6 +28903,7 @@ mod tests {
     #[test]
     fn delayed_free_occupied_mask_tracks_slots_and_repairs_missing_bits() {
         let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
         unsafe {
             clear_type_cache_for_test();
             clear_delayed_free_for_test();
@@ -28937,7 +28939,12 @@ mod tests {
             );
 
             let taken = delayed_free_take_slot(0);
+            let taken_ownership_cleanup = PendingGlobalDelayedFreeOwnership::new(taken.ptr);
             assert_eq!(taken.ptr, first.as_mut_ptr() as *mut u8);
+            assert!(
+                global_delayed_free_contains_ptr(taken.ptr),
+                "taking a delayed-free slot must retain process-visible ownership until the caller completes release"
+            );
             assert_eq!(
                 DELAYED_FREE_OCCUPIED_MASK & 0b11,
                 0b10,
@@ -28969,6 +28976,8 @@ mod tests {
                 "slow repair should rebuild the occupied mask from real slots"
             );
 
+            drop(taken_ownership_cleanup);
+            assert!(!global_delayed_free_contains_ptr(taken.ptr));
             clear_delayed_free_for_test();
             clear_type_cache_for_test();
         }
