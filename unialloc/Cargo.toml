@@ -25,7 +25,7 @@ tcmalloc = { version = "0.3.0", optional = true }
 snmalloc-rs = { version = "0.2.27", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["fibersapi", "fileapi", "handleapi", "memoryapi", "minwindef", "processenv", "synchapi", "sysinfoapi", "winbase", "winnt"] }
+winapi = { version = "0.3", features = ["errhandlingapi", "fibersapi", "fileapi", "handleapi", "memoryapi", "minwindef", "processenv", "synchapi", "sysinfoapi", "winbase", "winnt"] }
 
 [build-dependencies]
 num_cpus = "=1.13.0"
