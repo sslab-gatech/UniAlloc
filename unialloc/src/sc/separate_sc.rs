@@ -74,7 +74,10 @@ fn empty_slab_retain_limit_for_geometry(pg_num: usize, pg_count: usize) -> usize
 
 #[inline]
 fn strict_alignment_batch_request_limit(align: usize, pg_align: usize) -> usize {
-    if align <= pg_align {
+    // Every slot inherits the requested alignment only when the slot stride is
+    // divisible by it; `align <= pg_align` is not sufficient (for example,
+    // stride 160 with alignment 64).
+    if align != 0 && pg_align % align == 0 {
         return usize::MAX;
     }
 
@@ -560,7 +563,7 @@ impl SCAllocator {
                             );
                             return Err(restore_result.err().unwrap_or(err));
                         }
-                    } else if align > self.pg_align {
+                    } else if align != 0 && self.pg_align % align != 0 {
                         // A strict-alignment request may skip earlier partial
                         // pages whose free slots do not satisfy `align`.
                         // Promote the successful still-partial page to the
@@ -883,7 +886,7 @@ impl SCAllocator {
             return Err(AllocError::ESIZE);
         }
         let n = self.bitfield_words_for_current_page()?;
-        let strict_alignment = align > self.pg_align;
+        let strict_alignment = self.pg_align % align != 0;
         // `allocate_batch_v2` reserves one strict-alignment result up front via
         // `allocate()`. Clamp the effective request before placing that tail
         // object so the up-front object plus the page-local batch never exceeds

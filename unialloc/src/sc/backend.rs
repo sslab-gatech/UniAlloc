@@ -147,7 +147,9 @@ impl SCAllocator {
             (PAGE_SIZE / self.batch_stride).max(1)
         };
 
-        if align <= self.batch_stride {
+        // Magnitude alone is insufficient: a 160-byte slot stride does not
+        // preserve 64-byte alignment after the first slot.
+        if self.batch_stride % align == 0 {
             // `separate_sc` may back tiny classes with multiple independent
             // object pages.  Returning all of them as one thread-cache batch
             // forces a linked-list representation, so cold tail objects count
@@ -445,6 +447,29 @@ mod tests {
         alloc
             .deallocate_batch(head as *mut usize)
             .expect("strict batch cleanup should succeed");
+    }
+
+    #[test]
+    fn separate_backend_adapter_skips_exhausted_non_divisor_aligned_partial_pages() {
+        let mut alloc = SCAllocator::new(160, 1);
+        let (first, first_count, first_stride) = alloc
+            .allocate_batch_v2(64)
+            .expect("first non-divisor aligned refill should allocate");
+        let (second, second_count, second_stride) = alloc
+            .allocate_batch_v2(64)
+            .expect("later refill should skip exhausted partial pages");
+
+        for (head, count, stride) in [
+            (first, first_count, first_stride),
+            (second, second_count, second_stride),
+        ] {
+            assert_eq!((head as usize) & 63, 0);
+            assert_eq!(stride, None);
+            assert!(count > 1);
+            alloc
+                .deallocate_batch(head as *mut usize)
+                .expect("non-divisor aligned batch should deallocate");
+        }
     }
 
     #[test]
