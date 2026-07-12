@@ -21618,6 +21618,161 @@ mod tests {
             "cross-thread drop should consume the final global recovery record"
         );
     }
+
+    #[test]
+    fn cross_thread_mismatched_drop_cannot_strip_delayed_free_or_poison_type_cache() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let mismatches_before =
+            semantic_metadata_validation_snapshot().recovery_identity_mismatches;
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let allocation_metadata = AllocationMetadata::for_type(0xD17A_C701)
+            .with_module(0xC0DE_C700)
+            .with_callsite(0xA110_C701)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x71);
+        let wrong_drop_metadata = AllocationMetadata::for_type(0xD17A_BAD7)
+            .with_module(allocation_metadata.module_id)
+            .with_callsite(0xD0D0_BAD7)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(allocation_metadata.placement_hint);
+        let ptr = unsafe {
+            __unialloc_alloc_with_metadata_hints(
+                layout.size(),
+                layout.align(),
+                allocation_metadata.type_id,
+                allocation_metadata.module_id,
+                allocation_metadata.flags,
+                allocation_metadata.lifetime_hint,
+                allocation_metadata.placement_hint,
+                allocation_metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(allocation_metadata)
+        );
+        assert_eq!(
+            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+            1,
+            "cross-thread placement hint must publish the recovery record globally"
+        );
+        assert!(!current_thread_fast_auto_allocation_records_active());
+        assert!(semantic_runtime_slow_path_enabled());
+
+        let ptr_addr = ptr as usize;
+        let worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            unsafe {
+                clear_delayed_free_for_test();
+            }
+
+            let ptr = ptr_addr as *mut u8;
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                Some(allocation_metadata),
+                "foreign thread must observe the process-visible recovery record"
+            );
+            assert!(semantic_runtime_slow_path_enabled());
+            let previous = unsafe { set_active_metadata(wrong_drop_metadata) };
+            unsafe {
+                alloc.dealloc(ptr, layout);
+                restore_active_metadata(previous);
+            }
+            assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+            let validation = semantic_metadata_validation_snapshot();
+            assert_eq!(
+                validation.recovery_identity_mismatches,
+                mismatches_before + 1
+            );
+            assert_eq!(
+                validation.last_mismatch_recorded_type_id,
+                allocation_metadata.type_id
+            );
+            assert_eq!(
+                delayed_free_snapshot().occupied_slots,
+                1,
+                "foreign-thread recovery must preserve allocation-side quarantine policy"
+            );
+
+            let slots = unsafe { delayed_free_slots_snapshot_for_test() };
+            let delayed_idx = slots
+                .iter()
+                .position(|slot| slot.ptr == ptr)
+                .expect("foreign-thread free should enter the worker quarantine");
+            assert_eq!(
+                slots[delayed_idx].metadata, allocation_metadata,
+                "wrong active Drop scope must not replace the recorded allocation identity"
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, wrong_drop_metadata) },
+                None,
+                "wrong Drop identity must not observe quarantined storage"
+            );
+
+            let cache_metadata =
+                allocation_metadata.with_flags(allocation_metadata.flags & !FLAG_DELAYED_FREE);
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, cache_metadata) },
+                None,
+                "recorded identity must not reuse storage before quarantine release"
+            );
+            unsafe {
+                let delayed = delayed_free_take_slot(delayed_idx);
+                release_delayed_slot(&alloc, delayed);
+            }
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, wrong_drop_metadata) },
+                None,
+                "quarantine release must not poison the foreign thread's wrong type cache"
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, cache_metadata) },
+                Some(ptr),
+                "released storage should remain reusable only by its allocation identity"
+            );
+            unsafe {
+                alloc.dealloc_raw(ptr, layout);
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+            }
+        });
+        worker
+            .join()
+            .expect("cross-thread mismatched Drop security regression");
+
+        let validation = semantic_metadata_validation_snapshot();
+        assert_eq!(
+            validation.recovery_identity_mismatches,
+            mismatches_before + 1
+        );
+        assert_eq!(
+            validation.last_mismatch_requested_type_id,
+            wrong_drop_metadata.type_id
+        );
+        assert_eq!(
+            validation.last_mismatch_recorded_type_id,
+            allocation_metadata.type_id
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert!(
+            !semantic_runtime_slow_path_enabled(),
+            "foreign-thread mismatch should consume the process-visible recovery record once"
+        );
+        semantic_stats_recording_disable();
+    }
+
     #[test]
     fn cross_thread_recovered_frees_do_not_reuse_same_layout_across_type_identities() {
         let _guard = test_guard();
