@@ -140,6 +140,7 @@ fn main() {
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_asm_const)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_const_mut_refs)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_nonnull_slice_from_raw_parts)");
+        println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_raw_ref_op)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_slice_ptr_len)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_addr_of_mut_static_mut_is_safe)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_target_arm64e)");
@@ -154,6 +155,7 @@ fn main() {
         70,
     );
     emit_feature_stability_cfg(rustc_minor, "unialloc_has_stable_slice_ptr_len", 79);
+    emit_feature_stability_cfg(rustc_minor, "unialloc_has_stable_raw_ref_op", 82);
     emit_feature_stability_cfg(rustc_minor, "unialloc_has_stable_asm_const", 82);
     emit_feature_stability_cfg(rustc_minor, "unialloc_has_stable_const_mut_refs", 83);
     emit_feature_stability_cfg(rustc_minor, "unialloc_has_stable_alloc_layout_extra", 95);
