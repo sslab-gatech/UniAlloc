@@ -22195,10 +22195,53 @@ mod tests {
                 lookup_auto_allocation_metadata(grown, layout),
                 Some(new_metadata)
             );
+
+            assert!(unsafe {
+                __unialloc_dealloc_with_metadata_hints(
+                    grown,
+                    layout.size(),
+                    layout.align(),
+                    new_metadata.type_id,
+                    new_metadata.module_id,
+                    new_metadata.flags,
+                    new_metadata.lifetime_hint,
+                    new_metadata.placement_hint,
+                    new_metadata.callsite,
+                )
+            });
+            assert_eq!(lookup_auto_allocation_metadata(grown, layout), None);
+
+            #[cfg(not(feature = "fixed_heap"))]
+            unsafe {
+                let ordinary = ordinary_inline_segregated_type_cache_entry_snapshot_for_test();
+                let hugepage = hugepage_inline_segregated_type_cache_entries_snapshot_for_test();
+                let old_hugepage = hugepage
+                    .iter()
+                    .find(|entry| entry.ptr == ptr)
+                    .expect("moved-from storage must remain in the hugepage TLS side-cache");
+
+                assert_eq!(ordinary.ptr, grown);
+                assert_eq!(ordinary.metadata, new_metadata);
+                assert_eq!(
+                    ordinary.policy_key,
+                    segregated_type_cache_policy_key(new_metadata)
+                );
+                assert_eq!(old_hugepage.metadata, old_metadata);
+                assert_eq!(
+                    old_hugepage.policy_key,
+                    segregated_type_cache_policy_key(old_metadata)
+                );
+                assert_ne!(ordinary.ptr, ptr);
+                assert!(
+                    hugepage.iter().all(|entry| entry.ptr != grown),
+                    "ordinary replacement storage must not enter the hugepage TLS side-cache"
+                );
+            }
+
             assert_eq!(
                 unsafe { pop_semantic_type_cache(layout, new_metadata) },
-                None,
-                "ordinary metadata must not receive the moved-from hugepage-domain buffer"
+                Some(grown),
+                "the replacement buffer must remain recoverable through its new ordinary identity"
             );
             assert_eq!(
                 unsafe { pop_semantic_type_cache(layout, old_metadata) },
@@ -22210,10 +22253,10 @@ mod tests {
                 None,
                 "popping the old domain must not create an alias in the new domain"
             );
-
             assert_eq!(
-                take_auto_deallocation_metadata(grown, layout),
-                Some(new_metadata)
+                unsafe { pop_semantic_type_cache(layout, old_metadata) },
+                None,
+                "popping the new domain must not create an alias in the old domain"
             );
             unsafe {
                 alloc.dealloc_raw(ptr, layout);
