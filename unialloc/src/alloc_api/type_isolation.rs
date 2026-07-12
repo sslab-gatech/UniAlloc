@@ -22270,6 +22270,193 @@ mod tests {
     }
 
     #[test]
+    fn cross_thread_overflow_realloc_preserves_old_recovery_identity_and_payload() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        assert!(
+            Layout::from_size_align(usize::MAX, layout.align()).is_err(),
+            "test must use a new size that cannot form a Layout"
+        );
+        let old_metadata = AllocationMetadata::for_type(0xD17A_CB01)
+            .with_module(0xC0DE_CB00)
+            .with_callsite(0xA110_CB01)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0xB1);
+        let requested_metadata = AllocationMetadata::for_type(0xD17A_CB02)
+            .with_module(old_metadata.module_id)
+            .with_callsite(0xA110_CB02)
+            .with_flags(old_metadata.flags)
+            .with_placement_hint(old_metadata.placement_hint);
+        assert_ne!(old_metadata.type_id, requested_metadata.type_id);
+
+        let ptr = unsafe {
+            __unialloc_alloc_with_metadata_hints(
+                layout.size(),
+                layout.align(),
+                old_metadata.type_id,
+                old_metadata.module_id,
+                old_metadata.flags,
+                old_metadata.lifetime_hint,
+                old_metadata.placement_hint,
+                old_metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        unsafe {
+            core::ptr::write_bytes(ptr, 0x5A, layout.size());
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(old_metadata)
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert!(!current_thread_fast_auto_allocation_records_active());
+
+        let validation_before = semantic_metadata_validation_snapshot();
+        let ptr_addr = ptr as usize;
+        let worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            unsafe {
+                clear_delayed_free_for_test();
+            }
+            let ptr = ptr_addr as *mut u8;
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                Some(old_metadata),
+                "foreign thread must observe the creator's exact recovery identity"
+            );
+
+            let replacement = unsafe {
+                __unialloc_realloc_with_metadata_hints(
+                    ptr,
+                    layout.size(),
+                    layout.align(),
+                    usize::MAX,
+                    requested_metadata.type_id,
+                    requested_metadata.module_id,
+                    requested_metadata.flags,
+                    requested_metadata.lifetime_hint,
+                    requested_metadata.placement_hint,
+                    requested_metadata.callsite,
+                )
+            };
+            assert!(
+                replacement.is_null(),
+                "overflowing new Layout must fail without replacing the allocation"
+            );
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                Some(old_metadata),
+                "failed realloc must preserve the old exact recovery record"
+            );
+            assert_eq!(
+                AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+                1,
+                "failed realloc must not consume or duplicate the recovery record"
+            );
+            assert!(semantic_runtime_slow_path_enabled());
+            assert!(!current_thread_fast_auto_allocation_records_active());
+            assert_eq!(
+                semantic_metadata_validation_snapshot(),
+                validation_before,
+                "a failed new-object request must not validate it as an old identity"
+            );
+            for offset in 0..layout.size() {
+                assert_eq!(unsafe { *ptr.add(offset) }, 0x5A);
+            }
+            let after_failure = type_isolation_side_cache_snapshot();
+            assert!(!after_failure.inline_occupied);
+            assert_eq!(after_failure.occupied_entries, 0);
+            assert_eq!(after_failure.corrupt_slots, 0);
+            assert_eq!(delayed_free_snapshot().occupied_slots, 0);
+
+            assert!(unsafe {
+                __unialloc_dealloc_with_metadata_hints(
+                    ptr,
+                    layout.size(),
+                    layout.align(),
+                    old_metadata.type_id,
+                    old_metadata.module_id,
+                    old_metadata.flags,
+                    old_metadata.lifetime_hint,
+                    old_metadata.placement_hint,
+                    old_metadata.callsite,
+                )
+            });
+            assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+            assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+            assert!(
+                !semantic_runtime_slow_path_enabled(),
+                "normal deallocation must consume the final global record once"
+            );
+
+            let cached = type_isolation_side_cache_snapshot();
+            assert!(cached.inline_occupied);
+            assert_eq!(cached.occupied_entries, 1);
+            assert_eq!(cached.occupied_slots, 0);
+            assert_eq!(cached.corrupt_slots, 0);
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, requested_metadata) },
+                None,
+                "the failed replacement identity must not observe old storage"
+            );
+            let recovered = unsafe {
+                pop_semantic_type_cache(layout, old_metadata)
+                    .expect("normal deallocation must cache under the old identity")
+            };
+            assert_eq!(recovered, ptr);
+            for offset in 0..layout.size() {
+                assert_eq!(unsafe { *recovered.add(offset) }, 0x5A);
+            }
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, old_metadata) },
+                None,
+                "the old allocation must have one cache owner"
+            );
+            let drained = type_isolation_side_cache_snapshot();
+            assert!(!drained.inline_occupied);
+            assert_eq!(drained.occupied_entries, 0);
+            assert_eq!(drained.corrupt_slots, 0);
+
+            // The sole successful cache pop transfers the one raw allocation to
+            // this cleanup path, which frees it exactly once.
+            unsafe {
+                alloc.dealloc_raw(recovered, layout);
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+            }
+        });
+        worker
+            .join()
+            .expect("cross-thread overflow realloc recovery regression");
+
+        let validation_after = semantic_metadata_validation_snapshot();
+        assert_eq!(
+            validation_after.recovery_identity_matches,
+            validation_before.recovery_identity_matches + 1
+        );
+        assert_eq!(
+            validation_after.recovery_identity_mismatches,
+            validation_before.recovery_identity_mismatches
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        assert!(!semantic_runtime_slow_path_enabled());
+    }
+
+    #[test]
     fn cross_thread_realloc_keeps_hugepage_and_ordinary_policies_separate() {
         let _guard = test_guard();
         unsafe {
