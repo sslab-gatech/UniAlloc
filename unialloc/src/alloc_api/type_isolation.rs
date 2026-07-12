@@ -21783,6 +21783,173 @@ mod tests {
     }
 
     #[test]
+    fn cross_thread_realloc_keeps_old_delayed_free_identity_separate_from_new_type() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xD17A_C8A1)
+            .with_module(0xC0DE_C800)
+            .with_callsite(0xA110_C8A1)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x81);
+        let new_metadata = AllocationMetadata::for_type(0xD17A_C8B2)
+            .with_module(old_metadata.module_id)
+            .with_callsite(0xA110_C8B2)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x82);
+        assert!(!semantic_realloc_can_reuse_in_place(
+            layout,
+            layout.size(),
+            old_metadata,
+            new_metadata,
+        ));
+
+        let ptr = unsafe {
+            __unialloc_alloc_with_metadata_hints(
+                layout.size(),
+                layout.align(),
+                old_metadata.type_id,
+                old_metadata.module_id,
+                old_metadata.flags,
+                old_metadata.lifetime_hint,
+                old_metadata.placement_hint,
+                old_metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        unsafe {
+            core::ptr::write_bytes(ptr, 0xA5, layout.size());
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(old_metadata)
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert!(semantic_runtime_slow_path_enabled());
+
+        let ptr_addr = ptr as usize;
+        let worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            unsafe {
+                clear_delayed_free_for_test();
+            }
+
+            let ptr = ptr_addr as *mut u8;
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                Some(old_metadata),
+                "foreign-thread realloc must recover the allocation-side identity"
+            );
+            let grown = unsafe {
+                __unialloc_realloc_with_metadata_hints(
+                    ptr,
+                    layout.size(),
+                    layout.align(),
+                    layout.size(),
+                    new_metadata.type_id,
+                    new_metadata.module_id,
+                    new_metadata.flags,
+                    new_metadata.lifetime_hint,
+                    new_metadata.placement_hint,
+                    new_metadata.callsite,
+                )
+            };
+            assert!(!grown.is_null());
+            assert_ne!(
+                grown, ptr,
+                "a type-changing realloc must not retain the old allocation identity in place"
+            );
+            for offset in 0..layout.size() {
+                assert_eq!(unsafe { *grown.add(offset) }, 0xA5);
+            }
+
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                None,
+                "moved realloc must consume the old pointer recovery record"
+            );
+            assert_eq!(
+                lookup_auto_allocation_metadata(grown, layout),
+                Some(new_metadata),
+                "moved realloc must publish only the new pointer identity"
+            );
+            assert_eq!(
+                delayed_free_snapshot().occupied_slots,
+                1,
+                "the old allocation policy must still quarantine the moved-from buffer"
+            );
+
+            let slots = unsafe { delayed_free_slots_snapshot_for_test() };
+            let delayed_idx = slots
+                .iter()
+                .position(|slot| slot.ptr == ptr)
+                .expect("moved-from buffer should remain in delayed-free quarantine");
+            assert_eq!(
+                slots[delayed_idx].metadata, old_metadata,
+                "quarantine must retain the old allocation identity, not the new realloc site"
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, new_metadata) },
+                None,
+                "the new type must not observe the old quarantined buffer"
+            );
+
+            let old_cache_metadata =
+                old_metadata.with_flags(old_metadata.flags & !FLAG_DELAYED_FREE);
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, old_cache_metadata) },
+                None,
+                "the old type must not reuse its buffer before quarantine release"
+            );
+            unsafe {
+                let delayed = delayed_free_take_slot(delayed_idx);
+                release_delayed_slot(&alloc, delayed);
+            }
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, new_metadata) },
+                None,
+                "quarantine release must not poison the new type cache"
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, old_cache_metadata) },
+                Some(ptr),
+                "released storage must remain reusable only by the old allocation identity"
+            );
+
+            assert_eq!(
+                take_auto_deallocation_metadata(grown, layout),
+                Some(new_metadata),
+                "cleanup must consume the new pointer recovery record exactly once"
+            );
+            unsafe {
+                alloc.dealloc_raw(ptr, layout);
+                alloc.dealloc_raw(grown, layout);
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+            }
+        });
+        worker
+            .join()
+            .expect("cross-thread moved realloc identity regression");
+
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert!(
+            !semantic_runtime_slow_path_enabled(),
+            "moved realloc cleanup must leave no process-visible recovery record"
+        );
+    }
+
+    #[test]
     fn cross_thread_recovered_frees_do_not_reuse_same_layout_across_type_identities() {
         let _guard = test_guard();
         unsafe {
