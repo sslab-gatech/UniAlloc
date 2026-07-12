@@ -3,7 +3,7 @@
 This document defines toolchain provenance for UniAlloc evaluation.  The central
 rule is that **repository default** and **paper exact** are different concepts.
 
-Snapshot: 2026-07-09 after the final toolchain and disk audit.
+Snapshot: 2026-07-12 after the implementation-first toolchain refresh.
 
 ## Canonical distinction
 
@@ -14,7 +14,8 @@ Snapshot: 2026-07-09 after the final toolchain and disk audit.
   It is used only for an explicitly requested historical reproduction and is
   paper-exact only when the effective toolchain equals this full dated name.
 - A floating `nightly` alias is never paper-exact.  It may move without a source
-  change and is not installed on the current machine.
+  change; it is installed locally for compatibility checks but must not be used
+  as paper-exact evidence.
 
 Changing the repository default does not redefine the historical paper pin.
 
@@ -27,7 +28,7 @@ Changing the repository default does not redefine the historical paper pin.
 | `--rust-toolchain nightly-2022-07-01` | `cargo +nightly-2022-07-01 ...` | historical paper-exact, if installed |
 | `--rust-toolchain stable` | `cargo +stable ...` | explicit non-repo compatibility evidence; not paper-exact |
 | `--rust-toolchain system` / `none` | `cargo ...` | unpinned system toolchain; not paper-exact |
-| `--rust-toolchain latest` / `nightly` | floating rustup nightly alias | explicit drifting override; not paper-exact and unavailable unless separately installed |
+| `--rust-toolchain latest` / `nightly` | floating rustup nightly alias | explicit drifting override; locally installed, but never paper-exact |
 
 `UNIALLOC_RUST_TOOLCHAIN` supplies the same workload-driver override.  Some
 compiler probes use `--toolchain` rather than `--rust-toolchain`; pass the exact
@@ -74,7 +75,9 @@ Current installed toolchains:
 
 ```text
 stable-aarch64-apple-darwin
+nightly-aarch64-apple-darwin
 nightly-2021-02-19-aarch64-apple-darwin
+nightly-2022-07-01-aarch64-apple-darwin
 nightly-2026-06-11-aarch64-apple-darwin (active, default)
 ```
 
@@ -90,10 +93,11 @@ Installed components on the 2026 pin include `rust-src`, `rustc-dev`,
 current probes.
 
 The retained `nightly-2021-02-19` supports the RustPython workload route.
-`nightly-2022-07-01` is currently absent; install it or use a reproducible
-container only when an exact paper-reproduction run requires it.  The redundant
-floating nightly was removed: it consumed disk, could drift, and made provenance
-ambiguous.
+`nightly-2022-07-01` is installed and is also used by the bounded current-source
+Oxipng compiler-rewrite functionality smoke.  That use proves compatibility with
+the pinned compiler; it does not turn the reduced smoke into a paper-performance
+reproduction.  The floating nightly is installed for compatibility only and its
+drifting identity remains unsuitable for paper-exact evidence.
 
 The complete cleanup pass increased available disk space from about 18 GiB to
 about 64 GiB.  Its final rebuildable-output cleanup removed about 1.6 GiB of
@@ -191,11 +195,11 @@ python3 evaluation/scripts/paper_workload_driver.py \
   --timeout 300
 ```
 
-Installing the legacy toolchain is an on-demand disk/network action, not a
-standing prerequisite for current-source tests.  The local R-Polars workload
-configuration still names `nightly-2022-07-01`; therefore that exact route is
-unavailable until the toolchain or matching container is restored.  A newer
-successful R-Polars run must be labeled accepted-newer rather than paper-exact.
+The legacy toolchain is now present, but it is not a standing prerequisite for
+current-source tests.  The local R-Polars workload configuration names
+`nightly-2022-07-01`; running that route still depends on its external workload
+assets and compatibility checks.  A newer successful R-Polars run must be
+labeled accepted-newer rather than paper-exact.
 
 ## Docker Collections runner
 
@@ -272,9 +276,11 @@ matching source fingerprint.
 ## PAC and arm64e note
 
 Rustup lists `arm64e-apple-darwin` but does not ship a prebuilt arm64e standard
-library.  Current PAC validation therefore uses the arm64e C shim and the
-no-std direct allocator probe with `-Z build-std`.  A successful no-std hardware
-PAC probe proves allocator PAC behavior; it does not prove the optional C006
-cost matrix.  Treat `evaluation/results/pac_metadata_direct_probe_audit.json` as
-the last published audit and regenerate it after source changes before calling
-it current-source evidence.
+library.  Current PAC evidence separates three lanes: the host Rust allocator
+passes through the safe software fallback and typed side-cache reuse; an external
+arm64e C ABI probe observes hardware context binding and wrong-context rejection;
+the Rust allocator `no_std` arm64e lane remains blocked because its Cargo route
+pulls std-only dev dependencies.  Neither passing lane proves the optional C006
+cost matrix, and the external C probe is not allocator-runtime evidence.  Treat
+`evaluation/results/pac_metadata_direct_probe_audit.json` as historical unless it
+is rebound after source changes.

@@ -212,10 +212,14 @@ Retained toolchains, each with a current purpose:
 - `nightly-2026-06-11-aarch64-apple-darwin`: repository implementation and
   evaluation default;
 - `nightly-2021-02-19-aarch64-apple-darwin`: RustPython workload route;
+- `nightly-2022-07-01-aarch64-apple-darwin`: pinned compiler compatibility and
+  bounded current-source compiler-rewrite smoke;
+- `nightly-aarch64-apple-darwin`: drifting compatibility checks only;
 - `stable-aarch64-apple-darwin`: compatibility/support checks.
 
-The unused floating nightly was removed.  `nightly-2022-07-01` is absent and is
-available only as an on-demand historical paper-reproduction input.
+The floating nightly and `nightly-2022-07-01` are currently installed.  Only the
+full dated 2022 toolchain can satisfy that part of a historical pin, and its use
+in a bounded functional smoke does not establish paper-performance reproduction.
 
 Disk cleanup increased available space from about 18 GiB to about 64 GiB.  The
 final cleanup additionally removed:

@@ -171,7 +171,7 @@ Slide 10/17 的精确 threat model：attacker 可以触发 temporal bug 和 heap
 |---:|---|---|---|---|
 | 22 | **Retargetability comes from stable boundaries, not from feature flags alone.** | 解释 policy、cache/zone/backend、metadata allocator、PAL 各自责任 | 接口边界图；标出 reused vs adapted | 1:45；准备“这只是 cfg 吗？” |
 | 23 | **Hosted and constrained targets reuse the policy while changing memory acquisition.** | 对比 mmap/VirtualAlloc 与 fixed-heap；说明 target 仍需 adapter | 两列 deployment recipe | 1:45；不要说 zero-porting |
-| 24 | **The paper reported five retargeting environments; current functional readiness and external validation remain separate.** | 用 historical badge 展示论文五环境结果；另列 G002 的 macOS/Windows functional PASS、fixed-heap/hosted current smoke，以及 Redox/kernel/boot assets 的 external validation gaps | 五行平台矩阵：paper report / reused layer / adapted layer / current functional status | 1:30；完成 H3，再引出 evidence tiers |
+| 24 | **The paper reported five retargeting environments; current functional readiness and external validation remain separate.** | 用 historical badge 展示论文五环境结果；另列 G002 的 macOS/Windows functional PASS、fixed-heap/hosted current smoke、单独 source-bound 的 Redox real-target build/run evidence，以及 Rust-for-Linux/BlogOS 的 external asset gaps | 五行平台矩阵：paper report / reused layer / adapted layer / current functional status | 1:30；完成 H3，再引出 evidence tiers |
 
 关键实现依据：
 
@@ -491,7 +491,7 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 | Current claim status | `evaluation/results/claim_check_current.json` |
 | Missing claim requirements | `evaluation/results/overclaim_worklist.json` |
 | Deferred paper-performance scope | `evaluation/results/paper_performance_gap_plan.json`、`.omx/handoff/g001-performance-campaign-stop-user-objective-change-20260712T030350Z.json` |
-| Platform evidence | `evaluation/results/platform_matrix_audit.json`、`docs/c007-redox-boot-evidence.md` |
+| Platform evidence | `docs/c007-redox-boot-evidence.md`；`evaluation/results/platform_matrix_audit.json` 是 2026-07-10 的 historical/stale aggregate，仍含已修复 Redox blocker 与旧 source digest，不得作为 current aggregate 引用 |
 | Historical G001 freeze/partial records | `/Users/hqzhao/Downloads/UniAlloc-G001-freeze-235549b2/evaluation/raw/source-freeze-required-bound-plan-235549b2-20260711a/final-verification.json`；20 accepted records remain historical/diagnostic only |
 | Active implementation goal/status | `.omx/ultragoal/goals.json`、`.omx/ultragoal/ledger.jsonl`、live `git rev-parse HEAD` |
 
