@@ -21515,6 +21515,130 @@ mod tests {
             "cross-thread drop should consume the final global recovery record"
         );
     }
+    #[test]
+    fn cross_thread_recovered_frees_do_not_reuse_same_layout_across_type_identities() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        const OBJECTS: usize = 4;
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let producer_metadata = AllocationMetadata::for_type(0xC003_9011)
+            .with_module(0xC0DE_9010)
+            .with_callsite(0xA110_9011)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x11);
+        let consumer_metadata = AllocationMetadata::for_type(0xC003_9022)
+            .with_module(producer_metadata.module_id)
+            .with_callsite(0xA110_9022)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x22);
+        assert_eq!(layout.size(), MIN_TYPE_CACHE_OBJECT_SIZE);
+        assert!(compiler_type_isolated_recovery_fast_path(producer_metadata));
+
+        let mut produced = [0usize; OBJECTS];
+        for slot in produced.iter_mut() {
+            let ptr = unsafe {
+                __unialloc_alloc_with_metadata_hints(
+                    layout.size(),
+                    layout.align(),
+                    producer_metadata.type_id,
+                    producer_metadata.module_id,
+                    producer_metadata.flags,
+                    producer_metadata.lifetime_hint,
+                    producer_metadata.placement_hint,
+                    producer_metadata.callsite,
+                )
+            };
+            assert!(!ptr.is_null());
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                Some(producer_metadata)
+            );
+            *slot = ptr as usize;
+        }
+        assert_eq!(
+            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+            OBJECTS
+        );
+
+        let worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            unsafe {
+                clear_delayed_free_for_test();
+            }
+            assert!(
+                semantic_runtime_slow_path_enabled(),
+                "foreign thread should see process-visible recovery records before raw deallocation"
+            );
+
+            for ptr_addr in produced {
+                let ptr = ptr_addr as *mut u8;
+                unsafe {
+                    alloc.dealloc(ptr, layout);
+                }
+                assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+            }
+
+            let mut consumer_ptrs = [core::ptr::null_mut(); OBJECTS];
+            for slot in consumer_ptrs.iter_mut() {
+                let ptr = unsafe { alloc.alloc_with_metadata(layout, consumer_metadata) };
+                assert!(!ptr.is_null());
+                assert!(
+                    !produced.iter().any(|producer| *producer == ptr as usize),
+                    "type-isolated cache must not return producer storage to a distinct same-layout type identity"
+                );
+                *slot = ptr;
+            }
+            for ptr in consumer_ptrs {
+                unsafe {
+                    alloc.dealloc_raw(ptr, layout);
+                }
+            }
+
+            let mut recovered_ptrs = [core::ptr::null_mut(); OBJECTS];
+            for idx in 0..recovered_ptrs.len() {
+                let ptr = unsafe { alloc.alloc_with_metadata(layout, producer_metadata) };
+                assert!(!ptr.is_null());
+                assert!(
+                    produced.iter().any(|producer| *producer == ptr as usize),
+                    "the same recovered type identity may reuse its own quarantined storage"
+                );
+                assert!(
+                    !recovered_ptrs.iter().take(idx).any(|seen| *seen == ptr),
+                    "typed cache should not return the same storage twice"
+                );
+                recovered_ptrs[idx] = ptr;
+            }
+            for ptr in recovered_ptrs {
+                unsafe {
+                    alloc.dealloc_raw(ptr, layout);
+                }
+            }
+            unsafe {
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+            }
+        });
+        worker
+            .join()
+            .expect("cross-thread type isolation reuse audit");
+
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert!(
+            !semantic_runtime_slow_path_enabled(),
+            "cross-thread security audit should consume all process-visible recovery records"
+        );
+    }
+
     #[cfg(feature = "stats")]
     #[test]
     fn global_dealloc_prefers_compatible_active_drop_metadata_over_recovery_record() {
