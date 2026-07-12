@@ -26,12 +26,14 @@ import hashlib
 import json
 import os
 import pathlib
+import queue
 import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 RAW = ROOT / "evaluation" / "raw"
@@ -132,6 +134,84 @@ def remove_dir(path: pathlib.Path) -> Dict[str, Any]:
     return {"path": str(path), "existed": True, "removed": not path.exists(), "removed_bytes": total}
 
 
+def stream_process_lines(
+    proc: "subprocess.Popen[str]",
+    *,
+    timeout_seconds: float,
+    on_line: Callable[[str], None],
+    on_timeout: Callable[[], None],
+) -> Tuple[int, bool]:
+    """Stream stdout while enforcing a wall-clock timeout, even when silent.
+
+    Iterating over ``proc.stdout`` directly blocks until the child writes a
+    newline or exits.  That made the capture command's ``--timeout`` ineffective
+    during the exact failure mode it is meant to bound: a silent redoxer/QEMU
+    hang.  A daemon reader may block on the pipe, while this thread retains the
+    deadline and terminates the child through ``on_timeout``.
+    """
+
+    if proc.stdout is None:
+        raise ValueError("process stdout must be captured")
+    if timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be positive")
+
+    events: "queue.Queue[Tuple[str, str]]" = queue.Queue()
+
+    def read_stdout() -> None:
+        try:
+            for line in proc.stdout:
+                events.put(("line", line))
+        finally:
+            events.put(("eof", ""))
+
+    reader = threading.Thread(target=read_stdout, name="redoxer-output-reader", daemon=True)
+    reader.start()
+    deadline = time.monotonic() + timeout_seconds
+    saw_eof = False
+    timed_out = False
+
+    while not saw_eof:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 and proc.poll() is None:
+            timed_out = True
+            on_timeout()
+            break
+        try:
+            kind, value = events.get(timeout=max(0.01, min(0.1, max(remaining, 0.01))))
+        except queue.Empty:
+            continue
+        if kind == "line":
+            on_line(value)
+        else:
+            saw_eof = True
+
+    if timed_out:
+        try:
+            returncode = proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            returncode = proc.wait(timeout=5)
+    else:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 and proc.poll() is None:
+            timed_out = True
+            on_timeout()
+        try:
+            returncode = proc.wait(timeout=30 if timed_out else max(0.01, remaining))
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            on_timeout()
+            try:
+                returncode = proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                returncode = proc.wait(timeout=5)
+
+    reader.join(timeout=1)
+    proc.stdout.close()
+    return returncode, timed_out
+
+
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--run-id", default="")
@@ -229,10 +309,8 @@ exec redoxer exec -o - -f "$RAW/redox-root:/root" /root/redox-root/small_heap
         f"/work/{rel_out}/redoxer-inner-run.sh",
     ]
 
-    start = time.monotonic()
     copied = False
     copy_log = ""
-    timed_out = False
     lines: List[str] = []
     proc = subprocess.Popen(
         docker_cmd,
@@ -243,23 +321,35 @@ exec redoxer exec -o - -f "$RAW/redox-root:/root" /root/redox-root/small_heap
         bufsize=1,
     )
     assert proc.stdout is not None
-    try:
-        for line in proc.stdout:
-            lines.append(line)
-            raw_transcript.write_text("".join(lines), encoding="utf-8", errors="replace")
-            if not copied and ("Installing to RedoxFS partition" in line or "## redoxer" in line):
-                ok, detail = docker_exec_copy_image(container, tmp_inside, image_inside)
-                copy_log += detail
-                copied = ok and image_path.exists()
-            if time.monotonic() - start > args.timeout:
-                timed_out = True
-                subprocess.run(["docker", "kill", container], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                break
-        returncode = proc.wait(timeout=30)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        subprocess.run(["docker", "kill", container], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        returncode = proc.wait(timeout=30)
+
+    def record_line(line: str) -> None:
+        nonlocal copied, copy_log
+        lines.append(line)
+        raw_transcript.write_text("".join(lines), encoding="utf-8", errors="replace")
+        if not copied and ("Installing to RedoxFS partition" in line or "## redoxer" in line):
+            ok, detail = docker_exec_copy_image(container, tmp_inside, image_inside)
+            copy_log += detail
+            copied = ok and image_path.exists()
+
+    def stop_redoxer() -> None:
+        try:
+            subprocess.run(
+                ["docker", "kill", container],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        if proc.poll() is None:
+            proc.terminate()
+
+    returncode, timed_out = stream_process_lines(
+        proc,
+        timeout_seconds=args.timeout,
+        on_line=record_line,
+        on_timeout=stop_redoxer,
+    )
 
     raw_text = "".join(lines)
     raw_transcript.write_text(raw_text, encoding="utf-8", errors="replace")

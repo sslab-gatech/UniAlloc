@@ -133,6 +133,8 @@ python3 evaluation/scripts/capture_redoxer_constrained_boot.py \
 
 That helper stores the target transcript, copied Redox binary, build log,
 boot-config JSON, and a sparse preserved Redox image under `evaluation/raw/`.
+The timeout is a wall-clock bound: a silent redoxer/QEMU hang is terminated even
+when the child has not emitted another log line.
 It then appends a provenance marker whose image/config hashes are verifiable by:
 
 ```sh
@@ -169,6 +171,26 @@ docker run --rm --platform linux/amd64 \
 This path copies only the ~3 MiB executable into Docker.  Redoxer still creates a
 temporary Redox disk of roughly 3 GiB logical size while the command runs, so do
 not run many such probes concurrently.
+
+## Current-source compile and C ABI contract
+
+The bounded functional check below does not require a running VM:
+
+```sh
+python3 evaluation/scripts/redox_current_source_contract.py \
+  --toolchain "$(cat rust-toolchain)" \
+  --target x86_64-unknown-redox \
+  --output-dir /tmp/unialloc-redox-current-source
+```
+
+It checks the real allocator library and `small_heap` example for the Redox
+target, emits an x86-64 Redox ELF relocatable object, and verifies the fixed-heap,
+metadata, semantic-stats, and constrained-boot C ABI exports with the toolchain's
+`llvm-nm`.  This closes the local source/codegen/interface contract only.  A
+final Redox executable still needs the Redox linker supplied by redoxer, and a
+boot/run statement still needs a real redoxer/QEMU transcript.  A host `cc`
+linker failure is therefore an external toolchain integration gap, not an
+allocator functional failure.
 
 ## Current local host status
 
