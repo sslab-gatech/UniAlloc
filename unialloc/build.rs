@@ -243,15 +243,15 @@ fn generate_sizeclass(page_size: usize) {
         let template: (usize, usize, usize) = calculate_val(page_size, *val);
         let num = template.2 * page_size / *val;
 
-        content.push_str(&*format!("{}", num));
-        offset_arr.push_str(&*format!("{}", start));
+        content.push_str(&format!("{}", num));
+        offset_arr.push_str(&format!("{}", start));
         if num.is_power_of_two() {
             start += 2 * num;
         } else {
             start += 2 * num.next_power_of_two();
         }
 
-        offset_limit.push_str(&*format!("{}", start));
+        offset_limit.push_str(&format!("{}", start));
         if idx != SIZE_ARRAY.len() - 1 {
             content.push_str(", ");
             offset_arr.push_str(", ");
@@ -262,7 +262,7 @@ fn generate_sizeclass(page_size: usize) {
     content.push_str("];\n");
     offset_arr.push_str("];\n");
     offset_limit.push_str("];\n");
-    content.push_str(&*offset_arr);
-    content.push_str(&*offset_limit);
+    content.push_str(&offset_arr);
+    content.push_str(&offset_limit);
     fs::write(&dest_path, content).unwrap();
 }
