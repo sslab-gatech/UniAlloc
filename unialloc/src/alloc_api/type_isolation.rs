@@ -1438,6 +1438,22 @@ impl InlineTypeCacheEntry {
 static mut TYPE_CACHE: [TypeCacheSlot; TYPE_CACHE_SLOTS] =
     [TypeCacheSlot::empty(); TYPE_CACHE_SLOTS];
 
+// Allocator-rounded bytes owned by the linked (non-inline) plain type-cache
+// slots.  The inline entry is deliberately accounted at the call site: it is
+// a single O(1) value and changes independently of the linked-slot table.
+//
+// The counter starts untrusted so the first cold-cache growth after a reset
+// rebuilds it from the bounded table.  Healthy push/pop operations then update
+// it exactly, avoiding a 64-slot aggregate scan on every typed free.  Any
+// observed slot corruption or accounting repair marks it untrusted again; no
+// further cache growth is accepted until one bounded rebuild proves the
+// remaining visible table state is consistent.
+#[thread_local]
+static mut PLAIN_TYPE_CACHE_RETAINED_BYTES: usize = 0;
+
+#[thread_local]
+static mut PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED: bool = false;
+
 #[thread_local]
 static mut TYPE_CACHE_HOT_SLOT: TypeCacheHotSlot = TypeCacheHotSlot::empty();
 
@@ -1452,6 +1468,9 @@ static mut METADATA_RECORD_AUTH_HOT_SLOT: MetadataRecordAuthHotSlot =
 
 #[cfg(test)]
 static TYPE_CACHE_IDENTITY_HOT_HITS: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+static PLAIN_TYPE_CACHE_AGGREGATE_SCANS: AtomicUsize = AtomicUsize::new(0);
 
 #[thread_local]
 static mut INLINE_TYPE_CACHE_ENTRY: InlineTypeCacheEntry = InlineTypeCacheEntry::empty();
@@ -5338,10 +5357,63 @@ unsafe fn clear_type_cache_hot_slot(cache_key: u64) {
     }
 }
 
+#[cfg(test)]
+#[inline]
+fn record_plain_type_cache_aggregate_scan() {
+    PLAIN_TYPE_CACHE_AGGREGATE_SCANS.fetch_add(1, Ordering::Relaxed);
+}
+
+#[cfg(not(test))]
+#[inline]
+fn record_plain_type_cache_aggregate_scan() {}
+
+#[inline]
+unsafe fn set_plain_type_cache_retained_bytes(retained_bytes: usize, trusted: bool) {
+    PLAIN_TYPE_CACHE_RETAINED_BYTES = retained_bytes;
+    PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED = trusted;
+}
+
+#[inline]
+unsafe fn mark_plain_type_cache_retained_bytes_untrusted() {
+    PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED = false;
+}
+
+#[inline]
+unsafe fn adjust_trusted_plain_type_cache_retained_bytes(
+    released_bytes: usize,
+    retained_bytes: usize,
+) {
+    if !PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED {
+        return;
+    }
+
+    match PLAIN_TYPE_CACHE_RETAINED_BYTES
+        .checked_sub(released_bytes)
+        .and_then(|remaining| remaining.checked_add(retained_bytes))
+    {
+        Some(updated) if updated <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES => {
+            PLAIN_TYPE_CACHE_RETAINED_BYTES = updated;
+        }
+        _ => {
+            // An impossible underflow/overflow means the aggregate counter can
+            // no longer authorize cache growth.  Leave its last value intact
+            // for diagnostics and force a bounded rebuild before reuse.
+            mark_plain_type_cache_retained_bytes_untrusted();
+        }
+    }
+}
+
 #[inline]
 unsafe fn clear_type_cache_slot(slot: &mut TypeCacheSlot, cache_key: u64) {
+    let retained_bytes = slot.retained_bytes;
+    let accounting_was_trustworthy = !slot.is_corrupt();
     slot.clear();
     clear_type_cache_hot_slot(cache_key);
+    if accounting_was_trustworthy {
+        adjust_trusted_plain_type_cache_retained_bytes(retained_bytes, 0);
+    } else {
+        mark_plain_type_cache_retained_bytes_untrusted();
+    }
 }
 
 unsafe fn type_cache_slot_head_is_valid(slot: &TypeCacheSlot) -> bool {
@@ -5393,11 +5465,17 @@ unsafe fn type_cache_slot_retained_bytes(slot: &TypeCacheSlot) -> Option<usize> 
 
 unsafe fn repair_type_cache_slot_accounting_if_possible(slot: &mut TypeCacheSlot) -> bool {
     if slot.has_corrupt_links() {
+        mark_plain_type_cache_retained_bytes_untrusted();
         return false;
     }
     if !slot.has_corrupt_accounting() {
         return true;
     }
+
+    // Even a recoverable per-slot mismatch invalidates the aggregate.  Repair
+    // the owned linked list in place, but require a bounded table rebuild
+    // before the repaired slot can authorize any further cache growth.
+    mark_plain_type_cache_retained_bytes_untrusted();
 
     // As with the metadata-segregated bucket table, the retained-byte counter is
     // budget accounting.  A valid linked list should be recovered by recomputing
@@ -5415,11 +5493,20 @@ unsafe fn repair_type_cache_slot_accounting_if_possible(slot: &mut TypeCacheSlot
 }
 
 unsafe fn plain_type_cache_trusted_retained_bytes() -> Option<usize> {
-    let mut retained_bytes = if INLINE_TYPE_CACHE_ENTRY.is_empty() {
+    let inline_retained_bytes = if INLINE_TYPE_CACHE_ENTRY.is_empty() {
         0
     } else {
         INLINE_TYPE_CACHE_ENTRY.retained_bytes()
     };
+
+    if PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED
+        && PLAIN_TYPE_CACHE_RETAINED_BYTES <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES
+    {
+        return PLAIN_TYPE_CACHE_RETAINED_BYTES.checked_add(inline_retained_bytes);
+    }
+
+    record_plain_type_cache_aggregate_scan();
+    let mut retained_bytes = 0usize;
 
     let mut idx = 0usize;
     while idx < TYPE_CACHE_SLOTS {
@@ -5433,12 +5520,16 @@ unsafe fn plain_type_cache_trusted_retained_bytes() -> Option<usize> {
                 return None;
             }
         } else if occupied {
-            retained_bytes = retained_bytes.saturating_add(slot.retained_bytes);
+            retained_bytes = match retained_bytes.checked_add(slot.retained_bytes) {
+                Some(total) => total,
+                None => return None,
+            };
         }
         idx += 1;
     }
 
-    Some(retained_bytes)
+    set_plain_type_cache_retained_bytes(retained_bytes, true);
+    retained_bytes.checked_add(inline_retained_bytes)
 }
 
 #[inline]
@@ -5488,7 +5579,8 @@ unsafe fn type_cache_find_slot_for_key(
             if slot.cache_key == cache_key {
                 clear_type_cache_slot(slot, cache_key);
             } else {
-                slot.clear();
+                let stale_cache_key = slot.cache_key;
+                clear_type_cache_slot(slot, stale_cache_key);
             }
         }
         if slot.cache_key == cache_key {
@@ -6306,7 +6398,9 @@ unsafe fn push_inline_type_cache_eligible_with_key(
     metadata: AllocationMetadata,
     cache_key: u64,
 ) -> bool {
-    if INLINE_TYPE_CACHE_ENTRY.is_empty() {
+    if INLINE_TYPE_CACHE_ENTRY.is_empty()
+        && plain_type_cache_can_accept_retained_bytes(type_cache_retained_bytes_for_layout(layout))
+    {
         INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry {
             cache_key,
             type_id: metadata.type_id,
@@ -6362,6 +6456,7 @@ unsafe fn pop_type_cache_eligible_with_key(
     let mut remaining = slot.count;
     while !current.is_null() && remaining > 0 {
         if (current as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0 {
+            mark_plain_type_cache_retained_bytes_untrusted();
             clear_type_cache_slot(slot, slot_key);
             record_stats_type_cache_bypass(metadata);
             return None;
@@ -6381,13 +6476,18 @@ unsafe fn pop_type_cache_eligible_with_key(
                 previous.write(next as usize);
             }
             slot.count -= 1;
-            slot.retained_bytes = slot
-                .retained_bytes
-                .saturating_sub(type_cache_retained_bytes_for_object(size));
-            if slot.count == 0
+            let released_bytes = type_cache_retained_bytes_for_object(size);
+            let updated_slot_retained_bytes = slot.retained_bytes.checked_sub(released_bytes);
+            slot.retained_bytes = updated_slot_retained_bytes.unwrap_or(0);
+            let remaining_chain_is_corrupt = updated_slot_retained_bytes.is_none()
                 || (expected_tail_after_current != 0 && next.is_null())
-                || slot.has_corrupt_accounting()
-            {
+                || slot.has_corrupt_accounting();
+            if remaining_chain_is_corrupt {
+                mark_plain_type_cache_retained_bytes_untrusted();
+            } else {
+                adjust_trusted_plain_type_cache_retained_bytes(released_bytes, 0);
+            }
+            if slot.count == 0 || remaining_chain_is_corrupt {
                 // Emptying a slot must also clear the head pointer.  A corrupted
                 // under- or over-counted chain should be dropped immediately
                 // instead of leaving an UNKNOWN-key slot with a stale head that a
@@ -6403,6 +6503,7 @@ unsafe fn pop_type_cache_eligible_with_key(
     }
 
     if !current.is_null() || remaining != 0 {
+        mark_plain_type_cache_retained_bytes_untrusted();
         clear_type_cache_slot(slot, slot_key);
     }
     record_stats_type_cache_bypass(metadata);
@@ -6454,6 +6555,7 @@ unsafe fn push_type_cache_eligible_with_key(
             return false;
         }
         if !type_cache_slot_head_is_valid(slot) {
+            mark_plain_type_cache_retained_bytes_untrusted();
             clear_type_cache_slot(slot, slot_key);
             record_stats_type_cache_bypass(metadata);
             return false;
@@ -6485,6 +6587,7 @@ unsafe fn push_type_cache_eligible_with_key(
     slot.head = ptr;
     slot.count += 1;
     slot.retained_bytes = slot.retained_bytes.saturating_add(retained_size);
+    adjust_trusted_plain_type_cache_retained_bytes(0, retained_size);
     record_stats_type_cache_insert(metadata);
     true
 }
@@ -8781,6 +8884,7 @@ pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAl
         }
         idx += 1;
     }
+    set_plain_type_cache_retained_bytes(0, false);
 
     SEGREGATED_TYPE_CACHE_HOT_BUCKET = SegregatedTypeCacheHotBucket::empty();
     released = released.saturating_add(drain_inline_segregated_type_cache_at_thread_exit(
@@ -11580,6 +11684,8 @@ mod tests {
 
     unsafe fn clear_type_cache_for_test() {
         TYPE_CACHE = [TypeCacheSlot::empty(); TYPE_CACHE_SLOTS];
+        PLAIN_TYPE_CACHE_RETAINED_BYTES = 0;
+        PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED = false;
         TYPE_CACHE_HOT_SLOT = TypeCacheHotSlot::empty();
         clear_type_cache_identity_hot_slot_for_test();
         INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
@@ -11597,6 +11703,7 @@ mod tests {
         SEGREGATED_TYPE_CACHE_HOT_BUCKET = SegregatedTypeCacheHotBucket::empty();
         SEGREGATED_TYPE_CACHE_BUCKET_PROBE_STEPS.store(0, Ordering::Relaxed);
         SEGREGATED_TYPE_CACHE_AGGREGATE_SCANS.store(0, Ordering::Relaxed);
+        PLAIN_TYPE_CACHE_AGGREGATE_SCANS.store(0, Ordering::Relaxed);
         clear_auto_layout_metadata_hot_slot();
         clear_hugepage_segregated_type_cache_for_test();
         clear_memory_tags_for_test();
@@ -11625,6 +11732,16 @@ mod tests {
     #[inline]
     unsafe fn type_cache_snapshot_for_test() -> [TypeCacheSlot; TYPE_CACHE_SLOTS] {
         snapshot_static_copy(core::ptr::addr_of!(TYPE_CACHE))
+    }
+
+    #[inline]
+    unsafe fn plain_type_cache_retained_bytes_snapshot_for_test() -> usize {
+        snapshot_static_copy(core::ptr::addr_of!(PLAIN_TYPE_CACHE_RETAINED_BYTES))
+    }
+
+    #[inline]
+    unsafe fn plain_type_cache_retained_bytes_trusted_for_test() -> bool {
+        snapshot_static_copy(core::ptr::addr_of!(PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED))
     }
 
     #[inline]
@@ -16964,6 +17081,12 @@ mod tests {
             AUTO_ALLOCATION_RECOVERY_RECORDING_DEPTH = 1;
 
             assert!(type_isolation_side_cache_snapshot().occupied_entries >= 2);
+            assert_eq!(
+                plain_type_cache_retained_bytes_snapshot_for_test(),
+                type_cache_retained_bytes_for_layout(layout)
+            );
+            assert!(plain_type_cache_retained_bytes_trusted_for_test());
+            assert_eq!(PLAIN_TYPE_CACHE_AGGREGATE_SCANS.load(Ordering::Relaxed), 1);
             assert!(metadata_segregation_side_cache_snapshot().occupied_entries >= 2);
             assert_eq!(delayed_free_snapshot().occupied_slots, 1);
 
@@ -17005,6 +17128,8 @@ mod tests {
                 }
             );
             assert_eq!(delayed_free_snapshot().occupied_slots, 0);
+            assert_eq!(plain_type_cache_retained_bytes_snapshot_for_test(), 0);
+            assert!(!plain_type_cache_retained_bytes_trusted_for_test());
             assert!(!current_thread_fast_auto_allocation_records_active());
             assert_eq!(
                 lookup_auto_allocation_metadata(global_recovery_ptr, layout),
@@ -26678,6 +26803,118 @@ mod tests {
     }
 
     #[test]
+    fn plain_type_cache_aggregate_retained_bytes_scans_once_then_updates_in_o1() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            let mut storage = [[0usize; TYPE_CACHE_NODE_WORDS]; 3];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage[0]), align_of::<usize>()).unwrap();
+            let retained = type_cache_retained_bytes_for_layout(layout);
+            let metadata = AllocationMetadata::for_type(0xC003_5212).with_flags(FLAG_TYPE_ISOLATED);
+            let mut ptrs = [core::ptr::null_mut(); 3];
+
+            for (index, words) in storage.iter_mut().enumerate() {
+                let ptr = words.as_mut_ptr() as *mut u8;
+                ptrs[index] = ptr;
+                assert!(push_type_cache(ptr, layout, metadata));
+                assert_eq!(
+                    PLAIN_TYPE_CACHE_AGGREGATE_SCANS.load(Ordering::Relaxed),
+                    1,
+                    "only the first cold insertion after reset should rebuild the aggregate"
+                );
+                assert!(plain_type_cache_retained_bytes_trusted_for_test());
+                assert_eq!(
+                    plain_type_cache_retained_bytes_snapshot_for_test(),
+                    retained * (index + 1),
+                    "healthy cold pushes should update retained bytes exactly"
+                );
+            }
+
+            for (remaining, expected) in ptrs.iter().rev().enumerate() {
+                assert_eq!(pop_type_cache(layout, metadata), Some(*expected));
+                assert_eq!(
+                    plain_type_cache_retained_bytes_snapshot_for_test(),
+                    retained * (ptrs.len() - remaining - 1),
+                    "healthy cold pops should update retained bytes exactly"
+                );
+                assert_eq!(
+                    PLAIN_TYPE_CACHE_AGGREGATE_SCANS.load(Ordering::Relaxed),
+                    1,
+                    "healthy pops must not invalidate the aggregate"
+                );
+            }
+            assert!(plain_type_cache_retained_bytes_trusted_for_test());
+        }
+    }
+
+    #[test]
+    fn plain_type_cache_accounting_repair_triggers_one_bounded_rebuild() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            let mut storage = [[0usize; TYPE_CACHE_NODE_WORDS]; 3];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage[0]), align_of::<usize>()).unwrap();
+            let retained = type_cache_retained_bytes_for_layout(layout);
+            let metadata = AllocationMetadata::for_type(0xC003_5213).with_flags(FLAG_TYPE_ISOLATED);
+            let cache_key = type_cache_identity_key(metadata);
+            let slot_key = plain_type_cache_slot_key(cache_key, layout);
+            let first = storage[0].as_mut_ptr() as *mut u8;
+
+            assert!(push_type_cache(first, layout, metadata));
+            assert_eq!(PLAIN_TYPE_CACHE_AGGREGATE_SCANS.load(Ordering::Relaxed), 1);
+            assert_eq!(
+                plain_type_cache_retained_bytes_snapshot_for_test(),
+                retained
+            );
+            assert!(plain_type_cache_retained_bytes_trusted_for_test());
+
+            let slot = type_cache_find_slot_for_key(slot_key, false)
+                .expect("cold plain cache slot should exist after push");
+            (*slot).retained_bytes = 0;
+            assert_eq!(
+                pop_type_cache(layout, metadata),
+                Some(first),
+                "accounting-only drift should preserve the owned cached object"
+            );
+            assert!(
+                !plain_type_cache_retained_bytes_trusted_for_test(),
+                "repair must fail closed for subsequent aggregate growth"
+            );
+
+            let second = storage[1].as_mut_ptr() as *mut u8;
+            assert!(push_type_cache(second, layout, metadata));
+            assert_eq!(
+                PLAIN_TYPE_CACHE_AGGREGATE_SCANS.load(Ordering::Relaxed),
+                2,
+                "the first post-repair push should perform one bounded rebuild"
+            );
+            assert_eq!(
+                plain_type_cache_retained_bytes_snapshot_for_test(),
+                retained
+            );
+            assert!(plain_type_cache_retained_bytes_trusted_for_test());
+
+            let third = storage[2].as_mut_ptr() as *mut u8;
+            assert!(push_type_cache(third, layout, metadata));
+            assert_eq!(
+                PLAIN_TYPE_CACHE_AGGREGATE_SCANS.load(Ordering::Relaxed),
+                2,
+                "the rebuilt aggregate should return to O(1) updates"
+            );
+            assert_eq!(
+                plain_type_cache_retained_bytes_snapshot_for_test(),
+                retained * 2
+            );
+
+            assert_eq!(pop_type_cache(layout, metadata), Some(third));
+            assert_eq!(pop_type_cache(layout, metadata), Some(second));
+            assert_eq!(plain_type_cache_retained_bytes_snapshot_for_test(), 0);
+        }
+    }
+
+    #[test]
     fn type_cache_retained_bytes_use_allocator_rounded_size() {
         let _guard = test_guard();
         unsafe {
@@ -26794,6 +27031,7 @@ mod tests {
             let retained = type_cache_retained_bytes_for_layout(layout);
             assert!(retained > 0);
             assert!(retained <= MAX_TYPE_CACHE_SLOT_BYTES);
+            assert_eq!(MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES % retained, 0);
             let fit_entries = MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES / retained;
             assert!(
                 fit_entries > 1 && fit_entries < TYPE_CACHE_SLOTS * MAX_TYPE_CACHE_DEPTH,
@@ -26826,6 +27064,16 @@ mod tests {
                 before_overflow.retained_bytes <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES,
                 "accepted entries must stay within the aggregate budget"
             );
+            assert_eq!(
+                before_overflow.retained_bytes, MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES,
+                "the aggregate counter must admit exactly the 512 KiB cap"
+            );
+            assert_eq!(
+                plain_type_cache_retained_bytes_snapshot_for_test(),
+                MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES
+            );
+            assert!(plain_type_cache_retained_bytes_trusted_for_test());
+            assert_eq!(PLAIN_TYPE_CACHE_AGGREGATE_SCANS.load(Ordering::Relaxed), 1);
             assert!(
                 before_overflow.retained_bytes.saturating_add(retained)
                     > MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES,
@@ -26862,6 +27110,119 @@ mod tests {
                 type_isolation_side_cache_snapshot().retained_bytes
                     <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES
             );
+            assert_eq!(PLAIN_TYPE_CACHE_AGGREGATE_SCANS.load(Ordering::Relaxed), 1);
+        }
+    }
+
+    #[test]
+    fn plain_type_cache_inline_replacement_respects_aggregate_byte_cap() {
+        const QUARTER_SLOT_WORDS: usize =
+            (MAX_TYPE_CACHE_SLOT_BYTES / 4) / core::mem::size_of::<usize>();
+        const MAX_OBJECT_WORDS: usize = MAX_TYPE_CACHE_OBJECT_SIZE / core::mem::size_of::<usize>();
+
+        let _guard = test_guard();
+        let mut cold_storage: Vec<Box<[usize; QUARTER_SLOT_WORDS]>> = Vec::new();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+
+            let mut small_inline_storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let small_layout =
+                Layout::from_size_align(size_of_val(&small_inline_storage), align_of::<usize>())
+                    .unwrap();
+            let small_metadata =
+                AllocationMetadata::for_type(0xC003_5311).with_flags(FLAG_TYPE_ISOLATED);
+            let small_cache_key = type_cache_identity_key(small_metadata);
+            let small_ptr = small_inline_storage.as_mut_ptr() as *mut u8;
+            assert!(push_inline_type_cache_eligible_with_key(
+                small_ptr,
+                small_layout,
+                small_metadata,
+                small_cache_key,
+            ));
+
+            let cold_layout = Layout::from_size_align(
+                QUARTER_SLOT_WORDS * core::mem::size_of::<usize>(),
+                align_of::<usize>(),
+            )
+            .unwrap();
+            let cold_retained = type_cache_retained_bytes_for_layout(cold_layout);
+            let mut next_type = 0xC003_5312u64;
+            let mut attempts = 0usize;
+            while type_isolation_side_cache_snapshot()
+                .retained_bytes
+                .saturating_add(cold_retained)
+                <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES
+            {
+                assert!(attempts < 16_384, "test should find enough cold cache keys");
+                cold_storage.push(Box::new([0usize; QUARTER_SLOT_WORDS]));
+                let ptr = cold_storage.last_mut().unwrap().as_mut_ptr() as *mut u8;
+                let metadata =
+                    AllocationMetadata::for_type(next_type).with_flags(FLAG_TYPE_ISOLATED);
+                next_type = next_type.wrapping_add(1);
+                attempts += 1;
+                if !push_type_cache(ptr, cold_layout, metadata) {
+                    cold_storage.pop();
+                }
+            }
+
+            let with_small_inline = type_isolation_side_cache_snapshot();
+            assert!(with_small_inline.inline_occupied);
+            assert!(with_small_inline.retained_bytes <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES);
+            assert!(
+                with_small_inline
+                    .retained_bytes
+                    .saturating_add(cold_retained)
+                    > MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES,
+                "cold slots should be filled to the last aggregate-sized step"
+            );
+            assert_eq!(
+                pop_inline_type_cache_eligible_with_key(
+                    small_layout,
+                    small_metadata,
+                    small_cache_key,
+                ),
+                Some(small_ptr)
+            );
+
+            let cold_only = type_isolation_side_cache_snapshot();
+            assert!(!cold_only.inline_occupied);
+            assert_eq!(
+                cold_only.retained_bytes,
+                plain_type_cache_retained_bytes_snapshot_for_test()
+            );
+
+            let mut larger_inline_storage = Box::new([0usize; MAX_OBJECT_WORDS]);
+            let larger_layout =
+                Layout::from_size_align(size_of_val(&*larger_inline_storage), align_of::<usize>())
+                    .unwrap();
+            let larger_retained = type_cache_retained_bytes_for_layout(larger_layout);
+            assert!(
+                cold_only.retained_bytes.saturating_add(larger_retained)
+                    > MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES,
+                "the replacement inline candidate must exceed the remaining aggregate headroom"
+            );
+            let larger_metadata =
+                AllocationMetadata::for_type(next_type).with_flags(FLAG_TYPE_ISOLATED);
+            assert!(
+                !push_plain_semantic_type_cache_eligible(
+                    larger_inline_storage.as_mut_ptr() as *mut u8,
+                    larger_layout,
+                    larger_metadata,
+                ),
+                "an empty inline slot must not bypass the aggregate byte cap"
+            );
+
+            let after_rejection = type_isolation_side_cache_snapshot();
+            assert!(!after_rejection.inline_occupied);
+            assert_eq!(after_rejection.retained_bytes, cold_only.retained_bytes);
+            assert!(after_rejection.retained_bytes <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES);
+            assert_eq!(
+                plain_type_cache_retained_bytes_snapshot_for_test(),
+                cold_only.retained_bytes
+            );
+            assert!(plain_type_cache_retained_bytes_trusted_for_test());
+            assert_eq!(PLAIN_TYPE_CACHE_AGGREGATE_SCANS.load(Ordering::Relaxed), 1);
         }
     }
 
