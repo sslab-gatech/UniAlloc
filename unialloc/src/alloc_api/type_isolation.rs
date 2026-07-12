@@ -5114,6 +5114,57 @@ pub fn __unialloc_semantic_string_into_boxed_str(
     boxed
 }
 
+/// Convert a boxed string slice into an owned string while transferring the
+/// live type-isolation identity selected by the compiler.
+///
+/// `Box<str>::into_string` preserves the allocation pointer and exact byte
+/// layout. UniAlloc therefore changes only the `type_id` of one exact,
+/// authenticated recovery record and its matching memory-tag record when
+/// present. Wrong, zero, same, missing, duplicated, or incoherent identities
+/// leave the source identity authoritative; the standard conversion still
+/// succeeds in every case.
+#[doc(hidden)]
+pub fn __unialloc_semantic_boxed_str_into_string(
+    value: AllocBox<str>,
+    expected_old_type_id: u64,
+    new_type_id: u64,
+) -> AllocString {
+    let old_ptr = value.as_ptr() as *mut u8;
+    let old_len = value.len();
+    let layout = Layout::array::<u8>(old_len).ok();
+    let string = value.into_string();
+
+    let applied = if let Some(layout) = layout {
+        if layout.size() != 0
+            && string.as_ptr() as *mut u8 == old_ptr
+            && string.len() == old_len
+            && string.capacity() == old_len
+        {
+            unsafe {
+                try_rebind_auto_allocation_type_identity(
+                    old_ptr,
+                    layout,
+                    expected_old_type_id,
+                    new_type_id,
+                )
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    if semantic_stats_recording_enabled() {
+        if applied {
+            SEMANTIC_OWNERSHIP_TRANSFER_APPLIED.fetch_add(1, Ordering::Relaxed);
+        } else {
+            SEMANTIC_OWNERSHIP_TRANSFER_REJECTED.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    string
+}
+
 /// Convert a vector into its owning iterator while rebinding the live
 /// allocation identity to the exact `IntoIter<T, A>` type selected by the
 /// compiler.
