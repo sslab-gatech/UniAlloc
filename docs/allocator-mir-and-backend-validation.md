@@ -343,6 +343,19 @@ cross-thread realloc, delayed free, and cache routing. It does not establish
 that arbitrary forged metadata is safe or that every application realloc path
 has compiler coverage.
 
+### Memory-tagged cross-thread mismatch quarantines only once
+
+Commit `13807b3` adds a combined regression for process-visible recovery,
+memory-tag side-table state, a foreign-thread wrong Drop identity, delayed-free
+quarantine, and duplicate deallocation.  The recovered allocation identity may
+quarantine the address exactly once.  A second typed free must fail-stop before
+it can enqueue the address again, poison the wrong type cache, or create a
+second owner; the one accepted free remains owned by the allocation identity.
+
+This closes one concrete cross-thread metadata-mismatch and duplicate-free
+path.  It does not establish hardware memory tagging, arbitrary forged metadata
+handling, universal application coverage, or performance impact.
+
 ### Realloc policy-key separation across physical cache domains
 
 Commits `48cdfcf`, `e5b992d`, and `ae923c6` add a lower-level regression for a
@@ -499,16 +512,38 @@ path.
 
 ### Current Oxipng real-application compiler coverage boundary
 
-Commit `88c35fd` adds exact `indexmap::map::IndexMap` and
+Historical commit `88c35fd` added exact `indexmap::map::IndexMap` and
 `indexmap::set::IndexSet` heap-container identities to the compiler pass.  The
 match is intentionally narrow: rustc crate disambiguators such as
 `indexmap[hash]::set::IndexSet` are normalized, but the final def path must
 exactly match a supported container path.  The pass does not infer arbitrary
-custom ADTs, and the current real-application evidence keeps unsupported
-`png::PngData`, `headers::Headers`, and `crossbeam_channel::Sender<_>` Clone
-results unresolved.
+custom ADTs.  At that source snapshot, `png::PngData`, `headers::Headers`, and
+`crossbeam_channel::Sender<_>` Clone results all remained unresolved.
 
-A source-bound Oxipng v4.0.3 smoke at validator commit `e466831` validated the
+Commit `7cd31be` then classifies exact `alloc`/`std` `Arc` and `Rc` plain-Clone
+handles as non-owning without changing constructors, Drop, or other heap-owner
+semantics.  A single successful Oxipng v4.0.3 build/run bound to code-bearing
+source `15d892e` consequently applies both concrete `PngData::clone` sites to
+their sole allocating owner, `Vec<u8>`.  `Headers` still fails closed because
+it has multiple heap owners.  `Sender` also remains unresolved: its pinned
+dependency implementation is non-allocating, but the compiler pass cannot bind
+that source version, so a global name-only exception would be unsound.
+
+The current audit reports 843 actual semantic scopes, 278 applied Drop rows,
+265 multi-owner Drop rows that fail closed, 2 semantic fail-closed rows, 6
+direct rewrites, and 131 complete runtime rows.  The change from 853 to 843
+scopes removes standalone `Arc`/`Rc` handle-Clone false positives while making
+the two `PngData` sites precise; it is a semantic correction rather than a
+coverage regression.  The functional PNG SHA-256 is
+`565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`, and the
+injected compiler-identity-bound address oracle remains validated.  Evidence
+is under
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-arc-vec-15d892e-20260712/`.
+This source-bound run proves neither universal compiler coverage nor a
+publication-grade performance result.
+
+For historical comparison, a source-bound Oxipng v4.0.3 smoke at validator
+commit `e466831` validated the
 actual rewrite path without running a benchmark loop.  The pinned application
 built once and ran once with the expected output SHA-256.  Its target-crate MIR
 audit reported 6 direct allocator rewrites, 848 semantic-scope rewrites, 535
