@@ -924,6 +924,17 @@ pub struct SemanticMetadataValidationSnapshot {
     pub last_mismatch_recorded_callsite: u64,
 }
 
+/// Process-wide observability for compiler-lowered allocation ownership
+/// transfers such as `Box<[T]>` into `Vec<T>` while semantic stats recording
+/// is enabled.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C)]
+pub struct SemanticOwnershipTransferSnapshot {
+    pub attempted: usize,
+    pub applied: usize,
+    pub rejected: usize,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
 pub struct SemanticScopeDepthSnapshot {
@@ -939,6 +950,8 @@ pub static SEMANTIC_FALLBACK_ATTRIBUTION: SemanticFallbackAttribution =
     SemanticFallbackAttribution::new();
 pub static SEMANTIC_METADATA_VALIDATION: SemanticMetadataValidation =
     SemanticMetadataValidation::new();
+static SEMANTIC_OWNERSHIP_TRANSFER_APPLIED: AtomicUsize = AtomicUsize::new(0);
+static SEMANTIC_OWNERSHIP_TRANSFER_REJECTED: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static SEMANTIC_TEST_LOCK: Mutex<()> = Mutex::new(());
 #[cfg(test)]
@@ -4687,19 +4700,30 @@ pub fn __unialloc_semantic_box_slice_into_vec<T, A: Allocator>(
     let layout = Layout::array::<T>(old_len).ok();
     let vec = boxed.into_vec();
 
-    if let Some(layout) = layout {
+    let applied = if let Some(layout) = layout {
         // Keep the identity mutation narrower than the standard-library
         // contract: if a future implementation stops preserving these exact
         // representation properties, retain the old authoritative record.
         if layout.size() != 0 && vec.as_ptr() as *mut u8 == old_ptr && vec.capacity() == old_len {
             unsafe {
-                let _ = try_rebind_auto_allocation_type_identity(
+                try_rebind_auto_allocation_type_identity(
                     old_ptr,
                     layout,
                     expected_old_type_id,
                     new_type_id,
-                );
+                )
             }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    if semantic_stats_recording_enabled() {
+        if applied {
+            SEMANTIC_OWNERSHIP_TRANSFER_APPLIED.fetch_add(1, Ordering::Relaxed);
+        } else {
+            SEMANTIC_OWNERSHIP_TRANSFER_REJECTED.fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -9238,6 +9262,18 @@ pub fn semantic_metadata_validation_snapshot() -> SemanticMetadataValidationSnap
     SEMANTIC_METADATA_VALIDATION.snapshot()
 }
 
+/// Return cumulative counters for completed ownership-transfer attempts made
+/// while semantic stats recording was enabled.
+pub fn semantic_ownership_transfer_snapshot() -> SemanticOwnershipTransferSnapshot {
+    let applied = SEMANTIC_OWNERSHIP_TRANSFER_APPLIED.load(Ordering::Relaxed);
+    let rejected = SEMANTIC_OWNERSHIP_TRANSFER_REJECTED.load(Ordering::Relaxed);
+    SemanticOwnershipTransferSnapshot {
+        attempted: applied.saturating_add(rejected),
+        applied,
+        rejected,
+    }
+}
+
 pub fn semantic_scope_depth_snapshot() -> SemanticScopeDepthSnapshot {
     unsafe {
         let represented_overflow_depth =
@@ -12177,6 +12213,78 @@ mod tests {
             value.write((index as u8).wrapping_mul(17).wrapping_add(3));
         }
         unsafe { boxed.assume_init() }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn box_slice_into_vec_reports_applied_and_rejected_ownership_transfers() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const LEN: usize = 256;
+        let layout = Layout::array::<u8>(LEN).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xB05E_D491)
+            .with_module(0xC0DE_0291)
+            .with_callsite(0xA110_B491)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let new_type_id = 0x0EC0_D491;
+        let new_metadata = AllocationMetadata {
+            type_id: new_type_id,
+            ..old_metadata
+        };
+        let before = semantic_ownership_transfer_snapshot();
+
+        let applied_box = boxed_u8_slice_with_metadata(LEN, old_metadata);
+        let applied_ptr = applied_box.as_ptr() as *mut u8;
+        let applied_vec =
+            __unialloc_semantic_box_slice_into_vec(applied_box, old_metadata.type_id, new_type_id);
+        assert_eq!(
+            lookup_auto_allocation_metadata(applied_ptr, layout),
+            Some(new_metadata)
+        );
+        let after_applied = semantic_ownership_transfer_snapshot();
+        assert_eq!(after_applied.attempted.saturating_sub(before.attempted), 1);
+        assert_eq!(after_applied.applied.saturating_sub(before.applied), 1);
+        assert_eq!(after_applied.rejected.saturating_sub(before.rejected), 0);
+        assert_eq!(
+            after_applied.attempted,
+            after_applied.applied + after_applied.rejected
+        );
+        drop(applied_vec);
+
+        let rejected_box = boxed_u8_slice_with_metadata(LEN, old_metadata);
+        let rejected_ptr = rejected_box.as_ptr() as *mut u8;
+        let rejected_vec = __unialloc_semantic_box_slice_into_vec(
+            rejected_box,
+            old_metadata.type_id ^ 1,
+            new_type_id,
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(rejected_ptr, layout),
+            Some(old_metadata),
+            "a rejected transfer must retain the authoritative Box identity"
+        );
+        let after_rejected = semantic_ownership_transfer_snapshot();
+        assert_eq!(after_rejected.attempted.saturating_sub(before.attempted), 2);
+        assert_eq!(after_rejected.applied.saturating_sub(before.applied), 1);
+        assert_eq!(after_rejected.rejected.saturating_sub(before.rejected), 1);
+        assert_eq!(
+            after_rejected.attempted,
+            after_rejected.applied + after_rejected.rejected
+        );
+        drop(rejected_vec);
+
+        unsafe {
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, old_metadata);
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, new_metadata);
+        }
+        semantic_stats_recording_disable();
     }
 
     #[test]
