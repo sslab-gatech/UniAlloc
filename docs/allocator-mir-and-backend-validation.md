@@ -378,6 +378,21 @@ PAC claim: the lifecycle neither enables pointer authentication nor records PAC
 failure counters.  It proves the ordinary TLS identity-retirement/cache-routing
 path only, not a hugepage physical-domain or universal realloc guarantee.
 
+### Memory-tagged realloc-to-zero rejects a second owner
+
+Commit `9ca5a10` extends the zero-size boundary to allocations protected by the
+memory-tag side table.  Both the thread-local record path and the
+process-visible cross-thread-recovery path must return the aligned zero-size
+sentinel, retire the old tag, and consume the old recovery identity exactly
+once.  A second deallocation of the retired address must then fail before it
+can add another cache entry or reach the raw allocator; the type-isolation
+side-cache snapshot is required to remain unchanged by that rejected attempt.
+
+The two focused cases pass on hosted and `fixed_heap` configurations.  This is
+a bounded fail-stop double-free regression for `FLAG_MEMORY_TAGGING`; it does
+not claim hardware memory-tag enforcement, arbitrary stale-pointer detection,
+or performance impact.
+
 ### Cross-thread overflow realloc preserves the live allocation
 
 Commit `422c91f` adds the failure-side counterpart.  A creator publishes a
