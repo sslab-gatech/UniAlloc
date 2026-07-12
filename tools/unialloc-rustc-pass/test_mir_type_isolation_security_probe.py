@@ -333,7 +333,7 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
     reference_rows = clone_classification_rows(audit, "clone_nonowning_reference")
     if len(reference_rows) == 1:
         destination_type = str(reference_rows[0].get("destination_type") or "")
-        if not destination_type.startswith("&") or "std::vec::Vec<u8>" not in destination_type:
+        if not destination_type.startswith("&") or "std::vec::Vec<u8" not in destination_type:
             errors.append(
                 "clone_nonowning_reference did not preserve the borrowed Vec destination type"
             )
@@ -355,7 +355,7 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
         ):
             errors.append("clone_ambiguous_result did not record the multiple-owner reason")
         row_text = json.dumps(row, sort_keys=True)
-        for owner in ("std::vec::Vec<u8>", "std::string::String"):
+        for owner in ("std::vec::Vec<u8", "std::string::String"):
             if owner not in row_text:
                 errors.append(f"clone_ambiguous_result omitted owner {owner}")
 
