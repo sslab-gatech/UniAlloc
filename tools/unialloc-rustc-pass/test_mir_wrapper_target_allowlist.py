@@ -7,6 +7,7 @@ import json
 import os
 import pathlib
 import shutil
+import signal
 import subprocess
 import tempfile
 import unittest
@@ -20,7 +21,10 @@ TOOLCHAIN = (ROOT / "rust-toolchain").read_text(encoding="utf-8").strip()
 class MirWrapperTargetAllowlistTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls._tmp = tempfile.TemporaryDirectory(prefix="unialloc-wrapper-allowlist-")
+        temp_root = "/tmp" if pathlib.Path("/tmp").is_dir() else None
+        cls._tmp = tempfile.TemporaryDirectory(
+            prefix="unialloc-wrapper-allowlist-", dir=temp_root
+        )
         cls.tmp = pathlib.Path(cls._tmp.name)
         rustc = shutil.which("rustc") or "rustc"
         cls.sysroot = pathlib.Path(
@@ -69,18 +73,24 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
         )
         return source
 
-    def test_non_target_executes_original_rustc_without_audit_mutation(self) -> None:
-        captured = self.tmp / "captured-args.json"
-        # The .exe suffix also locks the Windows Cargo-wrapper argv0 path.
-        fake_rustc = self.tmp / "rustc-fake.exe"
-        fake_rustc.write_text(
+    def write_fake_compiler(self, name: str = "compiler-driver") -> pathlib.Path:
+        compiler = self.tmp / name
+        compiler.write_text(
             "#!/usr/bin/env python3\n"
-            "import json, os, pathlib, sys\n"
+            "import json, os, pathlib, signal, sys\n"
             "pathlib.Path(os.environ['CAPTURE_ARGS']).write_text(json.dumps(sys.argv[1:]))\n"
-            "raise SystemExit(int(os.environ['FAKE_RUSTC_EXIT']))\n",
+            "signal_name = os.environ.get('FAKE_COMPILER_SIGNAL')\n"
+            "if signal_name:\n"
+            "    os.kill(os.getpid(), getattr(signal, signal_name))\n"
+            "raise SystemExit(int(os.environ['FAKE_COMPILER_EXIT']))\n",
             encoding="utf-8",
         )
-        fake_rustc.chmod(0o755)
+        compiler.chmod(0o755)
+        return compiler
+
+    def test_non_target_executes_arbitrary_compiler_with_exact_argv(self) -> None:
+        captured = self.tmp / "captured-args.json"
+        compiler = self.write_fake_compiler()
         audit = self.tmp / "bypass-audit.json"
         audit.write_text("sentinel\n", encoding="utf-8")
         log = self.tmp / "bypass.log"
@@ -89,25 +99,47 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
         env.update(
             {
                 "UNIALLOC_RUSTC_TARGET_CRATES": "application-crate",
+                "UNIALLOC_LOWERING_POLICY_FLAGS": "not-a-number-for-non-target",
                 "UNIALLOC_REWRITE_AUDIT_OUT": str(audit),
                 "UNIALLOC_PASS_LOG_OUT": str(log),
                 "CAPTURE_ARGS": str(captured),
-                "FAKE_RUSTC_EXIT": "23",
+                "FAKE_COMPILER_EXIT": "31",
             }
         )
 
-        result = subprocess.run([str(self.wrapper), str(fake_rustc), *original_args], env=env)
+        result = subprocess.run([str(self.wrapper), str(compiler), *original_args], env=env)
 
-        self.assertEqual(result.returncode, 23)
+        self.assertEqual(result.returncode, 31)
         self.assertEqual(json.loads(captured.read_text(encoding="utf-8")), original_args)
         self.assertEqual(audit.read_text(encoding="utf-8"), "sentinel\n")
         self.assertFalse(log.exists())
 
         probe_args = ["-vV"]
-        result = subprocess.run([str(self.wrapper), str(fake_rustc), *probe_args], env=env)
-        self.assertEqual(result.returncode, 23)
+        result = subprocess.run([str(self.wrapper), str(compiler), *probe_args], env=env)
+        self.assertEqual(result.returncode, 31)
         self.assertEqual(json.loads(captured.read_text(encoding="utf-8")), probe_args)
         self.assertEqual(audit.read_text(encoding="utf-8"), "sentinel\n")
+
+    @unittest.skipUnless(os.name == "posix", "Unix signal propagation contract")
+    def test_non_target_bypass_preserves_unix_signal_status(self) -> None:
+        captured = self.tmp / "signal-args.json"
+        compiler = self.write_fake_compiler("compiler-driver-signal")
+        env = self.wrapper_env()
+        env.update(
+            {
+                "UNIALLOC_RUSTC_TARGET_CRATES": "application-crate",
+                "CAPTURE_ARGS": str(captured),
+                "FAKE_COMPILER_EXIT": "0",
+                "FAKE_COMPILER_SIGNAL": "SIGTERM",
+            }
+        )
+
+        result = subprocess.run(
+            [str(self.wrapper), str(compiler), "--crate-name", "dependency_crate"],
+            env=env,
+        )
+
+        self.assertEqual(result.returncode, -signal.SIGTERM)
 
     def test_cli_allowlist_selects_hyphen_alias_and_equals_crate_name(self) -> None:
         source = self.write_fixture("selected")
@@ -147,12 +179,14 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
         env = self.wrapper_env()
         env.pop("UNIALLOC_RUSTC_TARGET_CRATES", None)
         env["UNIALLOC_CONTINUE_COMPILATION"] = "1"
-        env["UNIALLOC_REWRITE_AUDIT_OUT"] = str(audit)
+        env["UNIALLOC_RUSTC_SYSROOT"] = str(self.sysroot)
 
         subprocess.run(
             [
                 str(self.wrapper),
-                str(self.rustc),
+                "--unialloc-rewrite-audit-out",
+                str(audit),
+                "--",
                 "--crate-name",
                 "unrestricted_crate",
                 "--crate-type=bin",

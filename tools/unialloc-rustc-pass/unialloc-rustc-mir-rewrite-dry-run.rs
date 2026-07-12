@@ -65,6 +65,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::{self, Command};
 use std::sync::Mutex;
+#[cfg(unix)]
+use std::{os::unix::fs::PermissionsExt, os::unix::process::CommandExt};
 
 const PASS_NAME: &str = "unialloc-rustc-driver-mir-rewrite-dry-run";
 const LOWERING_MODULE_ID: u64 = 0xC002_DA00_0000_0001;
@@ -131,9 +133,12 @@ struct Cli {
     direct_local_metadata_abi: bool,
     direct_local_size_align_with_semantic_drop: bool,
     continue_compilation: bool,
-    target_crates: BTreeSet<String>,
-    original_rustc_args: Vec<String>,
     rustc_args: Vec<String>,
+}
+
+enum ParsedInvocation {
+    Bypass(Vec<String>),
+    RunPass(Cli),
 }
 
 #[derive(Clone, Debug)]
@@ -480,6 +485,39 @@ fn looks_like_rustc_argv0(value: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn looks_like_compiler_argv0(value: &str) -> bool {
+    if looks_like_rustc_argv0(value) {
+        return true;
+    }
+    let path = PathBuf::from(value);
+    let metadata = match path.metadata() {
+        Ok(metadata) if metadata.is_file() => metadata,
+        _ => return false,
+    };
+    #[cfg(unix)]
+    {
+        return metadata.permissions().mode() & 0o111 != 0;
+    }
+    #[cfg(windows)]
+    {
+        return path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(|extension| {
+                matches!(
+                    extension.to_ascii_lowercase().as_str(),
+                    "exe" | "com" | "bat" | "cmd"
+                )
+            })
+            .unwrap_or(false);
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        let _ = metadata;
+        false
+    }
+}
+
 fn derive_sysroot_from_rustc_argv0(argv0: &str) -> Option<String> {
     let path = PathBuf::from(argv0);
     let file_name = path.file_name()?.to_str()?;
@@ -591,7 +629,7 @@ fn derived_output_path(dir: &PathBuf, args: &[String], extension: &str) -> PathB
     ))
 }
 
-fn parse_cli() -> Result<Cli, String> {
+fn parse_cli() -> Result<ParsedInvocation, String> {
     let raw: Vec<String> = env::args().collect();
     let mut audit_out = env::var_os("UNIALLOC_REWRITE_AUDIT_OUT").map(PathBuf::from);
     let mut pass_log_out = env::var_os("UNIALLOC_PASS_LOG_OUT").map(PathBuf::from);
@@ -599,18 +637,9 @@ fn parse_cli() -> Result<Cli, String> {
     let mut pass_log_dir = env::var_os("UNIALLOC_PASS_LOG_DIR").map(PathBuf::from);
     let mut actual_rewrite = env_truthy("UNIALLOC_ACTUAL_MIR_REWRITE");
     let mut semantic_scope_rewrite = env_truthy("UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE");
-    let mut policy_flags = match env::var("UNIALLOC_LOWERING_POLICY_FLAGS") {
-        Ok(value) => parse_u32(&value)?,
-        Err(_) => DEFAULT_LOWERING_POLICY_FLAGS,
-    };
-    let mut lifetime_hint = match env::var("UNIALLOC_LOWERING_LIFETIME_HINT") {
-        Ok(value) => parse_u16(&value)?,
-        Err(_) => 0,
-    };
-    let mut placement_hint = match env::var("UNIALLOC_LOWERING_PLACEMENT_HINT") {
-        Ok(value) => parse_u16(&value)?,
-        Err(_) => 0,
-    };
+    let mut policy_flags = None;
+    let mut lifetime_hint = None;
+    let mut placement_hint = None;
     let mut auto_cross_thread_recovery_hint =
         env_truthy("UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT");
     let mut direct_local_metadata_abi = env_truthy("UNIALLOC_DIRECT_LOCAL_METADATA_ABI");
@@ -687,21 +716,21 @@ fn parse_cli() -> Result<Cli, String> {
                 if i >= raw.len() {
                     return Err("--unialloc-policy-flags requires a u32 value".to_string());
                 }
-                policy_flags = parse_u32(&raw[i])?;
+                policy_flags = Some(parse_u32(&raw[i])?);
             }
             "--unialloc-lifetime-hint" => {
                 i += 1;
                 if i >= raw.len() {
                     return Err("--unialloc-lifetime-hint requires a u16 value".to_string());
                 }
-                lifetime_hint = parse_u16(&raw[i])?;
+                lifetime_hint = Some(parse_u16(&raw[i])?);
             }
             "--unialloc-placement-hint" => {
                 i += 1;
                 if i >= raw.len() {
                     return Err("--unialloc-placement-hint requires a u16 value".to_string());
                 }
-                placement_hint = parse_u16(&raw[i])?;
+                placement_hint = Some(parse_u16(&raw[i])?);
             }
             "--unialloc-auto-cross-thread-recovery-hint" => {
                 auto_cross_thread_recovery_hint = true;
@@ -745,10 +774,40 @@ fn parse_cli() -> Result<Cli, String> {
     }
 
     let mut original_rustc_args = Vec::new();
-    if saw_dashdash || !looks_like_rustc_argv0(&passthrough[0]) {
+    if saw_dashdash || !looks_like_compiler_argv0(&passthrough[0]) {
         original_rustc_args.push("rustc".to_string());
     }
     original_rustc_args.extend(passthrough);
+    if !target_crates.is_empty() {
+        let selected = rustc_crate_name(&original_rustc_args)
+            .map(normalized_target_crate_name)
+            .map(|crate_name| target_crates.contains(&crate_name))
+            .unwrap_or(false);
+        if !selected {
+            return Ok(ParsedInvocation::Bypass(original_rustc_args));
+        }
+    }
+    let policy_flags = match policy_flags {
+        Some(value) => value,
+        None => match env::var("UNIALLOC_LOWERING_POLICY_FLAGS") {
+            Ok(value) => parse_u32(&value)?,
+            Err(_) => DEFAULT_LOWERING_POLICY_FLAGS,
+        },
+    };
+    let lifetime_hint = match lifetime_hint {
+        Some(value) => value,
+        None => match env::var("UNIALLOC_LOWERING_LIFETIME_HINT") {
+            Ok(value) => parse_u16(&value)?,
+            Err(_) => 0,
+        },
+    };
+    let placement_hint = match placement_hint {
+        Some(value) => value,
+        None => match env::var("UNIALLOC_LOWERING_PLACEMENT_HINT") {
+            Ok(value) => parse_u16(&value)?,
+            Err(_) => 0,
+        },
+    };
     let mut rustc_args = original_rustc_args.clone();
     inject_sysroot_if_missing(&mut rustc_args);
     if direct_local_size_align_with_semantic_drop {
@@ -759,7 +818,7 @@ fn parse_cli() -> Result<Cli, String> {
         continue_compilation = true;
     }
 
-    Ok(Cli {
+    Ok(ParsedInvocation::RunPass(Cli {
         audit_out: audit_out
             .or_else(|| {
                 audit_dir
@@ -781,10 +840,8 @@ fn parse_cli() -> Result<Cli, String> {
         direct_local_metadata_abi,
         direct_local_size_align_with_semantic_drop,
         continue_compilation,
-        target_crates,
-        original_rustc_args,
         rustc_args,
-    })
+    }))
 }
 
 fn json_escape(value: &str) -> String {
@@ -6245,33 +6302,43 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     Ok(())
 }
 
+fn exec_original_rustc(original_rustc_args: &[String]) -> ! {
+    let (rustc, args) = match original_rustc_args.split_first() {
+        Some(parts) => parts,
+        None => {
+            eprintln!("missing original rustc command");
+            process::exit(2);
+        }
+    };
+    #[cfg(unix)]
+    {
+        let err = Command::new(rustc).args(args).exec();
+        eprintln!("failed to invoke original rustc `{}`: {}", rustc, err);
+        process::exit(1);
+    }
+    #[cfg(not(unix))]
+    {
+        match Command::new(rustc).args(args).status() {
+            Ok(status) => process::exit(status.code().unwrap_or(1)),
+            Err(err) => {
+                eprintln!("failed to invoke original rustc `{}`: {}", rustc, err);
+                process::exit(1);
+            }
+        }
+    }
+}
+
 fn main() {
     let cli = match parse_cli() {
-        Ok(cli) => cli,
+        Ok(ParsedInvocation::RunPass(cli)) => cli,
+        Ok(ParsedInvocation::Bypass(original_rustc_args)) => {
+            exec_original_rustc(&original_rustc_args)
+        }
         Err(err) => {
             eprintln!("{}", err);
             process::exit(2);
         }
     };
-    if !cli.target_crates.is_empty() {
-        let selected = rustc_crate_name(&cli.original_rustc_args)
-            .map(normalized_target_crate_name)
-            .map(|crate_name| cli.target_crates.contains(&crate_name))
-            .unwrap_or(false);
-        if !selected {
-            let Some((rustc, args)) = cli.original_rustc_args.split_first() else {
-                eprintln!("missing original rustc command");
-                process::exit(2);
-            };
-            match Command::new(rustc).args(args).status() {
-                Ok(status) => process::exit(status.code().unwrap_or(1)),
-                Err(err) => {
-                    eprintln!("failed to invoke original rustc `{}`: {}", rustc, err);
-                    process::exit(1);
-                }
-            }
-        }
-    }
     unsafe {
         RECORDS = Some(Mutex::new(Vec::new()));
         ACTUAL_MIR_REWRITE = cli.actual_rewrite;
