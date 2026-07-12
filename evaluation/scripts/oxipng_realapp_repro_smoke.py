@@ -31,10 +31,24 @@ DEFAULT_PINNED_CHECKOUT = ROOT / "evaluation" / "external" / "_checkouts" / "ext
 PASS_SOURCE = ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewrite-dry-run.rs"
 STATS_PREFIX = "UNIALLOC_STATS_JSON="
 SCOPED_STATUS_PATHS = [
+    pathlib.Path("Cargo.toml"),
+    pathlib.Path("Cargo.lock"),
     pathlib.Path("unialloc/src"),
     pathlib.Path("unialloc/Cargo.toml"),
+    pathlib.Path("unialloc/build.rs"),
+    pathlib.Path("alloc_macros"),
     PASS_SOURCE.relative_to(ROOT),
+    pathlib.Path("evaluation/scripts/oxipng_realapp_repro_smoke.py"),
+    pathlib.Path("evaluation/scripts/test_oxipng_realapp_repro_smoke.py"),
 ]
+
+REQUIRED_AUDIT_FLAGS = (
+    "actual_allocator_call_replacement",
+    "actual_semantic_scope_rewrite",
+    "body_clone_returned_to_rustc",
+    "direct_local_metadata_abi",
+    "direct_local_size_align_with_semantic_drop",
+)
 
 
 class SmokeError(RuntimeError):
@@ -345,6 +359,26 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
     return audits, totals
 
 
+
+def compiler_coverage_summary(audit_totals: dict[str, int]) -> dict[str, Any]:
+    unsolved_semantic = int(audit_totals.get("semantic_scope_unsolved_candidate_count", 0))
+    unsolved_drop = int(audit_totals.get("semantic_scope_drop_unsolved_candidate_count", 0))
+    unsolved_total = unsolved_semantic + unsolved_drop
+    return {
+        "complete": unsolved_total == 0,
+        "partial_coverage": unsolved_total != 0,
+        "unsolved_candidate_count": unsolved_total,
+        "semantic_scope_unsolved_candidate_count": unsolved_semantic,
+        "semantic_scope_drop_unsolved_candidate_count": unsolved_drop,
+        "direct_rewrite_applied_count": int(audit_totals.get("direct_rewrite_applied_count", 0)),
+        "semantic_scope_rewrite_applied_count": int(audit_totals.get("semantic_scope_rewrite_applied_count", 0)),
+        "semantic_scope_drop_rewrite_applied_count": int(audit_totals.get("semantic_scope_drop_rewrite_applied_count", 0)),
+        "claim_boundary": (
+            "complete compiler coverage" if unsolved_total == 0
+            else "partial compiler coverage only; unsolved semantic/drop candidates are explicitly counted"
+        ),
+    }
+
 def assert_contract(
     *,
     build: CommandResult,
@@ -364,6 +398,14 @@ def assert_contract(
         raise SmokeError(f"output hash mismatch: got {output_sha256}, expected {expected_output_sha256}")
     if not audits:
         raise SmokeError("no target-crate rewrite audits were emitted")
+    false_flags = [
+        f"{audit.get('file')}:{flag}"
+        for audit in audits
+        for flag in REQUIRED_AUDIT_FLAGS
+        if not audit.get(flag)
+    ]
+    if false_flags:
+        raise SmokeError("target-crate audit flags must be true: " + ", ".join(false_flags))
     if audit_totals["direct_rewrite_applied_count"] <= 0:
         raise SmokeError("direct MIR allocator rewrites must be nonzero")
     if audit_totals["semantic_scope_rewrite_applied_count"] <= 0:
@@ -394,15 +436,38 @@ def load_reference_summary(path: pathlib.Path | None) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def require_fresh_output_dir(path: pathlib.Path) -> None:
+def require_fresh_dir(path: pathlib.Path, *, label: str) -> None:
     if path.exists():
         if not path.is_dir():
-            raise SmokeError(f"output path exists and is not a directory: {path}")
+            raise SmokeError(f"{label} path exists and is not a directory: {path}")
         try:
             next(path.iterdir())
         except StopIteration:
             return
-        raise SmokeError(f"output directory must be fresh/empty; refusing to reuse existing files: {path}")
+        raise SmokeError(f"{label} directory must be fresh/empty; refusing to reuse existing files: {path}")
+
+
+
+
+def require_fresh_output_dir(path: pathlib.Path) -> None:
+    require_fresh_dir(path, label="output")
+
+
+def require_fresh_temp_dir(path: pathlib.Path) -> None:
+    require_fresh_dir(path, label="temporary")
+
+
+def path_is_relative_to(path: pathlib.Path, parent: pathlib.Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def require_contained_path(path: pathlib.Path, parent: pathlib.Path, *, label: str) -> None:
+    if not path_is_relative_to(path, parent):
+        raise SmokeError(f"{label} must be contained inside detached checkout: {path.resolve()} not under {parent.resolve()}")
 
 
 def git_status_for_paths(repo: pathlib.Path, paths: list[pathlib.Path]) -> str:
@@ -466,12 +531,28 @@ def reject_source_drift(start: dict[str, Any], end: dict[str, Any]) -> None:
         raise SmokeError(f"source binding drifted during smoke: {json.dumps(drift, sort_keys=True)}")
 
 
-def pass_binary_binding(path: pathlib.Path, *, built_by_script: bool) -> dict[str, Any]:
+def pass_binary_binding(
+    path: pathlib.Path,
+    *,
+    built_by_script: bool,
+    expected_sha256: str | None = None,
+    provenance: str | None = None,
+) -> dict[str, Any]:
     if not path.exists():
         raise SmokeError(f"pass binary is missing: {path}")
+    digest = sha256_file(path)
+    if not built_by_script:
+        if not expected_sha256:
+            raise SmokeError("provided pass binary requires --expected-pass-binary-sha256; refusing unproven current-source-bound success")
+        if not provenance:
+            raise SmokeError("provided pass binary requires --pass-binary-provenance; refusing unproven current-source-bound success")
+        if digest != expected_sha256:
+            raise SmokeError(f"provided pass binary hash mismatch: got {digest}, expected {expected_sha256}")
     return {
         "path": str(path),
-        "sha256": sha256_file(path),
+        "sha256": digest,
+        "expected_sha256": expected_sha256,
+        "provenance": provenance,
         "built_by_script": built_by_script,
         "source_boundary": (
             "script built this binary from the recorded pass source in the current run"
@@ -501,6 +582,7 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
         else:
             temp_root = temp_root.resolve()
             reject_protected_path_overlap(temp_root, pinned=pinned, label="temporary directory")
+            require_fresh_temp_dir(temp_root)
             temp_root.mkdir(parents=True, exist_ok=True)
         reject_protected_path_overlap(temp_root, pinned=pinned, label="temporary directory")
 
@@ -529,7 +611,12 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             build_pass_binary(args.toolchain, wrapper, args.timeout)
         elif not wrapper.exists():
             raise SmokeError(f"provided pass binary does not exist: {wrapper}")
-        pass_binding = pass_binary_binding(wrapper, built_by_script=pass_built_by_script)
+        pass_binding = pass_binary_binding(
+            wrapper,
+            built_by_script=pass_built_by_script,
+            expected_sha256=args.expected_pass_binary_sha256,
+            provenance=args.pass_binary_provenance,
+        )
 
         audit_dir = output_dir / "rewrites"
         log_dir = output_dir / "logs"
@@ -568,6 +655,7 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             raise SmokeError(f"wrapper cargo build failed with {build.returncode}; see {output_dir / 'wrapper-build.stderr.txt'}")
 
         input_path = (oxipng / args.input).resolve()
+        require_contained_path(input_path, oxipng, label="input PNG")
         if not input_path.exists():
             raise SmokeError(f"input PNG is missing in detached copy: {input_path}")
         wrapper_output = output_dir / "wrapper-out.png"
@@ -672,6 +760,7 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             },
             "audit_file_count": len(audits),
             "audit_totals": audit_totals,
+            "compiler_coverage": compiler_coverage_summary(audit_totals),
             "audits": audits,
         }
         write_text(output_dir / "oxipng-realapp-repro-summary.json", deterministic_summary(summary))
@@ -700,6 +789,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--input", type=pathlib.Path, default=DEFAULT_INPUT)
     parser.add_argument("--expected-output-sha256", default=DEFAULT_EXPECTED_OUTPUT_SHA256)
     parser.add_argument("--pass-binary", type=pathlib.Path)
+    parser.add_argument("--expected-pass-binary-sha256")
+    parser.add_argument("--pass-binary-provenance")
     parser.add_argument("--timeout", type=int, default=600)
     return parser.parse_args(argv)
 

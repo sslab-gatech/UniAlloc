@@ -79,6 +79,8 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                             "rewrite_applied_count": 2,
                             "semantic_scope_rewrite_applied_count": 3,
                             "semantic_scope_drop_rewrite_applied_count": 4,
+                            "semantic_scope_unsolved_candidate_count": 5,
+                            "semantic_scope_drop_unsolved_candidate_count": 6,
                         }
                     }
                 ),
@@ -92,6 +94,12 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertEqual(totals["direct_rewrite_applied_count"], 2)
             self.assertEqual(totals["semantic_scope_rewrite_applied_count"], 3)
             self.assertEqual(totals["semantic_scope_drop_rewrite_applied_count"], 4)
+            self.assertEqual(totals["semantic_scope_unsolved_candidate_count"], 5)
+            self.assertEqual(totals["semantic_scope_drop_unsolved_candidate_count"], 6)
+            coverage = smoke.compiler_coverage_summary(totals)
+            self.assertFalse(coverage["complete"])
+            self.assertTrue(coverage["partial_coverage"])
+            self.assertEqual(coverage["unsolved_candidate_count"], 11)
 
     def test_contract_fails_closed_on_missing_direct_rewrite(self) -> None:
         cmd = smoke.CommandResult(["cmd"], 0, "", "")
@@ -102,7 +110,7 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                 stats={"typed_allocations": 1, "fallback_allocations": 0, "type_isolation_corrupt_slots": 0},
                 output_sha256="a",
                 expected_output_sha256="a",
-                audits=[{"file": "audit.json"}],
+                audits=[{"file": "audit.json", **{key: True for key in smoke.REQUIRED_AUDIT_FLAGS}}],
                 audit_totals={
                     "direct_rewrite_applied_count": 0,
                     "semantic_scope_rewrite_applied_count": 1,
@@ -112,6 +120,62 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                 },
                 fallback_note="reported fallback_allocations=0",
             )
+
+
+    def test_contract_fails_closed_on_false_audit_flags(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        totals = {
+            "direct_rewrite_applied_count": 1,
+            "semantic_scope_rewrite_applied_count": 1,
+            "semantic_scope_drop_rewrite_applied_count": 1,
+            "semantic_scope_unsolved_candidate_count": 0,
+            "semantic_scope_drop_unsolved_candidate_count": 0,
+        }
+        audit = {key: True for key in smoke.REQUIRED_AUDIT_FLAGS}
+        audit.update({
+            "file": "audit.json",
+            "body_clone_returned_to_rustc": False,
+        })
+        with self.assertRaisesRegex(smoke.SmokeError, "body_clone_returned_to_rustc"):
+            smoke.assert_contract(
+                build=cmd,
+                run=cmd,
+                stats={"typed_allocations": 1, "fallback_allocations": 0, "type_isolation_corrupt_slots": 0},
+                output_sha256="a",
+                expected_output_sha256="a",
+                audits=[audit],
+                audit_totals=totals,
+                fallback_note="reported fallback_allocations=0",
+            )
+
+
+    def test_fresh_temp_dir_rejects_existing_files_without_deleting(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            temp_dir = pathlib.Path(td) / "temp"
+            temp_dir.mkdir()
+            stale = temp_dir / "stale-target"
+            stale.write_text("do not delete\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(smoke.SmokeError, "fresh/empty"):
+                smoke.require_fresh_temp_dir(temp_dir)
+
+            self.assertEqual(stale.read_text(encoding="utf-8"), "do not delete\n")
+
+
+    def test_input_must_be_contained_inside_detached_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = pathlib.Path(td)
+            checkout = root / "checkout"
+            checkout.mkdir()
+            inside = checkout / "tests" / "in.png"
+            inside.parent.mkdir()
+            inside.write_bytes(b"png")
+            outside = root / "outside.png"
+            outside.write_bytes(b"png")
+
+            smoke.require_contained_path(inside, checkout, label="input PNG")
+            with self.assertRaisesRegex(smoke.SmokeError, "detached checkout"):
+                smoke.require_contained_path(outside, checkout, label="input PNG")
 
 
     def test_fresh_output_dir_rejects_existing_files_without_deleting(self) -> None:
@@ -154,11 +218,12 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         )
 
         self.assertRegex(binding["repo_head"], r"^[0-9a-f]{40}$")
-        self.assertEqual(binding["scoped_status_paths"], [
-            "unialloc/src",
-            "unialloc/Cargo.toml",
-            "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs",
-        ])
+        self.assertEqual(binding["scoped_status_paths"], [str(path) for path in smoke.SCOPED_STATUS_PATHS])
+        self.assertIn("Cargo.toml", binding["scoped_file_hashes"])
+        self.assertIn("unialloc/build.rs", binding["scoped_file_hashes"])
+        self.assertIn("alloc_macros/Cargo.toml", binding["scoped_file_hashes"])
+        self.assertIn("evaluation/scripts/oxipng_realapp_repro_smoke.py", binding["scoped_file_hashes"])
+        self.assertIn("evaluation/scripts/test_oxipng_realapp_repro_smoke.py", binding["scoped_file_hashes"])
         self.assertIn("pass_source_sha256", binding)
         self.assertRegex(binding["pass_source_sha256"], r"^[0-9a-f]{64}$")
         self.assertIn("repo_cargo_lock_sha256", binding)
@@ -189,10 +254,24 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             binary = pathlib.Path(td) / "wrapper"
             binary.write_bytes(b"fake-wrapper\n")
 
-            provided = smoke.pass_binary_binding(binary, built_by_script=False)
+            digest = smoke.sha256_file(binary)
+            with self.assertRaisesRegex(smoke.SmokeError, "expected-pass-binary-sha256"):
+                smoke.pass_binary_binding(binary, built_by_script=False)
+            with self.assertRaisesRegex(smoke.SmokeError, "pass-binary-provenance"):
+                smoke.pass_binary_binding(binary, built_by_script=False, expected_sha256=digest)
+            with self.assertRaisesRegex(smoke.SmokeError, "hash mismatch"):
+                smoke.pass_binary_binding(
+                    binary, built_by_script=False, expected_sha256="0" * 64, provenance="unit-test wrapper"
+                )
+
+            provided = smoke.pass_binary_binding(
+                binary, built_by_script=False, expected_sha256=digest, provenance="unit-test wrapper"
+            )
             built = smoke.pass_binary_binding(binary, built_by_script=True)
 
             self.assertRegex(provided["sha256"], r"^[0-9a-f]{64}$")
+            self.assertEqual(provided["expected_sha256"], digest)
+            self.assertEqual(provided["provenance"], "unit-test wrapper")
             self.assertFalse(provided["built_by_script"])
             self.assertIn("not binary provenance", provided["source_boundary"])
             self.assertTrue(built["built_by_script"])
