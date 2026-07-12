@@ -7594,6 +7594,66 @@ unsafe fn verify_memory_tagged_dealloc(
     validate_memory_tagged_dealloc(record, layout, metadata)
 }
 
+/// Validate the memory-tag state that a moved realloc will later consume.
+///
+/// A moved realloc publishes the replacement allocation before releasing the
+/// old pointer.  Any fail-stop validation of the old tag therefore has to run
+/// before publishing the replacement, otherwise a catchable validation panic
+/// leaves the caller without the new pointer and leaks its tag/recovery state.
+/// This preflight deliberately does not clear either side table.
+fn verify_global_memory_tagged_reallocation_source(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+    requested: bool,
+) -> bool {
+    let mut table = global_memory_tag_table_for_ptr(ptr).lock();
+    let slot = match find_global_memory_tag_slot(&mut table, ptr) {
+        Some(slot) => slot,
+        None => return false,
+    };
+    if !requested {
+        panic_memory_tag_validation_error(MemoryTagValidationError::MissingDeallocationMetadata);
+    }
+    let record = unsafe { *slot };
+    if let Err(error) = unsafe { verify_memory_tagged_dealloc(record, layout, metadata) } {
+        panic_memory_tag_validation_error(error);
+    }
+    true
+}
+
+unsafe fn verify_memory_tagged_reallocation_source(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) {
+    let requested = metadata.requests(FLAG_MEMORY_TAGGING);
+    if !requested
+        && !current_thread_memory_tag_records_active()
+        && !global_memory_tag_records_active()
+    {
+        return;
+    }
+    if let Some(slot) = find_memory_tag_slot(ptr) {
+        if !requested {
+            panic_memory_tag_validation_error(
+                MemoryTagValidationError::MissingDeallocationMetadata,
+            );
+        }
+        let record = *slot;
+        if let Err(error) = verify_memory_tagged_dealloc(record, layout, metadata) {
+            panic_memory_tag_validation_error(error);
+        }
+        return;
+    }
+    if verify_global_memory_tagged_reallocation_source(ptr, layout, metadata, requested) {
+        return;
+    }
+    if requested {
+        panic_memory_tag_validation_error(MemoryTagValidationError::MissingAllocationRecord);
+    }
+}
+
 fn clear_global_memory_tagged_allocation(
     ptr: *mut u8,
     layout: Layout,
@@ -8762,6 +8822,15 @@ unsafe impl SemanticAlloc for RustAllocator {
                 core::ptr::write_bytes(ptr.add(old_layout.size()), 0, new_size - old_layout.size());
             }
             return ptr;
+        }
+
+        if !ptr.is_null() && old_layout.size() != 0 {
+            // Mirror the metadata choice made by `dealloc_with_metadata_inner`
+            // without recording recovery match/mismatch counters twice.  The
+            // exact allocation record is authoritative whenever it exists.
+            let dealloc_metadata = recover_auto_allocation_record_metadata(ptr, old_layout, false)
+                .unwrap_or(old_metadata);
+            verify_memory_tagged_reallocation_source(ptr, old_layout, dealloc_metadata);
         }
 
         let new_ptr = self.alloc_with_metadata(new_layout, new_metadata);
@@ -18351,6 +18420,150 @@ mod tests {
             None,
             "successful retry must leave no recovery record available for a second consumption"
         );
+    }
+
+    fn exercise_moved_realloc_corrupt_old_tag_transaction(metadata: AllocationMetadata) {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_memory_tags_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let recovery_record_count = || unsafe {
+            usize::from(
+                !snapshot_static_copy(core::ptr::addr_of!(FAST_AUTO_ALLOCATION_RECORD_INLINE))
+                    .is_empty(),
+            ) + snapshot_static_copy(core::ptr::addr_of!(FAST_AUTO_ALLOCATION_RECORD_COUNT))
+                + AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed)
+        };
+        let memory_tag_record_count = || unsafe {
+            snapshot_static_copy(core::ptr::addr_of!(MEMORY_TAG_RECORD_COUNT))
+                + GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed)
+        };
+        let memory_tag = |ptr| unsafe {
+            if memory_tag_requires_global_visibility(metadata) {
+                let mut table = global_memory_tag_table_for_ptr(ptr).lock();
+                find_global_memory_tag_slot(&mut *table, ptr).map(|slot| (*slot).tag)
+            } else {
+                find_memory_tag_slot(ptr).map(|slot| (*slot).tag)
+            }
+        };
+        let set_memory_tag = |ptr, tag| unsafe {
+            if memory_tag_requires_global_visibility(metadata) {
+                let mut table = global_memory_tag_table_for_ptr(ptr).lock();
+                let slot = find_global_memory_tag_slot(&mut *table, ptr)
+                    .expect("global memory-tag record");
+                (*slot).tag = tag;
+            } else {
+                let slot = find_memory_tag_slot(ptr).expect("thread-local memory-tag record");
+                (*slot).tag = tag;
+            }
+        };
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(size_of::<usize>(), align_of::<usize>()).unwrap();
+        let new_size = old_layout.size() * 16;
+        let new_layout = Layout::from_size_align(new_size, old_layout.align()).unwrap();
+        assert!(
+            !semantic_realloc_can_reuse_in_place(old_layout, new_size, metadata, metadata),
+            "test must exercise the moved realloc path"
+        );
+
+        let ptr = unsafe { alloc.alloc_with_recovery_metadata(old_layout, metadata) };
+        assert!(!ptr.is_null());
+        let payload = 0xA110_C0DEusize;
+        unsafe {
+            ptr.cast::<usize>().write(payload);
+        }
+        assert_eq!(recovery_record_count(), 1);
+        assert_eq!(memory_tag_record_count(), 1);
+
+        let valid_tag = memory_tag(ptr).expect("old memory-tag record");
+        let corrupt_tag = valid_tag ^ 1;
+        set_memory_tag(ptr, corrupt_tag);
+
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            with_auto_allocation_recovery_recording(|| {
+                alloc.realloc_with_split_metadata(ptr, old_layout, new_size, metadata, metadata)
+            });
+        }));
+        assert!(failed.is_err(), "corrupt old tag must fail-stop");
+        assert_eq!(
+            unsafe { ptr.cast::<usize>().read() },
+            payload,
+            "failed realloc must preserve the old allocation payload"
+        );
+        assert_eq!(
+            recovery_record_count(),
+            1,
+            "failed realloc must not publish an unreachable replacement recovery record"
+        );
+        assert_eq!(
+            memory_tag_record_count(),
+            1,
+            "failed realloc must not publish an unreachable replacement tag record"
+        );
+        assert_eq!(
+            recorded_reallocation_old_metadata(ptr, old_layout),
+            Some(metadata)
+        );
+        assert_eq!(
+            memory_tag(ptr),
+            Some(corrupt_tag),
+            "failed preflight must preserve the repairable old tag record"
+        );
+        set_memory_tag(ptr, valid_tag);
+
+        let grown = with_auto_allocation_recovery_recording(|| unsafe {
+            alloc.realloc_with_split_metadata(ptr, old_layout, new_size, metadata, metadata)
+        });
+        assert!(!grown.is_null());
+        assert_ne!(grown, ptr, "moved realloc cannot reuse a live old address");
+        assert_eq!(unsafe { grown.cast::<usize>().read() }, payload);
+        assert_eq!(recorded_reallocation_old_metadata(ptr, old_layout), None);
+        assert_eq!(
+            recorded_reallocation_old_metadata(grown, new_layout),
+            Some(metadata)
+        );
+        assert!(memory_tag(ptr).is_none());
+        assert!(memory_tag(grown).is_some());
+        assert_eq!(recovery_record_count(), 1);
+        assert_eq!(memory_tag_record_count(), 1);
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, grown, new_layout);
+        }
+        assert!(memory_tag(grown).is_none());
+        assert_eq!(recovery_record_count(), 0);
+        assert_eq!(memory_tag_record_count(), 0);
+        unsafe {
+            drain_semantic_cache_for_test(&alloc, old_layout, metadata);
+            drain_semantic_cache_for_test(&alloc, new_layout, metadata);
+        }
+    }
+
+    #[test]
+    fn moved_realloc_corrupt_old_tag_does_not_publish_replacement() {
+        let metadata = AllocationMetadata::for_type(0x7A6D_7E57)
+            .with_module(0xC0DE_7E57)
+            .with_callsite(0xA110_7E57)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING);
+        exercise_moved_realloc_corrupt_old_tag_transaction(metadata);
+    }
+
+    #[test]
+    fn moved_realloc_corrupt_global_old_tag_does_not_publish_replacement() {
+        let metadata = AllocationMetadata::for_type(0x7A6D_610B)
+            .with_module(0xC0DE_610B)
+            .with_callsite(0xA110_610B)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        exercise_moved_realloc_corrupt_old_tag_transaction(metadata);
     }
 
     #[test]
