@@ -36,15 +36,18 @@ struct ProducerPayload([u64; 8]);
 struct ConsumerPayload([u64; 8]);
 
 #[derive(Clone)]
+#[allow(dead_code)]
 struct RefCountedPayload(u64);
 
 #[derive(Clone)]
+#[allow(dead_code)]
 struct ArcVecCloneOwner {
     shared: Arc<RefCountedPayload>,
     values: Vec<u8>,
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 struct RcVecCloneOwner {
     shared: Rc<RefCountedPayload>,
     values: Vec<u8>,
