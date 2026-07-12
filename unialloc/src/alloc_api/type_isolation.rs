@@ -2471,6 +2471,23 @@ impl AutoAllocationRecord {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AutoAllocationRecordLookup {
+    Missing,
+    Mismatched,
+    Exact(AllocationMetadata),
+}
+
+impl AutoAllocationRecordLookup {
+    #[inline]
+    fn exact_metadata(self) -> Option<AllocationMetadata> {
+        match self {
+            AutoAllocationRecordLookup::Exact(metadata) => Some(metadata),
+            AutoAllocationRecordLookup::Missing | AutoAllocationRecordLookup::Mismatched => None,
+        }
+    }
+}
+
 #[cfg(not(feature = "fixed_heap"))]
 struct AutoAllocationRecordPage {
     next: *mut AutoAllocationRecordPage,
@@ -3837,18 +3854,18 @@ unsafe fn record_fast_auto_allocation_metadata_eligible(
     true
 }
 
-fn recover_fast_auto_allocation_record_metadata(
+fn lookup_fast_auto_allocation_record(
     ptr: *mut u8,
     layout: Layout,
     remove: bool,
-) -> Option<AllocationMetadata> {
+) -> AutoAllocationRecordLookup {
     let ptr_key = ptr as usize;
     if ptr.is_null()
         || ptr_key == AUTO_ALLOCATION_RECORD_TOMBSTONE_PTR
         || layout.size() == 0
         || !current_thread_fast_auto_allocation_records_active()
     {
-        return None;
+        return AutoAllocationRecordLookup::Missing;
     }
 
     unsafe {
@@ -3862,9 +3879,9 @@ fn recover_fast_auto_allocation_record_metadata(
                     FAST_AUTO_ALLOCATION_RECORD_INLINE = AutoAllocationRecord::empty();
                     fast_auto_allocation_record_global_deactivate();
                 }
-                return Some(inline_record.metadata);
+                return AutoAllocationRecordLookup::Exact(inline_record.metadata);
             }
-            return None;
+            return AutoAllocationRecordLookup::Mismatched;
         }
 
         let mut checked_hot_idx = None;
@@ -3887,9 +3904,9 @@ fn recover_fast_auto_allocation_record_metadata(
                                 AutoAllocationRecord::tombstone()
                             };
                     }
-                    return Some(record.metadata);
+                    return AutoAllocationRecordLookup::Exact(record.metadata);
                 }
-                return None;
+                return AutoAllocationRecordLookup::Mismatched;
             }
             // A stale non-empty/tombstone hot slot has already been inspected;
             // skip it in the bounded probe below.  If it is empty, preserve the
@@ -3911,7 +3928,7 @@ fn recover_fast_auto_allocation_record_metadata(
             record_fast_auto_allocation_record_probe_step();
             let record = FAST_AUTO_ALLOCATION_RECORDS[idx];
             if record.is_empty() {
-                return None;
+                return AutoAllocationRecordLookup::Missing;
             }
             if record.ptr == ptr_key {
                 if record.size == layout.size()
@@ -3936,14 +3953,22 @@ fn recover_fast_auto_allocation_record_metadata(
                             };
                     }
                     remember_fast_auto_allocation_record_hot_slot(ptr_key, idx);
-                    return Some(record.metadata);
+                    return AutoAllocationRecordLookup::Exact(record.metadata);
                 }
-                return None;
+                return AutoAllocationRecordLookup::Mismatched;
             }
             offset += 1;
         }
     }
-    None
+    AutoAllocationRecordLookup::Missing
+}
+
+fn recover_fast_auto_allocation_record_metadata(
+    ptr: *mut u8,
+    layout: Layout,
+    remove: bool,
+) -> Option<AllocationMetadata> {
+    lookup_fast_auto_allocation_record(ptr, layout, remove).exact_metadata()
 }
 
 #[inline]
@@ -4279,16 +4304,30 @@ unsafe fn record_global_auto_allocation_metadata(
     record_global_auto_allocation_metadata_eligible(ptr, layout, metadata)
 }
 
+fn lookup_auto_allocation_record(
+    ptr: *mut u8,
+    layout: Layout,
+    remove: bool,
+) -> AutoAllocationRecordLookup {
+    let fast_lookup = lookup_fast_auto_allocation_record(ptr, layout, remove);
+    if let AutoAllocationRecordLookup::Exact(_) = fast_lookup {
+        return fast_lookup;
+    }
+
+    let global_lookup = lookup_global_auto_allocation_record(ptr, layout, remove);
+    match global_lookup {
+        AutoAllocationRecordLookup::Exact(_) => global_lookup,
+        AutoAllocationRecordLookup::Mismatched => AutoAllocationRecordLookup::Mismatched,
+        AutoAllocationRecordLookup::Missing => fast_lookup,
+    }
+}
+
 fn recover_auto_allocation_record_metadata(
     ptr: *mut u8,
     layout: Layout,
     remove: bool,
 ) -> Option<AllocationMetadata> {
-    if let Some(metadata) = recover_fast_auto_allocation_record_metadata(ptr, layout, remove) {
-        return Some(metadata);
-    }
-
-    recover_global_auto_allocation_record_metadata(ptr, layout, remove)
+    lookup_auto_allocation_record(ptr, layout, remove).exact_metadata()
 }
 
 fn take_auto_allocation_records_for_reallocation(
@@ -4359,18 +4398,18 @@ fn remove_global_auto_allocation_inline_record(
     }
 }
 
-fn recover_global_auto_allocation_record_metadata(
+fn lookup_global_auto_allocation_record(
     ptr: *mut u8,
     layout: Layout,
     remove: bool,
-) -> Option<AllocationMetadata> {
+) -> AutoAllocationRecordLookup {
     let ptr_key = ptr as usize;
     if ptr.is_null()
         || ptr_key == AUTO_ALLOCATION_RECORD_TOMBSTONE_PTR
         || layout.size() == 0
         || AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed) == 0
     {
-        return None;
+        return AutoAllocationRecordLookup::Missing;
     }
 
     let (home_shard_idx, home_start) = auto_allocation_record_shard_and_slot(ptr);
@@ -4401,9 +4440,9 @@ fn recover_global_auto_allocation_record_metadata(
                             ptr_key,
                         );
                     }
-                    return Some(record.metadata);
+                    return AutoAllocationRecordLookup::Exact(record.metadata);
                 }
-                return None;
+                return AutoAllocationRecordLookup::Mismatched;
             }
             clear_global_auto_allocation_record_hot_slot(&mut *table, ptr_key);
         }
@@ -4427,9 +4466,9 @@ fn recover_global_auto_allocation_record_metadata(
                     } else {
                         remember_global_auto_allocation_record_hot_slot(&mut *table, ptr_key, idx);
                     }
-                    return Some(record.metadata);
+                    return AutoAllocationRecordLookup::Exact(record.metadata);
                 }
-                return None;
+                return AutoAllocationRecordLookup::Mismatched;
             }
             offset += 1;
         }
@@ -4473,9 +4512,9 @@ fn recover_global_auto_allocation_record_metadata(
                                 );
                             }
                         }
-                        return Some(record.metadata);
+                        return AutoAllocationRecordLookup::Exact(record.metadata);
                     }
-                    return None;
+                    return AutoAllocationRecordLookup::Mismatched;
                 }
             }
         }
@@ -4505,15 +4544,23 @@ fn recover_global_auto_allocation_record_metadata(
                                 idx,
                             );
                         }
-                        return Some(record.metadata);
+                        return AutoAllocationRecordLookup::Exact(record.metadata);
                     }
-                    return None;
+                    return AutoAllocationRecordLookup::Mismatched;
                 }
                 slow_offset += 1;
             }
         }
     }
-    None
+    AutoAllocationRecordLookup::Missing
+}
+
+fn recover_global_auto_allocation_record_metadata(
+    ptr: *mut u8,
+    layout: Layout,
+    remove: bool,
+) -> Option<AllocationMetadata> {
+    lookup_global_auto_allocation_record(ptr, layout, remove).exact_metadata()
 }
 
 fn lookup_auto_allocation_metadata(ptr: *mut u8, layout: Layout) -> Option<AllocationMetadata> {
@@ -8834,27 +8881,29 @@ impl RustAllocator {
         layout: Layout,
         metadata: AllocationMetadata,
         recover_allocation_record: bool,
-    ) {
+    ) -> bool {
         if ptr.is_null() || layout.size() == 0 {
-            return;
+            return true;
         }
-        let recorded_metadata = if recover_allocation_record {
-            recover_auto_allocation_record_metadata(ptr, layout, false)
-        } else {
-            None
-        };
-        let dealloc_metadata = match recorded_metadata {
-            Some(recorded_metadata) => {
-                deallocation_metadata_after_recovery_record(metadata, recorded_metadata)
+        let (dealloc_metadata, consume_recovery_record) = if recover_allocation_record {
+            match lookup_auto_allocation_record(ptr, layout, false) {
+                AutoAllocationRecordLookup::Exact(recorded_metadata) => (
+                    deallocation_metadata_after_recovery_record(metadata, recorded_metadata),
+                    true,
+                ),
+                AutoAllocationRecordLookup::Missing => (metadata, false),
+                AutoAllocationRecordLookup::Mismatched => {
+                    // A live record for the pointer with a different
+                    // layout/auth identity makes caller metadata unsafe to
+                    // apply. Preserve that exact record for a correct retry.
+                    return false;
+                }
             }
-            None => metadata,
+        } else {
+            (metadata, false)
         };
-        self.dealloc_with_resolved_metadata(
-            ptr,
-            layout,
-            dealloc_metadata,
-            recorded_metadata.is_some(),
-        );
+        self.dealloc_with_resolved_metadata(ptr, layout, dealloc_metadata, consume_recovery_record);
+        true
     }
 
     #[inline]
@@ -8947,7 +8996,7 @@ unsafe impl SemanticAlloc for RustAllocator {
         layout: Layout,
         metadata: AllocationMetadata,
     ) {
-        self.dealloc_with_metadata_inner(ptr, layout, metadata, true);
+        let _ = self.dealloc_with_metadata_inner(ptr, layout, metadata, true);
     }
 
     #[inline]
@@ -9578,23 +9627,6 @@ unsafe fn alloc_zeroed_layout_with_ffi_metadata_local(
 }
 
 #[inline]
-fn recovered_or_requested_reallocation_metadata(
-    ptr: *mut u8,
-    old_layout: Layout,
-    requested_metadata: AllocationMetadata,
-) -> (AllocationMetadata, AllocationMetadata, bool) {
-    match recorded_reallocation_old_metadata(ptr, old_layout) {
-        Some(recorded_metadata) => (
-            recorded_metadata,
-            recovery_delegated_metadata_after_record(requested_metadata, recorded_metadata)
-                .unwrap_or(requested_metadata),
-            true,
-        ),
-        None => (requested_metadata, requested_metadata, false),
-    }
-}
-
-#[inline]
 unsafe fn realloc_layout_with_split_ffi_metadata(
     ptr: *mut u8,
     old_layout: Layout,
@@ -9611,15 +9643,17 @@ unsafe fn realloc_layout_with_split_ffi_metadata(
         return core::ptr::null_mut();
     }
 
-    let old_metadata = recorded_reallocation_old_metadata(ptr, old_layout)
-        .map(|recorded| {
+    let old_metadata = match lookup_auto_allocation_record(ptr, old_layout, false) {
+        AutoAllocationRecordLookup::Exact(recorded) => {
             // The allocation-completion record owns the old object's identity
             // and policy. This records one validation result for the explicit
             // old identity without consuming the record. The caller's
             // requested new metadata remains independent.
             deallocation_metadata_after_recovery_record(requested_old_metadata, recorded)
-        })
-        .unwrap_or(requested_old_metadata);
+        }
+        AutoAllocationRecordLookup::Missing => requested_old_metadata,
+        AutoAllocationRecordLookup::Mismatched => return core::ptr::null_mut(),
+    };
     let allocator = RustAllocator::new();
     // The recovery lookup above is non-consuming. The allocator consumes or
     // replaces the old record only after a successful reallocation commit, so
@@ -9647,7 +9681,16 @@ unsafe fn realloc_layout_with_ffi_metadata(
     }
     let allocator = RustAllocator::new();
     let (old_metadata, new_metadata, recovery_record_found) =
-        recovered_or_requested_reallocation_metadata(ptr, old_layout, metadata);
+        match lookup_auto_allocation_record(ptr, old_layout, false) {
+            AutoAllocationRecordLookup::Exact(recorded_metadata) => (
+                recorded_metadata,
+                recovery_delegated_metadata_after_record(metadata, recorded_metadata)
+                    .unwrap_or(metadata),
+                true,
+            ),
+            AutoAllocationRecordLookup::Missing => (metadata, metadata, false),
+            AutoAllocationRecordLookup::Mismatched => return core::ptr::null_mut(),
+        };
     if !recovery_record_found && is_recovery_delegated_metadata_request(metadata) {
         // A delegated request without an exact record has no identity to
         // inherit. Keep the operation raw/untyped and do not manufacture a
@@ -9711,9 +9754,9 @@ unsafe fn dealloc_layout_with_ffi_metadata(
     ptr: *mut u8,
     layout: Layout,
     metadata: AllocationMetadata,
-) {
+) -> bool {
     let allocator = RustAllocator::new();
-    allocator.dealloc_with_metadata(ptr, layout, metadata);
+    allocator.dealloc_with_metadata_inner(ptr, layout, metadata, true)
 }
 
 /// Deallocate through exact compiler-supplied metadata without consulting the
@@ -9999,7 +10042,8 @@ pub unsafe fn __unialloc_alloc_zeroed_layout_with_metadata_hints_local(
 
 /// Compiler/runtime instrumentation ABI for semantic deallocation.
 ///
-/// Returns false when the layout is invalid.
+/// Returns false when the layout is invalid or a live recovery record for the
+/// pointer does not authenticate the supplied layout.
 #[no_mangle]
 pub unsafe extern "C" fn __unialloc_dealloc_with_metadata(
     ptr: *mut u8,
@@ -10011,14 +10055,11 @@ pub unsafe extern "C" fn __unialloc_dealloc_with_metadata(
     callsite: u64,
 ) -> bool {
     match Layout::from_size_align(size, align) {
-        Ok(layout) => {
-            dealloc_layout_with_ffi_metadata(
-                ptr,
-                layout,
-                ffi_metadata(type_id, module_id, flags, callsite),
-            );
-            true
-        }
+        Ok(layout) => dealloc_layout_with_ffi_metadata(
+            ptr,
+            layout,
+            ffi_metadata(type_id, module_id, flags, callsite),
+        ),
         Err(_) => false,
     }
 }
@@ -10066,21 +10107,18 @@ pub unsafe extern "C" fn __unialloc_dealloc_with_metadata_hints(
     callsite: u64,
 ) -> bool {
     match Layout::from_size_align(size, align) {
-        Ok(layout) => {
-            dealloc_layout_with_ffi_metadata(
-                ptr,
-                layout,
-                ffi_metadata_with_hints(
-                    type_id,
-                    module_id,
-                    flags,
-                    lifetime_hint,
-                    placement_hint,
-                    callsite,
-                ),
-            );
-            true
-        }
+        Ok(layout) => dealloc_layout_with_ffi_metadata(
+            ptr,
+            layout,
+            ffi_metadata_with_hints(
+                type_id,
+                module_id,
+                flags,
+                lifetime_hint,
+                placement_hint,
+                callsite,
+            ),
+        ),
         Err(_) => false,
     }
 }
@@ -10211,7 +10249,8 @@ pub unsafe fn __unialloc_dealloc_layout_with_metadata_hints_local(
 
 /// Compiler/runtime instrumentation ABI for semantic reallocation.
 ///
-/// Returns null on invalid layouts or allocation failure.
+/// Returns null on invalid layouts, allocation failure, or when a live recovery
+/// record for the pointer does not authenticate the supplied old layout.
 #[no_mangle]
 pub unsafe extern "C" fn __unialloc_realloc_with_metadata(
     ptr: *mut u8,
@@ -10428,7 +10467,8 @@ pub unsafe fn __unialloc_realloc_layout_with_metadata_hints_local(
 /// Compiler/runtime instrumentation ABI for semantic reallocation when the
 /// old object and new allocation site have distinct metadata.
 ///
-/// Returns null on invalid layouts or allocation failure.
+/// Returns null on invalid layouts, allocation failure, or when a live recovery
+/// record for the pointer does not authenticate the supplied old layout.
 #[no_mangle]
 pub unsafe extern "C" fn __unialloc_realloc_with_split_metadata(
     ptr: *mut u8,
@@ -14791,6 +14831,258 @@ mod tests {
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
 
         clear_auto_allocation_records();
+    }
+
+    #[test]
+    fn ffi_dealloc_rejects_valid_but_mismatched_recovery_layout() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let allocation_layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let wrong_layout = Layout::from_size_align(
+            MIN_TYPE_CACHE_OBJECT_SIZE + align_of::<usize>(),
+            align_of::<usize>(),
+        )
+        .unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_BAD1)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_BAD1)
+            .with_flags(FLAG_TYPE_ISOLATED);
+
+        let ptr = unsafe {
+            __unialloc_alloc_with_metadata(
+                allocation_layout.size(),
+                allocation_layout.align(),
+                metadata.type_id,
+                metadata.module_id,
+                metadata.flags,
+                metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, allocation_layout),
+            Some(metadata)
+        );
+
+        let accepted = unsafe {
+            __unialloc_dealloc_with_metadata(
+                ptr,
+                wrong_layout.size(),
+                wrong_layout.align(),
+                metadata.type_id,
+                metadata.module_id,
+                metadata.flags,
+                metadata.callsite,
+            )
+        };
+        let exact_record_after_mismatch = lookup_auto_allocation_metadata(ptr, allocation_layout);
+        let wrong_layout_cache_entry = unsafe { pop_semantic_type_cache(wrong_layout, metadata) };
+
+        assert!(
+            !accepted,
+            "a valid but allocation-mismatched Layout must be rejected by the recovery-backed deallocation ABI: accepted={}, exact_record_after_mismatch={:?}, wrong_layout_cache_entry={:?}",
+            accepted,
+            exact_record_after_mismatch,
+            wrong_layout_cache_entry,
+        );
+        assert_eq!(
+            exact_record_after_mismatch,
+            Some(metadata),
+            "layout mismatch must preserve the exact allocation record for a correct retry"
+        );
+        assert_eq!(
+            wrong_layout_cache_entry, None,
+            "layout mismatch must not publish the allocation into a cache under the caller's wrong Layout"
+        );
+        assert!(unsafe {
+            __unialloc_dealloc_with_metadata(
+                ptr,
+                allocation_layout.size(),
+                allocation_layout.align(),
+                metadata.type_id,
+                metadata.module_id,
+                metadata.flags,
+                metadata.callsite,
+            )
+        });
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, allocation_layout),
+            None
+        );
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(allocation_layout, metadata) },
+            Some(ptr),
+            "a correct retry must consume the preserved record and publish under the exact layout"
+        );
+        unsafe {
+            RustAllocator::new().dealloc_raw(ptr, allocation_layout);
+            clear_type_cache_for_test();
+        }
+
+        let allocator = RustAllocator::new();
+        let trait_ptr =
+            unsafe { allocator.alloc_with_recovery_metadata(allocation_layout, metadata) };
+        assert!(!trait_ptr.is_null());
+        assert_eq!(
+            lookup_auto_allocation_metadata(trait_ptr, allocation_layout),
+            Some(metadata)
+        );
+        unsafe {
+            allocator.dealloc_with_metadata(trait_ptr, wrong_layout, metadata);
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(trait_ptr, allocation_layout),
+            Some(metadata),
+            "SemanticAlloc deallocation must also preserve the exact record on layout mismatch"
+        );
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(wrong_layout, metadata) },
+            None,
+            "SemanticAlloc layout mismatch must fail before wrong-layout cache publication"
+        );
+        unsafe {
+            allocator.dealloc_with_metadata(trait_ptr, allocation_layout, metadata);
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(trait_ptr, allocation_layout),
+            None,
+            "the exact SemanticAlloc retry must consume the preserved record"
+        );
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(allocation_layout, metadata) },
+            Some(trait_ptr)
+        );
+        unsafe {
+            allocator.dealloc_raw(trait_ptr, allocation_layout);
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn ffi_realloc_rejects_valid_but_mismatched_recovery_layout() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let allocation_layout = Layout::from_size_align(63, align_of::<usize>()).unwrap();
+        let wrong_old_layout = Layout::from_size_align(57, align_of::<usize>()).unwrap();
+        assert_eq!(
+            crate::size_class::get_size_class(allocation_layout.size()).index(),
+            crate::size_class::get_size_class(wrong_old_layout.size()).index(),
+            "regression uses a same-class mismatch so fail-first execution cannot copy beyond or raw-free with a larger caller layout"
+        );
+        let metadata = AllocationMetadata::for_type(0xC002_BAD2)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_BAD2)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let new_metadata = AllocationMetadata::for_type(0xC002_BAD3)
+            .with_module(metadata.module_id)
+            .with_callsite(0xA110_BAD3)
+            .with_flags(metadata.flags);
+
+        let ptr = unsafe {
+            __unialloc_alloc_with_metadata(
+                allocation_layout.size(),
+                allocation_layout.align(),
+                metadata.type_id,
+                metadata.module_id,
+                metadata.flags,
+                metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.write_volatile(0xA5);
+            ptr.add(allocation_layout.size() - 1).write_volatile(0x5A);
+        }
+
+        let single_result = unsafe {
+            __unialloc_realloc_with_metadata(
+                ptr,
+                wrong_old_layout.size(),
+                wrong_old_layout.align(),
+                wrong_old_layout.size(),
+                metadata.type_id,
+                metadata.module_id,
+                metadata.flags,
+                metadata.callsite,
+            )
+        };
+        assert!(
+            single_result.is_null(),
+            "single-metadata realloc must reject a valid layout that mismatches the live recovery record"
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, allocation_layout),
+            Some(metadata)
+        );
+
+        let split_result = unsafe {
+            __unialloc_realloc_with_split_metadata(
+                ptr,
+                wrong_old_layout.size(),
+                wrong_old_layout.align(),
+                wrong_old_layout.size(),
+                metadata.type_id,
+                metadata.module_id,
+                metadata.flags,
+                metadata.callsite,
+                new_metadata.type_id,
+                new_metadata.module_id,
+                new_metadata.flags,
+                new_metadata.callsite,
+            )
+        };
+        assert!(
+            split_result.is_null(),
+            "split-metadata realloc must reject the same allocation-record layout mismatch"
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, allocation_layout),
+            Some(metadata),
+            "failed realloc attempts must preserve the exact allocation record"
+        );
+        assert_eq!(unsafe { ptr.read_volatile() }, 0xA5);
+        assert_eq!(
+            unsafe { ptr.add(allocation_layout.size() - 1).read_volatile() },
+            0x5A,
+            "failed realloc attempts must leave the original payload intact"
+        );
+
+        assert!(unsafe {
+            __unialloc_dealloc_with_metadata(
+                ptr,
+                allocation_layout.size(),
+                allocation_layout.align(),
+                metadata.type_id,
+                metadata.module_id,
+                metadata.flags,
+                metadata.callsite,
+            )
+        });
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(allocation_layout, metadata) },
+            Some(ptr)
+        );
+        unsafe {
+            RustAllocator::new().dealloc_raw(ptr, allocation_layout);
+            clear_type_cache_for_test();
+        }
     }
 
     #[test]
