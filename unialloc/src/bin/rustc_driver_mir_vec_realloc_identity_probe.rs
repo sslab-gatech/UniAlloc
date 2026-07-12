@@ -1,7 +1,9 @@
 #![cfg_attr(feature = "fixed_heap", allow(dead_code, unused_imports))]
 
+use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
 use std::fmt::Write as _;
 use std::mem::{align_of, size_of};
+use std::ptr::{read_volatile, write_volatile};
 use std::thread;
 
 use unialloc::{
@@ -37,11 +39,27 @@ struct ConsumerPayload([u64; 8]);
 
 #[derive(Clone, Copy, Debug)]
 struct WorkerEvidence {
+    transferred_buffer_verified_before_growth: bool,
+    growth_completed_on_worker_thread: bool,
+    drop_completed_on_worker_thread: bool,
+    allocation_type_id: u64,
+    growth_type_id: u64,
+    initial_buffer: usize,
     producer_final_buffer: usize,
     consumer_buffer: usize,
     recovered_producer_buffer: usize,
+    initial_capacity: usize,
     producer_capacity: usize,
     producer_checksum: u64,
+    growth_moved_buffer: bool,
+    growth_typed_allocations: usize,
+    growth_typed_deallocations: usize,
+    growth_raw_realloc_no_metadata: usize,
+    growth_recorded_old_metadata_fallback: usize,
+    growth_recovery_identity_mismatches: usize,
+    drop_typed_deallocations: usize,
+    drop_raw_dealloc_no_metadata: usize,
+    drop_recovery_identity_mismatches: usize,
     side_cache: TypeIsolationSideCacheSnapshot,
 }
 
@@ -186,6 +204,21 @@ fn assert_one_typed_reallocation(
     );
 }
 
+#[inline(never)]
+unsafe fn direct_allocator_rewrite_positive_control() -> u64 {
+    let layout = Layout::new::<[u64; 2]>();
+    let ptr = alloc(layout);
+    if ptr.is_null() {
+        handle_alloc_error(layout);
+    }
+    let words = ptr.cast::<u64>();
+    write_volatile(words, 0xC002_A110_7E57_0001);
+    write_volatile(words.add(1), 0xC002_A110_7E57_0002);
+    let checksum = read_volatile(words).rotate_left(17) ^ read_volatile(words.add(1));
+    dealloc(ptr, layout);
+    checksum
+}
+
 fn main() {
     #[cfg(feature = "fixed_heap")]
     fixed_heap_probe_global::ensure_initialized_for_probe();
@@ -199,54 +232,112 @@ fn main() {
     semantic_auto_metadata_disable();
     semantic_stats_reset();
 
+    let creator_thread = thread::current().id();
     let mut producer = Vec::<ProducerPayload>::with_capacity(1);
     producer.push(producer_payload(0xA110_0000));
     let initial_capacity = producer.capacity();
     let initial_buffer = producer.as_ptr() as usize;
+    let initial_checksum = producer_checksum(&producer);
+    let allocation_type_id = semantic_stats_snapshot().last_type_id;
     assert_eq!(initial_capacity, 1);
-
-    let before_growth_stats = semantic_stats_snapshot();
-    let before_growth_fallback = semantic_fallback_attribution_snapshot();
-    producer.reserve_exact(FINAL_LEN - producer.len());
-    let after_growth_stats = semantic_stats_snapshot();
-    let after_growth_fallback = semantic_fallback_attribution_snapshot();
-    assert_one_typed_reallocation(
-        before_growth_stats,
-        after_growth_stats,
-        before_growth_fallback,
-        after_growth_fallback,
-    );
-    let growth_typed_allocations = after_growth_stats
-        .typed_allocations
-        .saturating_sub(before_growth_stats.typed_allocations);
-    let growth_typed_deallocations = after_growth_stats
-        .typed_deallocations
-        .saturating_sub(before_growth_stats.typed_deallocations);
-    let growth_raw_realloc_no_metadata = after_growth_fallback
-        .raw_realloc_no_metadata
-        .saturating_sub(before_growth_fallback.raw_realloc_no_metadata);
-    let growth_recorded_old_metadata_fallback = after_growth_fallback
-        .realloc_recorded_old_metadata_new_allocations
-        .saturating_sub(before_growth_fallback.realloc_recorded_old_metadata_new_allocations);
-
-    let final_capacity = producer.capacity();
-    let final_buffer = producer.as_ptr() as usize;
-    assert!(final_capacity >= FINAL_LEN);
-    assert!(final_capacity > initial_capacity);
-    let growth_moved_buffer = final_buffer != initial_buffer;
-
-    for index in 1..FINAL_LEN {
-        producer.push(producer_payload(0xA110_0000 + index as u64));
-    }
-    assert_eq!(producer.len(), FINAL_LEN);
-    assert_eq!(producer.capacity(), final_capacity);
-    assert_eq!(producer.as_ptr() as usize, final_buffer);
-    let expected_checksum = producer_checksum(&producer);
+    assert_ne!(allocation_type_id, 0);
+    assert_eq!(thread::current().id(), creator_thread);
 
     let worker = thread::spawn(move || {
+        let worker_thread = thread::current().id();
+        assert_ne!(worker_thread, creator_thread);
+        assert_eq!(producer.as_ptr() as usize, initial_buffer);
+        assert_eq!(producer.capacity(), initial_capacity);
+        assert_eq!(producer.len(), 1);
+        assert_eq!(producer_checksum(&producer), initial_checksum);
+        let transferred_buffer_verified_before_growth = true;
+
+        let before_growth_stats = semantic_stats_snapshot();
+        let before_growth_fallback = semantic_fallback_attribution_snapshot();
+        let before_growth_validation = semantic_metadata_validation_snapshot();
+        producer.reserve_exact(FINAL_LEN - producer.len());
+        let after_growth_stats = semantic_stats_snapshot();
+        let after_growth_fallback = semantic_fallback_attribution_snapshot();
+        let after_growth_validation = semantic_metadata_validation_snapshot();
+        assert_one_typed_reallocation(
+            before_growth_stats,
+            after_growth_stats,
+            before_growth_fallback,
+            after_growth_fallback,
+        );
+        let growth_typed_allocations = after_growth_stats
+            .typed_allocations
+            .saturating_sub(before_growth_stats.typed_allocations);
+        let growth_typed_deallocations = after_growth_stats
+            .typed_deallocations
+            .saturating_sub(before_growth_stats.typed_deallocations);
+        let growth_raw_realloc_no_metadata = after_growth_fallback
+            .raw_realloc_no_metadata
+            .saturating_sub(before_growth_fallback.raw_realloc_no_metadata);
+        let growth_recorded_old_metadata_fallback = after_growth_fallback
+            .realloc_recorded_old_metadata_new_allocations
+            .saturating_sub(before_growth_fallback.realloc_recorded_old_metadata_new_allocations);
+        let growth_recovery_identity_mismatches = after_growth_validation
+            .recovery_identity_mismatches
+            .saturating_sub(before_growth_validation.recovery_identity_mismatches);
+        assert_eq!(
+            growth_recovery_identity_mismatches, 0,
+            "worker realloc must preserve the creator-thread allocation identity"
+        );
+        let growth_type_id = after_growth_stats.last_type_id;
+        assert_eq!(
+            growth_type_id, allocation_type_id,
+            "worker realloc must use the compiler type identity from creator allocation"
+        );
+        assert_eq!(thread::current().id(), worker_thread);
+        let growth_completed_on_worker_thread = true;
+
+        let final_capacity = producer.capacity();
+        let final_buffer = producer.as_ptr() as usize;
+        assert!(final_capacity >= FINAL_LEN);
+        assert!(final_capacity > initial_capacity);
+        let growth_moved_buffer = final_buffer != initial_buffer;
+
+        for index in 1..FINAL_LEN {
+            producer.push(producer_payload(0xA110_0000 + index as u64));
+        }
+        assert_eq!(producer.len(), FINAL_LEN);
+        assert_eq!(producer.capacity(), final_capacity);
+        assert_eq!(producer.as_ptr() as usize, final_buffer);
+        let expected_checksum = producer_checksum(&producer);
+
+        let before_drop_stats = semantic_stats_snapshot();
+        let before_drop_fallback = semantic_fallback_attribution_snapshot();
+        let before_drop_validation = semantic_metadata_validation_snapshot();
         let dropped_checksum =
             consume_producer_vec(producer, final_buffer, final_capacity, expected_checksum);
+        let after_drop_stats = semantic_stats_snapshot();
+        let after_drop_fallback = semantic_fallback_attribution_snapshot();
+        let after_drop_validation = semantic_metadata_validation_snapshot();
         assert_eq!(dropped_checksum, expected_checksum);
+        let drop_typed_deallocations = after_drop_stats
+            .typed_deallocations
+            .saturating_sub(before_drop_stats.typed_deallocations);
+        let drop_raw_dealloc_no_metadata = after_drop_fallback
+            .raw_dealloc_no_metadata
+            .saturating_sub(before_drop_fallback.raw_dealloc_no_metadata);
+        let drop_recovery_identity_mismatches = after_drop_validation
+            .recovery_identity_mismatches
+            .saturating_sub(before_drop_validation.recovery_identity_mismatches);
+        assert_eq!(
+            drop_typed_deallocations, 1,
+            "worker Drop must pair with exactly one typed Vec deallocation"
+        );
+        assert_eq!(
+            drop_raw_dealloc_no_metadata, 0,
+            "worker Drop must not fall back to raw untyped deallocation"
+        );
+        assert_eq!(
+            drop_recovery_identity_mismatches, 0,
+            "worker Drop must preserve the compiler allocation identity"
+        );
+        assert_eq!(thread::current().id(), worker_thread);
+        let drop_completed_on_worker_thread = true;
 
         let consumer_buffer = {
             let mut consumer = Vec::<ConsumerPayload>::with_capacity(final_capacity);
@@ -268,7 +359,7 @@ fn main() {
             let recovered_producer_buffer = recovered.as_ptr() as usize;
             assert_eq!(
                 recovered_producer_buffer, final_buffer,
-                "producer Vec identity did not recover its cross-thread cached buffer"
+                "producer Vec identity did not recover its worker-local post-transfer buffer"
             );
             for index in 0..FINAL_LEN {
                 recovered.push(producer_payload(0xA110_1000 + index as u64));
@@ -286,11 +377,27 @@ fn main() {
             "type-isolation side cache reported corrupt slots"
         );
         WorkerEvidence {
+            transferred_buffer_verified_before_growth,
+            growth_completed_on_worker_thread,
+            drop_completed_on_worker_thread,
+            allocation_type_id,
+            growth_type_id,
+            initial_buffer,
             producer_final_buffer: final_buffer,
             consumer_buffer,
             recovered_producer_buffer,
+            initial_capacity,
             producer_capacity: final_capacity,
             producer_checksum,
+            growth_moved_buffer,
+            growth_typed_allocations,
+            growth_typed_deallocations,
+            growth_raw_realloc_no_metadata,
+            growth_recorded_old_metadata_fallback,
+            growth_recovery_identity_mismatches,
+            drop_typed_deallocations,
+            drop_raw_dealloc_no_metadata,
+            drop_recovery_identity_mismatches,
             side_cache,
         }
     });
@@ -317,12 +424,26 @@ fn main() {
     semantic_type_stats_recording_disable();
     semantic_stats_recording_disable();
 
+    // This standard allocator-API triplet is a positive control for direct
+    // allocator-call replacement. It runs after the Vec evidence snapshots,
+    // uses no UniAlloc metadata ABI, and is not part of the lifecycle counts.
+    let direct_rewrite_checksum = unsafe { direct_allocator_rewrite_positive_control() };
+    assert_ne!(direct_rewrite_checksum, 0);
+
     let type_rows = type_rows_json(&rows, row_count);
     println!(
         concat!(
             "{{",
             "\"source\":\"rustc_driver_mir_vec_realloc_identity_probe\",",
             "\"identity_basis\":\"compiler-derived-rust-vec-object-type\",",
+            "\"direct_allocator_rewrite_positive_control\":true,",
+            "\"allocated_on_creator_thread\":true,",
+            "\"transferred_to_distinct_worker\":true,",
+            "\"transferred_buffer_verified_before_growth\":{},",
+            "\"growth_completed_on_worker_thread\":{},",
+            "\"drop_completed_on_worker_thread\":{},",
+            "\"allocation_type_id\":{},",
+            "\"growth_type_id\":{},",
             "\"same_layout_element_bytes\":{},",
             "\"same_layout_element_align\":{},",
             "\"initial_capacity\":{},",
@@ -333,6 +454,10 @@ fn main() {
             "\"growth_typed_deallocations\":{},",
             "\"growth_raw_realloc_no_metadata\":{},",
             "\"growth_recorded_old_metadata_fallback\":{},",
+            "\"growth_recovery_identity_mismatches\":{},",
+            "\"drop_typed_deallocations\":{},",
+            "\"drop_raw_dealloc_no_metadata\":{},",
+            "\"drop_recovery_identity_mismatches\":{},",
             "\"wrong_type_reuse_blocked\":true,",
             "\"producer_buffer_recovered\":true,",
             "\"initial_buffer\":{},",
@@ -357,16 +482,25 @@ fn main() {
             "\"type_rows\":{}",
             "}}"
         ),
+        evidence.transferred_buffer_verified_before_growth,
+        evidence.growth_completed_on_worker_thread,
+        evidence.drop_completed_on_worker_thread,
+        evidence.allocation_type_id,
+        evidence.growth_type_id,
         size_of::<ProducerPayload>(),
         align_of::<ProducerPayload>(),
-        initial_capacity,
+        evidence.initial_capacity,
         evidence.producer_capacity,
-        growth_moved_buffer,
-        growth_typed_allocations,
-        growth_typed_deallocations,
-        growth_raw_realloc_no_metadata,
-        growth_recorded_old_metadata_fallback,
-        initial_buffer,
+        evidence.growth_moved_buffer,
+        evidence.growth_typed_allocations,
+        evidence.growth_typed_deallocations,
+        evidence.growth_raw_realloc_no_metadata,
+        evidence.growth_recorded_old_metadata_fallback,
+        evidence.growth_recovery_identity_mismatches,
+        evidence.drop_typed_deallocations,
+        evidence.drop_raw_dealloc_no_metadata,
+        evidence.drop_recovery_identity_mismatches,
+        evidence.initial_buffer,
         evidence.producer_final_buffer,
         evidence.consumer_buffer,
         evidence.recovered_producer_buffer,

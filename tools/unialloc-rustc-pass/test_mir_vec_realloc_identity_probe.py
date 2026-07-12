@@ -257,6 +257,16 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     summary = audit.get("summary") or {}
     assert summary.get("provider_override_installed") is True
     assert summary.get("body_clone_returned_to_rustc") is True
+    assert summary.get("actual_allocator_call_replacement_requested") is True, (
+        "actual_allocator_call_replacement_requested must be true"
+    )
+    assert summary.get("actual_allocator_call_replacement") is True, (
+        "actual_allocator_call_replacement must be true"
+    )
+    assert int(summary.get("rewrite_applied_count") or 0) >= 2
+    assert summary.get("actual_semantic_scope_rewrite_requested") is True, (
+        "actual_semantic_scope_rewrite_requested must be true"
+    )
     assert summary.get("actual_semantic_scope_rewrite") is True
     assert int(summary.get("semantic_scope_rewrite_applied_count") or 0) > 0
     assert int(summary.get("semantic_scope_unsolved_candidate_count") or 0) == 0
@@ -290,6 +300,26 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         assert int(row.get("flags") or 0) & TYPE_ISOLATED
         assert int(row.get("placement_hint") or 0) & CROSS_THREAD_RECOVERY
 
+    for field in (
+        "direct_allocator_rewrite_positive_control",
+        "allocated_on_creator_thread",
+        "transferred_to_distinct_worker",
+        "transferred_buffer_verified_before_growth",
+        "growth_completed_on_worker_thread",
+        "drop_completed_on_worker_thread",
+    ):
+        assert runtime.get(field) is True, f"{field} must be true"
+    allocation_type_id = int(runtime.get("allocation_type_id") or 0)
+    growth_type_id = int(runtime.get("growth_type_id") or 0)
+    assert allocation_type_id == growth_type_id, (
+        "growth_type_id must preserve allocation_type_id across the thread transfer: "
+        f"allocation={allocation_type_id}, growth={growth_type_id}"
+    )
+    assert allocation_type_id == producer_type_id, (
+        "runtime allocation_type_id must equal compiler producer type_id: "
+        f"runtime={allocation_type_id}, compiler={producer_type_id}"
+    )
+
     assert runtime.get("capacity_growth_forced") is True
     assert runtime.get("wrong_type_reuse_blocked") is True
     assert runtime.get("producer_buffer_recovered") is True
@@ -299,6 +329,18 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     assert int(runtime.get("growth_typed_deallocations") or 0) in (0, 1)
     assert int(runtime.get("growth_raw_realloc_no_metadata") or 0) == 0
     assert int(runtime.get("growth_recorded_old_metadata_fallback") or 0) == 0
+    assert int(runtime.get("growth_recovery_identity_mismatches") or 0) == 0, (
+        "growth_recovery_identity_mismatches must be zero"
+    )
+    assert int(runtime.get("drop_typed_deallocations") or 0) == 1, (
+        "drop_typed_deallocations must be exactly one"
+    )
+    assert int(runtime.get("drop_raw_dealloc_no_metadata") or 0) == 0, (
+        "drop_raw_dealloc_no_metadata must be zero"
+    )
+    assert int(runtime.get("drop_recovery_identity_mismatches") or 0) == 0, (
+        "drop_recovery_identity_mismatches must be zero"
+    )
 
     producer_buffer = int(runtime.get("producer_final_buffer") or 0)
     consumer_buffer = int(runtime.get("consumer_buffer") or 0)
@@ -332,6 +374,10 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         "producer_type_id": producer_type_id,
         "consumer_type_id": consumer_type_id,
         "module_id": producer_module_id,
+        "allocation_type_id": allocation_type_id,
+        "growth_type_id": growth_type_id,
+        "cross_thread_growth_proven": True,
+        "worker_drop_pairing_proven": True,
         "producer_allocation_scope_rows": len(producer_alloc_rows),
         "producer_growth_scope_rows": len(producer_growth_rows),
         "producer_push_scope_rows": len(producer_push_rows),
@@ -487,10 +533,13 @@ def main() -> int:
         "runtime": runtime,
         "boundaries": [
             "Functional Vec realloc and type-isolation probe only; no timing or paper-performance claim.",
-            "The source uses ordinary Vec operations and no manual metadata or allocator ABI calls.",
+            "The primary lifecycle uses ordinary Vec operations and no manual metadata or allocator ABI calls.",
+            "A separate standard alloc/dealloc positive control, executed after the Vec evidence snapshots, proves direct allocator-call replacement without contributing to the lifecycle counters.",
+            "The compiler evidence is an actual rustc optimized-MIR provider override with both direct allocator-call replacement and applied semantic-scope rewrites around allocator-causing Vec operations; liballoc internals are not rebuilt by this target-crate probe.",
+            "The initial Vec allocation occurs on the creator thread; the distinct worker verifies the transferred buffer, grows it through typed realloc, and performs its typed Drop/deallocation.",
             "Capacity growth is required; whether the allocator moves the buffer is reported as an observation, not a pass condition.",
-            "The deterministic lifecycle invariant is final-buffer cross-thread recovery by Vec<ProducerPayload> and non-reuse by same-layout Vec<ConsumerPayload>.",
-            "One hosted run and one fixed-heap run cover this bounded lifecycle, not universal container or allocator behavior.",
+            "The deterministic isolation invariant is worker-local final-buffer recovery by Vec<ProducerPayload> and non-reuse by same-layout Vec<ConsumerPayload> after the cross-thread realloc/drop lifecycle.",
+            "This invocation covers one hosted or fixed-heap lifecycle according to the fixed_heap field, not universal container or allocator behavior.",
         ],
     }
     summary_path = output_dir / "summary.json"

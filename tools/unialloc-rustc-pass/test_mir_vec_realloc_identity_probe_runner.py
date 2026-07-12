@@ -51,6 +51,10 @@ def valid_audit() -> dict:
         "summary": {
             "provider_override_installed": True,
             "body_clone_returned_to_rustc": True,
+            "actual_allocator_call_replacement_requested": True,
+            "actual_allocator_call_replacement": True,
+            "rewrite_applied_count": 2,
+            "actual_semantic_scope_rewrite_requested": True,
             "actual_semantic_scope_rewrite": True,
             "semantic_scope_rewrite_applied_count": 6,
             "semantic_scope_unsolved_candidate_count": 0,
@@ -70,6 +74,12 @@ def valid_audit() -> dict:
 
 def valid_runtime() -> dict:
     return {
+        "direct_allocator_rewrite_positive_control": True,
+        "allocated_on_creator_thread": True,
+        "transferred_to_distinct_worker": True,
+        "transferred_buffer_verified_before_growth": True,
+        "growth_completed_on_worker_thread": True,
+        "drop_completed_on_worker_thread": True,
         "capacity_growth_forced": True,
         "wrong_type_reuse_blocked": True,
         "producer_buffer_recovered": True,
@@ -81,6 +91,12 @@ def valid_runtime() -> dict:
         "growth_typed_deallocations": 0,
         "growth_raw_realloc_no_metadata": 0,
         "growth_recorded_old_metadata_fallback": 0,
+        "allocation_type_id": 11,
+        "growth_type_id": 11,
+        "growth_recovery_identity_mismatches": 0,
+        "drop_typed_deallocations": 1,
+        "drop_raw_dealloc_no_metadata": 0,
+        "drop_recovery_identity_mismatches": 0,
         "producer_final_buffer": 0x1000,
         "consumer_buffer": 0x2000,
         "recovered_producer_buffer": 0x1000,
@@ -139,6 +155,44 @@ class MirVecReallocIdentityRunnerTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             runner.validate(valid_audit(), runtime)
 
+    def test_validate_rejects_missing_cross_thread_growth_provenance(self) -> None:
+        for field in (
+            "allocated_on_creator_thread",
+            "transferred_to_distinct_worker",
+            "transferred_buffer_verified_before_growth",
+            "growth_completed_on_worker_thread",
+            "drop_completed_on_worker_thread",
+        ):
+            with self.subTest(field=field):
+                runtime = valid_runtime()
+                runtime[field] = False
+                with self.assertRaisesRegex(AssertionError, field):
+                    runner.validate(valid_audit(), runtime)
+
+    def test_validate_rejects_growth_identity_drift(self) -> None:
+        runtime = valid_runtime()
+        runtime["growth_type_id"] = 33
+        with self.assertRaisesRegex(AssertionError, "growth_type_id"):
+            runner.validate(valid_audit(), runtime)
+
+        runtime = valid_runtime()
+        runtime["allocation_type_id"] = 33
+        runtime["growth_type_id"] = 33
+        with self.assertRaisesRegex(AssertionError, "compiler producer type_id"):
+            runner.validate(valid_audit(), runtime)
+
+    def test_validate_rejects_unpaired_worker_drop(self) -> None:
+        for field, value in (
+            ("drop_typed_deallocations", 0),
+            ("drop_raw_dealloc_no_metadata", 1),
+            ("drop_recovery_identity_mismatches", 1),
+        ):
+            with self.subTest(field=field):
+                runtime = valid_runtime()
+                runtime[field] = value
+                with self.assertRaisesRegex(AssertionError, field):
+                    runner.validate(valid_audit(), runtime)
+
     def test_validate_requires_growth_and_drop_rewrite_coverage(self) -> None:
         audit = valid_audit()
         audit["rewrite_candidates"] = [
@@ -159,6 +213,23 @@ class MirVecReallocIdentityRunnerTests(unittest.TestCase):
             )
         ]
         with self.assertRaisesRegex(AssertionError, "Drop"):
+            runner.validate(audit, valid_runtime())
+
+    def test_validate_rejects_dry_run_audit(self) -> None:
+        for field in (
+            "actual_allocator_call_replacement_requested",
+            "actual_semantic_scope_rewrite_requested",
+        ):
+            with self.subTest(field=field):
+                audit = valid_audit()
+                audit["summary"][field] = False
+                with self.assertRaisesRegex(AssertionError, field):
+                    runner.validate(audit, valid_runtime())
+
+        audit = valid_audit()
+        audit["summary"]["actual_allocator_call_replacement"] = False
+        audit["summary"]["rewrite_applied_count"] = 0
+        with self.assertRaisesRegex(AssertionError, "actual_allocator_call_replacement"):
             runner.validate(audit, valid_runtime())
 
     def test_commit_binding_rejects_dirty_head_and_source_drift(self) -> None:
