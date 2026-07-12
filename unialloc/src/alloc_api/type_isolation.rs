@@ -3187,6 +3187,15 @@ pub(crate) fn select_auto_allocation_metadata(
         // to a caller that may free the old slice until this load completes.
         let type_id = unsafe { *((config.compiler_type_ids_ptr as *const u64).add(idx)) };
         if type_id != UNKNOWN_SEMANTIC_ID {
+            // Bind recovery visibility to the same coherent config generation
+            // that supplied this compiler id. Recording happens after the
+            // backing allocation and may race disable/reconfiguration, so it
+            // must not consult whatever config happens to be current then.
+            let recovery_placement_hint = if config.compiler_type_ids_global_recovery {
+                PLACEMENT_HINT_CROSS_THREAD_RECOVERY
+            } else {
+                0
+            };
             return (
                 true,
                 Some(AllocationMetadata {
@@ -3194,7 +3203,7 @@ pub(crate) fn select_auto_allocation_metadata(
                     module_id: config.module_id,
                     flags: config.flags,
                     lifetime_hint: 0,
-                    placement_hint: 0,
+                    placement_hint: recovery_placement_hint,
                     callsite: config.callsite.wrapping_add(idx as u64),
                 }),
             );
@@ -3296,23 +3305,12 @@ fn auto_allocation_record_requires_global_visibility(metadata: AllocationMetadat
     // cursor has advanced.  Benchmark harnesses that prove same-thread replay
     // can opt into TLS recovery so every allocation does not take the global
     // recovery-table lock.
-    if metadata.placement_hint & PLACEMENT_HINT_CROSS_THREAD_RECOVERY != 0 {
-        return true;
-    }
-    // Auto-metadata enable publishes this bit before installing a compiler
-    // replay config, while disable clears it only after replacing that config
-    // with the disabled value.  A consuming stream clears the bit as soon as
-    // its final id is handed out, so retain the config lookup while its sticky
-    // exhaustion marker is set: that final allocation still needs the stream's
-    // global-vs-TLS recovery policy.  Otherwise the clear bit can linearize
-    // before any concurrent enable and avoid the config read lock.
-    if SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed) & SLOW_PATH_AUTO_METADATA == 0
-        && !AUTO_COMPILER_TYPE_IDS_STREAM_EXHAUSTED.load(Ordering::Relaxed)
-    {
-        return false;
-    }
-    let config = *AUTO_METADATA_CONFIG.read();
-    config.compiler_metadata_enabled() && config.compiler_type_ids_global_recovery
+    // Auto compiler selection copies its config generation's recovery policy
+    // into this hint before releasing AUTO_METADATA_CONFIG. Explicit compiler
+    // metadata uses the same public hint. Never re-read mutable process config
+    // here: disable/reconfigure and finite-stream exhaustion may occur between
+    // metadata selection and recovery-record installation.
+    metadata.placement_hint & PLACEMENT_HINT_CROSS_THREAD_RECOVERY != 0
 }
 
 #[inline]
@@ -12103,6 +12101,51 @@ mod tests {
         None
     }
 
+    fn record_selected_global_metadata_after_control_change(
+        layout: Layout,
+        ptr_key: usize,
+        change_control_state: impl FnOnce(),
+    ) -> AllocationMetadata {
+        let (selected_tx, selected_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let (recorded_tx, recorded_rx) = std::sync::mpsc::channel();
+        let worker = thread::spawn(move || {
+            let metadata = auto_allocation_metadata(layout).expect("global compiler metadata");
+            selected_tx.send(metadata).unwrap();
+            resume_rx.recv().unwrap();
+            let recorded = unsafe {
+                record_recovery_auto_allocation_metadata(ptr_key as *mut u8, layout, metadata)
+            };
+            recorded_tx.send(recorded).unwrap();
+        });
+
+        let selected = selected_rx.recv().unwrap();
+        assert_ne!(
+            selected.placement_hint & PLACEMENT_HINT_CROSS_THREAD_RECOVERY,
+            0,
+            "default compiler auto metadata must carry its selected global recovery policy"
+        );
+        change_control_state();
+        resume_tx.send(()).unwrap();
+        assert!(recorded_rx.recv().unwrap());
+        worker.join().unwrap();
+
+        assert_eq!(
+            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+            1,
+            "an in-flight globally recoverable allocation must remain process-visible after control-state changes"
+        );
+        assert_eq!(
+            FAST_AUTO_ALLOCATION_RECORD_GLOBAL_COUNT.load(Ordering::Relaxed),
+            0,
+            "global recovery metadata must not be downgraded to the allocating thread's TLS table"
+        );
+        let recovered = take_auto_deallocation_metadata(ptr_key as *mut u8, layout)
+            .expect("another thread must recover the selected allocation metadata");
+        assert_eq!(recovered, selected);
+        recovered
+    }
+
     #[test]
     fn metadata_builders_keep_compatibility_defaults() {
         let _guard = test_guard();
@@ -12605,21 +12648,26 @@ mod tests {
     }
 
     #[test]
-    fn disabled_auto_metadata_skips_config_lock_for_recovery_visibility() {
+    fn recovery_visibility_comes_from_metadata_without_config_lock() {
         let _guard = test_guard();
         semantic_auto_metadata_disable();
 
-        let metadata = AllocationMetadata::for_type(0xC002_2123)
+        let local_metadata = AllocationMetadata::for_type(0xC002_2123)
             .with_module(0xC0DE)
             .with_callsite(0xA110_C214)
             .with_flags(FLAG_TYPE_ISOLATED);
+        let global_metadata =
+            local_metadata.with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
         let config_writer = AUTO_METADATA_CONFIG.write();
         let (started_tx, started_rx) = std::sync::mpsc::channel();
         let (done_tx, done_rx) = std::sync::mpsc::channel();
         let worker = thread::spawn(move || {
             started_tx.send(()).unwrap();
             done_tx
-                .send(auto_allocation_record_requires_global_visibility(metadata))
+                .send((
+                    auto_allocation_record_requires_global_visibility(global_metadata),
+                    auto_allocation_record_requires_global_visibility(local_metadata),
+                ))
                 .unwrap();
         });
 
@@ -12630,9 +12678,132 @@ mod tests {
 
         assert_eq!(
             result,
-            Ok(false),
-            "disabled auto metadata must decide TLS recovery visibility without waiting for AUTO_METADATA_CONFIG's read lock"
+            Ok((true, false)),
+            "record placement must use selected metadata rather than waiting for current AUTO_METADATA_CONFIG"
         );
+    }
+
+    #[test]
+    fn selected_global_recovery_survives_disable_and_local_reconfigure() {
+        static GLOBAL_IDS: [u64; 1] = [0xC002_2124];
+        static LOCAL_IDS: [u64; 1] = [0xC002_2125];
+
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        semantic_auto_metadata_disable();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_enable(
+                0xC0DE_2124,
+                FLAG_TYPE_ISOLATED,
+                0xA110_2124,
+                GLOBAL_IDS.as_ptr(),
+                GLOBAL_IDS.len(),
+            )
+        });
+        let selected_before_disable = record_selected_global_metadata_after_control_change(
+            layout,
+            0xC002_1240,
+            semantic_auto_metadata_disable,
+        );
+        assert_eq!(selected_before_disable.type_id, GLOBAL_IDS[0]);
+
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_enable(
+                0xC0DE_2124,
+                FLAG_TYPE_ISOLATED,
+                0xA110_2124,
+                GLOBAL_IDS.as_ptr(),
+                GLOBAL_IDS.len(),
+            )
+        });
+        let selected_before_local_reconfigure =
+            record_selected_global_metadata_after_control_change(layout, 0xC002_1250, || {
+                assert!(unsafe {
+                    semantic_auto_compiler_metadata_thread_local_recovery_enable(
+                        0xC0DE_2125,
+                        FLAG_TYPE_ISOLATED,
+                        0xA110_2125,
+                        LOCAL_IDS.as_ptr(),
+                        LOCAL_IDS.len(),
+                    )
+                });
+            });
+        assert_eq!(selected_before_local_reconfigure.type_id, GLOBAL_IDS[0]);
+        assert_eq!(
+            auto_allocation_metadata(layout)
+                .expect("reconfigured thread-local compiler metadata")
+                .placement_hint
+                & PLACEMENT_HINT_CROSS_THREAD_RECOVERY,
+            0
+        );
+
+        semantic_auto_metadata_disable();
+    }
+
+    #[test]
+    fn earlier_global_stream_id_records_after_final_id_clears_auto_gate() {
+        static IDS: [u64; 2] = [0xC002_2126, 0xC002_2127];
+
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        semantic_auto_metadata_disable();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_stream_enable(
+                0xC0DE_2126,
+                FLAG_TYPE_ISOLATED,
+                0xA110_2126,
+                IDS.as_ptr(),
+                IDS.len(),
+            )
+        });
+
+        let ptr_key = 0xC002_1260usize;
+        let (selected_tx, selected_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let (recorded_tx, recorded_rx) = std::sync::mpsc::channel();
+        let worker = thread::spawn(move || {
+            let metadata = auto_allocation_metadata(layout).expect("earlier compiler stream id");
+            selected_tx.send(metadata).unwrap();
+            resume_rx.recv().unwrap();
+            let recorded = unsafe {
+                record_recovery_auto_allocation_metadata(ptr_key as *mut u8, layout, metadata)
+            };
+            recorded_tx.send(recorded).unwrap();
+        });
+
+        let earlier = selected_rx.recv().unwrap();
+        let final_metadata = auto_allocation_metadata(layout).expect("final compiler stream id");
+        assert_eq!(earlier.type_id, IDS[0]);
+        assert_eq!(final_metadata.type_id, IDS[1]);
+        assert_eq!(
+            SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed) & SLOW_PATH_AUTO_METADATA,
+            0,
+            "the final id must clear the auto-metadata allocation gate before the earlier id records"
+        );
+        assert!(AUTO_COMPILER_TYPE_IDS_STREAM_EXHAUSTED.load(Ordering::Relaxed));
+
+        resume_tx.send(()).unwrap();
+        assert!(recorded_rx.recv().unwrap());
+        worker.join().unwrap();
+        assert_eq!(
+            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+            1,
+            "an earlier default-global id must remain globally recoverable after final-stream gate clearing"
+        );
+        assert_eq!(
+            FAST_AUTO_ALLOCATION_RECORD_GLOBAL_COUNT.load(Ordering::Relaxed),
+            0
+        );
+        assert_eq!(
+            take_auto_deallocation_metadata(ptr_key as *mut u8, layout),
+            Some(earlier),
+            "a different thread must recover the earlier id after final-stream exhaustion"
+        );
+
+        semantic_auto_metadata_disable();
     }
 
     #[test]

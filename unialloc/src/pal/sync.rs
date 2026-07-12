@@ -39,24 +39,27 @@ pub mod pthread_thread_local {
     ///
     /// register the cleanup function for tls data
     /// This function is expected to be called once for the whole program
-    pub unsafe fn register_tls_key(free_thread_cache: unsafe extern "C" fn(*mut c_void)) {
+    pub unsafe fn register_tls_key(free_thread_cache: unsafe extern "C" fn(*mut c_void)) -> bool {
         let x = free_thread_cache as *const ();
         let ptr: unsafe extern "C" fn(*mut c_void) = core::mem::transmute(x);
-        if libc::pthread_key_create(core::ptr::addr_of_mut!(PKEY), Some(ptr)) == 0 {
-            PKEY_READY.store(true, Ordering::Release);
-        }
+        let registered = libc::pthread_key_create(core::ptr::addr_of_mut!(PKEY), Some(ptr)) == 0;
+        PKEY_READY.store(registered, Ordering::Release);
+        registered
     }
     /// # Safety
     ///
     /// put tls ptr into cleanup function chain
     /// This function is expected to be called once per thread
-    pub unsafe fn save_tls(ptr: *mut u8) {
+    pub unsafe fn save_tls(ptr: *mut u8) -> bool {
         if PKEY_READY.load(Ordering::Acquire) {
-            if libc::pthread_setspecific(PKEY, ptr as *const c_void) != 0 {
+            let saved = libc::pthread_setspecific(PKEY, ptr as *const c_void) == 0;
+            if !saved {
                 TLS_SAVE_FAILURES.fetch_add(1, Ordering::Relaxed);
             }
+            saved
         } else {
             TLS_SAVE_FAILURES.fetch_add(1, Ordering::Relaxed);
+            false
         }
     }
 }
@@ -76,6 +79,10 @@ pub mod win_thread_local {
     static mut TLS_DESTRUCTOR: Option<unsafe extern "C" fn(*mut libc_c_void)> = None;
     static PKEY_READY: AtomicBool = AtomicBool::new(false);
     static TLS_SAVE_FAILURES: AtomicUsize = AtomicUsize::new(0);
+    #[cfg(test)]
+    static FAIL_NEXT_TLS_REGISTRATION: AtomicBool = AtomicBool::new(false);
+    #[cfg(test)]
+    static FAIL_NEXT_TLS_SAVE: AtomicBool = AtomicBool::new(false);
     pub const fn backend_name() -> &'static str {
         "windows_fls_destructor"
     }
@@ -104,30 +111,65 @@ pub mod win_thread_local {
     ///
     /// register the cleanup function for tls data
     /// This function is expected to be called once for the whole program
-    pub unsafe fn register_tls_key(free_thread_cache: unsafe extern "C" fn(*mut libc_c_void)) {
+    pub unsafe fn register_tls_key(
+        free_thread_cache: unsafe extern "C" fn(*mut libc_c_void),
+    ) -> bool {
         unsafe extern "system" fn fls_destructor(value: *mut c_void) {
             if let Some(destructor) = TLS_DESTRUCTOR {
                 destructor(value.cast::<libc_c_void>());
             }
         }
 
+        #[cfg(test)]
+        if FAIL_NEXT_TLS_REGISTRATION.swap(false, Ordering::AcqRel) {
+            PKEY_READY.store(false, Ordering::Release);
+            return false;
+        }
+
+        let key = fibersapi::FlsAlloc(Some(fls_destructor));
+        if key == FLS_OUT_OF_INDEXES {
+            PKEY = FLS_OUT_OF_INDEXES;
+            TLS_DESTRUCTOR = None;
+            PKEY_READY.store(false, Ordering::Release);
+            return false;
+        }
         TLS_DESTRUCTOR = Some(free_thread_cache);
-        PKEY = fibersapi::FlsAlloc(Some(fls_destructor));
-        PKEY_READY.store(PKEY != FLS_OUT_OF_INDEXES, Ordering::Release);
+        PKEY = key;
+        PKEY_READY.store(true, Ordering::Release);
+        true
     }
 
     /// # Safety
     ///
     /// put tls ptr into cleanup function chain
     /// This function is expected to be called once per fiber
-    pub unsafe fn save_tls(ptr: *mut u8) {
+    pub unsafe fn save_tls(ptr: *mut u8) -> bool {
+        #[cfg(test)]
+        if FAIL_NEXT_TLS_SAVE.swap(false, Ordering::AcqRel) {
+            TLS_SAVE_FAILURES.fetch_add(1, Ordering::Relaxed);
+            return false;
+        }
+
         if PKEY_READY.load(Ordering::Acquire) {
-            if fibersapi::FlsSetValue(PKEY, ptr.cast::<c_void>()) == 0 {
+            let saved = fibersapi::FlsSetValue(PKEY, ptr.cast::<c_void>()) != 0;
+            if !saved {
                 TLS_SAVE_FAILURES.fetch_add(1, Ordering::Relaxed);
             }
+            saved
         } else {
             TLS_SAVE_FAILURES.fetch_add(1, Ordering::Relaxed);
+            false
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_tls_registration_for_test() {
+        FAIL_NEXT_TLS_REGISTRATION.store(true, Ordering::Release);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_tls_save_for_test() {
+        FAIL_NEXT_TLS_SAVE.store(true, Ordering::Release);
     }
 
     #[cfg(test)]
@@ -156,7 +198,7 @@ pub mod win_thread_local {
 
         unsafe extern "system" fn fiber_b_entry(_parameter: *mut c_void) {
             FIBER_B_INITIAL_VALUE.store(load_tls() as usize, Ordering::Release);
-            save_tls(ptr::addr_of!(FIBER_B_VALUE).cast_mut());
+            assert!(save_tls(ptr::addr_of!(FIBER_B_VALUE).cast_mut()));
             FIBER_B_SAVED_VALUE.store(load_tls() as usize, Ordering::Release);
             SwitchToFiber(MAIN_FIBER.load(Ordering::Acquire) as *mut c_void);
         }
@@ -173,15 +215,14 @@ pub mod win_thread_local {
                 let main_fiber = ConvertThreadToFiber(ptr::null_mut());
                 assert!(!main_fiber.is_null(), "ConvertThreadToFiber failed");
 
-                register_tls_key(record_destructor);
-                if !tls_key_ready() {
+                if !register_tls_key(record_destructor) {
                     let _ = ConvertFiberToThread();
                     panic!("FlsAlloc failed");
                 }
 
                 let fiber_a_value = ptr::addr_of!(FIBER_A_VALUE).cast_mut();
                 let fiber_b_value = ptr::addr_of!(FIBER_B_VALUE).cast_mut();
-                save_tls(fiber_a_value);
+                assert!(save_tls(fiber_a_value));
                 MAIN_FIBER.store(main_fiber as usize, Ordering::Release);
 
                 let fiber_b = CreateFiber(0, Some(fiber_b_entry), ptr::null_mut());

@@ -182,8 +182,14 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
     let func = expect_ident(&mut it);
     let tsd_state_name = format!("{}_TSD_STATE", name.to_uppercase());
     let ensure_tsd_name = format!("{}_ensure_tsd_initialized", name.to_lowercase());
+    let reset_tsd_name = format!(
+        "{}_reset_failed_tsd_initialization_for_test",
+        name.to_lowercase()
+    );
     let load_tls_name = format!("{}_load_tls_value", name.to_lowercase());
     let store_tls_name = format!("{}_store_tls_value", name.to_lowercase());
+    let reclaim_tls_name = format!("{}_reclaim_unpublished_tls_value", name.to_lowercase());
+    let tls_storage_failure_name = format!("{}_tls_storage_failure", name.to_lowercase());
 
     let expanded = format!(
         "
@@ -202,10 +208,11 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
                 core::sync::atomic::AtomicU8::new(0);
 
             #[inline]
-            unsafe fn {ensure_tsd_name}() {{
+            unsafe fn {ensure_tsd_name}() -> bool {{
                 loop {{
                     match {tsd_state_name}.load(core::sync::atomic::Ordering::Acquire) {{
-                        2 => return,
+                        2 => return true,
+                        3 => return false,
                         0 => {{
                             if {tsd_state_name}.compare_exchange(
                                 0,
@@ -213,9 +220,12 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
                                 core::sync::atomic::Ordering::AcqRel,
                                 core::sync::atomic::Ordering::Acquire,
                             ).is_ok() {{
-                                register_tls_key({func});
-                                {tsd_state_name}.store(2, core::sync::atomic::Ordering::Release);
-                                return;
+                                let registered = register_tls_key({func});
+                                {tsd_state_name}.store(
+                                    if registered {{ 2 }} else {{ 3 }},
+                                    core::sync::atomic::Ordering::Release,
+                                );
+                                return registered;
                             }}
                         }}
                         _ => core::hint::spin_loop(),
@@ -223,11 +233,46 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
                 }}
             }}
 
+            #[cfg(test)]
+            unsafe fn {reset_tsd_name}() -> bool {{
+                {tsd_state_name}.compare_exchange(
+                    3,
+                    0,
+                    core::sync::atomic::Ordering::AcqRel,
+                    core::sync::atomic::Ordering::Acquire,
+                ).is_ok()
+            }}
+
+            #[cold]
+            #[inline(never)]
+            fn {tls_storage_failure_name}() -> ! {{
+                extern crate alloc;
+                alloc::alloc::handle_alloc_error(alloc::alloc::Layout::new::<{ty}>())
+            }}
+
+            #[inline]
+            unsafe fn {reclaim_tls_name}(ptr: *mut {ty}) {{
+                if ptr.is_null() {{
+                    return;
+                }}
+
+                extern crate alloc;
+                use alloc::alloc::Allocator;
+                let layout = alloc::alloc::Layout::new::<{ty}>();
+                core::ptr::drop_in_place(ptr);
+                MetadataAllocator {{}}.deallocate(
+                    core::ptr::NonNull::new_unchecked(ptr.cast::<u8>()),
+                    layout,
+                );
+            }}
+
             #[inline]
             unsafe fn {load_tls_name}() -> *mut {ty} {{
                 #[cfg(any(unialloc_target_arm64e, windows))]
                 {{
-                    {ensure_tsd_name}();
+                    if !{ensure_tsd_name}() {{
+                        {tls_storage_failure_name}();
+                    }}
                     load_tls() as *mut {ty}
                 }}
                 #[cfg(not(any(unialloc_target_arm64e, windows)))]
@@ -237,17 +282,22 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
             }}
 
             #[inline]
-            unsafe fn {store_tls_name}(ptr: *mut {ty}) {{
+            unsafe fn {store_tls_name}(ptr: *mut {ty}) -> core::result::Result<(), *mut {ty}> {{
                 #[cfg(any(unialloc_target_arm64e, windows))]
                 {{
-                    {ensure_tsd_name}();
-                    save_tls(ptr as *mut u8);
+                    if !{ensure_tsd_name}() || !save_tls(ptr as *mut u8) {{
+                        core::result::Result::Err(ptr)
+                    }} else {{
+                        core::result::Result::Ok(())
+                    }}
                 }}
                 #[cfg(not(any(unialloc_target_arm64e, windows)))]
                 {{
                     {name}_VALUE = ptr;
-                    {ensure_tsd_name}();
-                    save_tls(ptr as *mut u8);
+                    if {ensure_tsd_name}() {{
+                        let _ = save_tls(ptr as *mut u8);
+                    }}
+                    core::result::Result::Ok(())
                 }}
             }}
 
@@ -271,7 +321,10 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
                             .unwrap_or_else(|_| alloc::alloc::handle_alloc_error(layout));
                         ptr = allocation.as_non_null_ptr().as_ptr() as *mut {ty};
                         core::ptr::write(ptr, {ty}::new());
-                        {store_tls_name}(ptr);
+                        if let core::result::Result::Err(unpublished) = {store_tls_name}(ptr) {{
+                            {reclaim_tls_name}(unpublished);
+                            {tls_storage_failure_name}();
+                        }}
                         ptr.as_ref().unwrap()
                     }}
                 }}
@@ -292,7 +345,10 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
                             .unwrap_or_else(|_| alloc::alloc::handle_alloc_error(layout));
                         ptr = allocation.as_non_null_ptr().as_ptr() as *mut {ty};
                         core::ptr::write(ptr, {ty}::new());
-                        {store_tls_name}(ptr);
+                        if let core::result::Result::Err(unpublished) = {store_tls_name}(ptr) {{
+                            {reclaim_tls_name}(unpublished);
+                            {tls_storage_failure_name}();
+                        }}
                         ptr.as_mut().unwrap()
                     }}
                 }}
@@ -303,8 +359,11 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
         func = func,
         tsd_state_name = tsd_state_name,
         ensure_tsd_name = ensure_tsd_name,
+        reset_tsd_name = reset_tsd_name,
         load_tls_name = load_tls_name,
         store_tls_name = store_tls_name,
+        reclaim_tls_name = reclaim_tls_name,
+        tls_storage_failure_name = tls_storage_failure_name,
     );
 
     expanded

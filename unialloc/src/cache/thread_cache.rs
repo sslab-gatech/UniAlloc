@@ -1674,7 +1674,12 @@ unsafe extern "C" fn free_thread_cache(ptr: *mut libc::c_void) {
     // allocate after this callback returns (or even re-enter while cleanup is
     // in progress); leaving the generated Rust TLS slot populated would expose
     // metadata storage after it has been returned to META_BUMP.
-    globaltcache_store_tls_value(core::ptr::null_mut());
+    if globaltcache_store_tls_value(core::ptr::null_mut()).is_err() {
+        // An authoritative pthread/FLS slot that still points at storage about
+        // to be recycled would become a use-after-free on the next allocator
+        // access. Fail closed instead of returning that storage to META_BUMP.
+        globaltcache_tls_storage_failure();
+    }
     let tcache = match ptr.as_mut() {
         Some(tcache) => tcache,
         None => return,
@@ -1784,6 +1789,62 @@ mod tests {
             );
             assert_eq!(fiber_a_after_cleanup, 0);
             assert_ne!(converted_to_thread, 0, "ConvertFiberToThread failed");
+        }
+    }
+
+    #[cfg(all(windows, not(feature = "fixed_heap")))]
+    #[test]
+    #[ignore = "mutates the process-wide production GlobalTcache FLS key; run in an isolated Windows process"]
+    fn global_thread_cache_fls_failures_do_not_lose_cache_ownership_on_windows() {
+        unsafe {
+            use crate::pal::sync::general_thread_local::{
+                fail_next_tls_registration_for_test, fail_next_tls_save_for_test, load_tls,
+                tls_key_ready,
+            };
+
+            fail_next_tls_registration_for_test();
+            assert!(
+                !globaltcache_ensure_tsd_initialized(),
+                "injected FlsAlloc failure was not observed"
+            );
+            assert!(!tls_key_ready());
+            assert!(load_tls().is_null());
+            assert!(
+                globaltcache_reset_failed_tsd_initialization_for_test(),
+                "failed initialization state was not reset for isolated retry"
+            );
+            assert!(
+                globaltcache_ensure_tsd_initialized(),
+                "FLS key retry failed"
+            );
+
+            let layout = Layout::new::<ThreadCache>();
+            let first_allocation = MetadataAllocator {}
+                .allocate(layout)
+                .expect("metadata allocation should succeed");
+            let first = first_allocation.as_non_null_ptr().as_ptr() as *mut ThreadCache;
+            core::ptr::write(first, ThreadCache::new());
+
+            fail_next_tls_save_for_test();
+            let unpublished = globaltcache_store_tls_value(first)
+                .expect_err("injected FlsSetValue failure was not observed");
+            assert_eq!(unpublished, first, "failed store lost pointer ownership");
+            assert!(
+                globaltcache_load_tls_value().is_null(),
+                "failed FlsSetValue unexpectedly published the cache"
+            );
+            globaltcache_reclaim_unpublished_tls_value(unpublished);
+
+            let second_allocation = MetadataAllocator {}
+                .allocate(layout)
+                .expect("reclaimed metadata allocation should be reusable");
+            let second = second_allocation.as_non_null_ptr().as_ptr() as *mut ThreadCache;
+            assert_eq!(
+                second, first,
+                "failed FLS publication leaked the unpublished ThreadCache allocation"
+            );
+            core::ptr::write(second, ThreadCache::new());
+            globaltcache_reclaim_unpublished_tls_value(second);
         }
     }
 
