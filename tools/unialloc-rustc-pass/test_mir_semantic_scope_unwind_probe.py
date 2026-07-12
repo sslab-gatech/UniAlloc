@@ -381,6 +381,10 @@ def main() -> int:
             "UNIALLOC_RUSTC_SYSROOT": sysroot,
             "CARGO_NET_OFFLINE": "true",
             "CARGO_INCREMENTAL": "0",
+            # The workspace's normal dev profile intentionally uses panic=abort.
+            # This functional probe must exercise MIR cleanup edges and catch the
+            # panic, so opt only this isolated Cargo invocation into unwind.
+            "CARGO_PROFILE_DEV_PANIC": "unwind",
             "CARGO_TARGET_DIR": str(target_dir),
         }
     )
@@ -456,6 +460,7 @@ def main() -> int:
             "Functional nested-unwind regression only; no timing or paper-performance claim.",
             "The Rust source uses ordinary Vec, Box, catch_unwind, and Drop behavior with no manual metadata allocator ABI calls.",
             "This adds the previously missing invariant that an inner compiler scope unwind restores a still-active outer compiler scope before a subsequent allocation/drop pair.",
+            "The isolated probe overrides the workspace dev panic strategy to unwind; normal project profiles remain unchanged.",
             "One hosted and one fixed-heap process cover this bounded lifecycle, not arbitrary panics, payloads, or allocator clients.",
         ],
     }
