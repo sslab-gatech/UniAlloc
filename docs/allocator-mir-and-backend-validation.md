@@ -340,6 +340,23 @@ PAC claim: the lifecycle neither enables pointer authentication nor records PAC
 failure counters.  It proves the ordinary TLS identity-retirement/cache-routing
 path only, not a hugepage physical-domain or universal realloc guarantee.
 
+### Cross-thread overflow realloc preserves the live allocation
+
+Commit `422c91f` adds the failure-side counterpart.  A creator publishes a
+cross-thread recovery identity and payload; a foreign worker then requests a
+distinct-type realloc with `usize::MAX`, which the test first proves cannot form
+a valid `Layout`.  The failed realloc must return null before changing recovery,
+validation, cache, delayed-free, or payload state.  The exact old global record
+must remain live until a subsequent normal deallocation consumes it once; the
+requested type must not observe the storage, while the old type can recover it
+exactly once for raw cleanup.
+
+Hosted and `fixed_heap` focused tests each pass once with no recovery mismatch,
+cache corruption, stale slow path, or duplicate ownership.  Statistics are
+disabled and PAC is not requested, so this test makes no PAC or performance
+claim.  It is a bounded invalid-layout failure invariant, not a proof for every
+allocator failure source.
+
 ### Size-negotiated semantic snapshot ABIs
 
 Commit `6fd22fb` adds hosted and `fixed_heap` regressions for the checked
