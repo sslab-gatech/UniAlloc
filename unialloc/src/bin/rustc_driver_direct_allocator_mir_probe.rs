@@ -11,9 +11,10 @@ use std::mem::{align_of, size_of};
 use std::ptr::{read_volatile, write_volatile};
 
 use unialloc::{
-    semantic_auto_metadata_disable, semantic_metadata_validation_snapshot, semantic_stats_reset,
-    semantic_stats_snapshot, semantic_type_stats_snapshot, SemanticMetadataValidationSnapshot,
-    SemanticTypeStatsSnapshot, UniAlloc,
+    semantic_auto_metadata_disable, semantic_fallback_attribution_snapshot,
+    semantic_metadata_validation_snapshot, semantic_stats_reset, semantic_stats_snapshot,
+    semantic_type_stats_snapshot, type_isolation_side_cache_snapshot,
+    SemanticMetadataValidationSnapshot, SemanticTypeStatsSnapshot, UniAlloc,
 };
 
 #[cfg(feature = "fixed_heap")]
@@ -45,6 +46,243 @@ fn direct_allocator_receiver() -> &'static UniAlloc {
 }
 
 const RUSTC_DRIVER_MIR_REWRITE_MODULE_ID: u64 = 0xC002_DA00_0000_0001;
+
+#[derive(Clone, Debug)]
+struct ReallocShrinkEvidence {
+    enabled: bool,
+    old_size: usize,
+    new_size: usize,
+    align: usize,
+    old_pointer: usize,
+    new_pointer: usize,
+    pointer_reused: bool,
+    pointer_aligned: bool,
+    payload_preserved: bool,
+    realloc_typed_allocations: usize,
+    realloc_typed_deallocations: usize,
+    final_typed_deallocations: usize,
+    realloc_fallback_allocations: usize,
+    realloc_raw_realloc_no_metadata: usize,
+    final_raw_dealloc_no_metadata: usize,
+    recovery_identity_matches: usize,
+    recovery_identity_mismatches: usize,
+    side_cache_corrupt_slots: usize,
+    recovery_record_after_final_dealloc: bool,
+    type_rows_json: String,
+}
+
+impl ReallocShrinkEvidence {
+    fn disabled() -> Self {
+        Self {
+            enabled: false,
+            old_size: 0,
+            new_size: 0,
+            align: 0,
+            old_pointer: 0,
+            new_pointer: 0,
+            pointer_reused: false,
+            pointer_aligned: false,
+            payload_preserved: false,
+            realloc_typed_allocations: 0,
+            realloc_typed_deallocations: 0,
+            final_typed_deallocations: 0,
+            realloc_fallback_allocations: 0,
+            realloc_raw_realloc_no_metadata: 0,
+            final_raw_dealloc_no_metadata: 0,
+            recovery_identity_matches: 0,
+            recovery_identity_mismatches: 0,
+            side_cache_corrupt_slots: 0,
+            recovery_record_after_final_dealloc: false,
+            type_rows_json: "[]".to_owned(),
+        }
+    }
+
+    fn json(&self) -> String {
+        format!(
+            concat!(
+                "{{",
+                "\"enabled\":{},",
+                "\"old_size\":{},",
+                "\"new_size\":{},",
+                "\"align\":{},",
+                "\"old_pointer\":{},",
+                "\"new_pointer\":{},",
+                "\"pointer_reused\":{},",
+                "\"pointer_aligned\":{},",
+                "\"payload_preserved\":{},",
+                "\"realloc_typed_allocations\":{},",
+                "\"realloc_typed_deallocations\":{},",
+                "\"final_typed_deallocations\":{},",
+                "\"realloc_fallback_allocations\":{},",
+                "\"realloc_raw_realloc_no_metadata\":{},",
+                "\"final_raw_dealloc_no_metadata\":{},",
+                "\"recovery_identity_matches\":{},",
+                "\"recovery_identity_mismatches\":{},",
+                "\"side_cache_corrupt_slots\":{},",
+                "\"recovery_record_after_final_dealloc\":{},",
+                "\"type_rows\":{}",
+                "}}"
+            ),
+            self.enabled,
+            self.old_size,
+            self.new_size,
+            self.align,
+            self.old_pointer,
+            self.new_pointer,
+            self.pointer_reused,
+            self.pointer_aligned,
+            self.payload_preserved,
+            self.realloc_typed_allocations,
+            self.realloc_typed_deallocations,
+            self.final_typed_deallocations,
+            self.realloc_fallback_allocations,
+            self.realloc_raw_realloc_no_metadata,
+            self.final_raw_dealloc_no_metadata,
+            self.recovery_identity_matches,
+            self.recovery_identity_mismatches,
+            self.side_cache_corrupt_slots,
+            self.recovery_record_after_final_dealloc,
+            self.type_rows_json,
+        )
+    }
+}
+
+fn realloc_shrink_type_rows_json(rows: &[SemanticTypeStatsSnapshot], row_count: usize) -> String {
+    let mut rendered = String::from("[");
+    let mut emitted = 0usize;
+    for row in rows.iter().take(std::cmp::min(row_count, rows.len())) {
+        if row.allocations == 0 && row.deallocations == 0 {
+            continue;
+        }
+        if emitted != 0 {
+            rendered.push(',');
+        }
+        emitted += 1;
+        rendered.push_str(&format!(
+            concat!(
+                "{{",
+                "\"type_id\":{},",
+                "\"module_id\":{},",
+                "\"callsite\":{},",
+                "\"allocations\":{},",
+                "\"deallocations\":{},",
+                "\"observed_alloc_size\":{},",
+                "\"observed_alloc_align\":{},",
+                "\"observed_dealloc_size\":{},",
+                "\"observed_dealloc_align\":{},",
+                "\"policy_flags_seen\":{}",
+                "}}"
+            ),
+            row.type_id,
+            row.module_id,
+            row.callsite,
+            row.allocations,
+            row.deallocations,
+            row.observed_alloc_size,
+            row.observed_alloc_align,
+            row.observed_dealloc_size,
+            row.observed_dealloc_align,
+            row.policy_flags_seen,
+        ));
+    }
+    rendered.push(']');
+    rendered
+}
+
+#[inline(never)]
+unsafe fn run_realloc_shrink_same_class_lifecycle() -> ReallocShrinkEvidence {
+    const OLD_SIZE: usize = 63;
+    const NEW_SIZE: usize = 57;
+    const ALIGN: usize = 64;
+
+    let old_layout = Layout::from_size_align(OLD_SIZE, ALIGN).expect("valid old shrink layout");
+    let new_layout = Layout::from_size_align(NEW_SIZE, ALIGN).expect("valid new shrink layout");
+    let old_pointer = alloc(old_layout);
+    if old_pointer.is_null() {
+        handle_alloc_error(old_layout);
+    }
+    for offset in 0..OLD_SIZE {
+        write_volatile(
+            old_pointer.add(offset),
+            (offset as u8).wrapping_mul(29) ^ 0xC2,
+        );
+    }
+
+    let before_realloc_stats = semantic_stats_snapshot();
+    let before_realloc_fallback = semantic_fallback_attribution_snapshot();
+    let before_realloc_validation = semantic_metadata_validation_snapshot();
+    let new_pointer = realloc(old_pointer, old_layout, NEW_SIZE);
+    assert!(!new_pointer.is_null(), "non-zero shrink must succeed");
+    assert_eq!(
+        new_pointer, old_pointer,
+        "same-size-class semantic shrink must reuse the allocation"
+    );
+    assert_eq!(
+        (new_pointer as usize) % ALIGN,
+        0,
+        "same-size-class shrink lost the requested alignment"
+    );
+    let mut payload_preserved = true;
+    for offset in 0..NEW_SIZE {
+        let expected = (offset as u8).wrapping_mul(29) ^ 0xC2;
+        payload_preserved &= read_volatile(new_pointer.add(offset)) == expected;
+    }
+    assert!(
+        payload_preserved,
+        "same-size-class shrink corrupted retained bytes"
+    );
+    let after_realloc_stats = semantic_stats_snapshot();
+    let after_realloc_fallback = semantic_fallback_attribution_snapshot();
+
+    dealloc(new_pointer, new_layout);
+    let after_dealloc_stats = semantic_stats_snapshot();
+    let after_dealloc_fallback = semantic_fallback_attribution_snapshot();
+    let after_dealloc_validation = semantic_metadata_validation_snapshot();
+    let side_cache = type_isolation_side_cache_snapshot();
+    let recovery_record_after_final_dealloc =
+        unialloc::alloc_api::take_auto_deallocation_metadata(new_pointer, new_layout).is_some();
+    let mut rows = [empty_type_stats_row(); 8];
+    let row_count = semantic_type_stats_snapshot(&mut rows);
+
+    ReallocShrinkEvidence {
+        enabled: true,
+        old_size: OLD_SIZE,
+        new_size: NEW_SIZE,
+        align: ALIGN,
+        old_pointer: old_pointer as usize,
+        new_pointer: new_pointer as usize,
+        pointer_reused: new_pointer == old_pointer,
+        pointer_aligned: (new_pointer as usize) % ALIGN == 0,
+        payload_preserved,
+        realloc_typed_allocations: after_realloc_stats
+            .typed_allocations
+            .saturating_sub(before_realloc_stats.typed_allocations),
+        realloc_typed_deallocations: after_realloc_stats
+            .typed_deallocations
+            .saturating_sub(before_realloc_stats.typed_deallocations),
+        final_typed_deallocations: after_dealloc_stats
+            .typed_deallocations
+            .saturating_sub(after_realloc_stats.typed_deallocations),
+        realloc_fallback_allocations: after_realloc_stats
+            .fallback_allocations
+            .saturating_sub(before_realloc_stats.fallback_allocations),
+        realloc_raw_realloc_no_metadata: after_realloc_fallback
+            .raw_realloc_no_metadata
+            .saturating_sub(before_realloc_fallback.raw_realloc_no_metadata),
+        final_raw_dealloc_no_metadata: after_dealloc_fallback
+            .raw_dealloc_no_metadata
+            .saturating_sub(after_realloc_fallback.raw_dealloc_no_metadata),
+        recovery_identity_matches: after_dealloc_validation
+            .recovery_identity_matches
+            .saturating_sub(before_realloc_validation.recovery_identity_matches),
+        recovery_identity_mismatches: after_dealloc_validation
+            .recovery_identity_mismatches
+            .saturating_sub(before_realloc_validation.recovery_identity_mismatches),
+        side_cache_corrupt_slots: side_cache.corrupt_slots,
+        recovery_record_after_final_dealloc,
+        type_rows_json: realloc_shrink_type_rows_json(&rows, row_count),
+    }
+}
 
 #[inline(never)]
 fn consume_box(value: Box<[u64; 16]>) -> u64 {
@@ -431,9 +669,15 @@ fn main() {
     // to rewrite the Box allocation call to UniAlloc's metadata ABI.
     #[cfg(feature = "fixed_heap")]
     fixed_heap_probe_global::ensure_initialized_for_probe();
+    let run_realloc_shrink_probe = std::env::var_os("UNIALLOC_REALLOC_SHRINK_PROBE").is_some();
     semantic_auto_metadata_disable();
     semantic_stats_reset();
 
+    let realloc_shrink = if run_realloc_shrink_probe {
+        unsafe { run_realloc_shrink_same_class_lifecycle() }
+    } else {
+        ReallocShrinkEvidence::disabled()
+    };
     let mut checksum = run_direct_allocator_workload(8);
     unsafe {
         checksum ^= run_layout_allocator_workload(4);
@@ -528,6 +772,7 @@ fn main() {
             "\"compiler_site_id_stream_mode\":\"rustc-driver-direct-allocator-mir\",",
             "\"compiler_site_replay\":false,",
             "\"manual_metadata_abi_calls\":false,",
+            "\"realloc_shrink\":{},",
             "\"checksum\":{},",
             "\"total_allocations\":{},",
             "\"typed_allocations\":{},",
@@ -547,6 +792,7 @@ fn main() {
             "\"runtime_layout_observation_rows\":[{}]",
             "}}"
         ),
+        realloc_shrink.json(),
         checksum,
         snap.total_allocations,
         snap.typed_allocations,
