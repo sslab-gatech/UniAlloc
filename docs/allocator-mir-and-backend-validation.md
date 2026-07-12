@@ -532,6 +532,49 @@ The durable summary (SHA-256
 target-crate audits are in
 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-runtime-typeclass-e466831-20260712/`.
 
+### Aggregate Drop fails closed and the real-app address oracle is explicit
+
+Commit `532435a` removes the unsafe first-owner shortcut for aggregate Drop.
+When a supported struct, enum, closure, or coroutine exposes more than one heap
+owner, one active Drop scope cannot represent every deallocation.  The pass now
+emits an audit-only multi-owner row and leaves allocation-side recovery
+authoritative.  Actual-MIR regressions cover generic struct and enum values with
+both `Vec<u8>` and `String`; the security-probe runner passes 18/18 tests.
+
+This correctness change intentionally reduces applied Drop coverage in the
+subsequent pinned Oxipng run: 278 Drop rows were applied, while 265 multi-owner
+Drop rows failed closed.  The same run retained 853 actual semantic-scope rows,
+6 direct rewrites, 4 semantic fail-closed rows, 131 complete runtime type rows,
+and 2 naturally matched compiler/runtime lifecycle rows.  No natural
+same-layout pair remained after the safer Drop attribution, so natural-pair
+presence is diagnostic rather than an acceptance gate.
+
+The instrumented application therefore labels its address-effect check as an
+injected functional oracle.  Two concrete, same-layout Rust `Vec` element types
+receive distinct identities from actual MIR audit rows.  The producer identity
+(`15719177160194310719`) allocated twice and recorded one cache hit; the
+wrong-type identity (`11520851239810895908`) allocated once.  The observed
+addresses were producer `4349034560`, wrong type `4349034624`, and producer
+recovery `4349034560`: the wrong class did not cross-reuse the address and the
+original class recovered it.  Two executed producer Drop identities and one
+wrong-type Drop identity had exact runtime rows; recovery mismatch, corrupt
+slot, and dropped-event counters were all zero.  The PNG output hash also
+matched the pinned reference.
+
+Two actual build/run attempts completed successfully, but the collector first
+rejected unexecuted unwind-cleanup Drop rows and then rejected the now-optional
+absence of a natural same-layout pair.  Those two concrete validator defects
+were repaired; no third build/run was performed.  Commit `6aae903` passed 22/22
+unit tests, including forged-oracle rejection, and replayed the preserved
+`9c74b95` raw evidence offline.  The replay artifact SHA-256 is
+`debb31038ab3912bdd07260de7facd394f8152ba086a4054e9b098b68b3aab0a` at
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-address-oracle-9c74b95-20260712/`.
+
+This supports one injected, compiler-identity-bound same-layout address
+sequence inside a pinned real Rust application.  It is not natural Oxipng
+address coverage, whole-program or address universality, a general security
+proof, or performance evidence.
+
 ### Supported plain Clone is paired with an ambiguous fail-closed control
 
 Commit `dd30004` extends the ordinary-Rust Clone probe with a supported
