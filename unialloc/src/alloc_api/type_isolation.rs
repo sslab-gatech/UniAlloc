@@ -2694,6 +2694,15 @@ pub fn semantic_runtime_slow_path_enabled() -> bool {
 
 #[inline]
 fn auto_metadata_allocations_exhausted() -> bool {
+    // The hot allocation/deallocation gates call this whenever auto metadata is
+    // enabled.  Layout-derived and cyclic compiler replay modes cannot become
+    // exhausted, and consuming streams explicitly set this flag when their last
+    // ID is consumed.  Avoid taking AUTO_METADATA_CONFIG's read lock on the
+    // common non-exhausted path; only confirm the active mode after the sticky
+    // exhaustion bit is observed.
+    if !AUTO_COMPILER_TYPE_IDS_STREAM_EXHAUSTED.load(Ordering::Relaxed) {
+        return false;
+    }
     let config = *AUTO_METADATA_CONFIG.read();
     auto_metadata_allocations_exhausted_for(config)
 }
