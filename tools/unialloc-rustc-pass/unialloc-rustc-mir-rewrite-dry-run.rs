@@ -329,6 +329,15 @@ fn compute_direct_local_size_align_pairing_gap_count(records: &[RewriteRecord]) 
 }
 
 #[derive(Clone, Debug)]
+enum PlainCloneHeapClass {
+    NotPlainClone,
+    Single(String),
+    DefiniteNoSupportedOwner,
+    Ambiguous(Vec<String>),
+    Unresolved,
+}
+
+#[derive(Clone, Debug)]
 struct SemanticScopeCandidate<'tcx> {
     bb: BasicBlock,
     original_is_cleanup: bool,
@@ -338,6 +347,7 @@ struct SemanticScopeCandidate<'tcx> {
     destination_place: String,
     destination_type: String,
     semantic_object_type: String,
+    plain_clone_heap_class: PlainCloneHeapClass,
     original_target: Option<BasicBlock>,
     original_unwind: MirUnwind,
     original_from_hir_call: MirCallSource,
@@ -1891,6 +1901,221 @@ fn collect_heap_object_types_from_ty_inner<'tcx>(
     }
 }
 
+#[derive(Default)]
+struct PlainCloneHeapOwnerScan {
+    owners: BTreeSet<String>,
+    unresolved: bool,
+}
+
+fn plain_clone_trait_call(callee: &str) -> bool {
+    let normalized = strip_rustc_crate_disambiguators(callee);
+    const DIRECT_MARKERS: &[&str] = &["core::clone::Clone::clone", "std::clone::Clone::clone"];
+    const QUALIFIED_MARKERS: &[&str] = &[
+        " as core::clone::Clone>::clone",
+        " as std::clone::Clone>::clone",
+    ];
+    DIRECT_MARKERS.iter().any(|marker| {
+        normalized.match_indices(marker).any(|(idx, _)| {
+            marker_has_prefix_boundary(&normalized, idx)
+                && path_marker_has_boundary(&normalized, idx, marker)
+        })
+    }) || QUALIFIED_MARKERS.iter().any(|marker| {
+        normalized
+            .match_indices(marker)
+            .any(|(idx, _)| path_marker_has_boundary(&normalized, idx, marker))
+    })
+}
+
+#[cfg(unialloc_rustc_current)]
+fn plain_clone_trait_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    let trait_item_def_id = tcx.trait_item_of(def_id).unwrap_or(def_id);
+    matches!(
+        tcx.def_path_str(trait_item_def_id).as_str(),
+        "core::clone::Clone::clone" | "std::clone::Clone::clone"
+    )
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn plain_clone_trait_def_id(_tcx: TyCtxt<'_>, _def_id: DefId) -> bool {
+    // Older supported rustc debug text retains the fully-qualified trait path;
+    // the boundary-checked textual matcher remains the compatibility path.
+    false
+}
+
+fn plain_clone_call(tcx: TyCtxt<'_>, def_id: Option<DefId>, callee: &str) -> bool {
+    def_id.map_or(false, |def_id| plain_clone_trait_def_id(tcx, def_id))
+        || plain_clone_trait_call(callee)
+}
+
+fn clone_transparent_wrapper_def_path(path: &str) -> bool {
+    path == "core::option::Option"
+        || path.ends_with("::core::option::Option")
+        || path == "core::result::Result"
+        || path.ends_with("::core::result::Result")
+}
+
+fn clone_known_no_supported_owner_adt(path: &str) -> bool {
+    path == "core::marker::PhantomData"
+        || path.ends_with("::core::marker::PhantomData")
+        || path == "core::time::Duration"
+        || path.ends_with("::core::time::Duration")
+}
+
+#[cfg(unialloc_rustc_current)]
+fn clone_custom_result_is_owner_complete<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
+    !type_contains_generic_param(tcx, ty)
+        && tcx.type_is_copy_modulo_regions(ty::TypingEnv::fully_monomorphized(), ty)
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn clone_custom_result_is_owner_complete<'tcx>(_tcx: TyCtxt<'tcx>, _ty: Ty<'tcx>) -> bool {
+    // On the older rustc_private surface every substituted field type is
+    // directly available.  Reaching this decision therefore means the complete
+    // field graph was recursively visible and contained only modeled scalar /
+    // reference leaves; raw pointers and unknown leaves already set unresolved.
+    true
+}
+
+fn collect_plain_clone_heap_owners_inner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    ty: Ty<'tcx>,
+    depth: usize,
+    scan: &mut PlainCloneHeapOwnerScan,
+) {
+    const MAX_PLAIN_CLONE_OWNER_DEPTH: usize = 8;
+    if depth > MAX_PLAIN_CLONE_OWNER_DEPTH {
+        scan.unresolved = true;
+        return;
+    }
+
+    match ty.kind() {
+        // Cloning a reference copies the borrow; it does not clone or own the
+        // referenced allocation.  In particular, `&Vec<T>` must not be
+        // attributed to `Vec<T>` merely because the pointee is a heap owner.
+        ty::Ref(_, _, _) => {}
+        #[cfg(unialloc_rustc_current)]
+        ty::RawPtr(_, _) => {
+            // A direct raw-pointer result has no supported owner.  A raw pointer
+            // inside a custom wrapper can encode an ownership convention that
+            // rustc's type alone cannot prove, so keep the wrapper unresolved.
+            if depth > 0 {
+                scan.unresolved = true;
+            }
+        }
+        #[cfg(not(unialloc_rustc_current))]
+        ty::RawPtr(_) => {
+            if depth > 0 {
+                scan.unresolved = true;
+            }
+        }
+        ty::Adt(adt, substs) => {
+            let def_path = tcx.def_path_str(adt.did());
+            let type_text = format!("{:?}", ty);
+            if supported_heap_adt_def_path(&def_path) || direct_heap_type_marker_matches(&type_text)
+            {
+                scan.owners.insert(type_text);
+                return;
+            }
+            if clone_known_no_supported_owner_adt(&def_path) {
+                // Do not inspect PhantomData<T>'s generic argument: it is not a
+                // stored T and scanning it would make PhantomData<Vec<_>> look
+                // like an owned Vec.  Duration is likewise a trusted scalar.
+                return;
+            }
+            if clone_transparent_wrapper_def_path(&def_path) {
+                // Option and Result store their type arguments directly.  This
+                // is the only generic-argument recursion allowed here; arbitrary
+                // ADT arguments may be phantom or otherwise non-stored.
+                for arg_ty in substs.types() {
+                    collect_plain_clone_heap_owners_inner(tcx, arg_ty, depth + 1, scan);
+                }
+                return;
+            }
+
+            let owner_count_before = scan.owners.len();
+            let unresolved_before = scan.unresolved;
+            #[cfg(unialloc_rustc_current)]
+            for variant in adt.variants().iter() {
+                for field in variant.fields.iter() {
+                    collect_plain_clone_heap_owners_inner(
+                        tcx,
+                        field.ty(tcx, substs).skip_norm_wip(),
+                        depth + 1,
+                        scan,
+                    );
+                }
+            }
+            #[cfg(not(unialloc_rustc_current))]
+            for variant in adt.variants().iter() {
+                for field in variant.fields.iter() {
+                    collect_plain_clone_heap_owners_inner(
+                        tcx,
+                        field.ty(tcx, substs),
+                        depth + 1,
+                        scan,
+                    );
+                }
+            }
+
+            // A custom ADT with visible heap fields can be classified from those
+            // fields.  Declaring a scalar-only custom ADT owner-free is stricter:
+            // require the current compiler's Copy proof.  This still leaves a
+            // raw-pointer wrapper unresolved because nested raw pointers set the
+            // dominating unresolved bit above.
+            if scan.owners.len() == owner_count_before
+                && scan.unresolved == unresolved_before
+                && !clone_custom_result_is_owner_complete(tcx, ty)
+            {
+                scan.unresolved = true;
+            }
+        }
+        ty::Tuple(fields) => {
+            for field_ty in fields.iter() {
+                collect_plain_clone_heap_owners_inner(tcx, field_ty, depth + 1, scan);
+            }
+        }
+        ty::Array(inner, _) => {
+            collect_plain_clone_heap_owners_inner(tcx, *inner, depth + 1, scan);
+        }
+        ty::Bool
+        | ty::Char
+        | ty::Int(_)
+        | ty::Uint(_)
+        | ty::Float(_)
+        | ty::Str
+        | ty::Never
+        | ty::FnDef(_, _)
+        | ty::FnPtr(..) => {}
+        // Slices, aliases, dynamic objects, generic parameters, inference
+        // variables, closures/coroutines, and compiler error types are not
+        // structurally complete enough here.  Unknown dominates any owners
+        // found in sibling fields, preventing a partial Single classification.
+        _ => scan.unresolved = true,
+    }
+}
+
+fn plain_clone_heap_class<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: Option<DefId>,
+    callee: &str,
+    destination_ty: Ty<'tcx>,
+) -> PlainCloneHeapClass {
+    if !plain_clone_call(tcx, callee_def_id, callee) {
+        return PlainCloneHeapClass::NotPlainClone;
+    }
+    let mut scan = PlainCloneHeapOwnerScan::default();
+    collect_plain_clone_heap_owners_inner(tcx, destination_ty, 0, &mut scan);
+    if scan.unresolved {
+        return PlainCloneHeapClass::Unresolved;
+    }
+    let owners = scan.owners.into_iter().collect::<Vec<_>>();
+    match owners.len() {
+        0 => PlainCloneHeapClass::DefiniteNoSupportedOwner,
+        1 => PlainCloneHeapClass::Single(owners.into_iter().next().unwrap()),
+        _ => PlainCloneHeapClass::Ambiguous(owners),
+    }
+}
+
 fn callee_return_type_text(callee: &str) -> Option<String> {
     let marker = ") -> ";
     let start = callee.find(marker)? + marker.len();
@@ -2131,6 +2356,25 @@ mod tests {
             object_type: label.to_string(),
             type_id_basis: "test",
         }
+    }
+
+    #[test]
+    fn plain_clone_matcher_is_trait_exact_and_excludes_clone_from() {
+        assert!(plain_clone_trait_call(
+            "Val(ZeroSized, FnDef(DefId(2:1 ~ core[2f33]::clone::Clone::clone), [u64]))"
+        ));
+        assert!(plain_clone_trait_call(
+            "<std::vec::Vec<u8> as std::clone::Clone>::clone"
+        ));
+        assert!(!plain_clone_trait_call(
+            "<std::vec::Vec<u8> as std::clone::Clone>::clone_from"
+        ));
+        assert!(!plain_clone_trait_call(
+            "<std::vec::Vec<u8> as std::clone::Clone>::clone_extra"
+        ));
+        assert!(!plain_clone_trait_call(
+            "my_crate::allocation::CloneFactory::clone"
+        ));
     }
 
     #[test]
@@ -4602,13 +4846,22 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 _ => continue,
             };
         let callee = callee_text(func);
+        let callee_def_id = match func.ty(&body.local_decls, tcx).kind() {
+            ty::FnDef(def_id, _) => Some(*def_id),
+            _ => None,
+        };
         let destination_ty = destination.ty(&body.local_decls, tcx).ty;
         let arg_operands = call_arg_operands(args);
         let argument_tys = arg_operands
             .iter()
             .map(|arg| arg.ty(&body.local_decls, tcx))
             .collect::<Vec<_>>();
-        if target.is_none() || !semantic_scope_candidate_for_mir(tcx, &callee, destination_ty) {
+        let plain_clone_heap_class =
+            plain_clone_heap_class(tcx, callee_def_id, &callee, destination_ty);
+        if target.is_none()
+            || (matches!(&plain_clone_heap_class, PlainCloneHeapClass::NotPlainClone)
+                && !semantic_scope_candidate_for_mir(tcx, &callee, destination_ty))
+        {
             continue;
         }
         let destination_type = format!("{:?}", destination_ty);
@@ -4616,8 +4869,15 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             .iter()
             .map(|arg_ty| format!("{:?}", arg_ty))
             .collect::<Vec<_>>();
-        let semantic_object_type =
-            semantic_heap_object_type_from_mir(tcx, destination_ty, &argument_tys, &callee);
+        let semantic_object_type = match &plain_clone_heap_class {
+            PlainCloneHeapClass::Single(owner) => owner.clone(),
+            PlainCloneHeapClass::DefiniteNoSupportedOwner
+            | PlainCloneHeapClass::Ambiguous(_)
+            | PlainCloneHeapClass::Unresolved => UNKNOWN_HEAP_OBJECT_TYPE.to_string(),
+            PlainCloneHeapClass::NotPlainClone => {
+                semantic_heap_object_type_from_mir(tcx, destination_ty, &argument_tys, &callee)
+            }
+        };
         candidate_blocks.push(SemanticScopeCandidate {
             bb,
             original_is_cleanup: data.is_cleanup,
@@ -4630,6 +4890,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             destination_place: format!("{:?}", destination),
             destination_type,
             semantic_object_type,
+            plain_clone_heap_class,
             original_target: *target,
             original_unwind,
             original_from_hir_call: from_hir_call,
@@ -4647,6 +4908,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
         destination_place,
         destination_type,
         semantic_object_type,
+        plain_clone_heap_class,
         original_target,
         original_unwind,
         original_from_hir_call,
@@ -4676,6 +4938,96 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
         );
         let (placement_hint, cross_thread_recovery_hint, placement_hint_basis) =
             lowering_placement_hint_for_body(candidate_cross_thread_escape);
+        if matches!(
+            &plain_clone_heap_class,
+            PlainCloneHeapClass::DefiniteNoSupportedOwner
+        ) {
+            records.push(RewriteRecord {
+                allocation_site_id: format!(
+                    "rustc-driver-mir-semantic-scope-no-supported-owner:{:016x}",
+                    callsite
+                ),
+                type_id,
+                module_id: LOWERING_MODULE_ID,
+                flags: policy_flags,
+                lifetime_hint,
+                placement_hint,
+                cross_thread_recovery_hint,
+                placement_hint_basis,
+                callsite,
+                mir_function: function_name.clone(),
+                basic_block,
+                source_span,
+                callee,
+                destination_place,
+                destination_type,
+                call_arguments,
+                argument_types,
+                semantic_object_type,
+                type_id_basis,
+                size_operand: None,
+                align_operand: None,
+                rewrite_status: "semantic_scope_rewrite_skipped_non_heap_object_type",
+                replacement_symbol: if lowering_metadata_hints_requested() {
+                    "__unialloc_semantic_scope_push_hints"
+                } else {
+                    "__unialloc_semantic_scope_push"
+                },
+                replacement_resolution_status:
+                    "rustc_middle_no_supported_heap_owner_not_lowered",
+                replacement_preview:
+                    "Skipped semantic-scope lowering because the Clone result type has no supported heap owner; this does not assert that the Clone implementation performs no temporary allocation"
+                        .to_string(),
+                semantic_scope_unwind_pop_inserted: false,
+                metadata_pairing_contract: "audit_only_no_supported_heap_owner",
+                lowering_kind: "semantic_scope_non_heap_object_skipped",
+            });
+            continue;
+        }
+        if let PlainCloneHeapClass::Ambiguous(owners) = &plain_clone_heap_class {
+            records.push(RewriteRecord {
+                allocation_site_id: format!(
+                    "rustc-driver-mir-semantic-scope-ambiguous:{:016x}",
+                    callsite
+                ),
+                type_id,
+                module_id: LOWERING_MODULE_ID,
+                flags: policy_flags,
+                lifetime_hint,
+                placement_hint,
+                cross_thread_recovery_hint,
+                placement_hint_basis,
+                callsite,
+                mir_function: function_name.clone(),
+                basic_block,
+                source_span,
+                callee,
+                destination_place,
+                destination_type,
+                call_arguments,
+                argument_types,
+                semantic_object_type,
+                type_id_basis,
+                size_operand: None,
+                align_operand: None,
+                rewrite_status: "semantic_scope_rewrite_skipped_ambiguous_heap_object_type",
+                replacement_symbol: if lowering_metadata_hints_requested() {
+                    "__unialloc_semantic_scope_push_hints"
+                } else {
+                    "__unialloc_semantic_scope_push"
+                },
+                replacement_resolution_status:
+                    "rustc_middle_multiple_heap_object_types_not_lowered",
+                replacement_preview: format!(
+                    "Skipped semantic-scope lowering because the Clone result has multiple supported heap owners: {}",
+                    owners.join(", ")
+                ),
+                semantic_scope_unwind_pop_inserted: false,
+                metadata_pairing_contract: "audit_only_ambiguous_heap_object_type",
+                lowering_kind: "semantic_scope_unsolved_heap_object_candidate",
+            });
+            continue;
+        }
         if semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE {
             // Do not turn non-heap iterator/Bencher/helper calls into typed
             // allocation evidence.  Keep an explicit audit row so the solver
