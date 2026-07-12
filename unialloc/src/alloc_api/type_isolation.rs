@@ -22100,6 +22100,186 @@ mod tests {
     }
 
     #[test]
+    fn cross_thread_realloc_to_zero_retires_old_identity_without_publishing_new_one() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xD17A_CA01)
+            .with_module(0xC0DE_CA00)
+            .with_callsite(0xA110_CA01)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0xA1);
+        let requested_metadata = AllocationMetadata::for_type(0xD17A_CA02)
+            .with_module(old_metadata.module_id)
+            .with_callsite(0xA110_CA02)
+            .with_flags(old_metadata.flags)
+            .with_placement_hint(old_metadata.placement_hint);
+        assert_ne!(old_metadata.type_id, requested_metadata.type_id);
+
+        let ptr = unsafe {
+            __unialloc_alloc_with_metadata_hints(
+                layout.size(),
+                layout.align(),
+                old_metadata.type_id,
+                old_metadata.module_id,
+                old_metadata.flags,
+                old_metadata.lifetime_hint,
+                old_metadata.placement_hint,
+                old_metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        unsafe {
+            core::ptr::write_bytes(ptr, 0xA5, layout.size());
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(old_metadata)
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert!(!current_thread_fast_auto_allocation_records_active());
+
+        let validation_before = semantic_metadata_validation_snapshot();
+        let stats_before = semantic_stats_snapshot();
+        let ptr_addr = ptr as usize;
+        let worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            unsafe {
+                clear_delayed_free_for_test();
+            }
+            let ptr = ptr_addr as *mut u8;
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                Some(old_metadata),
+                "foreign-thread realloc-to-zero must observe the allocation identity"
+            );
+
+            let zero_ptr = unsafe {
+                __unialloc_realloc_with_metadata_hints(
+                    ptr,
+                    layout.size(),
+                    layout.align(),
+                    0,
+                    requested_metadata.type_id,
+                    requested_metadata.module_id,
+                    requested_metadata.flags,
+                    requested_metadata.lifetime_hint,
+                    requested_metadata.placement_hint,
+                    requested_metadata.callsite,
+                )
+            };
+            assert_eq!(
+                zero_ptr as usize,
+                layout.align(),
+                "realloc-to-zero must return the layout-aligned sentinel"
+            );
+            assert_eq!((zero_ptr as usize) & (layout.align() - 1), 0);
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                None,
+                "realloc-to-zero must consume the old process-visible recovery record"
+            );
+            assert_eq!(
+                AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+                0,
+                "realloc-to-zero must not publish a replacement recovery record"
+            );
+            assert!(!current_thread_fast_auto_allocation_records_active());
+            assert!(
+                !semantic_runtime_slow_path_enabled(),
+                "retiring the final recovery identity must not leave stale slow-path state"
+            );
+            assert_eq!(delayed_free_snapshot().occupied_slots, 0);
+
+            // FLAG_TYPE_ISOLATED uses the ordinary TLS side-cache on hosted and
+            // fixed_heap builds. This assertion proves identity-key isolation in
+            // that cache; it deliberately makes no hugepage-domain claim.
+            let cached = type_isolation_side_cache_snapshot();
+            assert!(cached.inline_occupied);
+            assert_eq!(cached.occupied_entries, 1);
+            assert_eq!(cached.occupied_slots, 0);
+            assert_eq!(cached.corrupt_slots, 0);
+            let inline = unsafe { inline_type_cache_entry_snapshot_for_test() };
+            assert_eq!(inline.ptr, ptr);
+            assert_eq!(inline.type_id, old_metadata.type_id);
+
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, requested_metadata) },
+                None,
+                "a distinct same-layout type must not observe the retired allocation"
+            );
+            let after_wrong_type = type_isolation_side_cache_snapshot();
+            assert!(after_wrong_type.inline_occupied);
+            assert_eq!(after_wrong_type.occupied_entries, 1);
+            assert_eq!(after_wrong_type.corrupt_slots, 0);
+
+            let recovered = unsafe {
+                pop_semantic_type_cache(layout, old_metadata)
+                    .expect("the allocation type must recover its retired storage")
+            };
+            assert_eq!(recovered, ptr);
+            for offset in 0..layout.size() {
+                assert_eq!(unsafe { *recovered.add(offset) }, 0xA5);
+            }
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, old_metadata) },
+                None,
+                "the retired storage must have one cache owner"
+            );
+            let drained = type_isolation_side_cache_snapshot();
+            assert!(!drained.inline_occupied);
+            assert_eq!(drained.occupied_entries, 0);
+            assert_eq!(drained.corrupt_slots, 0);
+
+            // `recovered` is the sole owned raw pointer after the one successful
+            // cache pop, so cleanup performs exactly one raw free.
+            unsafe {
+                alloc.dealloc_raw(recovered, layout);
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+            }
+        });
+        worker
+            .join()
+            .expect("cross-thread realloc-to-zero identity retirement regression");
+
+        let validation_after = semantic_metadata_validation_snapshot();
+        assert_eq!(
+            validation_after.recovery_identity_matches,
+            validation_before.recovery_identity_matches + 1,
+            "the recovered old side of the split realloc must validate exactly once"
+        );
+        assert_eq!(
+            validation_after.recovery_identity_mismatches,
+            validation_before.recovery_identity_mismatches,
+            "the unmaterialized new type must not be compared as an old allocation identity"
+        );
+        let stats_after = semantic_stats_snapshot();
+        assert_eq!(
+            stats_after.metadata_pac_auth_failures,
+            stats_before.metadata_pac_auth_failures
+        );
+        assert_eq!(
+            stats_after.metadata_pac_software_fallback_failures,
+            stats_before.metadata_pac_software_fallback_failures
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        assert!(!semantic_runtime_slow_path_enabled());
+    }
+
+    #[test]
     fn cross_thread_realloc_keeps_hugepage_and_ordinary_policies_separate() {
         let _guard = test_guard();
         unsafe {
