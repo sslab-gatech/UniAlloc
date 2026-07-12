@@ -4,7 +4,8 @@ use crate::alloc_api::type_isolation::{
     active_allocation_metadata, active_allocation_metadata_requires_recovery_record,
     auto_allocation_metadata, auto_reallocation_old_metadata,
     checked_recorded_reallocation_old_metadata, deallocation_metadata_after_recovery_record,
-    recorded_reallocation_old_metadata, select_auto_allocation_metadata,
+    recorded_reallocation_old_metadata, reject_global_delayed_free_owned_pointer,
+    select_auto_allocation_metadata,
     semantic_allocation_slow_path_enabled,
     semantic_fallback_attribution_record_raw_alloc_no_metadata,
     semantic_fallback_attribution_record_raw_dealloc_no_metadata,
@@ -471,6 +472,7 @@ impl RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
+        reject_global_delayed_free_owned_pointer(ptr);
         if layout_uses_over_page_alignment(layout) {
             dealloc_over_page_aligned_raw(ptr, layout);
             return;
@@ -503,6 +505,7 @@ impl RustAllocator {
         if ptr.is_null() && layout.size() != 0 {
             return core::ptr::null_mut();
         }
+        reject_global_delayed_free_owned_pointer(ptr);
 
         #[cfg(feature = "fixed_heap")]
         if !ensure_fixed_heap_runtime_ready() {
@@ -553,6 +556,7 @@ impl RustAllocator {
         old_layout: Layout,
         new_layout: Layout,
     ) -> *mut u8 {
+        reject_global_delayed_free_owned_pointer(ptr);
         let selected_metadata = if let Some(metadata) = active_allocation_metadata() {
             let record_recovery = active_allocation_metadata_requires_recovery_record(metadata);
             Some((metadata, record_recovery, !record_recovery, Some(metadata)))
@@ -712,6 +716,7 @@ unsafe impl GlobalAlloc for RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
+        reject_global_delayed_free_owned_pointer(ptr);
         if !cfg!(feature = "quarantine") && !semantic_runtime_slow_path_enabled() {
             return self.dealloc_raw(ptr, layout);
         }
@@ -743,6 +748,7 @@ unsafe impl GlobalAlloc for RustAllocator {
         if ptr.is_null() && layout.size() != 0 {
             return core::ptr::null_mut();
         }
+        reject_global_delayed_free_owned_pointer(ptr);
         if !cfg!(feature = "quarantine") && !semantic_runtime_slow_path_enabled() {
             return self.realloc_raw(ptr, layout, new_size);
         }

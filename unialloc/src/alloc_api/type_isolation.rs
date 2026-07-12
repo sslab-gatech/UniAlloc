@@ -35,6 +35,15 @@ const SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY: u8 = 0;
 const SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE: u8 = 1;
 const TYPE_CACHE_NODE_WORDS: usize = 3;
 const DELAYED_FREE_SLOTS: usize = 32;
+/// Process-visible ownership records for objects retained in per-thread quarantine rings.
+///
+/// The retained objects themselves remain thread-local.  This small sharded
+/// pointer set exists only to prevent a foreign thread from treating an object
+/// still owned by another thread's quarantine as freshly deallocated storage.
+const GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_COUNT: usize = 8;
+const GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_SLOTS: usize = 32;
+const GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_MASK: usize =
+    GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_COUNT - 1;
 /// Maximum allocator-rounded bytes retained by one thread's delayed-free quarantine ring.
 ///
 /// Delayed free is a reuse-hardening policy, but retaining 32 large objects can
@@ -2242,6 +2251,18 @@ struct DelayedFreeSlot {
     metadata: AllocationMetadata,
 }
 
+struct GlobalDelayedFreeOwnershipTable {
+    ptrs: [usize; GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_SLOTS],
+}
+
+impl GlobalDelayedFreeOwnershipTable {
+    const fn empty() -> Self {
+        Self {
+            ptrs: [0; GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_SLOTS],
+        }
+    }
+}
+
 impl DelayedFreeSlot {
     const fn empty() -> Self {
         Self {
@@ -2366,6 +2387,19 @@ static mut DELAYED_FREE_RETAINED_BYTES: usize = 0;
 // empty slots while preventing a stale mask from hiding retained objects.
 #[thread_local]
 static mut DELAYED_FREE_OCCUPIED_MASK: usize = 0;
+
+static GLOBAL_DELAYED_FREE_OWNERSHIP: [Mutex<GlobalDelayedFreeOwnershipTable>;
+    GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_COUNT] = [
+    Mutex::new(GlobalDelayedFreeOwnershipTable::empty()),
+    Mutex::new(GlobalDelayedFreeOwnershipTable::empty()),
+    Mutex::new(GlobalDelayedFreeOwnershipTable::empty()),
+    Mutex::new(GlobalDelayedFreeOwnershipTable::empty()),
+    Mutex::new(GlobalDelayedFreeOwnershipTable::empty()),
+    Mutex::new(GlobalDelayedFreeOwnershipTable::empty()),
+    Mutex::new(GlobalDelayedFreeOwnershipTable::empty()),
+    Mutex::new(GlobalDelayedFreeOwnershipTable::empty()),
+];
+static GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[thread_local]
 static mut MEMORY_TAGS: [TaggedAllocation; MEMORY_TAG_FAST_SLOTS] =
@@ -8838,11 +8872,152 @@ unsafe fn dealloc_guarded(ptr: *mut u8, layout: Layout, metadata: AllocationMeta
     }
 }
 
-unsafe fn enqueue_delayed_free(
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GlobalDelayedFreeRegistration {
+    Inserted,
+    Duplicate,
+    Full,
+}
+
+struct PendingGlobalDelayedFreeOwnership {
+    ptr: *mut u8,
+    committed: bool,
+}
+
+impl PendingGlobalDelayedFreeOwnership {
+    #[inline]
+    fn new(ptr: *mut u8) -> Self {
+        Self {
+            ptr,
+            committed: false,
+        }
+    }
+
+    #[inline]
+    fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for PendingGlobalDelayedFreeOwnership {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = unregister_global_delayed_free_ownership(self.ptr);
+        }
+    }
+}
+
+#[inline]
+fn global_delayed_free_ownership_shard(ptr: *mut u8) -> usize {
+    let value = (ptr as usize) >> 3;
+    let mixed = value ^ (value >> 17) ^ (value >> 31);
+    mixed & GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_MASK
+}
+
+fn global_delayed_free_contains_ptr(ptr: *mut u8) -> bool {
+    if ptr.is_null() || GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire) == 0 {
+        return false;
+    }
+    let ptr_key = ptr as usize;
+    GLOBAL_DELAYED_FREE_OWNERSHIP[global_delayed_free_ownership_shard(ptr)]
+        .lock()
+        .ptrs
+        .iter()
+        .any(|candidate| *candidate == ptr_key)
+}
+
+/// Fail-stop before a caller can read, resize, release, or otherwise reclaim a
+/// pointer whose delayed-free ownership has already been published by another
+/// thread. Raw and trait-level allocator entry points call this in addition to
+/// the metadata-aware deallocation transaction.
+#[inline]
+pub(crate) fn reject_global_delayed_free_owned_pointer(ptr: *mut u8) {
+    if global_delayed_free_contains_ptr(ptr) {
+        panic!("delayed-free pointer already quarantined");
+    }
+}
+
+fn register_global_delayed_free_ownership(ptr: *mut u8) -> GlobalDelayedFreeRegistration {
+    if ptr.is_null() {
+        return GlobalDelayedFreeRegistration::Full;
+    }
+    let ptr_key = ptr as usize;
+    let mut table = GLOBAL_DELAYED_FREE_OWNERSHIP[global_delayed_free_ownership_shard(ptr)].lock();
+    let mut first_empty = None;
+    for (idx, candidate) in table.ptrs.iter().enumerate() {
+        if *candidate == ptr_key {
+            return GlobalDelayedFreeRegistration::Duplicate;
+        }
+        if first_empty.is_none() && *candidate == 0 {
+            first_empty = Some(idx);
+        }
+    }
+    let idx = match first_empty {
+        Some(idx) => idx,
+        None => return GlobalDelayedFreeRegistration::Full,
+    };
+    // Publish the nonzero process gate before the table entry while retaining
+    // the shard lock. A reader that observes the gate must take this same lock,
+    // so it cannot inspect the table until the pointer has been installed and
+    // the registration lock is released. Publishing the pointer first would
+    // leave a small false-zero window in the count fast path.
+    GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.fetch_add(1, Ordering::Release);
+    table.ptrs[idx] = ptr_key;
+    GlobalDelayedFreeRegistration::Inserted
+}
+
+fn unregister_global_delayed_free_ownership(ptr: *mut u8) -> bool {
+    if ptr.is_null() || GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire) == 0 {
+        return false;
+    }
+    let ptr_key = ptr as usize;
+    let mut table = GLOBAL_DELAYED_FREE_OWNERSHIP[global_delayed_free_ownership_shard(ptr)].lock();
+    let idx = match table
+        .ptrs
+        .iter()
+        .position(|candidate| *candidate == ptr_key)
+    {
+        Some(idx) => idx,
+        None => return false,
+    };
+    table.ptrs[idx] = 0;
+    GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+    true
+}
+
+fn begin_global_delayed_free_ownership(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> Option<PendingGlobalDelayedFreeOwnership> {
+    let quarantine_eligible = metadata.requests(FLAG_DELAYED_FREE)
+        && delayed_free_retained_bytes_for_layout(layout) <= MAX_DELAYED_FREE_RETAINED_BYTES;
+    if quarantine_eligible {
+        return match register_global_delayed_free_ownership(ptr) {
+            GlobalDelayedFreeRegistration::Inserted => {
+                Some(PendingGlobalDelayedFreeOwnership::new(ptr))
+            }
+            GlobalDelayedFreeRegistration::Duplicate => {
+                panic!("delayed-free pointer already quarantined")
+            }
+            // The registry is deliberately bounded. Never create hidden TLS
+            // ownership when its shard is full; the caller must use immediate
+            // non-delayed release instead.
+            GlobalDelayedFreeRegistration::Full => None,
+        };
+    }
+    if global_delayed_free_contains_ptr(ptr) {
+        panic!("delayed-free pointer already quarantined");
+    }
+    None
+}
+
+unsafe fn enqueue_delayed_free_with_ownership(
     alloc: &RustAllocator,
     ptr: *mut u8,
     layout: Layout,
     metadata: AllocationMetadata,
+    ownership: PendingGlobalDelayedFreeOwnership,
 ) -> Option<DelayedFreeSlot> {
     if ptr.is_null() {
         return None;
@@ -8891,6 +9066,7 @@ unsafe fn enqueue_delayed_free(
         evicted.retained_bytes()
     };
     DELAYED_FREE[idx] = incoming;
+    ownership.commit();
     delayed_free_mark_slot_occupied(idx, true);
     DELAYED_FREE_RETAINED_BYTES = DELAYED_FREE_RETAINED_BYTES
         .saturating_sub(evicted_size)
@@ -8903,6 +9079,38 @@ unsafe fn enqueue_delayed_free(
         record_stats_delayed_free_flush();
         Some(evicted)
     }
+}
+
+/// Test/internal convenience path for callers that are not already inside the
+/// deallocation transaction. Production deallocation acquires ownership before
+/// any validation or allocator mutation and calls
+/// `enqueue_delayed_free_with_ownership` directly.
+unsafe fn enqueue_delayed_free(
+    alloc: &RustAllocator,
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> Option<DelayedFreeSlot> {
+    if ptr.is_null() {
+        return None;
+    }
+    let ownership = match register_global_delayed_free_ownership(ptr) {
+        GlobalDelayedFreeRegistration::Inserted => PendingGlobalDelayedFreeOwnership::new(ptr),
+        GlobalDelayedFreeRegistration::Duplicate => {
+            panic!("delayed-free pointer already quarantined")
+        }
+        GlobalDelayedFreeRegistration::Full => {
+            record_stats_delayed_free_flush();
+            return Some(DelayedFreeSlot {
+                ptr,
+                size: layout.size(),
+                align: layout.align(),
+                auth: metadata_record_auth(ptr, layout, metadata),
+                metadata,
+            });
+        }
+    };
+    enqueue_delayed_free_with_ownership(alloc, ptr, layout, metadata, ownership)
 }
 
 #[inline]
@@ -9024,6 +9232,7 @@ unsafe fn release_delayed_slot(alloc: &RustAllocator, slot: DelayedFreeSlot) {
     }
     let layout = checked_side_table_layout(slot.size, slot.align, "delayed free");
     verify_metadata_record_auth(slot.ptr, layout, slot.metadata, slot.metadata, slot.auth);
+    let _ = unregister_global_delayed_free_ownership(slot.ptr);
     let metadata = slot
         .metadata
         .with_flags(slot.metadata.flags & !FLAG_DELAYED_FREE);
@@ -9085,6 +9294,7 @@ pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAl
                     idx += 1;
                     continue;
                 }
+                let _ = unregister_global_delayed_free_ownership(slot.ptr);
                 if slot.metadata.requests(FLAG_FORCE_INITIALIZE) {
                     core::ptr::write_bytes(slot.ptr, 0, layout.size());
                 }
@@ -9407,6 +9617,7 @@ pub unsafe trait SemanticAlloc {
         old_metadata: AllocationMetadata,
         new_metadata: AllocationMetadata,
     ) -> *mut u8 {
+        reject_global_delayed_free_owned_pointer(ptr);
         let new_layout = match Layout::from_size_align(new_size, old_layout.align()) {
             Ok(layout) => layout,
             Err(_) => return core::ptr::null_mut(),
@@ -9779,6 +9990,10 @@ impl RustAllocator {
         metadata: AllocationMetadata,
         consume_recovery_record: bool,
     ) {
+        // Local TLS state remains a defensive authority if a stale/corrupt
+        // test or older caller produced an entry without the process-visible
+        // registry. Check it before trying to acquire ownership for this
+        // deallocation.
         if (DELAYED_FREE_RETAINED_BYTES != 0 || DELAYED_FREE_OCCUPIED_MASK != 0)
             && delayed_free_contains_ptr(ptr)
         {
@@ -9787,6 +10002,14 @@ impl RustAllocator {
             // delayed-free flag and escape through a raw/compiler fast path.
             panic!("delayed-free pointer already quarantined");
         }
+
+        // Acquire process-visible ownership before memory-tag validation,
+        // recovery-record consumption, statistics, cache mutation, or raw
+        // release. This is the linearization point against a foreign-thread
+        // duplicate that omits FLAG_DELAYED_FREE. The pending guard rolls the
+        // registration back if any later validation panics before the TLS ring
+        // publishes the slot.
+        let mut pending_quarantine = begin_global_delayed_free_ownership(ptr, layout, metadata);
         if layout_derived_raw_only_fast_path(metadata) {
             if consume_recovery_record {
                 let _ = recover_auto_allocation_record_metadata(ptr, layout, true);
@@ -9813,8 +10036,27 @@ impl RustAllocator {
             return;
         }
         if metadata.requests(FLAG_DELAYED_FREE) {
-            if let Some(slot) = enqueue_delayed_free(self, ptr, layout, metadata) {
-                release_delayed_slot(self, slot);
+            if let Some(ownership) = pending_quarantine.take() {
+                if let Some(slot) =
+                    enqueue_delayed_free_with_ownership(self, ptr, layout, metadata, ownership)
+                {
+                    release_delayed_slot(self, slot);
+                }
+            } else {
+                // Oversized objects and registry-pressure fallbacks must not be
+                // hidden in TLS. Validate the same authenticated metadata, then
+                // release under the ordinary non-delayed policy.
+                record_stats_delayed_free_flush();
+                release_delayed_slot(
+                    self,
+                    DelayedFreeSlot {
+                        ptr,
+                        size: layout.size(),
+                        align: layout.align(),
+                        auth: metadata_record_auth(ptr, layout, metadata),
+                        metadata,
+                    },
+                );
             }
             return;
         }
@@ -9881,6 +10123,7 @@ unsafe impl SemanticAlloc for RustAllocator {
         old_metadata: AllocationMetadata,
         new_metadata: AllocationMetadata,
     ) -> *mut u8 {
+        reject_global_delayed_free_owned_pointer(ptr);
         let new_layout = match Layout::from_size_align(new_size, old_layout.align()) {
             Ok(layout) => layout,
             Err(_) => return core::ptr::null_mut(),
@@ -14190,6 +14433,14 @@ mod tests {
     }
 
     unsafe fn clear_delayed_free_for_test() {
+        let mut idx = 0usize;
+        while idx < DELAYED_FREE_SLOTS {
+            let slot = DELAYED_FREE[idx];
+            if !slot.is_empty() {
+                let _ = unregister_global_delayed_free_ownership(slot.ptr);
+            }
+            idx += 1;
+        }
         DELAYED_FREE = [DelayedFreeSlot::empty(); DELAYED_FREE_SLOTS];
         DELAYED_FREE_CURSOR = 0;
         DELAYED_FREE_RETAINED_BYTES = 0;
@@ -21776,6 +22027,356 @@ mod tests {
             release_delayed_free_for_test(&alloc);
         }
         assert_eq!(delayed_free_snapshot().occupied_slots, 0);
+    }
+
+    #[test]
+    fn cross_thread_delayed_free_rejects_foreign_duplicate_without_memory_tagging() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xD17A_D0B3)
+            .with_module(0xC0DE_D0B3)
+            .with_callsite(0xA110_D0B3)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x73);
+        let bypass_metadata = metadata.with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = unsafe { RustAllocator::new().alloc_with_recovery_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+
+        let ptr_addr = ptr as usize;
+        let (quarantined_tx, quarantined_rx) = std::sync::mpsc::channel();
+        let (cleanup_tx, cleanup_rx) = std::sync::mpsc::channel();
+        let owner = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = ptr_addr as *mut u8;
+            unsafe {
+                alloc.dealloc_with_metadata(ptr, layout, metadata);
+            }
+            assert_eq!(delayed_free_snapshot().occupied_slots, 1);
+            quarantined_tx.send(()).unwrap();
+            cleanup_rx.recv().unwrap();
+
+            unsafe {
+                release_delayed_free_for_test(&alloc);
+                let released = pop_semantic_type_cache(layout, bypass_metadata)
+                    .expect("owner cleanup should recover the released quarantine entry");
+                assert_eq!(released, ptr);
+                alloc.dealloc_raw(released, layout);
+            }
+        });
+        quarantined_rx.recv().unwrap();
+
+        let duplicate = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = ptr_addr as *mut u8;
+            let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                alloc.dealloc_with_metadata(ptr, layout, bypass_metadata);
+            }))
+            .is_err();
+            let reused = if rejected {
+                false
+            } else {
+                let reused = unsafe { alloc.alloc_with_metadata(layout, bypass_metadata) };
+                assert_eq!(
+                    reused, ptr,
+                    "the unfixed foreign duplicate path should expose the quarantined pointer through the second thread's cache"
+                );
+                true
+            };
+            (rejected, reused)
+        })
+        .join()
+        .expect("foreign duplicate worker");
+
+        cleanup_tx.send(()).unwrap();
+        owner.join().expect("quarantine owner cleanup");
+        assert!(
+            duplicate.0,
+            "process-visible quarantine ownership must reject a foreign-thread duplicate"
+        );
+        assert!(
+            !duplicate.1,
+            "a foreign thread must not reuse storage while another thread quarantines it"
+        );
+    }
+
+    #[test]
+    fn cross_thread_delayed_free_rejects_raw_and_semantic_reallocation_entry_points() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = [
+            AllocationMetadata::for_type(0xD17A_D0C0)
+                .with_module(0xC0DE_D0C0)
+                .with_callsite(0xA110_D0C0)
+                .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE),
+            AllocationMetadata::for_type(0xD17A_D0C1)
+                .with_module(0xC0DE_D0C1)
+                .with_callsite(0xA110_D0C1)
+                .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE),
+            AllocationMetadata::for_type(0xD17A_D0C2)
+                .with_module(0xC0DE_D0C2)
+                .with_callsite(0xA110_D0C2)
+                .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE),
+        ];
+        let alloc = RustAllocator::new();
+        let ptrs = metadata.map(|entry| unsafe {
+            let ptr = alloc.alloc_with_recovery_metadata(layout, entry);
+            assert!(!ptr.is_null());
+            ptr
+        });
+        let ptr_addrs = ptrs.map(|ptr| ptr as usize);
+
+        let (quarantined_tx, quarantined_rx) = std::sync::mpsc::channel();
+        let (cleanup_tx, cleanup_rx) = std::sync::mpsc::channel();
+        let owner = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            for idx in 0..ptr_addrs.len() {
+                unsafe {
+                    alloc.dealloc_with_metadata(ptr_addrs[idx] as *mut u8, layout, metadata[idx]);
+                }
+            }
+            assert_eq!(delayed_free_snapshot().occupied_slots, ptr_addrs.len());
+            quarantined_tx.send(()).unwrap();
+            cleanup_rx.recv().unwrap();
+
+            unsafe {
+                release_delayed_free_for_test(&alloc);
+                for idx in 0..ptr_addrs.len() {
+                    let immediate_metadata = metadata[idx].with_flags(FLAG_TYPE_ISOLATED);
+                    let released = pop_semantic_type_cache(layout, immediate_metadata)
+                        .expect("owner cleanup should recover each released quarantine entry");
+                    assert_eq!(released, ptr_addrs[idx] as *mut u8);
+                    alloc.dealloc_raw(released, layout);
+                }
+            }
+        });
+        quarantined_rx.recv().unwrap();
+
+        let global_dealloc_rejected =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                <RustAllocator as GlobalAlloc>::dealloc(&alloc, ptrs[0], layout);
+            }))
+            .is_err();
+        let global_realloc_rejected =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                <RustAllocator as GlobalAlloc>::realloc(&alloc, ptrs[1], layout, layout.size());
+            }))
+            .is_err();
+        let semantic_realloc_rejected =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                <RustAllocator as SemanticAlloc>::realloc_with_split_metadata(
+                    &alloc,
+                    ptrs[2],
+                    layout,
+                    layout.size(),
+                    metadata[2].with_flags(FLAG_TYPE_ISOLATED),
+                    metadata[2].with_flags(FLAG_TYPE_ISOLATED),
+                );
+            }))
+            .is_err();
+
+        assert!(
+            global_dealloc_rejected,
+            "GlobalAlloc::dealloc must fail-stop"
+        );
+        assert!(
+            global_realloc_rejected,
+            "GlobalAlloc::realloc must fail-stop"
+        );
+        assert!(
+            semantic_realloc_rejected,
+            "SemanticAlloc::realloc_with_split_metadata must fail-stop before in-place reuse"
+        );
+        for ptr in ptrs {
+            assert!(global_delayed_free_contains_ptr(ptr));
+        }
+
+        cleanup_tx.send(()).unwrap();
+        owner.join().expect("quarantine owner cleanup");
+    }
+
+    #[test]
+    fn pending_cross_thread_quarantine_ownership_blocks_foreign_dealloc_before_tls_publish() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let delayed_metadata = AllocationMetadata::for_type(0xD17A_D0B4)
+            .with_module(0xC0DE_D0B4)
+            .with_callsite(0xA110_D0B4)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE);
+        let immediate_metadata = delayed_metadata.with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = unsafe { alloc.alloc_raw(layout) };
+        assert!(!ptr.is_null());
+
+        let ptr_addr = ptr as usize;
+        let (registered_tx, registered_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let pending_owner = thread::spawn(move || {
+            let ptr = ptr_addr as *mut u8;
+            let pending = begin_global_delayed_free_ownership(ptr, layout, delayed_metadata)
+                .expect("test pointer should acquire bounded quarantine ownership");
+            registered_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+            drop(pending);
+        });
+        registered_rx.recv().unwrap();
+
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            alloc.dealloc_with_resolved_metadata(ptr, layout, immediate_metadata, false);
+        }));
+        assert!(
+            rejected.is_err(),
+            "foreign deallocation must observe pending ownership before TLS publication"
+        );
+        assert!(global_delayed_free_contains_ptr(ptr));
+
+        release_tx.send(()).unwrap();
+        pending_owner.join().expect("pending quarantine owner");
+        assert!(
+            !global_delayed_free_contains_ptr(ptr),
+            "uncommitted pending ownership must unregister on guard drop"
+        );
+        unsafe {
+            alloc.dealloc_raw(ptr, layout);
+        }
+    }
+
+    #[test]
+    fn delayed_free_registry_pressure_falls_back_to_immediate_release() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let delayed_metadata = AllocationMetadata::for_type(0xD17A_D0B5)
+            .with_module(0xC0DE_D0B5)
+            .with_callsite(0xA110_D0B5)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE);
+        let immediate_metadata = delayed_metadata.with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = unsafe { alloc.alloc_with_metadata(layout, delayed_metadata) };
+        assert!(!ptr.is_null());
+
+        let baseline_registrations = GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire);
+        let target_shard = global_delayed_free_ownership_shard(ptr);
+        let mut owners: [Option<PendingGlobalDelayedFreeOwnership>;
+            GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_SLOTS] = core::array::from_fn(|_| None);
+        let mut candidate = 8usize;
+        let mut inserted = 0usize;
+        let mut observed_full = false;
+        while inserted < owners.len() && !observed_full {
+            let fake_ptr = candidate as *mut u8;
+            candidate = candidate.wrapping_add(8);
+            if fake_ptr == ptr
+                || global_delayed_free_ownership_shard(fake_ptr) != target_shard
+                || global_delayed_free_contains_ptr(fake_ptr)
+            {
+                continue;
+            }
+            match register_global_delayed_free_ownership(fake_ptr) {
+                GlobalDelayedFreeRegistration::Inserted => {
+                    owners[inserted] = Some(PendingGlobalDelayedFreeOwnership::new(fake_ptr));
+                    inserted += 1;
+                }
+                GlobalDelayedFreeRegistration::Duplicate => {}
+                GlobalDelayedFreeRegistration::Full => observed_full = true,
+            }
+        }
+        assert!(
+            observed_full || inserted == owners.len(),
+            "the test must saturate the target ownership shard before deallocation"
+        );
+
+        unsafe {
+            alloc.dealloc_with_metadata(ptr, layout, delayed_metadata);
+        }
+        assert_eq!(
+            delayed_free_snapshot().occupied_slots,
+            0,
+            "registry pressure must not create quarantine ownership invisible to other threads"
+        );
+        let reused = unsafe { alloc.alloc_with_metadata(layout, immediate_metadata) };
+        assert_eq!(
+            reused, ptr,
+            "bounded-registry fallback should release through the ordinary type cache"
+        );
+        unsafe {
+            alloc.dealloc_raw(reused, layout);
+        }
+
+        drop(owners);
+        assert_eq!(
+            GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            baseline_registrations,
+            "dropping pending ownership guards must restore the pre-test registry count"
+        );
+    }
+
+    #[test]
+    fn pending_delayed_free_ownership_rolls_back_during_unwind() {
+        let _guard = test_guard();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xD17A_D0B6)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE);
+        let baseline_registrations = GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire);
+        let mut fake_addr = 0xD0B6_0008usize;
+        while global_delayed_free_contains_ptr(fake_addr as *mut u8) {
+            fake_addr = fake_addr.wrapping_add(8);
+        }
+        let fake_ptr = fake_addr as *mut u8;
+
+        let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _pending = begin_global_delayed_free_ownership(fake_ptr, layout, metadata)
+                .expect("test pointer should acquire pending ownership");
+            assert!(global_delayed_free_contains_ptr(fake_ptr));
+            panic!("exercise pending ownership unwind");
+        }));
+        assert!(unwound.is_err());
+        assert!(
+            !global_delayed_free_contains_ptr(fake_ptr),
+            "pending ownership must unregister during panic unwinding"
+        );
+        assert_eq!(
+            GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            baseline_registrations
+        );
     }
 
     #[test]
