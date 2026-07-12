@@ -275,6 +275,26 @@ This bundle is functional actual-rustc evidence only: it is not a benchmark,
 does not support a percentage, and does not establish universal compiler or
 container coverage.
 
+### Boxed-slice to `Vec` ownership-identity transfer
+
+At `3d08399`,
+`python3 tools/unialloc-rustc-pass/test_mir_box_slice_into_vec_rebind.py`
+compiles and runs ordinary Rust source through the actual rustc pass.  Exact
+DefId and structural type matching rewrites the `Box<[T], A>`-to-`Vec<T, A>`
+ownership transfer to `__unialloc_semantic_box_slice_into_vec`, preserving the
+allocation pointer and payload while rebinding only the live recovery `type_id`
+from the Box owner to a distinct compiler-derived Vec owner identity; module,
+flags, hints, and the allocation callsite remain bound to the original
+allocation.  The probe observes wrong-type non-reuse followed by exact
+same-Vec-type reuse, typed allocation/deallocation `3/3`, and raw fallback,
+recovery mismatch, and corrupt-slot counts all `0`.  Separately, the runtime
+regression `box_slice_into_vec_rebind_rejects_memory_tagged_record_without_mutation`
+verifies that a memory-tagged record fails closed and retains its old identity
+without mutation.
+
+This is one bounded functional ownership-transfer probe.  It does not establish
+universal compiler/container coverage, performance, or a paper percentage.
+
 ### Compiler-driven `Vec` realloc identity and type-isolation probe
 
 Commits `7096fc6`, `f0fe4d1`, and `37ea7cd` strengthen the focused `Vec<T>`
