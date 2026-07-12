@@ -13723,9 +13723,19 @@ mod tests {
             assert_eq!(delayed_free_snapshot().occupied_slots, 1);
 
             let released = drain_current_thread_semantic_state(&alloc);
+            // Every build owns two plain-cache objects, two segregated-cache
+            // objects, and one delayed-free object here. Hosted builds also
+            // create three hugepage-domain cache objects; fixed heaps compile
+            // that setup out and therefore must not be held to the hosted
+            // release count.
+            let minimum_expected_releases = 5;
+            #[cfg(not(feature = "fixed_heap"))]
+            let minimum_expected_releases = minimum_expected_releases + 3;
             assert!(
-                released >= 8,
-                "plain, segregated, delayed, and hugepage allocator-owned TLS objects must all be released"
+                released >= minimum_expected_releases,
+                "all allocator-owned TLS objects enabled for this build must be released; expected at least {}, released {}",
+                minimum_expected_releases,
+                released,
             );
             assert_eq!(
                 type_isolation_side_cache_snapshot(),
