@@ -21536,11 +21536,22 @@ mod tests {
             .with_callsite(0xA110_9011)
             .with_flags(FLAG_TYPE_ISOLATED)
             .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x11);
-        let consumer_metadata = AllocationMetadata::for_type(0xC003_9022)
-            .with_module(producer_metadata.module_id)
-            .with_callsite(0xA110_9022)
-            .with_flags(FLAG_TYPE_ISOLATED)
-            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x22);
+        let consumer_metadata = AllocationMetadata {
+            type_id: 0xC003_9022,
+            callsite: 0xA110_9022,
+            ..producer_metadata
+        };
+        assert_ne!(producer_metadata.type_id, consumer_metadata.type_id);
+        assert_eq!(producer_metadata.module_id, consumer_metadata.module_id);
+        assert_eq!(producer_metadata.flags, consumer_metadata.flags);
+        assert_eq!(
+            producer_metadata.lifetime_hint,
+            consumer_metadata.lifetime_hint
+        );
+        assert_eq!(
+            producer_metadata.placement_hint,
+            consumer_metadata.placement_hint
+        );
         assert_eq!(layout.size(), MIN_TYPE_CACHE_OBJECT_SIZE);
         assert!(compiler_type_isolated_recovery_fast_path(producer_metadata));
 
