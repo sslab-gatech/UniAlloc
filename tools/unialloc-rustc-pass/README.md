@@ -49,6 +49,35 @@ DYLD_LIBRARY_PATH="$SYSROOT/lib" /tmp/unialloc-rustc-allocation-sites \
   -- --sysroot "$SYSROOT" --edition=2021 /tmp/input.rs
 ```
 
+## Restrict a Cargo wrapper run to selected crates
+
+Set `UNIALLOC_RUSTC_TARGET_CRATES` to a comma-separated allowlist when using
+`unialloc-rustc-mir-rewrite-dry-run` as `RUSTC_WRAPPER` for a real application:
+
+```sh
+SYSROOT="$(rustc +$(cat rust-toolchain) --print sysroot)"
+DYLD_LIBRARY_PATH="$SYSROOT/lib" \
+UNIALLOC_RUSTC_TARGET_CRATES="my-app,my-helper" \
+UNIALLOC_REWRITE_AUDIT_DIR=/tmp/unialloc-rewrites \
+UNIALLOC_CONTINUE_COMPILATION=1 \
+RUSTC_WRAPPER=/tmp/unialloc-rustc-mir-rewrite-dry-run \
+cargo +$(cat rust-toolchain) build
+```
+
+The wrapper reads both `--crate-name NAME` and `--crate-name=NAME`. Cargo
+normalizes package hyphens to crate-name underscores, so allowlist matching
+trims whitespace and treats `my-app` and `my_app` equivalently. Matching remains
+case-sensitive. A nonempty allowlist makes every unselected dependency, build
+script, and rustc capability probe execute the original rustc with its original
+arguments and exit status; that bypass creates or updates no rewrite audit or
+pass log. An absent or empty allowlist preserves the existing all-crates
+behavior.
+
+For direct wrapper invocation, the equivalent option is
+`--unialloc-target-crates my-app,my-helper` (the `=...` form is also accepted).
+The environment variable is the intended Cargo integration because Cargo's
+`RUSTC_WRAPPER` setting names an executable rather than an argument vector.
+
 ## Run through the real Cargo bench target
 
 The evaluation wrapper builds the pass, runs `cargo clean -p unialloc` to avoid a

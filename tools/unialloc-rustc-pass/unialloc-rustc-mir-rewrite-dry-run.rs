@@ -63,7 +63,7 @@ use std::env;
 use std::fmt::Write as FmtWrite;
 use std::fs;
 use std::path::PathBuf;
-use std::process;
+use std::process::{self, Command};
 use std::sync::Mutex;
 
 const PASS_NAME: &str = "unialloc-rustc-driver-mir-rewrite-dry-run";
@@ -131,6 +131,8 @@ struct Cli {
     direct_local_metadata_abi: bool,
     direct_local_size_align_with_semantic_drop: bool,
     continue_compilation: bool,
+    target_crates: BTreeSet<String>,
+    original_rustc_args: Vec<String>,
     rustc_args: Vec<String>,
 }
 
@@ -357,7 +359,7 @@ struct SemanticDropCandidate<'tcx> {
 struct RewriteDryRunCallbacks;
 
 fn usage() -> &'static str {
-    "Usage:\n  RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs -o /tmp/unialloc-rustc-mir-rewrite-dry-run\n  DYLD_LIBRARY_PATH=$(rustc +$(cat rust-toolchain) --print sysroot)/lib /tmp/unialloc-rustc-mir-rewrite-dry-run \\\n    --unialloc-rewrite-audit-out /tmp/rewrite-audit.json -- --sysroot $(rustc +$(cat rust-toolchain) --print sysroot) --edition=2021 input.rs\n\nOptions:\n  --unialloc-rewrite-audit-out <path>  JSON rewrite audit output. Defaults to env UNIALLOC_REWRITE_AUDIT_OUT or ./unialloc-rustc-mir-rewrite-dry-run.json\n  --unialloc-rewrite-audit-dir <dir>   Wrapper-friendly output directory. Defaults to env UNIALLOC_REWRITE_AUDIT_DIR if set\n  --unialloc-pass-log-out <path>       Optional pass log output. Defaults to env UNIALLOC_PASS_LOG_OUT if set\n  --unialloc-pass-log-dir <dir>        Wrapper-friendly log directory. Defaults to env UNIALLOC_PASS_LOG_DIR if set\n  --unialloc-actual-mir-rewrite        Opt in to replacing supported direct allocator-call terminators. Defaults to env UNIALLOC_ACTUAL_MIR_REWRITE truthiness\n  --unialloc-actual-semantic-scope-rewrite  Opt in to inserting __unialloc_semantic_scope_push/pop around supported semantic allocation calls. Defaults to env UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE truthiness\n  --unialloc-auto-cross-thread-recovery-hint  OR the cross-thread recovery placement bit into solved heap-object scopes when the MIR body contains thread-spawn/escape calls. Defaults to env UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT truthiness\n  --unialloc-direct-local-metadata-abi  Use no-recovery UniAlloc Layout alloc/alloc_zeroed/realloc/dealloc ABI variants only when paired metadata deallocation/reallocation is explicit; unpaired size/align exchange_malloc keeps recovery ABI. Defaults to env UNIALLOC_DIRECT_LOCAL_METADATA_ABI truthiness\n  --unialloc-direct-local-size-align-with-semantic-drop  Allow no-recovery size/align exchange_malloc ABI only when semantic Drop-scope rewrite is also enabled and validated. Defaults to env UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP truthiness\n  --unialloc-policy-flags <u32>        Policy flags inserted into UniAlloc metadata. Defaults to env UNIALLOC_LOWERING_POLICY_FLAGS or 0x1 (TYPE_ISOLATED only)\n  --unialloc-lifetime-hint <u16>       Optional metadata lifetime hint. Defaults to env UNIALLOC_LOWERING_LIFETIME_HINT or 0\n  --unialloc-placement-hint <u16>      Optional metadata placement hint. Defaults to env UNIALLOC_LOWERING_PLACEMENT_HINT or 0\n  --unialloc-continue-compilation      Continue after analysis and produce normal rustc outputs. Actual rewrite modes continue by default. Defaults to env UNIALLOC_CONTINUE_COMPILATION truthiness\n  --unialloc-stop-after-analysis       Force analysis-only output even if an actual rewrite flag is set\n  --unialloc-dry-run-only              Force audit-only mode even if actual rewrite env flags are set\n  --unialloc-help                      Print this help\n\nEverything after `--` is passed to rustc_driver. Without `--`, remaining arguments are treated as rustc/wrapper arguments.\n"
+    "Usage:\n  RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs -o /tmp/unialloc-rustc-mir-rewrite-dry-run\n  DYLD_LIBRARY_PATH=$(rustc +$(cat rust-toolchain) --print sysroot)/lib /tmp/unialloc-rustc-mir-rewrite-dry-run \\\n    --unialloc-rewrite-audit-out /tmp/rewrite-audit.json -- --sysroot $(rustc +$(cat rust-toolchain) --print sysroot) --edition=2021 input.rs\n\nOptions:\n  --unialloc-rewrite-audit-out <path>  JSON rewrite audit output. Defaults to env UNIALLOC_REWRITE_AUDIT_OUT or ./unialloc-rustc-mir-rewrite-dry-run.json\n  --unialloc-rewrite-audit-dir <dir>   Wrapper-friendly output directory. Defaults to env UNIALLOC_REWRITE_AUDIT_DIR if set\n  --unialloc-pass-log-out <path>       Optional pass log output. Defaults to env UNIALLOC_PASS_LOG_OUT if set\n  --unialloc-pass-log-dir <dir>        Wrapper-friendly log directory. Defaults to env UNIALLOC_PASS_LOG_DIR if set\n  --unialloc-target-crates <names>     Optional comma-separated Cargo crate allowlist. Defaults to env UNIALLOC_RUSTC_TARGET_CRATES. Hyphens and underscores compare equivalently\n  --unialloc-actual-mir-rewrite        Opt in to replacing supported direct allocator-call terminators. Defaults to env UNIALLOC_ACTUAL_MIR_REWRITE truthiness\n  --unialloc-actual-semantic-scope-rewrite  Opt in to inserting __unialloc_semantic_scope_push/pop around supported semantic allocation calls. Defaults to env UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE truthiness\n  --unialloc-auto-cross-thread-recovery-hint  OR the cross-thread recovery placement bit into solved heap-object scopes when the MIR body contains thread-spawn/escape calls. Defaults to env UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT truthiness\n  --unialloc-direct-local-metadata-abi  Use no-recovery UniAlloc Layout alloc/alloc_zeroed/realloc/dealloc ABI variants only when paired metadata deallocation/reallocation is explicit; unpaired size/align exchange_malloc keeps recovery ABI. Defaults to env UNIALLOC_DIRECT_LOCAL_METADATA_ABI truthiness\n  --unialloc-direct-local-size-align-with-semantic-drop  Allow no-recovery size/align exchange_malloc ABI only when semantic Drop-scope rewrite is also enabled and validated. Defaults to env UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP truthiness\n  --unialloc-policy-flags <u32>        Policy flags inserted into UniAlloc metadata. Defaults to env UNIALLOC_LOWERING_POLICY_FLAGS or 0x1 (TYPE_ISOLATED only)\n  --unialloc-lifetime-hint <u16>       Optional metadata lifetime hint. Defaults to env UNIALLOC_LOWERING_LIFETIME_HINT or 0\n  --unialloc-placement-hint <u16>      Optional metadata placement hint. Defaults to env UNIALLOC_LOWERING_PLACEMENT_HINT or 0\n  --unialloc-continue-compilation      Continue after analysis and produce normal rustc outputs. Actual rewrite modes continue by default. Defaults to env UNIALLOC_CONTINUE_COMPILATION truthiness\n  --unialloc-stop-after-analysis       Force analysis-only output even if an actual rewrite flag is set\n  --unialloc-dry-run-only              Force audit-only mode even if actual rewrite env flags are set\n  --unialloc-help                      Print this help\n\nEverything after `--` is passed to rustc_driver. Without `--`, remaining arguments are treated as rustc/wrapper arguments.\n"
 }
 
 fn env_truthy(name: &str) -> bool {
@@ -468,13 +470,24 @@ fn looks_like_rustc_argv0(value: &str) -> bool {
     let path = PathBuf::from(value);
     path.file_name()
         .and_then(|name| name.to_str())
-        .map(|name| name == "rustc" || name.starts_with("rustc-"))
+        .map(|name| {
+            let name = name
+                .strip_suffix(".exe")
+                .or_else(|| name.strip_suffix(".EXE"))
+                .unwrap_or(name);
+            name == "rustc" || name.starts_with("rustc-")
+        })
         .unwrap_or(false)
 }
 
 fn derive_sysroot_from_rustc_argv0(argv0: &str) -> Option<String> {
     let path = PathBuf::from(argv0);
-    if path.file_name().and_then(|name| name.to_str()) != Some("rustc") {
+    let file_name = path.file_name()?.to_str()?;
+    let executable_name = file_name
+        .strip_suffix(".exe")
+        .or_else(|| file_name.strip_suffix(".EXE"))
+        .unwrap_or(file_name);
+    if executable_name != "rustc" {
         return None;
     }
     let bin = path.parent()?;
@@ -517,17 +530,41 @@ fn sanitize_filename(value: &str) -> String {
     }
 }
 
-fn crate_name_from_rustc_args(args: &[String]) -> String {
+fn rustc_crate_name(args: &[String]) -> Option<&str> {
     let mut idx = 0;
     while idx < args.len() {
         if args[idx] == "--crate-name" {
             if let Some(name) = args.get(idx + 1) {
-                return sanitize_filename(name);
+                if !name.starts_with('-') {
+                    return Some(name);
+                }
+            }
+        } else if let Some(name) = args[idx].strip_prefix("--crate-name=") {
+            if !name.is_empty() {
+                return Some(name);
             }
         }
         idx += 1;
     }
-    "rustc-input".to_string()
+    None
+}
+
+fn crate_name_from_rustc_args(args: &[String]) -> String {
+    rustc_crate_name(args)
+        .map(sanitize_filename)
+        .unwrap_or_else(|| "rustc-input".to_string())
+}
+
+fn normalized_target_crate_name(name: &str) -> String {
+    name.trim().replace('-', "_")
+}
+
+fn parse_target_crates(value: &str) -> BTreeSet<String> {
+    value
+        .split(',')
+        .map(normalized_target_crate_name)
+        .filter(|name| !name.is_empty())
+        .collect()
 }
 
 fn fnv1a64(bytes: &[u8]) -> u64 {
@@ -579,6 +616,10 @@ fn parse_cli() -> Result<Cli, String> {
     let mut direct_local_metadata_abi = env_truthy("UNIALLOC_DIRECT_LOCAL_METADATA_ABI");
     let mut direct_local_size_align_with_semantic_drop =
         env_truthy("UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP");
+    let mut target_crates = env::var("UNIALLOC_RUSTC_TARGET_CRATES")
+        .ok()
+        .map(|value| parse_target_crates(&value))
+        .unwrap_or_default();
     let mut continue_compilation = env_truthy("UNIALLOC_CONTINUE_COMPILATION");
     let mut force_stop_after_analysis = false;
     let mut passthrough: Vec<String> = Vec::new();
@@ -618,6 +659,22 @@ fn parse_cli() -> Result<Cli, String> {
                     return Err("--unialloc-pass-log-dir requires a directory".to_string());
                 }
                 pass_log_dir = Some(PathBuf::from(&raw[i]));
+            }
+            "--unialloc-target-crates" => {
+                i += 1;
+                if i >= raw.len() {
+                    return Err(
+                        "--unialloc-target-crates requires a comma-separated value".to_string()
+                    );
+                }
+                target_crates = parse_target_crates(&raw[i]);
+            }
+            value if value.starts_with("--unialloc-target-crates=") => {
+                target_crates = parse_target_crates(
+                    value
+                        .strip_prefix("--unialloc-target-crates=")
+                        .unwrap_or_default(),
+                );
             }
             "--unialloc-actual-mir-rewrite" => {
                 actual_rewrite = true;
@@ -687,11 +744,12 @@ fn parse_cli() -> Result<Cli, String> {
         return Err(format!("no rustc arguments supplied\n\n{}", usage()));
     }
 
-    let mut rustc_args = Vec::new();
+    let mut original_rustc_args = Vec::new();
     if saw_dashdash || !looks_like_rustc_argv0(&passthrough[0]) {
-        rustc_args.push("rustc".to_string());
+        original_rustc_args.push("rustc".to_string());
     }
-    rustc_args.extend(passthrough);
+    original_rustc_args.extend(passthrough);
+    let mut rustc_args = original_rustc_args.clone();
     inject_sysroot_if_missing(&mut rustc_args);
     if direct_local_size_align_with_semantic_drop {
         direct_local_metadata_abi = true;
@@ -723,6 +781,8 @@ fn parse_cli() -> Result<Cli, String> {
         direct_local_metadata_abi,
         direct_local_size_align_with_semantic_drop,
         continue_compilation,
+        target_crates,
+        original_rustc_args,
         rustc_args,
     })
 }
@@ -6193,6 +6253,25 @@ fn main() {
             process::exit(2);
         }
     };
+    if !cli.target_crates.is_empty() {
+        let selected = rustc_crate_name(&cli.original_rustc_args)
+            .map(normalized_target_crate_name)
+            .map(|crate_name| cli.target_crates.contains(&crate_name))
+            .unwrap_or(false);
+        if !selected {
+            let Some((rustc, args)) = cli.original_rustc_args.split_first() else {
+                eprintln!("missing original rustc command");
+                process::exit(2);
+            };
+            match Command::new(rustc).args(args).status() {
+                Ok(status) => process::exit(status.code().unwrap_or(1)),
+                Err(err) => {
+                    eprintln!("failed to invoke original rustc `{}`: {}", rustc, err);
+                    process::exit(1);
+                }
+            }
+        }
+    }
     unsafe {
         RECORDS = Some(Mutex::new(Vec::new()));
         ACTUAL_MIR_REWRITE = cli.actual_rewrite;
