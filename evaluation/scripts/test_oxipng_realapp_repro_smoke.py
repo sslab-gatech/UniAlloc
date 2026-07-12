@@ -97,9 +97,33 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertEqual(totals["semantic_scope_unsolved_candidate_count"], 5)
             self.assertEqual(totals["semantic_scope_drop_unsolved_candidate_count"], 6)
             coverage = smoke.compiler_coverage_summary(totals)
-            self.assertFalse(coverage["complete"])
-            self.assertTrue(coverage["partial_coverage"])
+            self.assertFalse(coverage["audited_candidates_resolved"])
+            self.assertTrue(coverage["has_unresolved_audited_candidates"])
+            self.assertFalse(coverage["whole_program_compiler_coverage"])
             self.assertEqual(coverage["unsolved_candidate_count"], 11)
+            self.assertNotIn("complete compiler coverage", coverage["claim_boundary"])
+
+    def test_zero_unsolved_means_audited_candidates_resolved_not_complete_coverage(self) -> None:
+        coverage = smoke.compiler_coverage_summary(
+            {
+                "direct_rewrite_applied_count": 6,
+                "semantic_scope_rewrite_applied_count": 846,
+                "semantic_scope_drop_rewrite_applied_count": 532,
+                "semantic_scope_unsolved_candidate_count": 0,
+                "semantic_scope_drop_unsolved_candidate_count": 0,
+            }
+        )
+
+        self.assertTrue(coverage["audited_candidates_resolved"])
+        self.assertFalse(coverage["has_unresolved_audited_candidates"])
+        self.assertFalse(coverage["whole_program_compiler_coverage"])
+        self.assertEqual(
+            coverage["coverage_scope"],
+            "target_crate_audited_semantic_and_drop_candidates",
+        )
+        self.assertIn("audited target-crate MIR", coverage["claim_boundary"])
+        self.assertIn("not whole-program or object coverage", coverage["claim_boundary"])
+        self.assertNotIn("complete compiler coverage", coverage["claim_boundary"])
 
     def test_contract_fails_closed_on_missing_direct_rewrite(self) -> None:
         cmd = smoke.CommandResult(["cmd"], 0, "", "")

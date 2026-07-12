@@ -369,8 +369,10 @@ def compiler_coverage_summary(audit_totals: dict[str, int]) -> dict[str, Any]:
     unsolved_drop = int(audit_totals.get("semantic_scope_drop_unsolved_candidate_count", 0))
     unsolved_total = unsolved_semantic + unsolved_drop
     return {
-        "complete": unsolved_total == 0,
-        "partial_coverage": unsolved_total != 0,
+        "audited_candidates_resolved": unsolved_total == 0,
+        "has_unresolved_audited_candidates": unsolved_total != 0,
+        "coverage_scope": "target_crate_audited_semantic_and_drop_candidates",
+        "whole_program_compiler_coverage": False,
         "unsolved_candidate_count": unsolved_total,
         "semantic_scope_unsolved_candidate_count": unsolved_semantic,
         "semantic_scope_drop_unsolved_candidate_count": unsolved_drop,
@@ -378,8 +380,11 @@ def compiler_coverage_summary(audit_totals: dict[str, int]) -> dict[str, Any]:
         "semantic_scope_rewrite_applied_count": int(audit_totals.get("semantic_scope_rewrite_applied_count", 0)),
         "semantic_scope_drop_rewrite_applied_count": int(audit_totals.get("semantic_scope_drop_rewrite_applied_count", 0)),
         "claim_boundary": (
-            "complete compiler coverage" if unsolved_total == 0
-            else "partial compiler coverage only; unsolved semantic/drop candidates are explicitly counted"
+            "no unresolved supported semantic/drop candidates in audited target-crate MIR; "
+            "not whole-program or object coverage"
+            if unsolved_total == 0
+            else "audited target-crate MIR still has explicitly counted unresolved "
+            "semantic/drop candidates; not whole-program or object coverage"
         ),
     }
 
