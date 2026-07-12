@@ -514,8 +514,11 @@ def validate_generic_drop_recovery_requirement(
     helper_rows = [
         row
         for row in audit.get("rewrite_candidates") or []
-        if str(row.get("mir_function") or "").endswith(
-            f"::{GENERIC_DROP_FUNCTION}"
+        if (
+            str(row.get("mir_function") or "") == GENERIC_DROP_FUNCTION
+            or str(row.get("mir_function") or "").endswith(
+                f"::{GENERIC_DROP_FUNCTION}"
+            )
         )
     ]
     applied_or_planned = [

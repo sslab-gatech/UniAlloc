@@ -134,6 +134,14 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         self.assertTrue(evidence["generic_drop_recovery_validated"])
         self.assertEqual(evidence["generic_drop_audit_only_skip_count"], 1)
 
+    def test_generic_drop_recovery_accepts_bare_function_name(self) -> None:
+        bare_name = ready_generic_drop_audit()
+        bare_name["rewrite_candidates"][0]["mir_function"] = "generic_drop"
+        bare_evidence = runner.validate_generic_drop_recovery_requirement(
+            bare_name, ready_generic_drop_runtime()
+        )
+        self.assertTrue(bare_evidence["generic_drop_recovery_validated"])
+
     def test_generic_drop_recovery_rejects_duplicate_or_applied_scope(self) -> None:
         duplicate = ready_generic_drop_audit()
         duplicate["rewrite_candidates"].append(
