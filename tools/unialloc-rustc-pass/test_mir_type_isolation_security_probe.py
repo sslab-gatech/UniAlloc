@@ -538,28 +538,59 @@ def validate_generic_drop_recovery_requirement(
         if row.get("lowering_kind")
         == "semantic_scope_drop_generic_type_parameter_skipped"
     ]
-    assert len(skipped) == 1, (
-        f"{GENERIC_DROP_FUNCTION} must have exactly one generic Drop<T> audit-only "
-        f"skip, got {len(skipped)}"
-    )
-    row = skipped[0]
-    assert (
-        row.get("rewrite_status")
-        == "semantic_scope_drop_rewrite_skipped_generic_type_parameter"
-    ), f"{GENERIC_DROP_FUNCTION} has the wrong generic Drop rewrite status"
-    assert (
-        row.get("replacement_resolution_status")
-        == "rustc_middle_drop_generic_type_parameter_not_lowered"
-    ), f"{GENERIC_DROP_FUNCTION} has the wrong generic Drop resolution status"
-    assert row.get("metadata_pairing_contract") == "audit_only_generic_drop_type", (
-        f"{GENERIC_DROP_FUNCTION} must use the audit-only pairing contract"
-    )
-    assert row.get("semantic_object_type") == "<unknown-heap-object-type>", (
-        f"{GENERIC_DROP_FUNCTION} must not invent a concrete heap-object identity"
-    )
-    assert str(row.get("destination_type") or "") == "T", (
-        f"{GENERIC_DROP_FUNCTION} must audit the unresolved generic destination"
-    )
+    if skipped:
+        assert len(skipped) == 1, (
+            f"{GENERIC_DROP_FUNCTION} must have exactly one generic Drop<T> "
+            f"audit-only skip, got {len(skipped)}"
+        )
+        row = skipped[0]
+        assert (
+            row.get("rewrite_status")
+            == "semantic_scope_drop_rewrite_skipped_generic_type_parameter"
+        ), f"{GENERIC_DROP_FUNCTION} has the wrong generic Drop rewrite status"
+        assert (
+            row.get("replacement_resolution_status")
+            == "rustc_middle_drop_generic_type_parameter_not_lowered"
+        ), f"{GENERIC_DROP_FUNCTION} has the wrong generic Drop resolution status"
+        assert row.get("metadata_pairing_contract") == "audit_only_generic_drop_type", (
+            f"{GENERIC_DROP_FUNCTION} must use the audit-only pairing contract"
+        )
+        assert row.get("semantic_object_type") == "<unknown-heap-object-type>", (
+            f"{GENERIC_DROP_FUNCTION} must not invent a concrete heap-object identity"
+        )
+        assert str(row.get("destination_type") or "") == "T", (
+            f"{GENERIC_DROP_FUNCTION} must audit the unresolved generic destination"
+        )
+        provider_exposure = "audit_only_generic_drop_skip"
+    else:
+        assert not helper_rows, (
+            f"{GENERIC_DROP_FUNCTION} was exposed without the required generic Drop "
+            f"audit-only row: {helper_rows}"
+        )
+        summary = audit.get("summary") or {}
+        assert summary.get("provider_override_installed") is True, (
+            "generic Drop provider-omission evidence requires the real optimized_mir "
+            "provider override"
+        )
+        assert summary.get("body_clone_returned_to_rustc") is True, (
+            "generic Drop provider-omission evidence requires returned cloned MIR bodies"
+        )
+        assert int(summary.get("semantic_scope_drop_candidate_count") or 0) > 0, (
+            "generic Drop provider-omission evidence requires other observed Drop candidates"
+        )
+        assert int(summary.get("semantic_scope_drop_rewrite_applied_count") or 0) > 0, (
+            "generic Drop provider-omission evidence requires other applied Drop rewrites"
+        )
+        assert (
+            int(
+                summary.get(
+                    "semantic_scope_drop_generic_type_parameter_skipped_count"
+                )
+                or 0
+            )
+            == 0
+        ), "generic Drop provider-omission evidence must not manufacture a skip count"
+        provider_exposure = "not_exposed_by_optimized_mir_provider"
 
     expected_deltas = {
         "generic_drop_typed_deallocations_delta": 4,
@@ -574,6 +605,7 @@ def validate_generic_drop_recovery_requirement(
     return {
         "generic_drop_recovery_validated": True,
         "generic_drop_audit_only_skip_count": len(skipped),
+        "generic_drop_provider_exposure": provider_exposure,
         **expected_deltas,
     }
 
@@ -871,7 +903,7 @@ def main() -> int:
             "The source contains no manual semantic metadata or allocation ABI calls; identities come from actual rustc_driver semantic-scope rewriting.",
             "The runner supplies the TYPE_ISOLATED policy and cross-thread-recovery placement bit uniformly so the compared cache keys differ only by compiler-derived type identity.",
             "The target-type audit contains no ProducerPayload or ConsumerPayload drop/deallocation scope, and runtime reports no requested recovery identity match; allocation-side records are therefore required for the observed typed reuse.",
-            "The generic_drop helper must have exactly one audit-only generic Drop<T> skip and no applied/planned scope; exact four-object runtime deltas bind that skip to typed deallocation and cache insertion without fallback.",
+            "The generic_drop helper must never receive an applied/planned semantic scope. If optimized_mir exposes its generic body, the audit requires exactly one audit-only generic Drop<T> skip; current rustc may instead codegen the monomorphized instance without exposing a helper row to this provider, which is reported as an evidence boundary rather than a manufactured skip. In both cases exact four-object runtime deltas require typed deallocation and cache insertion without fallback.",
             "Commit-bound evidence requires a clean HEAD, a repository-external output directory, and identical scoped source/toolchain bindings before and after the run.",
             "This covers two same-layout Rust types and one worker lifecycle, not universal UAF prevention or unmodified-toolchain deployment.",
         ],

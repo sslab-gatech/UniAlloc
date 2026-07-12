@@ -126,7 +126,57 @@ def ready_generic_drop_runtime() -> dict:
     }
 
 
+def preserved_raw_generic_drop_omission_audit() -> dict:
+    """Minimized from the preserved 2e3c0e2 actual-rustc target audit."""
+    return {
+        "summary": {
+            "provider_override_installed": True,
+            "body_clone_returned_to_rustc": True,
+            "semantic_scope_drop_candidate_count": 4,
+            "semantic_scope_drop_rewrite_applied_count": 4,
+            "semantic_scope_drop_generic_type_parameter_skipped_count": 0,
+        },
+        "rewrite_candidates": [
+            {
+                "mir_function": "producer_box",
+                "lowering_kind": "semantic_scope_enter_exit_rewrite",
+                "rewrite_status": "semantic_scope_enter_exit_rewrite_applied",
+                "semantic_object_type": "std::boxed::Box<ProducerPayload>",
+            },
+            {
+                "mir_function": "main",
+                "lowering_kind": "semantic_scope_drop_rewrite",
+                "rewrite_status": "semantic_scope_drop_rewrite_applied",
+                "semantic_object_type": "std::string::String",
+            },
+            {
+                "mir_function": "main::{closure#0}",
+                "lowering_kind": "semantic_scope_drop_non_heap_object_skipped",
+                "rewrite_status": "semantic_scope_drop_rewrite_skipped_non_heap_object_type",
+                "destination_type": "std::array::IntoIter<usize, 4_usize>",
+            },
+        ],
+    }
+
+
 class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
+    def test_generic_drop_recovery_accepts_preserved_raw_provider_omission(self) -> None:
+        evidence = runner.validate_generic_drop_recovery_requirement(
+            preserved_raw_generic_drop_omission_audit(), ready_generic_drop_runtime()
+        )
+        self.assertTrue(evidence["generic_drop_recovery_validated"])
+        self.assertEqual(evidence["generic_drop_audit_only_skip_count"], 0)
+        self.assertEqual(
+            evidence["generic_drop_provider_exposure"],
+            "not_exposed_by_optimized_mir_provider",
+        )
+
+    def test_generic_drop_recovery_rejects_unbound_synthetic_omission(self) -> None:
+        with self.assertRaisesRegex(AssertionError, "provider-omission evidence"):
+            runner.validate_generic_drop_recovery_requirement(
+                {"rewrite_candidates": []}, ready_generic_drop_runtime()
+            )
+
     def test_generic_drop_recovery_accepts_exact_audit_and_runtime_delta(self) -> None:
         evidence = runner.validate_generic_drop_recovery_requirement(
             ready_generic_drop_audit(), ready_generic_drop_runtime()
