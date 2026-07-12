@@ -21436,6 +21436,109 @@ mod tests {
     }
 
     #[test]
+    fn ffi_dealloc_mismatch_cannot_strip_delayed_free_or_poison_type_cache() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let allocation_metadata = AllocationMetadata::for_type(0xD17A_51A1)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_51A1)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE);
+        let wrong_dealloc_metadata = AllocationMetadata::for_type(0xD17A_BAD1)
+            .with_module(allocation_metadata.module_id)
+            .with_callsite(0xD0D0_BAD1)
+            .with_flags(FLAG_TYPE_ISOLATED);
+
+        let ptr = unsafe {
+            __unialloc_alloc_with_metadata(
+                layout.size(),
+                layout.align(),
+                allocation_metadata.type_id,
+                allocation_metadata.module_id,
+                allocation_metadata.flags,
+                allocation_metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(allocation_metadata)
+        );
+
+        assert!(unsafe {
+            __unialloc_dealloc_with_metadata(
+                ptr,
+                layout.size(),
+                layout.align(),
+                wrong_dealloc_metadata.type_id,
+                wrong_dealloc_metadata.module_id,
+                wrong_dealloc_metadata.flags,
+                wrong_dealloc_metadata.callsite,
+            )
+        });
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        assert_eq!(
+            delayed_free_snapshot().occupied_slots,
+            1,
+            "recovered allocation policy must prevent mismatched Drop metadata from bypassing quarantine"
+        );
+
+        let slots = unsafe { delayed_free_slots_snapshot_for_test() };
+        let delayed_idx = slots
+            .iter()
+            .position(|slot| slot.ptr == ptr)
+            .expect("recovered allocation should be present in delayed-free quarantine");
+        assert_eq!(
+            slots[delayed_idx].metadata, allocation_metadata,
+            "quarantine must retain the allocation-side identity and policy"
+        );
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(layout, wrong_dealloc_metadata) },
+            None,
+            "mismatched deallocation identity must not receive quarantined storage"
+        );
+
+        let cache_metadata =
+            allocation_metadata.with_flags(allocation_metadata.flags & !FLAG_DELAYED_FREE);
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(layout, cache_metadata) },
+            None,
+            "the allocation identity must not reuse storage before quarantine release"
+        );
+        unsafe {
+            let delayed = delayed_free_take_slot(delayed_idx);
+            release_delayed_slot(&alloc, delayed);
+        }
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(layout, wrong_dealloc_metadata) },
+            None,
+            "quarantine release must not poison the mismatched type cache"
+        );
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(layout, cache_metadata) },
+            Some(ptr),
+            "quarantine release should return storage only to the recovered allocation identity"
+        );
+
+        unsafe {
+            alloc.dealloc_raw(ptr, layout);
+            clear_auto_allocation_records();
+            clear_delayed_free_for_test();
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
     fn hinted_compiler_recovery_metadata_survives_cross_thread_dealloc() {
         let _guard = test_guard();
         unsafe {
