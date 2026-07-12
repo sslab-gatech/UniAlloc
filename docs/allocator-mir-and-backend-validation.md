@@ -1022,9 +1022,32 @@ iterator remains unresolved, while a Zip Drop containing `IterMut` and
 Clone, and ownership-transfer scans were not widened.  Independent review and
 the 660+430 pre-commit suite pass.
 
+Commit `9240fc6` closes the remaining pointer-preserving memory-tagged
+ownership-transfer gap for the compiler/runtime ABI.  Before the fix, an
+ordinary Rust `String::into_bytes` probe with policy flags `129` received an
+actual MIR rewrite but recorded transfer attempted/applied/rejected `1/0/1`:
+the old String identity could reuse the address and the exact Vec identity
+could not.  The runtime now rebinds the authenticated recovery record and the
+matching software memory-tag record together, changing only `type_id`; a failed
+recovery commit rolls the tag back.  Cold transfer validation exhaustively
+classifies TLS and process-global fast/overflow tag storage as zero, one, or
+multiple matching records.  Duplicate, cross-domain duplicate, layout,
+metadata, and authenticator inconsistencies therefore reject without mutation.
+
+Current and `nightly-2022-07-01` actual-rustc probes now record `1/1/0`, preserve
+payload, pointer, and capacity, prevent wrong-String reuse, permit exact-Vec
+reuse, and retire the tag record; fallback, raw, recovery-mismatch, and corrupt
+counts are zero.  Hosted and fixed-heap integration tests plus local/global,
+forced-rollback, and duplicate-record regressions pass.  Independent review
+found no remaining findings, and the pre-commit suite passes 662 UniAlloc tests
+and 430 std-bench tests.  This is bounded evidence for the pointer-preserving
+`String -> Vec<u8>` compiler/runtime contract.  It does not establish every
+ownership-transfer helper, linearization under illegal concurrent ownership,
+current-head Oxipng coverage, or performance.
+
 Oxipng was not rerun after these focused fixes.  Therefore the 13 corrected
 identity mismatches in the `a51960d` bundle remain historical observations;
-they cannot be claimed eliminated or rebound to `681398e`.  These additions
+they cannot be claimed eliminated or rebound to `9240fc6`.  These additions
 strengthen bounded safety and actual-rewrite evidence, not whole-application
 exact pairing, universal compiler coverage, or performance claims.
 
