@@ -228,7 +228,12 @@ two local source gaps without changing that external-evidence boundary.  The
 BlogOS fixture now links a no_std fixed-heap/global-allocator/boot/panic contract,
 and the Rust-for-Linux final crate explicitly force-links UniAlloc while a
 checked-in no_std regression verifies the real bridge's allocator and semantic
-symbols.  Both are build/link/ABI evidence only: BlogOS still needs its real
+symbols.  Commit `315cfc4` additionally checks five runtime/bridge ABI records'
+versions, sizes, alignments, and all 75 field offsets at Rust compile time, with
+matching C-header static assertions.  The Rust assertions compile for
+`x86_64-unknown-none`; the C header check uses the local 64-bit host compiler,
+not the actual kernel compiler.  These remain build/link/ABI evidence only:
+BlogOS still needs its real
 bootloader/image plus QEMU or hardware, and Rust-for-Linux still needs a kernel
 tree and module runner.  Those missing assets are external validation gaps, not
 allocator functional failures.

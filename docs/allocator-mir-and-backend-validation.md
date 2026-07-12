@@ -330,6 +330,20 @@ This test proves that the current allocator cache key keeps two explicitly
 supplied lifetime classes separate on the covered paths.  It does not establish
 compiler-derived lifetime coverage, universal policy isolation, or performance.
 
+### Placement-hint cache isolation
+
+Commit `a379f23` applies the same end-to-end cache-routing check to
+`placement_hint`, which previously had only key-level unit coverage.  With the
+type id, module id, flags, lifetime, and layout held constant, placement `0x21`
+must not share a released entry with placement `0x22`; returning to `0x21` must
+recover the original address.  Hosted and `fixed_heap` configurations each pass
+the focused test with zero fallback allocation/deallocation, recovery mismatch,
+and corrupt side-cache slots.
+
+This is a manual-metadata allocator lifecycle regression for two covered
+placement classes.  It is not automatic compiler placement inference,
+universal policy isolation, or performance evidence.
+
 ### Boxed-slice to `Vec` ownership-identity transfer
 
 At `3d08399`,
