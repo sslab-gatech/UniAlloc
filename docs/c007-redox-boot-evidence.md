@@ -222,3 +222,13 @@ The validated claim boundary is therefore:
   point at missing temporary artifacts. In the current workspace, BlogOS is the
   remaining missing-real-artifact blocker; do not fabricate replacement
   image/config files.
+
+For the implementation-first G002 scope, commits `00a187b` and `bd9d927` close
+two local source gaps without changing that external-evidence boundary.  The
+BlogOS fixture now links a no_std fixed-heap/global-allocator/boot/panic contract,
+and the Rust-for-Linux final crate explicitly force-links UniAlloc while a
+checked-in no_std regression verifies the real bridge's allocator and semantic
+symbols.  Both are build/link/ABI evidence only: BlogOS still needs its real
+bootloader/image plus QEMU or hardware, and Rust-for-Linux still needs a kernel
+tree and module runner.  Those missing assets are external validation gaps, not
+allocator functional failures.
