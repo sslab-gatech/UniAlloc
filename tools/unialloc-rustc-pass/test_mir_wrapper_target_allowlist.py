@@ -88,6 +88,90 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
         compiler.chmod(0o755)
         return compiler
 
+    def write_delegating_compiler(self, directory: pathlib.Path) -> pathlib.Path:
+        directory.mkdir(parents=True, exist_ok=True)
+        compiler = directory / "compiler-driver"
+        compiler.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            f"real_rustc = {str(self.rustc)!r}\n"
+            "with open(os.environ['COMPILER_DRIVER_LOG'], 'a', encoding='utf-8') as log:\n"
+            "    log.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            "os.execv(real_rustc, [real_rustc, *sys.argv[1:]])\n",
+            encoding="utf-8",
+        )
+        compiler.chmod(0o755)
+        return compiler
+
+    @unittest.skipUnless(os.name == "posix", "real bare-name Cargo compiler shim")
+    def test_cargo_wrapper_resolves_bare_rustc_from_path(self) -> None:
+        compiler_dir = self.tmp / "cargo-compiler-path"
+        self.write_delegating_compiler(compiler_dir)
+        compiler_log = self.tmp / "cargo-compiler.jsonl"
+        project = self.tmp / "cargo-fixture"
+        (project / "src").mkdir(parents=True)
+        (project / "Cargo.toml").write_text(
+            "[package]\nname = 'cargo-fixture'\nversion = '0.1.0'\nedition = '2021'\n"
+            "\n[workspace]\n",
+            encoding="utf-8",
+        )
+        (project / "src" / "main.rs").write_text(
+            "fn main() { let mut values = Vec::new(); values.push(7_u64); "
+            "assert_eq!(values[0], 7); }\n",
+            encoding="utf-8",
+        )
+        audits = self.tmp / "cargo-audits"
+        audits.mkdir()
+        env = self.wrapper_env()
+        env.update(
+            {
+                "PATH": f"{compiler_dir}{os.pathsep}{env.get('PATH', '')}",
+                "RUSTC": "compiler-driver",
+                "RUSTC_WRAPPER": str(self.wrapper),
+                "UNIALLOC_RUSTC_TARGET_CRATES": "cargo-fixture",
+                "UNIALLOC_REWRITE_AUDIT_DIR": str(audits),
+                "UNIALLOC_CONTINUE_COMPILATION": "1",
+                "UNIALLOC_RUSTC_SYSROOT": str(self.sysroot),
+                "COMPILER_DRIVER_LOG": str(compiler_log),
+                "CARGO_TARGET_DIR": str(self.tmp / "cargo-target"),
+            }
+        )
+
+        result = subprocess.run(
+            [
+                shutil.which("cargo") or "cargo",
+                f"+{TOOLCHAIN}",
+                "check",
+                "--manifest-path",
+                str(project / "Cargo.toml"),
+            ],
+            cwd=project,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(compiler_log.is_file())
+        audit_payloads = [
+            json.loads(path.read_text(encoding="utf-8")) for path in audits.glob("*.json")
+        ]
+        self.assertTrue(audit_payloads)
+        self.assertTrue(
+            any(
+                "cargo_fixture" in payload.get("rustc_args", [])
+                or "--crate-name=cargo_fixture" in payload.get("rustc_args", [])
+                or any(
+                    left == "--crate-name" and right == "cargo_fixture"
+                    for left, right in zip(
+                        payload.get("rustc_args", []), payload.get("rustc_args", [])[1:]
+                    )
+                )
+                for payload in audit_payloads
+            )
+        )
+
     def test_non_target_executes_arbitrary_compiler_with_exact_argv(self) -> None:
         captured = self.tmp / "captured-args.json"
         compiler = self.write_fake_compiler()
@@ -119,6 +203,25 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
         self.assertEqual(result.returncode, 31)
         self.assertEqual(json.loads(captured.read_text(encoding="utf-8")), probe_args)
         self.assertEqual(audit.read_text(encoding="utf-8"), "sentinel\n")
+
+    @unittest.skipUnless(os.name == "posix", "executable source ambiguity is Unix-specific")
+    def test_executable_first_argument_without_dashdash_is_compiler_contract(self) -> None:
+        captured = self.tmp / "executable-source-args.json"
+        executable_source = self.write_fake_compiler("ambiguous-source.rs")
+        env = self.wrapper_env()
+        env.update(
+            {
+                "UNIALLOC_RUSTC_TARGET_CRATES": "application-crate",
+                "CAPTURE_ARGS": str(captured),
+                "FAKE_COMPILER_EXIT": "37",
+            }
+        )
+        args = ["--crate-name", "dependency_crate"]
+
+        result = subprocess.run([str(self.wrapper), str(executable_source), *args], env=env)
+
+        self.assertEqual(result.returncode, 37)
+        self.assertEqual(json.loads(captured.read_text(encoding="utf-8")), args)
 
     @unittest.skipUnless(os.name == "posix", "Unix signal propagation contract")
     def test_non_target_bypass_preserves_unix_signal_status(self) -> None:
@@ -172,8 +275,9 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
         payload = json.loads(audit.read_text(encoding="utf-8"))
         self.assertIn("--crate-name=fixture_crate", payload["rustc_args"])
 
-    def test_absent_allowlist_preserves_existing_audit_behavior(self) -> None:
+    def test_explicit_dashdash_compiles_executable_source_directly(self) -> None:
         source = self.write_fixture("unrestricted")
+        source.chmod(0o755)
         audit = self.tmp / "unrestricted-audit.json"
         output = self.tmp / "unrestricted-bin"
         env = self.wrapper_env()
@@ -201,6 +305,17 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
 
         self.assertTrue(output.is_file())
         self.assertTrue(audit.is_file())
+
+    def test_help_documents_direct_source_boundary(self) -> None:
+        result = subprocess.run(
+            [str(self.wrapper), "--unialloc-help"],
+            env=self.wrapper_env(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True,
+        )
+        self.assertIn("Executable source files therefore require explicit `--`", result.stdout)
 
 
 if __name__ == "__main__":
