@@ -42,13 +42,17 @@ SCOPED_STATUS_PATHS = [
     pathlib.Path("evaluation/scripts/test_oxipng_realapp_repro_smoke.py"),
 ]
 
-REQUIRED_AUDIT_FLAGS = (
-    "actual_allocator_call_replacement",
+SEMANTIC_AND_BODY_AUDIT_FLAGS = (
     "actual_semantic_scope_rewrite",
     "body_clone_returned_to_rustc",
+)
+DIRECT_REWRITE_AUDIT_FLAGS = (
+    "actual_allocator_call_replacement",
     "direct_local_metadata_abi",
     "direct_local_size_align_with_semantic_drop",
 )
+REQUIRED_AUDIT_FLAGS = SEMANTIC_AND_BODY_AUDIT_FLAGS + DIRECT_REWRITE_AUDIT_FLAGS
+NO_SUPPORTED_DIRECT_REWRITE_STATUS = "no_supported_rewrite_candidates"
 
 
 class SmokeError(RuntimeError):
@@ -398,12 +402,16 @@ def assert_contract(
         raise SmokeError(f"output hash mismatch: got {output_sha256}, expected {expected_output_sha256}")
     if not audits:
         raise SmokeError("no target-crate rewrite audits were emitted")
-    false_flags = [
-        f"{audit.get('file')}:{flag}"
-        for audit in audits
-        for flag in REQUIRED_AUDIT_FLAGS
-        if not audit.get(flag)
-    ]
+    false_flags = []
+    for audit in audits:
+        required_flags = SEMANTIC_AND_BODY_AUDIT_FLAGS
+        if audit.get("replacement_resolution_status") != NO_SUPPORTED_DIRECT_REWRITE_STATUS:
+            required_flags += DIRECT_REWRITE_AUDIT_FLAGS
+        false_flags.extend(
+            f"{audit.get('file')}:{flag}"
+            for flag in required_flags
+            if not audit.get(flag)
+        )
     if false_flags:
         raise SmokeError("target-crate audit flags must be true: " + ", ".join(false_flags))
     if audit_totals["direct_rewrite_applied_count"] <= 0:

@@ -149,6 +149,39 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             )
 
 
+    def test_contract_accepts_mixed_no_candidate_and_applied_audits(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        no_candidates = {
+            "file": "no-candidates.json",
+            "replacement_resolution_status": smoke.NO_SUPPORTED_DIRECT_REWRITE_STATUS,
+            "actual_semantic_scope_rewrite": True,
+            "body_clone_returned_to_rustc": True,
+            **{key: False for key in smoke.DIRECT_REWRITE_AUDIT_FLAGS},
+        }
+        applied = {
+            "file": "applied.json",
+            "replacement_resolution_status": "resolved_unialloc_allocator_metadata_abi",
+            **{key: True for key in smoke.REQUIRED_AUDIT_FLAGS},
+        }
+
+        smoke.assert_contract(
+            build=cmd,
+            run=cmd,
+            stats={"typed_allocations": 1, "fallback_allocations": 0, "type_isolation_corrupt_slots": 0},
+            output_sha256="a",
+            expected_output_sha256="a",
+            audits=[no_candidates, applied],
+            audit_totals={
+                "direct_rewrite_applied_count": 1,
+                "semantic_scope_rewrite_applied_count": 2,
+                "semantic_scope_drop_rewrite_applied_count": 1,
+                "semantic_scope_unsolved_candidate_count": 0,
+                "semantic_scope_drop_unsolved_candidate_count": 0,
+            },
+            fallback_note="reported fallback_allocations=0",
+        )
+
+
     def test_fresh_temp_dir_rejects_existing_files_without_deleting(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             temp_dir = pathlib.Path(td) / "temp"
