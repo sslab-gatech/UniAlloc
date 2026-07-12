@@ -102,21 +102,20 @@ def validate_supported_controls(audit: Dict[str,Any]) -> Dict[str,Any]:
             if isinstance(row,dict)
             and probe_function_matches(row,function_name)
             and 'Vec<ProducerPayload' in str(row.get('semantic_object_type') or '')
-            and row.get('rewrite_status') in APPLIED_STATUSES
         ]
         scope_rows=[
             row for row in rows
             if row.get('lowering_kind')=='semantic_scope_enter_exit_rewrite'
-            and row.get('rewrite_status')=='actual_semantic_scope_enter_exit_rewrite_applied'
             and 'with_capacity' in str(row.get('callee') or '')
         ]
         drop_rows=[
             row for row in rows
             if row.get('lowering_kind')=='semantic_scope_drop_rewrite'
-            and row.get('rewrite_status')=='actual_semantic_scope_drop_rewrite_applied'
         ]
-        assert len(scope_rows)==1, f"{function_name} must have exactly one actual supported Vec allocation scope, got {len(scope_rows)}"
-        assert len(drop_rows)==1, f"{function_name} must have exactly one actual supported Vec Drop scope, got {len(drop_rows)}"
+        assert len(scope_rows)==1, f"{function_name} must have exactly one supported Vec allocation scope candidate, got {len(scope_rows)}"
+        assert len(drop_rows)==1, f"{function_name} must have exactly one supported Vec Drop candidate, got {len(drop_rows)}"
+        assert scope_rows[0].get('rewrite_status')=='actual_semantic_scope_enter_exit_rewrite_applied', f"{function_name} supported Vec allocation scope was not actually applied: {scope_rows[0]!r}"
+        assert drop_rows[0].get('rewrite_status')=='actual_semantic_scope_drop_rewrite_applied', f"{function_name} supported Vec Drop scope was not actually applied: {drop_rows[0]!r}"
         for row in scope_rows+drop_rows:
             assert int(row.get('flags') or 0)&TYPE_ISOLATED, f"{function_name} row is not type isolated: {row!r}"
         all_rows.extend(scope_rows+drop_rows)

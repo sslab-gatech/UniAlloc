@@ -189,7 +189,7 @@ class MirAmbiguousCloneFallbackRunnerTests(unittest.TestCase):
             )
         ]
         with self.assertRaisesRegex(
-            AssertionError, "exactly one actual supported Vec Drop"
+            AssertionError, "exactly one supported Vec Drop candidate"
         ):
             runner.validate_audit(audit)
 
@@ -199,8 +199,41 @@ class MirAmbiguousCloneFallbackRunnerTests(unittest.TestCase):
             supported_row(function_name="supported_seed_protected_buffer")
         )
         with self.assertRaisesRegex(
-            AssertionError, "exactly one actual supported Vec allocation scope"
+            AssertionError, "exactly one supported Vec allocation scope candidate"
         ):
+            runner.validate_audit(audit)
+
+    def test_validate_rejects_duplicate_planned_supported_scope(self) -> None:
+        audit = valid_audit()
+        planned = supported_row(function_name="supported_seed_protected_buffer")
+        planned["rewrite_status"] = "semantic_scope_enter_exit_rewrite_planned"
+        audit["rewrite_candidates"].append(planned)
+        with self.assertRaisesRegex(
+            AssertionError, "exactly one supported Vec allocation scope candidate"
+        ):
+            runner.validate_audit(audit)
+
+    def test_validate_rejects_duplicate_planned_supported_drop(self) -> None:
+        audit = valid_audit()
+        planned = supported_row(
+            function_name="supported_recover_protected_buffer", drop=True
+        )
+        planned["rewrite_status"] = "semantic_scope_drop_rewrite_planned"
+        audit["rewrite_candidates"].append(planned)
+        with self.assertRaisesRegex(
+            AssertionError, "exactly one supported Vec Drop candidate"
+        ):
+            runner.validate_audit(audit)
+
+    def test_validate_rejects_sole_supported_scope_not_actually_applied(self) -> None:
+        audit = valid_audit()
+        for row in audit["rewrite_candidates"]:
+            if (
+                row.get("mir_function") == "supported_seed_protected_buffer"
+                and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+            ):
+                row["rewrite_status"] = "semantic_scope_enter_exit_rewrite_planned"
+        with self.assertRaisesRegex(AssertionError, "was not actually applied"):
             runner.validate_audit(audit)
 
     def test_validate_rejects_supported_seed_recovery_identity_drift(self) -> None:
