@@ -484,6 +484,43 @@ This is an implementation/probe path, not a paper performance matrix.  It should
 be used to validate rustc-driver rewriting and allocator semantics before any
 larger timing run.
 
+### Multi-module application regression
+
+`test_mir_realistic_multimodule_type_isolation.py` builds and runs a generated
+Cargo application with separate ingest, transform, and storage modules through
+the real `RUSTC_WRAPPER`/optimized-MIR rewrite path:
+
+```sh
+python3 tools/unialloc-rustc-pass/test_mir_realistic_multimodule_type_isolation.py
+```
+
+The gate requires four actually applied allocation scopes spanning `String`,
+`Vec<u8>`, and `Box<[u8]>`, four distinct nonzero allocation callsites, and one
+actually applied `String::into_bytes` ownership transfer.  Runtime rows must
+match those compiler identities.  Its two address oracles require transferred
+String storage to reject the old String identity and accept the exact Vec
+identity, and same-layout Box storage to reject a Vec identity and accept the
+exact Box identity.  Fallback, raw-without-metadata, recovery-mismatch,
+corruption, and dropped-stat counters must remain zero.
+
+The same run also enables automatic cross-thread placement with no manual
+placement value.  A `Vec<u8>` allocated in the MIR body that performs a real
+`thread::spawn(move || ...)` must carry placement bit `0x8000` with basis
+`auto_cross_thread_escape`, while a same-type/same-layout local helper remains
+placement `0` with basis `default`.  A post-thread-creation runtime window then
+requires cross-to-local non-reuse plus exact reuse in both placement classes;
+its fallback/raw/mismatch/corruption counters remain zero.  A non-executed
+spawn-shaped branch supplies the second automatically tagged allocation needed
+for the exact cross-class reuse check without adding thread-runtime allocations
+to that diagnostic window.
+
+This is a single generated multi-module application and a bounded trusted-
+metadata isolation regression.  It is not arbitrary external-application
+coverage, a universal memory-safety proof, a benchmark, or a paper performance
+claim.  The `module_id` remains crate-scoped; Rust source-module separation is
+demonstrated by the applied MIR function paths and distinct callsites rather
+than by claiming a per-source-module `module_id`.
+
 The selected real-`std_bench` runtime smoke can also opt into this combined
 direct-allocator/semantic-Drop mode:
 
