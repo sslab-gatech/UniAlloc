@@ -985,6 +985,34 @@ coverage, a security proof, or performance evidence.  Full paper performance
 reproduction remains intentionally deferred under the G001-to-G002 objective
 change.
 
+### Post-bundle type-isolation hardening
+
+Three focused changes after the `a51960d` presentation bundle close concrete
+safety and compiler-attribution gaps without rebinding the saved application
+run.  Commit `ed188ca` adds a hosted and fixed-heap regression that transfers a
+String allocation to a Vec identity, drops it on another thread, and requires
+payload preservation, wrong-old-type non-reuse, exact-new-type reuse, and zero
+recovery mismatch.  Commit `4cd0d7f` restricts exact `Vec::with_capacity`
+destination attribution to the outer Vec backing allocation, including nested
+`Vec<Vec<u8>>`; current and legacy actual-rustc probes pass while element-
+affecting hazards remain fail closed.
+
+Commit `997e840` separates the two roles of exact `Result<T, E>` destinations.
+Only `Ok(T)` may supply a returned allocation identity; `Err(E)` remains a
+by-value safety hazard and cannot create a semantic scope on its own.  The
+actual-rustc A/B/C regression proves that an Err-only owner emits no outer
+scope, `Result<Vec<u8>, u8>` is actually rewritten with the Vec owner, and a
+conflicting Vec/Box error-owner result remains audit-only ambiguous.  The probe
+passes both the current and `nightly-2022-07-01` toolchains; clean-tree Clone
+and Layout provenance probes, the independent review, and the 660+430
+pre-commit suite also pass.
+
+Oxipng was not rerun after these focused fixes.  Therefore the 13 corrected
+identity mismatches in the `a51960d` bundle remain historical observations;
+they cannot be claimed eliminated or rebound to `997e840`.  These additions
+strengthen bounded safety and actual-rewrite evidence, not whole-application
+exact pairing, universal compiler coverage, or performance claims.
+
 For historical comparison, a source-bound Oxipng v4.0.3 smoke at validator
 commit `e466831` validated the
 actual rewrite path without running a benchmark loop.  The pinned application
