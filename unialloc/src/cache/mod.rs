@@ -2,9 +2,8 @@
 use crate::alloc_api::type_isolation::FLAG_DELAYED_FREE;
 use crate::alloc_api::type_isolation::{
     active_allocation_metadata, active_allocation_metadata_requires_recovery_record,
-    auto_allocation_metadata, auto_deallocation_metadata, auto_reallocation_old_metadata,
-    recorded_reallocation_old_metadata, select_auto_allocation_metadata,
-    semantic_allocation_slow_path_enabled,
+    auto_allocation_metadata, auto_reallocation_old_metadata, recorded_reallocation_old_metadata,
+    select_auto_allocation_metadata, semantic_allocation_slow_path_enabled,
     semantic_fallback_attribution_record_raw_alloc_no_metadata,
     semantic_fallback_attribution_record_raw_dealloc_no_metadata,
     semantic_fallback_attribution_record_raw_realloc_moved_dealloc_no_metadata,
@@ -252,15 +251,6 @@ fn checked_static_heap_range(
 }
 
 #[inline]
-fn with_recovery_recording_if_needed<R>(metadata: AllocationMetadata, f: impl FnOnce() -> R) -> R {
-    if metadata.is_layout_derived() {
-        f()
-    } else {
-        with_auto_allocation_recovery_recording(f)
-    }
-}
-
-#[inline]
 unsafe fn dealloc_with_active_or_recorded_metadata(
     alloc: &RustAllocator,
     ptr: *mut u8,
@@ -311,7 +301,7 @@ unsafe fn realloc_with_auto_metadata(
     let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
     if !new_ptr.is_null() {
         copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-        dealloc_reallocated_old_ptr(alloc, ptr, layout, || auto_deallocation_metadata(layout));
+        dealloc_reallocated_old_ptr(alloc, ptr, layout, || None);
     }
     new_ptr
 }
@@ -535,12 +525,7 @@ impl RustAllocator {
             // identity for this event (UNKNOWN/exhausted).
             let (auto_policy_enabled, auto_metadata) = select_auto_allocation_metadata(new_layout);
             if let Some(metadata) = auto_metadata {
-                Some((
-                    metadata,
-                    !metadata.is_layout_derived(),
-                    false,
-                    auto_deallocation_metadata(old_layout),
-                ))
+                Some((metadata, true, false, None))
             } else if !auto_policy_enabled {
                 recorded_reallocation_old_metadata(ptr, old_layout)
                     .map(|metadata| (metadata, true, false, Some(metadata)))
@@ -660,9 +645,6 @@ unsafe impl GlobalAlloc for RustAllocator {
             return self.alloc_with_metadata(layout, metadata);
         }
         if let Some(metadata) = auto_allocation_metadata(layout) {
-            if metadata.is_layout_derived() {
-                return self.alloc_with_metadata(layout, metadata);
-            }
             return self.alloc_with_recovery_metadata(layout, metadata);
         }
 
@@ -704,9 +686,6 @@ unsafe impl GlobalAlloc for RustAllocator {
         }
         if let Some(metadata) = recorded_reallocation_old_metadata(ptr, layout) {
             return self.dealloc_with_peeked_recovery_metadata(ptr, layout, metadata);
-        }
-        if let Some(metadata) = auto_deallocation_metadata(layout) {
-            return self.dealloc_with_metadata(ptr, layout, metadata);
         }
 
         #[cfg(feature = "quarantine")]
@@ -764,7 +743,7 @@ unsafe impl GlobalAlloc for RustAllocator {
             );
         }
         if let Some(alloc_metadata) = auto_allocation_metadata(new_layout) {
-            return with_recovery_recording_if_needed(alloc_metadata, || {
+            return with_auto_allocation_recovery_recording(|| {
                 realloc_with_auto_metadata(self, ptr, layout, new_layout, new_size, alloc_metadata)
             });
         }
@@ -935,19 +914,16 @@ unsafe impl Allocator for RustAllocator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "quarantine")]
     use crate::alloc_api::type_isolation::{
-        delayed_free_snapshot, drain_current_thread_semantic_state, semantic_auto_metadata_enable,
-    };
-    use crate::alloc_api::type_isolation::{
-        restore_active_metadata, semantic_test_guard, set_active_metadata,
+        delayed_free_snapshot, drain_current_thread_semantic_state, restore_active_metadata,
+        semantic_auto_metadata_enable, semantic_test_guard, set_active_metadata,
     };
     use crate::alloc_api::type_isolation::{
         semantic_auto_compiler_metadata_stream_enable, semantic_auto_metadata_disable,
         semantic_metadata_validation_snapshot, semantic_stats_recording_disable,
         semantic_stats_reset, semantic_stats_test_exact_recording_enter,
-        semantic_stats_test_exact_recording_exit, FLAG_TYPE_ISOLATED, MIN_TYPE_CACHE_OBJECT_SIZE,
-        PLACEMENT_HINT_LOCAL_SCOPE_NO_RECOVERY, UNKNOWN_SEMANTIC_ID,
+        semantic_stats_test_exact_recording_exit, FLAG_DELAYED_FREE, FLAG_TYPE_ISOLATED,
+        MIN_TYPE_CACHE_OBJECT_SIZE, PLACEMENT_HINT_LOCAL_SCOPE_NO_RECOVERY, UNKNOWN_SEMANTIC_ID,
     };
     #[cfg(feature = "stats")]
     use crate::alloc_api::type_isolation::{
@@ -1013,6 +989,127 @@ mod tests {
                 .realloc_recorded_old_metadata_new_allocation_bytes
                 .saturating_sub(before.realloc_recorded_old_metadata_new_allocation_bytes),
         }
+    }
+
+    struct AutoMetadataRawAttributionCleanup {
+        alloc: RustAllocator,
+    }
+
+    impl AutoMetadataRawAttributionCleanup {
+        fn new(alloc: RustAllocator) -> Self {
+            semantic_auto_metadata_disable();
+            semantic_stats_recording_disable();
+            unsafe {
+                restore_active_metadata(AllocationMetadata::unknown());
+                let _ = drain_current_thread_semantic_state(&alloc);
+            }
+            Self { alloc }
+        }
+    }
+
+    impl Drop for AutoMetadataRawAttributionCleanup {
+        fn drop(&mut self) {
+            semantic_auto_metadata_disable();
+            semantic_stats_recording_disable();
+            unsafe {
+                restore_active_metadata(AllocationMetadata::unknown());
+                let _ = drain_current_thread_semantic_state(&self.alloc);
+            }
+        }
+    }
+
+    #[test]
+    fn enabling_auto_policy_does_not_reattribute_preexisting_raw_deallocation() {
+        let _guard = semantic_test_guard();
+        let alloc = RustAllocator::new();
+        let _cleanup = AutoMetadataRawAttributionCleanup::new(alloc);
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let ptr = unsafe { alloc.alloc_raw(layout) };
+        assert!(!ptr.is_null());
+
+        semantic_auto_metadata_enable(0xC0DE_A701, FLAG_DELAYED_FREE, 0xA110_A701);
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        let old_release_delayed = delayed_free_snapshot().occupied_slots;
+        unsafe {
+            let _ = drain_current_thread_semantic_state(&alloc);
+        }
+
+        assert_eq!(
+            old_release_delayed, 0,
+            "a pointer with no exact recovery record must be released raw rather than inheriting a policy enabled after its allocation"
+        );
+    }
+
+    #[test]
+    fn auto_realloc_does_not_reattribute_unrecorded_old_pointer() {
+        let _guard = semantic_test_guard();
+        let alloc = RustAllocator::new();
+        let _cleanup = AutoMetadataRawAttributionCleanup::new(alloc);
+        let old_layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let new_size = 1024;
+        let new_layout = Layout::from_size_align(new_size, old_layout.align()).unwrap();
+
+        let ptr = unsafe { alloc.alloc_raw(old_layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.write(0xA7);
+        }
+        semantic_auto_metadata_enable(0xC0DE_A702, FLAG_DELAYED_FREE, 0xA110_A702);
+        let moved = unsafe { GlobalAlloc::realloc(&alloc, ptr, old_layout, new_size) };
+        assert!(!moved.is_null());
+        assert_ne!(moved, ptr);
+        let global_old_release_delayed = delayed_free_snapshot().occupied_slots;
+        let global_new_metadata = recorded_reallocation_old_metadata(moved, new_layout);
+        let global_prefix = unsafe { moved.read() };
+
+        semantic_auto_metadata_disable();
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, moved, new_layout);
+            let _ = drain_current_thread_semantic_state(&alloc);
+        }
+
+        let move_old_layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let move_new_layout = Layout::from_size_align(1024, 64).unwrap();
+        let move_ptr = unsafe { alloc.alloc_raw(move_old_layout) };
+        assert!(!move_ptr.is_null());
+        unsafe {
+            move_ptr.write(0xB7);
+        }
+        semantic_auto_metadata_enable(0xC0DE_A703, FLAG_DELAYED_FREE, 0xA110_A703);
+        let moved_block = unsafe {
+            Allocator::grow(
+                &alloc,
+                NonNull::new(move_ptr).unwrap(),
+                move_old_layout,
+                move_new_layout,
+            )
+        }
+        .expect("alignment-changing auto grow");
+        let move_moved = moved_block.as_ptr() as *mut u8;
+        let move_old_release_delayed = delayed_free_snapshot().occupied_slots;
+        let move_new_metadata = recorded_reallocation_old_metadata(move_moved, move_new_layout);
+        let move_prefix = unsafe { move_moved.read() };
+
+        semantic_auto_metadata_disable();
+        unsafe {
+            Allocator::deallocate(&alloc, NonNull::new(move_moved).unwrap(), move_new_layout);
+            let _ = drain_current_thread_semantic_state(&alloc);
+        }
+
+        assert_eq!(global_prefix, 0xA7);
+        assert!(global_new_metadata.is_some());
+        assert_eq!(
+            global_old_release_delayed, 0,
+            "GlobalAlloc realloc may apply the current auto policy to the new allocation, but not to an unrecorded old pointer"
+        );
+        assert_eq!(move_prefix, 0xB7);
+        assert!(move_new_metadata.is_some());
+        assert_eq!(
+            move_old_release_delayed, 0,
+            "alignment-changing Allocator grow must also release an unrecorded old pointer raw"
+        );
     }
 
     #[cfg(feature = "quarantine")]

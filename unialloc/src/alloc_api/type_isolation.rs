@@ -1148,6 +1148,8 @@ static AUTO_COMPILER_TYPE_IDS_CURSOR: AtomicUsize = AtomicUsize::new(0);
 static AUTO_COMPILER_TYPE_IDS_STREAM_EXHAUSTED: AtomicBool = AtomicBool::new(false);
 #[thread_local]
 static mut AUTO_COMPILER_TYPE_IDS_TLS_CURSOR: usize = 0;
+#[thread_local]
+static mut AUTO_COMPILER_TYPE_IDS_TLS_GENERATION: usize = 0;
 
 const AUTO_COMPILER_TYPE_IDS_MODE_CYCLIC_REPLAY: usize = 1;
 const AUTO_COMPILER_TYPE_IDS_MODE_CONSUMING_STREAM: usize = 2;
@@ -1161,6 +1163,7 @@ const AUTO_COMPILER_TYPE_IDS_MODE_CONSUMING_STREAM: usize = 2;
 /// policy together also prevents mixed-generation metadata rows.
 #[derive(Clone, Copy)]
 struct AutoMetadataConfig {
+    generation: usize,
     flags: u32,
     module_id: u64,
     callsite: u64,
@@ -1173,6 +1176,7 @@ struct AutoMetadataConfig {
 impl AutoMetadataConfig {
     const fn disabled() -> Self {
         Self {
+            generation: 0,
             flags: 0,
             module_id: 0,
             callsite: 0,
@@ -1192,6 +1196,16 @@ impl AutoMetadataConfig {
     fn compiler_stream_enabled(self) -> bool {
         self.compiler_metadata_enabled()
             && self.compiler_type_ids_mode == AUTO_COMPILER_TYPE_IDS_MODE_CONSUMING_STREAM
+    }
+}
+
+#[inline]
+fn next_auto_metadata_config_generation(config: AutoMetadataConfig) -> usize {
+    let next = config.generation.wrapping_add(1);
+    if next == 0 {
+        1
+    } else {
+        next
     }
 }
 
@@ -2530,6 +2544,8 @@ static AUTO_ALLOCATION_RECORDS: [Mutex<GlobalAutoAllocationRecordTable>;
 static AUTO_ALLOCATION_RECORD_COUNT: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_RECOVERY_RECORD_INSERT_PHASE: AtomicUsize = AtomicUsize::new(0);
 /// Bitset of global recovery shards with at least one live record.
 ///
 /// The count is still the source of truth for "does any recovery record exist?"
@@ -2924,15 +2940,17 @@ pub fn semantic_auto_metadata_type_id_basis() -> &'static str {
 pub fn semantic_auto_metadata_enable(module_id: u64, flags: u32, callsite: u64) {
     let normalized_flags = normalize_auto_metadata_flags(flags);
     let mut config = AUTO_METADATA_CONFIG.write();
-    clear_auto_allocation_records();
+    let generation = next_auto_metadata_config_generation(*config);
     unsafe {
         clear_auto_layout_metadata_hot_slot();
         AUTO_COMPILER_TYPE_IDS_TLS_CURSOR = 0;
+        AUTO_COMPILER_TYPE_IDS_TLS_GENERATION = generation;
     }
     semantic_slow_path_set(SLOW_PATH_AUTO_METADATA);
     AUTO_COMPILER_TYPE_IDS_CURSOR.store(0, Ordering::Relaxed);
     AUTO_COMPILER_TYPE_IDS_STREAM_EXHAUSTED.store(false, Ordering::Relaxed);
     *config = AutoMetadataConfig {
+        generation,
         flags: normalized_flags,
         module_id,
         callsite,
@@ -2954,13 +2972,15 @@ unsafe fn semantic_auto_compiler_metadata_enable_with_mode(
     }
     let normalized_flags = normalize_auto_metadata_flags(flags);
     let mut config = AUTO_METADATA_CONFIG.write();
-    clear_auto_allocation_records();
+    let generation = next_auto_metadata_config_generation(*config);
     clear_auto_layout_metadata_hot_slot();
     semantic_slow_path_set(SLOW_PATH_AUTO_METADATA);
     AUTO_COMPILER_TYPE_IDS_CURSOR.store(0, Ordering::Relaxed);
     AUTO_COMPILER_TYPE_IDS_TLS_CURSOR = 0;
+    AUTO_COMPILER_TYPE_IDS_TLS_GENERATION = generation;
     AUTO_COMPILER_TYPE_IDS_STREAM_EXHAUSTED.store(false, Ordering::Relaxed);
     *config = AutoMetadataConfig {
+        generation,
         flags: normalized_flags,
         module_id,
         callsite,
@@ -3102,14 +3122,18 @@ pub unsafe fn semantic_auto_compiler_metadata_stream_thread_local_recovery_enabl
 /// Disable process-wide layout auto-metadata for ordinary `GlobalAlloc` calls.
 pub fn semantic_auto_metadata_disable() {
     let mut config = AUTO_METADATA_CONFIG.write();
-    clear_auto_allocation_records();
+    let generation = next_auto_metadata_config_generation(*config);
     unsafe {
         clear_auto_layout_metadata_hot_slot();
         AUTO_COMPILER_TYPE_IDS_TLS_CURSOR = 0;
+        AUTO_COMPILER_TYPE_IDS_TLS_GENERATION = generation;
     }
     AUTO_COMPILER_TYPE_IDS_CURSOR.store(0, Ordering::Relaxed);
     AUTO_COMPILER_TYPE_IDS_STREAM_EXHAUSTED.store(false, Ordering::Relaxed);
-    *config = AutoMetadataConfig::disabled();
+    *config = AutoMetadataConfig {
+        generation,
+        ..AutoMetadataConfig::disabled()
+    };
     semantic_slow_path_clear(SLOW_PATH_AUTO_METADATA);
 }
 
@@ -3118,6 +3142,7 @@ fn next_auto_compiler_type_id_index(
     len: usize,
     stream_mode: bool,
     global_recovery: bool,
+    generation: usize,
 ) -> Option<usize> {
     if !stream_mode {
         if !global_recovery {
@@ -3126,6 +3151,10 @@ fn next_auto_compiler_type_id_index(
             // It does not require a process-global allocation-site order, so a
             // TLS cursor avoids a global atomic fetch_add on every allocation.
             unsafe {
+                if AUTO_COMPILER_TYPE_IDS_TLS_GENERATION != generation {
+                    AUTO_COMPILER_TYPE_IDS_TLS_CURSOR = 0;
+                    AUTO_COMPILER_TYPE_IDS_TLS_GENERATION = generation;
+                }
                 let idx = AUTO_COMPILER_TYPE_IDS_TLS_CURSOR % len;
                 AUTO_COMPILER_TYPE_IDS_TLS_CURSOR = (idx + 1) % len;
                 return Some(idx);
@@ -3178,6 +3207,7 @@ pub(crate) fn select_auto_allocation_metadata(
             config.compiler_type_ids_len,
             stream_mode,
             config.compiler_type_ids_global_recovery,
+            config.generation,
         ) {
             Some(idx) => idx,
             None => return (true, None),
@@ -3268,7 +3298,14 @@ pub fn auto_deallocation_metadata(layout: Layout) -> Option<AllocationMetadata> 
 
 #[inline]
 fn auto_allocation_recording_required(metadata: AllocationMetadata) -> bool {
-    metadata.has_type() && !metadata.is_layout_derived()
+    // Any semantic policy that reaches recovery-record installation must keep
+    // the exact allocation-time identity until the pointer is destroyed.
+    // Layout-derived metadata is not eligible for exact type-cache reuse, but
+    // it can still carry deallocation-sensitive policy (for example delayed
+    // free, guard pages, memory tagging, or stats attribution). Auto-metadata
+    // disable/reconfigure therefore cannot safely substitute the current
+    // layout policy for a live allocation's selected generation.
+    metadata.has_type()
 }
 
 #[inline]
@@ -3572,6 +3609,13 @@ unsafe fn release_empty_auto_allocation_record_overflow_pages(
     }
 }
 
+/// Destructively reset recovery bookkeeping for isolated tests.
+///
+/// Production auto-metadata control changes must never call this helper: a
+/// recovery record belongs to its live allocation, not to the currently
+/// selected auto-metadata configuration. Callers must prove that no live
+/// allocation can still own any record before resetting this state.
+#[cfg(test)]
 fn clear_auto_allocation_records() {
     for table_lock in AUTO_ALLOCATION_RECORDS.iter() {
         let mut table = table_lock.lock();
@@ -3698,6 +3742,19 @@ fn pause_after_last_global_recovery_count_decrement_for_test() {
         .is_ok()
     {
         while TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE.load(Ordering::Acquire) == 2 {
+            core::hint::spin_loop();
+        }
+    }
+}
+
+#[cfg(test)]
+fn pause_after_recovery_record_insert_for_test(recorded: bool) {
+    if recorded
+        && TEST_RECOVERY_RECORD_INSERT_PHASE
+            .compare_exchange(1, 2, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+    {
+        while TEST_RECOVERY_RECORD_INSERT_PHASE.load(Ordering::Acquire) == 2 {
             core::hint::spin_loop();
         }
     }
@@ -3912,13 +3969,16 @@ unsafe fn record_recovery_auto_allocation_metadata_eligible(
     layout: Layout,
     metadata: AllocationMetadata,
 ) -> bool {
-    if auto_allocation_record_requires_global_visibility(metadata) {
+    let recorded = if auto_allocation_record_requires_global_visibility(metadata) {
         record_global_auto_allocation_metadata_eligible(ptr, layout, metadata)
     } else if !record_fast_auto_allocation_metadata_eligible(ptr, layout, metadata) {
         record_global_auto_allocation_metadata_eligible(ptr, layout, metadata)
     } else {
         true
-    }
+    };
+    #[cfg(test)]
+    pause_after_recovery_record_insert_for_test(recorded);
+    recorded
 }
 
 #[inline]
@@ -4477,7 +4537,12 @@ pub(crate) fn auto_reallocation_old_metadata(
     ptr: *mut u8,
     layout: Layout,
 ) -> Option<AllocationMetadata> {
-    recorded_reallocation_old_metadata(ptr, layout).or_else(|| auto_deallocation_metadata(layout))
+    // The current auto configuration describes the new allocation event, not
+    // the provenance of an existing pointer. In particular, the pointer may
+    // predate auto metadata entirely or may come from a raw-only generation.
+    // Only an exact pointer/layout recovery record can safely authorize
+    // semantic old-side realloc behavior.
+    recorded_reallocation_old_metadata(ptr, layout)
 }
 
 /// Recover compiler-stream auto metadata for an ordinary `GlobalAlloc`
@@ -8073,23 +8138,22 @@ fn atomic_saturating_sub(counter: &AtomicUsize, amount: usize) {
     }
 }
 
-/// Release allocator-owned semantic TLS before the ordinary thread cache is destroyed.
+/// Release only allocator-owned retained semantic TLS state.
 ///
-/// This path deliberately performs no allocation: it detaches each TLS-owned
-/// object or side mapping first, then releases it through raw allocator/system
-/// primitives.  Process-global recovery/tag tables are not touched.  Compiler
-/// or memory-tagged objects that may outlive their allocating thread must have
-/// requested `PLACEMENT_HINT_CROSS_THREAD_RECOVERY`; their records live in
-/// those process-global tables rather than the TLS state cleared here.
+/// This deliberately leaves caller-owned live-object records, active semantic
+/// scopes, and compiler metadata cursors intact. Windows FLS destructors use
+/// this narrower drain when a non-current fiber is deleted: retained caches are
+/// OS-thread-local and must not lose their last allocator path, while live
+/// semantic context still belongs to the current fiber's thread.
 ///
 /// Returns the number of cached or quarantined allocator objects released.
 ///
 /// # Safety
 ///
-/// The caller must run this on the owning thread, after that thread has stopped
-/// using semantic allocation scopes and before its `ThreadCache` is cleaned up.
-/// It must not be re-entered concurrently on the same thread.
-pub(crate) unsafe fn drain_current_thread_semantic_state(alloc: &RustAllocator) -> usize {
+/// The caller must run this on the owning OS thread with a live `ThreadCache`
+/// bound for `alloc.dealloc_raw`. It must not be re-entered concurrently on the
+/// same thread.
+pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAllocator) -> usize {
     let mut released = 0usize;
 
     // Quarantine entries must bypass `release_delayed_slot`: that normal path
@@ -8216,6 +8280,26 @@ pub(crate) unsafe fn drain_current_thread_semantic_state(alloc: &RustAllocator) 
         }
     }
 
+    released
+}
+
+/// Release all semantic TLS before the ordinary thread cache is destroyed.
+///
+/// This path deliberately performs no allocation. It first drains every
+/// allocator-owned retained object and side mapping, then clears local records
+/// for caller-owned live objects, active scopes, and compiler cursor state.
+/// Process-global cross-thread recovery records remain intact.
+///
+/// Returns the number of cached or quarantined allocator objects released.
+///
+/// # Safety
+///
+/// The caller must run this on the owning thread, after that thread has stopped
+/// using semantic allocation scopes and before its `ThreadCache` is cleaned up.
+/// It must not be re-entered concurrently on the same thread.
+pub(crate) unsafe fn drain_current_thread_semantic_state(alloc: &RustAllocator) -> usize {
+    let released = drain_current_thread_semantic_retained_state(alloc);
+
     // These are metadata records for caller-owned live objects, not allocator
     // cache ownership.  Local records are invalid once their owning thread
     // exits; cross-thread-capable records are process-global and remain intact.
@@ -8238,7 +8322,7 @@ pub(crate) unsafe fn drain_current_thread_semantic_state(alloc: &RustAllocator) 
     } else {
         1
     };
-    idx = 0;
+    let mut idx = 0usize;
     while idx < FAST_AUTO_ALLOCATION_RECORD_SLOTS {
         let record = FAST_AUTO_ALLOCATION_RECORDS[idx];
         if !record.is_available() {
@@ -8258,6 +8342,7 @@ pub(crate) unsafe fn drain_current_thread_semantic_state(alloc: &RustAllocator) 
 
     clear_auto_layout_metadata_hot_slot();
     AUTO_COMPILER_TYPE_IDS_TLS_CURSOR = 0;
+    AUTO_COMPILER_TYPE_IDS_TLS_GENERATION = 0;
     AUTO_ALLOCATION_RECOVERY_RECORDING_DEPTH = 0;
     ACTIVE_METADATA = AllocationMetadata::unknown();
     SEMANTIC_SCOPE_STACK = [AllocationMetadata::unknown(); SEMANTIC_SCOPE_STACK_CAPACITY];
@@ -12107,12 +12192,11 @@ mod tests {
         change_control_state: impl FnOnce(),
     ) -> AllocationMetadata {
         let (selected_tx, selected_rx) = std::sync::mpsc::channel();
-        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
         let (recorded_tx, recorded_rx) = std::sync::mpsc::channel();
+        TEST_RECOVERY_RECORD_INSERT_PHASE.store(1, Ordering::Release);
         let worker = thread::spawn(move || {
             let metadata = auto_allocation_metadata(layout).expect("global compiler metadata");
             selected_tx.send(metadata).unwrap();
-            resume_rx.recv().unwrap();
             let recorded = unsafe {
                 record_recovery_auto_allocation_metadata(ptr_key as *mut u8, layout, metadata)
             };
@@ -12125,25 +12209,70 @@ mod tests {
             0,
             "default compiler auto metadata must carry its selected global recovery policy"
         );
+
+        struct ResumeRecoveryRecordInsert;
+        impl Drop for ResumeRecoveryRecordInsert {
+            fn drop(&mut self) {
+                TEST_RECOVERY_RECORD_INSERT_PHASE.store(3, Ordering::Release);
+            }
+        }
+        let resume_insert = ResumeRecoveryRecordInsert;
+        let pause_deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while TEST_RECOVERY_RECORD_INSERT_PHASE.load(Ordering::Acquire) != 2 {
+            if std::time::Instant::now() >= pause_deadline {
+                drop(resume_insert);
+                let _ = worker.join();
+                TEST_RECOVERY_RECORD_INSERT_PHASE.store(0, Ordering::Release);
+                panic!("recovery-record insertion did not reach the test pause");
+            }
+            thread::yield_now();
+        }
+
         change_control_state();
-        resume_tx.send(()).unwrap();
-        assert!(recorded_rx.recv().unwrap());
+        let count_while_insert_call_paused = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        let mask_while_insert_call_paused = auto_allocation_record_active_shards();
+        let shard_idx = auto_allocation_record_shard(ptr_key as *mut u8);
+        let shard_live_count_while_insert_call_paused =
+            AUTO_ALLOCATION_RECORDS[shard_idx].lock().live_count;
+        let lookup_while_insert_call_paused =
+            lookup_auto_allocation_metadata(ptr_key as *mut u8, layout);
+        let gate_while_insert_call_paused = semantic_runtime_slow_path_enabled();
+
+        drop(resume_insert);
+        let recorded = recorded_rx.recv().unwrap();
         worker.join().unwrap();
 
-        assert_eq!(
-            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
-            1,
-            "an in-flight globally recoverable allocation must remain process-visible after control-state changes"
+        let recovered = take_auto_deallocation_metadata(ptr_key as *mut u8, layout);
+        let count_after_recovery = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        let mask_after_recovery = auto_allocation_record_active_shards();
+        TEST_RECOVERY_RECORD_INSERT_PHASE.store(0, Ordering::Release);
+
+        assert!(recorded);
+        assert_eq!(count_while_insert_call_paused, 1);
+        assert_eq!(shard_live_count_while_insert_call_paused, 1);
+        assert!(auto_allocation_record_shard_is_active(
+            mask_while_insert_call_paused,
+            shard_idx
+        ));
+        assert_eq!(lookup_while_insert_call_paused, Some(selected));
+        assert!(
+            gate_while_insert_call_paused,
+            "a published recovery record must keep deallocation on the semantic path while its inserting call overlaps a control change"
         );
         assert_eq!(
             FAST_AUTO_ALLOCATION_RECORD_GLOBAL_COUNT.load(Ordering::Relaxed),
             0,
             "global recovery metadata must not be downgraded to the allocating thread's TLS table"
         );
-        let recovered = take_auto_deallocation_metadata(ptr_key as *mut u8, layout)
-            .expect("another thread must recover the selected allocation metadata");
-        assert_eq!(recovered, selected);
+        assert_eq!(
+            recovered,
+            Some(selected),
+            "another thread must recover metadata published by an insertion that overlapped the control change"
+        );
+        assert_eq!(count_after_recovery, 0);
+        assert_eq!(mask_after_recovery, 0);
         recovered
+            .expect("the selected allocation metadata must survive its overlapping control change")
     }
 
     #[test]
@@ -12384,6 +12513,62 @@ mod tests {
             "conservative/global replay still uses the process-visible atomic cursor"
         );
         semantic_auto_metadata_disable();
+    }
+
+    #[test]
+    fn thread_local_compiler_reconfigure_resets_long_lived_worker_cursor() {
+        static FIRST_IDS: [u64; 3] = [0xC003_7A20, 0xC003_7A21, 0xC003_7A22];
+        static SECOND_IDS: [u64; 3] = [0xC003_7A30, 0xC003_7A31, 0xC003_7A32];
+
+        let _guard = test_guard();
+        semantic_auto_metadata_disable();
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_thread_local_recovery_enable(
+                0xC0DE_7A20,
+                FLAG_TYPE_ISOLATED,
+                0xA110_7A20,
+                FIRST_IDS.as_ptr(),
+                FIRST_IDS.len(),
+            )
+        });
+
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let (old_tx, old_rx) = std::sync::mpsc::channel();
+        let (resume_tx, resume_rx) = std::sync::mpsc::channel();
+        let (new_tx, new_rx) = std::sync::mpsc::channel();
+        let worker = thread::spawn(move || {
+            let first = auto_allocation_metadata(layout).expect("first worker generation id");
+            let second = auto_allocation_metadata(layout).expect("second worker generation id");
+            old_tx.send((first, second)).unwrap();
+            resume_rx.recv().unwrap();
+            new_tx
+                .send(auto_allocation_metadata(layout).expect("reconfigured worker generation id"))
+                .unwrap();
+        });
+
+        let (old_first, old_second) = old_rx.recv().unwrap();
+        assert_eq!(old_first.type_id, FIRST_IDS[0]);
+        assert_eq!(old_second.type_id, FIRST_IDS[1]);
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_thread_local_recovery_enable(
+                0xC0DE_7A30,
+                FLAG_TYPE_ISOLATED,
+                0xA110_7A30,
+                SECOND_IDS.as_ptr(),
+                SECOND_IDS.len(),
+            )
+        });
+        resume_tx.send(()).unwrap();
+        let reconfigured = new_rx.recv().unwrap();
+        worker.join().unwrap();
+        semantic_auto_metadata_disable();
+
+        assert_eq!(
+            reconfigured.type_id, SECOND_IDS[0],
+            "a long-lived worker must lazily restart its TLS replay cursor at the first id of each coherent config generation"
+        );
+        assert_eq!(reconfigured.module_id, 0xC0DE_7A30);
+        assert_eq!(reconfigured.callsite, 0xA110_7A30);
     }
 
     #[test]
@@ -12684,7 +12869,223 @@ mod tests {
     }
 
     #[test]
-    fn selected_global_recovery_survives_disable_and_local_reconfigure() {
+    fn live_global_auto_records_survive_disable_and_reconfigure() {
+        static FIRST_IDS: [u64; 1] = [0xC002_2128];
+        static SECOND_IDS: [u64; 1] = [0xC002_2129];
+
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE.saturating_sub(1).max(1), 1)
+                .unwrap();
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_enable(
+                0xC0DE_2128,
+                FLAG_TYPE_ISOLATED,
+                0xA110_2128,
+                FIRST_IDS.as_ptr(),
+                FIRST_IDS.len(),
+            )
+        });
+
+        let disable_ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!disable_ptr.is_null());
+        let disable_metadata = lookup_auto_allocation_metadata(disable_ptr, layout)
+            .expect("live compiler allocation must publish recovery metadata");
+        assert_eq!(disable_metadata.type_id, FIRST_IDS[0]);
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+
+        semantic_auto_metadata_disable();
+        assert_eq!(
+            lookup_auto_allocation_metadata(disable_ptr, layout),
+            Some(disable_metadata),
+            "disabling future auto metadata must not erase a live allocation's recovery identity"
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert!(semantic_runtime_slow_path_enabled());
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, disable_ptr, layout);
+        }
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(auto_allocation_record_active_shards(), 0);
+        assert!(!semantic_runtime_slow_path_enabled());
+
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_enable(
+                0xC0DE_2128,
+                FLAG_TYPE_ISOLATED,
+                0xA110_2128,
+                FIRST_IDS.as_ptr(),
+                FIRST_IDS.len(),
+            )
+        });
+        let old_ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!old_ptr.is_null());
+        let old_metadata = lookup_auto_allocation_metadata(old_ptr, layout)
+            .expect("old-generation live allocation metadata");
+
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_enable(
+                0xC0DE_2129,
+                FLAG_TYPE_ISOLATED,
+                0xA110_2129,
+                SECOND_IDS.as_ptr(),
+                SECOND_IDS.len(),
+            )
+        });
+        let new_ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!new_ptr.is_null());
+        let old_after_reconfigure = lookup_auto_allocation_metadata(old_ptr, layout)
+            .expect("reconfiguration must retain old-generation recovery metadata");
+        let new_metadata = lookup_auto_allocation_metadata(new_ptr, layout)
+            .expect("new-generation live allocation metadata");
+
+        assert_eq!(old_after_reconfigure, old_metadata);
+        assert_eq!(old_after_reconfigure.type_id, FIRST_IDS[0]);
+        assert_eq!(old_after_reconfigure.module_id, 0xC0DE_2128);
+        assert_eq!(new_metadata.type_id, SECOND_IDS[0]);
+        assert_eq!(new_metadata.module_id, 0xC0DE_2129);
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 2);
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, old_ptr, layout);
+            GlobalAlloc::dealloc(&alloc, new_ptr, layout);
+        }
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(auto_allocation_record_active_shards(), 0);
+        semantic_auto_metadata_disable();
+        assert!(!semantic_runtime_slow_path_enabled());
+    }
+
+    #[test]
+    fn live_thread_local_auto_record_survives_disable() {
+        static IDS: [u64; 1] = [0xC002_212A];
+
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE.saturating_sub(1).max(1), 1)
+                .unwrap();
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_thread_local_recovery_enable(
+                0xC0DE_212A,
+                FLAG_TYPE_ISOLATED,
+                0xA110_212A,
+                IDS.as_ptr(),
+                IDS.len(),
+            )
+        });
+
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        let metadata = lookup_auto_allocation_metadata(ptr, layout)
+            .expect("same-thread compiler allocation recovery metadata");
+        assert_eq!(metadata.type_id, IDS[0]);
+        assert_eq!(
+            metadata.placement_hint & PLACEMENT_HINT_CROSS_THREAD_RECOVERY,
+            0
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            FAST_AUTO_ALLOCATION_RECORD_GLOBAL_COUNT.load(Ordering::Relaxed),
+            1
+        );
+
+        semantic_auto_metadata_disable();
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(metadata));
+        assert_eq!(
+            FAST_AUTO_ALLOCATION_RECORD_GLOBAL_COUNT.load(Ordering::Relaxed),
+            1,
+            "disable must not clear the allocating thread's live recovery record"
+        );
+        assert!(semantic_runtime_slow_path_enabled());
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        assert_eq!(
+            FAST_AUTO_ALLOCATION_RECORD_GLOBAL_COUNT.load(Ordering::Relaxed),
+            0
+        );
+        assert!(!semantic_runtime_slow_path_enabled());
+    }
+
+    #[test]
+    fn live_layout_auto_records_survive_reconfigure_and_disable() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(7, 1).unwrap();
+        semantic_auto_metadata_enable(0xC0DE_212B, FLAG_FORCE_INITIALIZE, 0xA110_212B);
+        let first_metadata =
+            auto_deallocation_metadata(layout).expect("first layout-auto generation");
+        let first_ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!first_ptr.is_null());
+
+        semantic_auto_metadata_enable(0xC0DE_212C, FLAG_FORCE_INITIALIZE, 0xA110_212C);
+        let second_metadata =
+            auto_deallocation_metadata(layout).expect("second layout-auto generation");
+        let second_ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!second_ptr.is_null());
+        semantic_auto_metadata_disable();
+
+        assert!(first_metadata.is_layout_derived());
+        assert!(second_metadata.is_layout_derived());
+        assert_ne!(first_metadata.module_id, second_metadata.module_id);
+        assert_ne!(first_metadata.callsite, second_metadata.callsite);
+        assert_eq!(
+            lookup_auto_allocation_metadata(first_ptr, layout),
+            Some(first_metadata),
+            "reconfiguration must preserve the exact policy generation of an older live layout-derived allocation"
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(second_ptr, layout),
+            Some(second_metadata),
+            "disable must preserve the exact policy generation of a live layout-derived allocation"
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 2);
+        assert!(semantic_runtime_slow_path_enabled());
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, first_ptr, layout);
+            GlobalAlloc::dealloc(&alloc, second_ptr, layout);
+        }
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(auto_allocation_record_active_shards(), 0);
+        assert!(!semantic_runtime_slow_path_enabled());
+    }
+
+    #[test]
+    fn global_recovery_insert_overlap_survives_disable_and_local_reconfigure() {
         static GLOBAL_IDS: [u64; 1] = [0xC002_2124];
         static LOCAL_IDS: [u64; 1] = [0xC002_2125];
 
@@ -14652,6 +15053,92 @@ mod tests {
             auto_allocation_metadata(Layout::from_size_align(64, align_of::<usize>()).unwrap()),
             None
         );
+    }
+
+    #[cfg(not(unialloc_target_arm64e))]
+    #[test]
+    fn retained_state_drain_preserves_live_records_scopes_and_compiler_cursor() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        semantic_auto_metadata_disable();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_D0C0)
+            .with_module(0xC0DE_D0C0)
+            .with_callsite(0xA110_D0C0)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let tagged_metadata = metadata
+            .with_callsite(0xA110_D0C1)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING);
+
+        unsafe {
+            let retained_ptr = alloc.alloc_with_metadata(layout, metadata);
+            assert!(!retained_ptr.is_null());
+            alloc.dealloc_with_metadata(retained_ptr, layout, metadata);
+
+            let recovery_ptr = alloc.alloc_raw(layout);
+            assert!(!recovery_ptr.is_null());
+            assert!(record_fast_auto_allocation_metadata_eligible(
+                recovery_ptr,
+                layout,
+                metadata,
+            ));
+
+            let tagged_ptr = alloc.alloc_raw(layout);
+            assert!(!tagged_ptr.is_null());
+            assert_eq!(
+                record_memory_tagged_allocation(tagged_ptr, layout, tagged_metadata),
+                Ok(())
+            );
+
+            set_active_metadata(metadata);
+            SEMANTIC_SCOPE_STACK[0] = metadata;
+            SEMANTIC_SCOPE_STACK_DEPTH = 1;
+            AUTO_COMPILER_TYPE_IDS_TLS_CURSOR = 7;
+
+            assert_eq!(type_isolation_side_cache_snapshot().occupied_entries, 1);
+            assert!(current_thread_fast_auto_allocation_records_active());
+            assert_eq!(
+                snapshot_static_copy(core::ptr::addr_of!(MEMORY_TAG_RECORD_COUNT)),
+                1
+            );
+
+            assert_eq!(drain_current_thread_semantic_retained_state(&alloc), 1);
+            assert_eq!(type_isolation_side_cache_snapshot().occupied_entries, 0);
+            assert!(current_thread_fast_auto_allocation_records_active());
+            assert_eq!(
+                snapshot_static_copy(core::ptr::addr_of!(MEMORY_TAG_RECORD_COUNT)),
+                1
+            );
+            assert_eq!(active_allocation_metadata(), Some(metadata));
+            assert_eq!(semantic_scope_stack_depth_for_test(), 1);
+            assert_eq!(
+                snapshot_static_copy(core::ptr::addr_of!(AUTO_COMPILER_TYPE_IDS_TLS_CURSOR)),
+                7
+            );
+
+            assert_eq!(drain_current_thread_semantic_state(&alloc), 0);
+            assert!(!current_thread_fast_auto_allocation_records_active());
+            assert_eq!(
+                snapshot_static_copy(core::ptr::addr_of!(MEMORY_TAG_RECORD_COUNT)),
+                0
+            );
+            assert_eq!(active_allocation_metadata(), None);
+            assert_eq!(semantic_scope_stack_depth_for_test(), 0);
+            assert_eq!(
+                snapshot_static_copy(core::ptr::addr_of!(AUTO_COMPILER_TYPE_IDS_TLS_CURSOR)),
+                0
+            );
+
+            alloc.dealloc_raw(recovery_ptr, layout);
+            alloc.dealloc_raw(tagged_ptr, layout);
+        }
     }
 
     #[cfg(not(unialloc_target_arm64e))]
