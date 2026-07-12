@@ -669,7 +669,7 @@ tests pass `15/15`, and the same pre-commit run passes 652 UniAlloc and 430
 std-bench tests.  These are bounded actual-rustc regressions, not a claim about
 all custom ADTs or all ownership transfer.
 
-The corresponding current-source real-application check builds and runs an
+The corresponding then-current-source real-application check builds and runs an
 instrumented Oxipng v4.0.3 copy once with pinned
 `nightly-2022-07-01`.  Both source-binding snapshots record
 `scoped_status=""`, scoped fingerprint
@@ -705,8 +705,49 @@ current-rustc same-layout regression, `Vec<String>` and `Vec<Vec<u8>>` receive
 distinct nonzero compiler/runtime identities, the wrong type cannot reuse the
 first buffer, the same type recovers it exactly with one cache hit, and
 recovery mismatch/corruption remain `0/0`; `Vec<String>::resize` remains
-fail-closed.  The Oxipng application was not rerun after `572bfab`, so the
-`427583b` artifact remains exact only for its recorded source snapshot.
+fail-closed.  The `427583b` Oxipng artifact predates this change and remains
+exact only for its recorded source snapshot.
+
+### Current-content Oxipng boxed-slice ownership-transfer run
+
+The first pinned old-nightly build of the current pass exposed a
+`GenericArg::as_type` compatibility break.  Commit `9bb9f8d` adds only the
+required cfg adapter and received an independent `APPROVE`.  The pinned
+old-nightly pass compile, the current actual-rustc Box ownership-transfer probe,
+and the embedded pass tests (`16/16`) then pass.
+
+One instrumented Oxipng v4.0.3 functional build/run was collected at HEAD
+`576df61` while that byte-stable adapter was still uncommitted; it was committed
+byte-identically as `9bb9f8d`.  At `9bb9f8d`, all 60 scoped collection-input
+hashes matched.  After code-bearing commit `f8f0d90`, 58/60 match: the only
+changes are the
+post-run summarizer and its test, while the compiler pass and allocator/runtime
+inputs remain byte-identical to the collection.  This is a scoped source
+binding and does not claim that the full working tree was clean.  Build and run
+both return zero, and the output SHA-256 exactly matches the known-good value.
+Target-crate actual-rustc evidence contains 6 direct, 383 semantic-scope, and
+320 Drop rewrites, plus 6 actual `Box<[u8]>`-to-`Vec<u8>` ownership-transfer
+rewrites in real functions; 575 candidates remain explicitly fail-closed.
+
+The runtime records 904 typed allocations out of 1070 allocation events, 64
+type rows, zero dropped events, and zero corrupt slots.  Its injected oracle
+passes wrong-type non-reuse and same-type reuse.  The whole run nevertheless has
+13 recovery corrections, so pairing remains `recovery_corrected_non_exact`, not
+exact whole-application pairing or natural-application isolation coverage.  The
+enriched artifact is
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-current-576df61-20260712c-enriched/`;
+`oxipng-realapp-repro-summary.json` has SHA-256
+`cd14bf7bdcbff8fe99d5fc6d97888ce2065050c527b423baa63b856857bdd43b`.
+The enrichment did not rerun Oxipng: commit `f8f0d90` deterministically replayed
+the two preserved raw audit files and records exactly 6 ownership-transfer
+candidates, 6 applied rows, and the 6 selected rows by matching the exact
+lowering kind and applied status.  That count is independent of the separate 6
+direct allocator rewrites.  The original artifact remains unchanged with
+summary SHA-256
+`054b0e6a9fe7d8827d8304bb7929bb187151542541f9cfa83bb8b8ba8718ee4f`.
+This was one functional run with no timing loop: it supports no performance or
+paper percentage and does not establish universal compiler or application
+coverage.
 
 For historical comparison, a source-bound Oxipng v4.0.3 smoke at validator
 commit `e466831` validated the
