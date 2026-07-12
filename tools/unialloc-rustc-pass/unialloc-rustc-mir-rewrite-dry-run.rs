@@ -270,6 +270,7 @@ struct SemanticOwnershipTransferAbi {
     string_into_bytes_def_id: DefId,
     string_into_boxed_str_def_id: DefId,
     boxed_str_into_string_def_id: DefId,
+    cstring_into_bytes_with_nul_def_id: DefId,
     vec_into_iter_def_id: DefId,
 }
 
@@ -278,6 +279,8 @@ const SEMANTIC_VEC_INTO_BOXED_SLICE_SYMBOL: &str = "__unialloc_semantic_vec_into
 const SEMANTIC_STRING_INTO_BYTES_SYMBOL: &str = "__unialloc_semantic_string_into_bytes";
 const SEMANTIC_STRING_INTO_BOXED_STR_SYMBOL: &str = "__unialloc_semantic_string_into_boxed_str";
 const SEMANTIC_BOXED_STR_INTO_STRING_SYMBOL: &str = "__unialloc_semantic_boxed_str_into_string";
+const SEMANTIC_CSTRING_INTO_BYTES_WITH_NUL_SYMBOL: &str =
+    "__unialloc_semantic_cstring_into_bytes_with_nul";
 const SEMANTIC_VEC_INTO_ITER_SYMBOL: &str = "__unialloc_semantic_vec_into_iter";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -287,6 +290,7 @@ enum SemanticOwnershipTransferKind {
     StringIntoBytes,
     StringIntoBoxedStr,
     BoxedStrIntoString,
+    CStringIntoBytesWithNul,
     VecIntoIter,
 }
 
@@ -2305,6 +2309,30 @@ fn exact_alloc_string_into_bytes_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool 
         && exact_alloc_string_into_bytes_def_path(&tcx.def_path_str(def_id))
 }
 
+fn exact_alloc_cstring_into_bytes_with_nul_def_path(path: &str) -> bool {
+    let normalized = strip_rustc_crate_disambiguators(path);
+    if matches!(
+        normalized.as_str(),
+        "alloc::ffi::c_str::CString::into_bytes_with_nul"
+            | "std::ffi::CString::into_bytes_with_nul"
+    ) {
+        return true;
+    }
+    let impl_index = match normalized
+        .strip_prefix("alloc::ffi::c_str::{impl#")
+        .and_then(|rest| rest.strip_suffix("}::into_bytes_with_nul"))
+    {
+        Some(index) => index,
+        None => return false,
+    };
+    !impl_index.is_empty() && impl_index.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn exact_alloc_cstring_into_bytes_with_nul_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "alloc"
+        && exact_alloc_cstring_into_bytes_with_nul_def_path(&tcx.def_path_str(def_id))
+}
+
 fn exact_alloc_string_into_boxed_str_def_path(path: &str) -> bool {
     let normalized = strip_rustc_crate_disambiguators(path);
     if matches!(
@@ -2477,6 +2505,13 @@ fn exact_alloc_string_def_path(path: &str) -> bool {
     )
 }
 
+fn exact_alloc_cstring_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "alloc::ffi::c_str::CString" | "std::ffi::CString"
+    )
+}
+
 fn exact_alloc_global_def_path(path: &str) -> bool {
     matches!(
         strip_rustc_crate_disambiguators(path).as_str(),
@@ -2634,6 +2669,66 @@ fn exact_string_into_bytes_transfer_proof<'tcx>(
         _ => return None,
     };
     if !exact_alloc_adt_def_id(tcx, source_def.did(), exact_alloc_string_def_path)
+        || !source_args.is_empty()
+    {
+        return None;
+    }
+
+    let (destination_def, destination_args) = match destination_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, destination_def.did(), exact_alloc_vec_def_path)
+        || callee_def_id.krate != source_def.did().krate
+        || destination_def.did().krate != source_def.did().krate
+        || destination_args.len() != 2
+    {
+        return None;
+    }
+    let destination_element_ty = generic_arg_type(destination_args.get(0)?)?;
+    let destination_allocator_ty = generic_arg_type(destination_args.get(1)?)?;
+    let (allocator_def, allocator_args) = match destination_allocator_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if destination_element_ty != tcx.types.u8
+        || !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path)
+        || allocator_def.did().krate != source_def.did().krate
+        || !allocator_args.is_empty()
+    {
+        return None;
+    }
+
+    Some(SemanticOwnershipTransferProof {
+        element_ty: destination_element_ty,
+        allocator_ty: destination_allocator_ty,
+        old_owner_type: format!("{:?}", source_ty),
+        new_owner_type: format!("{:?}", destination_ty),
+    })
+}
+
+fn exact_cstring_into_bytes_with_nul_transfer_proof<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    callee_generic_types: &[Ty<'tcx>],
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<SemanticOwnershipTransferProof<'tcx>> {
+    if !exact_alloc_cstring_into_bytes_with_nul_def_id(tcx, callee_def_id)
+        || !callee_generic_types.is_empty()
+        || argument_tys.len() != 1
+        || clone_result_has_unresolved_params(destination_ty)
+        || clone_result_has_unresolved_params(argument_tys[0])
+    {
+        return None;
+    }
+
+    let source_ty = argument_tys[0];
+    let (source_def, source_args) = match source_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, source_def.did(), exact_alloc_cstring_def_path)
         || !source_args.is_empty()
     {
         return None;
@@ -3667,6 +3762,24 @@ mod tests {
         assert!(!exact_alloc_string_into_bytes_def_path(
             "my_crate::alloc::string::{impl#0}::into_bytes"
         ));
+        assert!(exact_alloc_cstring_into_bytes_with_nul_def_path(
+            "alloc[d734]::ffi::c_str::{impl#1}::into_bytes_with_nul"
+        ));
+        assert!(exact_alloc_cstring_into_bytes_with_nul_def_path(
+            "alloc::ffi::c_str::{impl#17}::into_bytes_with_nul"
+        ));
+        assert!(exact_alloc_cstring_into_bytes_with_nul_def_path(
+            "std::ffi::CString::into_bytes_with_nul"
+        ));
+        assert!(!exact_alloc_cstring_into_bytes_with_nul_def_path(
+            "alloc::ffi::c_str::{impl#1}::into_bytes"
+        ));
+        assert!(!exact_alloc_cstring_into_bytes_with_nul_def_path(
+            "alloc::ffi::c_str::{impl#x}::into_bytes_with_nul"
+        ));
+        assert!(!exact_alloc_cstring_into_bytes_with_nul_def_path(
+            "my_crate::alloc::ffi::c_str::{impl#1}::into_bytes_with_nul"
+        ));
         assert!(exact_alloc_string_into_boxed_str_def_path(
             "alloc[d734]::string::{impl#0}::into_boxed_str"
         ));
@@ -3750,6 +3863,13 @@ mod tests {
         assert!(exact_alloc_string_def_path("std::string::String"));
         assert!(!exact_alloc_string_def_path(
             "my_crate::std::string::String"
+        ));
+        assert!(exact_alloc_cstring_def_path(
+            "alloc[d734]::ffi::c_str::CString"
+        ));
+        assert!(exact_alloc_cstring_def_path("std::ffi::CString"));
+        assert!(!exact_alloc_cstring_def_path(
+            "my_crate::std::ffi::CString"
         ));
         assert!(exact_alloc_global_def_path("alloc[d734]::alloc::Global"));
         assert!(exact_alloc_global_def_path("std::alloc::Global"));
@@ -4983,6 +5103,11 @@ fn resolve_unialloc_semantic_ownership_transfer_in_crate<'tcx>(
         crate_root,
         SEMANTIC_BOXED_STR_INTO_STRING_SYMBOL,
     )?;
+    let cstring_into_bytes_with_nul_def_id = child_def_id_in_alloc_api_or_type_isolation(
+        tcx,
+        crate_root,
+        SEMANTIC_CSTRING_INTO_BYTES_WITH_NUL_SYMBOL,
+    )?;
     let vec_into_iter_def_id = child_def_id_in_alloc_api_or_type_isolation(
         tcx,
         crate_root,
@@ -4994,6 +5119,7 @@ fn resolve_unialloc_semantic_ownership_transfer_in_crate<'tcx>(
         string_into_bytes_def_id,
         string_into_boxed_str_def_id,
         boxed_str_into_string_def_id,
+        cstring_into_bytes_with_nul_def_id,
         vec_into_iter_def_id,
     })
 }
@@ -6666,6 +6792,17 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             &argument_tys,
         ) {
             (SemanticOwnershipTransferKind::BoxedStrIntoString, proof)
+        } else if let Some(proof) = exact_cstring_into_bytes_with_nul_transfer_proof(
+            tcx,
+            callee_def_id,
+            &callee_generic_types,
+            destination_ty,
+            &argument_tys,
+        ) {
+            (
+                SemanticOwnershipTransferKind::CStringIntoBytesWithNul,
+                proof,
+            )
         } else if let Some(proof) = exact_vec_into_iter_transfer_proof(
             tcx,
             callee_def_id,
@@ -6702,6 +6839,9 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             }
             SemanticOwnershipTransferKind::BoxedStrIntoString => {
                 (proof.old_owner_type.clone(), "exact_boxed_str_argument")
+            }
+            SemanticOwnershipTransferKind::CStringIntoBytesWithNul => {
+                (proof.old_owner_type.clone(), "exact_cstring_argument")
             }
             SemanticOwnershipTransferKind::VecIntoIter => {
                 (proof.old_owner_type.clone(), "exact_vec_argument")
@@ -6821,6 +6961,15 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                                 &argument_tys,
                             )
                         }
+                        SemanticOwnershipTransferKind::CStringIntoBytesWithNul => {
+                            exact_cstring_into_bytes_with_nul_transfer_proof(
+                                tcx,
+                                callee_def_id,
+                                &callee_generic_types,
+                                destination_ty,
+                                &argument_tys,
+                            )
+                        }
                         SemanticOwnershipTransferKind::VecIntoIter => {
                             exact_vec_into_iter_transfer_proof(
                                 tcx,
@@ -6859,6 +7008,9 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                 SemanticOwnershipTransferKind::BoxedStrIntoString => {
                     abi.boxed_str_into_string_def_id
                 }
+                SemanticOwnershipTransferKind::CStringIntoBytesWithNul => {
+                    abi.cstring_into_bytes_with_nul_def_id
+                }
                 SemanticOwnershipTransferKind::VecIntoIter => abi.vec_into_iter_def_id,
             };
             let terminator = body[candidate.bb].terminator_mut();
@@ -6874,7 +7026,8 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             *func = match candidate.kind {
                 SemanticOwnershipTransferKind::StringIntoBytes
                 | SemanticOwnershipTransferKind::StringIntoBoxedStr
-                | SemanticOwnershipTransferKind::BoxedStrIntoString => {
+                | SemanticOwnershipTransferKind::BoxedStrIntoString
+                | SemanticOwnershipTransferKind::CStringIntoBytesWithNul => {
                     unialloc_function_handle(tcx, transfer_def_id, candidate.fn_span)
                 }
                 SemanticOwnershipTransferKind::BoxSliceIntoVec
@@ -6906,6 +7059,9 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                 }
                 SemanticOwnershipTransferKind::BoxedStrIntoString => {
                     "resolved_unialloc_semantic_boxed_str_into_string"
+                }
+                SemanticOwnershipTransferKind::CStringIntoBytesWithNul => {
+                    "resolved_unialloc_semantic_cstring_into_bytes_with_nul"
                 }
                 SemanticOwnershipTransferKind::VecIntoIter => {
                     "resolved_unialloc_semantic_vec_into_iter"
@@ -6973,6 +7129,19 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                     SEMANTIC_BOXED_STR_INTO_STRING_SYMBOL,
                     format!(
                         "Retarget exact pointer-preserving Box<str, Global> -> String ownership transfer; old_owner_type={}; old_type_id={}; old_owner_basis={}; new_owner_type={}; new_type_id={}",
+                        candidate.expected_old_owner_type,
+                        old_type_id,
+                        candidate.expected_old_owner_basis,
+                        candidate.proof.new_owner_type,
+                        new_type_id,
+                    ),
+                    "pointer_preserving_owner_identity_rebind",
+                ),
+                SemanticOwnershipTransferKind::CStringIntoBytesWithNul => (
+                    "rustc_middle_exact_cstring_into_bytes_with_nul_owner_transfer",
+                    SEMANTIC_CSTRING_INTO_BYTES_WITH_NUL_SYMBOL,
+                    format!(
+                        "Retarget exact pointer-preserving CString -> Vec<u8, Global> ownership transfer; old_owner_type={}; old_type_id={}; old_owner_basis={}; new_owner_type={}; new_type_id={}",
                         candidate.expected_old_owner_type,
                         old_type_id,
                         candidate.expected_old_owner_basis,
@@ -8308,6 +8477,10 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         record.rewrite_status == "actual_semantic_ownership_transfer_rewrite_applied"
             && record.replacement_symbol == SEMANTIC_BOXED_STR_INTO_STRING_SYMBOL
     });
+    let cstring_into_bytes_with_nul_rewrite_applied = records.iter().any(|record| {
+        record.rewrite_status == "actual_semantic_ownership_transfer_rewrite_applied"
+            && record.replacement_symbol == SEMANTIC_CSTRING_INTO_BYTES_WITH_NUL_SYMBOL
+    });
     let vec_into_iter_rewrite_applied = records.iter().any(|record| {
         record.rewrite_status == "actual_semantic_ownership_transfer_rewrite_applied"
             && record.replacement_symbol == SEMANTIC_VEC_INTO_ITER_SYMBOL
@@ -8321,27 +8494,31 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
             string_into_bytes_rewrite_applied,
             string_into_boxed_str_rewrite_applied,
             boxed_str_into_string_rewrite_applied,
+            cstring_into_bytes_with_nul_rewrite_applied,
             vec_into_iter_rewrite_applied,
         ) {
-            (true, false, false, false, false, false) => {
+            (true, false, false, false, false, false, false) => {
                 "resolved_unialloc_semantic_box_slice_into_vec"
             }
-            (false, true, false, false, false, false) => {
+            (false, true, false, false, false, false, false) => {
                 "resolved_unialloc_semantic_vec_into_boxed_slice"
             }
-            (false, false, true, false, false, false) => {
+            (false, false, true, false, false, false, false) => {
                 "resolved_unialloc_semantic_string_into_bytes"
             }
-            (false, false, false, true, false, false) => {
+            (false, false, false, true, false, false, false) => {
                 "resolved_unialloc_semantic_string_into_boxed_str"
             }
-            (false, false, false, false, true, false) => {
+            (false, false, false, false, true, false, false) => {
                 "resolved_unialloc_semantic_boxed_str_into_string"
             }
-            (false, false, false, false, false, true) => {
+            (false, false, false, false, false, true, false) => {
+                "resolved_unialloc_semantic_cstring_into_bytes_with_nul"
+            }
+            (false, false, false, false, false, false, true) => {
                 "resolved_unialloc_semantic_vec_into_iter"
             }
-            (false, false, false, false, false, false) => {
+            (false, false, false, false, false, false, false) => {
                 "no_supported_semantic_ownership_transfer_candidates"
             }
             _ => "resolved_unialloc_semantic_ownership_transfers",
@@ -8531,7 +8708,7 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     json.push_str("  \"lowering_contract\": {\n");
     json.push_str("    \"target_allocator_abi\": \"__unialloc_alloc_with_metadata[_hints](size, align, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite), Rust-ABI __unialloc_{alloc,alloc_zeroed,realloc,dealloc}_layout_with_metadata[_hints] plus optional no-recovery alloc/alloc_zeroed/realloc/dealloc _local variants for explicit paired Layout lowerings; size/align __unialloc_alloc_with_metadata[_hints] remains recovery-backed because exchange_malloc has no direct paired dealloc rewrite (original Layout operands, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite); explicit GlobalAlloc receiver calls are lowered only when the receiver type is UniAlloc/RustAllocator\",\n");
     json.push_str("    \"semantic_scope_abi\": \"__unialloc_semantic_scope_push[_hints][_local](type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite) / __unialloc_semantic_scope_pop(); _local is selected only for a single normal path with no owner move/call before the exact destination Drop; otherwise recovery-backed\",\n");
-    json.push_str("    \"semantic_ownership_transfer_abi\": \"exact DefId and structural owner proofs retarget Box<[T], A> -> Vec<T, A> to __unialloc_semantic_box_slice_into_vec, shrink-aware Vec<T, A> -> Box<[T], A> to __unialloc_semantic_vec_into_boxed_slice, String -> Vec<u8, Global> to __unialloc_semantic_string_into_bytes, shrink-aware String -> Box<str, Global> to __unialloc_semantic_string_into_boxed_str, Box<str, Global> -> String to __unialloc_semantic_boxed_str_into_string, and Vec<T, A> -> IntoIter<T, A> to __unialloc_semantic_vec_into_iter; no generic semantic allocation scope is inserted and any proof or symbol-resolution failure retains the ordinary ambiguous fail-closed path\",\n");
+    json.push_str("    \"semantic_ownership_transfer_abi\": \"exact DefId and structural owner proofs retarget Box<[T], A> -> Vec<T, A> to __unialloc_semantic_box_slice_into_vec, shrink-aware Vec<T, A> -> Box<[T], A> to __unialloc_semantic_vec_into_boxed_slice, String -> Vec<u8, Global> to __unialloc_semantic_string_into_bytes, shrink-aware String -> Box<str, Global> to __unialloc_semantic_string_into_boxed_str, Box<str, Global> -> String to __unialloc_semantic_boxed_str_into_string, CString -> Vec<u8, Global> to __unialloc_semantic_cstring_into_bytes_with_nul, and Vec<T, A> -> IntoIter<T, A> to __unialloc_semantic_vec_into_iter; no generic semantic allocation scope is inserted and any proof or symbol-resolution failure retains the ordinary ambiguous fail-closed path\",\n");
     json.push_str("    \"size_source\": \"original MIR call arg 0\",\n");
     json.push_str("    \"align_source\": \"original MIR call arg 1\",\n");
     json.push_str("    \"semantic_heap_object_solver\": \"rustc_middle TyKind::Adt destination/argument solver plus MIR ShallowInitBox, Layout::array/new/for_value/for_value_raw constructor provenance, size_of/align_of typed Layout::from_size_align reconstruction, Layout::align_to/pad_to_align transformer provenance, same-source Layout::from_size_align reconstruction provenance, projection-aware/packed Layout::extend/repeat composite provenance tracking, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, and canonicalized MIR place/ref/tuple projection provenance; unsolved candidates are audit-only\",\n");
@@ -9192,7 +9369,7 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let _ = writeln!(text, "rewrite_candidate_count: {}", records.len());
     text.push_str("target_allocator_abi: __unialloc_alloc_with_metadata[_hints](size, align, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite), Rust-ABI __unialloc_{alloc,alloc_zeroed,realloc,dealloc}_layout_with_metadata[_hints] plus optional no-recovery alloc/alloc_zeroed/realloc/dealloc _local variants for explicit paired Layout lowerings; size/align __unialloc_alloc_with_metadata[_hints] remains recovery-backed because exchange_malloc has no direct paired dealloc rewrite (original Layout operands, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite); explicit GlobalAlloc receiver calls are lowered only when the receiver type is UniAlloc/RustAllocator\n");
     text.push_str("semantic_scope_abi: __unialloc_semantic_scope_push[_hints][_local](type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite) / __unialloc_semantic_scope_pop(); _local is selected only for a single normal path with no owner move/call before the exact destination Drop; otherwise recovery-backed\n");
-    text.push_str("semantic_ownership_transfer_abi: exact DefId and structural owner proofs retarget Box<[T], A> -> Vec<T, A> to __unialloc_semantic_box_slice_into_vec, shrink-aware Vec<T, A> -> Box<[T], A> to __unialloc_semantic_vec_into_boxed_slice, String -> Vec<u8, Global> to __unialloc_semantic_string_into_bytes, shrink-aware String -> Box<str, Global> to __unialloc_semantic_string_into_boxed_str, Box<str, Global> -> String to __unialloc_semantic_boxed_str_into_string, and Vec<T, A> -> IntoIter<T, A> to __unialloc_semantic_vec_into_iter; proof or symbol-resolution failure retains the ambiguous fail-closed path\n");
+    text.push_str("semantic_ownership_transfer_abi: exact DefId and structural owner proofs retarget Box<[T], A> -> Vec<T, A> to __unialloc_semantic_box_slice_into_vec, shrink-aware Vec<T, A> -> Box<[T], A> to __unialloc_semantic_vec_into_boxed_slice, String -> Vec<u8, Global> to __unialloc_semantic_string_into_bytes, shrink-aware String -> Box<str, Global> to __unialloc_semantic_string_into_boxed_str, Box<str, Global> -> String to __unialloc_semantic_boxed_str_into_string, CString -> Vec<u8, Global> to __unialloc_semantic_cstring_into_bytes_with_nul, and Vec<T, A> -> IntoIter<T, A> to __unialloc_semantic_vec_into_iter; proof or symbol-resolution failure retains the ambiguous fail-closed path\n");
     text.push_str("semantic_heap_object_solver: rustc_middle TyKind::Adt destination/argument solver plus MIR ShallowInitBox, Layout::array/new/for_value/for_value_raw constructor provenance, size_of/align_of typed Layout::from_size_align reconstruction, Layout::align_to/pad_to_align transformer provenance, same-source Layout::from_size_align reconstruction provenance, projection-aware/packed Layout::extend/repeat composite provenance tracking, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, and canonicalized MIR place/ref/tuple projection provenance; unsolved candidates are audit-only\n");
     text.push_str("note: real rustc query override; dry-run by default, optional actual modes rewrite supported direct allocator calls or insert semantic-scope enter/exit calls\n");
     fs::write(path, text).map_err(|err| format!("write {}: {}", path.display(), err))?;

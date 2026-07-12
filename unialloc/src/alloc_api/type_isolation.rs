@@ -9,6 +9,7 @@
 //! denominator remains honest by default.
 
 use alloc::boxed::Box as AllocBox;
+use alloc::ffi::CString as AllocCString;
 use alloc::string::String as AllocString;
 use alloc::vec::IntoIter as AllocVecIntoIter;
 use alloc::vec::Vec as AllocVec;
@@ -5028,6 +5029,57 @@ pub fn __unialloc_semantic_string_into_bytes(
             && bytes.as_ptr() as *mut u8 == old_ptr
             && bytes.len() == old_len
             && bytes.capacity() == old_capacity
+        {
+            unsafe {
+                try_rebind_auto_allocation_type_identity(
+                    old_ptr,
+                    layout,
+                    expected_old_type_id,
+                    new_type_id,
+                )
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    if semantic_stats_recording_enabled() {
+        if applied {
+            SEMANTIC_OWNERSHIP_TRANSFER_APPLIED.fetch_add(1, Ordering::Relaxed);
+        } else {
+            SEMANTIC_OWNERSHIP_TRANSFER_REJECTED.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    bytes
+}
+
+/// Convert an owned C string into its nul-terminated byte vector while
+/// transferring the compiler-selected type-isolation identity.
+///
+/// `CString::into_bytes_with_nul` moves the exact `Box<[u8]>` backing storage
+/// into `Vec<u8, Global>` without changing its pointer, length, or capacity.
+/// UniAlloc changes only the `type_id` of one exact authenticated recovery
+/// record and its matching memory tag when present. Wrong, zero, same,
+/// missing, duplicated, or incoherent identities leave the source identity
+/// authoritative; the standard conversion still succeeds.
+#[doc(hidden)]
+pub fn __unialloc_semantic_cstring_into_bytes_with_nul(
+    value: AllocCString,
+    expected_old_type_id: u64,
+    new_type_id: u64,
+) -> AllocVec<u8> {
+    let old_ptr = value.as_ptr() as *mut u8;
+    let old_len = value.as_bytes_with_nul().len();
+    let layout = Layout::array::<u8>(old_len).ok();
+    let bytes = value.into_bytes_with_nul();
+
+    let applied = if let Some(layout) = layout {
+        if layout.size() != 0
+            && bytes.as_ptr() as *mut u8 == old_ptr
+            && bytes.len() == old_len
+            && bytes.capacity() == old_len
         {
             unsafe {
                 try_rebind_auto_allocation_type_identity(
