@@ -39,6 +39,9 @@ struct NestedVecOwner {
 #[derive(Clone, Copy)]
 struct RawPointerWrapper(*mut u8);
 
+#[derive(Clone, Copy)]
+struct ConstGenericClone<const N: usize>([u8; N]);
+
 #[inline(never)]
 fn clone_single_heap(value: &Option<Vec<u8>>) -> Option<Vec<u8>> {
     <Option<Vec<u8>> as Clone>::clone(value)
@@ -81,6 +84,11 @@ fn clone_raw_pointer_wrapper(value: &RawPointerWrapper) -> RawPointerWrapper {
     <RawPointerWrapper as Clone>::clone(value)
 }
 
+#[inline(never)]
+fn clone_const_generic<const N: usize>(value: &ConstGenericClone<N>) -> ConstGenericClone<N> {
+    <ConstGenericClone<N> as Clone>::clone(value)
+}
+
 static EMPTY_VEC: Vec<u8> = Vec::new();
 
 fn main() {
@@ -107,4 +115,7 @@ fn main() {
 
     let raw = black_box(RawPointerWrapper(std::ptr::null_mut()));
     black_box(clone_raw_pointer_wrapper(black_box(&raw)));
+
+    let const_generic = black_box(ConstGenericClone([17_u8; 4]));
+    black_box(clone_const_generic(black_box(&const_generic)));
 }

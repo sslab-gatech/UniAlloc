@@ -47,6 +47,10 @@ use rustc_middle::mir::{CallSource, UnwindAction};
 use rustc_middle::mir::{Constant, ConstantKind};
 #[cfg(not(unialloc_rustc_current))]
 use rustc_middle::ty::query::Providers;
+#[cfg(not(unialloc_rustc_current))]
+use rustc_middle::ty::TypeFoldable;
+#[cfg(unialloc_rustc_current)]
+use rustc_middle::ty::TypeVisitableExt;
 use rustc_middle::ty::{self, Ty, TyCtxt};
 #[cfg(unialloc_rustc_current)]
 use rustc_middle::util::Providers;
@@ -1963,7 +1967,8 @@ fn clone_known_no_supported_owner_adt(path: &str) -> bool {
 
 #[cfg(unialloc_rustc_current)]
 fn clone_custom_result_is_owner_complete<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
-    !type_contains_generic_param(tcx, ty)
+    !clone_result_has_unresolved_params(ty)
+        && !type_contains_generic_param(tcx, ty)
         && tcx.type_is_copy_modulo_regions(ty::TypingEnv::fully_monomorphized(), ty)
 }
 
@@ -1974,6 +1979,22 @@ fn clone_custom_result_is_owner_complete<'tcx>(_tcx: TyCtxt<'tcx>, _ty: Ty<'tcx>
     // field graph was recursively visible and contained only modeled scalar /
     // reference leaves; raw pointers and unknown leaves already set unresolved.
     true
+}
+
+#[cfg(unialloc_rustc_current)]
+fn clone_result_has_unresolved_params(ty: Ty<'_>) -> bool {
+    ty.has_non_region_param()
+        || ty.has_infer()
+        || ty.has_placeholders()
+        || ty.has_escaping_bound_vars()
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn clone_result_has_unresolved_params(ty: Ty<'_>) -> bool {
+    ty.has_param_types_or_consts()
+        || ty.has_infer_types_or_consts()
+        || ty.has_placeholders()
+        || ty.has_escaping_bound_vars()
 }
 
 fn collect_plain_clone_heap_owners_inner<'tcx>(
@@ -2102,6 +2123,13 @@ fn plain_clone_heap_class<'tcx>(
 ) -> PlainCloneHeapClass {
     if !plain_clone_call(tcx, callee_def_id, callee) {
         return PlainCloneHeapClass::NotPlainClone;
+    }
+    // `TypingEnv::fully_monomorphized()` is only valid for fully resolved
+    // destination types.  In particular, querying Copy for a Clone result that
+    // still contains a const parameter can ICE current rustc.  Keep all such
+    // candidates explicit and fail-closed instead of invoking the Copy query.
+    if clone_result_has_unresolved_params(destination_ty) {
+        return PlainCloneHeapClass::Unresolved;
     }
     let mut scan = PlainCloneHeapOwnerScan::default();
     collect_plain_clone_heap_owners_inner(tcx, destination_ty, 0, &mut scan);

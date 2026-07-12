@@ -53,6 +53,7 @@ NON_HEAP_CLONE_FUNCTIONS = (
 )
 NESTED_HEAP_CLONE_FUNCTION = "clone_nested_vec_owner"
 RAW_POINTER_CLONE_FUNCTION = "clone_raw_pointer_wrapper"
+CONST_GENERIC_CLONE_FUNCTION = "clone_const_generic"
 
 
 def sha256(path: Path) -> str:
@@ -377,6 +378,31 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
                 f"{RAW_POINTER_CLONE_FUNCTION} omitted the unresolved-owner status"
             )
 
+    const_generic_rows = clone_classification_rows(audit, CONST_GENERIC_CLONE_FUNCTION)
+    if len(const_generic_rows) != 1:
+        errors.append(
+            f"{CONST_GENERIC_CLONE_FUNCTION} expected one call-classification row, "
+            f"got {len(const_generic_rows)}"
+        )
+    else:
+        row = const_generic_rows[0]
+        if row.get("lowering_kind") != "semantic_scope_unsolved_heap_object_candidate":
+            errors.append(
+                f"{CONST_GENERIC_CLONE_FUNCTION} must remain fail-closed as unresolved"
+            )
+        if (
+            row.get("rewrite_status")
+            != "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+        ):
+            errors.append(
+                f"{CONST_GENERIC_CLONE_FUNCTION} omitted the unresolved-parameter status"
+            )
+        destination_type = str(row.get("destination_type") or "")
+        if "ConstGenericClone" not in destination_type:
+            errors.append(
+                f"{CONST_GENERIC_CLONE_FUNCTION} omitted its const-generic destination"
+            )
+
     ambiguous_rows = clone_classification_rows(audit, "clone_ambiguous_result")
     if len(ambiguous_rows) != 1:
         errors.append(
@@ -411,8 +437,8 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
             "non-heap skipped row count "
             f"expected {len(NON_HEAP_CLONE_FUNCTIONS)}, got {non_heap_skipped}"
         )
-    if unsolved != 2:
-        errors.append(f"semantic_scope_unsolved_candidate_count expected 2, got {unsolved}")
+    if unsolved != 3:
+        errors.append(f"semantic_scope_unsolved_candidate_count expected 3, got {unsolved}")
 
     if errors:
         raise AssertionError(
@@ -425,6 +451,7 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
         "non_heap_skipped_count": non_heap_skipped,
         "ambiguous_unsolved_count": len(ambiguous_rows),
         "raw_pointer_unresolved_count": len(raw_pointer_rows),
+        "const_generic_unresolved_count": len(const_generic_rows),
         "total_unsolved_count": unsolved,
     }
 

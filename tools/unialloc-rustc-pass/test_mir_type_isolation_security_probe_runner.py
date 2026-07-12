@@ -78,8 +78,18 @@ def ready_clone_classification_audit() -> dict:
             "destination_type": "fixture::RawPointerWrapper",
         }
     )
+    rows.append(
+        {
+            "mir_function": "fixture::clone_const_generic",
+            "lowering_kind": "semantic_scope_unsolved_heap_object_candidate",
+            "rewrite_status": "semantic_scope_rewrite_skipped_unresolved_heap_object_type",
+            "replacement_resolution_status": "rustc_middle_heap_object_type_not_solved",
+            "semantic_object_type": "<unknown-heap-object-type>",
+            "destination_type": "fixture::ConstGenericClone<N>",
+        }
+    )
     return {
-        "summary": {"semantic_scope_unsolved_candidate_count": 2},
+        "summary": {"semantic_scope_unsolved_candidate_count": 3},
         "rewrite_candidates": rows,
     }
 
@@ -94,7 +104,8 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         self.assertEqual(evidence["non_heap_skipped_count"], 4)
         self.assertEqual(evidence["ambiguous_unsolved_count"], 1)
         self.assertEqual(evidence["raw_pointer_unresolved_count"], 1)
-        self.assertEqual(evidence["total_unsolved_count"], 2)
+        self.assertEqual(evidence["const_generic_unresolved_count"], 1)
+        self.assertEqual(evidence["total_unsolved_count"], 3)
 
     def test_clone_candidate_classification_rejects_nonheap_as_unsolved(self) -> None:
         audit = ready_clone_classification_audit()
@@ -105,7 +116,7 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         )
         row["lowering_kind"] = "semantic_scope_unsolved_heap_object_candidate"
         row["rewrite_status"] = "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
-        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 3
+        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 4
         with self.assertRaisesRegex(AssertionError, "non-heap skip"):
             runner.validate_clone_candidate_classification(audit)
 
@@ -119,7 +130,7 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         row["lowering_kind"] = "semantic_scope_enter_exit_rewrite"
         row["rewrite_status"] = "semantic_scope_enter_exit_rewrite_planned"
         row["replacement_resolution_status"] = "not_requested_dry_run"
-        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 1
+        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 2
         with self.assertRaisesRegex(AssertionError, "fail-closed"):
             runner.validate_clone_candidate_classification(audit)
 
@@ -142,7 +153,20 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         )
         row["lowering_kind"] = "semantic_scope_non_heap_object_skipped"
         row["rewrite_status"] = "semantic_scope_rewrite_skipped_non_heap_object_type"
-        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 1
+        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 2
+        with self.assertRaisesRegex(AssertionError, "fail-closed"):
+            runner.validate_clone_candidate_classification(audit)
+
+    def test_clone_candidate_classification_rejects_const_generic_as_nonheap(self) -> None:
+        audit = ready_clone_classification_audit()
+        row = next(
+            row
+            for row in audit["rewrite_candidates"]
+            if row["mir_function"].endswith("::clone_const_generic")
+        )
+        row["lowering_kind"] = "semantic_scope_non_heap_object_skipped"
+        row["rewrite_status"] = "semantic_scope_rewrite_skipped_non_heap_object_type"
+        audit["summary"]["semantic_scope_unsolved_candidate_count"] = 2
         with self.assertRaisesRegex(AssertionError, "fail-closed"):
             runner.validate_clone_candidate_classification(audit)
 
