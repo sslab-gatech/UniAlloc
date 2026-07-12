@@ -231,6 +231,74 @@ These are bounded functionality probes, not the slow paper performance matrix.
 They are intended to catch real compiler/runtime integration regressions quickly
 before spending time on larger benchmark runs.
 
+### Compiler-driven `Vec` realloc identity and type-isolation probe
+
+Commits `9fad689` and `76dc569` add a focused `Vec<T>` lifecycle probe that
+uses ordinary Rust source and no manual metadata or allocator ABI calls.  The
+source creates `Vec<ProducerPayload>` with capacity 1, forces growth to at least
+capacity 8 through `reserve_exact`, transfers the final vector to another
+thread for Drop, then allocates a same-layout `Vec<ConsumerPayload>` followed by
+another `Vec<ProducerPayload>`.
+
+The validator requires real `rustc_driver` evidence and runtime behavior:
+
+- actual semantic-scope and Drop rewrites for the producer and consumer `Vec`
+  object types;
+- a typed replacement allocation for capacity growth, with
+  `growth_raw_realloc_no_metadata=0`;
+- distinct compiler-derived type ids for the same-layout producer and consumer
+  vectors;
+- cross-thread Drop of the grown producer buffer;
+- wrong-type non-reuse by `Vec<ConsumerPayload>`;
+- exact same-type recovery by the next `Vec<ProducerPayload>` allocation;
+- `recovery_identity_mismatches=0` and `side_cache_corrupt_slots=0`.
+
+Accepted one-shot evidence was collected once for the hosted allocator and once
+for `fixed_heap`.  Both runs validated on clean commit `fe9f66a` with
+`rustc 1.98.0-nightly (485ec3fbc 2026-06-10)`, and the docs are now bound to
+the mainline commits `9fad689` / `76dc569`.  Both audit files reported
+`semantic_scope_rewrite_applied_count=11`,
+`semantic_scope_drop_rewrite_applied_count=4`,
+`semantic_scope_unsolved_candidate_count=0`,
+`semantic_scope_drop_unsolved_candidate_count=0`, and
+`cross_thread_recovery_hint_count=15`.  Both runtime summaries observed
+`initial_capacity=1`, `final_capacity=8`, one typed growth allocation, zero raw
+realloc fallback, wrong-type reuse blocked, same-type producer buffer recovery,
+three recovery identity matches, zero recovery mismatches, and zero corrupt
+side-cache slots.
+
+Two observations are explicitly not gates: whether the capacity growth moved the
+physical pointer is recorded but not required, and a zero recovery-match count
+would be acceptable only for lifecycles whose allocation-side recovery proves
+the deterministic same-type address recovery.  This probe is functional safety
+evidence only; it makes no timing claim, no paper-performance claim, and no
+universal claim about every `Vec` or collection path.
+
+### Plain `Clone` candidate classification boundary
+
+The MIR pass now classifies exact plain `Clone::clone` return values before
+lowering them as semantic heap-object scopes.  The fail-closed behavior is
+intentional:
+
+- a single supported owner, such as `Option<Vec<u8>>` or a wrapper that contains
+  exactly one supported owner, may be lowered to that owner identity;
+- plain Clone results with no supported heap owner are skipped as non-heap object
+  candidates, which does **not** assert that the Clone implementation performs
+  no temporary allocation;
+- ambiguous results, such as `Result<Vec<u8>, String>`, remain unsolved instead
+  of choosing one owner;
+- raw-pointer wrappers remain unsolved;
+- const-generic Clone results remain unresolved when type or const parameters are
+  still present.
+
+Commit `52a7002` fixes a current-rustc ICE by preventing
+`TypingEnv::fully_monomorphized()` Copy queries on Clone destination types that
+still contain type or const parameters.  The const-generic fixture now exercises
+`ConstGenericClone<N>` and validates fail-closed classification rather than
+crashing the pass.  This strengthens compiler coverage accounting; it does not
+turn skipped, ambiguous, raw, or const-generic Clone candidates into protected
+runtime allocation events.
+
 ## PAC metadata-auth probes use allocator object addresses
 
 The PAC metadata-auth evidence path now distinguishes three things that should
