@@ -83,6 +83,22 @@ fn producer_checksum(values: &[ProducerPayload]) -> u64 {
     })
 }
 
+#[inline(never)]
+fn consume_producer_vec(
+    values: Vec<ProducerPayload>,
+    expected_buffer: usize,
+    expected_capacity: usize,
+    expected_checksum: u64,
+) -> u64 {
+    assert_eq!(producer_checksum(&values), expected_checksum);
+    assert_eq!(values.as_ptr() as usize, expected_buffer);
+    assert_eq!(values.capacity(), expected_capacity);
+    // `values` is intentionally dropped by this function's MIR Drop
+    // terminator, so the compiler audit can bind the deallocation side of the
+    // final cross-thread Vec buffer lifecycle.
+    expected_checksum
+}
+
 fn type_rows_json(rows: &[SemanticTypeStatsSnapshot], row_count: usize) -> String {
     let mut out = String::from("[");
     let mut emitted = 0usize;
@@ -228,35 +244,41 @@ fn main() {
     let expected_checksum = producer_checksum(&producer);
 
     let worker = thread::spawn(move || {
-        assert_eq!(producer_checksum(&producer), expected_checksum);
-        assert_eq!(producer.as_ptr() as usize, final_buffer);
-        assert_eq!(producer.capacity(), final_capacity);
-        drop(producer);
+        let dropped_checksum =
+            consume_producer_vec(producer, final_buffer, final_capacity, expected_checksum);
+        assert_eq!(dropped_checksum, expected_checksum);
 
-        let mut consumer = Vec::<ConsumerPayload>::with_capacity(final_capacity);
-        let consumer_buffer = consumer.as_ptr() as usize;
-        assert_ne!(
-            consumer_buffer, final_buffer,
-            "same-layout Vec with a distinct compiler type reused producer storage"
-        );
-        for index in 0..FINAL_LEN {
-            consumer.push(consumer_payload(0xC003_0000 + index as u64));
-        }
-        assert_eq!(consumer.capacity(), final_capacity);
-        drop(consumer);
+        let consumer_buffer = {
+            let mut consumer = Vec::<ConsumerPayload>::with_capacity(final_capacity);
+            let consumer_buffer = consumer.as_ptr() as usize;
+            assert_ne!(
+                consumer_buffer, final_buffer,
+                "same-layout Vec with a distinct compiler type reused producer storage"
+            );
+            for index in 0..FINAL_LEN {
+                consumer.push(consumer_payload(0xC003_0000 + index as u64));
+            }
+            assert_eq!(consumer.capacity(), final_capacity);
+            // Implicit scope-end Drop is required for compiler audit coverage.
+            consumer_buffer
+        };
 
-        let mut recovered = Vec::<ProducerPayload>::with_capacity(final_capacity);
-        let recovered_producer_buffer = recovered.as_ptr() as usize;
-        assert_eq!(
-            recovered_producer_buffer, final_buffer,
-            "producer Vec identity did not recover its cross-thread cached buffer"
-        );
-        for index in 0..FINAL_LEN {
-            recovered.push(producer_payload(0xA110_1000 + index as u64));
-        }
-        assert_eq!(recovered.capacity(), final_capacity);
-        let producer_checksum = producer_checksum(&recovered);
-        drop(recovered);
+        let (recovered_producer_buffer, producer_checksum) = {
+            let mut recovered = Vec::<ProducerPayload>::with_capacity(final_capacity);
+            let recovered_producer_buffer = recovered.as_ptr() as usize;
+            assert_eq!(
+                recovered_producer_buffer, final_buffer,
+                "producer Vec identity did not recover its cross-thread cached buffer"
+            );
+            for index in 0..FINAL_LEN {
+                recovered.push(producer_payload(0xA110_1000 + index as u64));
+            }
+            assert_eq!(recovered.capacity(), final_capacity);
+            let producer_checksum = producer_checksum(&recovered);
+            // Implicit scope-end Drop keeps the second producer lifecycle in
+            // the same compiler-derived identity class.
+            (recovered_producer_buffer, producer_checksum)
+        };
 
         let side_cache = type_isolation_side_cache_snapshot();
         assert_eq!(
