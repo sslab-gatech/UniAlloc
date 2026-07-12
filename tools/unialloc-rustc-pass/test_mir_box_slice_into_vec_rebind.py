@@ -17,6 +17,7 @@ PASS_SOURCE = ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-r
 PROBE_NAME = "box_slice_into_vec_rebind_probe"
 BOX_FUNCTION = "make_box"
 TRANSFER_FUNCTION = "box_into_vec"
+WRAPPED_TRANSFER_FUNCTION = "wrapped_box_into_vec"
 VEC_FUNCTION = "make_vec"
 BOX_TYPE = "std::boxed::Box<[u8], std::alloc::Global>"
 VEC_TYPE = "std::vec::Vec<u8, std::alloc::Global>"
@@ -103,6 +104,16 @@ fn make_box(seed: u8) -> Box<[u8]> {
 #[inline(never)]
 fn box_into_vec(value: Box<[u8]>) -> Vec<u8> {
     value.into_vec()
+}
+
+#[inline(never)]
+fn wrapped_box_into_vec(
+    value: Result<Option<Box<[u8]>>, u8>,
+) -> Result<Vec<u8>, u8> {
+    let optional = value?;
+    let boxed = optional.expect("probe always supplies Some(Box<[u8]>)");
+    let moved_box = boxed;
+    Ok(moved_box.into_vec())
 }
 
 #[inline(never)]
@@ -254,6 +265,67 @@ fn main() {
     assert_eq!(recovered_vec.capacity(), BYTES);
     let recovered_vec_pointer = recovered_vec.as_ptr() as usize;
     assert_eq!(recovered_vec_pointer, converted_pointer);
+
+    let wrapped_box = make_box(0xa5);
+    assert_eq!(wrapped_box.len(), BYTES);
+    assert!(payload_matches(&wrapped_box, 0xa5));
+    let wrapped_box_pointer = wrapped_box.as_ptr() as usize;
+
+    let before_wrapped_transfer_stats = semantic_stats_snapshot();
+    let before_wrapped_transfer_fallback = semantic_fallback_attribution_snapshot();
+    let before_wrapped_transfer_validation = semantic_metadata_validation_snapshot();
+    let wrapped_converted = wrapped_box_into_vec(Ok(Some(wrapped_box)))
+        .expect("probe supplies the Result::Ok path");
+    let after_wrapped_transfer_stats = semantic_stats_snapshot();
+    let after_wrapped_transfer_fallback = semantic_fallback_attribution_snapshot();
+    let after_wrapped_transfer_validation = semantic_metadata_validation_snapshot();
+
+    let wrapped_converted_pointer = wrapped_converted.as_ptr() as usize;
+    let wrapped_payload_preserved = payload_matches(&wrapped_converted, 0xa5);
+    assert_eq!(wrapped_converted_pointer, wrapped_box_pointer);
+    assert_eq!(wrapped_converted.len(), BYTES);
+    assert_eq!(wrapped_converted.capacity(), BYTES);
+    assert!(wrapped_payload_preserved);
+    assert_no_allocation_lifecycle_event(
+        before_wrapped_transfer_stats,
+        after_wrapped_transfer_stats,
+    );
+    assert_eq!(
+        after_wrapped_transfer_fallback,
+        before_wrapped_transfer_fallback
+    );
+    assert_eq!(
+        after_wrapped_transfer_validation.recovery_identity_mismatches,
+        before_wrapped_transfer_validation.recovery_identity_mismatches
+    );
+
+    drop(wrapped_converted);
+    let after_wrapped_converted_drop = semantic_stats_snapshot();
+    assert_eq!(
+        after_wrapped_converted_drop
+            .typed_deallocations
+            .saturating_sub(after_wrapped_transfer_stats.typed_deallocations),
+        1
+    );
+    assert_eq!(
+        after_wrapped_converted_drop
+            .typed_cache_inserts
+            .saturating_sub(after_wrapped_transfer_stats.typed_cache_inserts),
+        1
+    );
+
+    let wrapped_wrong_box = make_box(0xc7);
+    assert_eq!(wrapped_wrong_box.len(), BYTES);
+    assert!(payload_matches(&wrapped_wrong_box, 0xc7));
+    let wrapped_wrong_box_pointer = wrapped_wrong_box.as_ptr() as usize;
+    assert_ne!(wrapped_wrong_box_pointer, wrapped_converted_pointer);
+    drop(wrapped_wrong_box);
+
+    let wrapped_recovered_vec = make_vec();
+    assert_eq!(wrapped_recovered_vec.capacity(), BYTES);
+    let wrapped_recovered_vec_pointer = wrapped_recovered_vec.as_ptr() as usize;
+    assert_eq!(wrapped_recovered_vec_pointer, wrapped_converted_pointer);
+    drop(wrapped_recovered_vec);
     drop(recovered_vec);
 
     let stats = semantic_stats_snapshot();
@@ -263,10 +335,10 @@ fn main() {
     let mut rows = [SemanticTypeStatsSnapshot::empty(); 64];
     let row_count = semantic_type_stats_snapshot(&mut rows);
 
-    assert_eq!(stats.typed_allocations, 3, "{stats:?}");
-    assert_eq!(stats.typed_deallocations, 3, "{stats:?}");
-    assert_eq!(stats.typed_cache_hits, 1, "{stats:?}");
-    assert_eq!(stats.typed_cache_inserts, 3, "{stats:?}");
+    assert_eq!(stats.typed_allocations, 6, "{stats:?}");
+    assert_eq!(stats.typed_deallocations, 6, "{stats:?}");
+    assert_eq!(stats.typed_cache_hits, 3, "{stats:?}");
+    assert_eq!(stats.typed_cache_inserts, 6, "{stats:?}");
     assert_eq!(stats.fallback_allocations, 0, "{stats:?}");
     assert_eq!(stats.fallback_deallocations, 0, "{stats:?}");
     assert_eq!(stats.semantic_type_stats_dropped_events, 0, "{stats:?}");
@@ -289,10 +361,18 @@ fn main() {
             "\"converted_pointer\":{},",
             "\"wrong_box_pointer\":{},",
             "\"recovered_vec_pointer\":{},",
+            "\"wrapped_box_pointer\":{},",
+            "\"wrapped_converted_pointer\":{},",
+            "\"wrapped_wrong_box_pointer\":{},",
+            "\"wrapped_recovered_vec_pointer\":{},",
             "\"pointer_preserved\":{},",
             "\"payload_preserved\":{},",
             "\"wrong_box_non_reuse\":{},",
             "\"same_vec_reuse\":{},",
+            "\"wrapped_pointer_preserved\":{},",
+            "\"wrapped_payload_preserved\":{},",
+            "\"wrapped_wrong_box_non_reuse\":{},",
+            "\"wrapped_same_vec_reuse\":{},",
             "\"typed_allocations\":{},",
             "\"typed_deallocations\":{},",
             "\"typed_cache_hits\":{},",
@@ -313,10 +393,18 @@ fn main() {
         converted_pointer,
         wrong_box_pointer,
         recovered_vec_pointer,
+        wrapped_box_pointer,
+        wrapped_converted_pointer,
+        wrapped_wrong_box_pointer,
+        wrapped_recovered_vec_pointer,
         box_pointer == converted_pointer,
         payload_preserved,
         wrong_box_pointer != converted_pointer,
         recovered_vec_pointer == converted_pointer,
+        wrapped_box_pointer == wrapped_converted_pointer,
+        wrapped_payload_preserved,
+        wrapped_wrong_box_pointer != wrapped_converted_pointer,
+        wrapped_recovered_vec_pointer == wrapped_converted_pointer,
         stats.typed_allocations,
         stats.typed_deallocations,
         stats.typed_cache_hits,
@@ -416,10 +504,14 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert summary.get("body_clone_returned_to_rustc") is True, summary
     assert summary.get("actual_semantic_scope_rewrite_requested") is True, summary
     assert summary.get("actual_semantic_scope_rewrite") is True, summary
-    assert int(summary.get("semantic_ownership_transfer_candidate_count") or 0) == 1, summary
-    assert (
-        int(summary.get("semantic_ownership_transfer_rewrite_applied_count") or 0) == 1
-    ), summary
+    transfer_candidate_count = int(
+        summary.get("semantic_ownership_transfer_candidate_count") or 0
+    )
+    transfer_applied_count = int(
+        summary.get("semantic_ownership_transfer_rewrite_applied_count") or 0
+    )
+    assert transfer_candidate_count == 2, summary
+    assert transfer_applied_count == 2, summary
 
     rows = audit.get("rewrite_candidates")
     assert isinstance(rows, list), rows
@@ -427,32 +519,41 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         row
         for row in rows
         if isinstance(row, dict)
-        and function_matches(row, TRANSFER_FUNCTION)
+        and any(
+            function_matches(row, function_name)
+            for function_name in (TRANSFER_FUNCTION, WRAPPED_TRANSFER_FUNCTION)
+        )
         and row.get("lowering_kind") == TRANSFER_LOWERING_KIND
     ]
-    assert len(transfer_rows) == 1, transfer_rows
-    transfer = transfer_rows[0]
-    assert re.search(
-        r"~ alloc(?:\[[^]]+\])?::slice::\{impl#0\}::into_vec\)",
-        str(transfer.get("callee") or ""),
-    ), transfer
-    assert transfer.get("lowering_kind") == TRANSFER_LOWERING_KIND, transfer
-    assert transfer.get("rewrite_status") == TRANSFER_STATUS, transfer
-    assert transfer.get("replacement_symbol") == TRANSFER_SYMBOL, transfer
-    assert (
-        transfer.get("replacement_resolution_status")
-        == "resolved_unialloc_semantic_box_slice_into_vec"
-    ), transfer
-    assert transfer.get("metadata_pairing_contract") == TRANSFER_PAIRING, transfer
-    assert transfer.get("type_id_basis") == TRANSFER_TYPE_ID_BASIS, transfer
-    assert transfer.get("semantic_object_type") == VEC_TYPE, transfer
-    assert transfer.get("destination_type") == VEC_TYPE, transfer
-    assert transfer.get("argument_types") == [BOX_TYPE], transfer
-    assert int(transfer.get("type_id") or 0) != 0, transfer
-    assert int(transfer.get("module_id") or 0) != 0, transfer
-    assert int(transfer.get("callsite") or 0) != 0, transfer
-    assert int(transfer.get("flags") or 0) & TYPE_ISOLATED, transfer
-    assert transfer.get("semantic_scope_unwind_pop_inserted") is False, transfer
+    assert len(transfer_rows) == 2, transfer_rows
+    transfers_by_function: dict[str, dict[str, object]] = {}
+    for function_name in (TRANSFER_FUNCTION, WRAPPED_TRANSFER_FUNCTION):
+        matching = [row for row in transfer_rows if function_matches(row, function_name)]
+        assert len(matching) == 1, matching
+        transfers_by_function[function_name] = matching[0]
+
+    for transfer in transfers_by_function.values():
+        assert re.search(
+            r"~ alloc(?:\[[^]]+\])?::slice::\{impl#0\}::into_vec\)",
+            str(transfer.get("callee") or ""),
+        ), transfer
+        assert transfer.get("lowering_kind") == TRANSFER_LOWERING_KIND, transfer
+        assert transfer.get("rewrite_status") == TRANSFER_STATUS, transfer
+        assert transfer.get("replacement_symbol") == TRANSFER_SYMBOL, transfer
+        assert (
+            transfer.get("replacement_resolution_status")
+            == "resolved_unialloc_semantic_box_slice_into_vec"
+        ), transfer
+        assert transfer.get("metadata_pairing_contract") == TRANSFER_PAIRING, transfer
+        assert transfer.get("type_id_basis") == TRANSFER_TYPE_ID_BASIS, transfer
+        assert transfer.get("semantic_object_type") == VEC_TYPE, transfer
+        assert transfer.get("destination_type") == VEC_TYPE, transfer
+        assert transfer.get("argument_types") == [BOX_TYPE], transfer
+        assert int(transfer.get("type_id") or 0) != 0, transfer
+        assert int(transfer.get("module_id") or 0) != 0, transfer
+        assert int(transfer.get("callsite") or 0) != 0, transfer
+        assert int(transfer.get("flags") or 0) & TYPE_ISOLATED, transfer
+        assert transfer.get("semantic_scope_unwind_pop_inserted") is False, transfer
 
     box_rows = applied_scope_rows(audit, BOX_FUNCTION, BOX_TYPE)
     vec_rows = applied_scope_rows(audit, VEC_FUNCTION, VEC_TYPE)
@@ -467,15 +568,15 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert box_type_id != 0, box_row
     assert vec_type_id != 0, vec_row
     assert box_type_id != vec_type_id, (box_row, vec_row)
-    assert int(transfer.get("type_id") or 0) == vec_type_id, transfer
-
-    preview = str(transfer.get("replacement_preview") or "")
-    old_match = re.search(r"\bold_type_id=(\d+)\b", preview)
-    new_match = re.search(r"\bnew_type_id=(\d+)\b", preview)
-    assert old_match is not None, transfer
-    assert new_match is not None, transfer
-    assert int(old_match.group(1)) == box_type_id, transfer
-    assert int(new_match.group(1)) == vec_type_id, transfer
+    for transfer in transfers_by_function.values():
+        assert int(transfer.get("type_id") or 0) == vec_type_id, transfer
+        preview = str(transfer.get("replacement_preview") or "")
+        old_match = re.search(r"\bold_type_id=(\d+)\b", preview)
+        new_match = re.search(r"\bnew_type_id=(\d+)\b", preview)
+        assert old_match is not None, transfer
+        assert new_match is not None, transfer
+        assert int(old_match.group(1)) == box_type_id, transfer
+        assert int(new_match.group(1)) == vec_type_id, transfer
 
     runtime = load_runtime(stdout)
     assert int(runtime["bytes"]) == BYTES, runtime
@@ -483,14 +584,27 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert runtime["payload_preserved"] is True, runtime
     assert runtime["wrong_box_non_reuse"] is True, runtime
     assert runtime["same_vec_reuse"] is True, runtime
+    assert runtime["wrapped_pointer_preserved"] is True, runtime
+    assert runtime["wrapped_payload_preserved"] is True, runtime
+    assert runtime["wrapped_wrong_box_non_reuse"] is True, runtime
+    assert runtime["wrapped_same_vec_reuse"] is True, runtime
     assert int(runtime["box_pointer"]) == int(runtime["converted_pointer"]), runtime
     assert int(runtime["wrong_box_pointer"]) != int(runtime["converted_pointer"]), runtime
     assert int(runtime["recovered_vec_pointer"]) == int(runtime["converted_pointer"]), runtime
+    assert int(runtime["wrapped_box_pointer"]) == int(
+        runtime["wrapped_converted_pointer"]
+    ), runtime
+    assert int(runtime["wrapped_wrong_box_pointer"]) != int(
+        runtime["wrapped_converted_pointer"]
+    ), runtime
+    assert int(runtime["wrapped_recovered_vec_pointer"]) == int(
+        runtime["wrapped_converted_pointer"]
+    ), runtime
     for field, expected in (
-        ("typed_allocations", 3),
-        ("typed_deallocations", 3),
-        ("typed_cache_hits", 1),
-        ("typed_cache_inserts", 3),
+        ("typed_allocations", 6),
+        ("typed_deallocations", 6),
+        ("typed_cache_hits", 3),
+        ("typed_cache_inserts", 6),
         ("fallback_allocations", 0),
         ("fallback_deallocations", 0),
         ("raw_alloc_no_metadata", 0),
@@ -507,20 +621,20 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     box_totals = aggregate_runtime_type(type_rows, box_type_id)
     vec_totals = aggregate_runtime_type(type_rows, vec_type_id)
     expected_box = {
-        "allocations": 2,
-        "allocated_bytes": BYTES * 2,
-        "deallocations": 1,
-        "cache_hits": 0,
-        "cache_inserts": 1,
+        "allocations": 4,
+        "allocated_bytes": BYTES * 4,
+        "deallocations": 2,
+        "cache_hits": 1,
+        "cache_inserts": 2,
         "observed_alloc_sizes": [BYTES],
         "observed_dealloc_sizes": [BYTES],
     }
     expected_vec = {
-        "allocations": 1,
-        "allocated_bytes": BYTES,
-        "deallocations": 2,
-        "cache_hits": 1,
-        "cache_inserts": 2,
+        "allocations": 2,
+        "allocated_bytes": BYTES * 2,
+        "deallocations": 4,
+        "cache_hits": 2,
+        "cache_inserts": 4,
         "observed_alloc_sizes": [BYTES],
         "observed_dealloc_sizes": [BYTES],
     }
@@ -532,25 +646,32 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert int(vec_totals["policy_flags_seen"]) & TYPE_ISOLATED, vec_totals
 
     return {
-        "transfer_audit": {
-            key: transfer.get(key)
-            for key in (
-                "mir_function",
-                "callee",
-                "destination_type",
-                "argument_types",
-                "semantic_object_type",
-                "type_id",
-                "module_id",
-                "callsite",
-                "lowering_kind",
-                "rewrite_status",
-                "replacement_symbol",
-                "replacement_resolution_status",
-                "metadata_pairing_contract",
-                "type_id_basis",
-                "replacement_preview",
-            )
+        "transfer_counts": {
+            "candidates": transfer_candidate_count,
+            "applied": transfer_applied_count,
+        },
+        "transfer_audits": {
+            function_name: {
+                key: transfer.get(key)
+                for key in (
+                    "mir_function",
+                    "callee",
+                    "destination_type",
+                    "argument_types",
+                    "semantic_object_type",
+                    "type_id",
+                    "module_id",
+                    "callsite",
+                    "lowering_kind",
+                    "rewrite_status",
+                    "replacement_symbol",
+                    "replacement_resolution_status",
+                    "metadata_pairing_contract",
+                    "type_id_basis",
+                    "replacement_preview",
+                )
+            }
+            for function_name, transfer in transfers_by_function.items()
         },
         "compiler_type_ids": {"box": box_type_id, "vec": vec_type_id},
         "runtime_type_totals": {"box": box_totals, "vec": vec_totals},
