@@ -1,16 +1,32 @@
-# UniAlloc evaluation continuation status
+# Historical G001 evaluation continuation status
 
-This is the compact continuation document for the paper-reproduction goal.  It
-records current source identity, validation, evidence posture, and the remaining
-claim queue.  Per-run history belongs in `evaluation/raw/` and
+> **Historical G001 note (superseded 2026-07-12).** This document preserves the
+> paper-reproduction audit as historical context; it is no longer the active
+> execution objective. The formal campaign stopped by explicit user objective
+> change after 20 accepted source-bound records. Those records remain
+> historical/diagnostic evidence and do not support a paper performance claim.
+> G001 remains incomplete and is marked superseded, not complete. Active G002
+> work is implementation-first: allocator/compiler correctness, runnable
+> functional coverage, platform readiness, and profile-guided optimization.
+> C001/C003/C004/C005 and the C006 performance percentage are
+> `deferred_by_explicit_user_scope_change`; reduced benchmarks are diagnostic
+> only. For current execution status use `.omx/ultragoal/goals.json`,
+> `.omx/ultragoal/ledger.jsonl`, and the live repository HEAD rather than the
+> historical queue below.
+
+This is the compact historical continuation document for the superseded
+paper-reproduction goal.  It records that audit's source identity, validation,
+evidence posture, and remaining claim queue.  Per-run history belongs in `evaluation/raw/` and
 `.omx/ultragoal/ledger.jsonl` rather than in this file.
 
 Snapshot: 2026-07-09 after the final audit and fail-closed claim refresh.
 
-## Durable objective and source identity
+## Historical G001 objective and source identity
 
 - Durable goal `G001-users-hqzhao-downloads-rust-alloc-pa` remains
-  `in_progress`.  The implementation audit did not complete or narrow it.
+  `in_progress`.  The implementation audit did not complete or narrow it.  It
+  is now superseded by G002, not complete; this subsection preserves the
+  pre-supersession snapshot.
 - Local continuation branch: `g001-paper-refactor-evaluation-20260709`.
 - Pre-audit base: `341aed9aa77c` (`Update README.md`).
 - Final local commit hashes are not duplicated here; use
@@ -59,7 +75,7 @@ Marker-only transcripts, placeholder artifacts, fixture kernel trees,
 unvalidated cached summaries, and host/target provenance mismatches remain
 diagnostic even when their schemas are otherwise complete.
 
-## Provenance gates completed in this audit
+## Historical G001 provenance gates completed in this audit
 
 The evaluation framework now fails closed across the claim publication path:
 
@@ -82,7 +98,12 @@ The evaluation framework now fails closed across the claim publication path:
 These controls explain why previously reported C002 and C007 passes are now
 correctly missing rather than silently reused.
 
-## Current claim posture
+## Historical G001 claim posture before supersession
+
+This subsection preserves the fail-closed `2026-07-09` G001 snapshot.  It is not
+the current G002 status: C002 functional/compiler evidence and C006 PAC
+functionality are tracked separately, while the paper-performance claims are
+`deferred_by_explicit_user_scope_change` rather than pass or fail.
 
 `evaluation/results/claim_check_current.json` was generated at
 `2026-07-09T21:15:35.066717Z` with `overall=fail`:
@@ -106,14 +127,14 @@ The refreshed `evaluation/results/overclaim_worklist.json` was generated at
 `2026-07-09T21:15:35.849368Z`.  It contains seven actionable claims, 249 missing
 requirements in total, and 210 missing requirements across required claims.
 
-Current status inputs:
+Historical G001 status inputs:
 
 - `evaluation/results/claim_check_current.json`
 - `evaluation/results/overclaim_worklist.json`
 - `evaluation/results/compiler_coverage_evidence_audit.json`
 - `evaluation/results/platform_matrix_audit.json`
 
-## Validation completed
+## Validation completed for the historical G001 audit
 
 The final audit validation used `nightly-2026-06-11` and completed:
 
@@ -132,7 +153,8 @@ The final audit validation used `nightly-2026-06-11` and completed:
 - Rust-for-Linux bridge state regression: 3 tests passed, including partial
   initialization retry and foreign-ready allocator rejection.
 
-Reproducible validation commands for the next source-changing pass:
+Historical validation commands retained for provenance (not the active G002
+execution plan):
 
 ```sh
 cargo +$(cat rust-toolchain) fmt --all -- --check
@@ -215,7 +237,7 @@ Do not delete unique raw evidence to gain space.  Rebuildable targets may be
 cleaned again only after confirming no collector, compiler, emulator, benchmark,
 or Docker process is using them.
 
-## Remaining continuation queue
+## Historical G001 continuation queue (superseded; do not execute as G002 plan)
 
 1. Recollect and republish C002 compiler coverage/runtime evidence under the
    schema-2 provenance and integrity gates.
