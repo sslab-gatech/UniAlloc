@@ -217,6 +217,66 @@ def drop_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     ]
 
 
+def validate_positive_control_direct_rewrites(audit: Dict[str, Any]) -> Dict[str, Any]:
+    function_name = "direct_allocator_rewrite_positive_control"
+    rows = [
+        row
+        for row in audit.get("rewrite_candidates", [])
+        if isinstance(row, dict) and row.get("mir_function") == function_name
+    ]
+    assert len(rows) == 2, (
+        f"{function_name} must have exactly two direct rewrite rows "
+        f"(alloc and dealloc), got {len(rows)}"
+    )
+    for row in rows:
+        assert row.get("lowering_kind") == "direct_allocator_call_rewrite", (
+            f"{function_name} lowering_kind must be direct_allocator_call_rewrite"
+        )
+        assert row.get("rewrite_status") == (
+            "actual_allocator_call_replacement_applied"
+        ), f"{function_name} rewrite_status must prove an applied replacement"
+
+    expected_resolutions = {
+        "__unialloc_alloc_layout_with_metadata_hints": (
+            "resolved_unialloc_alloc_layout_with_metadata_hints"
+        ),
+        "__unialloc_dealloc_layout_with_metadata_hints": (
+            "resolved_unialloc_dealloc_layout_with_metadata_hints"
+        ),
+    }
+    by_symbol = {str(row.get("replacement_symbol") or ""): row for row in rows}
+    assert set(by_symbol) == set(expected_resolutions), (
+        f"{function_name} replacement symbols must be the resolved UniAlloc "
+        f"alloc/dealloc metadata ABI pair, got {sorted(by_symbol)}"
+    )
+    for symbol, expected_resolution in expected_resolutions.items():
+        row = by_symbol[symbol]
+        assert row.get("replacement_resolution_status") == expected_resolution, (
+            f"{function_name} {symbol} resolution must be {expected_resolution}"
+        )
+        operation = "dealloc" if "_dealloc_" in symbol else "alloc"
+        assert f"alloc::alloc::{operation}" in str(row.get("callee") or ""), (
+            f"{function_name} {symbol} must replace the matching {operation} call"
+        )
+        assert int(row.get("flags") or 0) & TYPE_ISOLATED
+        assert int(row.get("placement_hint") or 0) & CROSS_THREAD_RECOVERY
+
+    type_id = unique_int(rows, "type_id", function_name)
+    module_id = unique_int(rows, "module_id", function_name)
+    object_types = {str(row.get("semantic_object_type") or "") for row in rows}
+    assert len(object_types) == 1 and "" not in object_types, (
+        f"{function_name} alloc/dealloc rows must share one semantic object type"
+    )
+    return {
+        "function": function_name,
+        "row_count": len(rows),
+        "type_id": type_id,
+        "module_id": module_id,
+        "semantic_object_type": next(iter(object_types)),
+        "replacement_symbols": sorted(by_symbol),
+    }
+
+
 def aggregate_runtime_type(rows: List[Dict[str, Any]], type_id: int) -> Dict[str, Any]:
     matching = [row for row in rows if int(row.get("type_id") or 0) == type_id]
     assert matching, f"runtime type rows omit compiler type_id {type_id}"
@@ -272,6 +332,8 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     assert int(summary.get("semantic_scope_unsolved_candidate_count") or 0) == 0
     assert int(summary.get("semantic_scope_drop_unsolved_candidate_count") or 0) == 0
     assert int(summary.get("cross_thread_recovery_hint_count") or 0) > 0
+
+    direct_rewrite_evidence = validate_positive_control_direct_rewrites(audit)
 
     producer_rows = applied_type_rows(audit, "Vec<ProducerPayload")
     consumer_rows = applied_type_rows(audit, "Vec<ConsumerPayload")
@@ -384,6 +446,7 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         "producer_drop_scope_rows": len(producer_drop_rows),
         "consumer_allocation_scope_rows": len(consumer_alloc_rows),
         "consumer_drop_scope_rows": len(consumer_drop_rows),
+        "direct_allocator_rewrite_positive_control": direct_rewrite_evidence,
         "producer_runtime": producer_runtime,
         "consumer_runtime": consumer_runtime,
         "growth_moved_buffer_observed": bool(runtime.get("growth_moved_buffer")),

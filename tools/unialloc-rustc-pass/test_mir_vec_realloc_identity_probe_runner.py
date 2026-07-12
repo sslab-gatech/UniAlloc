@@ -44,6 +44,27 @@ def audit_row(
     }
 
 
+def direct_rewrite_row(*, dealloc: bool = False) -> dict:
+    operation = "dealloc" if dealloc else "alloc"
+    return {
+        "semantic_object_type": "std::alloc::Layout::new::<[u64; 2_usize]>",
+        "type_id": 33,
+        "module_id": 0xC002,
+        "flags": runner.TYPE_ISOLATED,
+        "placement_hint": runner.CROSS_THREAD_RECOVERY,
+        "mir_function": "direct_allocator_rewrite_positive_control",
+        "callee": f"alloc::alloc::{operation}",
+        "lowering_kind": "direct_allocator_call_rewrite",
+        "rewrite_status": "actual_allocator_call_replacement_applied",
+        "replacement_symbol": (
+            f"__unialloc_{operation}_layout_with_metadata_hints"
+        ),
+        "replacement_resolution_status": (
+            f"resolved_unialloc_{operation}_layout_with_metadata_hints"
+        ),
+    }
+
+
 def valid_audit() -> dict:
     producer = "std::vec::Vec<ProducerPayload, std::alloc::Global>"
     consumer = "std::vec::Vec<ConsumerPayload, std::alloc::Global>"
@@ -62,6 +83,8 @@ def valid_audit() -> dict:
             "cross_thread_recovery_hint_count": 6,
         },
         "rewrite_candidates": [
+            direct_rewrite_row(),
+            direct_rewrite_row(dealloc=True),
             audit_row(object_type=producer, type_id=11, callee="Vec::with_capacity"),
             audit_row(object_type=producer, type_id=11, callee="Vec::reserve_exact"),
             audit_row(object_type=producer, type_id=11, callee="Vec::push"),
@@ -214,6 +237,33 @@ class MirVecReallocIdentityRunnerTests(unittest.TestCase):
         ]
         with self.assertRaisesRegex(AssertionError, "Drop"):
             runner.validate(audit, valid_runtime())
+
+    def test_validate_requires_positive_control_direct_rewrite_rows(self) -> None:
+        audit = valid_audit()
+        audit["rewrite_candidates"] = [
+            row
+            for row in audit["rewrite_candidates"]
+            if row.get("replacement_symbol")
+            != "__unialloc_dealloc_layout_with_metadata_hints"
+        ]
+        with self.assertRaisesRegex(AssertionError, "exactly two direct rewrite rows"):
+            runner.validate(audit, valid_runtime())
+
+        mutations = (
+            ("mir_function", "not_the_positive_control", "exactly two direct rewrite rows"),
+            ("lowering_kind", "semantic_scope_enter_exit_rewrite", "lowering_kind"),
+            ("rewrite_status", "not_requested_dry_run", "rewrite_status"),
+            ("replacement_symbol", "__unialloc_alloc", "replacement symbols"),
+            ("replacement_resolution_status", "lowered", "resolution"),
+            ("type_id", 0, "type_id"),
+            ("type_id", 44, "type_id"),
+        )
+        for field, value, message in mutations:
+            with self.subTest(field=field, value=value):
+                audit = valid_audit()
+                audit["rewrite_candidates"][0][field] = value
+                with self.assertRaisesRegex(AssertionError, message):
+                    runner.validate(audit, valid_runtime())
 
     def test_validate_rejects_dry_run_audit(self) -> None:
         for field in (
