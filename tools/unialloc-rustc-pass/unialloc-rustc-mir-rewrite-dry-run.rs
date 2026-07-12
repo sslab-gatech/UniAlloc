@@ -78,7 +78,7 @@ const LOWERING_MODULE_ID: u64 = 0xC002_DA00_0000_0001;
 const DEFAULT_LOWERING_POLICY_FLAGS: u32 = 0x1;
 const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const TYPE_ID_ALGORITHM: &str =
-    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes solve only the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; constructor/factory scopes solve the MIR destination and do not inherit arbitrary argument identities; aggregate receiver/destination types with multiple supported heap owners fail closed; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; constructor/factory scopes attribute identity only from the MIR destination; for both shapes, remaining by-value argument owner graphs are merged as safety hazards: identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 
@@ -1738,10 +1738,20 @@ fn heap_object_type_from_ty<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<Str
     heap_object_type_from_ty_inner(tcx, ty, 0)
 }
 
+#[derive(Default)]
+struct HeapObjectTypeScan {
+    owners: BTreeSet<String>,
+    unresolved: bool,
+}
+
+fn heap_object_type_scan_from_ty<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> HeapObjectTypeScan {
+    let mut scan = HeapObjectTypeScan::default();
+    collect_heap_object_types_from_ty_inner(tcx, ty, 0, &mut scan);
+    scan
+}
+
 fn heap_object_types_from_ty<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    collect_heap_object_types_from_ty_inner(tcx, ty, 0, &mut out);
-    out
+    heap_object_type_scan_from_ty(tcx, ty).owners
 }
 
 fn type_contains_generic_param<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
@@ -1894,84 +1904,147 @@ fn collect_heap_object_types_from_ty_inner<'tcx>(
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
     depth: usize,
-    out: &mut BTreeSet<String>,
+    scan: &mut HeapObjectTypeScan,
 ) {
     const MAX_HEAP_OBJECT_SOLVER_DEPTH: usize = 6;
     if depth > MAX_HEAP_OBJECT_SOLVER_DEPTH {
+        scan.unresolved = true;
         return;
     }
 
-    let stripped = strip_type_indirection(ty);
-    match stripped.kind() {
+    match ty.kind() {
+        // A top-level receiver is normally `&mut Vec<T>` in MIR and must be
+        // inspected to identify the receiver. A reference stored inside an ADT
+        // is only a borrow and must never make that aggregate own the pointee.
+        ty::Ref(_, inner, _) => {
+            if depth == 0 {
+                collect_heap_object_types_from_ty_inner(tcx, *inner, depth + 1, scan);
+            }
+        }
+        #[cfg(unialloc_rustc_current)]
+        ty::RawPtr(inner, _) => {
+            if depth == 0 {
+                collect_heap_object_types_from_ty_inner(tcx, *inner, depth + 1, scan);
+            } else {
+                scan.unresolved = true;
+            }
+        }
+        #[cfg(not(unialloc_rustc_current))]
+        ty::RawPtr(type_and_mut) => {
+            if depth == 0 {
+                collect_heap_object_types_from_ty_inner(
+                    tcx,
+                    type_and_mut.ty,
+                    depth + 1,
+                    scan,
+                );
+            } else {
+                scan.unresolved = true;
+            }
+        }
         ty::Adt(adt, substs) => {
             let def_path = tcx.def_path_str(adt.did());
-            let type_text = format!("{:?}", stripped);
+            let type_text = format!("{:?}", ty);
             if supported_heap_adt_def_path(&def_path) || direct_heap_type_marker_matches(&type_text)
             {
-                out.insert(type_text);
-            }
-            // Do not classify an aggregate as a heap owner merely because its
-            // rendered generic arguments contain `Vec`, `String`, or another
-            // supported marker. The argument/field walk below records the
-            // actual owners and lets multi-owner Drop fail closed precisely.
-            for arg_ty in substs.types() {
-                collect_heap_object_types_from_ty_inner(tcx, arg_ty, depth + 1, out);
-            }
-            #[cfg(not(unialloc_rustc_current))]
-            for variant in adt.variants().iter() {
-                for field in variant.fields.iter() {
-                    collect_heap_object_types_from_ty_inner(
-                        tcx,
-                        field.ty(tcx, substs),
-                        depth + 1,
-                        out,
-                    );
+                scan.owners.insert(type_text);
+                // A supported container owns both its backing allocation and
+                // any allocator-visible values stored in its generic payload.
+                // Keeping both identities makes mutating methods and Drop fail
+                // closed for shapes such as `Vec<String>`.
+                for arg_ty in substs.types() {
+                    collect_heap_object_types_from_ty_inner(tcx, arg_ty, depth + 1, scan);
+                }
+            } else if clone_known_no_supported_owner_adt(&def_path) {
+                // PhantomData<T> does not store a T. In particular,
+                // PhantomData<Vec<_>> must not manufacture a Vec owner.
+            } else if clone_transparent_wrapper_def_path(&def_path) {
+                // Option and Result store their generic arguments directly.
+                // Arbitrary custom ADTs do not: a generic can be phantom while
+                // a non-generic private field owns another allocation.
+                for arg_ty in substs.types() {
+                    collect_heap_object_types_from_ty_inner(tcx, arg_ty, depth + 1, scan);
+                }
+            } else {
+                // Inspect concrete fields instead of treating generic arguments
+                // as stored owners.  In current rustc field types are exposed as
+                // `Unnormalized<Ty>`; `skip_norm_wip()` is the same conservative
+                // structural view already used by the actual-rustc Clone scan.
+                #[cfg(unialloc_rustc_current)]
+                for variant in adt.variants().iter() {
+                    for field in variant.fields.iter() {
+                        collect_heap_object_types_from_ty_inner(
+                            tcx,
+                            field.ty(tcx, substs).skip_norm_wip(),
+                            depth + 1,
+                            scan,
+                        );
+                    }
+                }
+                #[cfg(not(unialloc_rustc_current))]
+                for variant in adt.variants().iter() {
+                    for field in variant.fields.iter() {
+                        collect_heap_object_types_from_ty_inner(
+                            tcx,
+                            field.ty(tcx, substs),
+                            depth + 1,
+                            scan,
+                        );
+                    }
                 }
             }
         }
         ty::Tuple(fields) => {
             for field_ty in fields.iter() {
-                collect_heap_object_types_from_ty_inner(tcx, field_ty, depth + 1, out);
+                collect_heap_object_types_from_ty_inner(tcx, field_ty, depth + 1, scan);
             }
         }
         #[cfg(unialloc_rustc_current)]
         ty::Closure(_, substs) => {
             for upvar_ty in ty::UpvarArgs::Closure(substs).upvar_tys().iter() {
-                collect_heap_object_types_from_ty_inner(tcx, upvar_ty, depth + 1, out);
+                collect_heap_object_types_from_ty_inner(tcx, upvar_ty, depth + 1, scan);
             }
         }
         #[cfg(not(unialloc_rustc_current))]
         ty::Closure(_, substs) => {
             for upvar_ty in substs.as_closure().upvar_tys() {
-                collect_heap_object_types_from_ty_inner(tcx, upvar_ty, depth + 1, out);
+                collect_heap_object_types_from_ty_inner(tcx, upvar_ty, depth + 1, scan);
             }
         }
         #[cfg(unialloc_rustc_current)]
         ty::Coroutine(_, substs) => {
             for upvar_ty in ty::UpvarArgs::Coroutine(substs).upvar_tys().iter() {
-                collect_heap_object_types_from_ty_inner(tcx, upvar_ty, depth + 1, out);
+                collect_heap_object_types_from_ty_inner(tcx, upvar_ty, depth + 1, scan);
             }
         }
         #[cfg(unialloc_rustc_current)]
         ty::CoroutineClosure(_, substs) => {
             for upvar_ty in ty::UpvarArgs::CoroutineClosure(substs).upvar_tys().iter() {
-                collect_heap_object_types_from_ty_inner(tcx, upvar_ty, depth + 1, out);
+                collect_heap_object_types_from_ty_inner(tcx, upvar_ty, depth + 1, scan);
             }
         }
         #[cfg(not(unialloc_rustc_current))]
         ty::Generator(_, substs, _) => {
             for upvar_ty in substs.as_generator().upvar_tys() {
-                collect_heap_object_types_from_ty_inner(tcx, upvar_ty, depth + 1, out);
+                collect_heap_object_types_from_ty_inner(tcx, upvar_ty, depth + 1, scan);
             }
         }
         ty::Array(inner, _) | ty::Slice(inner) => {
-            collect_heap_object_types_from_ty_inner(tcx, *inner, depth + 1, out);
+            collect_heap_object_types_from_ty_inner(tcx, *inner, depth + 1, scan);
         }
-        _ => {
-            if let Some(normalized) = normalized_heap_object_type(&format!("{:?}", stripped)) {
-                out.insert(normalized);
-            }
-        }
+        ty::Bool
+        | ty::Char
+        | ty::Int(_)
+        | ty::Uint(_)
+        | ty::Float(_)
+        | ty::Str
+        | ty::Never
+        | ty::FnDef(_, _)
+        | ty::FnPtr(..) => {}
+        // Aliases, dynamic objects, generic parameters, inference variables,
+        // compiler errors, and other unmodeled leaves cannot prove a complete
+        // owner graph. Unknown dominates any owner found in a sibling field.
+        _ => scan.unresolved = true,
     }
 }
 
@@ -2234,21 +2307,53 @@ fn plain_clone_heap_class<'tcx>(
     }
 }
 
-fn semantic_scope_heap_class_from_ty<'tcx>(
+fn semantic_scope_argument_is_borrowed_or_raw(ty: Ty<'_>) -> bool {
+    match ty.kind() {
+        ty::Ref(_, _, _) => true,
+        #[cfg(unialloc_rustc_current)]
+        ty::RawPtr(_, _) => true,
+        #[cfg(not(unialloc_rustc_current))]
+        ty::RawPtr(_) => true,
+        _ => false,
+    }
+}
+
+fn semantic_scope_heap_class_with_by_value_hazards<'tcx>(
     tcx: TyCtxt<'tcx>,
-    ty: Ty<'tcx>,
+    attribution_ty: Ty<'tcx>,
+    hazard_tys: &[Ty<'tcx>],
 ) -> SemanticScopeHeapClass {
-    let stripped = strip_type_indirection(ty);
-    // Inspect the complete supported-owner graph. A directly supported outer
-    // container is not necessarily the only allocator-visible identity used by
-    // one call: for example, Vec<String>::resize may clone and allocate String
-    // elements while it also grows the Vec backing allocation.
-    let owners = heap_object_types_from_ty(tcx, stripped);
-    let owners = owners.into_iter().collect::<Vec<_>>();
-    match owners.len() {
-        0 => SemanticScopeHeapClass::Unresolved,
-        1 => SemanticScopeHeapClass::Single(owners.into_iter().next().unwrap()),
-        _ => SemanticScopeHeapClass::Ambiguous(owners),
+    let attribution_scan = heap_object_type_scan_from_ty(tcx, attribution_ty);
+    if attribution_scan.unresolved {
+        return SemanticScopeHeapClass::Unresolved;
+    }
+    let mut owners = attribution_scan.owners;
+    if owners.is_empty() {
+        return SemanticScopeHeapClass::Unresolved;
+    }
+    if owners.len() > 1 {
+        return SemanticScopeHeapClass::Ambiguous(owners.into_iter().collect());
+    }
+    let attributed_owner = owners.iter().next().cloned().unwrap();
+
+    for hazard_ty in hazard_tys {
+        // Borrowed and raw-pointer arguments are not consumed owners. Their
+        // pointees may be mutated, but they must not be re-attributed or make a
+        // same-owner by-value call look ambiguous.
+        if semantic_scope_argument_is_borrowed_or_raw(*hazard_ty) {
+            continue;
+        }
+        let hazard_scan = heap_object_type_scan_from_ty(tcx, *hazard_ty);
+        if hazard_scan.unresolved {
+            return SemanticScopeHeapClass::Unresolved;
+        }
+        owners.extend(hazard_scan.owners);
+    }
+
+    if owners.len() == 1 {
+        SemanticScopeHeapClass::Single(attributed_owner)
+    } else {
+        SemanticScopeHeapClass::Ambiguous(owners.into_iter().collect())
     }
 }
 
@@ -2259,19 +2364,24 @@ fn non_plain_semantic_scope_heap_class<'tcx>(
     callee: &str,
 ) -> SemanticScopeHeapClass {
     if semantic_scope_receiver_heap_owner_call(callee) {
-        // MIR keeps the receiver as argument zero. Inspecting later arguments
-        // can attribute an inserted value to the receiver or choose the first
-        // field of an aggregate receiver, so missing/ambiguous receiver proof
-        // is deliberately unresolved rather than falling back elsewhere.
+        // MIR keeps the receiver as argument zero, which remains the sole
+        // attribution source. Later by-value owners are safety hazards because
+        // the callee can consume/drop them under the receiver's active scope.
         match argument_tys.first() {
-            Some(receiver_ty) => semantic_scope_heap_class_from_ty(tcx, *receiver_ty),
+            Some(receiver_ty) => semantic_scope_heap_class_with_by_value_hazards(
+                tcx,
+                *receiver_ty,
+                &argument_tys[1..],
+            ),
             None => SemanticScopeHeapClass::Unresolved,
         }
     } else {
-        // Constructors/factories belong to their destination. In particular,
-        // an owner-typed input does not prove that a unit/scalar/opaque return
-        // owns an allocation, so never scan arbitrary non-receiver arguments.
-        semantic_scope_heap_class_from_ty(tcx, destination_ty)
+        // Constructors/factories remain attributed exclusively to their
+        // destination. A consumed by-value owner is nevertheless a scope-safety
+        // hazard: the callee can free it before producing the destination. Merge
+        // those owner graphs only to reject conflicting/unresolved scopes; never
+        // select an argument identity as the returned allocation identity.
+        semantic_scope_heap_class_with_by_value_hazards(tcx, destination_ty, argument_tys)
     }
 }
 
@@ -5777,9 +5887,14 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
         };
         let place_ty = place.ty(&body.local_decls, tcx).ty;
         let drop_type = format!("{:?}", place_ty);
-        let heap_owner_types = heap_object_types_from_ty(tcx, place_ty);
-        let drop_type_has_multiple_heap_owners = heap_owner_types.len() > 1;
-        let semantic_object_type = if drop_type_has_multiple_heap_owners {
+        let heap_owner_scan = heap_object_type_scan_from_ty(tcx, place_ty);
+        let drop_owner_graph_unresolved = heap_owner_scan.unresolved;
+        let heap_owner_types = heap_owner_scan.owners;
+        let drop_type_has_multiple_heap_owners =
+            !drop_owner_graph_unresolved && heap_owner_types.len() > 1;
+        let semantic_object_type = if drop_owner_graph_unresolved {
+            UNKNOWN_HEAP_OBJECT_TYPE.to_string()
+        } else if drop_type_has_multiple_heap_owners {
             format!(
                 "multiple_heap_owners({})",
                 heap_owner_types
@@ -5793,7 +5908,6 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                 .iter()
                 .next()
                 .cloned()
-                .or_else(|| heap_object_type_from_ty(tcx, place_ty))
                 .unwrap_or_else(|| UNKNOWN_HEAP_OBJECT_TYPE.to_string())
         };
         let drop_type_has_generic_param = type_contains_generic_param(tcx, place_ty);
