@@ -227,6 +227,8 @@ cross-thread escape sites.  Focused real-probe results:
   `arc_cross_thread_type_mapping_record_count=1`,
   `recovery_identity_mismatches=0`.
 
+At `c426a2f`, deterministic replay recomputes the companion from the validated raw target rewrite and runtime type rows rather than accepting the embedded summary: it requires distinct nonzero Arc and Vec identities in one module, exactly one fully contract-matching multi-owner closure skip, exactly `1/1` allocation/deallocation for each identity, and zero recovery mismatches.  This is bounded Arc+Vec worker-drop recovery-pairing evidence, not complete escape analysis, universal container coverage, or performance evidence; the durable replay summary is under `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/cross-thread-multi-owner-pairing-c426a2f-20260712/`.
+
 These are bounded functionality probes, not the slow paper performance matrix.
 They are intended to catch real compiler/runtime integration regressions quickly
 before spending time on larger benchmark runs.
