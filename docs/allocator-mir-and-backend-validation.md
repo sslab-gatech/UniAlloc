@@ -338,6 +338,30 @@ This is bounded cross-thread functional and safety evidence only.  It does not
 establish universal thread/container coverage, performance, or a paper
 percentage.
 
+### Cross-thread memory-tagged `String` to `Vec<u8>` transfer
+
+Commit `2b33401` closes the previously untested composition of compiler actual
+rewrite, type isolation, software memory tagging, cross-thread recovery, and
+pointer-preserving ownership transfer.  The ordinary Rust probe allocates a
+`String` on the main thread, moves it to a worker, and calls
+`String::into_bytes` there.  The pass applies exactly one transfer rewrite; the
+String and Vec allocation scopes carry policy flags `129` and explicit
+cross-thread placement `32768`.
+
+On current `nightly-2026-06-11` and legacy `nightly-2022-07-01`, one functional
+run each reports transfer attempted/applied/rejected `1/1/0`.  Pointer,
+capacity, and payload are preserved; the old String identity cannot reuse the
+released address, the exact Vec identity can, and a second Vec reuse proves the
+tag record was retired rather than left stale.  Fallback, raw-without-metadata,
+recovery-mismatch, corrupt-slot, and dropped-event counters are all `0`.
+Separately, the hosted and fixed-heap runtime regression each pass the same
+tagged cross-thread cache-routing boundary.
+
+The placement is an explicit compiler policy, not automatic escape analysis.
+This is a purpose-built ordinary Rust actual-rewrite probe, not external-app,
+benchmark, performance, universal thread/container, or paper-percentage
+evidence.
+
 ### `String` to `Vec<u8>` ownership-identity transfer
 
 The same commit `718aab9` adds the previously missing compiler/runtime transfer
