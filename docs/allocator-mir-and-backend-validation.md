@@ -258,11 +258,12 @@ artifacts rather than by rerunning the binaries.
   explicit pairing boundary.  The ambiguous raw Clone performs exactly one raw
   alloc/dealloc pair, cannot consume the protected buffer, and a later supported
   `Vec<ProducerPayload>` recovers that exact protected address.
-- **Generic helper boundary.** The monomorphized generic helper executes four
-  typed deallocations and four typed-cache insertions with zero fallback
+- **Generic helper boundary.** Four calls through the generic helper produce
+  four typed deallocations and four typed-cache insertions with zero fallback
   deallocations (`4/0/4`).  The current `optimized_mir` provider exposes no
   separate generic-helper audit row, so the evidence records that observability
-  boundary and does not invent a generic-Drop skip claim.
+  boundary and does not claim a separately observed monomorphized symbol or
+  invent a generic-Drop skip claim.
 
 This bundle is functional actual-rustc evidence only: it is not a benchmark,
 does not support a percentage, and does not establish universal compiler or
