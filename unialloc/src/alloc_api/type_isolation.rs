@@ -2528,12 +2528,17 @@ static AUTO_ALLOCATION_RECORDS: [Mutex<GlobalAutoAllocationRecordTable>;
     Mutex::new(GlobalAutoAllocationRecordTable::empty()),
 ];
 static AUTO_ALLOCATION_RECORD_COUNT: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE: AtomicUsize = AtomicUsize::new(0);
 /// Bitset of global recovery shards with at least one live record.
 ///
 /// The count is still the source of truth for "does any recovery record exist?"
 /// This bitset is an exact-but-defensive lock-skipping hint for sparse sharded
 /// traffic: each insertion sets its shard bit before publishing the record, and
 /// removals clear the bit only after scanning that shard under the shard lock.
+/// A removal never clears unrelated shard bits: legacy/test state may therefore
+/// leave a conservative stale bit until the next explicit table reset, but it
+/// cannot hide a record concurrently published in another shard.
 /// If a test or legacy path seeds records without setting the bit, lookups fall
 /// back to scanning all shards when the mask is zero but the global count is not.
 /// When the mask is nonzero, lookup still forces the pointer's home shard into
@@ -2663,6 +2668,13 @@ pub fn semantic_auto_metadata_enabled() -> bool {
 /// auto-metadata synthesis entirely.
 #[inline]
 pub fn semantic_runtime_slow_path_enabled() -> bool {
+    // The exact global-record count is authoritative.  The coarse slow-path
+    // flag can be cleared by a last-record removal racing an insertion in a
+    // different shard, so it must not be the only deallocation/reallocation
+    // gate for live cross-thread recovery metadata.
+    if AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed) != 0 {
+        return true;
+    }
     let global_flags = SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed);
     if global_flags & SLOW_PATH_SCOPED_METADATA_MASK != 0 && current_thread_scoped_metadata_active()
     {
@@ -3660,6 +3672,18 @@ fn decrement_global_auto_allocation_record_shard_live_count(
     refresh_global_auto_allocation_record_shard_active(shard_idx, table);
 }
 
+#[cfg(test)]
+fn pause_after_last_global_recovery_count_decrement_for_test() {
+    if TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE
+        .compare_exchange(1, 2, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        while TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE.load(Ordering::Acquire) == 2 {
+            core::hint::spin_loop();
+        }
+    }
+}
+
 #[inline]
 unsafe fn record_fast_auto_allocation_metadata_eligible(
     ptr: *mut u8,
@@ -4235,6 +4259,8 @@ fn remove_global_auto_allocation_inline_record(
 ) {
     clear_global_auto_allocation_record_hot_slot(table, ptr_key);
     if atomic_saturating_decrement(&AUTO_ALLOCATION_RECORD_COUNT) == 0 {
+        #[cfg(test)]
+        pause_after_last_global_recovery_count_decrement_for_test();
         // This global recovery table is on the compiler-scoped GlobalAlloc
         // deallocation path.  The TLS fast table already avoids clearing all
         // slots when the last live record is removed; keep the same O(1)
@@ -4243,8 +4269,10 @@ fn remove_global_auto_allocation_inline_record(
         // an empty stop marker and the slow-path flag can be cleared
         // immediately.
         table.inline[idx] = AutoAllocationRecord::empty();
-        table.live_count = table.live_count.saturating_sub(1);
-        AUTO_ALLOCATION_RECORD_ACTIVE_SHARDS.store(0, Ordering::Release);
+        // Only clear this shard's hint.  A concurrent insertion can publish a
+        // live record in another shard after the count reaches zero; a global
+        // store here would erase that new shard bit and hide its record.
+        decrement_global_auto_allocation_record_shard_live_count(shard_idx, table);
         semantic_slow_path_clear(SLOW_PATH_ALLOCATION_RECORDS);
     } else {
         table.inline[idx] = AutoAllocationRecord::tombstone();
@@ -4338,11 +4366,18 @@ fn recover_global_auto_allocation_record_metadata(
                     if record.matches_allocation(ptr, layout) {
                         if remove {
                             if atomic_saturating_decrement(&AUTO_ALLOCATION_RECORD_COUNT) == 0 {
+                                #[cfg(test)]
+                                pause_after_last_global_recovery_count_decrement_for_test();
                                 unsafe {
                                     *slot = AutoAllocationRecord::empty();
                                 }
-                                table.live_count = table.live_count.saturating_sub(1);
-                                AUTO_ALLOCATION_RECORD_ACTIVE_SHARDS.store(0, Ordering::Release);
+                                // Preserve active bits published by concurrent
+                                // insertions in other shards; this removal owns
+                                // only the home shard's live-count transition.
+                                decrement_global_auto_allocation_record_shard_live_count(
+                                    shard_idx,
+                                    &mut *table,
+                                );
                                 semantic_slow_path_clear(SLOW_PATH_ALLOCATION_RECORDS);
                             } else {
                                 unsafe {
@@ -12815,6 +12850,152 @@ mod tests {
         );
     }
 
+    fn exercise_concurrent_last_global_recovery_remove(seed_overflow: bool) {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            clear_scoped_metadata_gate_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xC003_A001)
+            .with_module(0xC0DE_A001)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let new_metadata = AllocationMetadata::for_type(0xC003_B001)
+            .with_module(0xC0DE_B001)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let old_ptr = unsafe { alloc.alloc_raw(layout) };
+        let new_ptr = unsafe { alloc.alloc_raw(layout) };
+        assert!(!old_ptr.is_null() && !new_ptr.is_null());
+
+        let old_shard_idx = auto_allocation_record_shard(old_ptr);
+        if seed_overflow {
+            #[cfg(not(feature = "fixed_heap"))]
+            unsafe {
+                let page = allocate_auto_allocation_record_page();
+                assert!(!page.is_null(), "hosted race test needs one overflow page");
+                (*page).entries[0] = auto_allocation_record_for(old_ptr, layout, old_metadata);
+                let mut table = AUTO_ALLOCATION_RECORDS[old_shard_idx].lock();
+                (*page).next = table.overflow;
+                table.overflow = page;
+                table.live_count = 1;
+                AUTO_ALLOCATION_RECORD_COUNT.store(1, Ordering::Relaxed);
+                auto_allocation_record_mark_shard_active(old_shard_idx);
+                semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+            }
+            #[cfg(feature = "fixed_heap")]
+            panic!("fixed_heap does not support global recovery overflow pages");
+        } else {
+            assert!(unsafe {
+                record_global_auto_allocation_metadata_eligible(old_ptr, layout, old_metadata)
+            });
+        }
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+
+        let new_home_shard_idx = auto_allocation_record_shard(new_ptr);
+        let new_record_shard_idx = (0..AUTO_ALLOCATION_RECORD_SHARD_COUNT)
+            .find(|&shard_idx| shard_idx != old_shard_idx && shard_idx != new_home_shard_idx)
+            .expect("at least one independent recovery shard");
+
+        TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE.store(1, Ordering::Release);
+        let old_ptr_addr = old_ptr as usize;
+        let remover = thread::spawn(move || {
+            recover_global_auto_allocation_record_metadata(old_ptr_addr as *mut u8, layout, true)
+        });
+
+        struct ResumeLastGlobalRecoveryRemove;
+        impl Drop for ResumeLastGlobalRecoveryRemove {
+            fn drop(&mut self) {
+                TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE.store(3, Ordering::Release);
+            }
+        }
+        let resume_remove = ResumeLastGlobalRecoveryRemove;
+        let pause_deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE.load(Ordering::Acquire) != 2 {
+            if std::time::Instant::now() >= pause_deadline {
+                drop(resume_remove);
+                let _ = remover.join();
+                panic!("last global recovery removal did not reach the test pause");
+            }
+            thread::yield_now();
+        }
+
+        let inserted = {
+            let mut table = AUTO_ALLOCATION_RECORDS[new_record_shard_idx].lock();
+            install_global_auto_allocation_inline_record(
+                new_record_shard_idx,
+                &mut *table,
+                0,
+                new_ptr,
+                layout,
+                new_metadata,
+            )
+        };
+        let count_while_paused = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        let mask_while_paused = auto_allocation_record_active_shards();
+        drop(resume_remove);
+        let removed_metadata = remover.join();
+
+        let count_after_race = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        let mask_after_race = auto_allocation_record_active_shards();
+        let gate_after_race = semantic_runtime_slow_path_enabled();
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, new_ptr, layout);
+        }
+        let new_record_survived_dealloc =
+            lookup_auto_allocation_metadata(new_ptr, layout) == Some(new_metadata);
+        if new_record_survived_dealloc {
+            let _ = recover_global_auto_allocation_record_metadata(new_ptr, layout, true);
+        }
+        unsafe {
+            alloc.dealloc_raw(old_ptr, layout);
+            clear_auto_allocation_records();
+        }
+        TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE.store(0, Ordering::Release);
+
+        assert!(
+            inserted,
+            "concurrent recovery-record insertion should succeed"
+        );
+        assert_eq!(count_while_paused, 1);
+        assert!(auto_allocation_record_shard_is_active(
+            mask_while_paused,
+            new_record_shard_idx
+        ));
+        assert_eq!(removed_metadata.unwrap(), Some(old_metadata));
+        assert_eq!(count_after_race, 1);
+        assert_eq!(
+            mask_after_race,
+            auto_allocation_record_shard_bit(new_record_shard_idx),
+            "last removal must clear only its own shard bit"
+        );
+        assert!(
+            gate_after_race,
+            "a live global recovery record must keep GlobalAlloc deallocation on the semantic path"
+        );
+        assert!(
+            !new_record_survived_dealloc,
+            "GlobalAlloc deallocation must consume metadata inserted during the last-remove window"
+        );
+    }
+
+    #[test]
+    fn concurrent_last_inline_global_recovery_remove_preserves_new_record() {
+        exercise_concurrent_last_global_recovery_remove(false);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn concurrent_last_overflow_global_recovery_remove_preserves_new_record() {
+        exercise_concurrent_last_global_recovery_remove(true);
+    }
+
     #[test]
     fn auto_allocation_record_active_offsets_iterate_only_set_shards_from_home() {
         let active_mask = auto_allocation_record_shard_bit(6)
@@ -12897,11 +13078,16 @@ mod tests {
             "removal must use the same home-including probe policy as lookup"
         );
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
-        assert_eq!(
-            auto_allocation_record_active_shards(),
-            0,
-            "final removal should restore a clean active-shard mask"
+        let final_mask = auto_allocation_record_active_shards();
+        assert!(
+            !auto_allocation_record_shard_is_active(final_mask, home_shard_idx),
+            "final removal should clear the removed record's home-shard bit"
         );
+        assert_eq!(
+            final_mask, stale_mask,
+            "shard-local removal must not globally clear an unrelated hint that could belong to a concurrent insertion"
+        );
+        clear_auto_allocation_records();
     }
 
     #[test]
