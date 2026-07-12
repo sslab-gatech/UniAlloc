@@ -19268,6 +19268,94 @@ mod tests {
         exercise_moved_realloc_corrupt_old_tag_transaction(metadata);
     }
 
+    fn exercise_memory_tagged_realloc_to_zero_retires_identity(metadata: AllocationMetadata) {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_memory_tags_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let memory_tag_record_exists = |ptr| unsafe {
+            if memory_tag_requires_global_visibility(metadata) {
+                let mut table = global_memory_tag_table_for_ptr(ptr).lock();
+                find_global_memory_tag_slot(&mut *table, ptr).is_some()
+            } else {
+                find_memory_tag_slot(ptr).is_some()
+            }
+        };
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(size_of::<usize>(), align_of::<usize>()).unwrap();
+        let zero_layout = Layout::from_size_align(0, old_layout.align()).unwrap();
+
+        let ptr = unsafe { alloc.alloc_with_recovery_metadata(old_layout, metadata) };
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.cast::<usize>().write(0xA110_C0DE);
+        }
+        assert!(memory_tag_record_exists(ptr));
+        assert_eq!(
+            recorded_reallocation_old_metadata(ptr, old_layout),
+            Some(metadata)
+        );
+
+        let zero_ptr =
+            unsafe { alloc.realloc_with_split_metadata(ptr, old_layout, 0, metadata, metadata) };
+        assert_eq!(zero_ptr, semantic_zero_size_ptr(zero_layout));
+        assert!(
+            !memory_tag_record_exists(ptr),
+            "realloc-to-zero must retire the old memory-tag record"
+        );
+        assert_eq!(
+            recorded_reallocation_old_metadata(ptr, old_layout),
+            None,
+            "realloc-to-zero must consume the old recovery identity exactly once"
+        );
+
+        let side_cache_after_retire = type_isolation_side_cache_snapshot();
+        let duplicate = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            alloc.dealloc_with_metadata(ptr, old_layout, metadata);
+        }));
+        assert!(
+            duplicate.is_err(),
+            "a second deallocation must fail before duplicate cache insertion or raw free"
+        );
+        assert_eq!(
+            type_isolation_side_cache_snapshot(),
+            side_cache_after_retire,
+            "rejected duplicate deallocation must not mutate the type-isolation cache"
+        );
+        assert_eq!(recorded_reallocation_old_metadata(ptr, old_layout), None);
+
+        unsafe {
+            drain_semantic_cache_for_test(&alloc, old_layout, metadata);
+        }
+    }
+
+    #[test]
+    fn memory_tagged_realloc_to_zero_retires_local_identity_before_double_free() {
+        let metadata = AllocationMetadata::for_type(0x7A6D_2E20)
+            .with_module(0xC0DE_2E20)
+            .with_callsite(0xA110_2E20)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING);
+        exercise_memory_tagged_realloc_to_zero_retires_identity(metadata);
+    }
+
+    #[test]
+    fn memory_tagged_realloc_to_zero_retires_global_identity_before_double_free() {
+        let metadata = AllocationMetadata::for_type(0x7A6D_2E21)
+            .with_module(0xC0DE_2E21)
+            .with_callsite(0xA110_2E21)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        exercise_memory_tagged_realloc_to_zero_retires_identity(metadata);
+    }
+
     #[test]
     fn memory_tagging_places_record_at_hashed_fast_slot() {
         let _guard = test_guard();
