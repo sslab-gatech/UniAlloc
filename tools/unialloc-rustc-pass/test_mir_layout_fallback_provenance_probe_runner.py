@@ -158,6 +158,12 @@ class MirLayoutFallbackProvenanceRunnerTests(unittest.TestCase):
         with self.assertRaises(AssertionError):
             runner.validate(valid_audit(), runtime)
 
+    def test_fail_first_rejects_wrong_positive_dealloc_alignment(self) -> None:
+        runtime = valid_runtime()
+        runtime["type_rows"][1]["observed_dealloc_align"] = 32
+        with self.assertRaises(AssertionError):
+            runner.validate(valid_audit(), runtime)
+
     def test_rejects_missing_actual_rewrite(self) -> None:
         audit = valid_audit()
         audit["rewrite_candidates"][2]["rewrite_status"] = (

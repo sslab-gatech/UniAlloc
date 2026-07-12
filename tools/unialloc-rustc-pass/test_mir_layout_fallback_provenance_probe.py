@@ -222,6 +222,13 @@ def aggregate_runtime_type(rows: List[Dict[str, Any]], type_id: int) -> Dict[str
                 if int(row.get("observed_dealloc_size") or 0)
             }
         ),
+        "dealloc_aligns": sorted(
+            {
+                int(row.get("observed_dealloc_align") or 0)
+                for row in matching
+                if int(row.get("observed_dealloc_align") or 0)
+            }
+        ),
         "callsites": sorted({int(row.get("callsite") or 0) for row in matching}),
         "module_ids": sorted({int(row.get("module_id") or 0) for row in matching}),
     }
@@ -284,6 +291,7 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     assert positive_runtime["alloc_sizes"] == [32]
     assert positive_runtime["alloc_aligns"] == [64]
     assert positive_runtime["dealloc_sizes"] == [32]
+    assert positive_runtime["dealloc_aligns"] == [64]
     assert fallback_runtime["allocations"] == 1
     assert fallback_runtime["deallocations"] == 0
     assert fallback_runtime["alloc_sizes"] == [37]
