@@ -8854,6 +8854,26 @@ unsafe fn enqueue_delayed_free(
     }
 }
 
+#[inline]
+unsafe fn delayed_free_contains_ptr(ptr: *mut u8) -> bool {
+    if ptr.is_null() {
+        return false;
+    }
+
+    // Delayed free is already a bounded slow path. Scan the authoritative
+    // slots instead of trusting only the occupancy hint so a stale mask cannot
+    // make a quarantined allocation eligible for a second deallocation.
+    let mut idx = 0usize;
+    while idx < DELAYED_FREE_SLOTS {
+        let slot = DELAYED_FREE[idx];
+        if !slot.is_empty() && slot.ptr == ptr {
+            return true;
+        }
+        idx += 1;
+    }
+    false
+}
+
 unsafe fn delayed_free_take_slot(idx: usize) -> DelayedFreeSlot {
     let slot = DELAYED_FREE[idx];
     DELAYED_FREE[idx] = DelayedFreeSlot::empty();
@@ -9708,6 +9728,14 @@ impl RustAllocator {
         metadata: AllocationMetadata,
         consume_recovery_record: bool,
     ) {
+        if (DELAYED_FREE_RETAINED_BYTES != 0 || DELAYED_FREE_OCCUPIED_MASK != 0)
+            && delayed_free_contains_ptr(ptr)
+        {
+            // Quarantine ownership is pointer state, not caller-supplied
+            // metadata. Reject a duplicate before a caller can omit the
+            // delayed-free flag and escape through a raw/compiler fast path.
+            panic!("delayed-free pointer already quarantined");
+        }
         if layout_derived_raw_only_fast_path(metadata) {
             if consume_recovery_record {
                 let _ = recover_auto_allocation_record_metadata(ptr, layout, true);
@@ -21560,7 +21588,7 @@ mod tests {
     }
 
     #[test]
-    fn memory_tagged_delayed_free_rejects_double_free_before_duplicate_quarantine() {
+    fn memory_tagged_delayed_free_rejects_duplicate_quarantine() {
         let _guard = test_guard();
         let _cleanup = SemanticStateCleanup;
         unsafe {
@@ -21609,7 +21637,7 @@ mod tests {
         }));
         assert!(
             second_dealloc.is_err(),
-            "missing memory-tag ownership must fail-stop a duplicate deallocation"
+            "quarantine ownership must fail-stop a duplicate deallocation"
         );
         assert_eq!(
             delayed_free_snapshot(),
@@ -21627,6 +21655,73 @@ mod tests {
             // The object is intentionally larger than the semantic cache cap,
             // so releasing the one valid quarantine record returns it directly
             // to the raw allocator instead of retaining test-owned storage.
+            release_delayed_free_for_test(&alloc);
+        }
+        assert_eq!(delayed_free_snapshot().occupied_slots, 0);
+    }
+
+    #[test]
+    fn delayed_free_without_memory_tagging_rejects_duplicate_quarantine() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(
+            MAX_TYPE_CACHE_OBJECT_SIZE + align_of::<usize>(),
+            align_of::<usize>(),
+        )
+        .unwrap();
+        assert!(
+            delayed_free_retained_bytes_for_layout(layout) <= MAX_DELAYED_FREE_RETAINED_BYTES,
+            "test object must enter quarantine instead of bypassing it"
+        );
+        let metadata = AllocationMetadata::for_type(0x7A6D_D0B2)
+            .with_module(0xC0DE_D0B2)
+            .with_callsite(0xA110_D0B2)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE);
+
+        let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+        unsafe {
+            alloc.dealloc_with_metadata(ptr, layout, metadata);
+        }
+        let quarantined_once = delayed_free_snapshot();
+        assert_eq!(quarantined_once.occupied_slots, 1);
+        assert_delayed_free_snapshot_accounting(quarantined_once);
+        assert_eq!(type_isolation_side_cache_snapshot().occupied_entries, 0);
+
+        unsafe {
+            // Exercise both defensive cases: the occupancy hint may be stale,
+            // and duplicate caller metadata may omit the delayed-free policy
+            // in an attempt to escape through the compiler fast path.
+            DELAYED_FREE_OCCUPIED_MASK = 0;
+        }
+        let bypass_metadata = metadata.with_flags(FLAG_TYPE_ISOLATED);
+        let second_dealloc = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            alloc.dealloc_with_metadata(ptr, layout, bypass_metadata);
+        }));
+        assert!(
+            second_dealloc.is_err(),
+            "quarantine ownership must reject duplicate deallocation despite caller metadata"
+        );
+        assert_eq!(
+            delayed_free_snapshot(),
+            quarantined_once,
+            "rejected duplicate deallocation must not mutate quarantine accounting"
+        );
+        assert_eq!(
+            type_isolation_side_cache_snapshot().occupied_entries,
+            0,
+            "rejected duplicate deallocation must not poison the semantic cache"
+        );
+
+        unsafe {
             release_delayed_free_for_test(&alloc);
         }
         assert_eq!(delayed_free_snapshot().occupied_slots, 0);
