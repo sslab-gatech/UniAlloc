@@ -128,6 +128,12 @@ def ready_generic_drop_runtime() -> dict:
 
 def preserved_raw_generic_drop_omission_audit() -> dict:
     """Minimized from the preserved 2e3c0e2 actual-rustc target audit."""
+    drop_callsites = (
+        13708296833535806698,
+        2539143866788732867,
+        17702369971882354328,
+        10831918827053851400,
+    )
     return {
         "summary": {
             "provider_override_installed": True,
@@ -143,12 +149,17 @@ def preserved_raw_generic_drop_omission_audit() -> dict:
                 "rewrite_status": "semantic_scope_enter_exit_rewrite_applied",
                 "semantic_object_type": "std::boxed::Box<ProducerPayload>",
             },
-            {
-                "mir_function": "main",
-                "lowering_kind": "semantic_scope_drop_rewrite",
-                "rewrite_status": "semantic_scope_drop_rewrite_applied",
-                "semantic_object_type": "std::string::String",
-            },
+            *[
+                {
+                    "mir_function": "main",
+                    "lowering_kind": "semantic_scope_drop_rewrite",
+                    "rewrite_status": "actual_semantic_scope_drop_rewrite_applied",
+                    "semantic_object_type": "std::string::String",
+                    "destination_type": "std::string::String",
+                    "callsite": callsite,
+                }
+                for callsite in drop_callsites
+            ],
             {
                 "mir_function": "main::{closure#0}",
                 "lowering_kind": "semantic_scope_drop_non_heap_object_skipped",
@@ -175,6 +186,18 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "provider-omission evidence"):
             runner.validate_generic_drop_recovery_requirement(
                 {"rewrite_candidates": []}, ready_generic_drop_runtime()
+            )
+
+    def test_generic_drop_recovery_rejects_summary_only_drop_evidence(self) -> None:
+        audit = preserved_raw_generic_drop_omission_audit()
+        audit["rewrite_candidates"] = [
+            row
+            for row in audit["rewrite_candidates"]
+            if row.get("lowering_kind") != "semantic_scope_drop_rewrite"
+        ]
+        with self.assertRaisesRegex(AssertionError, "row-level actual Drop evidence"):
+            runner.validate_generic_drop_recovery_requirement(
+                audit, ready_generic_drop_runtime()
             )
 
     def test_generic_drop_recovery_accepts_exact_audit_and_runtime_delta(self) -> None:

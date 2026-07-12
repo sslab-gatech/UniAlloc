@@ -575,11 +575,44 @@ def validate_generic_drop_recovery_requirement(
         assert summary.get("body_clone_returned_to_rustc") is True, (
             "generic Drop provider-omission evidence requires returned cloned MIR bodies"
         )
-        assert int(summary.get("semantic_scope_drop_candidate_count") or 0) > 0, (
-            "generic Drop provider-omission evidence requires other observed Drop candidates"
+        observed_drop_rows = [
+            row
+            for row in audit.get("rewrite_candidates") or []
+            if isinstance(row, dict)
+            and row.get("lowering_kind") == "semantic_scope_drop_rewrite"
+            and not (
+                str(row.get("mir_function") or "") == GENERIC_DROP_FUNCTION
+                or str(row.get("mir_function") or "").endswith(
+                    f"::{GENERIC_DROP_FUNCTION}"
+                )
+            )
+        ]
+        assert observed_drop_rows, (
+            "generic Drop provider-omission evidence requires row-level actual Drop evidence"
         )
-        assert int(summary.get("semantic_scope_drop_rewrite_applied_count") or 0) > 0, (
-            "generic Drop provider-omission evidence requires other applied Drop rewrites"
+        unexpected_drop_statuses = [
+            row
+            for row in observed_drop_rows
+            if row.get("rewrite_status")
+            != "actual_semantic_scope_drop_rewrite_applied"
+        ]
+        assert not unexpected_drop_statuses, (
+            "generic Drop provider-omission evidence requires exact applied Drop rows: "
+            f"{unexpected_drop_statuses}"
+        )
+        candidate_count = int(
+            summary.get("semantic_scope_drop_candidate_count") or 0
+        )
+        applied_count = int(
+            summary.get("semantic_scope_drop_rewrite_applied_count") or 0
+        )
+        assert candidate_count == len(observed_drop_rows), (
+            "generic Drop provider-omission candidate summary must match row-level "
+            f"Drop evidence: summary={candidate_count}, rows={len(observed_drop_rows)}"
+        )
+        assert applied_count == len(observed_drop_rows), (
+            "generic Drop provider-omission applied summary must match row-level "
+            f"Drop evidence: summary={applied_count}, rows={len(observed_drop_rows)}"
         )
         assert (
             int(
