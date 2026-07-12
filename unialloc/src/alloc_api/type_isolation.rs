@@ -4602,7 +4602,7 @@ pub(crate) fn allocation_metadata_recovery_identity_matches(
         && recorded.has_type()
         && !requested.is_layout_derived()
         && !recorded.is_layout_derived()
-        && type_cache_identity_key(recorded) == type_cache_identity_key(requested)
+        && type_cache_identity_metadata_matches(recorded, requested)
 }
 
 #[inline]
