@@ -30,6 +30,11 @@ DEFAULT_EXPECTED_OUTPUT_SHA256 = "565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8
 DEFAULT_PINNED_CHECKOUT = ROOT / "evaluation" / "external" / "_checkouts" / "external-R-Oxipng-Oxipng"
 PASS_SOURCE = ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewrite-dry-run.rs"
 STATS_PREFIX = "UNIALLOC_STATS_JSON="
+SCOPED_STATUS_PATHS = [
+    pathlib.Path("unialloc/src"),
+    pathlib.Path("unialloc/Cargo.toml"),
+    PASS_SOURCE.relative_to(ROOT),
+]
 
 
 class SmokeError(RuntimeError):
@@ -207,6 +212,29 @@ def build_pass_binary(toolchain: str, out: pathlib.Path, timeout: int) -> pathli
     return out
 
 
+def require_posix_host(os_name: str = os.name) -> None:
+    if os_name != "posix":
+        raise SmokeError("oxipng realapp repro smoke is POSIX-only; Windows path/executable handling is not claimed")
+
+
+def path_overlaps(left: pathlib.Path, right: pathlib.Path) -> bool:
+    left_resolved = left.resolve()
+    right_resolved = right.resolve()
+    return (
+        left_resolved == right_resolved
+        or left_resolved in right_resolved.parents
+        or right_resolved in left_resolved.parents
+    )
+
+
+def reject_protected_path_overlap(path: pathlib.Path, *, pinned: pathlib.Path, label: str) -> None:
+    for protected_label, protected in (("repo root", ROOT), ("pinned checkout", pinned)):
+        if path_overlaps(path, protected):
+            raise SmokeError(
+                f"{label} must not overlap or contain {protected_label}: {path.resolve()} vs {protected.resolve()}"
+            )
+
+
 def wrapper_env(
     *,
     base_env: dict[str, str],
@@ -256,7 +284,6 @@ def parse_stats(stderr: str) -> dict[str, Any]:
     return value
 
 
-
 def crate_name_from_rustc_args(args: list[Any]) -> str | None:
     for index, value in enumerate(args):
         text = str(value)
@@ -265,6 +292,7 @@ def crate_name_from_rustc_args(args: list[Any]) -> str | None:
         if text.startswith("--crate-name="):
             return text.split("=", 1)[1]
     return None
+
 
 def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dict[str, Any]], dict[str, int]]:
     audits: list[dict[str, Any]] = []
@@ -381,26 +409,89 @@ def git_status_for_paths(repo: pathlib.Path, paths: list[pathlib.Path]) -> str:
     return git_output(repo, ["status", "--short", "--", *[str(path) for path in paths]])
 
 
-def source_binding(toolchain: str, sysroot: pathlib.Path) -> dict[str, Any]:
-    paths = [pathlib.Path("unialloc/src"), pathlib.Path("unialloc/Cargo.toml"), PASS_SOURCE.relative_to(ROOT)]
+def source_file_hashes(paths: list[pathlib.Path]) -> dict[str, str]:
+    files: list[pathlib.Path] = []
+    for path in paths:
+        absolute = ROOT / path
+        if absolute.is_dir():
+            files.extend(sorted(child for child in absolute.rglob("*") if child.is_file()))
+        elif absolute.is_file():
+            files.append(absolute)
+        else:
+            raise SmokeError(f"source binding path is missing: {path}")
+    return {str(path.relative_to(ROOT)): sha256_file(path) for path in sorted(files)}
+
+
+def scoped_fingerprint(file_hashes: dict[str, str]) -> str:
+    digest = hashlib.sha256()
+    for path, file_hash in sorted(file_hashes.items()):
+        digest.update(path.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(file_hash.encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def source_binding(toolchain: str, sysroot: pathlib.Path, rustc_verbose_version: str) -> dict[str, Any]:
+    paths = SCOPED_STATUS_PATHS
+    file_hashes = source_file_hashes(paths)
     return {
         "repo_head": git_output(ROOT, ["rev-parse", "HEAD"]),
         "scoped_status": git_status_for_paths(ROOT, paths),
         "scoped_status_paths": [str(path) for path in paths],
+        "scoped_file_count": len(file_hashes),
+        "scoped_fingerprint_sha256": scoped_fingerprint(file_hashes),
+        "scoped_file_hashes": file_hashes,
         "pass_source": str(PASS_SOURCE.relative_to(ROOT)),
         "pass_source_sha256": sha256_file(PASS_SOURCE),
+        "repo_cargo_lock_sha256": sha256_file(ROOT / "Cargo.lock"),
         "build_toolchain": toolchain,
         "rustc_sysroot": str(sysroot),
+        "rustc_verbose_version": rustc_verbose_version,
+    }
+
+
+def reject_source_drift(start: dict[str, Any], end: dict[str, Any]) -> None:
+    keys = (
+        "repo_head",
+        "scoped_status",
+        "scoped_fingerprint_sha256",
+        "pass_source_sha256",
+        "repo_cargo_lock_sha256",
+        "rustc_sysroot",
+        "rustc_verbose_version",
+    )
+    drift = {key: {"start": start.get(key), "end": end.get(key)} for key in keys if start.get(key) != end.get(key)}
+    if drift:
+        raise SmokeError(f"source binding drifted during smoke: {json.dumps(drift, sort_keys=True)}")
+
+
+def pass_binary_binding(path: pathlib.Path, *, built_by_script: bool) -> dict[str, Any]:
+    if not path.exists():
+        raise SmokeError(f"pass binary is missing: {path}")
+    return {
+        "path": str(path),
+        "sha256": sha256_file(path),
+        "built_by_script": built_by_script,
+        "source_boundary": (
+            "script built this binary from the recorded pass source in the current run"
+            if built_by_script
+            else "provided pass binary is bound by binary hash; current pass source hash/status is recorded but is not binary provenance"
+        ),
     }
 
 
 def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
+    require_posix_host()
     pinned = args.pinned_checkout.resolve()
     output_dir = args.output_dir.resolve()
+    reject_protected_path_overlap(output_dir, pinned=pinned, label="output directory")
     require_fresh_output_dir(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     if args.temp_parent is None and pathlib.Path("/private/tmp").is_dir():
         args.temp_parent = "/private/tmp"
+    if args.temp_parent is not None:
+        reject_protected_path_overlap(pathlib.Path(args.temp_parent), pinned=pinned, label="temporary parent")
     temp_owner: tempfile.TemporaryDirectory[str] | None = None
     try:
         temp_root = args.temp_dir
@@ -409,7 +500,9 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             temp_root = pathlib.Path(temp_owner.name)
         else:
             temp_root = temp_root.resolve()
+            reject_protected_path_overlap(temp_root, pinned=pinned, label="temporary directory")
             temp_root.mkdir(parents=True, exist_ok=True)
+        reject_protected_path_overlap(temp_root, pinned=pinned, label="temporary directory")
 
         pinned_before = verify_pinned_checkout(pinned, args.expected_head)
         oxipng = temp_root / "oxipng-instrumented"
@@ -426,12 +519,17 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             ["rustc", f"+{args.toolchain}", "--print", "sysroot"], cwd=ROOT, timeout=args.timeout, check=True
         ).stdout.strip()
         sysroot = pathlib.Path(sysroot_text)
-        binding = source_binding(args.toolchain, sysroot)
+        rustc_verbose_version = run_command(
+            ["rustc", f"+{args.toolchain}", "-vV"], cwd=ROOT, timeout=args.timeout, check=True
+        ).stdout.strip()
+        source_binding_start = source_binding(args.toolchain, sysroot, rustc_verbose_version)
         wrapper = args.pass_binary.resolve() if args.pass_binary else temp_root / "unialloc-rustc-mir-rewrite-dry-run"
+        pass_built_by_script = args.pass_binary is None
         if args.pass_binary is None:
             build_pass_binary(args.toolchain, wrapper, args.timeout)
         elif not wrapper.exists():
             raise SmokeError(f"provided pass binary does not exist: {wrapper}")
+        pass_binding = pass_binary_binding(wrapper, built_by_script=pass_built_by_script)
 
         audit_dir = output_dir / "rewrites"
         log_dir = output_dir / "logs"
@@ -485,6 +583,7 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
         write_text(output_dir / "functional.returncode.txt", f"{run.returncode}\n")
         if not wrapper_output.exists():
             raise SmokeError("functional run did not produce wrapper-out.png")
+        built_oxipng_binary_sha256 = sha256_file(binary)
         stats = parse_stats(run.stderr)
         output_sha = sha256_file(wrapper_output)
         input_sha = sha256_file(input_path)
@@ -504,6 +603,8 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             fallback_note=fallback_note,
         )
         pinned_after = verify_pinned_checkout(pinned, pinned_before["head"])
+        source_binding_end = source_binding(args.toolchain, sysroot, rustc_verbose_version)
+        reject_source_drift(source_binding_start, source_binding_end)
         reference = load_reference_summary(args.reference_evidence)
         reference_digest = None
         if args.reference_evidence is not None:
@@ -515,10 +616,14 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
         summary = {
             "schema_version": 1,
             "source": "oxipng-realapp-repro-smoke",
-            "boundary": "functional/diagnostic smoke only; no timing loop; no performance claim",
+            "boundary": (
+                "functional/diagnostic smoke only; no timing loop; no performance claim; "
+                "subprocess timeout descendant cleanup is not claimed beyond direct fail-closed timeout handling"
+            ),
             "toolchain": args.toolchain,
-            "build_toolchain": binding["build_toolchain"],
-            "rustc_sysroot": binding["rustc_sysroot"],
+            "build_toolchain": source_binding_start["build_toolchain"],
+            "rustc_sysroot": source_binding_start["rustc_sysroot"],
+            "rustc_verbose_version": source_binding_start["rustc_verbose_version"],
             "rustc_target_crates": args.target_crate,
             "pinned_checkout": {
                 "head": pinned_before["head"],
@@ -528,11 +633,17 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             },
             "reference_evidence_sha256": reference_digest,
             "reference_evidence_source": None if reference is None else reference.get("source"),
-            "source_binding": binding,
+            "source_binding": {
+                "start": source_binding_start,
+                "end": source_binding_end,
+                "drift_checked": True,
+            },
             "instrumented_copy_status": git_output(oxipng, ["status", "--short"]),
             "instrumentation_patch": patch_path.name,
             "instrumentation_patch_sha256": sha256_file(patch_path),
-            "pass_binary_sha256": sha256_file(wrapper),
+            "instrumented_cargo_lock_sha256": sha256_file(oxipng / "Cargo.lock"),
+            "pass_binary": pass_binding,
+            "pass_binary_sha256": pass_binding["sha256"],
             "build": {
                 "command": "cargo +{toolchain} build --offline --features binary,parallel --package {crate}".format(
                     toolchain=args.toolchain, crate=args.target_crate
@@ -540,6 +651,8 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
                 "returncode": build.returncode,
                 "stdout": "wrapper-build.stdout.txt",
                 "stderr": "wrapper-build.stderr.txt",
+                "built_binary": str(binary),
+                "built_binary_sha256": built_oxipng_binary_sha256,
             },
             "functional_run": {
                 "command": "target-wrapper/debug/oxipng <input> --out wrapper-out.png --force --threads 1",

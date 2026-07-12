@@ -126,8 +126,32 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
 
             self.assertEqual(stale.read_text(encoding="utf-8"), "do not delete\n")
 
+    def test_posix_only_guard_rejects_windows(self) -> None:
+        smoke.require_posix_host("posix")
+        with self.assertRaisesRegex(smoke.SmokeError, "POSIX-only"):
+            smoke.require_posix_host("nt")
+
+    def test_protected_path_overlap_rejects_repo_and_pinned_containment(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            pinned = tmp / "pinned" / "checkout"
+            pinned.mkdir(parents=True)
+
+            with self.assertRaisesRegex(smoke.SmokeError, "repo root"):
+                smoke.reject_protected_path_overlap(ROOT / "evaluation" / "raw" / "stale", pinned=pinned, label="output")
+
+            with self.assertRaisesRegex(smoke.SmokeError, "pinned checkout"):
+                smoke.reject_protected_path_overlap(pinned / "nested-output", pinned=pinned, label="output")
+
+            with self.assertRaisesRegex(smoke.SmokeError, "pinned checkout"):
+                smoke.reject_protected_path_overlap(pinned.parent, pinned=pinned, label="temporary parent")
+
     def test_source_binding_records_head_status_pass_source_and_toolchain(self) -> None:
-        binding = smoke.source_binding("nightly-test", pathlib.Path("/tmp/example-sysroot"))
+        binding = smoke.source_binding(
+            "nightly-test",
+            pathlib.Path("/tmp/example-sysroot"),
+            "rustc 1.2.3\nhost: test",
+        )
 
         self.assertRegex(binding["repo_head"], r"^[0-9a-f]{40}$")
         self.assertEqual(binding["scoped_status_paths"], [
@@ -137,8 +161,42 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         ])
         self.assertIn("pass_source_sha256", binding)
         self.assertRegex(binding["pass_source_sha256"], r"^[0-9a-f]{64}$")
+        self.assertIn("repo_cargo_lock_sha256", binding)
+        self.assertRegex(binding["scoped_fingerprint_sha256"], r"^[0-9a-f]{64}$")
+        self.assertGreater(binding["scoped_file_count"], 0)
         self.assertEqual(binding["build_toolchain"], "nightly-test")
         self.assertEqual(binding["rustc_sysroot"], "/tmp/example-sysroot")
+        self.assertEqual(binding["rustc_verbose_version"], "rustc 1.2.3\nhost: test")
+
+    def test_source_drift_rejection_checks_scoped_fingerprint(self) -> None:
+        start = {
+            "repo_head": "a",
+            "scoped_status": "",
+            "scoped_fingerprint_sha256": "one",
+            "pass_source_sha256": "p",
+            "repo_cargo_lock_sha256": "c",
+            "rustc_sysroot": "/tmp/sysroot",
+            "rustc_verbose_version": "rustc",
+        }
+        smoke.reject_source_drift(start, dict(start))
+        end = dict(start)
+        end["scoped_fingerprint_sha256"] = "two"
+        with self.assertRaisesRegex(smoke.SmokeError, "drifted"):
+            smoke.reject_source_drift(start, end)
+
+    def test_pass_binary_binding_records_hash_and_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            binary = pathlib.Path(td) / "wrapper"
+            binary.write_bytes(b"fake-wrapper\n")
+
+            provided = smoke.pass_binary_binding(binary, built_by_script=False)
+            built = smoke.pass_binary_binding(binary, built_by_script=True)
+
+            self.assertRegex(provided["sha256"], r"^[0-9a-f]{64}$")
+            self.assertFalse(provided["built_by_script"])
+            self.assertIn("not binary provenance", provided["source_boundary"])
+            self.assertTrue(built["built_by_script"])
+            self.assertIn("current run", built["source_boundary"])
 
     def test_verify_pinned_checkout_rejects_dirty_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as td:
