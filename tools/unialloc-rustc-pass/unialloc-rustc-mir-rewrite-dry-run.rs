@@ -50,13 +50,13 @@ use rustc_middle::mir::{CallSource, UnwindAction};
 #[cfg(not(unialloc_rustc_current))]
 use rustc_middle::mir::{Constant, ConstantKind};
 #[cfg(not(unialloc_rustc_current))]
-use rustc_middle::ty::query::Providers;
-#[cfg(not(unialloc_rustc_current))]
-use rustc_middle::ty::TypeFoldable;
+use rustc_middle::ty::adjustment::PointerCast;
 #[cfg(unialloc_rustc_current)]
 use rustc_middle::ty::adjustment::PointerCoercion;
 #[cfg(not(unialloc_rustc_current))]
-use rustc_middle::ty::adjustment::PointerCast;
+use rustc_middle::ty::query::Providers;
+#[cfg(not(unialloc_rustc_current))]
+use rustc_middle::ty::TypeFoldable;
 #[cfg(unialloc_rustc_current)]
 use rustc_middle::ty::TypeVisitableExt;
 use rustc_middle::ty::{self, Ty, TyCtxt};
@@ -2238,10 +2238,7 @@ fn exact_box_slice_into_vec_transfer_proof<'tcx>(
 
 #[cfg(unialloc_rustc_current)]
 fn exact_pointer_unsize_cast_kind(kind: &CastKind) -> bool {
-    matches!(
-        kind,
-        CastKind::PointerCoercion(PointerCoercion::Unsize, _)
-    )
+    matches!(kind, CastKind::PointerCoercion(PointerCoercion::Unsize, _))
 }
 
 #[cfg(not(unialloc_rustc_current))]
@@ -2257,10 +2254,12 @@ fn exact_pointer_unsize_cast_kind(kind: &CastKind) -> bool {
 /// The direct allocation is recorded under `Box<[T; N]>`.  Passing the
 /// nominal `Box<[T]>` argument identity to the runtime helper therefore makes
 /// the authenticated record reject the transfer.  Accept only an immediate,
-/// move-only cast in the final statement before the `into_vec` terminator and
-/// prove the Box DefId, element, and allocator structurally.  Any less exact
-/// provenance keeps the ordinary Box-slice expected identity and fails closed
-/// at runtime if its record does not agree.
+/// move-only cast in the final semantic statement before the `into_vec`
+/// terminator and prove the Box DefId, element, and allocator structurally.
+/// Optimized MIR may append only lifetime bookkeeping (`StorageDead`) or
+/// no-ops after that cast; do not skip any other statement kind.  Any less
+/// exact provenance keeps the ordinary Box-slice expected identity and fails
+/// closed at runtime if its record does not agree.
 fn exact_immediate_box_array_unsize_owner_type<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &Body<'tcx>,
@@ -2273,7 +2272,12 @@ fn exact_immediate_box_array_unsize_owner_type<'tcx>(
         Operand::Move(place) if place.projection.is_empty() => *place,
         _ => return None,
     };
-    let statement = body[bb].statements.last()?;
+    let statement = body[bb].statements.iter().rev().find(|statement| {
+        !matches!(
+            &statement.kind,
+            StatementKind::StorageDead(_) | StatementKind::Nop
+        )
+    })?;
     let assigned = match &statement.kind {
         StatementKind::Assign(assigned) => assigned,
         _ => return None,
@@ -2283,9 +2287,7 @@ fn exact_immediate_box_array_unsize_owner_type<'tcx>(
         return None;
     }
     let (cast_kind, source_operand, cast_ty) = match rvalue {
-        Rvalue::Cast(cast_kind, source_operand, cast_ty) => {
-            (cast_kind, source_operand, *cast_ty)
-        }
+        Rvalue::Cast(cast_kind, source_operand, cast_ty) => (cast_kind, source_operand, *cast_ty),
         _ => return None,
     };
     if !exact_pointer_unsize_cast_kind(cast_kind) || cast_ty != nominal_box_slice_ty {

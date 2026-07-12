@@ -54,6 +54,9 @@ edition = "2021"
 unialloc = {{ path = {json.dumps(str(ROOT / "unialloc"))}, features = ["stats", "type_isolation"] }}
 # Pin UniAlloc's spin transitive dependency to a Rust-1.64-compatible release.
 lock_api = "=0.4.3"
+
+[profile.dev]
+opt-level = 2
 ''',
         encoding="utf-8",
     )
@@ -78,13 +81,20 @@ const PAYLOAD: [u8; 32] = [
 ];
 
 #[inline(never)]
+fn observe_payload(payload: &[u8]) {
+    assert_eq!(payload, PAYLOAD.as_slice());
+}
+
+#[inline(never)]
 fn vec_macro_list() -> Vec<u8> {
-    vec![
+    let output = vec![
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    ]
+    ];
+    observe_payload(&output);
+    output
 }
 
 #[inline(never)]
