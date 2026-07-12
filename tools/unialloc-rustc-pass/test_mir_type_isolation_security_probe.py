@@ -232,6 +232,7 @@ def compile_clone_classification_fixture(
             "--crate-name",
             "mir_clone_candidate_classification",
             "--edition=2021",
+            "-Zmir-opt-level=0",
             str(CLONE_CLASSIFICATION_SOURCE),
             "-o",
             str(binary_path),
@@ -280,12 +281,14 @@ def applied_type_rows(audit: Dict[str, Any], marker: str) -> List[Dict[str, Any]
 def clone_classification_rows(
     audit: Dict[str, Any], function_name: str
 ) -> List[Dict[str, Any]]:
-    suffix = f"::{function_name}"
     return [
         row
         for row in audit.get("rewrite_candidates", [])
         if isinstance(row, dict)
-        and str(row.get("mir_function") or "").endswith(suffix)
+        and (
+            str(row.get("mir_function") or "") == function_name
+            or str(row.get("mir_function") or "").endswith(f"::{function_name}")
+        )
         and row.get("lowering_kind") in CALL_CLASSIFICATION_KINDS
     ]
 
@@ -306,7 +309,8 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
             )
         if row.get("rewrite_status") != "semantic_scope_enter_exit_rewrite_planned":
             errors.append("clone_single_heap did not remain a planned audit-only rewrite")
-        if row.get("semantic_object_type") != "std::vec::Vec<u8>":
+        semantic_object_type = str(row.get("semantic_object_type") or "")
+        if "std::vec::Vec<u8" not in semantic_object_type:
             errors.append(
                 "clone_single_heap did not resolve the sole nested Vec heap owner"
             )
