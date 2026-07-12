@@ -10,6 +10,7 @@ extern crate unialloc as _;
 use core::alloc::Layout;
 use core::panic::PanicInfo;
 
+mod abi_layout_contract;
 #[path = "../../../kernel/kernel-modules/benchmarking/unialloc_bridge.rs"]
 mod unialloc_bridge;
 
