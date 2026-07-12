@@ -33,16 +33,22 @@ def ambiguous_row(**overrides: object) -> dict:
 
 
 def supported_row(
-    *, function_name: str, drop: bool = False, type_id: int = 11
+    *,
+    function_name: str,
+    drop: bool = False,
+    type_id: int = 11,
+    payload: str = "ProducerPayload",
 ) -> dict:
     return {
         "mir_function": function_name,
         "callee": "TerminatorKind::Drop" if drop else "Vec::with_capacity",
-        "destination_type": "std::vec::Vec<ProducerPayload, std::alloc::Global>",
-        "semantic_object_type": "std::vec::Vec<ProducerPayload, std::alloc::Global>",
+        "destination_type": f"std::vec::Vec<{payload}, std::alloc::Global>",
+        "semantic_object_type": f"std::vec::Vec<{payload}, std::alloc::Global>",
         "type_id": type_id,
         "module_id": 0xC002,
         "flags": runner.TYPE_ISOLATED,
+        "metadata_pairing_contract": "semantic_scope_active_metadata",
+        "replacement_resolution_status": "resolved_unialloc_semantic_scope_push_pop",
         "lowering_kind": (
             "semantic_scope_drop_rewrite"
             if drop
@@ -54,6 +60,30 @@ def supported_row(
             else "actual_semantic_scope_enter_exit_rewrite_applied"
         ),
     }
+
+
+def plain_clone_row(**overrides: object) -> dict:
+    row = {
+        "mir_function": runner.PLAIN_CLONE_HELPER,
+        "callee": "<Option<Vec<ProducerPayload>> as Clone>::clone",
+        "destination_type": (
+            "std::option::Option<std::vec::Vec<ProducerPayload, "
+            "std::alloc::Global>>"
+        ),
+        "semantic_object_type": (
+            "std::vec::Vec<ProducerPayload, std::alloc::Global>"
+        ),
+        "type_id": 11,
+        "module_id": 0xC002,
+        "flags": runner.TYPE_ISOLATED,
+        "metadata_pairing_contract": "semantic_scope_active_metadata",
+        "replacement_resolution_status": "resolved_unialloc_semantic_scope_push_pop",
+        "lowering_kind": "semantic_scope_enter_exit_rewrite",
+        "rewrite_status": "actual_semantic_scope_enter_exit_rewrite_applied",
+        "source_span": "probe.rs:100:5: 100:65",
+    }
+    row.update(overrides)
+    return row
 
 
 def valid_audit() -> dict:
@@ -68,6 +98,12 @@ def valid_audit() -> dict:
             ambiguous_row(),
             supported_row(function_name="supported_seed_protected_buffer"),
             supported_row(function_name="supported_recover_protected_buffer"),
+            supported_row(
+                function_name=runner.WRONG_TYPE_HELPER,
+                type_id=22,
+                payload="ConsumerPayload",
+            ),
+            plain_clone_row(),
         ],
     }
 
@@ -77,22 +113,49 @@ def valid_runtime() -> dict:
         "source": "rustc_driver_mir_ambiguous_clone_fallback_probe",
         "clone_function": "Result::clone",
         "result_variant": "Ok",
+        "plain_clone_function": "Option::clone",
+        "plain_clone_variant": "Some",
         "same_layout_bytes": 64,
         "source_len": 4,
         "cloned_len": 4,
         "source_buffer": 0x1000,
         "cloned_buffer": 0x2000,
+        "plain_source_buffer": 0x5000,
+        "plain_cloned_buffer": 0x3000,
+        "plain_cloned_len": 4,
         "protected_buffer": 0x3000,
         "recovered_buffer": 0x3000,
+        "wrong_type_buffer": 0x4000,
         "buffers_distinct": True,
+        "plain_clone_buffers_distinct": True,
+        "plain_clone_reused_protected_buffer": True,
+        "plain_clone_avoided_wrong_type_buffer": True,
         "fallback_avoided_protected_buffer": True,
         "typed_recovery_preserved": True,
         "checksum": 123,
         "seed_type_id": 11,
         "recovery_type_id": 11,
+        "plain_clone_type_id": 11,
+        "wrong_type_id": 22,
         "seed_typed_allocations": 1,
         "seed_typed_deallocations": 1,
         "seed_typed_cache_inserts": 1,
+        "wrong_type_typed_allocations": 1,
+        "wrong_type_typed_deallocations": 1,
+        "wrong_type_typed_cache_inserts": 1,
+        "wrong_type_fallback_allocations": 0,
+        "wrong_type_fallback_deallocations": 0,
+        "wrong_type_raw_alloc_no_metadata": 0,
+        "wrong_type_raw_dealloc_no_metadata": 0,
+        "plain_clone_typed_allocations": 1,
+        "plain_clone_typed_deallocations": 1,
+        "plain_clone_typed_cache_hits": 1,
+        "plain_clone_typed_cache_inserts": 1,
+        "plain_clone_fallback_allocations": 0,
+        "plain_clone_fallback_deallocations": 0,
+        "plain_clone_raw_alloc_no_metadata": 0,
+        "plain_clone_raw_dealloc_no_metadata": 0,
+        "plain_clone_raw_realloc_no_metadata": 0,
         "clone_typed_allocations": 0,
         "clone_typed_deallocations": 0,
         "clone_fallback_allocations": 1,
@@ -123,6 +186,10 @@ class MirAmbiguousCloneFallbackRunnerTests(unittest.TestCase):
         self.assertEqual(
             evidence["audit"]["supported_controls"]["type_id"], 11
         )
+        self.assertEqual(evidence["audit"]["plain_clone_control"]["type_id"], 11)
+        self.assertEqual(evidence["audit"]["wrong_type_control"]["type_id"], 22)
+        self.assertTrue(evidence["runtime"]["plain_clone_reused_protected_buffer"])
+        self.assertTrue(evidence["runtime"]["plain_clone_avoided_wrong_type_buffer"])
         for function_name in runner.SUPPORTED_FUNCTIONS:
             function_evidence = evidence["audit"]["supported_controls"][
                 "functions"
@@ -156,6 +223,34 @@ class MirAmbiguousCloneFallbackRunnerTests(unittest.TestCase):
         runtime["clone_typed_allocations"] = 1
         with self.assertRaises(AssertionError):
             runner.validate_runtime(runtime)
+
+    def test_validate_rejects_plain_clone_scope_not_actually_applied(self) -> None:
+        audit = valid_audit()
+        for row in audit["rewrite_candidates"]:
+            if row.get("mir_function") == runner.PLAIN_CLONE_HELPER:
+                row["rewrite_status"] = "semantic_scope_enter_exit_rewrite_planned"
+        with self.assertRaisesRegex(AssertionError, "was not actually applied"):
+            runner.validate_audit(audit)
+
+    def test_validate_rejects_plain_clone_fallback_allocation(self) -> None:
+        runtime = valid_runtime()
+        runtime["plain_clone_fallback_allocations"] = 1
+        with self.assertRaisesRegex(AssertionError, "unexpectedly used fallback"):
+            runner.validate_runtime(runtime, compiler_type_id=11, wrong_type_id=22)
+
+    def test_validate_rejects_plain_clone_reusing_same_layout_wrong_type(self) -> None:
+        runtime = valid_runtime()
+        runtime["plain_cloned_buffer"] = runtime["wrong_type_buffer"]
+        with self.assertRaisesRegex(AssertionError, "same-layout Consumer"):
+            runner.validate_runtime(runtime, compiler_type_id=11, wrong_type_id=22)
+
+    def test_validate_rejects_same_layout_compiler_identity_collision(self) -> None:
+        audit = valid_audit()
+        for row in audit["rewrite_candidates"]:
+            if row.get("mir_function") == runner.WRONG_TYPE_HELPER:
+                row["type_id"] = 11
+        with self.assertRaisesRegex(AssertionError, "distinct compiler type_id"):
+            runner.validate_audit(audit)
 
     def test_validate_rejects_fallback_reusing_protected_typed_address(self) -> None:
         runtime = valid_runtime()

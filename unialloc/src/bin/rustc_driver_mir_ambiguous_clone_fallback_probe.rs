@@ -28,6 +28,10 @@ static A: UniAlloc = UniAlloc;
 #[repr(C)]
 struct ProducerPayload([u64; 8]);
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C)]
+struct ConsumerPayload([u64; 8]);
+
 #[inline(never)]
 fn payload(seed: u64) -> ProducerPayload {
     ProducerPayload([
@@ -80,6 +84,25 @@ fn supported_recover_protected_buffer(expected_address: usize) -> usize {
     assert_ne!(checksum(&recovered), 0);
     drop(recovered);
     address
+}
+
+#[inline(never)]
+fn supported_wrong_type_seed_buffer() -> usize {
+    let mut wrong_type = Vec::<ConsumerPayload>::with_capacity(4);
+    for index in 0..4_u64 {
+        wrong_type.push(ConsumerPayload(payload(0xBAD0_0000 + index).0));
+    }
+    let address = wrong_type.as_ptr() as usize;
+    assert_ne!(address, 0);
+    drop(wrong_type);
+    address
+}
+
+#[inline(never)]
+fn supported_plain_option_clone(
+    source: &Option<Vec<ProducerPayload>>,
+) -> Option<Vec<ProducerPayload>> {
+    <Option<Vec<ProducerPayload>> as Clone>::clone(source)
 }
 
 fn stats_delta(before: SemanticStatsSnapshot, after: SemanticStatsSnapshot, field: &str) -> usize {
@@ -137,12 +160,14 @@ fn main() {
 
     assert_eq!(size_of::<ProducerPayload>(), 64);
     assert_eq!(align_of::<ProducerPayload>(), 8);
+    assert_eq!(size_of::<ConsumerPayload>(), size_of::<ProducerPayload>());
+    assert_eq!(align_of::<ConsumerPayload>(), align_of::<ProducerPayload>());
 
-    // The binary intentionally uses only ordinary Rust `Vec` and
-    // `Result::clone` operations. It does not manually call UniAlloc metadata
-    // or allocator ABIs. The companion runner proves the supported Vec seed
-    // and recovery received actual scope/Drop rewrites while the ambiguous
-    // Result clone stayed fail-closed.
+    // The binary intentionally uses only ordinary Rust `Vec`, `Option::clone`,
+    // and `Result::clone` operations. It does not manually call UniAlloc
+    // metadata or allocator ABIs. The companion runner proves the single-owner
+    // Option clone and supported Vec controls received actual scope rewrites
+    // while the multi-owner Result clone stayed fail-closed.
     semantic_auto_metadata_disable();
 
     // Keep the source allocation live so the protected seed below cannot
@@ -154,6 +179,15 @@ fn main() {
     let source_buffer = source_vec.as_ptr() as usize;
     let source_checksum = checksum(&source_vec);
     let source = Ok::<Vec<ProducerPayload>, String>(source_vec);
+
+    let mut plain_source_vec = Vec::with_capacity(4);
+    for index in 0..4_u64 {
+        plain_source_vec.push(payload(0x0110_0000 + index));
+    }
+    let plain_source_buffer = plain_source_vec.as_ptr() as usize;
+    let plain_source_checksum = checksum(&plain_source_vec);
+    let plain_source = Some(plain_source_vec);
+    assert_ne!(plain_source_buffer, source_buffer);
 
     semantic_stats_reset();
 
@@ -190,6 +224,149 @@ fn main() {
     );
     let seed_type_id = after_seed_stats.last_type_id;
     assert_ne!(seed_type_id, 0);
+
+    let before_wrong_type_stats = semantic_stats_snapshot();
+    let before_wrong_type_fallback = semantic_fallback_attribution_snapshot();
+    let wrong_type_buffer = supported_wrong_type_seed_buffer();
+    let after_wrong_type_stats = semantic_stats_snapshot();
+    let after_wrong_type_fallback = semantic_fallback_attribution_snapshot();
+    let wrong_type_typed_allocations = stats_delta(
+        before_wrong_type_stats,
+        after_wrong_type_stats,
+        "typed_allocations",
+    );
+    let wrong_type_typed_deallocations = stats_delta(
+        before_wrong_type_stats,
+        after_wrong_type_stats,
+        "typed_deallocations",
+    );
+    let wrong_type_typed_cache_inserts = stats_delta(
+        before_wrong_type_stats,
+        after_wrong_type_stats,
+        "typed_cache_inserts",
+    );
+    let wrong_type_fallback_allocations = stats_delta(
+        before_wrong_type_stats,
+        after_wrong_type_stats,
+        "fallback_allocations",
+    );
+    let wrong_type_fallback_deallocations = stats_delta(
+        before_wrong_type_stats,
+        after_wrong_type_stats,
+        "fallback_deallocations",
+    );
+    let wrong_type_raw_alloc_no_metadata = fallback_delta(
+        before_wrong_type_fallback,
+        after_wrong_type_fallback,
+        "raw_alloc_no_metadata",
+    );
+    let wrong_type_raw_dealloc_no_metadata = fallback_delta(
+        before_wrong_type_fallback,
+        after_wrong_type_fallback,
+        "raw_dealloc_no_metadata",
+    );
+    assert_eq!(wrong_type_typed_allocations, 1);
+    assert_eq!(wrong_type_typed_deallocations, 1);
+    assert_eq!(wrong_type_typed_cache_inserts, 1);
+    assert_eq!(wrong_type_fallback_allocations, 0);
+    assert_eq!(wrong_type_fallback_deallocations, 0);
+    assert_eq!(wrong_type_raw_alloc_no_metadata, 0);
+    assert_eq!(wrong_type_raw_dealloc_no_metadata, 0);
+    let wrong_type_id = after_wrong_type_stats.last_type_id;
+    assert_ne!(wrong_type_id, 0);
+    assert_ne!(wrong_type_id, seed_type_id);
+    assert_ne!(wrong_type_buffer, protected_buffer);
+
+    let before_plain_clone_stats = semantic_stats_snapshot();
+    let before_plain_clone_fallback = semantic_fallback_attribution_snapshot();
+    let plain_cloned = supported_plain_option_clone(&plain_source);
+    let after_plain_clone_stats = semantic_stats_snapshot();
+    let after_plain_clone_fallback = semantic_fallback_attribution_snapshot();
+    let plain_cloned_vec = plain_cloned
+        .as_ref()
+        .expect("single-owner clone should preserve Some variant");
+    let plain_cloned_buffer = plain_cloned_vec.as_ptr() as usize;
+    let plain_cloned_len = plain_cloned_vec.len();
+    assert_eq!(plain_cloned_len, 4);
+    assert_eq!(checksum(plain_cloned_vec), plain_source_checksum);
+    assert_ne!(plain_cloned_buffer, plain_source_buffer);
+    assert_eq!(
+        plain_cloned_buffer, protected_buffer,
+        "supported Option clone should recover the protected Producer cache entry"
+    );
+    assert_ne!(
+        plain_cloned_buffer, wrong_type_buffer,
+        "supported Option clone reused same-layout Consumer storage"
+    );
+
+    let plain_clone_typed_allocations = stats_delta(
+        before_plain_clone_stats,
+        after_plain_clone_stats,
+        "typed_allocations",
+    );
+    let plain_clone_typed_cache_hits = stats_delta(
+        before_plain_clone_stats,
+        after_plain_clone_stats,
+        "typed_cache_hits",
+    );
+    let plain_clone_fallback_allocations = stats_delta(
+        before_plain_clone_stats,
+        after_plain_clone_stats,
+        "fallback_allocations",
+    );
+    let plain_clone_raw_alloc_no_metadata = fallback_delta(
+        before_plain_clone_fallback,
+        after_plain_clone_fallback,
+        "raw_alloc_no_metadata",
+    );
+    let plain_clone_raw_realloc_no_metadata = fallback_delta(
+        before_plain_clone_fallback,
+        after_plain_clone_fallback,
+        "raw_realloc_no_metadata",
+    );
+    assert_eq!(plain_clone_typed_allocations, 1);
+    assert_eq!(plain_clone_typed_cache_hits, 1);
+    assert_eq!(
+        stats_delta(
+            before_plain_clone_stats,
+            after_plain_clone_stats,
+            "typed_deallocations"
+        ),
+        0
+    );
+    assert_eq!(plain_clone_fallback_allocations, 0);
+    assert_eq!(plain_clone_raw_alloc_no_metadata, 0);
+    assert_eq!(plain_clone_raw_realloc_no_metadata, 0);
+    let plain_clone_type_id = after_plain_clone_stats.last_type_id;
+    assert_eq!(plain_clone_type_id, seed_type_id);
+
+    drop(plain_cloned);
+    let after_plain_drop_stats = semantic_stats_snapshot();
+    let after_plain_drop_fallback = semantic_fallback_attribution_snapshot();
+    let plain_clone_typed_deallocations = stats_delta(
+        after_plain_clone_stats,
+        after_plain_drop_stats,
+        "typed_deallocations",
+    );
+    let plain_clone_typed_cache_inserts = stats_delta(
+        after_plain_clone_stats,
+        after_plain_drop_stats,
+        "typed_cache_inserts",
+    );
+    let plain_clone_fallback_deallocations = stats_delta(
+        after_plain_clone_stats,
+        after_plain_drop_stats,
+        "fallback_deallocations",
+    );
+    let plain_clone_raw_dealloc_no_metadata = fallback_delta(
+        after_plain_clone_fallback,
+        after_plain_drop_fallback,
+        "raw_dealloc_no_metadata",
+    );
+    assert_eq!(plain_clone_typed_deallocations, 1);
+    assert_eq!(plain_clone_typed_cache_inserts, 1);
+    assert_eq!(plain_clone_fallback_deallocations, 0);
+    assert_eq!(plain_clone_raw_dealloc_no_metadata, 0);
 
     let before_stats = semantic_stats_snapshot();
     let before_fallback = semantic_fallback_attribution_snapshot();
@@ -333,6 +510,7 @@ fn main() {
         Err(_) => unreachable!("probe source is always the Ok variant"),
     };
     drop(retained_source);
+    drop(plain_source);
     let validation = semantic_metadata_validation_snapshot();
     let side_cache = type_isolation_side_cache_snapshot();
 
@@ -356,22 +534,50 @@ fn main() {
             "\"source\":\"rustc_driver_mir_ambiguous_clone_fallback_probe\",",
             "\"clone_function\":\"Result::clone\",",
             "\"result_variant\":\"Ok\",",
+            "\"plain_clone_function\":\"Option::clone\",",
+            "\"plain_clone_variant\":\"Some\",",
             "\"same_layout_bytes\":{},",
             "\"source_len\":{},",
             "\"cloned_len\":{},",
             "\"source_buffer\":{},",
             "\"cloned_buffer\":{},",
+            "\"plain_source_buffer\":{},",
+            "\"plain_cloned_buffer\":{},",
+            "\"plain_cloned_len\":{},",
             "\"protected_buffer\":{},",
             "\"recovered_buffer\":{},",
+            "\"wrong_type_buffer\":{},",
             "\"buffers_distinct\":true,",
+            "\"plain_clone_buffers_distinct\":true,",
+            "\"plain_clone_reused_protected_buffer\":true,",
+            "\"plain_clone_avoided_wrong_type_buffer\":true,",
             "\"fallback_avoided_protected_buffer\":{},",
             "\"typed_recovery_preserved\":{},",
             "\"checksum\":{},",
+            "\"plain_checksum\":{},",
             "\"seed_type_id\":{},",
             "\"recovery_type_id\":{},",
+            "\"plain_clone_type_id\":{},",
+            "\"wrong_type_id\":{},",
             "\"seed_typed_allocations\":{},",
             "\"seed_typed_deallocations\":{},",
             "\"seed_typed_cache_inserts\":{},",
+            "\"wrong_type_typed_allocations\":{},",
+            "\"wrong_type_typed_deallocations\":{},",
+            "\"wrong_type_typed_cache_inserts\":{},",
+            "\"wrong_type_fallback_allocations\":{},",
+            "\"wrong_type_fallback_deallocations\":{},",
+            "\"wrong_type_raw_alloc_no_metadata\":{},",
+            "\"wrong_type_raw_dealloc_no_metadata\":{},",
+            "\"plain_clone_typed_allocations\":{},",
+            "\"plain_clone_typed_deallocations\":{},",
+            "\"plain_clone_typed_cache_hits\":{},",
+            "\"plain_clone_typed_cache_inserts\":{},",
+            "\"plain_clone_fallback_allocations\":{},",
+            "\"plain_clone_fallback_deallocations\":{},",
+            "\"plain_clone_raw_alloc_no_metadata\":{},",
+            "\"plain_clone_raw_dealloc_no_metadata\":{},",
+            "\"plain_clone_raw_realloc_no_metadata\":{},",
             "\"clone_typed_allocations\":{},",
             "\"clone_typed_deallocations\":{},",
             "\"clone_fallback_allocations\":{},",
@@ -396,16 +602,39 @@ fn main() {
         cloned_len,
         source_buffer,
         cloned_buffer,
+        plain_source_buffer,
+        plain_cloned_buffer,
+        plain_cloned_len,
         protected_buffer,
         recovered_buffer,
+        wrong_type_buffer,
         fallback_avoided_protected_buffer,
         typed_recovery_preserved,
         source_checksum,
+        plain_source_checksum,
         seed_type_id,
         recovery_type_id,
+        plain_clone_type_id,
+        wrong_type_id,
         seed_typed_allocations,
         seed_typed_deallocations,
         seed_typed_cache_inserts,
+        wrong_type_typed_allocations,
+        wrong_type_typed_deallocations,
+        wrong_type_typed_cache_inserts,
+        wrong_type_fallback_allocations,
+        wrong_type_fallback_deallocations,
+        wrong_type_raw_alloc_no_metadata,
+        wrong_type_raw_dealloc_no_metadata,
+        plain_clone_typed_allocations,
+        plain_clone_typed_deallocations,
+        plain_clone_typed_cache_hits,
+        plain_clone_typed_cache_inserts,
+        plain_clone_fallback_allocations,
+        plain_clone_fallback_deallocations,
+        plain_clone_raw_alloc_no_metadata,
+        plain_clone_raw_dealloc_no_metadata,
+        plain_clone_raw_realloc_no_metadata,
         clone_typed_allocations,
         stats_delta(before_stats, after_clone_stats, "typed_deallocations"),
         clone_fallback_allocations,
