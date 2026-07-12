@@ -3,6 +3,7 @@ name = "unialloc"
 version = "0.1.0"
 authors = ["sslab_gatech <sslab@cc.gatech.edu>"]
 edition = "2018"
+rust-version = "1.64"
 autobenches = false
 
 [dependencies]
@@ -12,7 +13,6 @@ alloc_macros = { path = "../alloc_macros" }
 mimalloc = { version = "0.1.25", default-features = false, optional = true }
 
 [dev-dependencies]
-criterion = "0.8"
 rand = "0.7"
 bencher = "0.1.4"
 rand_xorshift = "0.2"
