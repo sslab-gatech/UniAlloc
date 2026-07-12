@@ -42,8 +42,8 @@ use rustc_interface::interface;
 use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::visit::{MutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
-    BasicBlock, BasicBlockData, Body, LocalDecl, Location, Operand, Place, Rvalue, SourceInfo,
-    StatementKind, Terminator, TerminatorKind,
+    BasicBlock, BasicBlockData, Body, CastKind, LocalDecl, Location, Operand, Place, Rvalue,
+    SourceInfo, StatementKind, Terminator, TerminatorKind,
 };
 #[cfg(unialloc_rustc_current)]
 use rustc_middle::mir::{CallSource, UnwindAction};
@@ -53,6 +53,10 @@ use rustc_middle::mir::{Constant, ConstantKind};
 use rustc_middle::ty::query::Providers;
 #[cfg(not(unialloc_rustc_current))]
 use rustc_middle::ty::TypeFoldable;
+#[cfg(unialloc_rustc_current)]
+use rustc_middle::ty::adjustment::PointerCoercion;
+#[cfg(not(unialloc_rustc_current))]
+use rustc_middle::ty::adjustment::PointerCast;
 #[cfg(unialloc_rustc_current)]
 use rustc_middle::ty::TypeVisitableExt;
 use rustc_middle::ty::{self, Ty, TyCtxt};
@@ -277,6 +281,8 @@ struct SemanticOwnershipTransferCandidate<'tcx> {
     destination_place: String,
     destination_type: String,
     proof: BoxSliceIntoVecTransferProof<'tcx>,
+    expected_old_owner_type: String,
+    expected_old_owner_basis: &'static str,
     source_span: String,
     fn_span: Span,
 }
@@ -2228,6 +2234,88 @@ fn exact_box_slice_into_vec_transfer_proof<'tcx>(
         old_owner_type: format!("{:?}", source_ty),
         new_owner_type: format!("{:?}", destination_ty),
     })
+}
+
+#[cfg(unialloc_rustc_current)]
+fn exact_pointer_unsize_cast_kind(kind: &CastKind) -> bool {
+    matches!(
+        kind,
+        CastKind::PointerCoercion(PointerCoercion::Unsize, _)
+    )
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn exact_pointer_unsize_cast_kind(kind: &CastKind) -> bool {
+    matches!(kind, CastKind::Pointer(PointerCast::Unsize))
+}
+
+/// Recover the allocator-record owner for the exact old-rustc list-form
+/// `vec![...]` lowering:
+///
+/// `Box<[T; N]> --Pointer(Unsize)--> Box<[T]> --into_vec--> Vec<T>`.
+///
+/// The direct allocation is recorded under `Box<[T; N]>`.  Passing the
+/// nominal `Box<[T]>` argument identity to the runtime helper therefore makes
+/// the authenticated record reject the transfer.  Accept only an immediate,
+/// move-only cast in the final statement before the `into_vec` terminator and
+/// prove the Box DefId, element, and allocator structurally.  Any less exact
+/// provenance keeps the ordinary Box-slice expected identity and fails closed
+/// at runtime if its record does not agree.
+fn exact_immediate_box_array_unsize_owner_type<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    bb: BasicBlock,
+    argument: &Operand<'tcx>,
+    nominal_box_slice_ty: Ty<'tcx>,
+    proof: &BoxSliceIntoVecTransferProof<'tcx>,
+) -> Option<String> {
+    let argument_place = match argument {
+        Operand::Move(place) if place.projection.is_empty() => *place,
+        _ => return None,
+    };
+    let statement = body[bb].statements.last()?;
+    let assigned = match &statement.kind {
+        StatementKind::Assign(assigned) => assigned,
+        _ => return None,
+    };
+    let (destination, rvalue) = &**assigned;
+    if *destination != argument_place {
+        return None;
+    }
+    let (cast_kind, source_operand, cast_ty) = match rvalue {
+        Rvalue::Cast(cast_kind, source_operand, cast_ty) => {
+            (cast_kind, source_operand, *cast_ty)
+        }
+        _ => return None,
+    };
+    if !exact_pointer_unsize_cast_kind(cast_kind) || cast_ty != nominal_box_slice_ty {
+        return None;
+    }
+    let source_place = match source_operand {
+        Operand::Move(place) if place.projection.is_empty() => place,
+        _ => return None,
+    };
+    let source_ty = source_place.ty(&body.local_decls, tcx).ty;
+    let (source_def, source_args) = match source_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, source_def.did(), exact_alloc_box_def_path)
+        || tcx.lang_items().owned_box() != Some(source_def.did())
+        || source_args.len() != 2
+    {
+        return None;
+    }
+    let source_payload_ty = generic_arg_type(source_args.get(0)?)?;
+    let source_element_ty = match source_payload_ty.kind() {
+        ty::Array(element_ty, _) => *element_ty,
+        _ => return None,
+    };
+    let source_allocator_ty = generic_arg_type(source_args.get(1)?)?;
+    if source_element_ty != proof.element_ty || source_allocator_ty != proof.allocator_ty {
+        return None;
+    }
+    Some(format!("{:?}", source_ty))
 }
 
 fn clone_transparent_wrapper_def_path(path: &str) -> bool {
@@ -5710,6 +5798,18 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             Some(proof) => proof,
             None => continue,
         };
+        let (expected_old_owner_type, expected_old_owner_basis) =
+            match exact_immediate_box_array_unsize_owner_type(
+                tcx,
+                body,
+                bb,
+                &arg_operands[0],
+                argument_tys[0],
+                &proof,
+            ) {
+                Some(owner_type) => (owner_type, "exact_immediate_box_array_unsize"),
+                None => (proof.old_owner_type.clone(), "exact_box_slice_argument"),
+            };
 
         candidates.push(SemanticOwnershipTransferCandidate {
             bb,
@@ -5725,6 +5825,8 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             destination_place: format!("{:?}", destination),
             destination_type: format!("{:?}", destination_ty),
             proof,
+            expected_old_owner_type,
+            expected_old_owner_basis,
             source_span: tcx.sess.source_map().span_to_diagnostic_string(*fn_span),
             fn_span: *fn_span,
         });
@@ -5743,7 +5845,7 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             candidate.proof.new_owner_type,
         );
         let callsite = nonzero_fnv1a64_text(&key);
-        let (old_type_id, _) = semantic_scope_type_id(&candidate.proof.old_owner_type, &key);
+        let (old_type_id, _) = semantic_scope_type_id(&candidate.expected_old_owner_type, &key);
         let (new_type_id, _) = semantic_scope_type_id(&candidate.proof.new_owner_type, &key);
         let mut rewrite_status = "semantic_ownership_transfer_rewrite_planned";
         let mut replacement_resolution_status = "not_requested_dry_run";
@@ -5855,9 +5957,11 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             replacement_symbol: SEMANTIC_BOX_SLICE_INTO_VEC_SYMBOL,
             replacement_resolution_status,
             replacement_preview: format!(
-                "Retarget exact pointer-preserving Box<[T], A> -> Vec<T, A> ownership transfer; old_owner_type={}; old_type_id={}; new_owner_type={}; new_type_id={}",
-                candidate.proof.old_owner_type,
+                "Retarget exact pointer-preserving Box<[T], A> -> Vec<T, A> ownership transfer; old_owner_type={}; old_type_id={}; argument_owner_type={}; old_owner_basis={}; new_owner_type={}; new_type_id={}",
+                candidate.expected_old_owner_type,
                 old_type_id,
+                candidate.proof.old_owner_type,
+                candidate.expected_old_owner_basis,
                 candidate.proof.new_owner_type,
                 new_type_id,
             ),
