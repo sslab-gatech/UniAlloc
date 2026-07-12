@@ -495,37 +495,21 @@ fn command_path_resolves(path: &PathBuf) -> bool {
 }
 
 #[cfg(windows)]
-fn windows_pathext() -> Vec<String> {
-    env::var("PATHEXT")
-        .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
-        .split(';')
-        .map(str::trim)
-        .filter(|extension| !extension.is_empty())
-        .map(str::to_string)
-        .collect()
-}
-
-#[cfg(windows)]
 fn command_path_resolves(path: &PathBuf) -> bool {
-    let extensions = windows_pathext();
+    // Match `std::process::Command` rather than shell/PATHEXT lookup.  Command
+    // accepts an explicitly named executable and permits only the `.exe`
+    // suffix to be omitted.  Treating `.cmd`/`.bat` as implicit candidates
+    // would classify an argv0 that the later `Command::new(argv0)` bypass
+    // cannot execute under the same spelling.
     if path.is_file() {
-        if let Some(extension) = path.extension().and_then(|extension| extension.to_str()) {
-            let dotted = format!(".{}", extension);
-            if extensions
-                .iter()
-                .any(|candidate| candidate.eq_ignore_ascii_case(&dotted))
-            {
-                return true;
-            }
-        }
+        return true;
     }
     if path.extension().is_some() {
         return false;
     }
-    let path_text = path.to_string_lossy();
-    extensions
-        .iter()
-        .any(|extension| PathBuf::from(format!("{}{}", path_text, extension)).is_file())
+    let mut executable = path.as_os_str().to_os_string();
+    executable.push(".exe");
+    PathBuf::from(executable).is_file()
 }
 
 #[cfg(not(any(unix, windows)))]
