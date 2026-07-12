@@ -67,13 +67,7 @@ def valid_audit() -> dict:
         "rewrite_candidates": [
             ambiguous_row(),
             supported_row(function_name="supported_seed_protected_buffer"),
-            supported_row(
-                function_name="supported_seed_protected_buffer", drop=True
-            ),
             supported_row(function_name="supported_recover_protected_buffer"),
-            supported_row(
-                function_name="supported_recover_protected_buffer", drop=True
-            ),
         ],
     }
 
@@ -129,6 +123,15 @@ class MirAmbiguousCloneFallbackRunnerTests(unittest.TestCase):
         self.assertEqual(
             evidence["audit"]["supported_controls"]["type_id"], 11
         )
+        for function_name in runner.SUPPORTED_FUNCTIONS:
+            function_evidence = evidence["audit"]["supported_controls"][
+                "functions"
+            ][function_name]
+            self.assertEqual(function_evidence["allocation_scope_rows"], 1)
+            self.assertEqual(
+                function_evidence["target_drop_or_deallocation_rows"], 0
+            )
+            self.assertTrue(function_evidence["allocation_side_recovery_required"])
 
     def test_validate_rejects_ambiguous_clone_when_scope_is_applied(self) -> None:
         audit = valid_audit()
@@ -178,20 +181,47 @@ class MirAmbiguousCloneFallbackRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "exactly one ambiguous Clone"):
             runner.validate_audit(audit)
 
-    def test_validate_rejects_missing_supported_drop_scope(self) -> None:
+    def test_validate_rejects_helper_target_drop_scope(self) -> None:
         audit = valid_audit()
-        audit["rewrite_candidates"] = [
-            row
-            for row in audit["rewrite_candidates"]
-            if not (
-                row.get("mir_function") == "supported_recover_protected_buffer"
-                and row.get("lowering_kind") == "semantic_scope_drop_rewrite"
+        audit["rewrite_candidates"].append(
+            supported_row(
+                function_name="supported_recover_protected_buffer", drop=True
             )
-        ]
+        )
         with self.assertRaisesRegex(
-            AssertionError, "exactly one supported Vec Drop candidate"
+            AssertionError, "must not have target Drop/deallocation"
         ):
             runner.validate_audit(audit)
+
+    def test_validate_accepts_preserved_raw_allocation_side_recovery_shape(self) -> None:
+        audit = valid_audit()
+        for function_name in runner.SUPPORTED_FUNCTIONS:
+            push = supported_row(function_name=function_name)
+            push["callee"] = "Vec::push"
+            audit["rewrite_candidates"].append(push)
+        audit["rewrite_candidates"].append(
+            {
+                "mir_function": "main",
+                "callee": "TerminatorKind::Drop",
+                "semantic_object_type": (
+                    "std::result::Result<std::vec::Vec<ProducerPayload>, "
+                    "std::string::String>"
+                ),
+                "type_id": 99,
+                "module_id": 0xC002,
+                "flags": runner.TYPE_ISOLATED,
+                "lowering_kind": "semantic_scope_drop_rewrite",
+                "rewrite_status": "actual_semantic_scope_drop_rewrite_applied",
+            }
+        )
+        evidence = runner.validate(audit, valid_runtime())
+        for function_name in runner.SUPPORTED_FUNCTIONS:
+            self.assertEqual(
+                evidence["audit"]["supported_controls"]["functions"][
+                    function_name
+                ]["target_drop_or_deallocation_rows"],
+                0,
+            )
 
     def test_validate_rejects_duplicate_supported_scope(self) -> None:
         audit = valid_audit()
@@ -221,7 +251,26 @@ class MirAmbiguousCloneFallbackRunnerTests(unittest.TestCase):
         planned["rewrite_status"] = "semantic_scope_drop_rewrite_planned"
         audit["rewrite_candidates"].append(planned)
         with self.assertRaisesRegex(
-            AssertionError, "exactly one supported Vec Drop candidate"
+            AssertionError, "must not have target Drop/deallocation"
+        ):
+            runner.validate_audit(audit)
+
+    def test_validate_rejects_helper_target_deallocation_row(self) -> None:
+        audit = valid_audit()
+        deallocation = supported_row(
+            function_name="supported_seed_protected_buffer"
+        )
+        deallocation.update(
+            {
+                "callee": "__unialloc_dealloc_layout_with_metadata_hints",
+                "lowering_kind": "direct_allocator_call_rewrite",
+                "rewrite_status": "actual_allocator_call_replacement_applied",
+                "metadata_pairing_contract": "direct_metadata_deallocation",
+            }
+        )
+        audit["rewrite_candidates"].append(deallocation)
+        with self.assertRaisesRegex(
+            AssertionError, "must not have target Drop/deallocation"
         ):
             runner.validate_audit(audit)
 

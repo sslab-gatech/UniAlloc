@@ -97,31 +97,35 @@ def validate_supported_controls(audit: Dict[str,Any]) -> Dict[str,Any]:
     evidence={}
     all_rows=[]
     for function_name in SUPPORTED_FUNCTIONS:
-        rows=[
+        function_rows=[
             row for row in audit.get('rewrite_candidates',[])
             if isinstance(row,dict)
             and probe_function_matches(row,function_name)
-            and 'Vec<ProducerPayload' in str(row.get('semantic_object_type') or '')
         ]
         scope_rows=[
-            row for row in rows
+            row for row in function_rows
             if row.get('lowering_kind')=='semantic_scope_enter_exit_rewrite'
             and 'with_capacity' in str(row.get('callee') or '')
+            and 'Vec<ProducerPayload' in json.dumps(row,sort_keys=True)
         ]
-        drop_rows=[
-            row for row in rows
-            if row.get('lowering_kind')=='semantic_scope_drop_rewrite'
-        ]
+        target_drop_or_deallocation_rows=[]
+        for row in function_rows:
+            operation_text=' '.join(
+                str(row.get(field) or '')
+                for field in ('lowering_kind','callee','metadata_pairing_contract')
+            ).lower()
+            if 'drop' in operation_text or 'dealloc' in operation_text:
+                target_drop_or_deallocation_rows.append(row)
         assert len(scope_rows)==1, f"{function_name} must have exactly one supported Vec allocation scope candidate, got {len(scope_rows)}"
-        assert len(drop_rows)==1, f"{function_name} must have exactly one supported Vec Drop candidate, got {len(drop_rows)}"
         assert scope_rows[0].get('rewrite_status')=='actual_semantic_scope_enter_exit_rewrite_applied', f"{function_name} supported Vec allocation scope was not actually applied: {scope_rows[0]!r}"
-        assert drop_rows[0].get('rewrite_status')=='actual_semantic_scope_drop_rewrite_applied', f"{function_name} supported Vec Drop scope was not actually applied: {drop_rows[0]!r}"
-        for row in scope_rows+drop_rows:
+        assert not target_drop_or_deallocation_rows, f"{function_name} must not have target Drop/deallocation scope evidence; allocation-side recovery is the required mechanism: {target_drop_or_deallocation_rows!r}"
+        for row in scope_rows:
             assert int(row.get('flags') or 0)&TYPE_ISOLATED, f"{function_name} row is not type isolated: {row!r}"
-        all_rows.extend(scope_rows+drop_rows)
+        all_rows.extend(scope_rows)
         evidence[function_name]={
             'allocation_scope_rows':len(scope_rows),
-            'drop_scope_rows':len(drop_rows),
+            'target_drop_or_deallocation_rows':len(target_drop_or_deallocation_rows),
+            'allocation_side_recovery_required':True,
         }
     type_ids={int(row.get('type_id') or 0) for row in all_rows}
     assert len(type_ids)==1, f"supported seed/recovery must share one compiler type_id, got {sorted(type_ids)}"
@@ -129,7 +133,7 @@ def validate_supported_controls(audit: Dict[str,Any]) -> Dict[str,Any]:
     module_ids={int(row.get('module_id') or 0) for row in all_rows}
     assert len(module_ids)==1, f"supported seed/recovery must share one module_id, got {sorted(module_ids)}"
     module_id=next(iter(module_ids)); assert module_id!=0, "supported compiler module_id must be nonzero"
-    return {'type_id':type_id,'module_id':module_id,'functions':evidence}
+    return {'type_id':type_id,'module_id':module_id,'allocation_side_recovery_required':True,'functions':evidence}
 
 def validate_audit(audit: Dict[str,Any]) -> Dict[str,Any]:
     s=audit.get('summary') or {}; assert s.get('provider_override_installed') is True; assert s.get('body_clone_returned_to_rustc') is True; assert s.get('actual_semantic_scope_rewrite') is True; assert int(s.get('semantic_scope_unsolved_candidate_count') or 0)>=1
@@ -186,6 +190,6 @@ def main() -> int:
     paths=sorted(rewrites.glob('*.json'))
     if len(paths)!=1: raise SystemExit(f"expected one target audit, found {len(paths)} in {rewrites}")
     audit=json.loads(paths[0].read_text(encoding='utf-8')); runtime=load_runtime_event(Path(run['stdout'])); validation=validate(audit,runtime); shutil.rmtree(target); end=source_binding_snapshot(toolchain,rustc); assert_source_binding_stable(start,end)
-    summary={'schema_version':1,'source':'mir_ambiguous_clone_fallback_probe_summary','validated':True,'fixed_heap':a.fixed_heap,'toolchain':toolchain,'rustc':start['rustc_verbose_version'],'sysroot':sysroot,'git_head':start['git_head'],'git_status':start['git_status'],'source_binding':{'start':start,'end':end,'drift_checked':True,'commit_bound':True},'features':features,'build':build,'run':run,'artifacts':{'pass_source':str(PASS_SOURCE),'pass_source_sha256':sha256(PASS_SOURCE),'pass_binary':str(pass_bin),'pass_binary_sha256':sha256(pass_bin),'probe_source':str(PROBE_SOURCE),'probe_source_sha256':sha256(PROBE_SOURCE),'rewrite_audit':str(paths[0]),'rewrite_audit_sha256':sha256(paths[0])},'validation':validation,'runtime':runtime,'boundaries':['Functional compiler-pass partial-coverage non-interference regression only; no benchmark or paper-performance claim.','The Rust source uses ordinary Vec and Result::clone operations and no manual metadata allocator ABI calls.','The pass must apply supported Vec seed/recovery scope and Drop rewrites with one compiler identity while auditing the ambiguous Vec/String Clone result as exactly one fail-closed call.','Exact runtime counters and address relations prove the raw fallback could not consume the protected typed cache entry and the subsequent supported Vec recovered it.']}
+    summary={'schema_version':1,'source':'mir_ambiguous_clone_fallback_probe_summary','validated':True,'fixed_heap':a.fixed_heap,'toolchain':toolchain,'rustc':start['rustc_verbose_version'],'sysroot':sysroot,'git_head':start['git_head'],'git_status':start['git_status'],'source_binding':{'start':start,'end':end,'drift_checked':True,'commit_bound':True},'features':features,'build':build,'run':run,'artifacts':{'pass_source':str(PASS_SOURCE),'pass_source_sha256':sha256(PASS_SOURCE),'pass_binary':str(pass_bin),'pass_binary_sha256':sha256(pass_bin),'probe_source':str(PROBE_SOURCE),'probe_source_sha256':sha256(PROBE_SOURCE),'rewrite_audit':str(paths[0]),'rewrite_audit_sha256':sha256(paths[0])},'validation':validation,'runtime':runtime,'boundaries':['Functional compiler-pass partial-coverage non-interference regression only; no benchmark or paper-performance claim.','The Rust source uses ordinary Vec and Result::clone operations and no manual metadata allocator ABI calls.','The pass must apply the supported Vec seed/recovery allocation scopes with one compiler identity, emit no helper target Drop/deallocation scope, and audit the ambiguous Vec/String Clone result as exactly one fail-closed call.','Exact runtime counters and address relations prove allocation-side recovery protected the typed cache entry from raw fallback and returned it to the subsequent supported Vec.']}
     sp=out/'summary.json'; sp.write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n',encoding='utf-8'); print(json.dumps({'summary':str(sp),'validated':True},sort_keys=True)); return 0
 if __name__=='__main__': sys.exit(main())
