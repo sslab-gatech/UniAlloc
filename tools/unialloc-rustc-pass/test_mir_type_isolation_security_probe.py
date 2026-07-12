@@ -51,6 +51,8 @@ NON_HEAP_CLONE_FUNCTIONS = (
     "clone_nonheap_result",
     "clone_nonowning_reference",
 )
+NESTED_HEAP_CLONE_FUNCTION = "clone_nested_vec_owner"
+RAW_POINTER_CLONE_FUNCTION = "clone_raw_pointer_wrapper"
 
 
 def sha256(path: Path) -> str:
@@ -338,6 +340,43 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
                 "clone_nonowning_reference did not preserve the borrowed Vec destination type"
             )
 
+    nested_heap_rows = clone_classification_rows(audit, NESTED_HEAP_CLONE_FUNCTION)
+    if len(nested_heap_rows) != 1:
+        errors.append(
+            f"{NESTED_HEAP_CLONE_FUNCTION} expected one call-classification row, "
+            f"got {len(nested_heap_rows)}"
+        )
+    else:
+        row = nested_heap_rows[0]
+        if row.get("lowering_kind") != "semantic_scope_enter_exit_rewrite":
+            errors.append(
+                f"{NESTED_HEAP_CLONE_FUNCTION} did not resolve its stored Vec owner"
+            )
+        if "std::vec::Vec<u8" not in str(row.get("semantic_object_type") or ""):
+            errors.append(
+                f"{NESTED_HEAP_CLONE_FUNCTION} omitted its stored Vec owner type"
+            )
+
+    raw_pointer_rows = clone_classification_rows(audit, RAW_POINTER_CLONE_FUNCTION)
+    if len(raw_pointer_rows) != 1:
+        errors.append(
+            f"{RAW_POINTER_CLONE_FUNCTION} expected one call-classification row, "
+            f"got {len(raw_pointer_rows)}"
+        )
+    else:
+        row = raw_pointer_rows[0]
+        if row.get("lowering_kind") != "semantic_scope_unsolved_heap_object_candidate":
+            errors.append(
+                f"{RAW_POINTER_CLONE_FUNCTION} must remain fail-closed as unresolved"
+            )
+        if (
+            row.get("rewrite_status")
+            != "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+        ):
+            errors.append(
+                f"{RAW_POINTER_CLONE_FUNCTION} omitted the unresolved-owner status"
+            )
+
     ambiguous_rows = clone_classification_rows(audit, "clone_ambiguous_result")
     if len(ambiguous_rows) != 1:
         errors.append(
@@ -372,8 +411,8 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
             "non-heap skipped row count "
             f"expected {len(NON_HEAP_CLONE_FUNCTIONS)}, got {non_heap_skipped}"
         )
-    if unsolved != 1:
-        errors.append(f"semantic_scope_unsolved_candidate_count expected 1, got {unsolved}")
+    if unsolved != 2:
+        errors.append(f"semantic_scope_unsolved_candidate_count expected 2, got {unsolved}")
 
     if errors:
         raise AssertionError(
@@ -381,9 +420,12 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
         )
     return {
         "single_heap_scope_rows": len(single_heap_rows),
+        "nested_heap_scope_rows": len(nested_heap_rows),
         "non_heap_rows_by_function": non_heap_counts,
         "non_heap_skipped_count": non_heap_skipped,
-        "ambiguous_unsolved_count": unsolved,
+        "ambiguous_unsolved_count": len(ambiguous_rows),
+        "raw_pointer_unresolved_count": len(raw_pointer_rows),
+        "total_unsolved_count": unsolved,
     }
 
 

@@ -1,13 +1,21 @@
 //! Compile-only MIR fixture for semantic-scope Clone candidate classification.
 //!
-//! `main` retains each helper as a function pointer.  The fixture is compiled
-//! through the rustc-driver pass, but it is never executed by the validator.
+//! `main` calls every helper through `black_box` so the MIR bodies and call sites
+//! remain observable.  The fixture is compiled through the rustc-driver pass,
+//! but it is never executed by the validator.
+
+#![feature(bench_black_box)]
+#![allow(dead_code, stable_features)]
 
 use std::hint::black_box;
 
 struct NonHeapToken(u64);
 
 struct NonHeapError(u32);
+
+impl Copy for NonHeapToken {}
+
+impl Copy for NonHeapError {}
 
 impl Clone for NonHeapToken {
     #[inline(never)]
@@ -22,6 +30,14 @@ impl Clone for NonHeapError {
         Self(black_box(self.0))
     }
 }
+
+#[derive(Clone)]
+struct NestedVecOwner {
+    values: Vec<u8>,
+}
+
+#[derive(Clone, Copy)]
+struct RawPointerWrapper(*mut u8);
 
 #[inline(never)]
 fn clone_single_heap(value: &Option<Vec<u8>>) -> Option<Vec<u8>> {
@@ -55,14 +71,40 @@ fn clone_ambiguous_result(value: &Result<Vec<u8>, String>) -> Result<Vec<u8>, St
     <Result<Vec<u8>, String> as Clone>::clone(value)
 }
 
+#[inline(never)]
+fn clone_nested_vec_owner(value: &NestedVecOwner) -> NestedVecOwner {
+    <NestedVecOwner as Clone>::clone(value)
+}
+
+#[inline(never)]
+fn clone_raw_pointer_wrapper(value: &RawPointerWrapper) -> RawPointerWrapper {
+    <RawPointerWrapper as Clone>::clone(value)
+}
+
+static EMPTY_VEC: Vec<u8> = Vec::new();
+
 fn main() {
-    black_box(clone_single_heap as fn(&Option<Vec<u8>>) -> Option<Vec<u8>>);
-    black_box(clone_nonheap_token as fn(&NonHeapToken) -> NonHeapToken);
-    black_box(clone_nonheap_option as fn(&Option<NonHeapToken>) -> Option<NonHeapToken>);
-    black_box(
-        clone_nonheap_result
-            as fn(&Result<NonHeapToken, NonHeapError>) -> Result<NonHeapToken, NonHeapError>,
-    );
-    black_box(clone_nonowning_reference as fn(&&'static Vec<u8>) -> &'static Vec<u8>);
-    black_box(clone_ambiguous_result as fn(&Result<Vec<u8>, String>) -> Result<Vec<u8>, String>);
+    let single = black_box(None::<Vec<u8>>);
+    black_box(clone_single_heap(black_box(&single)));
+
+    let token = black_box(NonHeapToken(7));
+    black_box(clone_nonheap_token(black_box(&token)));
+
+    let option = black_box(Some(NonHeapToken(11)));
+    black_box(clone_nonheap_option(black_box(&option)));
+
+    let result = black_box(Ok::<NonHeapToken, NonHeapError>(NonHeapToken(13)));
+    let _ = black_box(clone_nonheap_result(black_box(&result)));
+
+    let borrowed: &'static Vec<u8> = &EMPTY_VEC;
+    black_box(clone_nonowning_reference(black_box(&borrowed)));
+
+    let ambiguous = black_box(Err::<Vec<u8>, String>(String::new()));
+    let _ = black_box(clone_ambiguous_result(black_box(&ambiguous)));
+
+    let nested = black_box(NestedVecOwner { values: Vec::new() });
+    black_box(clone_nested_vec_owner(black_box(&nested)));
+
+    let raw = black_box(RawPointerWrapper(std::ptr::null_mut()));
+    black_box(clone_raw_pointer_wrapper(black_box(&raw)));
 }
