@@ -2,8 +2,10 @@
 use crate::alloc_api::type_isolation::FLAG_DELAYED_FREE;
 use crate::alloc_api::type_isolation::{
     active_allocation_metadata, active_allocation_metadata_requires_recovery_record,
-    auto_allocation_metadata, auto_reallocation_old_metadata, recorded_reallocation_old_metadata,
-    select_auto_allocation_metadata, semantic_allocation_slow_path_enabled,
+    auto_allocation_metadata, auto_reallocation_old_metadata,
+    checked_recorded_reallocation_old_metadata, deallocation_metadata_after_recovery_record,
+    recorded_reallocation_old_metadata, select_auto_allocation_metadata,
+    semantic_allocation_slow_path_enabled,
     semantic_fallback_attribution_record_raw_alloc_no_metadata,
     semantic_fallback_attribution_record_raw_dealloc_no_metadata,
     semantic_fallback_attribution_record_raw_realloc_moved_dealloc_no_metadata,
@@ -12,7 +14,8 @@ use crate::alloc_api::type_isolation::{
     semantic_realloc_can_reuse_in_place, semantic_runtime_slow_path_enabled,
     semantic_stats_recording_enabled, take_auto_deallocation_metadata,
     take_recorded_reallocation_old_metadata, with_auto_allocation_recovery_recording,
-    without_auto_allocation_recovery_recording, AllocationMetadata, SemanticAlloc, SEMANTIC_STATS,
+    without_auto_allocation_recovery_recording, AllocationMetadata, AutoAllocationRecordLookup,
+    SemanticAlloc, SEMANTIC_STATS,
 };
 use crate::mm::BackendAllocator as GlobalBackend;
 #[cfg(not(feature = "fixed_heap"))]
@@ -257,9 +260,24 @@ unsafe fn dealloc_with_active_or_recorded_metadata(
     layout: Layout,
     active_metadata: AllocationMetadata,
 ) {
-    // The canonical metadata path peeks and reconciles the exact allocation
-    // record once, validates any memory tag, and only then consumes recovery.
-    alloc.dealloc_with_metadata(ptr, layout, active_metadata);
+    match checked_recorded_reallocation_old_metadata(ptr, layout) {
+        AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+            let dealloc_metadata =
+                deallocation_metadata_after_recovery_record(active_metadata, recorded_metadata);
+            alloc.dealloc_with_peeked_recovery_metadata(ptr, layout, dealloc_metadata);
+        }
+        AutoAllocationRecordLookup::Missing => {
+            if semantic_stats_recording_enabled() {
+                SEMANTIC_STATS.record_dealloc(AllocationMetadata::unknown());
+                semantic_fallback_attribution_record_raw_dealloc_no_metadata();
+            }
+            alloc.dealloc_raw(ptr, layout);
+        }
+        AutoAllocationRecordLookup::Mismatched => {
+            // A live record for this address with a different layout makes a
+            // raw release unsafe. Preserve it for a correct retry.
+        }
+    }
 }
 
 #[inline]
@@ -315,24 +333,43 @@ unsafe fn realloc_with_active_metadata(
     new_size: usize,
     alloc_metadata: AllocationMetadata,
 ) -> *mut u8 {
-    if let Some(dealloc_metadata) = recorded_reallocation_old_metadata(ptr, layout) {
-        if semantic_realloc_can_reuse_in_place(layout, new_size, dealloc_metadata, alloc_metadata) {
-            return alloc.realloc_with_split_metadata(
-                ptr,
+    match checked_recorded_reallocation_old_metadata(ptr, layout) {
+        AutoAllocationRecordLookup::Exact(dealloc_metadata) => {
+            if semantic_realloc_can_reuse_in_place(
                 layout,
                 new_size,
                 dealloc_metadata,
                 alloc_metadata,
-            );
+            ) {
+                return alloc.realloc_with_split_metadata(
+                    ptr,
+                    layout,
+                    new_size,
+                    dealloc_metadata,
+                    alloc_metadata,
+                );
+            }
+            let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
+            if !new_ptr.is_null() {
+                copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
+                alloc.dealloc_with_peeked_recovery_metadata(ptr, layout, dealloc_metadata);
+            }
+            new_ptr
         }
-        let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
-        if !new_ptr.is_null() {
-            copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-            dealloc_reallocated_old_ptr(alloc, ptr, layout, || Some(dealloc_metadata));
+        AutoAllocationRecordLookup::Missing => {
+            let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
+            if !new_ptr.is_null() {
+                copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
+                if semantic_stats_recording_enabled() {
+                    SEMANTIC_STATS.record_dealloc(AllocationMetadata::unknown());
+                    semantic_fallback_attribution_record_raw_realloc_moved_dealloc_no_metadata();
+                }
+                alloc.dealloc_raw(ptr, layout);
+            }
+            new_ptr
         }
-        return new_ptr;
+        AutoAllocationRecordLookup::Mismatched => core::ptr::null_mut(),
     }
-    alloc.realloc_with_metadata(ptr, layout, new_size, alloc_metadata)
 }
 
 #[inline]
@@ -1040,6 +1077,256 @@ mod tests {
             old_release_delayed, 0,
             "a pointer with no exact recovery record must be released raw rather than inheriting a policy enabled after its allocation"
         );
+    }
+
+    #[test]
+    fn active_recovery_scope_does_not_reattribute_unrecorded_old_pointer() {
+        let _guard = semantic_test_guard();
+        let alloc = RustAllocator::new();
+        let _cleanup = AutoMetadataRawAttributionCleanup::new(alloc);
+        let old_layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let new_size = 1024;
+        let new_layout = Layout::from_size_align(new_size, old_layout.align()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_A711)
+            .with_module(0xC0DE_A711)
+            .with_callsite(0xA110_A711)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE);
+
+        let dealloc_ptr = unsafe { alloc.alloc_raw(old_layout) };
+        assert!(!dealloc_ptr.is_null());
+        let previous = unsafe { set_active_metadata(metadata) };
+        #[cfg(feature = "stats")]
+        let dealloc_fallback_before;
+        #[cfg(feature = "stats")]
+        let dealloc_stats;
+        {
+            #[cfg(feature = "stats")]
+            let _stats = SemanticStatsRecordingScope::new();
+            #[cfg(feature = "stats")]
+            {
+                dealloc_fallback_before = semantic_fallback_attribution_snapshot();
+            }
+            unsafe {
+                GlobalAlloc::dealloc(&alloc, dealloc_ptr, old_layout);
+                restore_active_metadata(previous);
+            }
+            #[cfg(feature = "stats")]
+            {
+                dealloc_stats = semantic_stats_snapshot();
+            }
+        }
+        assert_eq!(
+            delayed_free_snapshot().occupied_slots,
+            0,
+            "a recovery-required active scope must release an unrecorded old pointer raw"
+        );
+        #[cfg(feature = "stats")]
+        {
+            let delta = fallback_delta(
+                dealloc_fallback_before,
+                semantic_fallback_attribution_snapshot(),
+            );
+            assert_eq!(dealloc_stats.fallback_deallocations, 1);
+            assert_eq!(dealloc_stats.typed_deallocations, 0);
+            assert_eq!(delta.raw_dealloc_no_metadata, 1);
+            assert_eq!(delta.raw_realloc_moved_dealloc_no_metadata, 0);
+        }
+
+        let realloc_ptr = unsafe { alloc.alloc_raw(old_layout) };
+        assert!(!realloc_ptr.is_null());
+        unsafe {
+            realloc_ptr.write(0xA7);
+        }
+        let previous = unsafe { set_active_metadata(metadata) };
+        #[cfg(feature = "stats")]
+        let realloc_fallback_before;
+        #[cfg(feature = "stats")]
+        let realloc_stats;
+        let moved;
+        {
+            #[cfg(feature = "stats")]
+            let _stats = SemanticStatsRecordingScope::new();
+            #[cfg(feature = "stats")]
+            {
+                realloc_fallback_before = semantic_fallback_attribution_snapshot();
+            }
+            moved = unsafe { GlobalAlloc::realloc(&alloc, realloc_ptr, old_layout, new_size) };
+            unsafe {
+                restore_active_metadata(previous);
+            }
+            #[cfg(feature = "stats")]
+            {
+                realloc_stats = semantic_stats_snapshot();
+            }
+        }
+
+        assert!(!moved.is_null());
+        assert_ne!(moved, realloc_ptr);
+        assert_eq!(unsafe { moved.read() }, 0xA7);
+        assert_eq!(
+            delayed_free_snapshot().occupied_slots,
+            0,
+            "active realloc may type the replacement, but must release an unrecorded old pointer raw"
+        );
+        assert_eq!(
+            recorded_reallocation_old_metadata(moved, new_layout),
+            Some(metadata),
+            "the replacement allocation must retain the active semantic identity"
+        );
+        #[cfg(feature = "stats")]
+        {
+            let delta = fallback_delta(
+                realloc_fallback_before,
+                semantic_fallback_attribution_snapshot(),
+            );
+            assert_eq!(realloc_stats.typed_allocations, 1);
+            assert_eq!(realloc_stats.fallback_deallocations, 1);
+            assert_eq!(delta.raw_dealloc_no_metadata, 0);
+            assert_eq!(delta.raw_realloc_moved_dealloc_no_metadata, 1);
+        }
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, moved, new_layout);
+        }
+    }
+
+    #[test]
+    fn active_recovery_scope_layout_mismatch_fails_closed_and_preserves_record() {
+        let _guard = semantic_test_guard();
+        let alloc = RustAllocator::new();
+        let _cleanup = AutoMetadataRawAttributionCleanup::new(alloc);
+        let recorded_layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let wrong_layout = Layout::from_size_align(128, recorded_layout.align()).unwrap();
+        let new_size = 1024;
+        let new_layout = Layout::from_size_align(new_size, recorded_layout.align()).unwrap();
+        let recorded_metadata = AllocationMetadata::for_type(0xC003_A721)
+            .with_module(0xC0DE_A721)
+            .with_callsite(0xA110_A721)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let active_metadata = AllocationMetadata::for_type(0xC003_A722)
+            .with_module(0xC0DE_A722)
+            .with_callsite(0xA110_A722)
+            .with_flags(FLAG_TYPE_ISOLATED);
+
+        let dealloc_ptr =
+            unsafe { alloc.alloc_with_recovery_metadata(recorded_layout, recorded_metadata) };
+        assert!(!dealloc_ptr.is_null());
+        unsafe {
+            dealloc_ptr.write(0xD7);
+        }
+        let previous = unsafe { set_active_metadata(active_metadata) };
+        #[cfg(feature = "stats")]
+        let mismatched_dealloc_fallback_before;
+        {
+            #[cfg(feature = "stats")]
+            let _stats = SemanticStatsRecordingScope::new();
+            #[cfg(feature = "stats")]
+            {
+                mismatched_dealloc_fallback_before = semantic_fallback_attribution_snapshot();
+            }
+            unsafe {
+                GlobalAlloc::dealloc(&alloc, dealloc_ptr, wrong_layout);
+                restore_active_metadata(previous);
+            }
+        }
+        assert_eq!(unsafe { dealloc_ptr.read() }, 0xD7);
+        assert_eq!(
+            recorded_reallocation_old_metadata(dealloc_ptr, recorded_layout),
+            Some(recorded_metadata),
+            "wrong-layout active dealloc must preserve the exact record for a correct retry"
+        );
+        #[cfg(feature = "stats")]
+        {
+            let delta = fallback_delta(
+                mismatched_dealloc_fallback_before,
+                semantic_fallback_attribution_snapshot(),
+            );
+            assert_eq!(delta.raw_dealloc_no_metadata, 0);
+            assert_eq!(delta.raw_realloc_moved_dealloc_no_metadata, 0);
+        }
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, dealloc_ptr, recorded_layout);
+        }
+        assert_eq!(
+            recorded_reallocation_old_metadata(dealloc_ptr, recorded_layout),
+            None
+        );
+
+        let realloc_ptr =
+            unsafe { alloc.alloc_with_recovery_metadata(recorded_layout, recorded_metadata) };
+        assert!(!realloc_ptr.is_null());
+        unsafe {
+            realloc_ptr.write(0xA7);
+        }
+        let previous = unsafe { set_active_metadata(active_metadata) };
+        #[cfg(feature = "stats")]
+        let mismatched_realloc_fallback_before;
+        let failed;
+        {
+            #[cfg(feature = "stats")]
+            let _stats = SemanticStatsRecordingScope::new();
+            #[cfg(feature = "stats")]
+            {
+                mismatched_realloc_fallback_before = semantic_fallback_attribution_snapshot();
+            }
+            failed = unsafe { GlobalAlloc::realloc(&alloc, realloc_ptr, wrong_layout, new_size) };
+            unsafe {
+                restore_active_metadata(previous);
+            }
+        }
+        assert!(failed.is_null());
+        assert_eq!(unsafe { realloc_ptr.read() }, 0xA7);
+        assert_eq!(
+            recorded_reallocation_old_metadata(realloc_ptr, recorded_layout),
+            Some(recorded_metadata),
+            "wrong-layout active realloc must preserve the exact record and old allocation"
+        );
+        #[cfg(feature = "stats")]
+        {
+            let delta = fallback_delta(
+                mismatched_realloc_fallback_before,
+                semantic_fallback_attribution_snapshot(),
+            );
+            assert_eq!(delta.raw_dealloc_no_metadata, 0);
+            assert_eq!(delta.raw_realloc_moved_dealloc_no_metadata, 0);
+        }
+
+        let previous = unsafe { set_active_metadata(active_metadata) };
+        #[cfg(feature = "stats")]
+        let exact_realloc_fallback_before;
+        let moved;
+        {
+            #[cfg(feature = "stats")]
+            let _stats = SemanticStatsRecordingScope::new();
+            #[cfg(feature = "stats")]
+            {
+                exact_realloc_fallback_before = semantic_fallback_attribution_snapshot();
+            }
+            moved = unsafe { GlobalAlloc::realloc(&alloc, realloc_ptr, recorded_layout, new_size) };
+            unsafe {
+                restore_active_metadata(previous);
+            }
+        }
+        assert!(!moved.is_null());
+        assert_ne!(moved, realloc_ptr);
+        assert_eq!(unsafe { moved.read() }, 0xA7);
+        assert_eq!(
+            recorded_reallocation_old_metadata(moved, new_layout),
+            Some(active_metadata),
+            "a correct retry must install the active identity on the replacement"
+        );
+        #[cfg(feature = "stats")]
+        {
+            let delta = fallback_delta(
+                exact_realloc_fallback_before,
+                semantic_fallback_attribution_snapshot(),
+            );
+            assert_eq!(delta.raw_dealloc_no_metadata, 0);
+            assert_eq!(delta.raw_realloc_moved_dealloc_no_metadata, 0);
+        }
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, moved, new_layout);
+        }
     }
 
     #[test]

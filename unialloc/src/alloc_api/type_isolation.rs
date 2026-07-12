@@ -2474,7 +2474,7 @@ impl AutoAllocationRecord {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum AutoAllocationRecordLookup {
+pub(crate) enum AutoAllocationRecordLookup {
     Missing,
     Mismatched,
     Exact(AllocationMetadata),
@@ -4717,6 +4717,16 @@ pub(crate) fn recorded_reallocation_old_metadata(
     layout: Layout,
 ) -> Option<AllocationMetadata> {
     lookup_auto_allocation_metadata(ptr, layout)
+}
+
+/// Distinguish an absent recovery record from a live record whose layout does
+/// not match the caller.  Active allocator scopes may release the former as a
+/// preexisting raw allocation, but must fail closed on the latter.
+pub(crate) fn checked_recorded_reallocation_old_metadata(
+    ptr: *mut u8,
+    layout: Layout,
+) -> AutoAllocationRecordLookup {
+    lookup_auto_allocation_record(ptr, layout, false)
 }
 
 pub(crate) fn auto_reallocation_old_metadata(
