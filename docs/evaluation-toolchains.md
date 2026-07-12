@@ -276,11 +276,16 @@ matching source fingerprint.
 ## PAC and arm64e note
 
 Rustup lists `arm64e-apple-darwin` but does not ship a prebuilt arm64e standard
-library.  Current PAC evidence separates three lanes: the host Rust allocator
+library.  PAC evidence therefore separates three lanes: the host Rust allocator
 passes through the safe software fallback and typed side-cache reuse; an external
 arm64e C ABI probe observes hardware context binding and wrong-context rejection;
-the Rust allocator `no_std` arm64e lane remains blocked because its Cargo route
-pulls std-only dev dependencies.  Neither passing lane proves the optional C006
-cost matrix, and the external C probe is not allocator-runtime evidence.  Treat
-`evaluation/results/pac_metadata_direct_probe_audit.json` as historical unless it
-is rebound after source changes.
+and the allocator has a dedicated `no_std` arm64e runtime route.  The last route
+now uses `tools/pac-nostd-contract/Cargo.toml`, which depends on UniAlloc as a
+normal dependency so std-only benchmark/test dependencies cannot enter its
+target graph.  It builds `core`, `alloc`, and `panic_abort` from `rust-src`
+instead of requiring a prebuilt arm64e standard library.
+
+The allocator `no_std` runtime probe validates metadata authentication and typed
+side-cache reuse, but it does not prove the optional C006 cost matrix.  Treat old
+`evaluation/results/pac_metadata_direct_probe_audit.json` files as historical
+unless they are rebound after source changes.
