@@ -6,7 +6,9 @@ mod fixed_heap_probe_global;
 
 use std::thread;
 
-use unialloc::alloc_api::type_isolation::__unialloc_semantic_string_into_bytes;
+use unialloc::alloc_api::type_isolation::{
+    __unialloc_semantic_string_into_bytes, FLAG_MEMORY_TAGGING,
+};
 use unialloc::alloc_api::PLACEMENT_HINT_CROSS_THREAD_RECOVERY;
 use unialloc::{
     semantic_auto_metadata_disable, semantic_metadata_validation_snapshot,
@@ -53,7 +55,7 @@ fn string_into_bytes_transfer_survives_cross_thread_drop_without_type_aliasing()
     let string_metadata = AllocationMetadata::for_type(0x57A1_C701)
         .with_module(0xC0DE_C701)
         .with_callsite(0xA110_C701)
-        .with_flags(FLAG_TYPE_ISOLATED)
+        .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING)
         .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x71);
     let vec_metadata = AllocationMetadata {
         type_id: 0x0EC0_C701,
@@ -85,7 +87,7 @@ fn string_into_bytes_transfer_survives_cross_thread_drop_without_type_aliasing()
         assert_ne!(
             wrong_source.as_ptr() as usize,
             transferred_ptr,
-            "cross-thread drop must not return Vec-owned storage to the old String identity"
+            "cross-thread tagged drop must not return Vec-owned storage to the old String identity"
         );
         drop(wrong_source);
 
@@ -93,7 +95,7 @@ fn string_into_bytes_transfer_survives_cross_thread_drop_without_type_aliasing()
         assert_eq!(
             same_target.as_ptr() as usize,
             transferred_ptr,
-            "cross-thread drop must cache transferred storage under the rebound Vec identity"
+            "cross-thread tagged drop must cache transferred storage under the rebound Vec identity"
         );
         drop(same_target);
     })
