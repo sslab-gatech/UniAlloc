@@ -22100,6 +22100,137 @@ mod tests {
     }
 
     #[test]
+    fn cross_thread_realloc_keeps_hugepage_and_ordinary_side_cache_domains_separate() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout = Layout::from_size_align(4 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0x5E6D_C9A1)
+            .with_module(0xC0DE_C900)
+            .with_callsite(0xA110_C9A1)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_HUGEPAGE_METADATA)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x91);
+        let new_metadata = AllocationMetadata::for_type(0x5E6D_C9B2)
+            .with_module(old_metadata.module_id)
+            .with_callsite(0xA110_C9B2)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x92);
+        assert!(!semantic_realloc_can_reuse_in_place(
+            layout,
+            layout.size(),
+            old_metadata,
+            new_metadata,
+        ));
+
+        let ptr = unsafe {
+            __unialloc_alloc_with_metadata_hints(
+                layout.size(),
+                layout.align(),
+                old_metadata.type_id,
+                old_metadata.module_id,
+                old_metadata.flags,
+                old_metadata.lifetime_hint,
+                old_metadata.placement_hint,
+                old_metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        unsafe {
+            for index in 0..layout.size() / size_of::<usize>() {
+                ptr.cast::<usize>()
+                    .add(index)
+                    .write(0xA110_C900usize ^ index);
+            }
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(old_metadata)
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+
+        let ptr_addr = ptr as usize;
+        let worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = ptr_addr as *mut u8;
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                Some(old_metadata)
+            );
+
+            let grown = unsafe {
+                __unialloc_realloc_with_metadata_hints(
+                    ptr,
+                    layout.size(),
+                    layout.align(),
+                    layout.size(),
+                    new_metadata.type_id,
+                    new_metadata.module_id,
+                    new_metadata.flags,
+                    new_metadata.lifetime_hint,
+                    new_metadata.placement_hint,
+                    new_metadata.callsite,
+                )
+            };
+            assert!(!grown.is_null());
+            assert_ne!(grown, ptr, "type/domain-changing realloc must move storage");
+            unsafe {
+                for index in 0..layout.size() / size_of::<usize>() {
+                    assert_eq!(
+                        grown.cast::<usize>().add(index).read(),
+                        0xA110_C900usize ^ index,
+                    );
+                }
+            }
+
+            assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+            assert_eq!(
+                lookup_auto_allocation_metadata(grown, layout),
+                Some(new_metadata)
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, new_metadata) },
+                None,
+                "ordinary metadata must not receive the moved-from hugepage-domain buffer"
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, old_metadata) },
+                Some(ptr),
+                "the moved-from buffer must remain recoverable only through its old hugepage identity"
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, new_metadata) },
+                None,
+                "popping the old domain must not create an alias in the new domain"
+            );
+
+            assert_eq!(
+                take_auto_deallocation_metadata(grown, layout),
+                Some(new_metadata)
+            );
+            unsafe {
+                alloc.dealloc_raw(ptr, layout);
+                alloc.dealloc_raw(grown, layout);
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+            }
+        });
+        worker
+            .join()
+            .expect("cross-thread hugepage-to-ordinary realloc regression");
+
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert!(!semantic_runtime_slow_path_enabled());
+    }
+
+    #[test]
     fn cross_thread_recovered_frees_do_not_reuse_same_layout_across_type_identities() {
         let _guard = test_guard();
         unsafe {
