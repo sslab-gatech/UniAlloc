@@ -1003,6 +1003,11 @@ fn semantic_stats_test_exact_recording_allows_current_thread() -> bool {
 static SEMANTIC_SLOW_PATH_FLAGS: AtomicUsize = AtomicUsize::new(0);
 static FAST_AUTO_ALLOCATION_RECORD_GLOBAL_COUNT: AtomicUsize = AtomicUsize::new(0);
 static METADATA_AUTH_COOKIE: AtomicU64 = AtomicU64::new(0);
+static METADATA_RECORD_AUTH_SEED: AtomicU64 = AtomicU64::new(0);
+#[cfg(test)]
+static METADATA_RECORD_AUTH_SEED_DERIVATIONS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static METADATA_RECORD_AUTH_COMPUTATIONS: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
@@ -1314,6 +1319,47 @@ impl TypeCacheIdentityHotSlot {
 }
 
 #[derive(Clone, Copy)]
+struct MetadataRecordAuthHotSlot {
+    seed: u64,
+    ptr: usize,
+    size: usize,
+    align: usize,
+    metadata: AllocationMetadata,
+    auth: u64,
+    active: bool,
+}
+
+impl MetadataRecordAuthHotSlot {
+    const fn empty() -> Self {
+        Self {
+            seed: 0,
+            ptr: 0,
+            size: 0,
+            align: 1,
+            metadata: AllocationMetadata::unknown(),
+            auth: 0,
+            active: false,
+        }
+    }
+
+    #[inline]
+    fn matches(
+        self,
+        seed: u64,
+        ptr: *mut u8,
+        layout: Layout,
+        metadata: AllocationMetadata,
+    ) -> bool {
+        self.active
+            && self.seed == seed
+            && self.ptr == ptr as usize
+            && self.size == layout.size()
+            && self.align == layout.align()
+            && self.metadata == metadata
+    }
+}
+
+#[derive(Clone, Copy)]
 struct InlineTypeCacheEntry {
     cache_key: u64,
     type_id: u64,
@@ -1367,6 +1413,11 @@ static mut TYPE_CACHE_HOT_SLOT: TypeCacheHotSlot = TypeCacheHotSlot::empty();
 #[thread_local]
 static mut TYPE_CACHE_IDENTITY_HOT_SLOT: TypeCacheIdentityHotSlot =
     TypeCacheIdentityHotSlot::empty();
+
+#[cfg(not(unialloc_target_arm64e))]
+#[thread_local]
+static mut METADATA_RECORD_AUTH_HOT_SLOT: MetadataRecordAuthHotSlot =
+    MetadataRecordAuthHotSlot::empty();
 
 #[cfg(test)]
 static TYPE_CACHE_IDENTITY_HOT_HITS: AtomicUsize = AtomicUsize::new(0);
@@ -6446,12 +6497,45 @@ unsafe fn release_evicted_segregated_type_cache_entry(
 }
 
 #[inline]
-fn derive_metadata_record_auth(ptr: *mut u8, layout: Layout, metadata: AllocationMetadata) -> u64 {
-    let hash = keyed_integrity_hash(b"semantic-metadata-auth-v1");
-    let hash = fnv1a_mix(hash, &(ptr as usize).to_le_bytes());
+fn compute_metadata_record_auth(
+    seed: u64,
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> u64 {
+    #[cfg(test)]
+    METADATA_RECORD_AUTH_COMPUTATIONS.fetch_add(1, Ordering::Relaxed);
+    let hash = fnv1a_mix(seed, &(ptr as usize).to_le_bytes());
     let hash = fnv1a_mix(hash, &layout.size().to_le_bytes());
     let hash = fnv1a_mix(hash, &layout.align().to_le_bytes());
     non_zero_hash(mix_semantic_metadata_fields(hash, metadata, true))
+}
+
+#[inline]
+fn derive_metadata_record_auth(ptr: *mut u8, layout: Layout, metadata: AllocationMetadata) -> u64 {
+    let seed = metadata_record_auth_seed();
+    #[cfg(not(unialloc_target_arm64e))]
+    unsafe {
+        let hot = METADATA_RECORD_AUTH_HOT_SLOT;
+        if hot.matches(seed, ptr, layout, metadata) {
+            return hot.auth;
+        }
+    }
+
+    let auth = compute_metadata_record_auth(seed, ptr, layout, metadata);
+    #[cfg(not(unialloc_target_arm64e))]
+    unsafe {
+        METADATA_RECORD_AUTH_HOT_SLOT = MetadataRecordAuthHotSlot {
+            seed,
+            ptr: ptr as usize,
+            size: layout.size(),
+            align: layout.align(),
+            metadata,
+            auth,
+            active: true,
+        };
+    }
+    auth
 }
 
 #[inline]
@@ -6483,6 +6567,23 @@ fn metadata_auth_cookie() -> u64 {
 fn keyed_integrity_hash(domain: &[u8]) -> u64 {
     let hash = fnv1a_mix(FNV1A_OFFSET, domain);
     fnv1a_mix(hash, &metadata_auth_cookie().to_le_bytes())
+}
+
+#[inline]
+fn metadata_record_auth_seed() -> u64 {
+    let cached = METADATA_RECORD_AUTH_SEED.load(Ordering::Relaxed);
+    if cached != 0 {
+        return cached;
+    }
+
+    #[cfg(test)]
+    METADATA_RECORD_AUTH_SEED_DERIVATIONS.fetch_add(1, Ordering::Relaxed);
+    let seed = non_zero_hash(keyed_integrity_hash(b"semantic-metadata-auth-v1"));
+    match METADATA_RECORD_AUTH_SEED.compare_exchange(0, seed, Ordering::Relaxed, Ordering::Relaxed)
+    {
+        Ok(_) => seed,
+        Err(existing) => existing,
+    }
 }
 
 #[cfg(all(feature = "pac", target_arch = "aarch64"))]
@@ -10518,7 +10619,14 @@ mod tests {
     }
 
     fn reset_metadata_auth_cookie_for_test() {
+        #[cfg(not(unialloc_target_arm64e))]
+        unsafe {
+            METADATA_RECORD_AUTH_HOT_SLOT = MetadataRecordAuthHotSlot::empty();
+        }
+        METADATA_RECORD_AUTH_SEED.store(0, Ordering::Relaxed);
         METADATA_AUTH_COOKIE.store(0, Ordering::Relaxed);
+        METADATA_RECORD_AUTH_SEED_DERIVATIONS.store(0, Ordering::Relaxed);
+        METADATA_RECORD_AUTH_COMPUTATIONS.store(0, Ordering::Relaxed);
     }
 
     unsafe fn cached_segregated_type_cache_entry_for_test(
@@ -18031,6 +18139,160 @@ mod tests {
             derive_metadata_record_auth(ptr, layout, metadata),
             "metadata auth cookie must be stable for cached metadata records"
         );
+    }
+
+    #[test]
+    fn metadata_software_auth_binds_pointer_layout_and_all_metadata_fields() {
+        let _guard = test_guard();
+        reset_metadata_auth_cookie_for_test();
+
+        let mut storage = [0u8; 8 * core::mem::size_of::<usize>()];
+        let ptr = storage.as_mut_ptr();
+        let layout = Layout::from_size_align(storage.len(), align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xA17C_C007)
+            .with_module(0xC0DE_C007)
+            .with_callsite(0xA110_C007)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_POINTER_AUTH | FLAG_METADATA_PROTECTION)
+            .with_lifetime_hint(0x17)
+            .with_placement_hint(0x2A);
+        let auth = derive_metadata_record_auth(ptr, layout, metadata);
+
+        assert_ne!(
+            auth,
+            derive_metadata_record_auth(ptr.wrapping_add(1), layout, metadata),
+            "software auth must bind the allocation pointer"
+        );
+        let different_size = Layout::from_size_align(layout.size() / 2, layout.align()).unwrap();
+        assert_ne!(
+            auth,
+            derive_metadata_record_auth(ptr, different_size, metadata),
+            "software auth must bind layout size"
+        );
+        let different_align =
+            Layout::from_size_align(layout.size(), layout.align().saturating_mul(2)).unwrap();
+        assert_ne!(
+            auth,
+            derive_metadata_record_auth(ptr, different_align, metadata),
+            "software auth must bind layout alignment"
+        );
+
+        let metadata_variants = [
+            AllocationMetadata::for_type(metadata.type_id ^ 1)
+                .with_module(metadata.module_id)
+                .with_callsite(metadata.callsite)
+                .with_flags(metadata.flags)
+                .with_lifetime_hint(metadata.lifetime_hint)
+                .with_placement_hint(metadata.placement_hint),
+            metadata.with_module(metadata.module_id ^ 1),
+            metadata.with_callsite(metadata.callsite ^ 1),
+            metadata.with_flags(metadata.flags ^ FLAG_FORCE_INITIALIZE),
+            metadata.with_lifetime_hint(metadata.lifetime_hint ^ 1),
+            metadata.with_placement_hint(metadata.placement_hint ^ 1),
+        ];
+        for changed in metadata_variants {
+            assert_ne!(
+                auth,
+                derive_metadata_record_auth(ptr, layout, changed),
+                "software auth must bind every semantic metadata field"
+            );
+        }
+        assert_eq!(
+            METADATA_RECORD_AUTH_COMPUTATIONS.load(Ordering::Relaxed),
+            10,
+            "each changed pointer/layout/metadata tuple must recompute auth"
+        );
+
+        assert_eq!(auth, derive_metadata_record_auth(ptr, layout, metadata));
+        assert_eq!(
+            METADATA_RECORD_AUTH_COMPUTATIONS.load(Ordering::Relaxed),
+            11,
+            "returning to the original tuple after another tuple must recompute auth"
+        );
+        assert_eq!(auth, derive_metadata_record_auth(ptr, layout, metadata));
+        #[cfg(not(unialloc_target_arm64e))]
+        assert_eq!(
+            METADATA_RECORD_AUTH_COMPUTATIONS.load(Ordering::Relaxed),
+            11,
+            "an immediately repeated exact tuple should hit the auth memo"
+        );
+        #[cfg(unialloc_target_arm64e)]
+        assert_eq!(
+            METADATA_RECORD_AUTH_COMPUTATIONS.load(Ordering::Relaxed),
+            12,
+            "arm64e deliberately avoids the TLS auth memo and must recompute"
+        );
+    }
+
+    #[cfg(all(feature = "stats", feature = "pac", target_arch = "aarch64"))]
+    #[test]
+    fn metadata_pointer_auth_hot_reuse_derives_static_auth_seed_once() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        reset_metadata_auth_cookie_for_test();
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        let software_fallback = !crate::pal::arch::pac::context_binding_available();
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(4 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xA17C_C006)
+            .with_module(0xC0DE_C006)
+            .with_callsite(0xA110_C006)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_POINTER_AUTH | FLAG_METADATA_PROTECTION);
+
+        let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+        unsafe {
+            alloc.dealloc_with_metadata(ptr, layout, metadata);
+            let reused = alloc.alloc_with_metadata(layout, metadata);
+            assert_eq!(
+                reused, ptr,
+                "PAC hot-path regression must exercise cache reuse"
+            );
+            alloc.dealloc_with_metadata(reused, layout, metadata);
+        }
+
+        let snap = semantic_stats_snapshot();
+        if software_fallback {
+            assert_eq!(snap.metadata_pac_auth_signs, 0);
+            assert_eq!(snap.metadata_pac_auth_verifications, 0);
+            assert_eq!(snap.metadata_pac_auth_failures, 0);
+            assert_eq!(snap.metadata_pac_software_fallback_signs, 2);
+            assert_eq!(snap.metadata_pac_software_fallback_verifications, 1);
+            assert_eq!(snap.metadata_pac_software_fallback_failures, 0);
+            assert_eq!(
+                METADATA_RECORD_AUTH_SEED_DERIVATIONS.load(Ordering::Relaxed),
+                1,
+                "software PAC hot reuse should derive the stable domain/cookie seed once"
+            );
+            assert_eq!(
+                METADATA_RECORD_AUTH_COMPUTATIONS.load(Ordering::Relaxed),
+                1,
+                "software PAC hot reuse should compute an unchanged full-tuple auth once"
+            );
+        } else {
+            assert_eq!(snap.metadata_pac_auth_signs, 2);
+            assert_eq!(snap.metadata_pac_auth_verifications, 1);
+            assert_eq!(snap.metadata_pac_auth_failures, 0);
+            assert_eq!(snap.metadata_pac_software_fallback_signs, 0);
+            assert_eq!(snap.metadata_pac_software_fallback_verifications, 0);
+            assert_eq!(snap.metadata_pac_software_fallback_failures, 0);
+            assert_eq!(
+                METADATA_RECORD_AUTH_SEED_DERIVATIONS.load(Ordering::Relaxed),
+                0,
+                "hardware PAC hot reuse must not derive the software fallback seed"
+            );
+            assert_eq!(
+                METADATA_RECORD_AUTH_COMPUTATIONS.load(Ordering::Relaxed),
+                0,
+                "hardware PAC hot reuse must not compute software fallback auth"
+            );
+        }
+        semantic_stats_recording_disable();
     }
 
     #[test]
