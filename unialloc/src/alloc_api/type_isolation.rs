@@ -4615,10 +4615,42 @@ pub(crate) fn allocation_metadata_recovery_identity_matches(
 }
 
 #[inline]
+fn is_recovery_delegated_metadata_request(requested: AllocationMetadata) -> bool {
+    // The compiler uses this exact neutral tuple to delegate an unresolved
+    // realloc/dealloc identity to the exact `(ptr, layout)` recovery record.
+    // Do not treat merely-untyped metadata as delegated: module, policy, or
+    // placement-bearing requests still have caller-visible semantics.
+    !requested.has_type()
+        && requested.module_id == UNKNOWN_SEMANTIC_ID
+        && requested.flags == 0
+        && requested.lifetime_hint == 0
+        && requested.placement_hint == 0
+        && requested.callsite != 0
+}
+
+#[inline]
+fn recovery_delegated_metadata_after_record(
+    requested: AllocationMetadata,
+    recorded: AllocationMetadata,
+) -> Option<AllocationMetadata> {
+    if is_recovery_delegated_metadata_request(requested) && recorded.has_type() {
+        Some(recorded.with_callsite(requested.callsite))
+    } else {
+        None
+    }
+}
+
+#[inline]
 pub(crate) fn deallocation_metadata_after_recovery_record(
     requested: AllocationMetadata,
     recorded: AllocationMetadata,
 ) -> AllocationMetadata {
+    if let Some(delegated) = recovery_delegated_metadata_after_record(requested, recorded) {
+        // Delegation is not an exact compiler identity match: the caller did
+        // not supply a type identity to validate. Preserve that distinction in
+        // the validation counters while retaining the deallocation callsite.
+        return delegated;
+    }
     if allocation_metadata_recovery_identity_matches(requested, recorded) {
         SEMANTIC_METADATA_VALIDATION.record_recovery_identity_match();
         // Preserve caller-provided deallocation/drop-site callsite metadata when
@@ -9451,12 +9483,20 @@ unsafe fn alloc_zeroed_layout_with_ffi_metadata_local(
 }
 
 #[inline]
-fn recovered_or_requested_reallocation_old_metadata(
+fn recovered_or_requested_reallocation_metadata(
     ptr: *mut u8,
     old_layout: Layout,
     requested_metadata: AllocationMetadata,
-) -> AllocationMetadata {
-    recorded_reallocation_old_metadata(ptr, old_layout).unwrap_or(requested_metadata)
+) -> (AllocationMetadata, AllocationMetadata, bool) {
+    match recorded_reallocation_old_metadata(ptr, old_layout) {
+        Some(recorded_metadata) => (
+            recorded_metadata,
+            recovery_delegated_metadata_after_record(requested_metadata, recorded_metadata)
+                .unwrap_or(requested_metadata),
+            true,
+        ),
+        None => (requested_metadata, requested_metadata, false),
+    }
 }
 
 #[inline]
@@ -9470,9 +9510,24 @@ unsafe fn realloc_layout_with_ffi_metadata(
         return core::ptr::null_mut();
     }
     let allocator = RustAllocator::new();
-    let old_metadata = recovered_or_requested_reallocation_old_metadata(ptr, old_layout, metadata);
+    let (old_metadata, new_metadata, recovery_record_found) =
+        recovered_or_requested_reallocation_metadata(ptr, old_layout, metadata);
+    if !recovery_record_found && is_recovery_delegated_metadata_request(metadata) {
+        // A delegated request without an exact record has no identity to
+        // inherit. Keep the operation raw/untyped and do not manufacture a
+        // recovery record for unknown metadata.
+        return without_auto_allocation_recovery_recording(|| {
+            allocator.realloc_with_split_metadata(
+                ptr,
+                old_layout,
+                new_size,
+                old_metadata,
+                new_metadata,
+            )
+        });
+    }
     with_auto_allocation_recovery_recording(|| {
-        allocator.realloc_with_split_metadata(ptr, old_layout, new_size, old_metadata, metadata)
+        allocator.realloc_with_split_metadata(ptr, old_layout, new_size, old_metadata, new_metadata)
     })
 }
 
@@ -9498,7 +9553,10 @@ unsafe fn realloc_layout_with_ffi_metadata_local(
         return core::ptr::null_mut();
     }
     let allocator = RustAllocator::new();
-    let old_metadata = recovered_or_requested_reallocation_old_metadata(ptr, old_layout, metadata);
+    // Local ABI callers promise exact new-object metadata and must never
+    // delegate it through a recovery record. A conservative old record may
+    // still identify the moved-from object during a mixed transition.
+    let old_metadata = recorded_reallocation_old_metadata(ptr, old_layout).unwrap_or(metadata);
     let new_ptr = without_auto_allocation_recovery_recording(|| {
         allocator.realloc_with_split_metadata(ptr, old_layout, new_size, old_metadata, metadata)
     });
@@ -11171,6 +11229,382 @@ mod tests {
             !allocation_metadata_recovery_identity_matches(layout_derived, recorded),
             "layout-derived metadata must not be promoted to exact compiler recovery identity"
         );
+    }
+
+    #[test]
+    fn recovery_delegation_requires_exact_neutral_metadata() {
+        let recorded = AllocationMetadata::for_type(0xC003_1D11)
+            .with_module(0xC0DE_1D11)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED)
+            .with_lifetime_hint(7)
+            .with_placement_hint(11)
+            .with_callsite(0xA110_1D11);
+        let delegated = AllocationMetadata::unknown().with_callsite(0xD00D_1D11);
+
+        assert!(is_recovery_delegated_metadata_request(delegated));
+        assert_eq!(
+            recovery_delegated_metadata_after_record(delegated, recorded),
+            Some(recorded.with_callsite(delegated.callsite)),
+            "delegation must retain recorded identity/policy/hints and only replace callsite"
+        );
+        assert!(
+            !is_recovery_delegated_metadata_request(AllocationMetadata::unknown()),
+            "ordinary all-zero unknown metadata is not a compiler delegation request"
+        );
+
+        for policy_bearing in [
+            delegated.with_module(0xBAD0),
+            delegated.with_flags(FLAG_FORCE_INITIALIZE),
+            delegated.with_lifetime_hint(1),
+            delegated.with_placement_hint(1),
+        ] {
+            assert!(!is_recovery_delegated_metadata_request(policy_bearing));
+            assert_eq!(
+                recovery_delegated_metadata_after_record(policy_bearing, recorded),
+                None,
+                "untyped but policy-bearing metadata must keep its original semantics"
+            );
+        }
+        assert_eq!(
+            recovery_delegated_metadata_after_record(delegated, AllocationMetadata::unknown()),
+            None,
+            "a neutral request cannot inherit a missing/unknown recorded type"
+        );
+    }
+
+    #[test]
+    fn recovery_delegated_layout_realloc_and_dealloc_preserve_recorded_identity() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let old_layout = Layout::from_size_align(63, 64).unwrap();
+        let new_layout = Layout::from_size_align(57, old_layout.align()).unwrap();
+        assert_eq!(
+            crate::size_class::get_size_class(old_layout.size()).index(),
+            crate::size_class::get_size_class(new_layout.size()).index(),
+            "regression requires an in-place-capable shrink"
+        );
+        let recorded = AllocationMetadata::for_type(0xC003_1D21)
+            .with_module(0xC0DE_1D21)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_lifetime_hint(3)
+            .with_placement_hint(5)
+            .with_callsite(0xA110_1D21);
+        let realloc_request = AllocationMetadata::unknown().with_callsite(0xA110_1D22);
+        let dealloc_request = AllocationMetadata::unknown().with_callsite(0xD00D_1D23);
+        let validation_before = semantic_metadata_validation_snapshot();
+
+        let ptr = unsafe {
+            __unialloc_alloc_layout_with_metadata_hints(
+                old_layout,
+                recorded.type_id,
+                recorded.module_id,
+                recorded.flags,
+                recorded.lifetime_hint,
+                recorded.placement_hint,
+                recorded.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.write_volatile(0xC2);
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, old_layout),
+            Some(recorded)
+        );
+
+        let shrunk = unsafe {
+            __unialloc_realloc_layout_with_metadata_hints(
+                ptr,
+                old_layout,
+                new_layout.size(),
+                realloc_request.type_id,
+                realloc_request.module_id,
+                realloc_request.flags,
+                realloc_request.lifetime_hint,
+                realloc_request.placement_hint,
+                realloc_request.callsite,
+            )
+        };
+        assert_eq!(shrunk, ptr);
+        assert_eq!((shrunk as usize) & (new_layout.align() - 1), 0);
+        assert_eq!(unsafe { shrunk.read_volatile() }, 0xC2);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, old_layout), None);
+        assert_eq!(
+            lookup_auto_allocation_metadata(shrunk, new_layout),
+            Some(recorded.with_callsite(realloc_request.callsite))
+        );
+
+        unsafe {
+            __unialloc_dealloc_layout_with_metadata_hints(
+                shrunk,
+                new_layout,
+                dealloc_request.type_id,
+                dealloc_request.module_id,
+                dealloc_request.flags,
+                dealloc_request.lifetime_hint,
+                dealloc_request.placement_hint,
+                dealloc_request.callsite,
+            );
+        }
+        assert_eq!(lookup_auto_allocation_metadata(shrunk, new_layout), None);
+        let validation_after = semantic_metadata_validation_snapshot();
+        assert_eq!(
+            validation_after.recovery_identity_matches, validation_before.recovery_identity_matches,
+            "recovery delegation is not an exact compiler identity match"
+        );
+        assert_eq!(
+            validation_after.recovery_identity_mismatches,
+            validation_before.recovery_identity_mismatches
+        );
+
+        let allocator = RustAllocator::new();
+        let reused = unsafe { allocator.alloc_with_metadata(new_layout, recorded) };
+        assert_eq!(
+            reused, shrunk,
+            "delegated dealloc must preserve typed cache routing"
+        );
+        unsafe {
+            allocator.dealloc_raw(reused, new_layout);
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+    }
+
+    #[test]
+    fn recovery_delegated_layout_realloc_without_record_stays_untyped() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let old_layout = Layout::from_size_align(63, 64).unwrap();
+        let new_layout = Layout::from_size_align(57, old_layout.align()).unwrap();
+        let neutral = AllocationMetadata::unknown().with_callsite(0xA110_1D31);
+        let allocator = RustAllocator::new();
+        let ptr = unsafe { allocator.alloc_raw(old_layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.write_volatile(0xC2);
+        }
+        assert_eq!(lookup_auto_allocation_metadata(ptr, old_layout), None);
+
+        let shrunk = unsafe {
+            __unialloc_realloc_layout_with_metadata_hints(
+                ptr,
+                old_layout,
+                new_layout.size(),
+                neutral.type_id,
+                neutral.module_id,
+                neutral.flags,
+                neutral.lifetime_hint,
+                neutral.placement_hint,
+                neutral.callsite,
+            )
+        };
+        assert_eq!(shrunk, ptr);
+        assert_eq!(unsafe { shrunk.read_volatile() }, 0xC2);
+        assert_eq!(lookup_auto_allocation_metadata(shrunk, new_layout), None);
+
+        unsafe {
+            __unialloc_dealloc_layout_with_metadata_hints(
+                shrunk,
+                new_layout,
+                neutral.type_id,
+                neutral.module_id,
+                neutral.flags,
+                neutral.lifetime_hint,
+                neutral.placement_hint,
+                neutral.callsite.wrapping_add(1),
+            );
+        }
+        assert_eq!(lookup_auto_allocation_metadata(shrunk, new_layout), None);
+    }
+
+    #[test]
+    fn local_layout_realloc_does_not_apply_recovery_delegation() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let old_layout = Layout::from_size_align(63, 64).unwrap();
+        let new_layout = Layout::from_size_align(57, old_layout.align()).unwrap();
+        let recorded = AllocationMetadata::for_type(0xC003_1D41)
+            .with_module(0xC0DE_1D41)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_callsite(0xA110_1D41);
+        let neutral = AllocationMetadata::unknown().with_callsite(0xA110_1D42);
+        let ptr = unsafe {
+            __unialloc_alloc_layout_with_metadata(
+                old_layout,
+                recorded.type_id,
+                recorded.module_id,
+                recorded.flags,
+                recorded.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.write_volatile(0xC2);
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, old_layout),
+            Some(recorded)
+        );
+
+        let shrunk = unsafe {
+            __unialloc_realloc_layout_with_metadata_local(
+                ptr,
+                old_layout,
+                new_layout.size(),
+                neutral.type_id,
+                neutral.module_id,
+                neutral.flags,
+                neutral.callsite,
+            )
+        };
+        assert!(!shrunk.is_null());
+        assert_ne!(
+            shrunk, ptr,
+            "local ABI must use its exact untyped new metadata rather than inheriting the typed old identity in place"
+        );
+        assert_eq!(unsafe { shrunk.read_volatile() }, 0xC2);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, old_layout), None);
+        assert_eq!(lookup_auto_allocation_metadata(shrunk, new_layout), None);
+
+        unsafe {
+            __unialloc_dealloc_layout_with_metadata_local(
+                shrunk,
+                new_layout,
+                neutral.type_id,
+                neutral.module_id,
+                neutral.flags,
+                neutral.callsite.wrapping_add(1),
+            );
+        }
+        let allocator = RustAllocator::new();
+        let cached = unsafe {
+            pop_semantic_type_cache(old_layout, recorded)
+                .expect("old local transition must preserve the recorded type cache route")
+        };
+        assert_eq!(cached, ptr);
+        unsafe {
+            allocator.dealloc_raw(cached, old_layout);
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+    }
+
+    #[test]
+    fn policy_bearing_untyped_realloc_does_not_inherit_recorded_type() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let old_layout = Layout::from_size_align(63, 64).unwrap();
+        let new_layout = Layout::from_size_align(57, old_layout.align()).unwrap();
+        let recorded = AllocationMetadata::for_type(0xC003_1D51)
+            .with_module(0xC0DE_1D51)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_callsite(0xA110_1D51);
+        let requested = AllocationMetadata::unknown()
+            .with_module(0xC0DE_1D52)
+            .with_flags(FLAG_FORCE_INITIALIZE)
+            .with_callsite(0xA110_1D52);
+        assert!(!is_recovery_delegated_metadata_request(requested));
+
+        let ptr = unsafe {
+            __unialloc_alloc_layout_with_metadata(
+                old_layout,
+                recorded.type_id,
+                recorded.module_id,
+                recorded.flags,
+                recorded.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.write_volatile(0xC2);
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, old_layout),
+            Some(recorded)
+        );
+
+        let shrunk = unsafe {
+            __unialloc_realloc_layout_with_metadata(
+                ptr,
+                old_layout,
+                new_layout.size(),
+                requested.type_id,
+                requested.module_id,
+                requested.flags,
+                requested.callsite,
+            )
+        };
+        assert!(!shrunk.is_null());
+        assert_ne!(
+            shrunk, ptr,
+            "policy-bearing untyped metadata must not inherit the typed identity for in-place reuse"
+        );
+        assert_eq!(unsafe { shrunk.read_volatile() }, 0xC2);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, old_layout), None);
+        assert_eq!(
+            lookup_auto_allocation_metadata(shrunk, new_layout),
+            None,
+            "untyped policy-bearing realloc must not fabricate a typed recovery identity"
+        );
+
+        unsafe {
+            __unialloc_dealloc_layout_with_metadata(
+                shrunk,
+                new_layout,
+                requested.type_id,
+                requested.module_id,
+                requested.flags,
+                requested.callsite.wrapping_add(1),
+            );
+        }
+        assert_eq!(lookup_auto_allocation_metadata(shrunk, new_layout), None);
+        let allocator = RustAllocator::new();
+        let cached = unsafe {
+            pop_semantic_type_cache(old_layout, recorded)
+                .expect("moved-from typed allocation must remain in its original cache domain")
+        };
+        assert_eq!(cached, ptr);
+        unsafe {
+            allocator.dealloc_raw(cached, old_layout);
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
     }
 
     #[test]

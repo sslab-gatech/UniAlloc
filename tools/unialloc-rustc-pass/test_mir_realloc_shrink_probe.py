@@ -152,12 +152,24 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         assert row.get("replacement_resolution_status") == "resolved" + symbol[1:], "helper resolution"
         by_operation[op] = row
     assert set(by_operation) == {"alloc", "realloc", "dealloc"}, f"helper operations: {by_operation}"
-    type_ids = {int(row.get("type_id") or 0) for row in rows}
-    module_ids = {int(row.get("module_id") or 0) for row in rows}
     callsites = {int(row.get("callsite") or 0) for row in rows}
-    assert len(type_ids) == 1 and 0 not in type_ids, f"helper type_id pairing: {sorted(type_ids)}"
-    assert len(module_ids) == 1 and 0 not in module_ids, f"helper module_id pairing: {sorted(module_ids)}"
     assert len(callsites) == 3 and 0 not in callsites, f"helper callsite provenance: {sorted(callsites)}"
+    alloc_row = by_operation["alloc"]
+    assert int(alloc_row.get("type_id") or 0) != 0, "unresolved alloc fallback identity"
+    assert int(alloc_row.get("module_id") or 0) != 0, "unresolved alloc module identity"
+    assert int(alloc_row.get("flags") or 0) & TYPE_ISOLATED, "unresolved alloc policy"
+    assert alloc_row.get("type_id_basis") == "direct_allocator_callsite_key", "alloc fallback basis"
+    assert alloc_row.get("replacement_symbol") == "__unialloc_alloc_layout_with_metadata", "alloc recovery ABI"
+    for op in ("realloc", "dealloc"):
+        row = by_operation[op]
+        assert int(row.get("type_id") or 0) == 0, f"{op} delegated type_id"
+        assert int(row.get("module_id") or 0) == 0, f"{op} delegated module_id"
+        assert int(row.get("flags") or 0) == 0, f"{op} delegated flags"
+        assert int(row.get("lifetime_hint") or 0) == 0, f"{op} delegated lifetime_hint"
+        assert int(row.get("placement_hint") or 0) == 0, f"{op} delegated placement_hint"
+        assert row.get("type_id_basis") == "direct_allocator_recovery_delegated", f"{op} delegated basis"
+        assert row.get("replacement_symbol") == f"__unialloc_{op}_layout_with_metadata", f"{op} recovery ABI"
+        assert not str(row.get("replacement_symbol") or "").endswith("_local"), f"{op} local ABI forbidden"
 
     shrink = runtime.get("realloc_shrink")
     assert isinstance(shrink, dict) and shrink.get("enabled") is True, "realloc_shrink enabled"
@@ -176,7 +188,7 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     assert int(shrink.get("realloc_fallback_allocations") or 0) == 0
     assert int(shrink.get("realloc_raw_realloc_no_metadata") or 0) == 0
     assert int(shrink.get("final_raw_dealloc_no_metadata") or 0) == 0
-    assert int(shrink.get("recovery_identity_matches") or 0) == 1
+    assert int(shrink.get("recovery_identity_matches") or 0) == 0
     assert int(shrink.get("recovery_identity_mismatches") or 0) == 0
     assert int(shrink.get("side_cache_corrupt_slots") or 0) == 0
     assert shrink.get("recovery_record_after_final_dealloc") is False
@@ -190,7 +202,7 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         "realloc": (1, 0, 57, 0),
         "dealloc": (0, 1, 0, 57),
     }
-    compiler_type = next(iter(type_ids)); compiler_module = next(iter(module_ids))
+    compiler_type = int(alloc_row["type_id"]); compiler_module = int(alloc_row["module_id"])
     for op, row in by_operation.items():
         observed = runtime_by_callsite.get(int(row["callsite"]))
         assert observed is not None, f"missing runtime {op} callsite row"

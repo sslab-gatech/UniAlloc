@@ -76,7 +76,7 @@ const PASS_NAME: &str = "unialloc-rustc-driver-mir-rewrite-dry-run";
 const LOWERING_MODULE_ID: u64 = 0xC002_DA00_0000_0001;
 const DEFAULT_LOWERING_POLICY_FLAGS: u32 = 0x1;
 const TYPE_ID_ALGORITHM: &str =
-    "direct: fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key) for unsolved calls or fnv1a64(mir-heap-object-type-v1 NUL solved heap object type) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes solve receiver/argument heap-owner types before return types, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; constructor/factory scopes solve destination types first; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "direct: fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use fnv1a64(mir-heap-object-type-v1 NUL solved heap object type) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes solve receiver/argument heap-owner types before return types, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; constructor/factory scopes solve destination types first; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 
@@ -206,6 +206,8 @@ struct DirectAllocatorReplacementAbis {
     layout_alloc_zeroed: Option<AllocMetadataAbi>,
     layout_realloc: Option<AllocMetadataAbi>,
     layout_dealloc: Option<AllocMetadataAbi>,
+    recovery_backed_layout_realloc: Option<AllocMetadataAbi>,
+    recovery_backed_layout_dealloc: Option<AllocMetadataAbi>,
 }
 
 #[derive(Clone, Debug)]
@@ -1184,6 +1186,27 @@ fn direct_allocator_default_replacement_symbol(kind: DirectAllocatorCallKind) ->
     direct_allocator_replacement_symbol_for_site(kind, true)
 }
 
+fn direct_allocator_recovery_backed_replacement_symbol(
+    kind: DirectAllocatorCallKind,
+) -> &'static str {
+    let kind = direct_allocator_layout_abi_kind(kind).unwrap_or(kind);
+    match (kind, lowering_metadata_hints_requested()) {
+        (DirectAllocatorCallKind::LayoutRealloc, false) => {
+            "__unialloc_realloc_layout_with_metadata"
+        }
+        (DirectAllocatorCallKind::LayoutRealloc, true) => {
+            "__unialloc_realloc_layout_with_metadata_hints"
+        }
+        (DirectAllocatorCallKind::LayoutDealloc, false) => {
+            "__unialloc_dealloc_layout_with_metadata"
+        }
+        (DirectAllocatorCallKind::LayoutDealloc, true) => {
+            "__unialloc_dealloc_layout_with_metadata_hints"
+        }
+        _ => direct_allocator_default_replacement_symbol(kind),
+    }
+}
+
 fn direct_allocator_replacement_symbol_for_site(
     kind: DirectAllocatorCallKind,
     allow_size_align_local: bool,
@@ -1265,9 +1288,11 @@ fn direct_allocator_resolved_status_for_site(
     kind: DirectAllocatorCallKind,
     supports_hints: bool,
     allow_size_align_local: bool,
+    force_recovery_backed: bool,
 ) -> &'static str {
     let kind = direct_allocator_layout_abi_kind(kind).unwrap_or(kind);
-    let local = direct_local_metadata_abi_requested()
+    let local = !force_recovery_backed
+        && direct_local_metadata_abi_requested()
         && (kind != DirectAllocatorCallKind::SizeAlignAlloc
             || !direct_local_size_align_with_semantic_drop_requested()
             || allow_size_align_local);
@@ -1344,9 +1369,11 @@ fn direct_allocator_resolved_status_for_site(
 fn direct_allocator_unresolved_status_for_site(
     kind: DirectAllocatorCallKind,
     allow_size_align_local: bool,
+    force_recovery_backed: bool,
 ) -> &'static str {
     let kind = direct_allocator_layout_abi_kind(kind).unwrap_or(kind);
-    let local = direct_local_metadata_abi_requested()
+    let local = !force_recovery_backed
+        && direct_local_metadata_abi_requested()
         && (kind != DirectAllocatorCallKind::SizeAlignAlloc
             || !direct_local_size_align_with_semantic_drop_requested()
             || allow_size_align_local);
@@ -2515,6 +2542,60 @@ mod tests {
     }
 
     #[test]
+    fn unresolved_realloc_and_dealloc_delegate_recovery_but_alloc_stays_typed() {
+        for kind in [
+            DirectAllocatorCallKind::LayoutRealloc,
+            DirectAllocatorCallKind::LayoutDealloc,
+            DirectAllocatorCallKind::GlobalAllocLayoutRealloc,
+            DirectAllocatorCallKind::GlobalAllocLayoutDealloc,
+        ] {
+            let (type_id, basis) = direct_allocator_type_id(
+                kind,
+                UNKNOWN_HEAP_OBJECT_TYPE,
+                "test_solved_basis",
+                "same-callsite",
+            );
+            assert_eq!(type_id, 0);
+            assert_eq!(basis, "direct_allocator_recovery_delegated");
+            let symbol = direct_allocator_recovery_backed_replacement_symbol(kind);
+            assert!(symbol.contains("_layout_with_metadata"));
+            assert!(
+                !symbol.ends_with("_local"),
+                "delegated recovery must never select the no-recovery local ABI: {}",
+                symbol
+            );
+        }
+
+        for kind in [
+            DirectAllocatorCallKind::LayoutAlloc,
+            DirectAllocatorCallKind::LayoutAllocZeroed,
+            DirectAllocatorCallKind::GlobalAllocLayoutAlloc,
+            DirectAllocatorCallKind::GlobalAllocLayoutAllocZeroed,
+        ] {
+            let (type_id, basis) = direct_allocator_type_id(
+                kind,
+                UNKNOWN_HEAP_OBJECT_TYPE,
+                "test_solved_basis",
+                "same-callsite",
+            );
+            assert_ne!(
+                type_id, 0,
+                "unresolved alloc must create a recoverable identity"
+            );
+            assert_eq!(basis, "direct_allocator_callsite_key");
+        }
+
+        let (solved_type_id, solved_basis) = direct_allocator_type_id(
+            DirectAllocatorCallKind::LayoutRealloc,
+            "alloc::vec::Vec<u8>",
+            "rustc_middle_test_basis",
+            "same-callsite",
+        );
+        assert_ne!(solved_type_id, 0);
+        assert_eq!(solved_basis, "rustc_middle_test_basis");
+    }
+
+    #[test]
     fn layout_generic_argument_parser_matches_current_rustc_impl_paths() {
         let callee =
             "Val(ZeroSized, FnDef(DefId(2:16920 ~ core[2f33]::alloc::layout::{impl#0}::array), [u64]))";
@@ -3305,15 +3386,26 @@ fn semantic_scope_type_id(semantic_object_type: &str, callsite_key: &str) -> (u6
 }
 
 fn direct_allocator_type_id(
+    call_kind: DirectAllocatorCallKind,
     semantic_object_type: &str,
     solved_type_id_basis: &'static str,
     callsite_key: &str,
 ) -> (u64, &'static str) {
     if semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE {
-        (
-            fnv1a64_text(&format!("mir-rewrite-dry-run-v1\0{}", callsite_key)),
-            "direct_allocator_callsite_key",
-        )
+        if matches!(
+            call_kind,
+            DirectAllocatorCallKind::LayoutRealloc
+                | DirectAllocatorCallKind::LayoutDealloc
+                | DirectAllocatorCallKind::GlobalAllocLayoutRealloc
+                | DirectAllocatorCallKind::GlobalAllocLayoutDealloc
+        ) {
+            (0, "direct_allocator_recovery_delegated")
+        } else {
+            (
+                fnv1a64_text(&format!("mir-rewrite-dry-run-v1\0{}", callsite_key)),
+                "direct_allocator_callsite_key",
+            )
+        }
     } else {
         (
             fnv1a64_text(&format!(
@@ -3388,8 +3480,13 @@ fn resolve_unialloc_layout_metadata_abi_in_crate<'tcx>(
     tcx: TyCtxt<'tcx>,
     crate_root: DefId,
     kind: DirectAllocatorCallKind,
+    force_recovery_backed: bool,
 ) -> Option<AllocMetadataAbi> {
-    let symbol = direct_allocator_default_replacement_symbol(kind);
+    let symbol = if force_recovery_backed {
+        direct_allocator_recovery_backed_replacement_symbol(kind)
+    } else {
+        direct_allocator_default_replacement_symbol(kind)
+    };
     if symbol.starts_with('<') {
         return None;
     }
@@ -3405,12 +3502,16 @@ fn resolve_unialloc_layout_metadata_abi_in_crate<'tcx>(
 fn resolve_unialloc_layout_metadata_abi<'tcx>(
     tcx: TyCtxt<'tcx>,
     kind: DirectAllocatorCallKind,
+    force_recovery_backed: bool,
 ) -> Option<AllocMetadataAbi> {
     for krate in tcx.crates(()).iter().copied() {
         if tcx.crate_name(krate).as_str() == "unialloc" {
-            if let Some(abi) =
-                resolve_unialloc_layout_metadata_abi_in_crate(tcx, krate.as_def_id(), kind)
-            {
+            if let Some(abi) = resolve_unialloc_layout_metadata_abi_in_crate(
+                tcx,
+                krate.as_def_id(),
+                kind,
+                force_recovery_backed,
+            ) {
                 return Some(abi);
             }
         }
@@ -3427,18 +3528,32 @@ fn resolve_unialloc_direct_allocator_abis<'tcx>(
         layout_alloc: resolve_unialloc_layout_metadata_abi(
             tcx,
             DirectAllocatorCallKind::LayoutAlloc,
+            false,
         ),
         layout_alloc_zeroed: resolve_unialloc_layout_metadata_abi(
             tcx,
             DirectAllocatorCallKind::LayoutAllocZeroed,
+            false,
         ),
         layout_realloc: resolve_unialloc_layout_metadata_abi(
             tcx,
             DirectAllocatorCallKind::LayoutRealloc,
+            false,
         ),
         layout_dealloc: resolve_unialloc_layout_metadata_abi(
             tcx,
             DirectAllocatorCallKind::LayoutDealloc,
+            false,
+        ),
+        recovery_backed_layout_realloc: resolve_unialloc_layout_metadata_abi(
+            tcx,
+            DirectAllocatorCallKind::LayoutRealloc,
+            true,
+        ),
+        recovery_backed_layout_dealloc: resolve_unialloc_layout_metadata_abi(
+            tcx,
+            DirectAllocatorCallKind::LayoutDealloc,
+            true,
         ),
     }
 }
@@ -3447,6 +3562,7 @@ fn direct_allocator_replacement_abi(
     abis: DirectAllocatorReplacementAbis,
     kind: DirectAllocatorCallKind,
     allow_size_align_local: bool,
+    force_recovery_backed: bool,
 ) -> Option<AllocMetadataAbi> {
     let kind = direct_allocator_layout_abi_kind(kind).unwrap_or(kind);
     match kind {
@@ -3454,6 +3570,12 @@ fn direct_allocator_replacement_abi(
         DirectAllocatorCallKind::SizeAlignAlloc => abis.conservative_size_align_alloc,
         DirectAllocatorCallKind::LayoutAlloc => abis.layout_alloc,
         DirectAllocatorCallKind::LayoutAllocZeroed => abis.layout_alloc_zeroed,
+        DirectAllocatorCallKind::LayoutRealloc if force_recovery_backed => {
+            abis.recovery_backed_layout_realloc
+        }
+        DirectAllocatorCallKind::LayoutDealloc if force_recovery_backed => {
+            abis.recovery_backed_layout_dealloc
+        }
         DirectAllocatorCallKind::LayoutRealloc => abis.layout_realloc,
         DirectAllocatorCallKind::LayoutDealloc => abis.layout_dealloc,
         DirectAllocatorCallKind::Unsupported => None,
@@ -4567,7 +4689,8 @@ fn record_or_rewrite_candidates<'tcx>(
         );
         let callsite = fnv1a64_text(&key);
         let (type_id, type_id_basis) =
-            direct_allocator_type_id(&semantic_object_type, solved_type_id_basis, &key);
+            direct_allocator_type_id(call_kind, &semantic_object_type, solved_type_id_basis, &key);
+        let recovery_delegated = type_id_basis == "direct_allocator_recovery_delegated";
         let allow_size_align_local = if call_kind == DirectAllocatorCallKind::SizeAlignAlloc
             && direct_local_size_align_with_semantic_drop_requested()
             && semantic_object_type != UNKNOWN_HEAP_OBJECT_TYPE
@@ -4592,22 +4715,51 @@ fn record_or_rewrite_candidates<'tcx>(
                 .entry(semantic_object_type.clone())
                 .or_insert(0) += 1;
         }
-        let policy_flags = lowering_policy_flags();
-        let lifetime_hint = lowering_lifetime_hint();
+        let configured_policy_flags = lowering_policy_flags();
+        let configured_lifetime_hint = lowering_lifetime_hint();
         let candidate_cross_thread_escape = semantic_object_needs_cross_thread_recovery_hint(
             cross_thread_escape,
             &cross_thread_escape_heap_object_types,
             &semantic_object_type,
         );
-        let (placement_hint, cross_thread_recovery_hint, placement_hint_basis) =
-            lowering_placement_hint_for_body(candidate_cross_thread_escape);
+        let (
+            configured_placement_hint,
+            configured_cross_thread_recovery_hint,
+            configured_placement_hint_basis,
+        ) = lowering_placement_hint_for_body(candidate_cross_thread_escape);
+        let (
+            module_id,
+            policy_flags,
+            lifetime_hint,
+            placement_hint,
+            cross_thread_recovery_hint,
+            placement_hint_basis,
+        ) = if recovery_delegated {
+            (
+                0,
+                0,
+                0,
+                0,
+                false,
+                "direct_allocator_recovery_delegated_neutral",
+            )
+        } else {
+            (
+                LOWERING_MODULE_ID,
+                configured_policy_flags,
+                configured_lifetime_hint,
+                configured_placement_hint,
+                configured_cross_thread_recovery_hint,
+                configured_placement_hint_basis,
+            )
+        };
         let replacement_preview = format!(
             "Call allocator metadata ABI(kind={}, size={}, align={}, type_id={}, module_id={}, flags={}, lifetime_hint={}, placement_hint={}, callsite={}) -> {}; semantic_object_type={}",
             direct_allocator_call_kind_label(call_kind),
             size_operand.as_deref().unwrap_or("<missing>"),
             align_operand.as_deref().unwrap_or("<missing>"),
             type_id,
-            LOWERING_MODULE_ID,
+            module_id,
             policy_flags,
             lifetime_hint,
             placement_hint,
@@ -4617,11 +4769,20 @@ fn record_or_rewrite_candidates<'tcx>(
         );
         let replacement_symbol = replacement_abis
             .and_then(|abis| {
-                direct_allocator_replacement_abi(abis, call_kind, allow_size_align_local)
+                direct_allocator_replacement_abi(
+                    abis,
+                    call_kind,
+                    allow_size_align_local,
+                    recovery_delegated,
+                )
             })
             .map(|abi| abi.symbol)
             .unwrap_or_else(|| {
-                direct_allocator_replacement_symbol_for_site(call_kind, allow_size_align_local)
+                if recovery_delegated {
+                    direct_allocator_recovery_backed_replacement_symbol(call_kind)
+                } else {
+                    direct_allocator_replacement_symbol_for_site(call_kind, allow_size_align_local)
+                }
             });
         let metadata_pairing_contract =
             direct_allocator_metadata_pairing_contract(call_kind, replacement_symbol);
@@ -4640,7 +4801,7 @@ fn record_or_rewrite_candidates<'tcx>(
                             callsite
                         ),
                         type_id,
-                        module_id: LOWERING_MODULE_ID,
+                        module_id,
                         flags: policy_flags,
                         lifetime_hint,
                         placement_hint,
@@ -4676,7 +4837,12 @@ fn record_or_rewrite_candidates<'tcx>(
                     "actual_allocator_call_replacement_skipped_missing_original_operands";
                 replacement_resolution_status = "missing_original_allocator_operands";
             } else if let Some(replacement_abi) = replacement_abis.and_then(|abis| {
-                direct_allocator_replacement_abi(abis, call_kind, allow_size_align_local)
+                direct_allocator_replacement_abi(
+                    abis,
+                    call_kind,
+                    allow_size_align_local,
+                    recovery_delegated,
+                )
             }) {
                 let mut rewritten_args = match call_kind {
                     DirectAllocatorCallKind::SizeAlignAlloc => {
@@ -4724,7 +4890,7 @@ fn record_or_rewrite_candidates<'tcx>(
                     DirectAllocatorCallKind::Unsupported => Vec::new(),
                 };
                 rewritten_args.push(const_u64_operand(tcx, type_id, fn_span));
-                rewritten_args.push(const_u64_operand(tcx, LOWERING_MODULE_ID, fn_span));
+                rewritten_args.push(const_u64_operand(tcx, module_id, fn_span));
                 rewritten_args.push(const_u32_operand(tcx, policy_flags, fn_span));
                 if replacement_abi.supports_hints {
                     rewritten_args.push(const_u16_operand(tcx, lifetime_hint, fn_span));
@@ -4738,17 +4904,21 @@ fn record_or_rewrite_candidates<'tcx>(
                     call_kind,
                     replacement_abi.supports_hints,
                     allow_size_align_local,
+                    recovery_delegated,
                 );
             } else {
                 rewrite_status = "actual_allocator_call_replacement_requested_symbol_unresolved";
-                replacement_resolution_status =
-                    direct_allocator_unresolved_status_for_site(call_kind, allow_size_align_local);
+                replacement_resolution_status = direct_allocator_unresolved_status_for_site(
+                    call_kind,
+                    allow_size_align_local,
+                    recovery_delegated,
+                );
             }
         }
         records.push(RewriteRecord {
             allocation_site_id: format!("rustc-driver-mir-rewrite-dry-run:{:016x}", callsite),
             type_id,
-            module_id: LOWERING_MODULE_ID,
+            module_id,
             flags: policy_flags,
             lifetime_hint,
             placement_hint,

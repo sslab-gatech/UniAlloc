@@ -16,10 +16,14 @@ runner = importlib.util.module_from_spec(SPEC); sys.modules[SPEC.name] = runner;
 
 def row(op: str, callsite: int) -> dict:
     symbol = f"__unialloc_{op}_layout_with_metadata"
+    delegated = op in {"realloc", "dealloc"}
     return {"mir_function": f"probe::{runner.HELPER}", "lowering_kind": "direct_allocator_call_rewrite",
             "rewrite_status": "actual_allocator_call_replacement_applied", "replacement_symbol": symbol,
-            "replacement_resolution_status": "resolved" + symbol[1:], "type_id": 11,
-            "module_id": 22, "callsite": callsite, "flags": runner.TYPE_ISOLATED}
+            "replacement_resolution_status": "resolved" + symbol[1:],
+            "type_id": 0 if delegated else 11, "module_id": 0 if delegated else 22,
+            "callsite": callsite, "flags": 0 if delegated else runner.TYPE_ISOLATED,
+            "lifetime_hint": 0, "placement_hint": 0,
+            "type_id_basis": "direct_allocator_recovery_delegated" if delegated else "direct_allocator_callsite_key"}
 
 
 def valid_audit() -> dict:
@@ -43,7 +47,7 @@ def valid_runtime() -> dict:
             "realloc_typed_allocations": 1, "realloc_typed_deallocations": 1,
             "final_typed_deallocations": 1, "realloc_fallback_allocations": 0,
             "realloc_raw_realloc_no_metadata": 0, "final_raw_dealloc_no_metadata": 0,
-            "recovery_identity_matches": 1, "recovery_identity_mismatches": 0,
+            "recovery_identity_matches": 0, "recovery_identity_mismatches": 0,
             "side_cache_corrupt_slots": 0, "recovery_record_after_final_dealloc": False,
             "type_rows": [runtime_row(101,1,1,63,63), runtime_row(102,1,0,57,0), runtime_row(103,0,1,0,57)]}}
 
@@ -57,7 +61,7 @@ class ReallocShrinkValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "exactly three"): runner.validate(audit, valid_runtime())
         for field, value, message in (("rewrite_status", "not_requested_dry_run", "rewrite_status"),
                                       ("replacement_resolution_status", "lowered", "resolution"),
-                                      ("type_id", 99, "type_id pairing")):
+                                      ("type_id", 99, "realloc delegated type_id")):
             with self.subTest(field=field):
                 audit = valid_audit(); audit["rewrite_candidates"][1][field] = value
                 with self.assertRaisesRegex(AssertionError, message): runner.validate(audit, valid_runtime())
@@ -80,5 +84,21 @@ class ReallocShrinkValidatorTests(unittest.TestCase):
             with self.subTest(field=field):
                 runtime = valid_runtime(); runtime["realloc_shrink"][field] = 1
                 with self.assertRaises(AssertionError): runner.validate(valid_audit(), runtime)
+
+    def test_rejects_non_neutral_or_local_delegated_rows(self) -> None:
+        for field, value, message in (("module_id", 22, "realloc delegated module_id"),
+                                      ("flags", runner.TYPE_ISOLATED, "realloc delegated flags"),
+                                      ("lifetime_hint", 1, "realloc delegated lifetime_hint"),
+                                      ("placement_hint", 1, "realloc delegated placement_hint"),
+                                      ("type_id_basis", "direct_allocator_callsite_key", "realloc delegated basis")):
+            with self.subTest(field=field):
+                audit = valid_audit(); audit["rewrite_candidates"][1][field] = value
+                with self.assertRaisesRegex(AssertionError, message):
+                    runner.validate(audit, valid_runtime())
+        audit = valid_audit()
+        audit["rewrite_candidates"][1]["replacement_symbol"] += "_local"
+        audit["rewrite_candidates"][1]["replacement_resolution_status"] += "_local"
+        with self.assertRaisesRegex(AssertionError, "realloc recovery ABI"):
+            runner.validate(audit, valid_runtime())
 
 if __name__ == "__main__": unittest.main()
