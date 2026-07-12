@@ -4663,8 +4663,9 @@ fn candidate_has_linear_exact_drop<'tcx>(
     if !candidate_has_zero_alias_owner_uses(body, candidate) {
         return false;
     }
-    let Some(mut bb) = candidate.original_target else {
-        return false;
+    let mut bb = match candidate.original_target {
+        Some(bb) => bb,
+        None => return false,
     };
     let mut visited = BTreeSet::new();
 
