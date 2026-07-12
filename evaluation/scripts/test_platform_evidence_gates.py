@@ -13,6 +13,7 @@ import tempfile
 import textwrap
 import types
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -23,6 +24,22 @@ spec = importlib.util.spec_from_file_location("unialloc_evaluate", EVALUATE_PATH
 assert spec is not None and spec.loader is not None
 evaluate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(evaluate)
+
+
+def source_fingerprint_fixture(digest_byte: str = "a") -> dict:
+    return {
+        "schema_version": evaluate.REPOSITORY_SOURCE_FINGERPRINT_SCHEMA_VERSION,
+        "algorithm": "sha256",
+        "source_digest": digest_byte * 64,
+    }
+
+
+def source_fingerprint_marker_fields(source_fingerprint: dict) -> str:
+    return (
+        f"schema_version={source_fingerprint.get('schema_version')} "
+        f"algorithm={source_fingerprint.get('algorithm')} "
+        f"source_digest={source_fingerprint.get('source_digest')}"
+    )
 
 
 def source_bind_platform_matrix(matrix: dict) -> dict:
@@ -64,8 +81,13 @@ def valid_constrained_boot_marker(platform: str = "blogos") -> str:
     )
 
 
-def valid_constrained_boot_provenance_marker(platform: str = "blogos") -> str:
-    return (
+def valid_constrained_boot_provenance_marker(
+    platform: str = "blogos",
+    *,
+    source_fingerprint: dict | None = None,
+    include_source_fingerprint: bool = True,
+) -> str:
+    marker = (
         f"{evaluate.CONSTRAINED_BOOT_PROVENANCE_MARKER} "
         f"platform={platform} "
         f"image_sha256={'1' * 64} "
@@ -73,12 +95,19 @@ def valid_constrained_boot_provenance_marker(platform: str = "blogos") -> str:
         "emulator=qemu-system-x86_64 "
         "emulator_version=8.2.0"
     )
+    if include_source_fingerprint:
+        marker += " " + source_fingerprint_marker_fields(
+            source_fingerprint or evaluate.repository_source_fingerprint()
+        )
+    return marker
 
 
 def constrained_boot_provenance_marker_for_artifacts(
     platform: str,
     image: pathlib.Path,
     boot_config: pathlib.Path,
+    *,
+    source_fingerprint: dict | None = None,
 ) -> str:
     return (
         f"{evaluate.CONSTRAINED_BOOT_PROVENANCE_MARKER} "
@@ -86,7 +115,10 @@ def constrained_boot_provenance_marker_for_artifacts(
         f"image_sha256={evaluate.file_sha256(image)} "
         f"boot_config_sha256={evaluate.file_sha256(boot_config)} "
         "emulator=qemu-system-x86_64 "
-        "emulator_version=8.2.0"
+        "emulator_version=8.2.0 "
+        + source_fingerprint_marker_fields(
+            source_fingerprint or evaluate.repository_source_fingerprint()
+        )
     )
 
 
@@ -156,6 +188,7 @@ def valid_rust_for_linux_cycle_counts() -> dict:
         "constrained_boot_sample_records": boot_records,
         "source_artifact": "/artifacts/rfl-kernel-run.log",
         "source_artifact_sha256": "0" * 64,
+        "evidence_source_fingerprint": evaluate.repository_source_fingerprint(),
         "measurement_scope": (
             "Rust-for-Linux kernel module cycle-count samples plus checked UniAlloc "
             "allocator stats and constrained boot sample from an external kernel build/run."
@@ -501,6 +534,119 @@ class PlatformEvidenceGateTests(unittest.TestCase):
             self.assertEqual(record["boot_provenance_blockers"], [])
             self.assertEqual(record["boot_provenance_record_blockers"], [])
             self.assertTrue(log_path.exists())
+
+    def test_imported_constrained_boot_log_requires_current_source_fingerprint(self) -> None:
+        current = source_fingerprint_fixture("a")
+        stale = source_fingerprint_fixture("b")
+        malformed = {
+            "schema_version": evaluate.REPOSITORY_SOURCE_FINGERPRINT_SCHEMA_VERSION,
+            "algorithm": "sha256",
+            "source_digest": "not-a-64-hex-digest",
+        }
+        for platform_name in ("blogos", "redox"):
+            cases = [
+                ("missing", [], False),
+                ("matching", [current], True),
+                ("stale", [stale], False),
+                ("malformed", [malformed], False),
+                ("conflicting", [current, stale], False),
+            ]
+            for case_name, fingerprints, expected_passed in cases:
+                with self.subTest(platform=platform_name, case=case_name):
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        tmp = pathlib.Path(tmpdir)
+                        provenance_markers = [
+                            valid_constrained_boot_provenance_marker(
+                                platform_name,
+                                source_fingerprint=fingerprint,
+                            )
+                            for fingerprint in fingerprints
+                        ]
+                        if not fingerprints:
+                            provenance_markers = [
+                                valid_constrained_boot_provenance_marker(
+                                    platform_name,
+                                    include_source_fingerprint=False,
+                                )
+                            ]
+                        boot_log = tmp / f"{platform_name}-{case_name}-boot.log"
+                        boot_log.write_text(
+                            "\n".join(
+                                [
+                                    f"{platform_name} target image booting UniAlloc fixed heap",
+                                    "UNIALLOC_BOOT_OK",
+                                    *provenance_markers,
+                                    valid_constrained_boot_marker(platform_name),
+                                ]
+                            )
+                            + "\n",
+                            encoding="utf-8",
+                        )
+                        with mock.patch.object(
+                            evaluate,
+                            "repository_source_fingerprint",
+                            return_value=current,
+                        ):
+                            record, _log_path, passed, blockers = (
+                                evaluate.collect_imported_constrained_boot_log(
+                                    out_dir=tmp,
+                                    platform_name=platform_name,
+                                    display_name=platform_name.title(),
+                                    artifact_path=boot_log,
+                                    success_pattern="UNIALLOC_BOOT_OK",
+                                    required_log_markers=[platform_name, "unialloc"],
+                                )
+                            )
+                    self.assertEqual(passed, expected_passed, blockers)
+                    if expected_passed:
+                        self.assertEqual(
+                            record.get("evidence_source_fingerprint"),
+                            current,
+                        )
+                    else:
+                        self.assertIn("fingerprint", " | ".join(blockers).lower())
+
+    def test_imported_rust_for_linux_cycle_counts_require_current_source_fingerprint(self) -> None:
+        current = source_fingerprint_fixture("c")
+        stale = source_fingerprint_fixture("d")
+        malformed = {
+            "schema_version": evaluate.REPOSITORY_SOURCE_FINGERPRINT_SCHEMA_VERSION,
+            "algorithm": "sha256",
+            "source_digest": "invalid",
+        }
+        cases = [
+            ("missing", None, False),
+            ("matching", current, True),
+            ("stale", stale, False),
+            ("malformed", malformed, False),
+        ]
+        for case_name, source_fingerprint, expected_ready in cases:
+            with self.subTest(case=case_name):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    tmp = pathlib.Path(tmpdir)
+                    cycle_counts = valid_rust_for_linux_cycle_counts()
+                    if source_fingerprint is None:
+                        cycle_counts.pop("evidence_source_fingerprint", None)
+                    else:
+                        cycle_counts["evidence_source_fingerprint"] = source_fingerprint
+                    cycle_path = tmp / f"rfl-cycle-counts-{case_name}.json"
+                    cycle_path.write_text(
+                        json.dumps(cycle_counts, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with mock.patch.object(
+                        evaluate,
+                        "repository_source_fingerprint",
+                        return_value=current,
+                    ):
+                        blockers = evaluate.platform_evidence_content_blockers(
+                            "cycle_counts",
+                            cycle_path,
+                            platform_name="rust-for-linux",
+                        )
+                self.assertEqual(not blockers, expected_ready, blockers)
+                if not expected_ready:
+                    self.assertIn("fingerprint", " | ".join(blockers).lower())
 
     def test_imported_constrained_boot_log_rejects_missing_boot_provenance_marker(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

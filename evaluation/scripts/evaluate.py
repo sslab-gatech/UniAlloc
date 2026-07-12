@@ -573,11 +573,15 @@ def repository_source_binding_blockers(
     recorded_digest = str(recorded.get("source_digest") or "").strip()
     if not recorded_digest:
         return ["artifact repository source fingerprint is missing source_digest"]
+    if not re.fullmatch(r"[0-9a-f]{64}", recorded_digest):
+        return [
+            "artifact repository source fingerprint has an invalid sha256 source_digest"
+        ]
     current_fingerprint = current or repository_source_fingerprint()
     current_digest = str(current_fingerprint.get("source_digest") or "").strip()
     if recorded_digest != current_digest:
         return [
-            "artifact repository source digest does not match the current working tree: "
+            "artifact repository source fingerprint digest does not match the current working tree: "
             f"recorded={recorded_digest}, current={current_digest}"
         ]
     return []
@@ -56233,6 +56237,60 @@ def extract_constrained_boot_provenance_records_from_text(text: str) -> List[Dic
     return records
 
 
+def constrained_boot_provenance_source_fingerprint(
+    records: Sequence[Dict[str, Any]],
+    *,
+    current: Optional[Dict[str, Any]] = None,
+) -> Tuple[Optional[Dict[str, Any]], List[str]]:
+    """Validate one current-source fingerprint on every boot provenance row."""
+
+    current_fingerprint = current or repository_source_fingerprint()
+    fingerprints: List[Dict[str, Any]] = []
+    blockers: List[str] = []
+    for index, record in enumerate(records, start=1):
+        if not isinstance(record, dict):
+            blockers.append(
+                f"boot provenance record {index} has no repository source fingerprint"
+            )
+            continue
+        raw_schema = record.get("schema_version")
+        raw_algorithm = record.get("algorithm")
+        raw_digest = record.get("source_digest")
+        if raw_schema is None or raw_algorithm is None or raw_digest is None:
+            blockers.append(
+                f"boot provenance record {index} is missing repository source fingerprint fields"
+            )
+            continue
+        parsed_schema = optional_int(raw_schema)
+        fingerprint = {
+            "schema_version": parsed_schema if parsed_schema is not None else raw_schema,
+            "algorithm": str(raw_algorithm).strip().lower(),
+            "source_digest": str(raw_digest).strip().lower(),
+        }
+        binding_blockers = repository_source_binding_blockers(
+            {"evidence_source_fingerprint": fingerprint},
+            current=current_fingerprint,
+        )
+        if binding_blockers:
+            blockers.extend(
+                f"boot provenance record {index}: {blocker}"
+                for blocker in binding_blockers
+            )
+            continue
+        fingerprints.append(fingerprint)
+
+    if blockers:
+        return None, unique_strings(blockers)
+    if not fingerprints:
+        return None, ["constrained boot provenance has no repository source fingerprint"]
+    first = fingerprints[0]
+    if any(fingerprint != first for fingerprint in fingerprints[1:]):
+        return None, [
+            "constrained boot provenance contains conflicting repository source fingerprints"
+        ]
+    return first, []
+
+
 def constrained_boot_provenance_record_blockers(
     records: Sequence[Dict[str, Any]],
     *,
@@ -56397,6 +56455,12 @@ def validate_constrained_boot_transcript_evidence(
         boot_provenance_records,
         platform_name=platform_name,
     )
+    evidence_source_fingerprint, source_fingerprint_blockers = (
+        constrained_boot_provenance_source_fingerprint(boot_provenance_records)
+    )
+    boot_provenance_record_blockers = unique_strings(
+        [*boot_provenance_record_blockers, *source_fingerprint_blockers]
+    )
     boot_provenance_artifact_hash_blockers: List[str] = []
     if image_status is not None or boot_config_status is not None:
         boot_provenance_artifact_hash_blockers = (
@@ -56422,6 +56486,7 @@ def validate_constrained_boot_transcript_evidence(
         "boot_provenance_record_count": len(boot_provenance_records),
         "boot_provenance_record_blockers": boot_provenance_record_blockers,
         "boot_provenance_artifact_hash_blockers": boot_provenance_artifact_hash_blockers,
+        "evidence_source_fingerprint": evidence_source_fingerprint,
         "blockers": unique_strings(
             [
                 *boot_sample_blockers,
@@ -56852,6 +56917,9 @@ def collect_imported_constrained_boot_log(
     boot_provenance_artifact_hash_blockers = transcript_validation[
         "boot_provenance_artifact_hash_blockers"
     ]
+    evidence_source_fingerprint = transcript_validation[
+        "evidence_source_fingerprint"
+    ]
     blockers.extend(transcript_validation["blockers"])
     record = {
         "schema_version": 1,
@@ -56888,6 +56956,7 @@ def collect_imported_constrained_boot_log(
         "boot_provenance_record_count": len(boot_provenance_records),
         "boot_provenance_record_blockers": boot_provenance_record_blockers,
         "boot_provenance_artifact_hash_blockers": boot_provenance_artifact_hash_blockers,
+        "evidence_source_fingerprint": evidence_source_fingerprint,
     }
     log = write_platform_command_log(out_dir, f"{platform_name}-boot-log-import", record)
     return record, log, not blockers, unique_strings(blockers)
@@ -58524,6 +58593,7 @@ def platform_evidence_content_blockers(
         if isinstance(samples, list) and not samples:
             blockers.append("cycle_counts artifact has an empty cycle_count_samples list")
         if data.get("platform") == "rust-for-linux":
+            blockers.extend(repository_source_binding_blockers(data))
             cycle_records = extract_cycle_count_sample_records(data)
             cycle_samples = extract_cycle_count_samples(data)
             blockers.extend(
