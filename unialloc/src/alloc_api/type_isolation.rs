@@ -22100,7 +22100,7 @@ mod tests {
     }
 
     #[test]
-    fn cross_thread_realloc_keeps_hugepage_and_ordinary_side_cache_domains_separate() {
+    fn cross_thread_realloc_keeps_hugepage_and_ordinary_policies_separate() {
         let _guard = test_guard();
         unsafe {
             clear_type_cache_for_test();
@@ -22180,7 +22180,7 @@ mod tests {
                 )
             };
             assert!(!grown.is_null());
-            assert_ne!(grown, ptr, "type/domain-changing realloc must move storage");
+            assert_ne!(grown, ptr, "type/policy-changing realloc must move storage");
             unsafe {
                 for index in 0..layout.size() / size_of::<usize>() {
                     assert_eq!(
@@ -22210,6 +22210,20 @@ mod tests {
                 )
             });
             assert_eq!(lookup_auto_allocation_metadata(grown, layout), None);
+
+            #[cfg(feature = "fixed_heap")]
+            {
+                assert_eq!(
+                    segregated_type_cache_inline_domain(old_metadata),
+                    SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                    "fixed_heap must map the hugepage policy onto ordinary cache storage"
+                );
+                assert_eq!(
+                    segregated_type_cache_inline_domain(new_metadata),
+                    SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                    "fixed_heap must map the ordinary policy onto ordinary cache storage"
+                );
+            }
 
             #[cfg(not(feature = "fixed_heap"))]
             unsafe {
@@ -22241,22 +22255,22 @@ mod tests {
             assert_eq!(
                 unsafe { pop_semantic_type_cache(layout, new_metadata) },
                 Some(grown),
-                "the replacement buffer must remain recoverable through its new ordinary identity"
+                "the replacement buffer must remain recoverable through its new ordinary policy"
             );
             assert_eq!(
                 unsafe { pop_semantic_type_cache(layout, old_metadata) },
                 Some(ptr),
-                "the moved-from buffer must remain recoverable only through its old hugepage identity"
+                "the moved-from buffer must remain recoverable only through its old hugepage policy"
             );
             assert_eq!(
                 unsafe { pop_semantic_type_cache(layout, new_metadata) },
                 None,
-                "popping the old domain must not create an alias in the new domain"
+                "popping the old policy must not create an alias in the new policy"
             );
             assert_eq!(
                 unsafe { pop_semantic_type_cache(layout, old_metadata) },
                 None,
-                "popping the new domain must not create an alias in the old domain"
+                "popping the new policy must not create an alias in the old policy"
             );
             unsafe {
                 alloc.dealloc_raw(ptr, layout);
@@ -22267,7 +22281,7 @@ mod tests {
         });
         worker
             .join()
-            .expect("cross-thread hugepage-to-ordinary realloc regression");
+            .expect("cross-thread hugepage-to-ordinary policy realloc regression");
 
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
         assert!(!semantic_runtime_slow_path_enabled());
