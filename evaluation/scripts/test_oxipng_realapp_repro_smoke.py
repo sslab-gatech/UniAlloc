@@ -359,8 +359,11 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             coverage = smoke.compiler_coverage_summary(totals)
             self.assertFalse(coverage["audited_candidates_resolved"])
             self.assertTrue(coverage["has_unresolved_audited_candidates"])
+            self.assertTrue(coverage["has_fail_closed_audited_candidates"])
             self.assertFalse(coverage["whole_program_compiler_coverage"])
             self.assertEqual(coverage["unsolved_candidate_count"], 1)
+            self.assertEqual(coverage["fail_closed_candidate_count"], 2)
+            self.assertEqual(coverage["multi_owner_drop_fail_closed_count"], 1)
             self.assertNotIn("complete compiler coverage", coverage["claim_boundary"])
 
     def test_zero_unsolved_means_audited_candidates_resolved_not_complete_coverage(self) -> None:
@@ -376,7 +379,9 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
 
         self.assertTrue(coverage["audited_candidates_resolved"])
         self.assertFalse(coverage["has_unresolved_audited_candidates"])
+        self.assertFalse(coverage["has_fail_closed_audited_candidates"])
         self.assertFalse(coverage["whole_program_compiler_coverage"])
+        self.assertEqual(coverage["fail_closed_candidate_count"], 0)
         self.assertEqual(
             coverage["coverage_scope"],
             "target_crate_audited_semantic_and_drop_candidates",
@@ -384,6 +389,24 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         self.assertIn("audited target-crate MIR", coverage["claim_boundary"])
         self.assertIn("not whole-program or object coverage", coverage["claim_boundary"])
         self.assertNotIn("complete compiler coverage", coverage["claim_boundary"])
+
+    def test_multi_owner_drop_rows_prevent_false_resolved_coverage(self) -> None:
+        coverage = smoke.compiler_coverage_summary(
+            {
+                "semantic_scope_unsolved_candidate_count": 0,
+                "semantic_scope_drop_unsolved_candidate_count": 0,
+                "fail_closed_semantic_row_count": 0,
+                "fail_closed_drop_row_count": 265,
+                "fail_closed_multi_owner_drop_row_count": 265,
+            }
+        )
+
+        self.assertFalse(coverage["audited_candidates_resolved"])
+        self.assertTrue(coverage["has_fail_closed_audited_candidates"])
+        self.assertEqual(coverage["unsolved_candidate_count"], 0)
+        self.assertEqual(coverage["fail_closed_candidate_count"], 265)
+        self.assertEqual(coverage["multi_owner_drop_fail_closed_count"], 265)
+        self.assertIn("fail-closed", coverage["claim_boundary"])
 
     def test_multi_owner_drop_fail_closed_row_is_never_hidden_by_aggregate_shape(self) -> None:
         cmd = smoke.CommandResult(["cmd"], 0, "", "")

@@ -1109,23 +1109,36 @@ def compiler_coverage_summary(audit_totals: dict[str, int]) -> dict[str, Any]:
     unsolved_semantic = int(audit_totals.get("semantic_scope_unsolved_candidate_count", 0))
     unsolved_drop = int(audit_totals.get("semantic_scope_drop_unsolved_candidate_count", 0))
     unsolved_total = unsolved_semantic + unsolved_drop
+    row_fail_closed_total = int(
+        audit_totals.get("fail_closed_semantic_row_count", 0)
+    ) + int(audit_totals.get("fail_closed_drop_row_count", 0))
+    # Older audit summaries do not expose row-level fail-closed totals.  When
+    # they do, use those exact rows so deliberate multi-owner Drop skips cannot
+    # be mislabeled as fully resolved merely because the legacy Drop-unsolved
+    # aggregate omits them.
+    fail_closed_total = max(unsolved_total, row_fail_closed_total)
     return {
-        "audited_candidates_resolved": unsolved_total == 0,
-        "has_unresolved_audited_candidates": unsolved_total != 0,
+        "audited_candidates_resolved": fail_closed_total == 0,
+        "has_unresolved_audited_candidates": fail_closed_total != 0,
+        "has_fail_closed_audited_candidates": fail_closed_total != 0,
         "coverage_scope": "target_crate_audited_semantic_and_drop_candidates",
         "whole_program_compiler_coverage": False,
         "unsolved_candidate_count": unsolved_total,
+        "fail_closed_candidate_count": fail_closed_total,
         "semantic_scope_unsolved_candidate_count": unsolved_semantic,
         "semantic_scope_drop_unsolved_candidate_count": unsolved_drop,
+        "multi_owner_drop_fail_closed_count": int(
+            audit_totals.get("fail_closed_multi_owner_drop_row_count", 0)
+        ),
         "direct_rewrite_applied_count": int(audit_totals.get("direct_rewrite_applied_count", 0)),
         "semantic_scope_rewrite_applied_count": int(audit_totals.get("semantic_scope_rewrite_applied_count", 0)),
         "semantic_scope_drop_rewrite_applied_count": int(audit_totals.get("semantic_scope_drop_rewrite_applied_count", 0)),
         "claim_boundary": (
             "no unresolved supported semantic/drop candidates in audited target-crate MIR; "
             "not whole-program or object coverage"
-            if unsolved_total == 0
+            if fail_closed_total == 0
             else "audited target-crate MIR still has explicitly counted unresolved "
-            "semantic/drop candidates; not whole-program or object coverage"
+            "or fail-closed semantic/drop candidates; not whole-program or object coverage"
         ),
     }
 
