@@ -301,7 +301,7 @@ fn bench_clone_1000(b: &mut Bencher) {
 }
 
 fn do_bench_clone_from(b: &mut Bencher, times: usize, dst_len: usize, src_len: usize) {
-    let dst: Vec<_> = FromIterator::from_iter(0..src_len);
+    let dst: Vec<_> = FromIterator::from_iter(0..dst_len);
     let src: Vec<_> = FromIterator::from_iter(dst_len..dst_len + src_len);
 
     b.bytes = (times * src_len) as u64;
