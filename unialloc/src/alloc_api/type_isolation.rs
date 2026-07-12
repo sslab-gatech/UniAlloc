@@ -9500,6 +9500,47 @@ fn recovered_or_requested_reallocation_metadata(
 }
 
 #[inline]
+unsafe fn realloc_layout_with_split_ffi_metadata(
+    ptr: *mut u8,
+    old_layout: Layout,
+    new_size: usize,
+    requested_old_metadata: AllocationMetadata,
+    requested_new_metadata: AllocationMetadata,
+) -> *mut u8 {
+    // Validate the public ABI request before recording a stale-identity
+    // diagnostic. The semantic realloc implementation repeats these checks at
+    // its safety boundary.
+    if Layout::from_size_align(new_size, old_layout.align()).is_err()
+        || !semantic_realloc_old_pointer_supported(ptr, old_layout)
+    {
+        return core::ptr::null_mut();
+    }
+
+    let old_metadata = recorded_reallocation_old_metadata(ptr, old_layout)
+        .map(|recorded| {
+            // The allocation-completion record owns the old object's identity
+            // and policy. This records one validation result for the explicit
+            // old identity without consuming the record. The caller's
+            // requested new metadata remains independent.
+            deallocation_metadata_after_recovery_record(requested_old_metadata, recorded)
+        })
+        .unwrap_or(requested_old_metadata);
+    let allocator = RustAllocator::new();
+    // The recovery lookup above is non-consuming. The allocator consumes or
+    // replaces the old record only after a successful reallocation commit, so
+    // allocation/recording failure leaves the old pointer identity recoverable.
+    with_auto_allocation_recovery_recording(|| {
+        allocator.realloc_with_split_metadata(
+            ptr,
+            old_layout,
+            new_size,
+            old_metadata,
+            requested_new_metadata,
+        )
+    })
+}
+
+#[inline]
 unsafe fn realloc_layout_with_ffi_metadata(
     ptr: *mut u8,
     old_layout: Layout,
@@ -10309,18 +10350,13 @@ pub unsafe extern "C" fn __unialloc_realloc_with_split_metadata(
     new_callsite: u64,
 ) -> *mut u8 {
     match Layout::from_size_align(old_size, old_align) {
-        Ok(old_layout) => {
-            let allocator = RustAllocator::new();
-            with_auto_allocation_recovery_recording(|| {
-                allocator.realloc_with_split_metadata(
-                    ptr,
-                    old_layout,
-                    new_size,
-                    ffi_metadata(old_type_id, old_module_id, old_flags, old_callsite),
-                    ffi_metadata(new_type_id, new_module_id, new_flags, new_callsite),
-                )
-            })
-        }
+        Ok(old_layout) => realloc_layout_with_split_ffi_metadata(
+            ptr,
+            old_layout,
+            new_size,
+            ffi_metadata(old_type_id, old_module_id, old_flags, old_callsite),
+            ffi_metadata(new_type_id, new_module_id, new_flags, new_callsite),
+        ),
         Err(_) => core::ptr::null_mut(),
     }
 }
@@ -10347,32 +10383,27 @@ pub unsafe extern "C" fn __unialloc_realloc_with_split_metadata_hints(
     new_callsite: u64,
 ) -> *mut u8 {
     match Layout::from_size_align(old_size, old_align) {
-        Ok(old_layout) => {
-            let allocator = RustAllocator::new();
-            with_auto_allocation_recovery_recording(|| {
-                allocator.realloc_with_split_metadata(
-                    ptr,
-                    old_layout,
-                    new_size,
-                    ffi_metadata_with_hints(
-                        old_type_id,
-                        old_module_id,
-                        old_flags,
-                        old_lifetime_hint,
-                        old_placement_hint,
-                        old_callsite,
-                    ),
-                    ffi_metadata_with_hints(
-                        new_type_id,
-                        new_module_id,
-                        new_flags,
-                        new_lifetime_hint,
-                        new_placement_hint,
-                        new_callsite,
-                    ),
-                )
-            })
-        }
+        Ok(old_layout) => realloc_layout_with_split_ffi_metadata(
+            ptr,
+            old_layout,
+            new_size,
+            ffi_metadata_with_hints(
+                old_type_id,
+                old_module_id,
+                old_flags,
+                old_lifetime_hint,
+                old_placement_hint,
+                old_callsite,
+            ),
+            ffi_metadata_with_hints(
+                new_type_id,
+                new_module_id,
+                new_flags,
+                new_lifetime_hint,
+                new_placement_hint,
+                new_callsite,
+            ),
+        ),
         Err(_) => core::ptr::null_mut(),
     }
 }
@@ -22289,6 +22320,216 @@ mod tests {
             clear_auto_allocation_records();
             clear_delayed_free_for_test();
             clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn ffi_split_realloc_stale_old_metadata_cannot_steal_recorded_identity() {
+        let _guard = test_guard();
+
+        for use_hints in [false, true] {
+            unsafe {
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+                clear_auto_allocation_records();
+            }
+            semantic_auto_metadata_disable();
+            semantic_stats_recording_disable();
+            semantic_type_stats_recording_disable();
+
+            let alloc = RustAllocator::new();
+            let layout =
+                Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+            let hint_discriminator = usize::from(use_hints) as u64;
+            let recorded_metadata = AllocationMetadata::for_type(0xD17A_7100 + hint_discriminator)
+                .with_module(0xC0DE_7100 + hint_discriminator)
+                .with_callsite(0xA110_7100 + hint_discriminator)
+                .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE)
+                .with_lifetime_hint(if use_hints { 0x71 } else { 0 })
+                .with_placement_hint(if use_hints { 0x72 } else { 0 });
+            let stale_old_metadata = AllocationMetadata::for_type(0xD17A_BAD0 + hint_discriminator)
+                .with_module(recorded_metadata.module_id)
+                .with_callsite(0xD0D0_BAD0 + hint_discriminator)
+                .with_flags(FLAG_TYPE_ISOLATED)
+                .with_lifetime_hint(if use_hints { 0xB1 } else { 0 })
+                .with_placement_hint(if use_hints { 0xB2 } else { 0 });
+            let requested_new_metadata =
+                stale_old_metadata.with_callsite(0xA110_BEEF + hint_discriminator);
+
+            let ptr = unsafe {
+                if use_hints {
+                    __unialloc_alloc_with_metadata_hints(
+                        layout.size(),
+                        layout.align(),
+                        recorded_metadata.type_id,
+                        recorded_metadata.module_id,
+                        recorded_metadata.flags,
+                        recorded_metadata.lifetime_hint,
+                        recorded_metadata.placement_hint,
+                        recorded_metadata.callsite,
+                    )
+                } else {
+                    __unialloc_alloc_with_metadata(
+                        layout.size(),
+                        layout.align(),
+                        recorded_metadata.type_id,
+                        recorded_metadata.module_id,
+                        recorded_metadata.flags,
+                        recorded_metadata.callsite,
+                    )
+                }
+            };
+            assert!(!ptr.is_null());
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                Some(recorded_metadata)
+            );
+            for offset in 0..layout.size() {
+                unsafe {
+                    ptr.add(offset)
+                        .write((offset as u8).wrapping_mul(29).wrapping_add(7));
+                }
+            }
+
+            let validation_before = semantic_metadata_validation_snapshot();
+            let new_ptr = unsafe {
+                if use_hints {
+                    __unialloc_realloc_with_split_metadata_hints(
+                        ptr,
+                        layout.size(),
+                        layout.align(),
+                        layout.size(),
+                        stale_old_metadata.type_id,
+                        stale_old_metadata.module_id,
+                        stale_old_metadata.flags,
+                        stale_old_metadata.lifetime_hint,
+                        stale_old_metadata.placement_hint,
+                        stale_old_metadata.callsite,
+                        requested_new_metadata.type_id,
+                        requested_new_metadata.module_id,
+                        requested_new_metadata.flags,
+                        requested_new_metadata.lifetime_hint,
+                        requested_new_metadata.placement_hint,
+                        requested_new_metadata.callsite,
+                    )
+                } else {
+                    __unialloc_realloc_with_split_metadata(
+                        ptr,
+                        layout.size(),
+                        layout.align(),
+                        layout.size(),
+                        stale_old_metadata.type_id,
+                        stale_old_metadata.module_id,
+                        stale_old_metadata.flags,
+                        stale_old_metadata.callsite,
+                        requested_new_metadata.type_id,
+                        requested_new_metadata.module_id,
+                        requested_new_metadata.flags,
+                        requested_new_metadata.callsite,
+                    )
+                }
+            };
+            assert!(!new_ptr.is_null());
+            assert_ne!(
+                new_ptr, ptr,
+                "a stale split-realloc old identity must not authorize in-place reuse"
+            );
+            for offset in 0..layout.size() {
+                assert_eq!(
+                    unsafe { new_ptr.add(offset).read() },
+                    (offset as u8).wrapping_mul(29).wrapping_add(7),
+                    "reallocation must preserve the payload"
+                );
+            }
+            assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+            assert_eq!(
+                lookup_auto_allocation_metadata(new_ptr, layout),
+                Some(requested_new_metadata),
+                "old-identity recovery must not overwrite requested new-object metadata"
+            );
+
+            let validation_after = semantic_metadata_validation_snapshot();
+            assert_eq!(
+                validation_after.recovery_identity_mismatches,
+                validation_before.recovery_identity_mismatches + 1,
+                "the stale explicit old identity should be audited once"
+            );
+            assert_eq!(
+                validation_after.recovery_identity_matches,
+                validation_before.recovery_identity_matches + 1,
+                "the committed move should deallocate with the reconciled old identity"
+            );
+            assert_eq!(
+                delayed_free_snapshot().occupied_slots,
+                1,
+                "the authoritative old policy must retain the moved allocation in quarantine"
+            );
+
+            let slots = unsafe { delayed_free_slots_snapshot_for_test() };
+            let delayed_idx = slots
+                .iter()
+                .position(|slot| slot.ptr == ptr)
+                .expect("the reconciled old allocation should be quarantined");
+            assert_eq!(
+                slots[delayed_idx].metadata, recorded_metadata,
+                "quarantine must retain the authoritative allocation identity"
+            );
+            let recorded_cache_metadata =
+                recorded_metadata.with_flags(recorded_metadata.flags & !FLAG_DELAYED_FREE);
+            unsafe {
+                let delayed = delayed_free_take_slot(delayed_idx);
+                release_delayed_slot(&alloc, delayed);
+            }
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, requested_new_metadata) },
+                None,
+                "the stale/new identity must not receive the recovered old storage"
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, recorded_cache_metadata) },
+                Some(ptr),
+                "quarantine release must route storage by the recorded old identity"
+            );
+            unsafe {
+                alloc.dealloc_raw(ptr, layout);
+            }
+
+            let deallocated = unsafe {
+                if use_hints {
+                    __unialloc_dealloc_with_metadata_hints(
+                        new_ptr,
+                        layout.size(),
+                        layout.align(),
+                        requested_new_metadata.type_id,
+                        requested_new_metadata.module_id,
+                        requested_new_metadata.flags,
+                        requested_new_metadata.lifetime_hint,
+                        requested_new_metadata.placement_hint,
+                        requested_new_metadata.callsite,
+                    )
+                } else {
+                    __unialloc_dealloc_with_metadata(
+                        new_ptr,
+                        layout.size(),
+                        layout.align(),
+                        requested_new_metadata.type_id,
+                        requested_new_metadata.module_id,
+                        requested_new_metadata.flags,
+                        requested_new_metadata.callsite,
+                    )
+                }
+            };
+            assert!(deallocated);
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, requested_new_metadata) },
+                Some(new_ptr)
+            );
+            unsafe {
+                alloc.dealloc_raw(new_ptr, layout);
+                clear_auto_allocation_records();
+                clear_delayed_free_for_test();
+                clear_type_cache_for_test();
+            }
         }
     }
 
