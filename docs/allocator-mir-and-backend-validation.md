@@ -274,6 +274,24 @@ the deterministic same-type address recovery.  This probe is functional safety
 evidence only; it makes no timing claim, no paper-performance claim, and no
 universal claim about every `Vec` or collection path.
 
+### Cross-thread type-changing realloc quarantine invariant
+
+Commit `2eea36f` adds a P0 allocator regression for the lower-level lifecycle
+that the compiler-driven `Vec` probe depends on. A producer allocation is
+reallocated under a distinct consumer identity, then handed to another thread
+while delayed-free quarantine is active. The test requires the old recovery
+record to be consumed exactly once, the replacement allocation to publish the
+new identity, and the payload to survive the replacement. While quarantined,
+the old buffer must be invisible to the new type; after quarantine release, it
+may return only to the old type's cache. Final cleanup must leave no stale
+recovery record.
+
+Hosted and `fixed_heap` test suites both pass this invariant with no recovery
+identity mismatch. This is a bounded allocator-mechanism regression for
+cross-thread realloc, delayed free, and cache routing. It does not establish
+that arbitrary forged metadata is safe or that every application realloc path
+has compiler coverage.
+
 ### Plain `Clone` candidate classification boundary
 
 The MIR pass now classifies exact plain `Clone::clone` return values before
@@ -308,6 +326,28 @@ contents, distinct buffers, zero recovery-identity mismatches, and zero corrupt
 side-cache slots.  This proves safe conventional execution for this bounded
 ambiguous path; it does not turn fallback traffic into type-isolation coverage.
 
+### Nested semantic-scope unwind restoration
+
+Commits `97c7aae`, `1aa4481`, and `d394f19` add a real `rustc_driver` regression
+for nested compiler-inserted scopes. The inner `Vec::extend_from_slice` path
+panics during Clone, so its MIR cleanup edge must pop only the inner semantic
+scope and restore the still-active outer `Box` scope at depth 1. Returning from
+the outer call must then restore depth 0, and the compiler-attributed `Box`
+allocation and Drop must retain one matching nonzero type identity.
+
+The hosted and `fixed_heap` one-shot summaries both validate the `1 -> 0`
+restoration sequence, one typed allocation/deallocation pair, zero fallback,
+zero recovery mismatch, and zero corrupt side-cache slots. Their MIR audits
+contain 8 scope rewrites, 8 Drop rewrites, 5 unwind-pop insertions, and no
+unsolved candidates. The subprocess explicitly overrides the workspace's
+development `panic = "abort"` policy with `CARGO_PROFILE_DEV_PANIC=unwind` so
+the probe exercises cleanup rather than terminating. These summaries and
+audits are preserved under
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-real-rust-88c35fd-374d455-20260712/nested-unwind/`.
+
+This proves one bounded nested-unwind pairing invariant. It is not a general
+proof for every panic source, future rustc MIR shape, or unsupported allocation
+path.
 
 ### Current Oxipng real-application compiler coverage boundary
 
