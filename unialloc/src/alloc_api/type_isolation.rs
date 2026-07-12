@@ -10,6 +10,7 @@
 
 use alloc::boxed::Box as AllocBox;
 use alloc::string::String as AllocString;
+use alloc::vec::IntoIter as AllocVecIntoIter;
 use alloc::vec::Vec as AllocVec;
 use core::alloc::{Allocator, Layout};
 use core::mem::size_of;
@@ -4817,6 +4818,151 @@ pub fn __unialloc_semantic_string_into_bytes(
     }
 
     bytes
+}
+
+/// Convert a string into a boxed string slice while transferring the live
+/// type-isolation identity selected by the compiler.
+///
+/// `String::into_boxed_str` may shrink spare capacity before returning.  This
+/// helper therefore follows the same fail-closed contract as
+/// [`__unialloc_semantic_vec_into_boxed_slice`]: an exact authenticated source
+/// record supplies either target metadata for an accepted shrink or unchanged
+/// source metadata for a rejected one.  Missing or ambiguous source records run
+/// with unrelated outer scopes and process-wide auto metadata suppressed.  An
+/// exact in-place conversion rebinds the live record after verifying pointer
+/// and layout preservation; a moved shrink is accepted only after the ordinary
+/// split-reallocation path published the exact target record and consumed the
+/// old one.  Wrong, zero, duplicate, already-transitioned, or memory-tagged
+/// identities fail closed without preventing the standard conversion.
+#[doc(hidden)]
+pub fn __unialloc_semantic_string_into_boxed_str(
+    value: AllocString,
+    expected_old_type_id: u64,
+    new_type_id: u64,
+) -> AllocBox<str> {
+    let old_ptr = value.as_ptr() as *mut u8;
+    let old_layout = Layout::array::<u8>(value.capacity()).ok();
+    let new_len = value.len();
+
+    let source_metadata = old_layout.and_then(|layout| {
+        if layout.size() == 0 {
+            return None;
+        }
+        exact_auto_allocation_record_for_identity_rebind(old_ptr, layout)
+            .map(|(_, recorded)| recorded)
+    });
+    let target_metadata = source_metadata.and_then(|recorded| {
+        if expected_old_type_id == UNKNOWN_SEMANTIC_ID
+            || new_type_id == UNKNOWN_SEMANTIC_ID
+            || expected_old_type_id == new_type_id
+        {
+            return None;
+        }
+        if recorded.type_id != expected_old_type_id
+            || recorded.requests(FLAG_MEMORY_TAGGING)
+            || unsafe { memory_tag_record_exists_for_identity_rebind(old_ptr) }
+        {
+            return None;
+        }
+        Some(AllocationMetadata {
+            type_id: new_type_id,
+            ..recorded
+        })
+    });
+
+    let conversion_metadata = target_metadata
+        .or(source_metadata)
+        .unwrap_or(AllocationMetadata::unknown());
+    let boxed = without_auto_metadata_selection(|| {
+        with_semantic_metadata(conversion_metadata, move || value.into_boxed_str())
+    });
+
+    let new_ptr = boxed.as_ptr() as *mut u8;
+    let new_layout = Layout::array::<u8>(new_len).ok();
+    let applied = match (old_layout, new_layout, target_metadata) {
+        (Some(old_layout), Some(new_layout), Some(_target_metadata))
+            if old_ptr == new_ptr
+                && old_layout.size() == new_layout.size()
+                && old_layout.align() == new_layout.align() =>
+        unsafe {
+            try_rebind_auto_allocation_type_identity(
+                new_ptr,
+                new_layout,
+                expected_old_type_id,
+                new_type_id,
+            )
+        },
+        (Some(old_layout), Some(new_layout), Some(target_metadata)) if old_ptr != new_ptr => {
+            let new_record = exact_auto_allocation_record_for_identity_rebind(new_ptr, new_layout)
+                .map(|(_, metadata)| metadata);
+            let old_fast = lookup_fast_auto_allocation_record(old_ptr, old_layout, false);
+            let old_global = lookup_global_auto_allocation_record(old_ptr, old_layout, false);
+            new_record == Some(target_metadata)
+                && matches!(old_fast, AutoAllocationRecordLookup::Missing)
+                && matches!(old_global, AutoAllocationRecordLookup::Missing)
+        }
+        _ => false,
+    };
+    if semantic_stats_recording_enabled() {
+        if applied {
+            SEMANTIC_OWNERSHIP_TRANSFER_APPLIED.fetch_add(1, Ordering::Relaxed);
+        } else {
+            SEMANTIC_OWNERSHIP_TRANSFER_REJECTED.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    boxed
+}
+
+/// Convert a vector into its owning iterator while rebinding the live
+/// allocation identity to the exact `IntoIter<T, A>` type selected by the
+/// compiler.
+///
+/// `Vec::into_iter` transfers the allocation without reallocating it.  After
+/// verifying that the iterator still exposes the original unconsumed pointer
+/// and length, UniAlloc changes only the type component of one exact,
+/// authenticated, non-tagged recovery record.  Wrong, zero, same, missing,
+/// duplicated, or memory-tagged identities leave the authoritative source
+/// record untouched; the standard conversion succeeds in every case.
+#[doc(hidden)]
+pub fn __unialloc_semantic_vec_into_iter<T, A: Allocator>(
+    vec: AllocVec<T, A>,
+    expected_old_type_id: u64,
+    new_type_id: u64,
+) -> AllocVecIntoIter<T, A> {
+    let old_ptr = vec.as_ptr() as *mut u8;
+    let old_len = vec.len();
+    let layout = Layout::array::<T>(vec.capacity()).ok();
+    let iter: AllocVecIntoIter<T, A> = vec.into_iter();
+
+    let applied = if let Some(layout) = layout {
+        if layout.size() != 0
+            && iter.as_slice().as_ptr() as *mut u8 == old_ptr
+            && iter.len() == old_len
+        {
+            unsafe {
+                try_rebind_auto_allocation_type_identity(
+                    old_ptr,
+                    layout,
+                    expected_old_type_id,
+                    new_type_id,
+                )
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    if semantic_stats_recording_enabled() {
+        if applied {
+            SEMANTIC_OWNERSHIP_TRANSFER_APPLIED.fetch_add(1, Ordering::Relaxed);
+        } else {
+            SEMANTIC_OWNERSHIP_TRANSFER_REJECTED.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    iter
 }
 
 /// Convert a vector into a boxed slice while transferring the allocator's live
@@ -13097,6 +13243,214 @@ mod tests {
             semantic_metadata_validation_snapshot().recovery_identity_mismatches,
             0
         );
+        semantic_stats_recording_disable();
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn vec_into_iter_rebinds_exact_identity_and_rejects_untrusted_records() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const LEN: usize = 256;
+        let layout = Layout::array::<u8>(LEN).unwrap();
+        let source = AllocationMetadata::for_type(0x0EC0_D701)
+            .with_module(0xC0DE_0701)
+            .with_callsite(0xA110_D701)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let target = AllocationMetadata {
+            type_id: 0x17E2_D701,
+            ..source
+        };
+        let before = semantic_ownership_transfer_snapshot();
+        let validation_before = semantic_metadata_validation_snapshot();
+
+        let positive = with_semantic_metadata(source, || {
+            let mut vec = Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new());
+            vec.extend((0..LEN).map(|value| (value as u8).wrapping_mul(3)));
+            vec
+        });
+        let positive_ptr = positive.as_ptr() as *mut u8;
+        let positive_iter =
+            __unialloc_semantic_vec_into_iter(positive, source.type_id, target.type_id);
+        assert_eq!(positive_iter.as_slice().as_ptr() as *mut u8, positive_ptr);
+        assert_eq!(positive_iter.len(), LEN);
+        assert!(positive_iter
+            .as_slice()
+            .iter()
+            .enumerate()
+            .all(|(index, value)| *value == (index as u8).wrapping_mul(3)));
+        assert_eq!(
+            lookup_auto_allocation_metadata(positive_ptr, layout),
+            Some(target),
+            "the owning iterator must become the authoritative live identity"
+        );
+        drop(positive_iter);
+
+        let wrong_source_after_positive = with_semantic_metadata(source, || {
+            Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new())
+        });
+        assert_ne!(
+            wrong_source_after_positive.as_ptr() as *mut u8,
+            positive_ptr,
+            "the source Vec identity must not reuse IntoIter-owned storage"
+        );
+        drop(wrong_source_after_positive);
+        let target_after_positive = with_semantic_metadata(target, || {
+            Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new()).into_iter()
+        });
+        assert_eq!(
+            target_after_positive.as_slice().as_ptr() as *mut u8,
+            positive_ptr,
+            "an allocation carrying the IntoIter identity should recover transferred storage"
+        );
+        drop(target_after_positive);
+
+        let rejected_cases = [
+            (0x0EC0_D711, 0x17E2_D711, 0x0EC0_D711 ^ 1, 0x17E2_D711),
+            (0x0EC0_D712, 0x17E2_D712, UNKNOWN_SEMANTIC_ID, 0x17E2_D712),
+            (0x0EC0_D713, 0x17E2_D713, 0x0EC0_D713, UNKNOWN_SEMANTIC_ID),
+            (0x0EC0_D714, 0x17E2_D714, 0x0EC0_D714, 0x0EC0_D714),
+        ];
+        for (index, &(source_type, target_type, expected_old, requested_new)) in
+            rejected_cases.iter().enumerate()
+        {
+            let rejected_source = AllocationMetadata::for_type(source_type)
+                .with_module(0xC0DE_0711 + index as u64)
+                .with_callsite(0xA110_D711 + index as u64)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let rejected_target = AllocationMetadata {
+                type_id: target_type,
+                ..rejected_source
+            };
+            let rejected = with_semantic_metadata(rejected_source, || {
+                let mut vec = Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new());
+                vec.extend((0..LEN).map(|value| value as u8));
+                vec
+            });
+            let rejected_ptr = rejected.as_ptr() as *mut u8;
+            let rejected_iter =
+                __unialloc_semantic_vec_into_iter(rejected, expected_old, requested_new);
+            assert_eq!(rejected_iter.as_slice().as_ptr() as *mut u8, rejected_ptr);
+            assert_eq!(
+                lookup_auto_allocation_metadata(rejected_ptr, layout),
+                Some(rejected_source),
+                "wrong, zero, and same-id transitions must preserve the source identity"
+            );
+            drop(rejected_iter);
+
+            let target_control = with_semantic_metadata(rejected_target, || {
+                Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new()).into_iter()
+            });
+            assert_ne!(target_control.as_slice().as_ptr() as *mut u8, rejected_ptr);
+            drop(target_control);
+            let source_control = with_semantic_metadata(rejected_source, || {
+                Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new())
+            });
+            assert_eq!(source_control.as_ptr() as *mut u8, rejected_ptr);
+            drop(source_control);
+
+            unsafe {
+                drain_semantic_cache_for_test(&RustAllocator::new(), layout, rejected_source);
+                drain_semantic_cache_for_test(&RustAllocator::new(), layout, rejected_target);
+            }
+        }
+
+        let tagged_source = AllocationMetadata::for_type(0x0EC0_D715)
+            .with_module(0xC0DE_0715)
+            .with_callsite(0xA110_D715)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING);
+        let tagged_target = AllocationMetadata {
+            type_id: 0x17E2_D715,
+            ..tagged_source
+        };
+        let tagged = with_semantic_metadata(tagged_source, || {
+            let mut vec = Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new());
+            vec.extend((0..LEN).map(|value| value as u8));
+            vec
+        });
+        let tagged_ptr = tagged.as_ptr() as *mut u8;
+        assert!(unsafe { find_memory_tag_slot(tagged_ptr).is_some() });
+        let tagged_iter =
+            __unialloc_semantic_vec_into_iter(tagged, tagged_source.type_id, tagged_target.type_id);
+        assert_eq!(
+            lookup_auto_allocation_metadata(tagged_ptr, layout),
+            Some(tagged_source)
+        );
+        assert!(unsafe { find_memory_tag_slot(tagged_ptr).is_some() });
+        drop(tagged_iter);
+        assert!(unsafe { find_memory_tag_slot(tagged_ptr).is_none() });
+
+        let missing = {
+            let mut vec = Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new());
+            vec.extend((0..LEN).map(|value| value as u8));
+            vec
+        };
+        let missing_ptr = missing.as_ptr() as *mut u8;
+        assert_eq!(lookup_auto_allocation_metadata(missing_ptr, layout), None);
+        let missing_iter = __unialloc_semantic_vec_into_iter(missing, 0x0EC0_D716, 0x17E2_D716);
+        assert_eq!(missing_iter.as_slice().as_ptr() as *mut u8, missing_ptr);
+        assert_eq!(lookup_auto_allocation_metadata(missing_ptr, layout), None);
+        drop(missing_iter);
+
+        let duplicate_source = AllocationMetadata::for_type(0x0EC0_D717)
+            .with_module(0xC0DE_0717)
+            .with_callsite(0xA110_D717)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let duplicate = with_semantic_metadata(duplicate_source, || {
+            let mut vec = Vec::<u8, _>::with_capacity_in(LEN, RustAllocator::new());
+            vec.extend((0..LEN).map(|value| value as u8));
+            vec
+        });
+        let duplicate_ptr = duplicate.as_ptr() as *mut u8;
+        assert!(unsafe {
+            record_global_auto_allocation_metadata_eligible(duplicate_ptr, layout, duplicate_source)
+        });
+        assert!(matches!(
+            lookup_fast_auto_allocation_record(duplicate_ptr, layout, false),
+            AutoAllocationRecordLookup::Exact(metadata) if metadata == duplicate_source
+        ));
+        assert!(matches!(
+            lookup_global_auto_allocation_record(duplicate_ptr, layout, false),
+            AutoAllocationRecordLookup::Exact(metadata) if metadata == duplicate_source
+        ));
+        let duplicate_iter =
+            __unialloc_semantic_vec_into_iter(duplicate, duplicate_source.type_id, 0x17E2_D717);
+        assert!(matches!(
+            lookup_fast_auto_allocation_record(duplicate_ptr, layout, false),
+            AutoAllocationRecordLookup::Exact(metadata) if metadata == duplicate_source
+        ));
+        assert!(matches!(
+            lookup_global_auto_allocation_record(duplicate_ptr, layout, true),
+            AutoAllocationRecordLookup::Exact(metadata) if metadata == duplicate_source
+        ));
+        drop(duplicate_iter);
+
+        let after = semantic_ownership_transfer_snapshot();
+        assert_eq!(after.attempted.saturating_sub(before.attempted), 8);
+        assert_eq!(after.applied.saturating_sub(before.applied), 1);
+        assert_eq!(after.rejected.saturating_sub(before.rejected), 7);
+        assert_eq!(
+            semantic_metadata_validation_snapshot()
+                .recovery_identity_mismatches
+                .saturating_sub(validation_before.recovery_identity_mismatches),
+            0,
+            "accepted and fail-closed IntoIter drops must keep recovery identity coherent"
+        );
+
+        unsafe {
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, source);
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, target);
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, tagged_source);
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, tagged_target);
+            drain_semantic_cache_for_test(&RustAllocator::new(), layout, duplicate_source);
+        }
         semantic_stats_recording_disable();
     }
 
