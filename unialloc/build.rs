@@ -137,6 +137,7 @@ fn main() {
         println!("cargo:rustc-check-cfg=cfg(rseq)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_btree_extract_if_range)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_alloc_layout_extra)");
+        println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_alloc_c_string)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_asm_const)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_const_mut_refs)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_map_first_last)");
@@ -151,6 +152,10 @@ fn main() {
     // but avoid enabling gates that current rustc has stabilized.  This makes
     // `cargo +nightly check` useful signal instead of expected-version noise.
     emit_feature_stability_cfg(rustc_minor, "unialloc_has_stable_map_first_last", 66);
+    // `alloc::ffi::CString` was still feature-gated on the paper-pinned
+    // pre-release 1.64 nightly even though 1.64 stable later exposed it. Use
+    // 1.65 as the first whole-minor boundary where the gate is unnecessary.
+    emit_feature_stability_cfg(rustc_minor, "unialloc_has_stable_alloc_c_string", 65);
     emit_feature_stability_cfg(
         rustc_minor,
         "unialloc_has_stable_nonnull_slice_from_raw_parts",
