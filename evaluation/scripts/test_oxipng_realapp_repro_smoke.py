@@ -21,6 +21,107 @@ sys.modules[spec.name] = smoke
 spec.loader.exec_module(smoke)
 
 
+def actual_scope_row(
+    *, type_id: int, callsite: int, semantic_object_type: str
+) -> dict:
+    return {
+        "mir_function": f"fixture::{semantic_object_type}",
+        "semantic_object_type": semantic_object_type,
+        "type_id": type_id,
+        "module_id": 77,
+        "callsite": callsite,
+        "flags": smoke.TYPE_ISOLATED,
+        "lowering_kind": "semantic_scope_enter_exit_rewrite",
+        "rewrite_status": smoke.ACTUAL_SEMANTIC_SCOPE_STATUS,
+        "source_span": f"fixture.rs:{callsite}:1",
+    }
+
+
+def runtime_type_row(*, type_id: int, callsite: int) -> dict:
+    return {
+        "type_id": type_id,
+        "module_id": 77,
+        "callsite": callsite,
+        "allocations": 3,
+        "deallocations": 2,
+        "cache_hits": 1,
+        "cache_inserts": 2,
+        "cache_bypasses": 0,
+        "observed_alloc_size": 64,
+        "observed_alloc_align": 8,
+        "observed_dealloc_size": 64,
+        "observed_dealloc_align": 8,
+        "policy_flags_seen": smoke.TYPE_ISOLATED,
+    }
+
+
+def fail_closed_row() -> dict:
+    return {
+        "mir_function": "fixture::ambiguous_clone",
+        "lowering_kind": "semantic_scope_unsolved_heap_object_candidate",
+        "rewrite_status": "semantic_scope_rewrite_skipped_ambiguous_heap_object_type",
+        "replacement_resolution_status": (
+            "rustc_middle_multiple_heap_object_types_not_lowered"
+        ),
+        "destination_type": "Result<Vec<u8>, String>",
+        "semantic_object_type": "multiple_heap_owners(Vec<u8>,String)",
+        "source_span": "fixture.rs:30:1",
+    }
+
+
+def valid_contract_stats() -> dict:
+    rows = [
+        runtime_type_row(type_id=101, callsite=1001),
+        runtime_type_row(type_id=202, callsite=2002),
+    ]
+    return {
+        "typed_allocations": 6,
+        "fallback_allocations": 0,
+        "type_isolation_corrupt_slots": 0,
+        "type_stats_rows": len(rows),
+        "type_stats_dropped_events": 0,
+        "type_rows": rows,
+    }
+
+
+def valid_contract_audits() -> list[dict]:
+    return [
+        {
+            "file": "applied.json",
+            "replacement_resolution_status": (
+                "resolved_unialloc_allocator_metadata_abi"
+            ),
+            **{key: True for key in smoke.REQUIRED_AUDIT_FLAGS},
+            "actual_type_scope_rows": [
+                actual_scope_row(
+                    type_id=101,
+                    callsite=1001,
+                    semantic_object_type="Vec<Producer>",
+                ),
+                actual_scope_row(
+                    type_id=202,
+                    callsite=2002,
+                    semantic_object_type="Vec<Consumer>",
+                ),
+            ],
+            "fail_closed_rows": [fail_closed_row()],
+        }
+    ]
+
+
+def valid_contract_totals() -> dict:
+    return {
+        "direct_rewrite_applied_count": 1,
+        "semantic_scope_rewrite_applied_count": 2,
+        "semantic_scope_drop_rewrite_applied_count": 1,
+        "semantic_scope_unsolved_candidate_count": 1,
+        "semantic_scope_drop_unsolved_candidate_count": 0,
+        "actual_type_scope_row_count": 2,
+        "fail_closed_semantic_row_count": 1,
+        "fail_closed_drop_row_count": 0,
+    }
+
+
 class OxipngRealappReproSmokeTests(unittest.TestCase):
     def make_minimal_oxipng_checkout(self, root: pathlib.Path) -> pathlib.Path:
         oxipng = root / "oxipng"
@@ -52,7 +153,10 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertIn('unialloc = { path = "../repo/unialloc"', cargo)
             self.assertNotIn(str(unialloc), cargo)
             self.assertIn("[workspace]", cargo)
-            self.assertIn("#[global_allocator]", (oxipng / "src" / "main.rs").read_text(encoding="utf-8"))
+            main = (oxipng / "src" / "main.rs").read_text(encoding="utf-8")
+            self.assertIn("#[global_allocator]", main)
+            self.assertIn("type_rows_json", main)
+            self.assertIn("SemanticTypeStatsSnapshot::empty(); 256", main)
             self.assertIn("extern crate unialloc;", (oxipng / "src" / "lib.rs").read_text(encoding="utf-8"))
 
     def test_parse_stats_requires_exactly_one_stats_line(self) -> None:
@@ -77,11 +181,24 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                             "direct_local_metadata_abi": True,
                             "direct_local_size_align_with_semantic_drop": True,
                             "rewrite_applied_count": 2,
-                            "semantic_scope_rewrite_applied_count": 3,
+                            "semantic_scope_rewrite_applied_count": 2,
                             "semantic_scope_drop_rewrite_applied_count": 4,
-                            "semantic_scope_unsolved_candidate_count": 5,
-                            "semantic_scope_drop_unsolved_candidate_count": 6,
-                        }
+                            "semantic_scope_unsolved_candidate_count": 1,
+                            "semantic_scope_drop_unsolved_candidate_count": 0,
+                        },
+                        "rewrite_candidates": [
+                            actual_scope_row(
+                                type_id=101,
+                                callsite=1001,
+                                semantic_object_type="Vec<Producer>",
+                            ),
+                            actual_scope_row(
+                                type_id=202,
+                                callsite=2002,
+                                semantic_object_type="Vec<Consumer>",
+                            ),
+                            fail_closed_row(),
+                        ],
                     }
                 ),
                 encoding="utf-8",
@@ -92,15 +209,19 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
 
             self.assertEqual(len(audits), 1)
             self.assertEqual(totals["direct_rewrite_applied_count"], 2)
-            self.assertEqual(totals["semantic_scope_rewrite_applied_count"], 3)
+            self.assertEqual(totals["semantic_scope_rewrite_applied_count"], 2)
             self.assertEqual(totals["semantic_scope_drop_rewrite_applied_count"], 4)
-            self.assertEqual(totals["semantic_scope_unsolved_candidate_count"], 5)
-            self.assertEqual(totals["semantic_scope_drop_unsolved_candidate_count"], 6)
+            self.assertEqual(totals["semantic_scope_unsolved_candidate_count"], 1)
+            self.assertEqual(totals["semantic_scope_drop_unsolved_candidate_count"], 0)
+            self.assertEqual(totals["actual_type_scope_row_count"], 2)
+            self.assertEqual(totals["fail_closed_semantic_row_count"], 1)
+            self.assertEqual(len(audits[0]["actual_type_scope_rows"]), 2)
+            self.assertEqual(len(audits[0]["fail_closed_rows"]), 1)
             coverage = smoke.compiler_coverage_summary(totals)
             self.assertFalse(coverage["audited_candidates_resolved"])
             self.assertTrue(coverage["has_unresolved_audited_candidates"])
             self.assertFalse(coverage["whole_program_compiler_coverage"])
-            self.assertEqual(coverage["unsolved_candidate_count"], 11)
+            self.assertEqual(coverage["unsolved_candidate_count"], 1)
             self.assertNotIn("complete compiler coverage", coverage["claim_boundary"])
 
     def test_zero_unsolved_means_audited_candidates_resolved_not_complete_coverage(self) -> None:
@@ -183,27 +304,72 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             **{key: False for key in smoke.DIRECT_REWRITE_AUDIT_FLAGS},
         }
         applied = {
-            "file": "applied.json",
-            "replacement_resolution_status": "resolved_unialloc_allocator_metadata_abi",
-            **{key: True for key in smoke.REQUIRED_AUDIT_FLAGS},
+            **valid_contract_audits()[0],
         }
 
-        smoke.assert_contract(
+        evidence = smoke.assert_contract(
             build=cmd,
             run=cmd,
-            stats={"typed_allocations": 1, "fallback_allocations": 0, "type_isolation_corrupt_slots": 0},
+            stats=valid_contract_stats(),
             output_sha256="a",
             expected_output_sha256="a",
             audits=[no_candidates, applied],
-            audit_totals={
-                "direct_rewrite_applied_count": 1,
-                "semantic_scope_rewrite_applied_count": 2,
-                "semantic_scope_drop_rewrite_applied_count": 1,
-                "semantic_scope_unsolved_candidate_count": 0,
-                "semantic_scope_drop_unsolved_candidate_count": 0,
-            },
+            audit_totals=valid_contract_totals(),
             fallback_note="reported fallback_allocations=0",
         )
+        self.assertTrue(evidence["validated"])
+
+    def test_contract_binds_actual_rewrite_to_same_layout_runtime_classes_and_fail_closed_rows(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        evidence = smoke.assert_contract(
+            build=cmd,
+            run=cmd,
+            stats=valid_contract_stats(),
+            output_sha256="a",
+            expected_output_sha256="a",
+            audits=valid_contract_audits(),
+            audit_totals=valid_contract_totals(),
+            fallback_note="reported fallback_allocations=0",
+        )
+
+        pair = evidence["same_layout_distinct_type_pair"]
+        self.assertEqual(len(pair), 2)
+        self.assertNotEqual(pair[0]["type_id"], pair[1]["type_id"])
+        self.assertNotEqual(
+            pair[0]["semantic_object_type"], pair[1]["semantic_object_type"]
+        )
+        self.assertEqual(pair[0]["observed_size"], pair[1]["observed_size"])
+        self.assertEqual(evidence["fail_closed_candidate_count"], 1)
+        self.assertIn("not whole-program coverage", evidence["claim_boundary"])
+
+        wrong_layout = valid_contract_stats()
+        wrong_layout["type_rows"][1]["observed_alloc_size"] = 32
+        wrong_layout["type_rows"][1]["observed_dealloc_size"] = 32
+        with self.assertRaisesRegex(smoke.SmokeError, "same observed"):
+            smoke.assert_contract(
+                build=cmd,
+                run=cmd,
+                stats=wrong_layout,
+                output_sha256="a",
+                expected_output_sha256="a",
+                audits=valid_contract_audits(),
+                audit_totals=valid_contract_totals(),
+                fallback_note="reported fallback_allocations=0",
+            )
+
+        missing_fail_closed = valid_contract_audits()
+        missing_fail_closed[0]["fail_closed_rows"] = []
+        with self.assertRaisesRegex(smoke.SmokeError, "row-level fail-closed"):
+            smoke.assert_contract(
+                build=cmd,
+                run=cmd,
+                stats=valid_contract_stats(),
+                output_sha256="a",
+                expected_output_sha256="a",
+                audits=missing_fail_closed,
+                audit_totals=valid_contract_totals(),
+                fallback_note="reported fallback_allocations=0",
+            )
 
 
     def test_fresh_temp_dir_rejects_existing_files_without_deleting(self) -> None:

@@ -53,6 +53,26 @@ DIRECT_REWRITE_AUDIT_FLAGS = (
 )
 REQUIRED_AUDIT_FLAGS = SEMANTIC_AND_BODY_AUDIT_FLAGS + DIRECT_REWRITE_AUDIT_FLAGS
 NO_SUPPORTED_DIRECT_REWRITE_STATUS = "no_supported_rewrite_candidates"
+TYPE_ISOLATED = 0x1
+ACTUAL_SEMANTIC_SCOPE_STATUS = "actual_semantic_scope_enter_exit_rewrite_applied"
+FAIL_CLOSED_CONTRACTS = {
+    "semantic_scope_unsolved_heap_object_candidate": {
+        (
+            "semantic_scope_rewrite_skipped_unresolved_heap_object_type",
+            "rustc_middle_heap_object_type_not_solved",
+        ),
+        (
+            "semantic_scope_rewrite_skipped_ambiguous_heap_object_type",
+            "rustc_middle_multiple_heap_object_types_not_lowered",
+        ),
+    },
+    "semantic_scope_drop_unsolved_heap_object_candidate": {
+        (
+            "semantic_scope_drop_rewrite_skipped_unresolved_heap_object_type",
+            "rustc_middle_drop_heap_object_type_not_solved",
+        ),
+    },
+}
 
 
 class SmokeError(RuntimeError):
@@ -142,6 +162,15 @@ def insert_after_once(text: str, needle: str, insertion: str) -> str:
     return text[: index + len(needle)] + insertion + text[index + len(needle) :]
 
 
+def insert_before_once(text: str, needle: str, insertion: str) -> str:
+    if insertion.strip() in text:
+        return text
+    index = text.find(needle)
+    if index < 0:
+        raise SmokeError(f"instrumentation anchor not found: {needle!r}")
+    return text[:index] + insertion + text[index:]
+
+
 def apply_instrumentation(oxipng: pathlib.Path, unialloc_crate: pathlib.Path) -> None:
     relative_unialloc = os.path.relpath(unialloc_crate.resolve(), oxipng.resolve())
     cargo = oxipng / "Cargo.toml"
@@ -164,6 +193,7 @@ def apply_instrumentation(oxipng: pathlib.Path, unialloc_crate: pathlib.Path) ->
     main_rs = oxipng / "src" / "main.rs"
     main_text = main_rs.read_text(encoding="utf-8")
     import_line = (
+        "use std::fmt::Write as _;\n"
         "use unialloc::{semantic_stats_recording_disable, semantic_stats_recording_enable, "
         "semantic_stats_reset, semantic_stats_snapshot, semantic_type_stats_recording_disable, "
         "semantic_type_stats_recording_enable, semantic_type_stats_snapshot, "
@@ -179,14 +209,74 @@ def apply_instrumentation(oxipng: pathlib.Path, unialloc_crate: pathlib.Path) ->
         "fn main() {\n",
         "    semantic_stats_reset();\n    semantic_stats_recording_enable();\n    semantic_type_stats_recording_enable();\n",
     )
+    type_rows_helper = r'''
+fn unialloc_type_rows_json(
+    rows: &[SemanticTypeStatsSnapshot],
+    row_count: usize,
+) -> String {
+    assert!(
+        row_count <= rows.len(),
+        "UniAlloc type stats snapshot truncated: {} rows exceed capacity {}",
+        row_count,
+        rows.len(),
+    );
+    let mut output = String::from("[");
+    for (index, row) in rows.iter().take(row_count).enumerate() {
+        if index != 0 {
+            output.push(',');
+        }
+        write!(
+            output,
+            concat!(
+                "{{",
+                "\"type_id\":{},",
+                "\"module_id\":{},",
+                "\"callsite\":{},",
+                "\"allocations\":{},",
+                "\"deallocations\":{},",
+                "\"cache_hits\":{},",
+                "\"cache_inserts\":{},",
+                "\"cache_bypasses\":{},",
+                "\"observed_alloc_size\":{},",
+                "\"observed_alloc_align\":{},",
+                "\"observed_dealloc_size\":{},",
+                "\"observed_dealloc_align\":{},",
+                "\"policy_flags_seen\":{}",
+                "}}"
+            ),
+            row.type_id,
+            row.module_id,
+            row.callsite,
+            row.allocations,
+            row.deallocations,
+            row.cache_hits,
+            row.cache_inserts,
+            row.cache_bypasses,
+            row.observed_alloc_size,
+            row.observed_alloc_align,
+            row.observed_dealloc_size,
+            row.observed_dealloc_align,
+            row.policy_flags_seen,
+        )
+        .expect("writing UniAlloc type stats JSON to String must succeed");
+    }
+    output.push(']');
+    output
+}
+
+'''
+    main_text = insert_before_once(main_text, "fn main() {\n", type_rows_helper)
     stats_block = r'''
 
     let stats = semantic_stats_snapshot();
     let side_cache = type_isolation_side_cache_snapshot();
-    let mut rows = [SemanticTypeStatsSnapshot::empty(); 64];
+    let mut rows = [SemanticTypeStatsSnapshot::empty(); 256];
     let row_count = semantic_type_stats_snapshot(&mut rows);
+    semantic_type_stats_recording_disable();
+    semantic_stats_recording_disable();
+    let type_rows_json = unialloc_type_rows_json(&rows, row_count);
     eprintln!(
-        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{}}}",
+        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{},\"type_rows\":{}}}",
         stats.total_allocations,
         stats.typed_allocations,
         stats.fallback_allocations,
@@ -202,9 +292,8 @@ def apply_instrumentation(oxipng: pathlib.Path, unialloc_crate: pathlib.Path) ->
         side_cache.occupied_slots,
         side_cache.occupied_entries,
         side_cache.corrupt_slots,
+        type_rows_json,
     );
-    semantic_type_stats_recording_disable();
-    semantic_stats_recording_disable();
 '''
     main_text = insert_after_once(main_text, "    if !success {\n        exit(1);\n    }\n", stats_block)
     main_rs.write_text(main_text, encoding="utf-8")
@@ -312,6 +401,62 @@ def crate_name_from_rustc_args(args: list[Any]) -> str | None:
     return None
 
 
+def actual_type_scope_rows(audit: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    for candidate in audit.get("rewrite_candidates", []):
+        if not isinstance(candidate, dict):
+            continue
+        if candidate.get("lowering_kind") != "semantic_scope_enter_exit_rewrite":
+            continue
+        if candidate.get("rewrite_status") != ACTUAL_SEMANTIC_SCOPE_STATUS:
+            continue
+        rows.append(
+            {
+                "mir_function": candidate.get("mir_function"),
+                "semantic_object_type": candidate.get("semantic_object_type"),
+                "type_id": int(candidate.get("type_id") or 0),
+                "module_id": int(candidate.get("module_id") or 0),
+                "callsite": int(candidate.get("callsite") or 0),
+                "flags": int(candidate.get("flags") or 0),
+                "rewrite_status": candidate.get("rewrite_status"),
+                "source_span": candidate.get("source_span"),
+            }
+        )
+    return rows
+
+
+def fail_closed_rows(audit: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    for candidate in audit.get("rewrite_candidates", []):
+        if not isinstance(candidate, dict):
+            continue
+        lowering_kind = str(candidate.get("lowering_kind") or "")
+        expected = FAIL_CLOSED_CONTRACTS.get(lowering_kind)
+        if expected is None:
+            continue
+        observed = (
+            str(candidate.get("rewrite_status") or ""),
+            str(candidate.get("replacement_resolution_status") or ""),
+        )
+        if observed not in expected:
+            raise SmokeError(
+                "unresolved compiler candidate did not fail closed: "
+                f"kind={lowering_kind} status={observed[0]} resolution={observed[1]}"
+            )
+        rows.append(
+            {
+                "mir_function": candidate.get("mir_function"),
+                "lowering_kind": lowering_kind,
+                "rewrite_status": observed[0],
+                "replacement_resolution_status": observed[1],
+                "destination_type": candidate.get("destination_type"),
+                "semantic_object_type": candidate.get("semantic_object_type"),
+                "source_span": candidate.get("source_span"),
+            }
+        )
+    return rows
+
+
 def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dict[str, Any]], dict[str, int]]:
     audits: list[dict[str, Any]] = []
     totals = {
@@ -320,6 +465,9 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
         "semantic_scope_drop_rewrite_applied_count": 0,
         "semantic_scope_unsolved_candidate_count": 0,
         "semantic_scope_drop_unsolved_candidate_count": 0,
+        "actual_type_scope_row_count": 0,
+        "fail_closed_semantic_row_count": 0,
+        "fail_closed_drop_row_count": 0,
     }
     for path in sorted(audit_dir.glob("*.json")):
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -328,6 +476,8 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
         crate_name = compiler.get("crate_name") or data.get("crate_name") or crate_name_from_rustc_args(data.get("rustc_args", []))
         if crate_name != target_crate:
             continue
+        applied_type_rows = actual_type_scope_rows(data)
+        unresolved_rows = fail_closed_rows(data)
         row = {
             "file": path.name,
             "crate_name": crate_name,
@@ -356,11 +506,199 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
             "semantic_scope_drop_unsolved_candidate_count": int(
                 compiler.get("semantic_scope_drop_unsolved_candidate_count", summary.get("semantic_scope_drop_unsolved_candidate_count", 0)) or 0
             ),
+            "actual_type_scope_rows": applied_type_rows,
+            "fail_closed_rows": unresolved_rows,
+            "actual_type_scope_row_count": len(applied_type_rows),
+            "fail_closed_semantic_row_count": sum(
+                candidate["lowering_kind"]
+                == "semantic_scope_unsolved_heap_object_candidate"
+                for candidate in unresolved_rows
+            ),
+            "fail_closed_drop_row_count": sum(
+                candidate["lowering_kind"]
+                == "semantic_scope_drop_unsolved_heap_object_candidate"
+                for candidate in unresolved_rows
+            ),
         }
         audits.append(row)
         for key in totals:
             totals[key] += int(row[key])
     return audits, totals
+
+
+def validate_realapp_type_isolation(
+    *,
+    stats: dict[str, Any],
+    audits: list[dict[str, Any]],
+    audit_totals: dict[str, int],
+) -> dict[str, Any]:
+    runtime_rows = stats.get("type_rows")
+    if not isinstance(runtime_rows, list):
+        raise SmokeError("runtime type-class rows must be explicitly reported")
+    reported_runtime_rows = int(stats.get("type_stats_rows", -1))
+    if reported_runtime_rows != len(runtime_rows):
+        raise SmokeError(
+            "runtime type-class snapshot must be complete: "
+            f"reported {reported_runtime_rows}, serialized {len(runtime_rows)}"
+        )
+    if int(stats.get("type_stats_dropped_events", -1)) != 0:
+        raise SmokeError("runtime type-class stats must report zero dropped events")
+
+    compiler_rows = [
+        row
+        for audit in audits
+        for row in audit.get("actual_type_scope_rows", [])
+        if isinstance(row, dict)
+    ]
+    if int(audit_totals.get("actual_type_scope_row_count", -1)) != len(compiler_rows):
+        raise SmokeError("actual semantic-scope aggregate is not backed by row-level evidence")
+    compiler_by_identity: dict[tuple[int, int, int], dict[str, Any]] = {}
+    for row in compiler_rows:
+        if row.get("rewrite_status") != ACTUAL_SEMANTIC_SCOPE_STATUS:
+            raise SmokeError(f"semantic-scope row is not an actual rewrite: {row}")
+        identity = (
+            int(row.get("type_id") or 0),
+            int(row.get("module_id") or 0),
+            int(row.get("callsite") or 0),
+        )
+        if 0 in identity:
+            raise SmokeError(f"actual semantic scope has zero identity component: {row}")
+        if not int(row.get("flags") or 0) & TYPE_ISOLATED:
+            raise SmokeError(f"actual semantic scope is not TYPE_ISOLATED: {row}")
+        compiler_by_identity[identity] = row
+    if not compiler_by_identity:
+        raise SmokeError("no row-level actual TYPE_ISOLATED semantic scopes were collected")
+
+    matched_lifecycle_rows: list[dict[str, Any]] = []
+    for runtime_row in runtime_rows:
+        if not isinstance(runtime_row, dict):
+            raise SmokeError("runtime type-class row is not an object")
+        identity = (
+            int(runtime_row.get("type_id") or 0),
+            int(runtime_row.get("module_id") or 0),
+            int(runtime_row.get("callsite") or 0),
+        )
+        compiler_row = compiler_by_identity.get(identity)
+        if compiler_row is None:
+            continue
+        if not int(runtime_row.get("policy_flags_seen") or 0) & TYPE_ISOLATED:
+            raise SmokeError(f"runtime row lost TYPE_ISOLATED policy: {runtime_row}")
+        alloc_size = int(runtime_row.get("observed_alloc_size") or 0)
+        alloc_align = int(runtime_row.get("observed_alloc_align") or 0)
+        dealloc_size = int(runtime_row.get("observed_dealloc_size") or 0)
+        dealloc_align = int(runtime_row.get("observed_dealloc_align") or 0)
+        if (
+            int(runtime_row.get("allocations") or 0) > 0
+            and int(runtime_row.get("deallocations") or 0) > 0
+            and alloc_size > 0
+            and alloc_align > 0
+            and (alloc_size, alloc_align) == (dealloc_size, dealloc_align)
+        ):
+            matched_lifecycle_rows.append(
+                {
+                    **runtime_row,
+                    "semantic_object_type": compiler_row.get("semantic_object_type"),
+                    "mir_function": compiler_row.get("mir_function"),
+                    "source_span": compiler_row.get("source_span"),
+                }
+            )
+
+    layout_groups: dict[tuple[int, int, int], list[dict[str, Any]]] = {}
+    for row in matched_lifecycle_rows:
+        key = (
+            int(row.get("module_id") or 0),
+            int(row.get("observed_alloc_size") or 0),
+            int(row.get("observed_alloc_align") or 0),
+        )
+        layout_groups.setdefault(key, []).append(row)
+    separated_pair = None
+    for key in sorted(layout_groups):
+        candidates = sorted(
+            layout_groups[key],
+            key=lambda row: (
+                int(row.get("type_id") or 0),
+                int(row.get("callsite") or 0),
+            ),
+        )
+        for left_index, left in enumerate(candidates):
+            for right in candidates[left_index + 1 :]:
+                if int(left.get("type_id") or 0) == int(right.get("type_id") or 0):
+                    continue
+                if left.get("semantic_object_type") == right.get("semantic_object_type"):
+                    continue
+                separated_pair = [left, right]
+                break
+            if separated_pair is not None:
+                break
+        if separated_pair is not None:
+            break
+    if separated_pair is None:
+        raise SmokeError(
+            "real application did not expose two distinct compiler-derived type classes "
+            "with the same observed allocation/deallocation layout"
+        )
+
+    fail_closed_evidence = [
+        row
+        for audit in audits
+        for row in audit.get("fail_closed_rows", [])
+        if isinstance(row, dict)
+    ]
+    for row in fail_closed_evidence:
+        expected = FAIL_CLOSED_CONTRACTS.get(str(row.get("lowering_kind") or ""))
+        observed = (
+            str(row.get("rewrite_status") or ""),
+            str(row.get("replacement_resolution_status") or ""),
+        )
+        if expected is None or observed not in expected:
+            raise SmokeError(f"row-level unresolved candidate is not fail-closed: {row}")
+    expected_fail_closed = int(
+        audit_totals.get("semantic_scope_unsolved_candidate_count", 0)
+    ) + int(audit_totals.get("semantic_scope_drop_unsolved_candidate_count", 0))
+    aggregate_fail_closed = int(
+        audit_totals.get("fail_closed_semantic_row_count", 0)
+    ) + int(audit_totals.get("fail_closed_drop_row_count", 0))
+    observed_fail_closed = len(fail_closed_evidence)
+    if expected_fail_closed <= 0:
+        raise SmokeError(
+            "pinned real application no longer exercises an unresolved fail-closed candidate"
+        )
+    if observed_fail_closed != aggregate_fail_closed or observed_fail_closed != expected_fail_closed:
+        raise SmokeError(
+            "aggregate unresolved candidate count is not backed by row-level fail-closed evidence: "
+            f"expected {expected_fail_closed}, aggregate {aggregate_fail_closed}, "
+            f"observed {observed_fail_closed}"
+        )
+
+    pair_summary = [
+        {
+            "type_id": int(row["type_id"]),
+            "module_id": int(row["module_id"]),
+            "callsite": int(row["callsite"]),
+            "semantic_object_type": row.get("semantic_object_type"),
+            "mir_function": row.get("mir_function"),
+            "allocations": int(row["allocations"]),
+            "deallocations": int(row["deallocations"]),
+            "observed_size": int(row["observed_alloc_size"]),
+            "observed_align": int(row["observed_alloc_align"]),
+            "policy_flags_seen": int(row["policy_flags_seen"]),
+        }
+        for row in separated_pair
+    ]
+    return {
+        "validated": True,
+        "actual_type_scope_row_count": len(compiler_rows),
+        "runtime_type_row_count": reported_runtime_rows,
+        "matched_lifecycle_row_count": len(matched_lifecycle_rows),
+        "same_layout_distinct_type_pair": pair_summary,
+        "fail_closed_candidate_count": observed_fail_closed,
+        "claim_boundary": (
+            "one pinned Oxipng functional run binds actual target-crate MIR type identities "
+            "to complete runtime type-class lifecycle rows and exercises row-level fail-closed "
+            "unresolved candidates; this is not whole-program coverage, address-level non-reuse, "
+            "or performance evidence"
+        ),
+    }
 
 
 
@@ -398,7 +736,7 @@ def assert_contract(
     audits: list[dict[str, Any]],
     audit_totals: dict[str, int],
     fallback_note: str,
-) -> None:
+) -> dict[str, Any]:
     if build.returncode != 0:
         raise SmokeError(f"wrapper cargo build failed with {build.returncode}")
     if run.returncode != 0:
@@ -433,6 +771,11 @@ def assert_contract(
         raise SmokeError("type isolation corrupt slots must be zero")
     if not fallback_note:
         raise SmokeError("fallback note must be explicit")
+    return validate_realapp_type_isolation(
+        stats=stats,
+        audits=audits,
+        audit_totals=audit_totals,
+    )
 
 
 def deterministic_summary(summary: dict[str, Any]) -> str:
@@ -693,7 +1036,7 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             f"reported fallback_allocations={stats.get('fallback_allocations')} and "
             f"fallback_deallocations={stats.get('fallback_deallocations')}"
         )
-        assert_contract(
+        type_isolation_evidence = assert_contract(
             build=build,
             run=run,
             stats=stats,
@@ -719,7 +1062,9 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             "source": "oxipng-realapp-repro-smoke",
             "boundary": (
                 "functional/diagnostic smoke only; no timing loop; no performance claim; "
-                "subprocess timeout descendant cleanup is not claimed beyond direct fail-closed timeout handling"
+                "same-layout evidence is runtime type-class identity/lifecycle separation, not "
+                "address-level non-reuse; subprocess timeout descendant cleanup is not claimed "
+                "beyond direct fail-closed timeout handling"
             ),
             "toolchain": args.toolchain,
             "build_toolchain": source_binding_start["build_toolchain"],
@@ -774,6 +1119,7 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             "audit_file_count": len(audits),
             "audit_totals": audit_totals,
             "compiler_coverage": compiler_coverage_summary(audit_totals),
+            "type_isolation_evidence": type_isolation_evidence,
             "audits": audits,
         }
         write_text(output_dir / "oxipng-realapp-repro-summary.json", deterministic_summary(summary))
