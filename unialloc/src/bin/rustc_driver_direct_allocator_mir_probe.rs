@@ -1,4 +1,8 @@
 #![feature(layout_for_ptr)]
+#![cfg_attr(
+    not(unialloc_has_stable_alloc_layout_extra),
+    feature(alloc_layout_extra)
+)]
 #![cfg_attr(feature = "fixed_heap", allow(dead_code, unused_imports))]
 
 use std::alloc::{alloc, alloc_zeroed, dealloc, handle_alloc_error, realloc, GlobalAlloc, Layout};
