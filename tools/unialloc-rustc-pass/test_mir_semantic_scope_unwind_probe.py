@@ -251,8 +251,8 @@ def validate_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
     allocation_rows = [
         row
         for row in box_rows
-        if "Box" in str(row.get("callee") or "")
-        and "new" in str(row.get("callee") or "")
+        if "outer_box_after_caught_panic" in str(row.get("mir_function") or "")
+        and "::new" in str(row.get("callee") or "")
         and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
     ]
     drop_rows = [
