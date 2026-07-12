@@ -275,6 +275,22 @@ This bundle is functional actual-rustc evidence only: it is not a benchmark,
 does not support a percentage, and does not establish universal compiler or
 container coverage.
 
+### Actual-rustc `VecDeque` same-layout type isolation
+
+Commit `5eb25f5` adds an ordinary-Rust `VecDeque` lifecycle probe rather than a
+manual metadata-ABI fixture.  The actual compiler pass assigns distinct
+nonzero identities to two same-layout element types.  In both hosted and
+`fixed_heap` one-shot runs, four objects of the first type and four of the
+second type occupy disjoint address sets; after release, four new objects of
+the first type recover exactly its original set.  The bounded run reports 12
+typed allocations, 12 typed deallocations, four cache hits, and zero
+fallback/raw allocation, deallocation, or reallocation events, recovery
+identity mismatches, corrupt slots, or dropped events.
+
+This proves one compiler-derived `VecDeque` identity-to-reuse lifecycle for two
+same-layout Rust types.  It is not universal container coverage, an exploit
+proof, or performance evidence.
+
 ### Boxed-slice to `Vec` ownership-identity transfer
 
 At `3d08399`,
@@ -384,6 +400,33 @@ the conventional raw path without fabricated typed attribution.
 
 This is bounded functional and safety evidence only.  It does not establish
 universal container/compiler coverage, performance, or a paper percentage.
+
+### Ownership-consuming `Vec`/`String` conversions rebind the live identity
+
+Commit `32c3c5b` closes two P0 ownership-pairing gaps in ordinary Rust
+conversions.  The actual-rustc `Vec<T, A> -> IntoIter<T, A>` probe applies its
+only transfer candidate (`1/1`) and observes runtime attempted/applied/rejected
+`1/1/0`: pointer and payload are preserved, a new `Vec` identity cannot consume
+the transferred storage, the exact `IntoIter` identity can recover it, and an
+implicit Drop introduces no recovery mismatch.  The runtime rejection matrix
+also fails closed for wrong, zero, same, missing, duplicate, and memory-tagged
+records without mutating an authenticated source record.
+
+The same commit rewrites both exact-capacity and spare-capacity
+`String -> Box<str>` candidates (`2/2`), with runtime transfer `2/2/0`.  The
+exact case preserves pointer and payload; the shrink case may move while
+publishing the target identity and retaining the old String identity only for
+released old storage.  Wrong-String reuse is blocked, exact-`Box<str>` reuse is
+observed, and the moved case lets the old String identity recover its old
+storage.  Across the compiler/runtime probes, fallback/raw allocation,
+deallocation, and reallocation, recovery mismatch, corruption, and dropped
+events remain zero.  The dedicated String regression passes on both hosted and
+`fixed_heap` backends and covers exact/moved positives plus wrong, tagged, and
+missing-record rejection.
+
+These are bounded current-rustc functional and safety probes.  They do not
+establish every ownership-consuming standard-library conversion, stable rustc
+compatibility, or performance.
 
 ### Compiler-driven `Vec` realloc identity and type-isolation probe
 
@@ -625,6 +668,30 @@ audits are preserved under
 This proves one bounded nested-unwind pairing invariant. It is not a general
 proof for every panic source, future rustc MIR shape, or unsupported allocation
 path.
+
+### Plain type-cache accounting is O(1) after a bounded rebuild
+
+Commit `1228f71` replaces a healthy cold-cache insertion's repeated full scan
+of all 64 plain type-cache slots with a trusted retained-byte counter.  The
+first cold insertion after reset performs one bounded rebuild; healthy pushes
+and pops then update the counter in O(1).  Observed per-slot corruption or an
+accounting repair marks the aggregate untrusted, so the next growth performs
+one bounded rebuild before returning to O(1) updates.
+
+The same change repairs the aggregate admission check so the inline entry and
+cold slots share one 512 KiB retained-byte cap; an empty inline slot can no
+longer bypass remaining aggregate headroom.  Regressions cover push/pop totals,
+exact admission at the cap, inline/cold replacement, drain/reset, and
+corruption-triggered rebuild behavior.
+
+A single before/after micro-diagnostic used 24 distinct type identities with
+the same 64-byte layout, one thread, 50,000 cycles, and 2.4 million typed
+allocation/deallocation operations.  With identical 1.2 million cache hits,
+1.2 million inserts, and zero bypasses, the observed cost changed from
+`72.338 ns/op` at `32c3c5b` to `54.808 ns/op` at `a51960d`
+(`-24.233%`).  This is one directional run only: there is no median or range,
+and it supports no general-application, paper, publication-grade, or stable
+percentage claim.
 
 ### Auto-metadata policy changes preserve allocation-time identity
 
@@ -885,6 +952,38 @@ its `oxipng-realapp-repro-summary.json` has SHA-256
 This is one bounded diagnostic functional run.  It is not a timing benchmark,
 whole-program ownership/isolation coverage, universal compiler coverage, a
 paper percentage, or publication-grade performance evidence.
+
+### Presentation-bound current-head Oxipng validation
+
+The current presentation bundle is bound to clean scoped source HEAD
+`a51960d92a7c72deabaf25fc23e985c3b26c09a5` with scoped fingerprint
+`f23eda54db834f2a81475ea84f28d70a55a54fb5502c379d7b36dc355a6e1d8f`.
+Commit `a51960d` strengthens the Oxipng acceptance gate: a static ownership
+transfer candidate is insufficient unless at least one transfer was actually
+applied at runtime.
+
+One pinned instrumented Oxipng v4.0.3 build/run passes at that source.  The
+output SHA-256 exactly matches
+`565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`.
+The target-crate audit keeps its denominators separate: 6 direct rewrites, 383
+semantic-scope rewrites, 320 Drop rewrites, 12 ownership-transfer candidates
+with 12 applied static rewrites, and 575 explicit fail-closed candidates.  The
+runtime transfer delta is attempted/applied/rejected `3/1/2`.  The injected
+same-layout address oracle observes wrong-type non-reuse and exact same-type
+reuse with oracle mismatch/corruption `0/0`; the whole workload separately
+records 13 correctly recovered identity mismatches and therefore remains
+`recovery_corrected_non_exact`, not exact whole-application pairing.
+
+At the same source, the full repository test run passes 660 UniAlloc unit tests
+and 430 std-bench tests.  The authoritative summary is
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-type-isolation-a51960d-20260712T202813Z/summary.json`
+with SHA-256
+`bc6f32805e58cb021223dde2e01a91887cbe36e653f5ff73257823349a12e685`.
+This is one instrumented real-application functional run plus bounded
+regressions.  It is not natural-application universal isolation, whole-program
+coverage, a security proof, or performance evidence.  Full paper performance
+reproduction remains intentionally deferred under the G001-to-G002 objective
+change.
 
 For historical comparison, a source-bound Oxipng v4.0.3 smoke at validator
 commit `e466831` validated the
