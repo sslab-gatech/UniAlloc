@@ -3299,6 +3299,18 @@ fn auto_allocation_record_requires_global_visibility(metadata: AllocationMetadat
     if metadata.placement_hint & PLACEMENT_HINT_CROSS_THREAD_RECOVERY != 0 {
         return true;
     }
+    // Auto-metadata enable publishes this bit before installing a compiler
+    // replay config, while disable clears it only after replacing that config
+    // with the disabled value.  A consuming stream clears the bit as soon as
+    // its final id is handed out, so retain the config lookup while its sticky
+    // exhaustion marker is set: that final allocation still needs the stream's
+    // global-vs-TLS recovery policy.  Otherwise the clear bit can linearize
+    // before any concurrent enable and avoid the config read lock.
+    if SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed) & SLOW_PATH_AUTO_METADATA == 0
+        && !AUTO_COMPILER_TYPE_IDS_STREAM_EXHAUSTED.load(Ordering::Relaxed)
+    {
+        return false;
+    }
     let config = *AUTO_METADATA_CONFIG.read();
     config.compiler_metadata_enabled() && config.compiler_type_ids_global_recovery
 }
@@ -12590,6 +12602,37 @@ mod tests {
             alloc.dealloc_raw(ptr, layout);
         }
         semantic_stats_recording_disable();
+    }
+
+    #[test]
+    fn disabled_auto_metadata_skips_config_lock_for_recovery_visibility() {
+        let _guard = test_guard();
+        semantic_auto_metadata_disable();
+
+        let metadata = AllocationMetadata::for_type(0xC002_2123)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_C214)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let config_writer = AUTO_METADATA_CONFIG.write();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker = thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            done_tx
+                .send(auto_allocation_record_requires_global_visibility(metadata))
+                .unwrap();
+        });
+
+        started_rx.recv().unwrap();
+        let result = done_rx.recv_timeout(std::time::Duration::from_secs(1));
+        drop(config_writer);
+        worker.join().unwrap();
+
+        assert_eq!(
+            result,
+            Ok(false),
+            "disabled auto metadata must decide TLS recovery visibility without waiting for AUTO_METADATA_CONFIG's read lock"
+        );
     }
 
     #[test]
