@@ -1,0 +1,13 @@
+[package]
+name = "external-oxipng-unialloc-harness"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+oxipng = { path = "../../external/_checkouts/external-R-Oxipng-Oxipng", default-features = false, features = ["parallel"] }
+unialloc = { path = "../../../unialloc", features = ["stats", "type_isolation"] }
+# Pin transitive spin dependency for the repository's Rust 1.64-era toolchain.
+lock_api = "=0.4.3"
+
+[workspace]
