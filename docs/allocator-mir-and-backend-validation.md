@@ -508,17 +508,29 @@ custom ADTs, and the current real-application evidence keeps unsupported
 `png::PngData`, `headers::Headers`, and `crossbeam_channel::Sender<_>` Clone
 results unresolved.
 
-A clean-HEAD Oxipng v4.0.3 smoke at `88c35fd` validated the actual rewrite path
-without running a benchmark loop.  The pinned application built and ran once with
-matching output SHA-256.  Its target-crate MIR audit reported 6 direct allocator
-rewrites, 844 semantic-scope rewrites, 532 Drop rewrites, 4 semantic unresolved
-candidates, and 0 Drop unresolved candidates.  The runtime recording window
-reported 1058 typed allocations out of 1067 total allocation events, 9 fallback
-allocations, and 0 type-isolation corrupt slots.  This is bounded functional
-coverage and regression evidence only; it is not whole-program coverage,
-unmodified-application deployment evidence, or a paper-performance result.
-The durable summaries and target-crate audits for these real-Rust probes are in
-`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-real-rust-88c35fd-374d455-20260712/`.
+A source-bound Oxipng v4.0.3 smoke at validator commit `e466831` validated the
+actual rewrite path without running a benchmark loop.  The pinned application
+built once and ran once with the expected output SHA-256.  Its target-crate MIR
+audit reported 6 direct allocator rewrites, 848 semantic-scope rewrites, 535
+Drop rewrites, 4 semantic unresolved candidates, and 0 Drop unresolved
+candidates; all 4 unresolved candidates have exact row-level fail-closed
+evidence.  The runtime recording window captured all 140 type-class rows with
+0 dropped events and 0 corrupt slots.  It reported 1058 typed allocations out
+of 1067 total allocation events, 1016 typed deallocations, 9 fallback
+allocations, and 1 fallback deallocation.
+
+The validator matched 5 compiler identities to runtime lifecycle rows.  In one
+same-module, same-layout case, `Vec<(InFile, OutFile)>` and
+`Box<std::io::error::Custom>` both used size 139 and alignment 1, yet retained
+distinct compiler-derived type ids and distinct runtime type-class rows; each
+row recorded one allocation and one deallocation.  This proves a bounded
+actual-MIR-identity-to-runtime-class lifecycle in one instrumented real Rust
+application.  It does not by itself prove address-level non-reuse,
+whole-program coverage, unmodified-application deployment, or performance.
+The durable summary (SHA-256
+`b53452cdab3421f0f41717acb0cc109720444d115546b8f5f6ea81a8acf6da55`) and
+target-crate audits are in
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-runtime-typeclass-e466831-20260712/`.
 
 ### Supported plain Clone is paired with an ambiguous fail-closed control
 
