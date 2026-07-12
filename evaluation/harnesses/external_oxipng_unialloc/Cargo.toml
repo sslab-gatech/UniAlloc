@@ -1,5 +1,5 @@
 [package]
-name = "external-oxipng-unialloc-harness"
+name = "external-oxipng-unialloc"
 version = "0.1.0"
 edition = "2021"
 publish = false

@@ -25,7 +25,7 @@ fn main() {
         .nth(1)
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            eprintln!("usage: external-oxipng-unialloc-harness <input.png>");
+            eprintln!("usage: external-oxipng-unialloc <input.png>");
             std::process::exit(2);
         });
     let input_bytes = fs::read(&input).unwrap_or_else(|err| {
@@ -52,7 +52,7 @@ fn main() {
     let row_count = semantic_type_stats_snapshot(&mut rows);
 
     println!(
-        "{{\"source\":\"external-oxipng-unialloc-harness\",\"input\":\"{}\",\"input_bytes\":{},\"output_bytes\":{},\"output_checksum\":{},\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{}}}",
+        "{{\"source\":\"external-oxipng-unialloc\",\"input\":\"{}\",\"input_bytes\":{},\"output_bytes\":{},\"output_checksum\":{},\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{}}}",
         json_escape(&input.display().to_string()),
         input_bytes.len(),
         output_len,
