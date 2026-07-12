@@ -33,6 +33,23 @@ def valid_audit() -> dict:
             "rewrite_candidates": [row("alloc", 101), row("realloc", 102), row("dealloc", 103)]}
 
 
+def raw_semantic_scope_helper_row() -> dict:
+    """Preserved shape of the legitimate fourth row from the combined probe audit."""
+    return {
+        "mir_function": runner.HELPER,
+        "callee": "realloc_shrink_type_rows_json",
+        "destination_type": "std::string::String",
+        "lowering_kind": "semantic_scope_enter_exit_rewrite",
+        "rewrite_status": "semantic_scope_enter_exit_rewrite_planned",
+        "replacement_symbol": "__unialloc_semantic_scope_push",
+        "replacement_resolution_status": "not_requested_dry_run",
+        "type_id": 11507945832468554002,
+        "module_id": 13835860698770440193,
+        "flags": runner.TYPE_ISOLATED,
+        "callsite": 13804096419549101735,
+    }
+
+
 def runtime_row(callsite: int, allocations: int, deallocations: int, alloc_size: int, dealloc_size: int) -> dict:
     return {"type_id": 11, "module_id": 22, "callsite": callsite, "allocations": allocations,
             "deallocations": deallocations, "observed_alloc_size": alloc_size,
@@ -55,6 +72,19 @@ def valid_runtime() -> dict:
 class ReallocShrinkValidatorTests(unittest.TestCase):
     def test_accepts_contract_valid_same_class_shrink(self) -> None:
         evidence = runner.validate(valid_audit(), valid_runtime()); self.assertEqual(evidence["compiler_type_id"], 11)
+
+    def test_accepts_preserved_semantic_scope_row_in_same_helper(self) -> None:
+        audit = valid_audit()
+        audit["rewrite_candidates"].append(raw_semantic_scope_helper_row())
+        evidence = runner.validate(audit, valid_runtime())
+        self.assertEqual(evidence["compiler_type_id"], 11)
+
+    def test_rejects_duplicate_direct_row_even_with_semantic_scope_row(self) -> None:
+        audit = valid_audit()
+        audit["rewrite_candidates"].append(raw_semantic_scope_helper_row())
+        audit["rewrite_candidates"].append(row("alloc", 104))
+        with self.assertRaisesRegex(AssertionError, "exactly three"):
+            runner.validate(audit, valid_runtime())
 
     def test_rejects_missing_or_tampered_rewrite_row(self) -> None:
         audit = valid_audit(); audit["rewrite_candidates"].pop()

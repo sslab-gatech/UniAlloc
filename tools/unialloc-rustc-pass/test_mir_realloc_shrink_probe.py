@@ -122,7 +122,8 @@ def load_runtime_event(stdout_path: Path) -> Dict[str, Any]:
 
 def helper_rows(audit: Dict[str, Any]) -> List[Dict[str, Any]]:
     return [row for row in audit.get("rewrite_candidates", []) if isinstance(row, dict)
-            and str(row.get("mir_function") or "").endswith(HELPER)]
+            and str(row.get("mir_function") or "").endswith(HELPER)
+            and row.get("lowering_kind") == "direct_allocator_call_rewrite"]
 
 
 def operation(row: Dict[str, Any]) -> str:
