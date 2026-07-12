@@ -20068,6 +20068,156 @@ mod tests {
 
     #[cfg(feature = "stats")]
     #[test]
+    fn semantic_fallback_attribution_checked_snapshot_is_size_negotiated() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        SEMANTIC_FALLBACK_ATTRIBUTION.record_raw_alloc_no_metadata(64);
+        SEMANTIC_FALLBACK_ATTRIBUTION.record_raw_dealloc_no_metadata();
+        SEMANTIC_FALLBACK_ATTRIBUTION.record_raw_realloc_no_metadata(96);
+        SEMANTIC_FALLBACK_ATTRIBUTION.record_raw_realloc_moved_dealloc_no_metadata();
+        SEMANTIC_FALLBACK_ATTRIBUTION.record_realloc_recorded_old_metadata_new_allocation(128);
+
+        assert_eq!(
+            __unialloc_semantic_fallback_attribution_snapshot_abi_version(),
+            SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION
+        );
+        assert_eq!(
+            __unialloc_semantic_fallback_attribution_snapshot_size(),
+            size_of::<SemanticFallbackAttributionSnapshot>()
+        );
+        assert!(!unsafe {
+            __unialloc_semantic_fallback_attribution_snapshot_checked(
+                core::ptr::null_mut(),
+                size_of::<SemanticFallbackAttributionSnapshot>(),
+            )
+        });
+
+        let sentinel = SemanticFallbackAttributionSnapshot {
+            raw_alloc_no_metadata: usize::MAX,
+            raw_alloc_no_metadata_bytes: usize::MAX,
+            raw_dealloc_no_metadata: usize::MAX,
+            raw_realloc_no_metadata: usize::MAX,
+            raw_realloc_no_metadata_bytes: usize::MAX,
+            raw_realloc_moved_dealloc_no_metadata: usize::MAX,
+            realloc_recorded_old_metadata_new_allocations: usize::MAX,
+            realloc_recorded_old_metadata_new_allocation_bytes: usize::MAX,
+        };
+        let mut short = sentinel;
+        assert!(!unsafe {
+            __unialloc_semantic_fallback_attribution_snapshot_checked(
+                &mut short,
+                size_of::<SemanticFallbackAttributionSnapshot>() - 1,
+            )
+        });
+        assert_eq!(short, sentinel, "rejected snapshot must not write output");
+
+        let expected = SemanticFallbackAttributionSnapshot {
+            raw_alloc_no_metadata: 1,
+            raw_alloc_no_metadata_bytes: 64,
+            raw_dealloc_no_metadata: 1,
+            raw_realloc_no_metadata: 1,
+            raw_realloc_no_metadata_bytes: 96,
+            raw_realloc_moved_dealloc_no_metadata: 1,
+            realloc_recorded_old_metadata_new_allocations: 1,
+            realloc_recorded_old_metadata_new_allocation_bytes: 128,
+        };
+        for out_size in [
+            size_of::<SemanticFallbackAttributionSnapshot>(),
+            size_of::<SemanticFallbackAttributionSnapshot>() + 64,
+        ] {
+            let mut out = MaybeUninit::<SemanticFallbackAttributionSnapshot>::uninit();
+            assert!(unsafe {
+                __unialloc_semantic_fallback_attribution_snapshot_checked(
+                    out.as_mut_ptr(),
+                    out_size,
+                )
+            });
+            assert_eq!(unsafe { out.assume_init() }, expected);
+        }
+
+        semantic_stats_recording_disable();
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn semantic_metadata_validation_checked_snapshot_is_size_negotiated() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        let requested = AllocationMetadata::for_type(0xC002_7101)
+            .with_module(0xC002_7102)
+            .with_callsite(0xC002_7103);
+        let recorded = AllocationMetadata::for_type(0xC002_7201)
+            .with_module(0xC002_7202)
+            .with_callsite(0xC002_7203);
+        SEMANTIC_METADATA_VALIDATION.record_recovery_identity_match();
+        SEMANTIC_METADATA_VALIDATION.record_recovery_identity_mismatch(requested, recorded);
+
+        assert_eq!(
+            __unialloc_semantic_metadata_validation_snapshot_abi_version(),
+            SEMANTIC_METADATA_VALIDATION_SNAPSHOT_ABI_VERSION
+        );
+        assert_eq!(
+            __unialloc_semantic_metadata_validation_snapshot_size(),
+            size_of::<SemanticMetadataValidationSnapshot>()
+        );
+        assert!(!unsafe {
+            __unialloc_semantic_metadata_validation_snapshot_checked(
+                core::ptr::null_mut(),
+                size_of::<SemanticMetadataValidationSnapshot>(),
+            )
+        });
+
+        let sentinel = SemanticMetadataValidationSnapshot {
+            recovery_identity_matches: usize::MAX,
+            recovery_identity_mismatches: usize::MAX,
+            last_mismatch_requested_type_id: u64::MAX,
+            last_mismatch_recorded_type_id: u64::MAX,
+            last_mismatch_requested_module_id: u64::MAX,
+            last_mismatch_recorded_module_id: u64::MAX,
+            last_mismatch_requested_callsite: u64::MAX,
+            last_mismatch_recorded_callsite: u64::MAX,
+        };
+        let mut short = sentinel;
+        assert!(!unsafe {
+            __unialloc_semantic_metadata_validation_snapshot_checked(
+                &mut short,
+                size_of::<SemanticMetadataValidationSnapshot>() - 1,
+            )
+        });
+        assert_eq!(short, sentinel, "rejected snapshot must not write output");
+
+        let expected = SemanticMetadataValidationSnapshot {
+            recovery_identity_matches: 1,
+            recovery_identity_mismatches: 1,
+            last_mismatch_requested_type_id: requested.type_id,
+            last_mismatch_recorded_type_id: recorded.type_id,
+            last_mismatch_requested_module_id: requested.module_id,
+            last_mismatch_recorded_module_id: recorded.module_id,
+            last_mismatch_requested_callsite: requested.callsite,
+            last_mismatch_recorded_callsite: recorded.callsite,
+        };
+        for out_size in [
+            size_of::<SemanticMetadataValidationSnapshot>(),
+            size_of::<SemanticMetadataValidationSnapshot>() + 64,
+        ] {
+            let mut out = MaybeUninit::<SemanticMetadataValidationSnapshot>::uninit();
+            assert!(unsafe {
+                __unialloc_semantic_metadata_validation_snapshot_checked(out.as_mut_ptr(), out_size)
+            });
+            assert_eq!(unsafe { out.assume_init() }, expected);
+        }
+
+        semantic_stats_recording_disable();
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
     fn semantic_type_stats_checked_snapshot_requires_exact_record_size() {
         let _guard = test_guard();
         let _cleanup = SemanticStateCleanup;
