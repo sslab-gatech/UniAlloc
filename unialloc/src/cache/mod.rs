@@ -1,3 +1,5 @@
+#[cfg(feature = "quarantine")]
+use crate::alloc_api::type_isolation::FLAG_DELAYED_FREE;
 use crate::alloc_api::type_isolation::{
     active_allocation_metadata, active_allocation_metadata_requires_recovery_record,
     auto_allocation_metadata, auto_deallocation_metadata, auto_reallocation_old_metadata,
@@ -31,6 +33,10 @@ mod thread_cache;
 use crate::page::{PageBumpAlloc, PG_BUMP};
 use crate::sc::META_BUMP;
 pub use thread_cache::*;
+
+#[cfg(feature = "quarantine")]
+const COMPILED_QUARANTINE_METADATA: AllocationMetadata =
+    AllocationMetadata::unknown().with_flags(FLAG_DELAYED_FREE);
 
 #[cfg(all(test, feature = "fixed_heap"))]
 #[inline]
@@ -538,7 +544,7 @@ unsafe impl GlobalAlloc for RustAllocator {
         if layout.size() == 0 {
             return dangling_ptr_for_layout(layout);
         }
-        if !semantic_allocation_slow_path_enabled() {
+        if !cfg!(feature = "quarantine") && !semantic_allocation_slow_path_enabled() {
             return self.alloc_raw(layout);
         }
         if let Some(metadata) = active_allocation_metadata() {
@@ -553,12 +559,20 @@ unsafe impl GlobalAlloc for RustAllocator {
             }
             return self.alloc_with_recovery_metadata(layout, metadata);
         }
-        let ptr = self.alloc_raw(layout);
-        if !ptr.is_null() && semantic_stats_recording_enabled() {
-            SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), layout.size());
-            semantic_fallback_attribution_record_raw_alloc_no_metadata(layout.size());
+
+        #[cfg(feature = "quarantine")]
+        {
+            self.alloc_with_metadata(layout, COMPILED_QUARANTINE_METADATA)
         }
-        ptr
+        #[cfg(not(feature = "quarantine"))]
+        {
+            let ptr = self.alloc_raw(layout);
+            if !ptr.is_null() && semantic_stats_recording_enabled() {
+                SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), layout.size());
+                semantic_fallback_attribution_record_raw_alloc_no_metadata(layout.size());
+            }
+            ptr
+        }
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
@@ -573,7 +587,7 @@ unsafe impl GlobalAlloc for RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
-        if !semantic_runtime_slow_path_enabled() {
+        if !cfg!(feature = "quarantine") && !semantic_runtime_slow_path_enabled() {
             return self.dealloc_raw(ptr, layout);
         }
         if let Some(metadata) = active_allocation_metadata() {
@@ -588,18 +602,26 @@ unsafe impl GlobalAlloc for RustAllocator {
         if let Some(metadata) = auto_deallocation_metadata(layout) {
             return self.dealloc_with_metadata(ptr, layout, metadata);
         }
-        if semantic_stats_recording_enabled() {
-            SEMANTIC_STATS.record_dealloc(AllocationMetadata::unknown());
-            semantic_fallback_attribution_record_raw_dealloc_no_metadata();
+
+        #[cfg(feature = "quarantine")]
+        {
+            self.dealloc_with_metadata(ptr, layout, COMPILED_QUARANTINE_METADATA);
         }
-        self.dealloc_raw(ptr, layout)
+        #[cfg(not(feature = "quarantine"))]
+        {
+            if semantic_stats_recording_enabled() {
+                SEMANTIC_STATS.record_dealloc(AllocationMetadata::unknown());
+                semantic_fallback_attribution_record_raw_dealloc_no_metadata();
+            }
+            self.dealloc_raw(ptr, layout)
+        }
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         if ptr.is_null() && layout.size() != 0 {
             return core::ptr::null_mut();
         }
-        if !semantic_runtime_slow_path_enabled() {
+        if !cfg!(feature = "quarantine") && !semantic_runtime_slow_path_enabled() {
             return self.realloc_raw(ptr, layout, new_size);
         }
         let new_layout = match checked_realloc_layout(layout, new_size) {
@@ -678,19 +700,34 @@ unsafe impl GlobalAlloc for RustAllocator {
             }
             return new_ptr;
         }
-        if semantic_stats_recording_enabled() {
-            let new_ptr = self.realloc_raw(ptr, layout, new_size);
-            if !new_ptr.is_null() {
-                SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), new_size);
-                semantic_fallback_attribution_record_raw_realloc_no_metadata(new_size);
-                if fallback_realloc_should_record_dealloc(ptr, layout, new_ptr) {
-                    SEMANTIC_STATS.record_dealloc(AllocationMetadata::unknown());
-                    semantic_fallback_attribution_record_raw_realloc_moved_dealloc_no_metadata();
-                }
-            }
-            return new_ptr;
+
+        #[cfg(feature = "quarantine")]
+        {
+            self.realloc_with_split_metadata(
+                ptr,
+                layout,
+                new_size,
+                COMPILED_QUARANTINE_METADATA,
+                COMPILED_QUARANTINE_METADATA,
+            )
         }
-        self.realloc_raw(ptr, layout, new_size)
+        #[cfg(not(feature = "quarantine"))]
+        {
+            if semantic_stats_recording_enabled() {
+                let new_ptr = self.realloc_raw(ptr, layout, new_size);
+                if !new_ptr.is_null() {
+                    SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), new_size);
+                    semantic_fallback_attribution_record_raw_realloc_no_metadata(new_size);
+                    if fallback_realloc_should_record_dealloc(ptr, layout, new_ptr) {
+                        SEMANTIC_STATS.record_dealloc(AllocationMetadata::unknown());
+                        semantic_fallback_attribution_record_raw_realloc_moved_dealloc_no_metadata(
+                        );
+                    }
+                }
+                return new_ptr;
+            }
+            self.realloc_raw(ptr, layout, new_size)
+        }
     }
 }
 
@@ -796,6 +833,10 @@ unsafe impl Allocator for RustAllocator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "quarantine")]
+    use crate::alloc_api::type_isolation::{
+        delayed_free_snapshot, drain_current_thread_semantic_state, semantic_auto_metadata_enable,
+    };
     use crate::alloc_api::type_isolation::{
         restore_active_metadata, semantic_test_guard, set_active_metadata,
     };
@@ -869,6 +910,182 @@ mod tests {
                 .realloc_recorded_old_metadata_new_allocation_bytes
                 .saturating_sub(before.realloc_recorded_old_metadata_new_allocation_bytes),
         }
+    }
+
+    #[cfg(feature = "quarantine")]
+    struct CompiledQuarantineTestCleanup {
+        alloc: RustAllocator,
+    }
+
+    #[cfg(feature = "quarantine")]
+    impl CompiledQuarantineTestCleanup {
+        fn new(alloc: RustAllocator) -> Self {
+            semantic_auto_metadata_disable();
+            semantic_stats_recording_disable();
+            unsafe {
+                restore_active_metadata(AllocationMetadata::unknown());
+                let _ = drain_current_thread_semantic_state(&alloc);
+            }
+            Self { alloc }
+        }
+    }
+
+    #[cfg(feature = "quarantine")]
+    impl Drop for CompiledQuarantineTestCleanup {
+        fn drop(&mut self) {
+            semantic_auto_metadata_disable();
+            semantic_stats_recording_disable();
+            unsafe {
+                restore_active_metadata(AllocationMetadata::unknown());
+                let _ = drain_current_thread_semantic_state(&self.alloc);
+            }
+        }
+    }
+
+    #[cfg(feature = "quarantine")]
+    #[test]
+    fn compiled_quarantine_global_dealloc_enqueues_unscoped_fallback() {
+        let _guard = semantic_test_guard();
+        let alloc = RustAllocator::new();
+        let _cleanup = CompiledQuarantineTestCleanup::new(alloc);
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+
+        let snapshot = delayed_free_snapshot();
+        assert_eq!(snapshot.occupied_slots, 1);
+        assert!(snapshot.retained_bytes >= layout.size());
+        assert!(snapshot.retained_accounting_matches);
+    }
+
+    #[cfg(feature = "quarantine")]
+    #[test]
+    fn compiled_quarantine_global_realloc_preserves_prefix_and_quarantines_old_block() {
+        let _guard = semantic_test_guard();
+        let alloc = RustAllocator::new();
+        let _cleanup = CompiledQuarantineTestCleanup::new(alloc);
+        let old_layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let new_size = 1024;
+        let new_layout = Layout::from_size_align(new_size, old_layout.align()).unwrap();
+
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, old_layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            for offset in 0..old_layout.size() {
+                ptr.add(offset).write((offset as u8) ^ 0xA5);
+            }
+        }
+
+        let new_ptr = unsafe { GlobalAlloc::realloc(&alloc, ptr, old_layout, new_size) };
+        assert!(!new_ptr.is_null());
+        assert_ne!(new_ptr, ptr, "cross-size-class realloc must move");
+        unsafe {
+            for offset in 0..old_layout.size() {
+                assert_eq!(new_ptr.add(offset).read(), (offset as u8) ^ 0xA5);
+            }
+        }
+        assert_eq!(
+            delayed_free_snapshot().occupied_slots,
+            1,
+            "successful moving realloc must quarantine the old allocation"
+        );
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, new_ptr, new_layout);
+        }
+        assert_eq!(delayed_free_snapshot().occupied_slots, 2);
+    }
+
+    #[cfg(feature = "quarantine")]
+    #[test]
+    fn compiled_quarantine_eviction_stays_bounded_and_thread_drain_cleans_it() {
+        let _guard = semantic_test_guard();
+        let alloc = RustAllocator::new();
+        let _cleanup = CompiledQuarantineTestCleanup::new(alloc);
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let mut ptrs = [core::ptr::null_mut(); 40];
+
+        for ptr in ptrs.iter_mut() {
+            *ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+            assert!(!ptr.is_null());
+        }
+        for ptr in ptrs {
+            unsafe {
+                GlobalAlloc::dealloc(&alloc, ptr, layout);
+            }
+        }
+
+        let full = delayed_free_snapshot();
+        assert_eq!(full.occupied_slots, 32);
+        assert!(full.retained_accounting_matches);
+        let released = unsafe { drain_current_thread_semantic_state(&alloc) };
+        assert_eq!(released, full.occupied_slots);
+        assert_eq!(delayed_free_snapshot().occupied_slots, 0);
+    }
+
+    #[cfg(feature = "quarantine")]
+    #[test]
+    fn compiled_quarantine_does_not_override_scoped_or_recovered_metadata() {
+        let _guard = semantic_test_guard();
+        let alloc = RustAllocator::new();
+        let _cleanup = CompiledQuarantineTestCleanup::new(alloc);
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_DF01)
+            .with_module(0xC0DE_DF01)
+            .with_callsite(0xA110_DF01)
+            .with_flags(FLAG_TYPE_ISOLATED);
+
+        let previous = unsafe { set_active_metadata(metadata) };
+        let scoped_ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!scoped_ptr.is_null());
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, scoped_ptr, layout);
+            restore_active_metadata(previous);
+        }
+        assert_eq!(
+            delayed_free_snapshot().occupied_slots,
+            0,
+            "compiled fallback must not add delayed-free to active scoped metadata"
+        );
+        unsafe {
+            let _ = drain_current_thread_semantic_state(&alloc);
+        }
+
+        let recovered_ptr = unsafe { alloc.alloc_with_recovery_metadata(layout, metadata) };
+        assert!(!recovered_ptr.is_null());
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, recovered_ptr, layout);
+        }
+        assert_eq!(
+            delayed_free_snapshot().occupied_slots,
+            0,
+            "recorded metadata must take precedence over the compiled fallback"
+        );
+    }
+
+    #[cfg(feature = "quarantine")]
+    #[test]
+    fn compiled_quarantine_does_not_override_auto_metadata() {
+        let _guard = semantic_test_guard();
+        let alloc = RustAllocator::new();
+        let _cleanup = CompiledQuarantineTestCleanup::new(alloc);
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        semantic_auto_metadata_enable(0xC0DE_DF02, FLAG_TYPE_ISOLATED, 0xA110_DF02);
+
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        assert_eq!(
+            delayed_free_snapshot().occupied_slots,
+            0,
+            "configured auto metadata must take precedence without inheriting delayed-free"
+        );
     }
 
     #[test]
@@ -1150,7 +1367,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "stats")]
+    #[cfg(all(feature = "stats", not(feature = "quarantine")))]
     #[test]
     fn fallback_attribution_counts_raw_global_alloc_and_dealloc() {
         let _guard = semantic_test_guard();
@@ -1268,7 +1485,7 @@ mod tests {
         semantic_stats_recording_disable();
     }
 
-    #[cfg(feature = "stats")]
+    #[cfg(all(feature = "stats", not(feature = "quarantine")))]
     #[test]
     fn fallback_attribution_distinguishes_raw_and_recovered_old_realloc() {
         let _guard = semantic_test_guard();
