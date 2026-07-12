@@ -302,9 +302,10 @@ prevents self-instrumentation of `crate::__unialloc_rustc_driver_lowered_site`
 or its `Drop` guard, which can otherwise recurse through the allocator metadata
 path.
 
-These checks are intentionally non-claim-grade until production MIR rewriting and
-full-surface runtime allocation-event coverage exist.  They are nevertheless real
-compiler/runtime validation: the pass is a rustc_driver optimized-MIR pass, the
+These checks are intentionally non-claim-grade because selected-entrypoint and
+compile-surface evidence do not establish full-application runtime allocation-event
+coverage.  They are nevertheless real compiler/runtime validation: the implemented
+pass path is a rustc_driver optimized-MIR pass, the
 compiled target is the actual Cargo `std_bench` bench target, and the runtime
 smoke disables layout auto metadata so any lowered-module typed rows must come
 from compiler-derived scope metadata.  The MIR semantic-scope pass now solves
@@ -330,8 +331,9 @@ coverage (`runtime_coverage_percent`) measures how many dynamic allocations were
 typed; pair coverage measures how many distinct compiler-map `(type_id,
 callsite)` pairs appeared at runtime.  A selected smoke can legitimately reach a
 high dynamic allocation coverage while covering only a few allocation-site pairs,
-so claim-grade C002 still requires production MIR lowering plus a full-surface
-runtime run rather than treating a high selected-smoke percentage as final.
+so no selected smoke may be promoted to universal or whole-application coverage.
+Static candidate/applied/fail-closed coverage, dynamic typed/total allocation-event
+coverage, and adversarial isolation-behavior coverage retain separate denominators.
 
 ## Direct allocator-call MIR replacement ABI modes
 
@@ -413,21 +415,33 @@ opt-in:
 `--unialloc-direct-local-size-align-with-semantic-drop` (or
 `UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP=1`).  This implies direct
 local metadata ABI plus semantic Drop-scope MIR rewriting in the same
-`rustc_driver` compile.  In that mode, the pass may rewrite size/align
-allocation to the `_local` ABI only when it also emits a matching Drop scope with
-the same heap-object type identity (`mir-heap-object-type-v1`).  The audit row
-must carry `metadata_pairing_contract:
-local_metadata_abi_semantic_drop_scope`, and the probe gate requires
-`direct_size_align_local_pairing_validated=true` with zero
-`direct_local_size_align_metadata_contract_violation_count` and zero
-`direct_local_size_align_pairing_gap_count`.  The latter is computed per
-compiler-assigned heap-object type identity, so a global "one local allocation
-and one unrelated Drop scope somewhere" count is not accepted, while legitimate
-cross-function moves into a typed Drop/consumer function remain valid.  Without
-this paired proof, size/align lowering remains recovery-backed by default.
-Do not use this mode for paths that may still deallocate through ordinary
-`GlobalAlloc::dealloc` without compiler-emitted metadata; those paths need the
-default recovery ABI.
+`rustc_driver` compile.  The raw size/align allocator call itself remains
+recovery-backed: optimized MIR does not expose a sound pointer-to-owner link
+that would authorize a no-recovery `exchange_malloc` rewrite.
+
+The semantic allocation/Drop scopes may independently select the `_local`
+scope ABI, but only for a deliberately narrow zero-alias proof.  The allocation
+must write one unprojected owner local, every candidate of the same heap-object
+type must follow one acyclic non-cleanup normal path, and that exact local must
+reach its exact `Drop` without any intervening borrow, raw pointer, copy, move,
+call argument, projection, overwrite, branch, loop, or early exit.  Any such
+use makes the whole same-type group recovery-backed.  Cross-function ownership
+transfer is therefore not accepted as local merely because a matching type is
+dropped elsewhere.
+
+`test_mir_direct_local_ownership_pairing.py` exercises actual two-crate
+`RUSTC_WRAPPER` rewriting and runtime accounting.  It includes two same-type
+owners with mixed local/escaping lifetimes, a conditional escape, a positive
+unused-then-Drop owner, and a hidden `&mut owner` passed to a dependency that
+uses `mem::replace`.  The adversarial paths must use recovery scopes and finish
+with no raw deallocation lacking metadata; only the exact zero-alias owner may
+use the local scope ABI.  The hidden-alias fail-first result was typed
+allocation/deallocation `1/1`, fallback allocation/deallocation `1/1`, and
+`raw_dealloc_no_metadata=1`.  At `26051b9`, the repaired hidden lane is typed
+`1/2`, fallback `1/0`, and raw-without-metadata `0`; the positive aggregate is
+typed `4/4`, fallback `0/0`, and raw `0`.  This is a bounded conservative
+ownership check, not a general Rust escape analysis or universal ownership
+proof.
 
 The evaluation wrapper exposes the same mode for targeted real probes:
 
@@ -463,3 +477,50 @@ Selected/slice smokes are raw implementation evidence only and must not replace
 the claim-grade `evaluation/results/rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json`;
 the evaluator only refreshes that results mirror when the runtime artifact is
 full-surface validated.
+
+## Companion runtime and real-application evidence boundaries
+
+The compiler pass relies on runtime identity that survives policy control
+changes.  Commit `6603460` preserves allocation-time metadata and coherent
+configuration generations for global, thread-local, and layout-derived auto
+metadata; it also prevents pre-enable raw pointers and unrecorded old realloc
+pointers from inheriting a later policy.  Hosted `stats,type_isolation` tests
+pass `720/720`, and fixed-heap tests pass `606/606`.  These are runtime lifecycle
+checks, not compiler-coverage or performance denominators.
+
+Windows readiness is also narrower than runtime validation.  Commit `f5c4935`
+provides symmetric FLS PAL access, `df5f449` makes production `GlobalTcache`
+fiber-local, and `f238f10` separates full current-owner teardown from a narrow
+retained-cache drain for non-current fiber deletion.  Host regressions pass
+`1/1` retained-drain and `69/69` thread-cache tests; the Windows GNU
+cross-target type-check/cross-build and a Zig-linked test executable no-run
+pass.  The fiber deletion and thread-exit regressions still require a real
+Windows or Wine run, so this is compile/link readiness rather than Windows
+runtime evidence.
+
+The Oxipng run at `15d892e` is pre-`26051b9` ownership hardening.  Its exact
+source-bound counts remain historical evidence and must not be rebound to the
+current compiler pass.
+
+The post-hardening one-shot application run is bound to source
+`af342f7e26dc4a5e132acc18d7f7a450009e6517`; build/run return codes are both
+zero and the output SHA-256 is
+`565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`.
+Its separate static categories are 6 direct, 843 semantic, and 278 Drop applied
+rewrites plus 267 fail-closed candidates (265 multi-owner Drop and 2 semantic).
+The runtime window reports 1061 typed out of 1070 allocation events and 9
+fallback allocations; `9915 bp` is only that diagnostic event ratio.  The
+injected address oracle reports wrong-type non-reuse, same-type reuse, mismatch
+before/after `0/0`, and zero corruption.
+
+The full workload nevertheless records 67 recovery identity corrections.  The
+runtime uses the allocation-time record, so this is fail-closed
+`recovery_corrected_non_exact` attribution, not allocator corruption and not an
+exact whole-application compiler-pairing result.  It is distinct from both the
+oracle window and the 267 static fail-closed candidates.  Validator `3dc1039`
+only replays the preserved artifacts after separating those windows; it does
+not rerun Oxipng.  See
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-af342f7-20260712a/posthoc-preserved-run-validation.json`.
+Static rows, runtime events, the bounded oracle, and whole-run corrections must
+retain separate denominators; none is universal coverage or publication-grade
+performance evidence.

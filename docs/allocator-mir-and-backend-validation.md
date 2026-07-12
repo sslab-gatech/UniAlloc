@@ -138,27 +138,38 @@ Current key result:
 
 ### Direct-local no-recovery metadata ABI gate
 
-The direct-local Layout ABI is a deliberate no-recovery path for compiler-proven
-`std::alloc::Layout` alloc/realloc/dealloc calls.  In that mode,
-`recovery_identity_matches=0` is expected because local dealloc uses the exact
-compiler-supplied metadata directly instead of consulting the recovery side
-table.  The evaluator therefore accepts zero recovery matches only when the
-audit independently proves all of the following:
+The direct-local Layout ABI is a deliberate no-recovery path only when the
+compiler rewrites a paired `std::alloc::Layout` allocation and its exact
+reallocation/deallocation metadata.  Local deallocation then uses the
+compiler-supplied metadata directly, so `recovery_identity_matches=0` is
+expected only when the audit independently proves applied local rewrites,
+row-level layout provenance, no recovery-backed row requiring validation, zero
+pairing/contract gaps, and `recovery_identity_mismatches=0`.
 
-- real direct-local metadata ABI rewrites were applied;
-- local realloc and dealloc rewrites were both present;
-- no recovery-backed rows remain that still need recovery identity validation;
-- the local size/align and recovery fallback contracts validated;
-- runtime layout provenance validated row-by-row with no blockers;
-- `recovery_identity_mismatches=0`.
+Commit `26051b9` tightens the adjacent semantic owner/Drop path.  A local scope
+now requires one unprojected owner local, the exact constructor destination, a
+single acyclic non-cleanup normal path, and the exact `Drop`, with no intervening
+borrow or reference, raw pointer, copy, move, call argument, projection,
+overwrite, branch, loop, or early exit.  One unsafe or duplicate candidate makes
+the complete same-type candidate group recovery-backed.  Raw
+`SizeAlign`/`exchange_malloc` remains recovery-backed because optimized MIR does
+not expose a sound pointer-to-owner link; a same-type Drop elsewhere is not
+accepted as ownership proof.
 
-This is not a general relaxation.  Recovery-backed MIR probes still require at
-least one recovery identity match, and any reported mismatch remains a hard
-failure for every probe.
+The actual two-crate `RUSTC_WRAPPER` regression includes a hidden `&mut owner`
+passed into a dependency that calls `mem::replace`.  The fail-first behavior was
+typed allocation/deallocation `1/1`, fallback allocation/deallocation `1/1`,
+and `raw_dealloc_no_metadata=1`.  After the ownership repair, that hidden-alias
+lane reports typed `1/2`, fallback `1/0`, and raw-without-metadata `0`; the
+positive aggregate reports typed `4/4`, fallback `0/0`, and raw `0`.  Only the
+exact zero-alias owner uses the local scope ABI.  This is a bounded conservative
+ownership check, not general Rust escape analysis.
 
-Focused validation:
+Focused validation shape:
 
 ```sh
+python3 tools/unialloc-rustc-pass/test_mir_direct_local_ownership_pairing.py
+
 python3 evaluation/scripts/evaluate.py collect-rustc-driver-direct-allocator-mir-probe \
   --features stats,type_isolation \
   --direct-local-size-align-with-semantic-drop \
@@ -167,17 +178,12 @@ python3 evaluation/scripts/evaluate.py collect-rustc-driver-direct-allocator-mir
   --no-update-results
 ```
 
-Current key result:
-
-- companion status: `ready=true`, `blockers=[]`
-- `runtime_probe_validated=true`
-- `direct_local_no_recovery_metadata_abi_validated=true`
-- `direct_size_align_recovery_backed_required_count=0`
-- `semantic_metadata_recovery_identity_match_required=false`
-- `semantic_metadata_recovery_identity_validated=true`
-- `typed_allocations=84`, `typed_deallocations=84`, `fallback_allocations=0`
-- `recovery_identity_matches=0`, `recovery_identity_mismatches=0`
-- `runtime_layout_provenance_validated=true`
+The earlier pure-Layout direct-local probe reported typed allocations and
+deallocations `84/84`, fallback allocations `0`, recovery matches `0`, recovery
+mismatches `0`, and validated row-level layout provenance.  That result predates
+`26051b9`; it remains historical evidence for its exact Layout ABI snapshot and
+must not be promoted to current ownership-hardening or universal coverage
+proof.
 
 ## Semantic scope and cross-thread validation
 
@@ -510,7 +516,25 @@ This proves one bounded nested-unwind pairing invariant. It is not a general
 proof for every panic source, future rustc MIR shape, or unsupported allocation
 path.
 
-### Current Oxipng real-application compiler coverage boundary
+### Auto-metadata policy changes preserve allocation-time identity
+
+Commit `6603460` makes auto-metadata configuration generation-aware without
+discarding live recovery records.  Global, thread-local, and layout-derived
+allocations retain the exact metadata selected at allocation time across
+disable or reconfiguration.  A long-lived worker lazily restarts a cyclic
+compiler-ID stream at the first ID of each coherent generation.  Publication
+and control-change overlap is covered by a concurrency regression.
+
+Two negative boundaries prevent retroactive attribution: a pointer allocated
+before auto metadata was enabled remains raw on deallocation, and an unrecorded
+old pointer in realloc/move remains raw even when the replacement may use the
+current policy.  The hosted `stats,type_isolation` suite passes `720/720`; the
+fixed-heap suite passes `606/606`.  Thread-local recovery APIs still require
+same-thread free/realloc; process-visible global recovery remains the explicit
+cross-thread contract.  These are lifecycle correctness results, not
+performance measurements.
+
+### Oxipng real-application compiler/runtime evidence boundary
 
 Historical commit `88c35fd` added exact `indexmap::map::IndexMap` and
 `indexmap::set::IndexSet` heap-container identities to the compiler pass.  The
@@ -523,13 +547,15 @@ custom ADTs.  At that source snapshot, `png::PngData`, `headers::Headers`, and
 Commit `7cd31be` then classifies exact `alloc`/`std` `Arc` and `Rc` plain-Clone
 handles as non-owning without changing constructors, Drop, or other heap-owner
 semantics.  A single successful Oxipng v4.0.3 build/run bound to code-bearing
-source `15d892e` consequently applies both concrete `PngData::clone` sites to
+pre-ownership-hardening source `15d892e` consequently applies both concrete
+`PngData::clone` sites to
 their sole allocating owner, `Vec<u8>`.  `Headers` still fails closed because
 it has multiple heap owners.  `Sender` also remains unresolved: its pinned
 dependency implementation is non-allocating, but the compiler pass cannot bind
 that source version, so a global name-only exception would be unsound.
 
-The current audit reports 843 actual semantic scopes, 278 applied Drop rows,
+The pre-ownership-hardening audit reports 843 actual semantic scopes, 278
+applied Drop rows,
 265 multi-owner Drop rows that fail closed, 2 semantic fail-closed rows, 6
 direct rewrites, and 131 complete runtime rows.  The change from 853 to 843
 scopes removes standalone `Arc`/`Rc` handle-Clone false positives while making
@@ -539,8 +565,41 @@ coverage regression.  The functional PNG SHA-256 is
 injected compiler-identity-bound address oracle remains validated.  Evidence
 is under
 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-arc-vec-15d892e-20260712/`.
-This source-bound run proves neither universal compiler coverage nor a
+This source-bound run predates `26051b9` and cannot be rebound to the hardened
+owner analysis.  It proves neither universal compiler coverage nor a
 publication-grade performance result.
+
+The post-ownership-hardening Oxipng v4.0.3 one-shot is bound to application
+source `af342f7e26dc4a5e132acc18d7f7a450009e6517`.  The wrapper build and the
+single functional run both returned zero, and the output SHA-256 exactly
+matched
+`565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`.
+The target-crate static audit keeps four categories distinct: 6 applied direct
+rewrites, 843 applied semantic scopes, 278 applied Drop scopes, and 267
+fail-closed candidates (265 multi-owner Drop plus 2 semantic).  Across the 1121
+applied semantic/Drop rows, 23 satisfy the `_local` zero-alias proof and 1098
+use recovery-backed scopes.
+
+The separate runtime recording window reports 1061 typed allocation events out
+of 1070 total, 9 fallback allocations, 129 complete type rows, zero dropped
+events, and zero corrupt slots.  Its `9915 bp` counter is only a diagnostic
+dynamic-event ratio, not static compiler coverage or object coverage.  The
+injected address oracle records producer/wrong-type/producer-recovery addresses
+`4379656256 / 4379656320 / 4379656256`: the wrong type does not reuse producer
+storage, the same type does, oracle mismatches remain `0/0`, and oracle corrupt
+slots remain zero.
+
+The whole workload separately reports 67 recovery identity mismatches.  Each
+is routed with the authoritative allocation-time recorded identity, so the
+allocator fails closed without reporting corruption, but the result is
+`recovery_corrected_non_exact`: it does not support an exact whole-application
+compiler-pairing claim.  These 67 dynamic corrections are neither the oracle's
+zero-delta window nor the 267 static fail-closed MIR candidates.  Validator
+commit `3dc1039` repairs the former coupling and revalidates only the preserved
+artifacts; the application was not rerun.  Evidence is under
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-af342f7-20260712a/posthoc-preserved-run-validation.json`.
+This is one-shot functional/diagnostic evidence, not universal coverage,
+performance evidence, or a publication-grade percentage.
 
 For historical comparison, a source-bound Oxipng v4.0.3 smoke at validator
 commit `e466831` validated the
@@ -645,6 +704,26 @@ function, and no dependency MIR row.  The exact focused unittest passes `1/1`.
 This is bounded target/dependency non-interference evidence for that wrapper
 path, not direct allocator-call coverage, arbitrary dependency-graph coverage,
 runtime type-isolation evidence, or performance evidence.
+
+### Windows FLS teardown is compile/link ready, not runtime-validated
+
+The Windows work is split across three source-bound changes.  Commit `f5c4935`
+provides symmetric PAL `FlsSetValue`/`FlsGetValue` access; `df5f449` makes the
+production `GlobalTcache` owner fiber-local; `f238f10` handles registration and
+save failures plus destructor ownership.  A current-owner callback performs a
+full semantic drain.  When `DeleteFiber(B)` invokes B's callback while A is
+current, the callback first narrow-drains OS-thread-shared allocator-retained
+semantic caches, preserving live recovery/tag records, active scopes, and the
+compiler cursor, then reclaims B.  If temporary binding or clearing fails, the
+code leaks safely rather than risking use-after-free or double-free.
+
+The host retained-only regression passes `1/1`, the host thread-cache filter
+passes `69/69`, the Windows GNU cross-target type-check/cross-build passes, and
+a Windows test executable links through the configured Zig wrapper without
+running.  The A-current/B-delete, A-null/B-populated, and current-owner
+thread-exit regressions have not run on Windows or Wine.  The evidence therefore
+supports source and cross-target compile/link readiness only, not a Windows
+runtime PASS.
 
 ## PAC metadata-auth probes use allocator object addresses
 
