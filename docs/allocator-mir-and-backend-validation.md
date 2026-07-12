@@ -533,6 +533,26 @@ This is an ordinary-Rust actual-rewrite and bounded isolation-effect probe, not
 an external-application run, universal conversion coverage, performance, or a
 paper percentage.  The preserved Oxipng run was not rerun or rebound.
 
+### `CString` to `Vec<u8>` pointer-preserving ownership transfer
+
+Commit `5408c04` adds exact current-rustc handling for ordinary
+`CString::into_bytes_with_nul`.  Exact allocation-crate DefId matching and a
+structural `CString -> Vec<u8, Global>` proof report one candidate and apply it
+(`1/1`) through `__unialloc_semantic_cstring_into_bytes_with_nul`.  The
+single-run runtime oracle reports attempted/applied/rejected `1/1/0`: 258 bytes,
+the allocation pointer, payload, and capacity are preserved; the compiler-derived
+CString and Vec identities are distinct and nonzero; the old CString identity
+cannot reuse the transferred storage; and the exact Vec identity reuses it.
+Fallback/raw allocation, deallocation, and realloc-without-metadata, recovery
+mismatch, corrupt-slot, and dropped-event counts are all `0`.
+
+The direct runtime regression passes once on hosted and once on `fixed_heap`
+with `stats,type_isolation`.  It covers accepted, wrong-old-identity, missing
+record, and authenticated memory-tagged cases.  Independent review approved the
+exact fail-closed proof and runtime contract.  This is a bounded ordinary-Rust
+actual rewrite and isolation-effect probe only; it does not establish other
+CString APIs, custom allocators, external-application coverage, or performance.
+
 ### Compiler-driven `Vec` realloc identity and type-isolation probe
 
 Commits `7096fc6`, `f0fe4d1`, and `37ea7cd` strengthen the focused `Vec<T>`
@@ -636,6 +656,31 @@ tests). Independent review approved the repaired ordering and claim boundary.
 This proves current-thread TLS quarantine ownership only. It does not establish
 cross-thread duplicate detection without global memory tagging, universal
 double-free detection, or performance.
+
+### Process-visible cross-thread delayed-free ownership
+
+Commit `e6dc7d6` closes the cross-thread/raw-entry bypass left outside the
+current-thread TLS guard.  A bounded 8-shard, 256-entry process-visible pointer
+registry publishes ownership before memory-tag validation, recovery-record
+consumption, statistics, cache mutation, copying, in-place realloc, or raw
+release.  A pending RAII guard unregisters on panic before TLS publication;
+normal release, eviction, and valid thread-exit drain unregister after record
+authentication.  `GlobalAlloc::{dealloc,realloc}`, raw dealloc/realloc,
+different-alignment move, and both semantic realloc implementations fail-stop
+before touching a registered pointer.
+
+The hosted and `fixed_heap` delayed-free filters pass `15/15` each.  Regressions
+cover foreign explicit deallocation, ordinary `GlobalAlloc` dealloc/realloc,
+same-class `SemanticAlloc` realloc, the pre-TLS-publication window, panic
+rollback, and a full registry shard.  Registry-full and oversized objects use
+immediate authenticated release rather than hidden TLS ownership.  The full
+pre-commit workspace suite passes 668 UniAlloc unit tests and 430 std-bench
+tests, and independent review found no equivalent dealloc/realloc bypass.
+
+The boundary is deliberately narrow: this protects pointers after their
+pending/quarantined ownership has been process-visibly registered.  It is not a
+universal detector for illegal operations that linearize before registration,
+not a general double-free security proof, and not performance evidence.
 
 ### Realloc policy-key separation across physical cache domains
 
