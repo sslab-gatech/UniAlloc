@@ -84,9 +84,11 @@ use std::sync::Mutex;
 use std::{os::unix::fs::PermissionsExt, os::unix::process::CommandExt};
 
 const PASS_NAME: &str = "unialloc-rustc-driver-mir-rewrite-dry-run";
-const LOWERING_MODULE_ID: u64 = 0xC002_DA00_0000_0001;
+const LEGACY_UNIALLOC_LOWERING_MODULE_ID: u64 = 0xC002_DA00_0000_0001;
 const DEFAULT_LOWERING_POLICY_FLAGS: u32 = 0x1;
 const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+const MODULE_ID_ALGORITHM: &str =
+    "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))";
 const TYPE_ID_ALGORITHM: &str =
     "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer Vec identity because they can change only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; constructor/factory scopes otherwise attribute identity only from the MIR destination, with exact Result<T, E>/Option<T> destinations selecting only the Ok/Some payload while Result Err owners remain fail-closed hazards; for both shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec capacity-only exception; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
@@ -103,6 +105,7 @@ static mut ORIGINAL_OPTIMIZED_MIR: Option<
 static mut RECORDS: Option<Mutex<Vec<RewriteRecord>>> = None;
 static mut ACTUAL_MIR_REWRITE: bool = false;
 static mut ACTUAL_SEMANTIC_SCOPE_REWRITE: bool = false;
+static mut LOWERING_MODULE_ID: u64 = LEGACY_UNIALLOC_LOWERING_MODULE_ID;
 static mut LOWERING_POLICY_FLAGS: u32 = DEFAULT_LOWERING_POLICY_FLAGS;
 static mut LOWERING_LIFETIME_HINT: u16 = 0;
 static mut LOWERING_PLACEMENT_HINT: u16 = 0;
@@ -711,6 +714,52 @@ fn crate_name_from_rustc_args(args: &[String]) -> String {
         .unwrap_or_else(|| "rustc-input".to_string())
 }
 
+fn rustc_crate_metadata(args: &[String]) -> Option<&str> {
+    let mut idx = 0;
+    while idx < args.len() {
+        if args[idx] == "-C" {
+            if let Some(value) = args
+                .get(idx + 1)
+                .and_then(|arg| arg.strip_prefix("metadata="))
+            {
+                if !value.is_empty() {
+                    return Some(value);
+                }
+            }
+        } else if let Some(value) = args[idx].strip_prefix("-Cmetadata=") {
+            if !value.is_empty() {
+                return Some(value);
+            }
+        }
+        idx += 1;
+    }
+    None
+}
+
+fn rustc_primary_input(args: &[String]) -> Option<&str> {
+    args.iter().skip(1).find_map(|arg| {
+        if arg == "-" || (!arg.starts_with('-') && arg.ends_with(".rs")) {
+            Some(arg.as_str())
+        } else {
+            None
+        }
+    })
+}
+
+fn crate_module_disambiguator(args: &[String]) -> String {
+    if let Some(metadata) = rustc_crate_metadata(args) {
+        return format!("metadata\0{}", metadata);
+    }
+    if let Some(input) = rustc_primary_input(args) {
+        if input != "-" {
+            let path = PathBuf::from(input);
+            let stable_path = path.canonicalize().unwrap_or(path);
+            return format!("primary-input\0{}", stable_path.display());
+        }
+    }
+    format!("rustc-argv\0{}", args.join("\0"))
+}
+
 fn normalized_target_crate_name(name: &str) -> String {
     name.trim().replace('-', "_")
 }
@@ -747,6 +796,28 @@ fn nonzero_fnv1a64(hash: u64) -> u64 {
 
 fn nonzero_fnv1a64_text(text: &str) -> u64 {
     nonzero_fnv1a64(fnv1a64_text(text))
+}
+
+fn lowering_module_id_from_rustc_args(args: &[String]) -> u64 {
+    let crate_name = rustc_crate_name(args)
+        .map(normalized_target_crate_name)
+        .unwrap_or_else(|| "rustc_input".to_string());
+    if crate_name == "unialloc" {
+        // Preserve the public in-tree probe ABI while giving every external
+        // crate compilation unit its own compiler-derived isolation context.
+        return LEGACY_UNIALLOC_LOWERING_MODULE_ID;
+    }
+
+    let mut identity = String::from("mir-crate-module-v1\0");
+    identity.push_str(&crate_name);
+    identity.push('\0');
+    identity.push_str(&crate_module_disambiguator(args));
+    nonzero_fnv1a64_text(&identity)
+}
+
+#[inline]
+fn lowering_module_id() -> u64 {
+    unsafe { LOWERING_MODULE_ID }
 }
 
 fn derived_output_path(dir: &PathBuf, args: &[String], extension: &str) -> PathBuf {
@@ -6133,7 +6204,7 @@ fn record_or_rewrite_candidates<'tcx>(
             )
         } else {
             (
-                LOWERING_MODULE_ID,
+                lowering_module_id(),
                 configured_policy_flags,
                 configured_lifetime_hint,
                 configured_placement_hint,
@@ -6777,7 +6848,7 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                 callsite
             ),
             type_id: new_type_id,
-            module_id: LOWERING_MODULE_ID,
+            module_id: lowering_module_id(),
             flags: lowering_policy_flags(),
             lifetime_hint: lowering_lifetime_hint(),
             placement_hint: lowering_placement_hint(),
@@ -7020,7 +7091,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                     callsite
                 ),
                 type_id,
-                module_id: LOWERING_MODULE_ID,
+                module_id: lowering_module_id(),
                 flags: policy_flags,
                 lifetime_hint,
                 placement_hint,
@@ -7068,7 +7139,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                     callsite
                 ),
                 type_id,
-                module_id: LOWERING_MODULE_ID,
+                module_id: lowering_module_id(),
                 flags: policy_flags,
                 lifetime_hint,
                 placement_hint,
@@ -7122,7 +7193,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                     callsite
                 ),
                 type_id,
-                module_id: LOWERING_MODULE_ID,
+                module_id: lowering_module_id(),
                 flags: policy_flags,
                 lifetime_hint,
                 placement_hint,
@@ -7163,7 +7234,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             "Wrap {} with semantic scope metadata(type_id={}, module_id={}, flags={}, lifetime_hint={}, placement_hint={}, callsite={}) / __unialloc_semantic_scope_pop(); semantic_object_type={}",
             callee,
             type_id,
-            LOWERING_MODULE_ID,
+            lowering_module_id(),
             policy_flags,
             lifetime_hint,
             placement_hint,
@@ -7240,7 +7311,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
 
                 let mut push_args = vec![
                     const_u64_operand(tcx, type_id, fn_span),
-                    const_u64_operand(tcx, LOWERING_MODULE_ID, fn_span),
+                    const_u64_operand(tcx, lowering_module_id(), fn_span),
                     const_u32_operand(tcx, policy_flags, fn_span),
                 ];
                 if scope_abi.supports_hints {
@@ -7281,7 +7352,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
         records.push(RewriteRecord {
             allocation_site_id: format!("rustc-driver-mir-semantic-scope:{:016x}", callsite),
             type_id,
-            module_id: LOWERING_MODULE_ID,
+            module_id: lowering_module_id(),
             flags: policy_flags,
             lifetime_hint,
             placement_hint,
@@ -7433,7 +7504,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                     callsite
                 ),
                 type_id,
-                module_id: LOWERING_MODULE_ID,
+                module_id: lowering_module_id(),
                 flags: policy_flags,
                 lifetime_hint,
                 placement_hint: lowering_placement_hint(),
@@ -7525,7 +7596,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             records.push(RewriteRecord {
                 allocation_site_id: format!("{}:{:016x}", allocation_site_prefix, callsite),
                 type_id,
-                module_id: LOWERING_MODULE_ID,
+                module_id: lowering_module_id(),
                 flags: policy_flags,
                 lifetime_hint,
                 placement_hint,
@@ -7565,7 +7636,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             "Wrap Drop of {} with semantic scope metadata(type_id={}, module_id={}, flags={}, lifetime_hint={}, placement_hint={}, callsite={}) / __unialloc_semantic_scope_pop(); semantic_object_type={}",
             drop_place,
             type_id,
-            LOWERING_MODULE_ID,
+            lowering_module_id(),
             policy_flags,
             lifetime_hint,
             placement_hint,
@@ -7628,7 +7699,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
 
                 let mut push_args = vec![
                     const_u64_operand(tcx, type_id, fn_span),
-                    const_u64_operand(tcx, LOWERING_MODULE_ID, fn_span),
+                    const_u64_operand(tcx, lowering_module_id(), fn_span),
                     const_u32_operand(tcx, policy_flags, fn_span),
                 ];
                 if scope_abi.supports_hints {
@@ -7668,7 +7739,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
         records.push(RewriteRecord {
             allocation_site_id: format!("rustc-driver-mir-semantic-drop:{:016x}", callsite),
             type_id,
-            module_id: LOWERING_MODULE_ID,
+            module_id: lowering_module_id(),
             flags: policy_flags,
             lifetime_hint,
             placement_hint,
@@ -8145,6 +8216,12 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let _ = writeln!(json, "    \"policy_flags\": {},", cli.policy_flags);
     let _ = writeln!(json, "    \"lifetime_hint\": {},", cli.lifetime_hint);
     let _ = writeln!(json, "    \"placement_hint\": {},", cli.placement_hint);
+    let _ = writeln!(json, "    \"module_id\": {},", lowering_module_id());
+    let _ = writeln!(
+        json,
+        "    \"module_id_algorithm\": \"{}\",",
+        MODULE_ID_ALGORITHM
+    );
     let _ = writeln!(
         json,
         "    \"auto_cross_thread_recovery_hint\": {},",
@@ -8849,6 +8926,8 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let _ = writeln!(text, "policy_flags: {}", cli.policy_flags);
     let _ = writeln!(text, "lifetime_hint: {}", cli.lifetime_hint);
     let _ = writeln!(text, "placement_hint: {}", cli.placement_hint);
+    let _ = writeln!(text, "module_id: {}", lowering_module_id());
+    let _ = writeln!(text, "module_id_algorithm: {}", MODULE_ID_ALGORITHM);
     let _ = writeln!(
         text,
         "auto_cross_thread_recovery_hint: {}",
@@ -8991,6 +9070,7 @@ fn main() {
         RECORDS = Some(Mutex::new(Vec::new()));
         ACTUAL_MIR_REWRITE = cli.actual_rewrite;
         ACTUAL_SEMANTIC_SCOPE_REWRITE = cli.semantic_scope_rewrite;
+        LOWERING_MODULE_ID = lowering_module_id_from_rustc_args(&cli.rustc_args);
         LOWERING_POLICY_FLAGS = cli.policy_flags;
         LOWERING_LIFETIME_HINT = cli.lifetime_hint;
         LOWERING_PLACEMENT_HINT = cli.placement_hint;
