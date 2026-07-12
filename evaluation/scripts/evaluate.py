@@ -55283,9 +55283,6 @@ def recognized_boot_emulator(value: str, status: Dict[str, Any]) -> bool:
 
     if not value:
         return False
-    if status.get("kind") == "uri":
-        return False
-    candidates = [value, str(status.get("resolved") or "")]
     markers = (
         "qemu-system-",
         "qemu-kvm",
@@ -55297,6 +55294,12 @@ def recognized_boot_emulator(value: str, status: Dict[str, Any]) -> bool:
         "firecracker",
         "cloud-hypervisor",
     )
+    if status.get("kind") == "uri":
+        normalized = value.strip().lower()
+        if not normalized.startswith("docker://"):
+            return False
+        return any(marker in normalized for marker in markers)
+    candidates = [value, str(status.get("resolved") or "")]
     for candidate in candidates:
         name = Path(candidate).name.lower()
         if any(marker in name for marker in markers):

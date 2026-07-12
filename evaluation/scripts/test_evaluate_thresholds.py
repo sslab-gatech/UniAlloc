@@ -31,6 +31,15 @@ evaluate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(evaluate)
 
 
+def source_fingerprint_marker_fields(source_fingerprint: dict | None = None) -> str:
+    fingerprint = source_fingerprint or evaluate.repository_source_fingerprint()
+    return (
+        f"schema_version={fingerprint.get('schema_version')} "
+        f"algorithm={fingerprint.get('algorithm')} "
+        f"source_digest={fingerprint.get('source_digest')}"
+    )
+
+
 def rpolars_test_source_contract() -> dict:
     """Minimal exact-paper provenance contract for claim-grade R-Polars unit fixtures."""
     return {
@@ -1618,7 +1627,8 @@ class ConstrainedBootLogPackagingTests(unittest.TestCase):
                         (
                             f"{evaluate.CONSTRAINED_BOOT_PROVENANCE_MARKER} "
                             f"platform=redox image_sha256={image_sha} boot_config_sha256={config_sha} "
-                            "emulator=redoxer emulator_version=test"
+                            "emulator=redoxer emulator_version=test "
+                            f"{source_fingerprint_marker_fields()}"
                         ),
                         (
                             f"{evaluate.CONSTRAINED_BOOT_SAMPLE_MARKER} platform=redox boot_cycle=1 "

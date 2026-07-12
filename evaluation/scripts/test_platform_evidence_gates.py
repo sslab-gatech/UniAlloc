@@ -1246,6 +1246,106 @@ class PlatformEvidenceGateTests(unittest.TestCase):
         self.assertTrue(blogos_audit["ready_for_claim_grade_import"], blogos_audit)
         self.assertEqual(blogos_audit["evidence_content_blockers"], [])
 
+    def test_boot_emulator_recognition_keeps_arbitrary_docker_uri_blocked(self) -> None:
+        status = evaluate.executable_status("docker://busybox:latest")
+
+        self.assertFalse(evaluate.recognized_boot_emulator("docker://busybox:latest", status))
+
+    def test_platform_matrix_audit_accepts_redox_docker_redoxer_uri_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            build_log = tmp / "redox-build.log"
+            image = tmp / "redox.img"
+            boot_config = tmp / "redox-boot.toml"
+            image.write_bytes(b"R" * (64 * 1024))
+            boot_config.write_text("[boot]\nserial=true\n", encoding="utf-8")
+            build_log.write_text("Redox UniAlloc build complete\n", encoding="utf-8")
+            boot_records = evaluate.extract_constrained_boot_sample_records_from_text(
+                valid_constrained_boot_marker("redox"),
+                platform_name="redox",
+            )
+            provenance_records = evaluate.extract_constrained_boot_provenance_records_from_text(
+                constrained_boot_provenance_marker_for_artifacts(
+                    "redox",
+                    image,
+                    boot_config,
+                ),
+            )
+            boot_cycles = tmp / "redox-boot-cycles.json"
+            boot_cycles.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "source": "redox-platform-boot-cycle",
+                        "kind": "boot_cycles",
+                        "platform": "redox",
+                        "passed": True,
+                        "claim_grade": True,
+                        "complete_for_claim": True,
+                        "boot_cycle_count": 1,
+                        "boot_sample_records": boot_records,
+                        "boot_sample_record_count": len(boot_records),
+                        "boot_provenance_records": provenance_records,
+                        "boot_provenance_record_count": len(provenance_records),
+                        "boot_provenance_blockers": [],
+                        "boot_provenance_record_blockers": [],
+                        "image": str(image),
+                        "boot_config": str(boot_config),
+                        "measurement_scope": "Redox constrained heap target image boot-cycle validated through Docker/redoxer.",
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            cfg = {
+                "claims": [
+                    {
+                        "id": "C007-cross-platform-retargeting",
+                        "platforms": ["redox"],
+                    }
+                ]
+            }
+            matrix = {
+                "redox": {
+                    "target": "Redox constrained heap target image boot-cycle validation",
+                    "passed": True,
+                    "claim_grade": True,
+                    "complete_for_claim": True,
+                    "image": str(image),
+                    "target_triple": "x86_64-unknown-redox",
+                    "platform_target": "Redox constrained heap target image",
+                    "emulator": "docker://redoxos/redoxer:latest",
+                    "boot_config": str(boot_config),
+                    "target_metadata": {
+                        "boot": "validated-target",
+                        "runner": "redoxer/QEMU through Docker",
+                    },
+                    "evidence": [
+                        {
+                            "path": build_log.name,
+                            "kind": "build_log",
+                            "sha256": evaluate.file_sha256(build_log),
+                        },
+                        {
+                            "path": boot_cycles.name,
+                            "kind": "boot_cycles",
+                            "sha256": evaluate.file_sha256(boot_cycles),
+                        },
+                    ],
+                }
+            }
+
+            audit = evaluate.build_platform_matrix_audit(
+                cfg,
+                tmp / "platform-matrix.generated.json",
+                source_bind_platform_matrix(matrix),
+            )
+
+        redox_audit = audit["platforms"]["redox"]
+        self.assertTrue(redox_audit["ready_for_claim_grade_import"], redox_audit)
+        self.assertEqual(redox_audit["metadata_integrity_blockers"], [])
+
     def test_platform_matrix_audit_rejects_imported_boot_json_without_provenance_record(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = pathlib.Path(tmpdir)
