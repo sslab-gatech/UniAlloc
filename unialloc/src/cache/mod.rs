@@ -610,16 +610,26 @@ impl RustAllocator {
             Some(heap_end) => heap_end,
             None => return false,
         };
-        let accepted = META_BUMP
-            .lock()
-            .init_with_range(heap_start, heap_end, page_size);
         #[cfg(feature = "fixed_heap")]
         {
+            #[cfg(all(test, not(feature = "separate_sc_backend")))]
+            crate::fixed_heap_init_race_test_gate_before_serialization();
+
+            // META_BUMP already owns the complete fixed-heap bootstrap.  Keep
+            // the readiness recheck under that same lock so a stale concurrent
+            // caller cannot replace roots published by the preceding caller.
+            let mut meta_bump = META_BUMP.lock();
+            if crate::sc::fixed_heap_roots_initialized() {
+                return true;
+            }
+            let accepted = meta_bump.init_with_range(heap_start, heap_end, page_size);
             accepted && crate::sc::fixed_heap_roots_initialized()
         }
         #[cfg(not(feature = "fixed_heap"))]
         {
-            accepted
+            META_BUMP
+                .lock()
+                .init_with_range(heap_start, heap_end, page_size)
         }
     }
     ///

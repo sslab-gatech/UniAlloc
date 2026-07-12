@@ -266,6 +266,28 @@ pub unsafe extern "C" fn __unialloc_constrained_boot_sample_checked(
     true
 }
 
+#[cfg(all(test, feature = "fixed_heap", not(feature = "separate_sc_backend")))]
+static FIXED_HEAP_INIT_RACE_TEST_ENABLED: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+#[cfg(all(test, feature = "fixed_heap", not(feature = "separate_sc_backend")))]
+static FIXED_HEAP_INIT_RACE_TEST_ARRIVALS: core::sync::atomic::AtomicUsize =
+    core::sync::atomic::AtomicUsize::new(0);
+#[cfg(all(test, feature = "fixed_heap", not(feature = "separate_sc_backend")))]
+static FIXED_HEAP_INIT_RACE_TEST_PERMITS: core::sync::atomic::AtomicUsize =
+    core::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(all(test, feature = "fixed_heap", not(feature = "separate_sc_backend")))]
+fn fixed_heap_init_race_test_gate_before_serialization() {
+    use core::sync::atomic::Ordering;
+    if !FIXED_HEAP_INIT_RACE_TEST_ENABLED.load(Ordering::Acquire) {
+        return;
+    }
+    let ticket = FIXED_HEAP_INIT_RACE_TEST_ARRIVALS.fetch_add(1, Ordering::AcqRel);
+    while FIXED_HEAP_INIT_RACE_TEST_PERMITS.load(Ordering::Acquire) <= ticket {
+        core::hint::spin_loop();
+    }
+}
+
 #[cfg(feature = "fixed_heap")]
 #[no_mangle]
 pub unsafe extern "C" fn unialloc_fixed_heap_try_init(
@@ -355,6 +377,101 @@ pub unsafe extern "C" fn unialloc_realloc(
 #[cfg(all(test, feature = "fixed_heap"))]
 mod fixed_heap_c_abi_tests {
     use super::*;
+
+    #[cfg(not(feature = "separate_sc_backend"))]
+    mod fixed_heap_init_race {
+        use super::*;
+        extern crate std;
+
+        const RACE_HEAP_BYTES: usize = 64 * 1024 * 1024;
+        const RACE_CHILD_ENV: &str = "UNIALLOC_FIXED_HEAP_INIT_RACE_CHILD";
+        const RACE_TEST_NAME: &str = concat!(
+            "fixed_heap_c_abi_tests::fixed_heap_init_race::",
+            "concurrent_fixed_heap_try_init_must_not_replace_live_roots"
+        );
+
+        #[repr(align(16384))]
+        struct RaceHeap([u8; RACE_HEAP_BYTES]);
+
+        static mut RACE_HEAP_A: RaceHeap = RaceHeap([0; RACE_HEAP_BYTES]);
+        static mut RACE_HEAP_B: RaceHeap = RaceHeap([0; RACE_HEAP_BYTES]);
+
+        fn wait_for_race_arrivals(expected: usize) {
+            use core::sync::atomic::Ordering;
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while FIXED_HEAP_INIT_RACE_TEST_ARRIVALS.load(Ordering::Acquire) < expected {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "init caller did not reach test gate"
+                );
+                std::thread::yield_now();
+            }
+        }
+
+        #[test]
+        fn concurrent_fixed_heap_try_init_must_not_replace_live_roots() {
+            use core::sync::atomic::Ordering;
+
+            // Other fixed-heap unit tests lazily initialize process-wide roots.
+            // Re-exec this one test so its race fixture always owns a fresh set of
+            // allocator globals, even when the full test binary runs in parallel.
+            if std::env::var_os(RACE_CHILD_ENV).is_none() {
+                let status = std::process::Command::new(
+                    std::env::current_exe().expect("current fixed-heap test executable"),
+                )
+                .args(["--exact", RACE_TEST_NAME, "--nocapture"])
+                .env(RACE_CHILD_ENV, "1")
+                .status()
+                .expect("spawn isolated fixed-heap init race test");
+                assert!(status.success(), "isolated fixed-heap race test failed");
+                return;
+            }
+
+            assert!(!unialloc_fixed_heap_ready());
+            let heap_a = unsafe { core::ptr::addr_of_mut!(RACE_HEAP_A.0).cast::<u8>() as usize };
+            let heap_b = unsafe { core::ptr::addr_of_mut!(RACE_HEAP_B.0).cast::<u8>() as usize };
+            assert_eq!(heap_a % crate::PAGE_SIZE, 0);
+            assert_eq!(heap_b % crate::PAGE_SIZE, 0);
+
+            FIXED_HEAP_INIT_RACE_TEST_ARRIVALS.store(0, Ordering::Release);
+            FIXED_HEAP_INIT_RACE_TEST_PERMITS.store(0, Ordering::Release);
+            FIXED_HEAP_INIT_RACE_TEST_ENABLED.store(true, Ordering::Release);
+
+            let first = std::thread::spawn(move || unsafe {
+                UniAlloc.try_init(heap_a, RACE_HEAP_BYTES, crate::PAGE_SIZE)
+            });
+            wait_for_race_arrivals(1);
+            let second = std::thread::spawn(move || unsafe {
+                UniAlloc.try_init(heap_b, RACE_HEAP_BYTES, crate::PAGE_SIZE)
+            });
+            wait_for_race_arrivals(2);
+
+            FIXED_HEAP_INIT_RACE_TEST_PERMITS.store(1, Ordering::Release);
+            assert!(first.join().expect("first init thread"));
+            let first_tcache = crate::cache::GlobalTcache_ptr.load(Ordering::Acquire);
+            let first_zone = crate::zone::GLOBAL_ZONE_ptr.load(Ordering::Acquire);
+            assert!(!first_tcache.is_null());
+            assert!(!first_zone.is_null());
+            let live = unsafe { unialloc_alloc(32, 8) };
+            assert!(!live.is_null());
+
+            FIXED_HEAP_INIT_RACE_TEST_PERMITS.store(2, Ordering::Release);
+            assert!(second.join().expect("second init thread"));
+            FIXED_HEAP_INIT_RACE_TEST_ENABLED.store(false, Ordering::Release);
+
+            let final_tcache = crate::cache::GlobalTcache_ptr.load(Ordering::Acquire);
+            let final_zone = crate::zone::GLOBAL_ZONE_ptr.load(Ordering::Acquire);
+            assert_eq!(
+                final_tcache, first_tcache,
+                "a stale concurrent caller replaced the live fixed-heap thread-cache root"
+            );
+            assert_eq!(
+                final_zone, first_zone,
+                "a stale concurrent caller replaced the live fixed-heap zone root"
+            );
+            unsafe { unialloc_dealloc(live, 32, 8) };
+        }
+    }
 
     fn ensure_ready() -> spin::MutexGuard<'static, ()> {
         let guard = crate::sc::fixed_heap_test_guard();
