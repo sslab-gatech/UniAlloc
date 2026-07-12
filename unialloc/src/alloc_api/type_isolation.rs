@@ -9,6 +9,7 @@
 //! denominator remains honest by default.
 
 use alloc::boxed::Box as AllocBox;
+use alloc::string::String as AllocString;
 use alloc::vec::Vec as AllocVec;
 use core::alloc::{Allocator, Layout};
 use core::mem::size_of;
@@ -4765,6 +4766,57 @@ pub fn __unialloc_semantic_box_slice_into_vec<T, A: Allocator>(
     }
 
     vec
+}
+
+/// Convert a string into bytes while transferring the allocator's live
+/// type-isolation identity from the exact `String` type to `Vec<u8>`.
+///
+/// This compiler-lowering helper follows `String::into_bytes`, whose standard
+/// representation-preserving conversion keeps the allocation pointer, length,
+/// and capacity.  UniAlloc changes only the type component of one exact,
+/// authenticated recovery record. Missing, mismatched, duplicate, zero-sized,
+/// or memory-tagged records fail closed and retain their original identity.
+#[doc(hidden)]
+pub fn __unialloc_semantic_string_into_bytes(
+    value: AllocString,
+    expected_old_type_id: u64,
+    new_type_id: u64,
+) -> AllocVec<u8> {
+    let old_ptr = value.as_ptr() as *mut u8;
+    let old_len = value.len();
+    let old_capacity = value.capacity();
+    let layout = Layout::array::<u8>(old_capacity).ok();
+    let bytes = value.into_bytes();
+
+    let applied = if let Some(layout) = layout {
+        if layout.size() != 0
+            && bytes.as_ptr() as *mut u8 == old_ptr
+            && bytes.len() == old_len
+            && bytes.capacity() == old_capacity
+        {
+            unsafe {
+                try_rebind_auto_allocation_type_identity(
+                    old_ptr,
+                    layout,
+                    expected_old_type_id,
+                    new_type_id,
+                )
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    if semantic_stats_recording_enabled() {
+        if applied {
+            SEMANTIC_OWNERSHIP_TRANSFER_APPLIED.fetch_add(1, Ordering::Relaxed);
+        } else {
+            SEMANTIC_OWNERSHIP_TRANSFER_REJECTED.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    bytes
 }
 
 /// Convert a vector into a boxed slice while transferring the allocator's live
