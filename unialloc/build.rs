@@ -139,6 +139,7 @@ fn main() {
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_alloc_layout_extra)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_asm_const)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_const_mut_refs)");
+        println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_map_first_last)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_nonnull_slice_from_raw_parts)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_raw_ref_op)");
         println!("cargo:rustc-check-cfg=cfg(unialloc_has_stable_slice_ptr_len)");
@@ -149,6 +150,7 @@ fn main() {
     // Keep the paper-pinned 2022 nightly on the feature gates it still needs,
     // but avoid enabling gates that current rustc has stabilized.  This makes
     // `cargo +nightly check` useful signal instead of expected-version noise.
+    emit_feature_stability_cfg(rustc_minor, "unialloc_has_stable_map_first_last", 66);
     emit_feature_stability_cfg(
         rustc_minor,
         "unialloc_has_stable_nonnull_slice_from_raw_parts",

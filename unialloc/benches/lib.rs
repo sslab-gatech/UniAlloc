@@ -1,5 +1,6 @@
 #![cfg(not(target_os = "android"))]
 #![cfg_attr(not(unialloc_btree_extract_if_range), feature(btree_drain_filter))]
+#![cfg_attr(not(unialloc_has_stable_map_first_last), feature(map_first_last))]
 #![feature(portable_simd)]
 #![feature(slice_partition_dedup)]
 #![feature(test)]
