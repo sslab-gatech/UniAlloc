@@ -505,6 +505,42 @@ unmodified-application deployment evidence, or a paper-performance result.
 The durable summaries and target-crate audits for these real-Rust probes are in
 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-real-rust-88c35fd-374d455-20260712/`.
 
+### Supported plain Clone is paired with an ambiguous fail-closed control
+
+Commit `dd30004` extends the ordinary-Rust Clone probe with a supported
+`Option<Vec<ProducerPayload>>::clone` positive path beside the existing
+ambiguous `Result<Vec<ProducerPayload>, String>::clone` negative path.  The
+source does not call UniAlloc metadata or allocator ABIs manually.  Its actual
+optimized-MIR audit contains exactly one applied semantic-scope row for the
+Option Clone, with compiler type id `11653960357981974603` and module id
+`13835860698770440193`.  A same-layout `Vec<ConsumerPayload>` row has the same
+module but distinct type id `17450045950661180065`.
+
+The runtime evidence binds those compiler identities to reuse behavior.  The
+Option Clone records typed allocation/deallocation/cache-hit/cache-insert
+`1/1/1/1`, zero fallback/raw allocation, deallocation, or reallocation, and
+recovers the protected Producer address while not reusing the Consumer address.
+The ambiguous Result Clone remains exactly one compiler fail-closed row and one
+raw allocation/deallocation pair, and it cannot consume the protected Producer
+entry.  Recovery mismatch and corrupt side-cache counts are both zero.  The
+clean source-bound artifact is under
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-option-clone-dd30004-20260712/`.
+This proves one supported Clone callsite and one ambiguous control, not universal
+Clone or whole-application coverage, and it contains no performance evidence.
+
+### Cargo target allowlisting does not rewrite the path dependency
+
+Commit `1956350` upgrades the POSIX wrapper regression to a real two-crate Cargo
+fixture.  Both the selected binary and a tiny path dependency compile and run;
+the exact output is `target=7 dependency=11 sum=18`.  The dependency invocation
+passes through the delegating compiler shim, whereas the allowlisted target is
+compiled inside the rustc-driver wrapper.  The test requires exactly one target
+audit and one pass log, an actual semantic-scope rewrite in the selected
+function, and no dependency MIR row.  The exact focused unittest passes `1/1`.
+This is bounded target/dependency non-interference evidence for that wrapper
+path, not direct allocator-call coverage, arbitrary dependency-graph coverage,
+runtime type-isolation evidence, or performance evidence.
+
 ## PAC metadata-auth probes use allocator object addresses
 
 The PAC metadata-auth evidence path now distinguishes three things that should
