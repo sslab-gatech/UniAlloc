@@ -22528,6 +22528,118 @@ mod tests {
     }
 
     #[test]
+    fn cross_thread_memory_tagged_mismatch_quarantines_once_and_rejects_duplicate_free() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_memory_tags_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout = Layout::from_size_align(
+            MAX_TYPE_CACHE_OBJECT_SIZE + align_of::<usize>(),
+            align_of::<usize>(),
+        )
+        .unwrap();
+        assert!(
+            delayed_free_retained_bytes_for_layout(layout) <= MAX_DELAYED_FREE_RETAINED_BYTES,
+            "test object must enter quarantine instead of bypassing it"
+        );
+        let allocation_metadata = AllocationMetadata::for_type(0xD17A_C7A1)
+            .with_module(0xC0DE_C7A0)
+            .with_callsite(0xA110_C7A1)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING | FLAG_DELAYED_FREE)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x7A);
+        let wrong_drop_metadata = AllocationMetadata::for_type(0xD17A_BADA)
+            .with_module(allocation_metadata.module_id)
+            .with_callsite(0xD0D0_BADA)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(allocation_metadata.placement_hint);
+
+        let ptr = unsafe {
+            __unialloc_alloc_with_metadata_hints(
+                layout.size(),
+                layout.align(),
+                allocation_metadata.type_id,
+                allocation_metadata.module_id,
+                allocation_metadata.flags,
+                allocation_metadata.lifetime_hint,
+                allocation_metadata.placement_hint,
+                allocation_metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(allocation_metadata)
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 1);
+
+        let ptr_addr = ptr as usize;
+        let worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = ptr_addr as *mut u8;
+            unsafe {
+                clear_delayed_free_for_test();
+            }
+
+            let previous = unsafe { set_active_metadata(wrong_drop_metadata) };
+            unsafe {
+                GlobalAlloc::dealloc(&alloc, ptr, layout);
+                restore_active_metadata(previous);
+            }
+            assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+            assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 0);
+
+            let quarantined_once = delayed_free_snapshot();
+            assert_eq!(quarantined_once.occupied_slots, 1);
+            assert_delayed_free_snapshot_accounting(quarantined_once);
+            let slots = unsafe { delayed_free_slots_snapshot_for_test() };
+            let delayed_idx = slots
+                .iter()
+                .position(|slot| slot.ptr == ptr)
+                .expect("foreign-thread free must quarantine the recovered allocation");
+            assert_eq!(
+                slots[delayed_idx].metadata, allocation_metadata,
+                "wrong Drop metadata must not strip memory-tag or quarantine ownership"
+            );
+
+            let duplicate = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                alloc.dealloc_with_metadata(ptr, layout, allocation_metadata);
+            }));
+            assert!(
+                duplicate.is_err(),
+                "the retired global memory tag must fail-stop a duplicate typed free"
+            );
+            assert_eq!(
+                delayed_free_snapshot(),
+                quarantined_once,
+                "rejected duplicate free must not enqueue the same pointer twice"
+            );
+
+            unsafe {
+                let delayed = delayed_free_take_slot(delayed_idx);
+                release_delayed_slot(&alloc, delayed);
+            }
+            assert_eq!(delayed_free_snapshot().occupied_slots, 0);
+        });
+        worker
+            .join()
+            .expect("cross-thread memory-tagged quarantine regression");
+
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert!(!semantic_runtime_slow_path_enabled());
+    }
+
+    #[test]
     fn cross_thread_realloc_keeps_old_delayed_free_identity_separate_from_new_type() {
         let _guard = test_guard();
         unsafe {
