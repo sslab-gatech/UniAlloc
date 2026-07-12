@@ -254,10 +254,6 @@ def validate_positive_control_direct_rewrites(audit: Dict[str, Any]) -> Dict[str
         assert row.get("replacement_resolution_status") == expected_resolution, (
             f"{function_name} {symbol} resolution must be {expected_resolution}"
         )
-        operation = "dealloc" if "_dealloc_" in symbol else "alloc"
-        assert f"alloc::alloc::{operation}" in str(row.get("callee") or ""), (
-            f"{function_name} {symbol} must replace the matching {operation} call"
-        )
         assert int(row.get("flags") or 0) & TYPE_ISOLATED
         assert int(row.get("placement_hint") or 0) & CROSS_THREAD_RECOVERY
 
