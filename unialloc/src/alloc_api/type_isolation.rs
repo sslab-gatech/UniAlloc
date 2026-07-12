@@ -1740,13 +1740,32 @@ static mut SEGREGATED_TYPE_CACHE_RETAINED_BYTES: usize = 0;
 #[thread_local]
 static mut SEGREGATED_TYPE_CACHE_RETAINED_BYTES_TRUSTED: bool = false;
 
+const ORDINARY_INLINE_SEGREGATED_TYPE_CACHE_DEPTH: usize = 2;
+
 #[thread_local]
 static mut INLINE_SEGREGATED_TYPE_CACHE_ENTRY: SegregatedTypeCacheEntry =
     SegregatedTypeCacheEntry::empty();
 
+// Two inline entries keep a small alternating semantic pair off the bucket
+// table. Larger working sets still spill into the existing bounded cache.
+#[thread_local]
+static mut INLINE_SEGREGATED_TYPE_CACHE_ENTRY_SECOND: SegregatedTypeCacheEntry =
+    SegregatedTypeCacheEntry::empty();
+
+#[cfg(not(feature = "fixed_heap"))]
+const HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_DEPTH: usize = 2;
+
 #[cfg(not(feature = "fixed_heap"))]
 #[thread_local]
 static mut HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_ENTRY: SegregatedTypeCacheEntry =
+    SegregatedTypeCacheEntry::empty();
+
+// Two inline entries cover the common producer/consumer pair without
+// materializing a page-backed bucket table.  Larger working sets still spill
+// into the bounded side cache, preserving the existing aggregate byte caps.
+#[cfg(not(feature = "fixed_heap"))]
+#[thread_local]
+static mut HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_ENTRY_SECOND: SegregatedTypeCacheEntry =
     SegregatedTypeCacheEntry::empty();
 
 #[cfg(unialloc_target_arm64e)]
@@ -1844,18 +1863,41 @@ fn segregated_type_cache_inline_domain(_metadata: AllocationMetadata) -> u8 {
 
 #[inline]
 unsafe fn inline_segregated_type_cache_entry(_cache_domain: u8) -> *mut SegregatedTypeCacheEntry {
-    #[cfg(not(feature = "fixed_heap"))]
-    {
-        if _cache_domain == SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE {
-            return &raw mut HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_ENTRY;
-        }
-    }
-    &raw mut INLINE_SEGREGATED_TYPE_CACHE_ENTRY
+    inline_segregated_type_cache_entry_at(_cache_domain, 0)
 }
 
 #[inline]
-unsafe fn inline_segregated_type_cache_entry_value(cache_domain: u8) -> SegregatedTypeCacheEntry {
-    *inline_segregated_type_cache_entry(cache_domain)
+fn inline_segregated_type_cache_capacity(_cache_domain: u8) -> usize {
+    #[cfg(not(feature = "fixed_heap"))]
+    {
+        if _cache_domain == SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE {
+            return HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_DEPTH;
+        }
+    }
+    ORDINARY_INLINE_SEGREGATED_TYPE_CACHE_DEPTH
+}
+
+#[inline]
+unsafe fn inline_segregated_type_cache_entry_at(
+    _cache_domain: u8,
+    index: usize,
+) -> *mut SegregatedTypeCacheEntry {
+    debug_assert!(index < inline_segregated_type_cache_capacity(_cache_domain));
+    #[cfg(not(feature = "fixed_heap"))]
+    {
+        if _cache_domain == SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE {
+            return if index == 0 {
+                &raw mut HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_ENTRY
+            } else {
+                &raw mut HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_ENTRY_SECOND
+            };
+        }
+    }
+    if index == 0 {
+        &raw mut INLINE_SEGREGATED_TYPE_CACHE_ENTRY
+    } else {
+        &raw mut INLINE_SEGREGATED_TYPE_CACHE_ENTRY_SECOND
+    }
 }
 
 #[inline]
@@ -4981,14 +5023,11 @@ pub fn hugepage_metadata_side_cache_snapshot() -> Option<HugepageMetadataSideCac
         } else {
             let footprint =
                 segregated_type_cache_footprint_snapshot(&*HUGEPAGE_SEGREGATED_TYPE_CACHE);
-            let inline =
-                inline_segregated_type_cache_entry_value(SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE);
-            let inline_entries: usize = if inline.is_empty() { 0 } else { 1 };
-            let inline_retained_bytes = if inline.is_empty() {
-                0
-            } else {
-                inline.retained_bytes()
-            };
+            let inline_entries = inline_segregated_type_cache_occupied_entry_count(
+                SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE,
+            );
+            let inline_retained_bytes =
+                inline_segregated_type_cache_retained_bytes(SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE);
             Some(HugepageMetadataSideCacheSnapshot {
                 allocated: true,
                 address: HUGEPAGE_SEGREGATED_TYPE_CACHE as usize,
@@ -5007,15 +5046,12 @@ pub fn hugepage_metadata_side_cache_snapshot() -> Option<HugepageMetadataSideCac
 
 pub fn metadata_segregation_side_cache_snapshot() -> MetadataSegregationSideCacheSnapshot {
     unsafe {
-        let inline =
-            inline_segregated_type_cache_entry_value(SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY);
-        let inline_occupied = !inline.is_empty();
-        let inline_entries: usize = if inline_occupied { 1 } else { 0 };
-        let inline_retained_bytes = if inline_occupied {
-            inline.retained_bytes()
-        } else {
-            0
-        };
+        let inline_entries = inline_segregated_type_cache_occupied_entry_count(
+            SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+        );
+        let inline_occupied = inline_entries != 0;
+        let inline_retained_bytes =
+            inline_segregated_type_cache_retained_bytes(SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY);
         let cache = &*core::ptr::addr_of!(SEGREGATED_TYPE_CACHE);
         let footprint = segregated_type_cache_footprint_snapshot(cache);
         MetadataSegregationSideCacheSnapshot {
@@ -5048,12 +5084,29 @@ fn segregated_type_cache_bucket_has_visible_state(bucket: SegregatedTypeCacheBuc
 
 #[inline]
 unsafe fn inline_segregated_type_cache_retained_bytes(cache_domain: u8) -> usize {
-    let entry = inline_segregated_type_cache_entry_value(cache_domain);
-    if entry.is_empty() {
-        0
-    } else {
-        entry.retained_bytes()
+    let mut retained_bytes = 0usize;
+    let mut index = 0usize;
+    while index < inline_segregated_type_cache_capacity(cache_domain) {
+        let entry = *inline_segregated_type_cache_entry_at(cache_domain, index);
+        if !entry.is_empty() {
+            retained_bytes = retained_bytes.saturating_add(entry.retained_bytes());
+        }
+        index += 1;
     }
+    retained_bytes
+}
+
+#[inline]
+unsafe fn inline_segregated_type_cache_occupied_entry_count(cache_domain: u8) -> usize {
+    let mut occupied = 0usize;
+    let mut index = 0usize;
+    while index < inline_segregated_type_cache_capacity(cache_domain) {
+        if !(*inline_segregated_type_cache_entry_at(cache_domain, index)).is_empty() {
+            occupied = occupied.saturating_add(1);
+        }
+        index += 1;
+    }
+    occupied
 }
 
 unsafe fn segregated_type_cache_trusted_retained_bytes(
@@ -5140,13 +5193,18 @@ unsafe fn segregated_type_cache_can_accept_aggregate(
 unsafe fn segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
     cache: &[SegregatedTypeCacheBucket; TYPE_CACHE_SLOTS],
     cache_domain: u8,
+    inline_cache_domain: u8,
     cached_retained_bytes: &mut Option<usize>,
     bucket_idx: usize,
     incoming_size: usize,
 ) -> bool {
     let current_retained_bytes = match *cached_retained_bytes {
         Some(retained_bytes) => retained_bytes,
-        None => match segregated_type_cache_trusted_retained_bytes(cache, cache_domain) {
+        None => match segregated_type_cache_trusted_retained_bytes_for_inline_domain(
+            cache,
+            cache_domain,
+            inline_cache_domain,
+        ) {
             Some(retained_bytes) => {
                 *cached_retained_bytes = Some(retained_bytes);
                 retained_bytes
@@ -5165,12 +5223,33 @@ unsafe fn segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
 }
 
 #[inline]
+unsafe fn segregated_type_cache_trusted_retained_bytes_for_inline_domain(
+    cache: &[SegregatedTypeCacheBucket; TYPE_CACHE_SLOTS],
+    cache_domain: u8,
+    inline_cache_domain: u8,
+) -> Option<usize> {
+    segregated_type_cache_trusted_retained_bytes(cache, cache_domain).map(|mut retained_bytes| {
+        if inline_cache_domain != cache_domain {
+            retained_bytes = retained_bytes.saturating_add(
+                inline_segregated_type_cache_retained_bytes(inline_cache_domain),
+            );
+        }
+        retained_bytes
+    })
+}
+
+#[inline]
 unsafe fn segregated_type_cache_can_grow_inline_aggregate(
     cache: &[SegregatedTypeCacheBucket; TYPE_CACHE_SLOTS],
     cache_domain: u8,
+    inline_cache_domain: u8,
     incoming_size: usize,
 ) -> bool {
-    match segregated_type_cache_trusted_retained_bytes(cache, cache_domain) {
+    match segregated_type_cache_trusted_retained_bytes_for_inline_domain(
+        cache,
+        cache_domain,
+        inline_cache_domain,
+    ) {
         Some(retained_bytes) => {
             retained_bytes.saturating_add(type_cache_retained_bytes_for_object(incoming_size))
                 <= MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES
@@ -5450,7 +5529,7 @@ fn inline_segregated_type_cache_eligible_for_classified(metadata: AllocationMeta
 
 #[inline]
 fn inline_segregated_type_cache_pop_eligible(metadata: AllocationMetadata) -> bool {
-    // Hugepage metadata may occupy the single-entry inline cache before a second
+    // Hugepage metadata may occupy either bounded inline entry before a third
     // cached object justifies allocating the mmap_huge-backed bucket table.
     inline_segregated_type_cache_eligible_for_classified(metadata)
         || metadata.requests(FLAG_HUGEPAGE_METADATA)
@@ -5775,14 +5854,17 @@ unsafe fn pop_inline_segregated_type_cache_eligible_with_key(
     policy_key: u32,
     inline_cache_domain: u8,
 ) -> Option<SegregatedTypeCacheEntry> {
-    let slot = inline_segregated_type_cache_entry(inline_cache_domain);
-    let entry = *slot;
-    if entry.matches_cached_key(layout, cache_key, policy_key) {
-        *slot = SegregatedTypeCacheEntry::empty();
-        Some(entry)
-    } else {
-        None
+    let mut index = 0usize;
+    while index < inline_segregated_type_cache_capacity(inline_cache_domain) {
+        let slot = inline_segregated_type_cache_entry_at(inline_cache_domain, index);
+        let entry = *slot;
+        if entry.matches_cached_key(layout, cache_key, policy_key) {
+            *slot = SegregatedTypeCacheEntry::empty();
+            return Some(entry);
+        }
+        index += 1;
     }
+    None
 }
 
 unsafe fn pop_segregated_type_cache(
@@ -5896,6 +5978,7 @@ unsafe fn pop_segregated_type_cache_bucket_eligible_with_key(
 unsafe fn segregated_type_cache_full_bucket_for_replacement(
     cache: &mut [SegregatedTypeCacheBucket; TYPE_CACHE_SLOTS],
     cache_domain: u8,
+    inline_cache_domain: u8,
     cached_retained_bytes: &mut Option<usize>,
     start: usize,
     layout: Layout,
@@ -5912,7 +5995,11 @@ unsafe fn segregated_type_cache_full_bucket_for_replacement(
     let mut selected_matches = 0;
     let aggregate_retained_bytes = match *cached_retained_bytes {
         Some(retained_bytes) => retained_bytes,
-        None => match segregated_type_cache_trusted_retained_bytes(&*cache, cache_domain) {
+        None => match segregated_type_cache_trusted_retained_bytes_for_inline_domain(
+            &*cache,
+            cache_domain,
+            inline_cache_domain,
+        ) {
             Some(retained_bytes) => {
                 *cached_retained_bytes = Some(retained_bytes);
                 retained_bytes
@@ -6003,23 +6090,34 @@ unsafe fn materialize_matching_inline_segregated_type_cache(
     cache_key: u64,
     policy_key: u32,
 ) {
-    let inline_slot = inline_segregated_type_cache_entry(inline_cache_domain);
-    let entry = *inline_slot;
-    if !entry.matches_cached_key(layout, cache_key, policy_key) {
-        return;
+    let mut index = 0usize;
+    while index < inline_segregated_type_cache_capacity(inline_cache_domain) {
+        let inline_slot = inline_segregated_type_cache_entry_at(inline_cache_domain, index);
+        let entry = *inline_slot;
+        if entry.matches_cached_key(layout, cache_key, policy_key) {
+            if !try_append_segregated_type_cache_bucket(&mut cache[bucket_idx], cache_domain, entry)
+            {
+                break;
+            }
+            *inline_slot = SegregatedTypeCacheEntry::empty();
+        }
+        index += 1;
     }
+}
 
-    let bucket = &mut cache[bucket_idx];
+#[inline]
+unsafe fn try_append_segregated_type_cache_bucket(
+    bucket: &mut SegregatedTypeCacheBucket,
+    cache_domain: u8,
+    entry: SegregatedTypeCacheEntry,
+) -> bool {
     clear_segregated_type_cache_bucket_if_corrupt(bucket, cache_domain);
-    if bucket.count >= SEGREGATED_TYPE_CACHE_DEPTH {
-        return;
+    if bucket.count >= SEGREGATED_TYPE_CACHE_DEPTH || !bucket.can_accept_object_size(entry.size) {
+        return false;
     }
-    if !bucket.can_accept_object_size(entry.size) {
-        return;
-    }
-
-    *inline_slot = SegregatedTypeCacheEntry::empty();
-    let _ = push_segregated_type_cache_bucket(bucket, cache_domain, entry);
+    let evicted = push_segregated_type_cache_bucket(bucket, cache_domain, entry);
+    debug_assert!(evicted.is_none());
+    evicted.is_none()
 }
 
 #[inline]
@@ -6033,8 +6131,28 @@ unsafe fn push_inline_segregated_type_cache_eligible_with_key(
     inline_cache_domain: u8,
     cache: &mut [SegregatedTypeCacheBucket; TYPE_CACHE_SLOTS],
 ) -> bool {
-    let inline_slot = inline_segregated_type_cache_entry(inline_cache_domain);
-    if !(*inline_slot).is_empty() {
+    let mut inline_slot: *mut SegregatedTypeCacheEntry = core::ptr::null_mut();
+    let mut inline_slot_index = 0usize;
+    let mut index = 0usize;
+    while index < inline_segregated_type_cache_capacity(inline_cache_domain) {
+        let candidate = inline_segregated_type_cache_entry_at(inline_cache_domain, index);
+        let entry = *candidate;
+        if inline_cache_domain == SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY
+            && entry.matches_cached_key(layout, cache_key, policy_key)
+        {
+            // Keep multiple objects from one semantic class in the bucket
+            // cache, where the existing bounded depth/eviction policy applies.
+            // The second ordinary inline slot is reserved for a small
+            // alternating pair of distinct classes.
+            return false;
+        }
+        if inline_slot.is_null() && entry.is_empty() {
+            inline_slot = candidate;
+            inline_slot_index = index;
+        }
+        index += 1;
+    }
+    if inline_slot.is_null() {
         return false;
     }
     let occupied_buckets = segregated_type_cache_occupied_bucket_count(cache_domain);
@@ -6046,6 +6164,15 @@ unsafe fn push_inline_segregated_type_cache_eligible_with_key(
             Some(idx) => segregated_type_cache_bucket_has_visible_state(cache[idx]),
             None => false,
         };
+    if inline_cache_domain == SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY
+        && inline_slot_index != 0
+        && (occupied_buckets != 0 || start_bucket_has_visible_state || hot_bucket_has_visible_state)
+    {
+        // Once the bucket table is active, preserve its hot-bucket and
+        // corruption-repair behavior rather than bypassing it through the
+        // secondary inline slot.
+        return false;
+    }
     if occupied_buckets == 0 && !start_bucket_has_visible_state && !hot_bucket_has_visible_state {
         // The common metadata-segregated/PAC/hugepage hot path is one object
         // bouncing through this inline slot.  When no materialized bucket exists
@@ -6053,7 +6180,10 @@ unsafe fn push_inline_segregated_type_cache_eligible_with_key(
         // the aggregate cap reduces to this single incoming object.  Avoiding
         // the bucket probe plus full-table retained-byte scan is what keeps the
         // compiler-supplied semantic fast path a real hot path.
-        if type_cache_retained_bytes_for_layout(layout) > MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES {
+        if inline_segregated_type_cache_retained_bytes(inline_cache_domain)
+            .saturating_add(type_cache_retained_bytes_for_layout(layout))
+            > MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES
+        {
             return false;
         }
     } else {
@@ -6066,7 +6196,12 @@ unsafe fn push_inline_segregated_type_cache_eligible_with_key(
         ) {
             return false;
         }
-        if !segregated_type_cache_can_grow_inline_aggregate(&*cache, cache_domain, layout.size()) {
+        if !segregated_type_cache_can_grow_inline_aggregate(
+            &*cache,
+            cache_domain,
+            inline_cache_domain,
+            layout.size(),
+        ) {
             return false;
         }
     }
@@ -6132,11 +6267,11 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
         #[cfg(not(feature = "fixed_heap"))]
         if metadata.requests(FLAG_HUGEPAGE_METADATA) && HUGEPAGE_SEGREGATED_TYPE_CACHE.is_null() {
             // Avoid allocating a hugepage-sized side-cache mapping for the common
-            // one-object reuse case.  We still scan the ordinary fallback bucket
+            // one- or two-object reuse case.  We still scan the ordinary fallback bucket
             // table so older entries created when hugepage mapping was unavailable
-            // remain the single source of truth for their class.  The inline slot
-            // itself is hugepage-domain local, so an ordinary metadata hot entry
-            // does not force a one-object hugepage free to allocate the bucket
+            // remain the single source of truth for their class.  The inline entries
+            // are hugepage-domain local, so an ordinary metadata hot entry does not
+            // force either of the first two hugepage frees to allocate the bucket
             // mapping.
             let cache = ordinary_segregated_type_cache_mut();
             if push_inline_segregated_type_cache_eligible_with_key(
@@ -6154,8 +6289,8 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
         }
 
         let (cache, cache_domain) = segregated_type_cache_for_push(metadata);
+        let inline_cache_domain = segregated_type_cache_inline_domain(metadata);
         if inline_segregated_type_cache_eligible_for_classified(metadata) {
-            let inline_cache_domain = segregated_type_cache_inline_domain(metadata);
             if push_inline_segregated_type_cache_eligible_with_key(
                 ptr,
                 layout,
@@ -6192,6 +6327,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
                     && segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
                         &*cache,
                         cache_domain,
+                        inline_cache_domain,
                         &mut aggregate_retained_bytes,
                         idx,
                         layout.size(),
@@ -6213,6 +6349,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
                     && segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
                         &*cache,
                         cache_domain,
+                        inline_cache_domain,
                         &mut aggregate_retained_bytes,
                         idx,
                         layout.size(),
@@ -6244,6 +6381,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
                         && segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
                             &*cache,
                             cache_domain,
+                            inline_cache_domain,
                             &mut aggregate_retained_bytes,
                             idx,
                             layout.size(),
@@ -6266,6 +6404,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
                     && segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
                         &*cache,
                         cache_domain,
+                        inline_cache_domain,
                         &mut aggregate_retained_bytes,
                         idx,
                         layout.size(),
@@ -6282,6 +6421,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
             match segregated_type_cache_full_bucket_for_replacement(
                 cache,
                 cache_domain,
+                inline_cache_domain,
                 &mut aggregate_retained_bytes,
                 start,
                 layout,
@@ -6303,6 +6443,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
         if !segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
             &*cache,
             cache_domain,
+            inline_cache_domain,
             &mut aggregate_retained_bytes,
             bucket_idx,
             layout.size(),
@@ -6333,7 +6474,6 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
             bucket_idx,
         );
         if evicted.is_none() {
-            let inline_cache_domain = segregated_type_cache_inline_domain(metadata);
             materialize_matching_inline_segregated_type_cache(
                 cache,
                 cache_domain,
@@ -7946,10 +8086,17 @@ unsafe fn drain_inline_segregated_type_cache_at_thread_exit(
     alloc: &RustAllocator,
     cache_domain: u8,
 ) -> usize {
-    let slot = inline_segregated_type_cache_entry(cache_domain);
-    let entry = *slot;
-    *slot = SegregatedTypeCacheEntry::empty();
-    drain_segregated_entry_at_thread_exit(alloc, entry) as usize
+    let mut released = 0usize;
+    let mut index = 0usize;
+    while index < inline_segregated_type_cache_capacity(cache_domain) {
+        let slot = inline_segregated_type_cache_entry_at(cache_domain, index);
+        let entry = *slot;
+        *slot = SegregatedTypeCacheEntry::empty();
+        released =
+            released.saturating_add(drain_segregated_entry_at_thread_exit(alloc, entry) as usize);
+        index += 1;
+    }
+    released
 }
 
 unsafe fn drain_segregated_bucket_at_thread_exit(
@@ -10498,9 +10645,11 @@ mod tests {
         SEGREGATED_TYPE_CACHE_RETAINED_BYTES = 0;
         SEGREGATED_TYPE_CACHE_RETAINED_BYTES_TRUSTED = false;
         INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry::empty();
+        INLINE_SEGREGATED_TYPE_CACHE_ENTRY_SECOND = SegregatedTypeCacheEntry::empty();
         #[cfg(not(feature = "fixed_heap"))]
         {
             HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry::empty();
+            HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_ENTRY_SECOND = SegregatedTypeCacheEntry::empty();
         }
         SEGREGATED_TYPE_CACHE_HOT_BUCKET = SegregatedTypeCacheHotBucket::empty();
         SEGREGATED_TYPE_CACHE_BUCKET_PROBE_STEPS.store(0, Ordering::Relaxed);
@@ -10563,6 +10712,25 @@ mod tests {
     unsafe fn hugepage_inline_segregated_type_cache_entry_snapshot_for_test(
     ) -> SegregatedTypeCacheEntry {
         inline_segregated_type_cache_entry_snapshot_for_test(SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE)
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[inline]
+    unsafe fn hugepage_second_inline_segregated_type_cache_entry_snapshot_for_test(
+    ) -> SegregatedTypeCacheEntry {
+        snapshot_static_copy(core::ptr::addr_of!(
+            HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_ENTRY_SECOND
+        ))
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[inline]
+    unsafe fn hugepage_inline_segregated_type_cache_entries_snapshot_for_test(
+    ) -> [SegregatedTypeCacheEntry; HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_DEPTH] {
+        [
+            hugepage_inline_segregated_type_cache_entry_snapshot_for_test(),
+            hugepage_second_inline_segregated_type_cache_entry_snapshot_for_test(),
+        ]
     }
 
     #[inline]
@@ -10637,11 +10805,16 @@ mod tests {
         let cache_key = type_cache_identity_key(metadata);
         let policy_key = segregated_type_cache_policy_key(metadata);
         let inline_cache_domain = segregated_type_cache_inline_domain(metadata);
-        let inline_entry = inline_segregated_type_cache_entry(inline_cache_domain);
-        if (*inline_entry).ptr == ptr
-            && (*inline_entry).matches_cached_key(layout, cache_key, policy_key)
-        {
-            return Some(inline_entry);
+        let mut inline_index = 0usize;
+        while inline_index < inline_segregated_type_cache_capacity(inline_cache_domain) {
+            let inline_entry =
+                inline_segregated_type_cache_entry_at(inline_cache_domain, inline_index);
+            if (*inline_entry).ptr == ptr
+                && (*inline_entry).matches_cached_key(layout, cache_key, policy_key)
+            {
+                return Some(inline_entry);
+            }
+            inline_index += 1;
         }
 
         let bucket = &mut SEGREGATED_TYPE_CACHE[segregated_type_cache_slot(metadata, layout)];
@@ -11035,6 +11208,14 @@ mod tests {
                 snapshot.backing
             );
         }
+    }
+
+    fn assert_same_pointer_set<const N: usize>(expected: [*mut u8; N], observed: [*mut u8; N]) {
+        let mut expected = expected.map(|ptr| ptr as usize);
+        let mut observed = observed.map(|ptr| ptr as usize);
+        expected.sort_unstable();
+        observed.sort_unstable();
+        assert_eq!(observed, expected, "cached object pointer set changed");
     }
 
     #[cfg(not(feature = "fixed_heap"))]
@@ -13516,9 +13697,12 @@ mod tests {
                     .with_flags(FLAG_TYPE_ISOLATED | FLAG_HUGEPAGE_METADATA);
                 let huge_a = alloc.alloc_with_metadata(layout, huge);
                 let huge_b = alloc.alloc_with_metadata(layout, huge);
-                assert!(!huge_a.is_null() && !huge_b.is_null());
+                let huge_c = alloc.alloc_with_metadata(layout, huge);
+                assert!(!huge_a.is_null() && !huge_b.is_null() && !huge_c.is_null());
                 alloc.dealloc_with_metadata(huge_a, layout, huge);
                 alloc.dealloc_with_metadata(huge_b, layout, huge);
+                assert!(hugepage_metadata_side_cache_snapshot().is_none());
+                alloc.dealloc_with_metadata(huge_c, layout, huge);
                 assert!(hugepage_metadata_side_cache_snapshot().is_some());
 
                 let prot = system_alloc::prots::get_prot(true, true, false);
@@ -13540,8 +13724,8 @@ mod tests {
 
             let released = drain_current_thread_semantic_state(&alloc);
             assert!(
-                released >= 5,
-                "plain, segregated, and delayed allocator-owned TLS objects must all be released"
+                released >= 8,
+                "plain, segregated, delayed, and hugepage allocator-owned TLS objects must all be released"
             );
             assert_eq!(
                 type_isolation_side_cache_snapshot(),
@@ -13595,6 +13779,55 @@ mod tests {
             );
             alloc.dealloc_raw(global_recovery_ptr, layout);
         }
+    }
+
+    #[cfg(all(not(feature = "fixed_heap"), not(unialloc_target_arm64e)))]
+    #[test]
+    fn thread_exit_drain_releases_two_inline_hugepage_entries_without_mapping() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        semantic_auto_metadata_disable();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC004_D005)
+            .with_module(0xC0DE_D005)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_HUGEPAGE_METADATA);
+        let first = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        let second = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert!(!first.is_null() && !second.is_null());
+        assert_ne!(first, second);
+
+        let before = system_alloc::hugepage_mmap_stats_snapshot();
+        unsafe {
+            alloc.dealloc_with_metadata(first, layout, metadata);
+            alloc.dealloc_with_metadata(second, layout, metadata);
+            let inline = hugepage_inline_segregated_type_cache_entries_snapshot_for_test();
+            assert_same_pointer_set([first, second], [inline[0].ptr, inline[1].ptr]);
+            assert_eq!(
+                inline_segregated_type_cache_occupied_entry_count(
+                    SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE,
+                ),
+                2
+            );
+            assert!(hugepage_metadata_side_cache_snapshot().is_none());
+
+            assert_eq!(drain_current_thread_semantic_state(&alloc), 2);
+            assert_eq!(
+                inline_segregated_type_cache_occupied_entry_count(
+                    SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE,
+                ),
+                0
+            );
+            assert!(hugepage_metadata_side_cache_snapshot().is_none());
+        }
+        let after = system_alloc::hugepage_mmap_stats_snapshot();
+        assert_eq!(after.attempts, before.attempts);
     }
 
     #[cfg(not(feature = "stats"))]
@@ -15816,6 +16049,62 @@ mod tests {
     }
 
     #[test]
+    fn metadata_segregated_two_object_pair_stays_inline_without_bucket_probes() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(4 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let first_metadata = AllocationMetadata::for_type(0x5E6D_5211)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+        let second_metadata = AllocationMetadata::for_type(0x5E6D_5212)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+
+        let first = unsafe { alloc.alloc_with_metadata(layout, first_metadata) };
+        let second = unsafe { alloc.alloc_with_metadata(layout, second_metadata) };
+        assert!(!first.is_null());
+        assert!(!second.is_null());
+        assert_ne!(first, second);
+        let probes_before_free = SEGREGATED_TYPE_CACHE_BUCKET_PROBE_STEPS.load(Ordering::Relaxed);
+
+        unsafe {
+            alloc.dealloc_with_metadata(first, layout, first_metadata);
+            alloc.dealloc_with_metadata(second, layout, second_metadata);
+        }
+
+        let cached = metadata_segregation_side_cache_snapshot();
+        assert!(cached.inline_occupied);
+        assert_eq!(cached.occupied_entries, 2);
+        assert_eq!(
+            cached.retained_bytes,
+            2 * type_cache_retained_bytes_for_layout(layout)
+        );
+        assert_eq!(
+            cached.occupied_buckets, 0,
+            "a two-object semantic pair should not materialize the bucket table"
+        );
+        assert_eq!(
+            SEGREGATED_TYPE_CACHE_BUCKET_PROBE_STEPS.load(Ordering::Relaxed),
+            probes_before_free,
+            "freeing a two-object semantic pair should stay on the O(1) inline path"
+        );
+
+        unsafe {
+            let reused_first = alloc.alloc_with_metadata(layout, first_metadata);
+            let reused_second = alloc.alloc_with_metadata(layout, second_metadata);
+            assert_eq!(reused_first, first);
+            assert_eq!(reused_second, second);
+            alloc.dealloc_raw(reused_first, layout);
+            alloc.dealloc_raw(reused_second, layout);
+        }
+    }
+
+    #[test]
     fn metadata_segregated_side_cache_snapshot_tracks_inline_entry() {
         let _guard = test_guard();
         unsafe {
@@ -16088,15 +16377,24 @@ mod tests {
         let metadata = AllocationMetadata::for_type(0x5E6D_5202)
             .with_flags(FLAG_TYPE_ISOLATED | FLAG_HUGEPAGE_METADATA);
 
-        let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
-        assert!(!ptr.is_null());
+        let first = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        let second = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        let third = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert!(!first.is_null() && !second.is_null() && !third.is_null());
+        assert_ne!(first, second);
+        assert_ne!(first, third);
+        assert_ne!(second, third);
+        let before = system_alloc::hugepage_mmap_stats_snapshot();
 
         unsafe {
-            alloc.dealloc_with_metadata(ptr, layout, metadata);
+            alloc.dealloc_with_metadata(first, layout, metadata);
             assert_eq!(
                 hugepage_inline_segregated_type_cache_entry_snapshot_for_test().ptr,
-                ptr,
+                first,
                 "a single hugepage metadata free should use the O(1) hugepage inline side-cache"
+            );
+            assert!(
+                hugepage_second_inline_segregated_type_cache_entry_snapshot_for_test().is_empty()
             );
             assert!(
                 INLINE_SEGREGATED_TYPE_CACHE_ENTRY.is_empty(),
@@ -16109,10 +16407,48 @@ mod tests {
             );
             assert!(hugepage_metadata_side_cache_snapshot().is_none());
 
-            let reused = alloc.alloc_with_metadata(layout, metadata);
-            assert_eq!(reused, ptr);
-            assert!(hugepage_inline_segregated_type_cache_entry_snapshot_for_test().is_empty());
-            alloc.dealloc_raw(reused, layout);
+            alloc.dealloc_with_metadata(second, layout, metadata);
+            let inline = hugepage_inline_segregated_type_cache_entries_snapshot_for_test();
+            assert_same_pointer_set([first, second], [inline[0].ptr, inline[1].ptr]);
+            assert_eq!(
+                inline_segregated_type_cache_occupied_entry_count(
+                    SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE,
+                ),
+                2
+            );
+            assert!(hugepage_metadata_side_cache_snapshot().is_none());
+            assert_eq!(
+                system_alloc::hugepage_mmap_stats_snapshot().attempts,
+                before.attempts,
+                "the two inline entries must not materialize the hugepage bucket table"
+            );
+
+            alloc.dealloc_with_metadata(third, layout, metadata);
+            assert_eq!(
+                hugepage_segregated_bucket_count_for_test(layout, metadata),
+                Some(3),
+                "the third matching object should materialize all three entries into one bucket"
+            );
+            let snapshot = hugepage_metadata_side_cache_snapshot()
+                .expect("the third matching object should materialize side-cache backing");
+            assert_eq!(snapshot.occupied_buckets, 1);
+            assert_eq!(snapshot.occupied_entries, 3);
+            assert!(
+                system_alloc::hugepage_mmap_stats_snapshot().attempts > before.attempts,
+                "the 2→3 boundary should attempt hugepage side-cache mapping"
+            );
+
+            let reused_one = alloc.alloc_with_metadata(layout, metadata);
+            let reused_two = alloc.alloc_with_metadata(layout, metadata);
+            let reused_three = alloc.alloc_with_metadata(layout, metadata);
+            assert_same_pointer_set(
+                [first, second, third],
+                [reused_one, reused_two, reused_three],
+            );
+            assert!(hugepage_metadata_side_cache_snapshot().is_none());
+            alloc.dealloc_raw(reused_one, layout);
+            alloc.dealloc_raw(reused_two, layout);
+            alloc.dealloc_raw(reused_three, layout);
             drop_hugepage_segregated_type_cache_for_test();
         }
 
@@ -16140,9 +16476,12 @@ mod tests {
 
         let ordinary_ptr = unsafe { alloc.alloc_with_metadata(layout, ordinary) };
         let hugepage_ptr = unsafe { alloc.alloc_with_metadata(layout, hugepage) };
+        let hugepage_ptr_second = unsafe { alloc.alloc_with_metadata(layout, hugepage) };
         assert!(!ordinary_ptr.is_null());
         assert!(!hugepage_ptr.is_null());
+        assert!(!hugepage_ptr_second.is_null());
         assert_ne!(ordinary_ptr, hugepage_ptr);
+        assert_ne!(hugepage_ptr, hugepage_ptr_second);
 
         unsafe {
             alloc.dealloc_with_metadata(ordinary_ptr, layout, ordinary);
@@ -16151,35 +16490,48 @@ mod tests {
                 ordinary_ptr,
                 "ordinary metadata should keep its one-object hot entry"
             );
-            assert!(
-                HUGEPAGE_INLINE_SEGREGATED_TYPE_CACHE_ENTRY.is_empty(),
-                "ordinary metadata must not occupy the hugepage inline slot"
+            assert_eq!(
+                inline_segregated_type_cache_occupied_entry_count(
+                    SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE,
+                ),
+                0,
+                "ordinary metadata must not occupy either hugepage inline slot"
             );
 
             alloc.dealloc_with_metadata(hugepage_ptr, layout, hugepage);
+            alloc.dealloc_with_metadata(hugepage_ptr_second, layout, hugepage);
             assert_eq!(
                 ordinary_inline_segregated_type_cache_entry_snapshot_for_test().ptr,
                 ordinary_ptr,
-                "a hugepage free must not evict the ordinary inline hot entry"
+                "hugepage frees must not evict the ordinary inline hot entry"
             );
-            assert_eq!(
-                hugepage_inline_segregated_type_cache_entry_snapshot_for_test().ptr,
-                hugepage_ptr,
-                "hugepage metadata should use its independent one-object hot entry"
+            let hugepage_inline = hugepage_inline_segregated_type_cache_entries_snapshot_for_test();
+            assert_same_pointer_set(
+                [hugepage_ptr, hugepage_ptr_second],
+                [hugepage_inline[0].ptr, hugepage_inline[1].ptr],
             );
             assert_eq!(
                 hugepage_segregated_bucket_count_for_test(layout, hugepage),
                 None,
-                "one hugepage hot entry should not materialize the mmap_huge bucket table"
+                "two hugepage hot entries should not materialize the mmap_huge bucket table"
             );
             assert!(
                 hugepage_metadata_side_cache_snapshot().is_none(),
-                "a single hugepage hot entry should not allocate snapshot-visible side-cache backing"
+                "two hugepage hot entries should not allocate snapshot-visible side-cache backing"
             );
 
-            let reused_hugepage = alloc.alloc_with_metadata(layout, hugepage);
-            assert_eq!(reused_hugepage, hugepage_ptr);
-            assert!(hugepage_inline_segregated_type_cache_entry_snapshot_for_test().is_empty());
+            let reused_hugepage_one = alloc.alloc_with_metadata(layout, hugepage);
+            let reused_hugepage_two = alloc.alloc_with_metadata(layout, hugepage);
+            assert_same_pointer_set(
+                [hugepage_ptr, hugepage_ptr_second],
+                [reused_hugepage_one, reused_hugepage_two],
+            );
+            assert_eq!(
+                inline_segregated_type_cache_occupied_entry_count(
+                    SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE,
+                ),
+                0
+            );
             assert_eq!(
                 ordinary_inline_segregated_type_cache_entry_snapshot_for_test().ptr,
                 ordinary_ptr,
@@ -16190,7 +16542,8 @@ mod tests {
             assert_eq!(reused_ordinary, ordinary_ptr);
             assert!(INLINE_SEGREGATED_TYPE_CACHE_ENTRY.is_empty());
 
-            alloc.dealloc_raw(reused_hugepage, layout);
+            alloc.dealloc_raw(reused_hugepage_one, layout);
+            alloc.dealloc_raw(reused_hugepage_two, layout);
             alloc.dealloc_raw(reused_ordinary, layout);
             drop_hugepage_segregated_type_cache_for_test();
         }
@@ -16292,6 +16645,206 @@ mod tests {
         }
         semantic_stats_recording_disable();
     }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hugepage_metadata_two_object_reuse_does_not_repeat_mmap_attempts() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            drop_hugepage_segregated_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(4 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0x5E6D_6005)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_HUGEPAGE_METADATA);
+        let mut first = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        let mut second = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert!(!first.is_null());
+        assert!(!second.is_null());
+        assert_ne!(first, second);
+
+        let before = system_alloc::hugepage_mmap_stats_snapshot();
+        for _ in 0..4 {
+            unsafe {
+                alloc.dealloc_with_metadata(first, layout, metadata);
+                alloc.dealloc_with_metadata(second, layout, metadata);
+                let inline = hugepage_inline_segregated_type_cache_entries_snapshot_for_test();
+                assert_same_pointer_set([first, second], [inline[0].ptr, inline[1].ptr]);
+                assert_eq!(
+                    inline_segregated_type_cache_occupied_entry_count(
+                        SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE,
+                    ),
+                    2
+                );
+                assert!(hugepage_metadata_side_cache_snapshot().is_none());
+                assert_eq!(
+                    system_alloc::hugepage_mmap_stats_snapshot().attempts,
+                    before.attempts,
+                    "two-object caching must remain entirely inline"
+                );
+            }
+
+            let reused_one = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert_eq!(
+                unsafe {
+                    inline_segregated_type_cache_occupied_entry_count(
+                        SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE,
+                    )
+                },
+                1
+            );
+            let reused_two = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert_same_pointer_set([first, second], [reused_one, reused_two]);
+            assert_eq!(
+                unsafe {
+                    inline_segregated_type_cache_occupied_entry_count(
+                        SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE,
+                    )
+                },
+                0
+            );
+            assert!(
+                hugepage_metadata_side_cache_snapshot().is_none(),
+                "two-object hot reuse should not leave an mmap-backed side cache"
+            );
+            first = reused_one;
+            second = reused_two;
+        }
+        let after = system_alloc::hugepage_mmap_stats_snapshot();
+        assert_eq!(
+            after.attempts, before.attempts,
+            "bounded two-object reuse must not materialize and tear down the hugepage side cache on every round"
+        );
+
+        unsafe {
+            alloc.dealloc_raw(first, layout);
+            alloc.dealloc_raw(second, layout);
+            drop_hugepage_segregated_type_cache_for_test();
+        }
+        semantic_stats_recording_disable();
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hugepage_fallback_aggregate_budget_counts_both_inline_entries() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MAX_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let retained = type_cache_retained_bytes_for_layout(layout);
+        let metadata = AllocationMetadata::for_type(0x5E6D_6006)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_HUGEPAGE_METADATA);
+        let ordinary_metadata = AllocationMetadata::for_type(0x5E6D_6007)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+        let first = unsafe { alloc.alloc_raw(layout) };
+        let second = unsafe { alloc.alloc_raw(layout) };
+        let ordinary = unsafe { alloc.alloc_raw(layout) };
+        assert!(!first.is_null() && !second.is_null() && !ordinary.is_null());
+        assert_ne!(first, second);
+        assert_ne!(first, ordinary);
+        assert_ne!(second, ordinary);
+
+        unsafe {
+            let cache_key = type_cache_identity_key(metadata);
+            let policy_key = segregated_type_cache_policy_key(metadata);
+            INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry {
+                cache_key: type_cache_identity_key(ordinary_metadata),
+                type_id: ordinary_metadata.type_id,
+                policy_key: segregated_type_cache_policy_key(ordinary_metadata),
+                ptr: ordinary,
+                size: layout.size(),
+                align: layout.align(),
+                auth: metadata_record_auth(ordinary, layout, ordinary_metadata),
+                metadata: ordinary_metadata,
+            };
+            *inline_segregated_type_cache_entry_at(SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE, 0) =
+                SegregatedTypeCacheEntry {
+                    cache_key,
+                    type_id: metadata.type_id,
+                    policy_key,
+                    ptr: first,
+                    size: layout.size(),
+                    align: layout.align(),
+                    auth: metadata_record_auth(first, layout, metadata),
+                    metadata,
+                };
+            *inline_segregated_type_cache_entry_at(SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE, 1) =
+                SegregatedTypeCacheEntry {
+                    cache_key,
+                    type_id: metadata.type_id,
+                    policy_key,
+                    ptr: second,
+                    size: layout.size(),
+                    align: layout.align(),
+                    auth: metadata_record_auth(second, layout, metadata),
+                    metadata,
+                };
+            set_segregated_type_cache_bucket_retained_bytes(
+                SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES.saturating_sub(retained * 3),
+                true,
+            );
+
+            let bucket_idx = segregated_type_cache_slot_for_key(cache_key, layout);
+            let cache = ordinary_segregated_type_cache_mut();
+            let mut ordinary_cached = None;
+            assert!(
+                segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
+                    &*cache,
+                    SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                    SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                    &mut ordinary_cached,
+                    bucket_idx,
+                    layout.size(),
+                ),
+                "the mocked ordinary budget has room when only its own inline ownership is counted"
+            );
+
+            let mut hugepage_cached = None;
+            assert!(
+                !segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
+                    &*cache,
+                    SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                    SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE,
+                    &mut hugepage_cached,
+                    bucket_idx,
+                    layout.size(),
+                ),
+                "ordinary fallback must count ordinary inline plus both hugepage inline objects before accepting a third"
+            );
+            assert_eq!(
+                hugepage_cached,
+                Some(MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES)
+            );
+
+            *inline_segregated_type_cache_entry_at(SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE, 0) =
+                SegregatedTypeCacheEntry::empty();
+            *inline_segregated_type_cache_entry_at(SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE, 1) =
+                SegregatedTypeCacheEntry::empty();
+            INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry::empty();
+            set_segregated_type_cache_bucket_retained_bytes(
+                SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                0,
+                false,
+            );
+            alloc.dealloc_raw(first, layout);
+            alloc.dealloc_raw(second, layout);
+            alloc.dealloc_raw(ordinary, layout);
+        }
+    }
+
     #[cfg(feature = "stats")]
     #[cfg(not(feature = "fixed_heap"))]
     #[test]
@@ -16314,9 +16867,13 @@ mod tests {
 
         let first = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         let second = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        let third = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         assert!(!first.is_null());
         assert!(!second.is_null());
+        assert!(!third.is_null());
         assert_ne!(first, second);
+        assert_ne!(first, third);
+        assert_ne!(second, third);
         unsafe {
             alloc.dealloc_with_metadata(first, layout, metadata);
             assert!(
@@ -16324,14 +16881,19 @@ mod tests {
                 "the first hugepage metadata free should stay inline"
             );
             alloc.dealloc_with_metadata(second, layout, metadata);
+            assert!(
+                hugepage_metadata_side_cache_snapshot().is_none(),
+                "the second hugepage metadata free should stay in the bounded inline cache"
+            );
+            alloc.dealloc_with_metadata(third, layout, metadata);
             assert_eq!(
                 SEGREGATED_TYPE_CACHE[slot].count, 0,
                 "hugepage metadata must not be stored in the ordinary static side cache"
             );
             assert_eq!(
                 hugepage_segregated_bucket_count_for_test(layout, metadata),
-                Some(2),
-                "the second cached hugepage metadata object should materialize the mmap_huge-backed side cache"
+                Some(3),
+                "the third cached hugepage metadata object should materialize the mmap_huge-backed side cache"
             );
             let snapshot = hugepage_metadata_side_cache_snapshot()
                 .expect("hugepage side cache should be live after bucket materialization");
@@ -16358,19 +16920,21 @@ mod tests {
 
         let reused_one = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         let reused_two = unsafe { alloc.alloc_with_metadata(layout, metadata) };
-        assert!(
-            (reused_one == first && reused_two == second)
-                || (reused_one == second && reused_two == first)
+        let reused_three = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert_same_pointer_set(
+            [first, second, third],
+            [reused_one, reused_two, reused_three],
         );
         unsafe {
             alloc.dealloc_raw(reused_one, layout);
             alloc.dealloc_raw(reused_two, layout);
+            alloc.dealloc_raw(reused_three, layout);
             drop_hugepage_segregated_type_cache_for_test();
         }
 
         let snap = semantic_stats_snapshot();
-        assert_eq!(snap.typed_cache_inserts, 2);
-        assert_eq!(snap.typed_cache_hits, 2);
+        assert_eq!(snap.typed_cache_inserts, 3);
+        assert_eq!(snap.typed_cache_hits, 3);
         semantic_stats_recording_disable();
     }
 
@@ -16393,9 +16957,13 @@ mod tests {
 
         let first = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         let second = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        let third = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         assert!(!first.is_null());
         assert!(!second.is_null());
+        assert!(!third.is_null());
         assert_ne!(first, second);
+        assert_ne!(first, third);
+        assert_ne!(second, third);
         unsafe {
             alloc.dealloc_with_metadata(first, layout, metadata);
         }
@@ -16407,23 +16975,37 @@ mod tests {
             alloc.dealloc_with_metadata(second, layout, metadata);
         }
         assert!(
+            hugepage_metadata_side_cache_snapshot().is_none(),
+            "the second cached hugepage metadata object should stay in the bounded inline cache"
+        );
+        unsafe {
+            alloc.dealloc_with_metadata(third, layout, metadata);
+        }
+        assert!(
             hugepage_metadata_side_cache_snapshot().is_some(),
-            "the second cached hugepage metadata object should allocate the side-cache mapping"
+            "the third cached hugepage metadata object should allocate the side-cache mapping"
         );
 
         let reused_one = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         assert!(
-            reused_one == first || reused_one == second,
+            reused_one == first || reused_one == second || reused_one == third,
             "first reuse should come from one of the cached objects"
         );
         assert!(
             hugepage_metadata_side_cache_snapshot().is_some(),
-            "the mmap-backed hugepage side cache should remain while one bucket entry is cached"
+            "the mmap-backed hugepage side cache should remain while two bucket entries are cached"
         );
         let reused_two = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert!(reused_two == first || reused_two == second || reused_two == third);
+        assert_ne!(reused_one, reused_two);
         assert!(
-            (reused_one == first && reused_two == second)
-                || (reused_one == second && reused_two == first)
+            hugepage_metadata_side_cache_snapshot().is_some(),
+            "the mmap-backed hugepage side cache should remain while one bucket entry is cached"
+        );
+        let reused_three = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert_same_pointer_set(
+            [first, second, third],
+            [reused_one, reused_two, reused_three],
         );
         assert!(
             hugepage_metadata_side_cache_snapshot().is_none(),
@@ -16433,6 +17015,7 @@ mod tests {
         unsafe {
             alloc.dealloc_raw(reused_one, layout);
             alloc.dealloc_raw(reused_two, layout);
+            alloc.dealloc_raw(reused_three, layout);
             drop_hugepage_segregated_type_cache_for_test();
         }
         semantic_stats_recording_disable();
@@ -16467,9 +17050,13 @@ mod tests {
 
             let first = unsafe { alloc.alloc_with_metadata(layout, metadata) };
             let second = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            let third = unsafe { alloc.alloc_with_metadata(layout, metadata) };
             assert!(!first.is_null());
             assert!(!second.is_null());
+            assert!(!third.is_null());
             assert_ne!(first, second);
+            assert_ne!(first, third);
+            assert_ne!(second, third);
 
             unsafe {
                 alloc.dealloc_with_metadata(first, layout, metadata);
@@ -16478,6 +17065,11 @@ mod tests {
                     "worker's first hugepage metadata free should remain inline"
                 );
                 alloc.dealloc_with_metadata(second, layout, metadata);
+                assert!(
+                    hugepage_metadata_side_cache_snapshot().is_none(),
+                    "worker's second hugepage metadata free should remain inline"
+                );
+                alloc.dealloc_with_metadata(third, layout, metadata);
             }
             let worker_snapshot = hugepage_metadata_side_cache_snapshot()
                 .expect("worker should materialize its own hugepage side-cache");
@@ -16495,10 +17087,10 @@ mod tests {
 
             let reused_one = unsafe { alloc.alloc_with_metadata(layout, metadata) };
             let reused_two = unsafe { alloc.alloc_with_metadata(layout, metadata) };
-            assert!(
-                (reused_one == first && reused_two == second)
-                    || (reused_one == second && reused_two == first),
-                "worker should recover its own cached hugepage metadata objects"
+            let reused_three = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert_same_pointer_set(
+                [first, second, third],
+                [reused_one, reused_two, reused_three],
             );
             assert!(
                 hugepage_metadata_side_cache_snapshot().is_none(),
@@ -16508,6 +17100,7 @@ mod tests {
             unsafe {
                 alloc.dealloc_raw(reused_one, layout);
                 alloc.dealloc_raw(reused_two, layout);
+                alloc.dealloc_raw(reused_three, layout);
                 drop_hugepage_segregated_type_cache_for_test();
             }
         });
@@ -16563,9 +17156,13 @@ mod tests {
 
         let first = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         let second = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        let third = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         assert!(!first.is_null());
         assert!(!second.is_null());
+        assert!(!third.is_null());
         assert_ne!(first, second);
+        assert_ne!(first, third);
+        assert_ne!(second, third);
 
         unsafe {
             alloc.dealloc_with_metadata(first, layout, metadata);
@@ -16574,31 +17171,38 @@ mod tests {
                 "the first hugepage metadata free should stay in the inline slot"
             );
             alloc.dealloc_with_metadata(second, layout, metadata);
+            assert!(
+                hugepage_metadata_side_cache_snapshot().is_none(),
+                "the second hugepage metadata free should stay in the second inline slot"
+            );
+            alloc.dealloc_with_metadata(third, layout, metadata);
         }
 
         let snapshot = hugepage_metadata_side_cache_snapshot()
-            .expect("the second cached object should materialize the side-cache mapping");
+            .expect("the third cached object should materialize the side-cache mapping");
         assert_eq!(snapshot.occupied_buckets, 1);
-        assert_eq!(snapshot.occupied_entries, 2);
+        assert_eq!(snapshot.occupied_entries, 3);
         assert_eq!(snapshot.corrupt_buckets, 0);
         assert_eq!(
             snapshot.retained_bytes,
-            retained * 2,
+            retained * 3,
             "snapshot must expose allocator-rounded bytes retained in the hugepage side-cache"
         );
         assert!(snapshot.retained_bytes <= MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES);
 
         let reused_one = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         let reused_two = unsafe { alloc.alloc_with_metadata(layout, metadata) };
-        assert!(
-            (reused_one == first && reused_two == second)
-                || (reused_one == second && reused_two == first)
+        let reused_three = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert_same_pointer_set(
+            [first, second, third],
+            [reused_one, reused_two, reused_three],
         );
         assert!(hugepage_metadata_side_cache_snapshot().is_none());
 
         unsafe {
             alloc.dealloc_raw(reused_one, layout);
             alloc.dealloc_raw(reused_two, layout);
+            alloc.dealloc_raw(reused_three, layout);
             drop_hugepage_segregated_type_cache_for_test();
         }
         semantic_stats_recording_disable();
@@ -16623,38 +17227,60 @@ mod tests {
 
         let first = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         let second = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        let third = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         assert!(!first.is_null());
         assert!(!second.is_null());
+        assert!(!third.is_null());
         assert_ne!(first, second);
+        assert_ne!(first, third);
+        assert_ne!(second, third);
         unsafe {
             alloc.dealloc_with_metadata(first, layout, metadata);
             alloc.dealloc_with_metadata(second, layout, metadata);
+            assert!(hugepage_metadata_side_cache_snapshot().is_none());
+            alloc.dealloc_with_metadata(third, layout, metadata);
         }
         assert_eq!(
             unsafe { hugepage_segregated_bucket_count_for_test(layout, metadata) },
-            Some(2),
-            "both freed objects should be cached in the hugepage side-cache bucket"
+            Some(3),
+            "all three freed objects should be cached in the hugepage side-cache bucket"
+        );
+        assert_eq!(
+            hugepage_metadata_side_cache_snapshot()
+                .expect("materialized hugepage side-cache should be live")
+                .occupied_entries,
+            3
         );
 
         let reused_one = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         assert!(
-            reused_one == first || reused_one == second,
+            reused_one == first || reused_one == second || reused_one == third,
             "first reuse should come from one of the cached objects"
         );
         assert!(
             hugepage_metadata_side_cache_snapshot().is_some(),
-            "the mapping must stay while one hugepage side-cache entry remains"
+            "the mapping must stay while two hugepage side-cache entries remain"
         );
         assert_eq!(
-            unsafe { hugepage_segregated_bucket_count_for_test(layout, metadata) },
-            Some(1)
+            hugepage_metadata_side_cache_snapshot()
+                .unwrap()
+                .occupied_entries,
+            2
         );
 
         let reused_two = unsafe { alloc.alloc_with_metadata(layout, metadata) };
-        assert!(
-            (reused_one == first && reused_two == second)
-                || (reused_one == second && reused_two == first),
-            "second reuse should recover the remaining cached object"
+        assert!(reused_two == first || reused_two == second || reused_two == third);
+        assert_ne!(reused_one, reused_two);
+        assert_eq!(
+            hugepage_metadata_side_cache_snapshot()
+                .unwrap()
+                .occupied_entries,
+            1
+        );
+        let reused_three = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert_same_pointer_set(
+            [first, second, third],
+            [reused_one, reused_two, reused_three],
         );
         assert!(
             hugepage_metadata_side_cache_snapshot().is_none(),
@@ -16664,6 +17290,7 @@ mod tests {
         unsafe {
             alloc.dealloc_raw(reused_one, layout);
             alloc.dealloc_raw(reused_two, layout);
+            alloc.dealloc_raw(reused_three, layout);
             drop_hugepage_segregated_type_cache_for_test();
         }
         semantic_stats_recording_disable();
@@ -16688,9 +17315,13 @@ mod tests {
 
         let first = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         let second = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        let third = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         assert!(!first.is_null());
         assert!(!second.is_null());
+        assert!(!third.is_null());
         assert_ne!(first, second);
+        assert_ne!(first, third);
+        assert_ne!(second, third);
 
         unsafe {
             alloc.dealloc_with_metadata(first, layout, metadata);
@@ -16703,13 +17334,20 @@ mod tests {
             alloc.dealloc_with_metadata(second, layout, metadata);
             assert_eq!(
                 hugepage_segregated_occupied_bucket_count_for_test(),
+                0,
+                "second hugepage metadata free should use the second inline slot"
+            );
+            assert!(hugepage_metadata_side_cache_snapshot().is_none());
+            alloc.dealloc_with_metadata(third, layout, metadata);
+            assert_eq!(
+                hugepage_segregated_occupied_bucket_count_for_test(),
                 1,
-                "materializing inline+second entry in one bucket should set one occupied bucket"
+                "materializing two inline entries plus the third entry should set one occupied bucket"
             );
         }
 
         let reused_one = unsafe { alloc.alloc_with_metadata(layout, metadata) };
-        assert!(reused_one == first || reused_one == second);
+        assert!(reused_one == first || reused_one == second || reused_one == third);
         unsafe {
             assert_eq!(
                 hugepage_segregated_occupied_bucket_count_for_test(),
@@ -16719,9 +17357,19 @@ mod tests {
         }
 
         let reused_two = unsafe { alloc.alloc_with_metadata(layout, metadata) };
-        assert!(
-            (reused_one == first && reused_two == second)
-                || (reused_one == second && reused_two == first)
+        assert!(reused_two == first || reused_two == second || reused_two == third);
+        assert_ne!(reused_one, reused_two);
+        unsafe {
+            assert_eq!(
+                hugepage_segregated_occupied_bucket_count_for_test(),
+                1,
+                "the bucket remains occupied until the third and final pop"
+            );
+        }
+        let reused_three = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert_same_pointer_set(
+            [first, second, third],
+            [reused_one, reused_two, reused_three],
         );
         unsafe {
             assert_eq!(
@@ -16732,6 +17380,7 @@ mod tests {
             assert!(hugepage_metadata_side_cache_snapshot().is_none());
             alloc.dealloc_raw(reused_one, layout);
             alloc.dealloc_raw(reused_two, layout);
+            alloc.dealloc_raw(reused_three, layout);
             drop_hugepage_segregated_type_cache_for_test();
         }
         semantic_stats_recording_disable();
