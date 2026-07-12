@@ -5,6 +5,12 @@
 
 #[macro_use]
 extern crate alloc;
+// The bridge below reaches UniAlloc through `extern "C"` declarations, so the
+// final module crate must still explicitly consume the rlib passed via
+// `RUSTFLAGS_MODULE=--extern unialloc=...`.  Without this anonymous import,
+// rustc is free to leave that otherwise-unused `--extern` crate out of the
+// link, leaving the bridge ABI symbols unresolved.
+extern crate unialloc as _;
 
 mod unialloc_bridge;
 
