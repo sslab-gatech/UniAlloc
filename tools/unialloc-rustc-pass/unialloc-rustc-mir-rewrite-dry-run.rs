@@ -37,9 +37,10 @@ use rustc_hir::def::Res;
 use rustc_interface::interface;
 #[cfg(unialloc_rustc_current)]
 use rustc_middle::mir::interpret::Scalar;
+use rustc_middle::mir::visit::{MutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
-    BasicBlock, BasicBlockData, Body, LocalDecl, Operand, Place, Rvalue, SourceInfo, StatementKind,
-    Terminator, TerminatorKind,
+    BasicBlock, BasicBlockData, Body, LocalDecl, Location, Operand, Place, Rvalue, SourceInfo,
+    StatementKind, Terminator, TerminatorKind,
 };
 #[cfg(unialloc_rustc_current)]
 use rustc_middle::mir::{CallSource, UnwindAction};
@@ -265,11 +266,17 @@ fn semantic_scope_resolution_status(scope_abi: SemanticScopeAbi) -> &'static str
     semantic_scope_resolution_status_for(scope_abi.supports_hints, scope_abi.local_no_recovery)
 }
 
-fn semantic_scope_unresolved_status() -> &'static str {
-    match (
-        lowering_metadata_hints_requested(),
-        direct_local_size_align_with_semantic_drop_requested(),
-    ) {
+fn semantic_scope_push_symbol(local_no_recovery: bool) -> &'static str {
+    match (lowering_metadata_hints_requested(), local_no_recovery) {
+        (true, true) => "__unialloc_semantic_scope_push_hints_local",
+        (false, true) => "__unialloc_semantic_scope_push_local",
+        (true, false) => "__unialloc_semantic_scope_push_hints",
+        (false, false) => "__unialloc_semantic_scope_push",
+    }
+}
+
+fn semantic_scope_unresolved_status(local_no_recovery: bool) -> &'static str {
+    match (lowering_metadata_hints_requested(), local_no_recovery) {
         (true, true) => "unialloc_semantic_scope_push_hints_local_pop_not_resolved",
         (false, true) => "unialloc_semantic_scope_push_local_pop_not_resolved",
         (true, false) => "unialloc_semantic_scope_push_hints_pop_not_resolved",
@@ -351,6 +358,7 @@ struct SemanticScopeCandidate<'tcx> {
     callee: String,
     call_arguments: Vec<String>,
     argument_types: Vec<String>,
+    destination: Place<'tcx>,
     destination_place: String,
     destination_type: String,
     semantic_object_type: String,
@@ -381,7 +389,7 @@ struct SemanticDropCandidate<'tcx> {
 struct RewriteDryRunCallbacks;
 
 fn usage() -> &'static str {
-    "Usage:\n  RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs -o /tmp/unialloc-rustc-mir-rewrite-dry-run\n  DYLD_LIBRARY_PATH=$(rustc +$(cat rust-toolchain) --print sysroot)/lib /tmp/unialloc-rustc-mir-rewrite-dry-run \\\n    --unialloc-rewrite-audit-out /tmp/rewrite-audit.json -- --sysroot $(rustc +$(cat rust-toolchain) --print sysroot) --edition=2021 input.rs\n\nOptions:\n  --unialloc-rewrite-audit-out <path>  JSON rewrite audit output. Defaults to env UNIALLOC_REWRITE_AUDIT_OUT or ./unialloc-rustc-mir-rewrite-dry-run.json\n  --unialloc-rewrite-audit-dir <dir>   Wrapper-friendly output directory. Defaults to env UNIALLOC_REWRITE_AUDIT_DIR if set\n  --unialloc-pass-log-out <path>       Optional pass log output. Defaults to env UNIALLOC_PASS_LOG_OUT if set\n  --unialloc-pass-log-dir <dir>        Wrapper-friendly log directory. Defaults to env UNIALLOC_PASS_LOG_DIR if set\n  --unialloc-target-crates <names>     Optional comma-separated Cargo crate allowlist. Defaults to env UNIALLOC_RUSTC_TARGET_CRATES. Hyphens and underscores compare equivalently\n  --unialloc-actual-mir-rewrite        Opt in to replacing supported direct allocator-call terminators. Defaults to env UNIALLOC_ACTUAL_MIR_REWRITE truthiness\n  --unialloc-actual-semantic-scope-rewrite  Opt in to inserting __unialloc_semantic_scope_push/pop around supported semantic allocation calls. Defaults to env UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE truthiness\n  --unialloc-auto-cross-thread-recovery-hint  OR the cross-thread recovery placement bit into solved heap-object scopes when the MIR body contains thread-spawn/escape calls. Defaults to env UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT truthiness\n  --unialloc-direct-local-metadata-abi  Use no-recovery UniAlloc Layout alloc/alloc_zeroed/realloc/dealloc ABI variants only when paired metadata deallocation/reallocation is explicit; unpaired size/align exchange_malloc keeps recovery ABI. Defaults to env UNIALLOC_DIRECT_LOCAL_METADATA_ABI truthiness\n  --unialloc-direct-local-size-align-with-semantic-drop  Allow no-recovery size/align exchange_malloc ABI only when semantic Drop-scope rewrite is also enabled and validated. Defaults to env UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP truthiness\n  --unialloc-policy-flags <u32>        Policy flags inserted into UniAlloc metadata. Defaults to env UNIALLOC_LOWERING_POLICY_FLAGS or 0x1 (TYPE_ISOLATED only)\n  --unialloc-lifetime-hint <u16>       Optional metadata lifetime hint. Defaults to env UNIALLOC_LOWERING_LIFETIME_HINT or 0\n  --unialloc-placement-hint <u16>      Optional metadata placement hint. Defaults to env UNIALLOC_LOWERING_PLACEMENT_HINT or 0\n  --unialloc-continue-compilation      Continue after analysis and produce normal rustc outputs. Actual rewrite modes continue by default. Defaults to env UNIALLOC_CONTINUE_COMPILATION truthiness\n  --unialloc-stop-after-analysis       Force analysis-only output even if an actual rewrite flag is set\n  --unialloc-dry-run-only              Force audit-only mode even if actual rewrite env flags are set\n  --unialloc-help                      Print this help\n\nEverything after `--` is passed to rustc_driver as a direct invocation. Without `--`, an executable path or a bare command resolved through PATH/PATHEXT is treated as Cargo's compiler argv0. Executable source files therefore require explicit `--` for direct compilation.\n"
+    "Usage:\n  RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs -o /tmp/unialloc-rustc-mir-rewrite-dry-run\n  DYLD_LIBRARY_PATH=$(rustc +$(cat rust-toolchain) --print sysroot)/lib /tmp/unialloc-rustc-mir-rewrite-dry-run \\\n    --unialloc-rewrite-audit-out /tmp/rewrite-audit.json -- --sysroot $(rustc +$(cat rust-toolchain) --print sysroot) --edition=2021 input.rs\n\nOptions:\n  --unialloc-rewrite-audit-out <path>  JSON rewrite audit output. Defaults to env UNIALLOC_REWRITE_AUDIT_OUT or ./unialloc-rustc-mir-rewrite-dry-run.json\n  --unialloc-rewrite-audit-dir <dir>   Wrapper-friendly output directory. Defaults to env UNIALLOC_REWRITE_AUDIT_DIR if set\n  --unialloc-pass-log-out <path>       Optional pass log output. Defaults to env UNIALLOC_PASS_LOG_OUT if set\n  --unialloc-pass-log-dir <dir>        Wrapper-friendly log directory. Defaults to env UNIALLOC_PASS_LOG_DIR if set\n  --unialloc-target-crates <names>     Optional comma-separated Cargo crate allowlist. Defaults to env UNIALLOC_RUSTC_TARGET_CRATES. Hyphens and underscores compare equivalently\n  --unialloc-actual-mir-rewrite        Opt in to replacing supported direct allocator-call terminators. Defaults to env UNIALLOC_ACTUAL_MIR_REWRITE truthiness\n  --unialloc-actual-semantic-scope-rewrite  Opt in to inserting __unialloc_semantic_scope_push/pop around supported semantic allocation calls. Defaults to env UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE truthiness\n  --unialloc-auto-cross-thread-recovery-hint  OR the cross-thread recovery placement bit into solved heap-object scopes when the MIR body contains thread-spawn/escape calls. Defaults to env UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT truthiness\n  --unialloc-direct-local-metadata-abi  Use no-recovery UniAlloc Layout alloc/alloc_zeroed/realloc/dealloc ABI variants only when paired metadata deallocation/reallocation is explicit; unpaired size/align exchange_malloc keeps recovery ABI. Defaults to env UNIALLOC_DIRECT_LOCAL_METADATA_ABI truthiness\n  --unialloc-direct-local-size-align-with-semantic-drop  Enable no-recovery semantic scopes only for destination-proven linear Drop ownership; raw size/align calls without an exact owner link remain recovery-backed. Defaults to env UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP truthiness\n  --unialloc-policy-flags <u32>        Policy flags inserted into UniAlloc metadata. Defaults to env UNIALLOC_LOWERING_POLICY_FLAGS or 0x1 (TYPE_ISOLATED only)\n  --unialloc-lifetime-hint <u16>       Optional metadata lifetime hint. Defaults to env UNIALLOC_LOWERING_LIFETIME_HINT or 0\n  --unialloc-placement-hint <u16>      Optional metadata placement hint. Defaults to env UNIALLOC_LOWERING_PLACEMENT_HINT or 0\n  --unialloc-continue-compilation      Continue after analysis and produce normal rustc outputs. Actual rewrite modes continue by default. Defaults to env UNIALLOC_CONTINUE_COMPILATION truthiness\n  --unialloc-stop-after-analysis       Force analysis-only output even if an actual rewrite flag is set\n  --unialloc-dry-run-only              Force audit-only mode even if actual rewrite env flags are set\n  --unialloc-help                      Print this help\n\nEverything after `--` is passed to rustc_driver as a direct invocation. Without `--`, an executable path or a bare command resolved through PATH/PATHEXT is treated as Cargo's compiler argv0. Executable source files therefore require explicit `--` for direct compilation.\n"
 }
 
 fn env_truthy(name: &str) -> bool {
@@ -3634,6 +3642,7 @@ fn direct_allocator_replacement_abi(
 fn resolve_unialloc_semantic_scope_in_crate<'tcx>(
     tcx: TyCtxt<'tcx>,
     crate_root: DefId,
+    local_no_recovery: bool,
 ) -> Option<SemanticScopeAbi> {
     let pop = child_def_id_in_alloc_api_or_type_isolation(
         tcx,
@@ -3641,13 +3650,7 @@ fn resolve_unialloc_semantic_scope_in_crate<'tcx>(
         "__unialloc_semantic_scope_pop",
     )?;
     let supports_hints = lowering_metadata_hints_requested();
-    let local_no_recovery = direct_local_size_align_with_semantic_drop_requested();
-    let push_symbol = match (supports_hints, local_no_recovery) {
-        (true, true) => "__unialloc_semantic_scope_push_hints_local",
-        (false, true) => "__unialloc_semantic_scope_push_local",
-        (true, false) => "__unialloc_semantic_scope_push_hints",
-        (false, false) => "__unialloc_semantic_scope_push",
-    };
+    let push_symbol = semantic_scope_push_symbol(local_no_recovery);
 
     child_def_id_in_alloc_api_or_type_isolation(tcx, crate_root, push_symbol).map(|push_def_id| {
         SemanticScopeAbi {
@@ -3660,10 +3663,14 @@ fn resolve_unialloc_semantic_scope_in_crate<'tcx>(
     })
 }
 
-fn resolve_unialloc_semantic_scope<'tcx>(tcx: TyCtxt<'tcx>) -> Option<SemanticScopeAbi> {
+fn resolve_unialloc_semantic_scope<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    local_no_recovery: bool,
+) -> Option<SemanticScopeAbi> {
     for krate in tcx.crates(()).iter().copied() {
         if tcx.crate_name(krate).as_str() == "unialloc" {
-            if let Some(def_ids) = resolve_unialloc_semantic_scope_in_crate(tcx, krate.as_def_id())
+            if let Some(def_ids) =
+                resolve_unialloc_semantic_scope_in_crate(tcx, krate.as_def_id(), local_no_recovery)
             {
                 return Some(def_ids);
             }
@@ -4565,26 +4572,175 @@ fn const_u16_operand<'tcx>(tcx: TyCtxt<'tcx>, value: u16, span: Span) -> Operand
     const_bits_operand(tcx, tcx.types.u16, value as u128, span)
 }
 
-fn body_semantic_drop_object_type_counts<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    body: &Body<'tcx>,
-) -> BTreeMap<String, usize> {
-    let mut counts = BTreeMap::new();
-    for data in body_basic_blocks!(body).iter() {
-        let terminator = match &data.terminator {
-            Some(terminator) => terminator,
-            None => continue,
-        };
-        let place = match &terminator.kind {
-            TerminatorKind::Drop { place, .. } => place,
-            _ => continue,
-        };
-        let place_ty = place.ty(&body.local_decls, tcx).ty;
-        if let Some(object_type) = heap_object_type_from_ty(tcx, place_ty) {
-            *counts.entry(object_type).or_insert(0) += 1;
+#[derive(Default)]
+struct SemanticLocalOwnershipProof {
+    allocation_pairs: BTreeSet<(String, String)>,
+    drop_pairs: BTreeSet<(String, String)>,
+}
+
+struct SemanticOwnerUseVisitor<'tcx> {
+    owner: Place<'tcx>,
+    allocation_block: BasicBlock,
+    allocation_statement_index: usize,
+    disqualified: bool,
+}
+
+impl<'tcx> Visitor<'tcx> for SemanticOwnerUseVisitor<'tcx> {
+    fn visit_place(&mut self, place: &Place<'tcx>, context: PlaceContext, location: Location) {
+        if self.disqualified || place.local != self.owner.local {
+            return;
+        }
+
+        let exact_owner = *place == self.owner;
+        let allocation_destination = exact_owner
+            && location.block == self.allocation_block
+            && location.statement_index == self.allocation_statement_index
+            && matches!(context, PlaceContext::MutatingUse(MutatingUseContext::Call));
+        let exact_drop =
+            exact_owner && matches!(context, PlaceContext::MutatingUse(MutatingUseContext::Drop));
+        let bookkeeping_only = matches!(context, PlaceContext::NonUse(_));
+
+        // Local/no-recovery is intentionally a zero-alias proof.  Apart from
+        // the constructor destination, compiler bookkeeping, and an exact
+        // Drop, *every* typed use of the owner local fails closed.  This
+        // includes Ref/Reborrow/RawPtr, moves/copies, call arguments,
+        // projections, overwrites, and deref temporaries.  Rejecting at alias
+        // creation means a later call cannot hide ownership behind another
+        // local, unlike the former MIR debug-string substring heuristic.
+        if !allocation_destination && !exact_drop && !bookkeeping_only {
+            self.disqualified = true;
         }
     }
-    counts
+}
+
+fn candidate_has_zero_alias_owner_uses<'tcx>(
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> bool {
+    if !candidate.destination.projection.is_empty() {
+        return false;
+    }
+
+    let mut visitor = SemanticOwnerUseVisitor {
+        owner: candidate.destination,
+        allocation_block: candidate.bb,
+        allocation_statement_index: body[candidate.bb].statements.len(),
+        disqualified: false,
+    };
+    for (bb, data) in body_basic_blocks!(body).iter_enumerated() {
+        for (statement_index, statement) in data.statements.iter().enumerate() {
+            visitor.visit_statement(
+                statement,
+                Location {
+                    block: bb,
+                    statement_index,
+                },
+            );
+            if visitor.disqualified {
+                return false;
+            }
+        }
+        if let Some(terminator) = &data.terminator {
+            visitor.visit_terminator(
+                terminator,
+                Location {
+                    block: bb,
+                    statement_index: data.statements.len(),
+                },
+            );
+            if visitor.disqualified {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn candidate_has_linear_exact_drop<'tcx>(
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> bool {
+    if !candidate_has_zero_alias_owner_uses(body, candidate) {
+        return false;
+    }
+    let Some(mut bb) = candidate.original_target else {
+        return false;
+    };
+    let mut visited = BTreeSet::new();
+
+    loop {
+        if !visited.insert(bb) {
+            return false;
+        }
+        let data = &body[bb];
+        if data.is_cleanup {
+            return false;
+        }
+        let terminator = match &data.terminator {
+            Some(terminator) => terminator,
+            None => return false,
+        };
+
+        if let TerminatorKind::Drop { place, .. } = &terminator.kind {
+            if *place == candidate.destination {
+                return true;
+            }
+        }
+
+        let normal_successors = terminator
+            .successors()
+            .filter(|successor| !body[*successor].is_cleanup)
+            .collect::<Vec<_>>();
+        if normal_successors.len() != 1 {
+            return false;
+        }
+        bb = normal_successors[0];
+    }
+}
+
+fn exact_semantic_local_ownership_proof<'tcx>(
+    body: &Body<'tcx>,
+    candidates: &[SemanticScopeCandidate<'tcx>],
+) -> SemanticLocalOwnershipProof {
+    if !direct_local_size_align_with_semantic_drop_requested() {
+        return SemanticLocalOwnershipProof::default();
+    }
+
+    let mut candidate_counts: BTreeMap<(String, String), usize> = BTreeMap::new();
+    let mut candidate_pairs: BTreeMap<String, Vec<((String, String), bool)>> = BTreeMap::new();
+
+    for candidate in candidates {
+        if candidate.semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE {
+            continue;
+        }
+        let key = (
+            candidate.semantic_object_type.clone(),
+            candidate.destination_place.clone(),
+        );
+        *candidate_counts.entry(key.clone()).or_insert(0) += 1;
+        candidate_pairs
+            .entry(candidate.semantic_object_type.clone())
+            .or_default()
+            .push((
+                key,
+                !candidate.original_is_cleanup && candidate_has_linear_exact_drop(body, candidate),
+            ));
+    }
+
+    let mut proof = SemanticLocalOwnershipProof::default();
+    for pairs in candidate_pairs.into_values() {
+        if pairs
+            .iter()
+            .any(|(pair, proven)| !proven || candidate_counts.get(pair) != Some(&1))
+        {
+            continue;
+        }
+        for (pair, _) in pairs {
+            proof.allocation_pairs.insert(pair.clone());
+            proof.drop_pairs.insert(pair);
+        }
+    }
+    proof
 }
 
 fn record_or_rewrite_candidates<'tcx>(
@@ -4595,6 +4751,7 @@ fn record_or_rewrite_candidates<'tcx>(
     replacement_abis: Option<DirectAllocatorReplacementAbis>,
     semantic_scope_rewrite: bool,
     semantic_scope_abi: Option<SemanticScopeAbi>,
+    semantic_scope_local_abi: Option<SemanticScopeAbi>,
     records: &mut Vec<RewriteRecord>,
 ) {
     let function_name = tcx.def_path_str(def_id);
@@ -4606,8 +4763,6 @@ fn record_or_rewrite_candidates<'tcx>(
     };
     let mut direct_candidates = Vec::new();
     let mut layout_provenance: BTreeMap<String, HeapObjectSolution> = BTreeMap::new();
-    let body_drop_object_type_counts = body_semantic_drop_object_type_counts(tcx, body);
-    let mut planned_local_size_align_object_type_counts: BTreeMap<String, usize> = BTreeMap::new();
 
     for (bb, data) in body_basic_blocks!(body).iter_enumerated() {
         for statement in &data.statements {
@@ -4739,30 +4894,12 @@ fn record_or_rewrite_candidates<'tcx>(
         let (type_id, type_id_basis) =
             direct_allocator_type_id(call_kind, &semantic_object_type, solved_type_id_basis, &key);
         let recovery_delegated = type_id_basis == "direct_allocator_recovery_delegated";
-        let allow_size_align_local = if call_kind == DirectAllocatorCallKind::SizeAlignAlloc
-            && direct_local_size_align_with_semantic_drop_requested()
-            && semantic_object_type != UNKNOWN_HEAP_OBJECT_TYPE
-        {
-            let available_drop_count = body_drop_object_type_counts
-                .get(&semantic_object_type)
-                .copied()
-                .unwrap_or(0);
-            let planned_count = planned_local_size_align_object_type_counts
-                .get(&semantic_object_type)
-                .copied()
-                .unwrap_or(0);
-            available_drop_count > planned_count
-        } else {
-            true
-        };
-        if call_kind == DirectAllocatorCallKind::SizeAlignAlloc
-            && direct_local_size_align_with_semantic_drop_requested()
-            && allow_size_align_local
-        {
-            *planned_local_size_align_object_type_counts
-                .entry(semantic_object_type.clone())
-                .or_insert(0) += 1;
-        }
+        // Optimized MIR no longer exposes a sound owner link from a raw
+        // size/align allocator destination to the eventual heap-owner Drop.
+        // A same-type Drop count is not an ownership proof, so this branch
+        // remains recovery-backed until an exact destination link exists.
+        let allow_size_align_local = !(call_kind == DirectAllocatorCallKind::SizeAlignAlloc
+            && direct_local_size_align_with_semantic_drop_requested());
         let configured_policy_flags = lowering_policy_flags();
         let configured_lifetime_hint = lowering_lifetime_hint();
         let candidate_cross_thread_escape = semantic_object_needs_cross_thread_recovery_hint(
@@ -4994,12 +5131,13 @@ fn record_or_rewrite_candidates<'tcx>(
             lowering_kind: "direct_allocator_call_rewrite",
         });
     }
-    record_or_rewrite_semantic_scope_candidates(
+    let local_ownership = record_or_rewrite_semantic_scope_candidates(
         tcx,
         def_id,
         body,
         semantic_scope_rewrite,
         semantic_scope_abi,
+        semantic_scope_local_abi,
         records,
     );
     record_or_rewrite_semantic_drop_candidates(
@@ -5008,6 +5146,8 @@ fn record_or_rewrite_candidates<'tcx>(
         body,
         semantic_scope_rewrite,
         semantic_scope_abi,
+        semantic_scope_local_abi,
+        &local_ownership.drop_pairs,
         records,
     );
 }
@@ -5062,8 +5202,9 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
     body: &mut Body<'tcx>,
     semantic_scope_rewrite: bool,
     semantic_scope_abi: Option<SemanticScopeAbi>,
+    semantic_scope_local_abi: Option<SemanticScopeAbi>,
     records: &mut Vec<RewriteRecord>,
-) {
+) -> SemanticLocalOwnershipProof {
     let function_name = tcx.def_path_str(def_id);
     let cross_thread_escape = body_contains_cross_thread_escape_call(body);
     let cross_thread_escape_heap_object_types = if cross_thread_escape {
@@ -5163,6 +5304,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 .map(|arg| format!("{:?}", arg))
                 .collect::<Vec<_>>(),
             argument_types,
+            destination: *destination,
             destination_place: format!("{:?}", destination),
             destination_type,
             semantic_object_type,
@@ -5175,12 +5317,19 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
         });
     }
 
+    // The local ABI is a per-owner optimization, not a per-type heuristic.
+    // Authorize the type group only when every allocation destination follows
+    // one non-cleanup normal path, is not moved or passed to a call, and reaches
+    // its exact destination-matched Drop before any normal exit.
+    let local_ownership = exact_semantic_local_ownership_proof(body, &candidate_blocks);
+
     for SemanticScopeCandidate {
         bb,
         original_is_cleanup,
         callee,
         call_arguments,
         argument_types,
+        destination: _,
         destination_place,
         destination_type,
         semantic_object_type,
@@ -5363,9 +5512,18 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             semantic_object_type
         );
         let mut semantic_scope_unwind_pop_inserted = false;
+        let exact_local_pair = local_ownership
+            .allocation_pairs
+            .contains(&(semantic_object_type.clone(), destination_place.clone()));
+        let selected_semantic_scope_abi = if exact_local_pair {
+            semantic_scope_local_abi.or(semantic_scope_abi)
+        } else {
+            semantic_scope_abi
+        };
 
         if semantic_scope_rewrite {
-            if let (Some(scope_abi), Some(original_target)) = (semantic_scope_abi, original_target)
+            if let (Some(scope_abi), Some(original_target)) =
+                (selected_semantic_scope_abi, original_target)
             {
                 let push_unit_local = push_internal_local(body, unit_ty(tcx), fn_span);
                 let push_unit_place = Place::from(push_unit_local);
@@ -5457,7 +5615,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             } else {
                 rewrite_status =
                     "actual_semantic_scope_enter_exit_rewrite_requested_symbol_unresolved";
-                replacement_resolution_status = semantic_scope_unresolved_status();
+                replacement_resolution_status = semantic_scope_unresolved_status(exact_local_pair);
             }
         }
 
@@ -5484,13 +5642,9 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             size_operand: None,
             align_operand: None,
             rewrite_status,
-            replacement_symbol: semantic_scope_abi.map(|abi| abi.push_symbol).unwrap_or(
-                if lowering_metadata_hints_requested() {
-                    "__unialloc_semantic_scope_push_hints"
-                } else {
-                    "__unialloc_semantic_scope_push"
-                },
-            ),
+            replacement_symbol: selected_semantic_scope_abi
+                .map(|abi| abi.push_symbol)
+                .unwrap_or_else(|| semantic_scope_push_symbol(exact_local_pair)),
             replacement_resolution_status,
             replacement_preview,
             semantic_scope_unwind_pop_inserted,
@@ -5498,6 +5652,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             lowering_kind: "semantic_scope_enter_exit_rewrite",
         });
     }
+    local_ownership
 }
 
 fn record_or_rewrite_semantic_drop_candidates<'tcx>(
@@ -5506,6 +5661,8 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
     body: &mut Body<'tcx>,
     semantic_scope_rewrite: bool,
     semantic_scope_abi: Option<SemanticScopeAbi>,
+    semantic_scope_local_abi: Option<SemanticScopeAbi>,
+    local_drop_pairs: &BTreeSet<(String, String)>,
     records: &mut Vec<RewriteRecord>,
 ) {
     let function_name = tcx.def_path_str(def_id);
@@ -5753,9 +5910,16 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             semantic_object_type
         );
         let mut semantic_scope_unwind_pop_inserted = false;
+        let exact_local_pair =
+            local_drop_pairs.contains(&(semantic_object_type.clone(), drop_place.clone()));
+        let selected_semantic_scope_abi = if exact_local_pair {
+            semantic_scope_local_abi.or(semantic_scope_abi)
+        } else {
+            semantic_scope_abi
+        };
 
         if semantic_scope_rewrite {
-            if let Some(scope_abi) = semantic_scope_abi {
+            if let Some(scope_abi) = selected_semantic_scope_abi {
                 let push_unit_local = push_internal_local(body, unit_ty(tcx), fn_span);
                 let push_unit_place = Place::from(push_unit_local);
                 let source_info = body[bb].terminator().source_info;
@@ -5834,7 +5998,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                 };
             } else {
                 rewrite_status = "actual_semantic_scope_drop_rewrite_requested_symbol_unresolved";
-                replacement_resolution_status = semantic_scope_unresolved_status();
+                replacement_resolution_status = semantic_scope_unresolved_status(exact_local_pair);
             }
         }
 
@@ -5861,13 +6025,9 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             size_operand: None,
             align_operand: None,
             rewrite_status,
-            replacement_symbol: semantic_scope_abi.map(|abi| abi.push_symbol).unwrap_or(
-                if lowering_metadata_hints_requested() {
-                    "__unialloc_semantic_scope_push_hints"
-                } else {
-                    "__unialloc_semantic_scope_push"
-                },
-            ),
+            replacement_symbol: selected_semantic_scope_abi
+                .map(|abi| abi.push_symbol)
+                .unwrap_or_else(|| semantic_scope_push_symbol(exact_local_pair)),
             replacement_resolution_status,
             replacement_preview,
             semantic_scope_unwind_pop_inserted,
@@ -5894,10 +6054,16 @@ fn optimized_mir_with_rewrite_dry_run<'tcx>(
         None
     };
     let semantic_scope_abi = if semantic_scope_rewrite {
-        resolve_unialloc_semantic_scope(tcx)
+        resolve_unialloc_semantic_scope(tcx, false)
     } else {
         None
     };
+    let semantic_scope_local_abi =
+        if semantic_scope_rewrite && direct_local_size_align_with_semantic_drop_requested() {
+            resolve_unialloc_semantic_scope(tcx, true)
+        } else {
+            None
+        };
     let record_def_id = optimized_mir_def_id_to_def_id(def_id);
     unsafe {
         if let Some(records) = &RECORDS {
@@ -5910,6 +6076,7 @@ fn optimized_mir_with_rewrite_dry_run<'tcx>(
                     replacement_abis,
                     semantic_scope_rewrite,
                     semantic_scope_abi,
+                    semantic_scope_local_abi,
                     &mut guard,
                 );
             }
@@ -6111,7 +6278,26 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .count();
     let metadata_hints_requested =
         cli.lifetime_hint != 0 || cli.placement_hint != 0 || cli.auto_cross_thread_recovery_hint;
-    let local_semantic_scope_requested = direct_local_size_align_with_semantic_drop_requested();
+    let local_semantic_scope_applied_count = records
+        .iter()
+        .filter(|record| {
+            matches!(
+                record.rewrite_status,
+                "actual_semantic_scope_enter_exit_rewrite_applied"
+                    | "actual_semantic_scope_drop_rewrite_applied"
+            ) && record.replacement_symbol.ends_with("_local")
+        })
+        .count();
+    let recovery_semantic_scope_applied_count = records
+        .iter()
+        .filter(|record| {
+            matches!(
+                record.rewrite_status,
+                "actual_semantic_scope_enter_exit_rewrite_applied"
+                    | "actual_semantic_scope_drop_rewrite_applied"
+            ) && !record.replacement_symbol.ends_with("_local")
+        })
+        .count();
     let actual_allocator_call_replacement = cli.actual_rewrite && rewrite_applied_count > 0;
     let actual_semantic_scope_rewrite =
         cli.semantic_scope_rewrite && semantic_scope_rewrite_applied_count > 0;
@@ -6161,10 +6347,19 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let semantic_scope_replacement_resolution_status = if !cli.semantic_scope_rewrite {
         "not_requested_dry_run"
     } else if semantic_scope_rewrite_applied_count > 0 {
-        semantic_scope_resolution_status_for(
+        match (
             metadata_hints_requested,
-            local_semantic_scope_requested,
-        )
+            local_semantic_scope_applied_count > 0,
+            recovery_semantic_scope_applied_count > 0,
+        ) {
+            (true, true, true) => {
+                "resolved_unialloc_semantic_scope_push_hints_mixed_local_recovery_pop"
+            }
+            (false, true, true) => "resolved_unialloc_semantic_scope_push_mixed_local_recovery_pop",
+            (supports_hints, local, _) => {
+                semantic_scope_resolution_status_for(supports_hints, local)
+            }
+        }
     } else if records.iter().any(|record| {
         record.replacement_resolution_status
             == "unialloc_semantic_scope_push_hints_local_pop_not_resolved"
@@ -6335,7 +6530,7 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     json.push_str("  },\n");
     json.push_str("  \"lowering_contract\": {\n");
     json.push_str("    \"target_allocator_abi\": \"__unialloc_alloc_with_metadata[_hints](size, align, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite), Rust-ABI __unialloc_{alloc,alloc_zeroed,realloc,dealloc}_layout_with_metadata[_hints] plus optional no-recovery alloc/alloc_zeroed/realloc/dealloc _local variants for explicit paired Layout lowerings; size/align __unialloc_alloc_with_metadata[_hints] remains recovery-backed because exchange_malloc has no direct paired dealloc rewrite (original Layout operands, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite); explicit GlobalAlloc receiver calls are lowered only when the receiver type is UniAlloc/RustAllocator\",\n");
-    json.push_str("    \"semantic_scope_abi\": \"__unialloc_semantic_scope_push[_hints][_local](type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite) / __unialloc_semantic_scope_pop(); _local is selected only for paired direct-local size/align + semantic-drop lowering\",\n");
+    json.push_str("    \"semantic_scope_abi\": \"__unialloc_semantic_scope_push[_hints][_local](type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite) / __unialloc_semantic_scope_pop(); _local is selected only for a single normal path with no owner move/call before the exact destination Drop; otherwise recovery-backed\",\n");
     json.push_str("    \"size_source\": \"original MIR call arg 0\",\n");
     json.push_str("    \"align_source\": \"original MIR call arg 1\",\n");
     json.push_str("    \"semantic_heap_object_solver\": \"rustc_middle TyKind::Adt destination/argument solver plus MIR ShallowInitBox, Layout::array/new/for_value/for_value_raw constructor provenance, size_of/align_of typed Layout::from_size_align reconstruction, Layout::align_to/pad_to_align transformer provenance, same-source Layout::from_size_align reconstruction provenance, projection-aware/packed Layout::extend/repeat composite provenance tracking, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, and canonicalized MIR place/ref/tuple projection provenance; unsolved candidates are audit-only\",\n");
@@ -6938,7 +7133,7 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(text, "rewrite_candidate_count: {}", records.len());
     text.push_str("target_allocator_abi: __unialloc_alloc_with_metadata[_hints](size, align, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite), Rust-ABI __unialloc_{alloc,alloc_zeroed,realloc,dealloc}_layout_with_metadata[_hints] plus optional no-recovery alloc/alloc_zeroed/realloc/dealloc _local variants for explicit paired Layout lowerings; size/align __unialloc_alloc_with_metadata[_hints] remains recovery-backed because exchange_malloc has no direct paired dealloc rewrite (original Layout operands, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite); explicit GlobalAlloc receiver calls are lowered only when the receiver type is UniAlloc/RustAllocator\n");
-    text.push_str("semantic_scope_abi: __unialloc_semantic_scope_push[_hints][_local](type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite) / __unialloc_semantic_scope_pop(); _local is selected only for paired direct-local size/align + semantic-drop lowering\n");
+    text.push_str("semantic_scope_abi: __unialloc_semantic_scope_push[_hints][_local](type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite) / __unialloc_semantic_scope_pop(); _local is selected only for a single normal path with no owner move/call before the exact destination Drop; otherwise recovery-backed\n");
     text.push_str("semantic_heap_object_solver: rustc_middle TyKind::Adt destination/argument solver plus MIR ShallowInitBox, Layout::array/new/for_value/for_value_raw constructor provenance, size_of/align_of typed Layout::from_size_align reconstruction, Layout::align_to/pad_to_align transformer provenance, same-source Layout::from_size_align reconstruction provenance, projection-aware/packed Layout::extend/repeat composite provenance tracking, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, and canonicalized MIR place/ref/tuple projection provenance; unsolved candidates are audit-only\n");
     text.push_str("note: real rustc query override; dry-run by default, optional actual modes rewrite supported direct allocator calls or insert semantic-scope enter/exit calls\n");
     fs::write(path, text).map_err(|err| format!("write {}: {}", path.display(), err))?;
