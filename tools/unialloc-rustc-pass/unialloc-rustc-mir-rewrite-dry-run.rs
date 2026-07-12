@@ -78,7 +78,7 @@ const LOWERING_MODULE_ID: u64 = 0xC002_DA00_0000_0001;
 const DEFAULT_LOWERING_POLICY_FLAGS: u32 = 0x1;
 const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const TYPE_ID_ALGORITHM: &str =
-    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; constructor/factory scopes attribute identity only from the MIR destination; for both shapes, remaining by-value argument owner graphs are merged as safety hazards: identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer Vec identity because they can change only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; constructor/factory scopes attribute identity only from the MIR destination; for both shapes, remaining by-value argument owner graphs are merged as safety hazards: identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the capacity-only Vec exception; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 
@@ -1932,12 +1932,7 @@ fn collect_heap_object_types_from_ty_inner<'tcx>(
         #[cfg(not(unialloc_rustc_current))]
         ty::RawPtr(type_and_mut) => {
             if depth == 0 {
-                collect_heap_object_types_from_ty_inner(
-                    tcx,
-                    type_and_mut.ty,
-                    depth + 1,
-                    scan,
-                );
+                collect_heap_object_types_from_ty_inner(tcx, type_and_mut.ty, depth + 1, scan);
             } else {
                 scan.unresolved = true;
             }
@@ -2318,24 +2313,12 @@ fn semantic_scope_argument_is_borrowed_or_raw(ty: Ty<'_>) -> bool {
     }
 }
 
-fn semantic_scope_heap_class_with_by_value_hazards<'tcx>(
+fn semantic_scope_heap_class_with_known_attribution_and_by_value_hazards<'tcx>(
     tcx: TyCtxt<'tcx>,
-    attribution_ty: Ty<'tcx>,
+    attributed_owner: String,
     hazard_tys: &[Ty<'tcx>],
 ) -> SemanticScopeHeapClass {
-    let attribution_scan = heap_object_type_scan_from_ty(tcx, attribution_ty);
-    if attribution_scan.unresolved {
-        return SemanticScopeHeapClass::Unresolved;
-    }
-    let mut owners = attribution_scan.owners;
-    if owners.is_empty() {
-        return SemanticScopeHeapClass::Unresolved;
-    }
-    if owners.len() > 1 {
-        return SemanticScopeHeapClass::Ambiguous(owners.into_iter().collect());
-    }
-    let attributed_owner = owners.iter().next().cloned().unwrap();
-
+    let mut owners = BTreeSet::from([attributed_owner.clone()]);
     for hazard_ty in hazard_tys {
         // Borrowed and raw-pointer arguments are not consumed owners. Their
         // pointees may be mutated, but they must not be re-attributed or make a
@@ -2357,13 +2340,78 @@ fn semantic_scope_heap_class_with_by_value_hazards<'tcx>(
     }
 }
 
+fn semantic_scope_heap_class_with_by_value_hazards<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    attribution_ty: Ty<'tcx>,
+    hazard_tys: &[Ty<'tcx>],
+) -> SemanticScopeHeapClass {
+    let attribution_scan = heap_object_type_scan_from_ty(tcx, attribution_ty);
+    if attribution_scan.unresolved {
+        return SemanticScopeHeapClass::Unresolved;
+    }
+    let owners = attribution_scan.owners;
+    if owners.is_empty() {
+        return SemanticScopeHeapClass::Unresolved;
+    }
+    if owners.len() > 1 {
+        return SemanticScopeHeapClass::Ambiguous(owners.into_iter().collect());
+    }
+    let attributed_owner = owners.iter().next().cloned().unwrap();
+    semantic_scope_heap_class_with_known_attribution_and_by_value_hazards(
+        tcx,
+        attributed_owner,
+        hazard_tys,
+    )
+}
+
+fn direct_outer_vec_receiver_owner<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<String> {
+    let mut receiver_ty = ty;
+    while let ty::Ref(_, inner, _) = receiver_ty.kind() {
+        receiver_ty = *inner;
+    }
+    if clone_result_has_unresolved_params(receiver_ty) {
+        return None;
+    }
+    let type_text = format!("{:?}", receiver_ty);
+    match receiver_ty.kind() {
+        ty::Adt(adt, _) => {
+            let def_path = strip_rustc_crate_disambiguators(&tcx.def_path_str(adt.did()));
+            if matches!(def_path.as_str(), "std::vec::Vec" | "alloc::vec::Vec") {
+                Some(type_text)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 fn non_plain_semantic_scope_heap_class<'tcx>(
     tcx: TyCtxt<'tcx>,
     destination_ty: Ty<'tcx>,
     argument_tys: &[Ty<'tcx>],
     callee: &str,
 ) -> SemanticScopeHeapClass {
-    if semantic_scope_receiver_heap_owner_call(callee) {
+    if semantic_scope_capacity_only_vec_receiver_call(callee) {
+        // These methods can allocate, reallocate, or free only the direct Vec
+        // backing buffer; they never clone/drop elements or run element code.
+        // Keep the later by-value hazard gate, but do not make nested supported
+        // element owners (for example String in Vec<String>) ambiguous with the
+        // outer buffer whose capacity is being changed.
+        match argument_tys.first() {
+            Some(receiver_ty) => match direct_outer_vec_receiver_owner(tcx, *receiver_ty) {
+                Some(owner) => {
+                    semantic_scope_heap_class_with_known_attribution_and_by_value_hazards(
+                        tcx,
+                        owner,
+                        &argument_tys[1..],
+                    )
+                }
+                None => SemanticScopeHeapClass::Unresolved,
+            },
+            None => SemanticScopeHeapClass::Unresolved,
+        }
+    } else if semantic_scope_receiver_heap_owner_call(callee) {
         // MIR keeps the receiver as argument zero, which remains the sole
         // attribution source. Later by-value owners are safety hazards because
         // the callee can consume/drop them under the receiver's active scope.
@@ -2914,6 +2962,24 @@ mod tests {
         ));
         assert!(semantic_scope_receiver_mutating_allocation_like_call(
             os_string_bare_push
+        ));
+        for method in VEC_CAPACITY_ONLY_METHODS {
+            let current = format!(
+                "Val(ZeroSized, FnDef(DefId(3:8610 ~ alloc[d734]::vec::{{impl#2}}::{}), [std::string::String, std::alloc::Global]))",
+                method
+            );
+            let named = format!(
+                "Vec::<std::string::String>::{}(move _14, const 4_usize)",
+                method
+            );
+            assert!(semantic_scope_capacity_only_vec_receiver_call(&current));
+            assert!(semantic_scope_capacity_only_vec_receiver_call(&named));
+        }
+        assert!(!semantic_scope_capacity_only_vec_receiver_call(
+            vec_bare_push
+        ));
+        assert!(!semantic_scope_capacity_only_vec_receiver_call(
+            "Vec::<std::string::String>::resize(move _14, const 4_usize, move _15)"
         ));
         assert!(!semantic_scope_current_impl_receiver_mutating_call(
             unrelated_push
@@ -3959,6 +4025,24 @@ const VEC_RECEIVER_GROW_METHODS: &[&str] = &[
     "shrink_to",
     "shrink_to_fit",
 ];
+
+const VEC_CAPACITY_ONLY_METHODS: &[&str] = &[
+    "reserve",
+    "reserve_exact",
+    "try_reserve",
+    "try_reserve_exact",
+    "shrink_to",
+    "shrink_to_fit",
+];
+
+fn semantic_scope_capacity_only_vec_receiver_call(callee: &str) -> bool {
+    VEC_CAPACITY_ONLY_METHODS.iter().any(|method| {
+        callee_contains_current_impl_method(callee, "alloc::vec", method)
+            || ["Vec", "std::vec::Vec", "alloc::vec::Vec"]
+                .iter()
+                .any(|receiver| callee_contains_named_receiver_method(callee, receiver, method))
+    })
+}
 
 fn semantic_scope_current_impl_receiver_mutating_call(callee: &str) -> bool {
     // Current rustc debug strings identify many inherent impl methods by the
