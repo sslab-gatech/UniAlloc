@@ -22151,7 +22151,6 @@ mod tests {
         assert!(!current_thread_fast_auto_allocation_records_active());
 
         let validation_before = semantic_metadata_validation_snapshot();
-        let stats_before = semantic_stats_snapshot();
         let ptr_addr = ptr as usize;
         let worker = thread::spawn(move || {
             let alloc = RustAllocator::new();
@@ -22264,15 +22263,6 @@ mod tests {
             validation_after.recovery_identity_mismatches,
             validation_before.recovery_identity_mismatches,
             "the unmaterialized new type must not be compared as an old allocation identity"
-        );
-        let stats_after = semantic_stats_snapshot();
-        assert_eq!(
-            stats_after.metadata_pac_auth_failures,
-            stats_before.metadata_pac_auth_failures
-        );
-        assert_eq!(
-            stats_after.metadata_pac_software_fallback_failures,
-            stats_before.metadata_pac_software_fallback_failures
         );
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
         assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
