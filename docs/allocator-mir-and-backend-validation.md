@@ -1007,9 +1007,24 @@ passes both the current and `nightly-2022-07-01` toolchains; clean-tree Clone
 and Layout provenance probes, the independent review, and the 660+430
 pre-commit suite also pass.
 
+Commit `681398e` narrows one additional compiler false negative without
+widening general ownership inference.  Only the by-value hazard scan treats
+the exact `core::slice::Iter` and `core::slice::IterMut` DefPaths as borrowed
+nonowners.  An ordinary Rust
+`input.iter().copied().collect::<Vec<u8>>()` call therefore receives an actual
+Vec semantic-scope rewrite on both the current and
+`nightly-2022-07-01` toolchains.  Its runtime control preserves the payload,
+rejects reuse under the wrong String identity, permits exact Vec-identity
+reuse, records transfer attempted/applied/rejected `2/2/0`, and records zero
+fallback, raw, recovery-mismatch, or corruption events.  A custom raw-pointer
+iterator remains unresolved, while a Zip Drop containing `IterMut` and
+`IntoIter` remains two unresolved rows with zero applied rows.  General, Drop,
+Clone, and ownership-transfer scans were not widened.  Independent review and
+the 660+430 pre-commit suite pass.
+
 Oxipng was not rerun after these focused fixes.  Therefore the 13 corrected
 identity mismatches in the `a51960d` bundle remain historical observations;
-they cannot be claimed eliminated or rebound to `997e840`.  These additions
+they cannot be claimed eliminated or rebound to `681398e`.  These additions
 strengthen bounded safety and actual-rewrite evidence, not whole-application
 exact pairing, universal compiler coverage, or performance claims.
 
