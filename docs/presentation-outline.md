@@ -114,7 +114,7 @@ Georgia Tech 对 qualifier 的公开描述强调研究准备度、研究深度�
 | 13 | **Compiler extraction removes source annotations from common Rust allocation paths.** | 展示 `T` 如何通过 optimized MIR rewrite 进入 metadata ABI | `Box<T>` → MIR → metadata ABI → allocator，4 个节点 | 2:00；准备 rustc fragility |
 | 14 | **Correct semantics require pairing allocation, reallocation, drop, unwind, and thread transfer.** | 表明实现难点不只是 alloc site；说明 scope push/pop、direct path、recovery path | object lifecycle 状态图 | 1:30；准备 cross-thread 问题 |
 | 15 | **Fallback preserves execution when semantics are absent, but it also bounds protection.** | 把兼容性与安全 coverage 放在同一张图上 | Coverage 圆：typed/known vs unknown/fallback | 1:30；不要把 fallback 说成安全覆盖 |
-| 16 | **H1 is supported by a real compiler-to-runtime path, with version and coverage limits.** | H1 小结：current-HEAD actual-rewrite probes 支持 feasibility；不证明全面 coverage 或稳定 ABI | `Supports / Does not establish` 两个框 | 1:00；给证据 badge |
+| 16 | **H1 is supported by source-bound probes and an instrumented real application, with version and coverage limits.** | H1 小结：actual-rewrite probes 与 Oxipng integration 支持 feasibility；不证明全面 coverage、unmodified-app deployment 或稳定 ABI | `Supports / Does not establish` 两个框 | 1:00；给证据 badge |
 
 关键实现依据：
 
@@ -124,7 +124,10 @@ Georgia Tech 对 qualifier 的公开描述强调研究准备度、研究深度�
 - `tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs:4227-4299`：metadata ABI rewrite。
 - `tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs:4595-4689`：scope push/original call/pop 与 unwind cleanup。
 - `docs/allocator-mir-and-backend-validation.md:38-84,170-232`：real rustc-driver 与 bounded functionality probes；不要把这些叫 performance evidence。
-- `94b2523d...` current-HEAD presentation probe（source digest `56a912ef...`）：direct path 观察到 36 个 actual rewrites、typed runtime `84/84`；semantic-scope path 观察到 116 个 rewrites、28 个 drop rewrites、typed runtime `161/161`；cross-thread path 观察到 4 个 hints、3 个 recovery matches、0 mismatch。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-current-head-94b2523d8823-20260712T060330Z/`。这是 current functionality evidence，不是 universal coverage 或 performance evidence。
+- `94b2523d...` source-bound presentation snapshot（source digest `56a912ef...`）：direct path 观察到 36 个 actual rewrites、typed runtime `84/84`；semantic-scope path 观察到 116 个 rewrites、28 个 drop rewrites、typed runtime `161/161`；cross-thread path 观察到 4 个 hints、3 个 recovery matches、0 mismatch。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-current-head-94b2523d8823-20260712T060330Z/`。开发 HEAD 已继续前进，因此它是精确绑定的 recent functionality evidence，不应再称 live-HEAD universal coverage 或 performance evidence。
+- `addd743...` instrumented Oxipng integration：在 `dea2321...` (`v4.0.3`) 的 detached copy 中加入 UniAlloc dependency/global allocator、runtime counters、symbol-visibility hook 和有限 build plumbing（`lock_api`、`[workspace]`与更新后的 `Cargo.lock`）；保存的 source/build patch 不包含生成的 `Cargo.lock` diff。pass 随后在真实 Oxipng library/binary MIR 上实际应用 6 个 allocator-call replacements、846 个 semantic scopes 与 532 个 Drop rewrites，剩余 9 个 semantic unsolved、0 个 Drop unsolved。对一个 pinned PNG invocation，功能运行返回 0，输出 SHA-256 与先前 clean harness 相同。instrumented `main` 中的 recording window 观察到 `1058/1067` typed allocation events，即 `9915 bp` counter-truncated coverage（直接比率约 `99.16%`），fallback `9`，type-isolation corrupt slots `0`；pre-main 和 post-snapshot events 不在该 denominator 中。该 source/build patch、audit 和 source/toolchain boundary 位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/external-oxipng-instrumented-actual-rewrite-addd743/`。这是 exact `nightly-2022-07-01` 上的 source-bound functional evidence；不是 unmodified-app、whole-process coverage、general output equivalence、live-HEAD、object coverage 或 performance claim。
+
+Slide 15/16 必须把三种 coverage 分开：**static compiler coverage**（candidate/applied/unsolved）、**runtime allocation-event coverage**（typed/total）和 **isolation behavior coverage**（哪些 adversarial lifecycle 路径有 regression）。三个 denominator 不得互换。
 
 #### Slide 12 必须定义的 compatibility contract
 
@@ -152,7 +155,10 @@ Georgia Tech 对 qualifier 的公开描述强调研究准备度、研究深度�
 - `unialloc/src/alloc_api/type_isolation.rs:6492-6611,8444-8484,8554-8604`：ordinary matching-key cache 的 allocation/deallocation/recovery。
 - `unialloc/src/cache/thread_cache.rs:22-38,1576-1655`、`unialloc/src/zone.rs:15-43,83-165`：hot path 和 retention bounds。
 - `../rust-alloc-paper/intro.tex:274-286`：论文明确的 defense-in-depth 与 coverage 限制。
-- `94b2523d...` current-HEAD H2 probe：type-id cache separation、cross-thread recovery metadata、moved-realloc corrupt-tag transaction 三项精确 regression tests 均 `1/1`，semantic metadata probe 也通过。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h2-20260712T0604Z/audit.json`。该 probe 支持 lifecycle 与 routing correctness，不支持 exploit-prevention 或 performance percentage。
+- `94b2523d...` source-bound H2 snapshot：type-id cache separation、cross-thread recovery metadata、moved-realloc corrupt-tag transaction 三项精确 regression tests 均 `1/1`，semantic metadata probe 也通过。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h2-20260712T0604Z/audit.json`。该 snapshot 支持当时源码的 lifecycle 与 routing correctness；live HEAD 的新增安全 regression 另列如下，二者都不支持论文性能百分比。
+- `3acbd6d...` adversarial reuse regression：4 个同 layout 对象经 process-visible cross-thread recovery 在同一 worker TLS cache 中释放；consumer 与 producer 的 module/flags/lifetime/placement 完全相同、只有 `type_id` 不同，consumer 不得获得任一 producer 地址，而 producer identity 随后必须无重复地取回全部 4 个地址。Hosted 与 `fixed_heap` 各 `1/1` PASS；证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-cross-thread-security-3acbd6d/`。这仍是 covered-path mechanism test，不是 universal UAF/exploit-success 证明。
+- `ca9462e...` mismatch/quarantine regression：allocation 带 process-visible cross-thread recovery、type isolation 与 delayed-free；foreign thread 同时处在错误 Drop identity 下。测试要求 global recovery 记录只能消费一次、错误 identity 不得取消 quarantine 或看到该地址、释放 quarantine 后地址只能进入 allocation-side cache。Hosted 与 `fixed_heap` 各 `1/1` PASS。它把 cross-thread、mismatched metadata、delayed-free 和 cache poisoning 四个条件放进同一条 adversarial lifecycle，但仍不代表 arbitrary forged metadata 或完整 exploit corpus。
+- `4dc6814...` recovery matcher 把两个 hashed-key 比较收紧为 allocator-visible fields 的 exact comparison，消除了 recovery agreement 的 hash-collision false match，并少做两次 identity hash。5+5 次同机 probe 的方向性 median 为 `3.497 ms → 2.366 ms`，但冷启动范围很宽；只能作为 diagnostic direction，不得作为论文性能百分比。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-exact-recovery-4dc6814/`。
 
 Slide 10/17 的精确 threat model：attacker 可以触发 temporal bug 和 heap grooming；TCB 信任 compiler/runtime 产生或受信 semantic caller 提供的 metadata，并假设 allocator metadata 未被伪造。对 covered requests，若 allocator-visible keys distinct 且不碰撞，ordinary cross-class reuse 被分开。**Same-key reuse、64-bit hash collision、spoofed/manual IDs、metadata corruption、unknown/fallback/custom-allocator path 均不在该有限保证内。**
 
@@ -170,7 +176,7 @@ Slide 10/17 的精确 threat model：attacker 可以触发 temporal bug 和 heap
 - `unialloc/Cargo.toml:63-95`：fixed heap、alternate slab backend、hugepage、type isolation、metadata segregation、PAC/MTE/MPK/guard/quarantine 等配置面。
 - `unialloc/src/sc/mod.rs:1-24`、`unialloc/src/sc/backend.rs:1-18`：separate-metadata/bitmap backend 是真实 backend choice，不只是命名 flag。
 - `../rust-alloc-paper/sys.tex:52-114`：paper architecture decomposition。
-- `94b2523d...` current-HEAD H3 smoke：fixed-heap `small_heap` 与 hosted 4-thread allocator workload 均通过、无 compiler warning；fixed-heap semantic C ABI 观察到 typed alloc/dealloc pairing，hosted workload 只证明 global allocator/thread-cache/platform path。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h3-20260712T060354Z-94b2523d8823/`。hosted 普通 Cargo run 没有 MIR rewrite，因此其 `typed_allocations=0` 不得被误读为 H1 failure。
+- `94b2523d...` source-bound H3 smoke：fixed-heap `small_heap` 与 hosted 4-thread allocator workload 均通过、无 compiler warning；fixed-heap semantic C ABI 观察到 typed alloc/dealloc pairing，hosted workload 只证明 global allocator/thread-cache/platform path。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h3-20260712T060354Z-94b2523d8823/`。hosted 普通 Cargo run 没有 MIR rewrite，因此其 `typed_allocations=0` 不得被误读为 H1 failure；开发 HEAD 已前进，不能称这份 snapshot 为 current-HEAD。
 
 ### F. Evaluation and evidence boundary — 36:00--42:00（Slides 25--28）
 
@@ -330,8 +336,8 @@ Deep answer: backup slide number
 
 | Slide | Claim | Evidence tier | Source | Assumption | Does not prove | Backup |
 |---:|---|---|---|---|---|---:|
-| 16 | real compiler-to-runtime path exists | current probe | MIR probe + runtime validation | tested toolchain/path | universal coverage/stable ABI | B3--B4 |
-| 21 | ordinary cross-class reuse is separated for distinct trusted keys | implementation + historical result | type-isolation code/paper | covered path, trusted non-colliding key | memory safety/same-key/collision/spoofing protection | B7--B10 |
+| 16 | real compiler-to-runtime path exists | source-bound functional evidence | MIR probes + instrumented Oxipng runtime validation | tested toolchain/instrumented path | universal coverage/unmodified-app deployment/stable ABI | B3--B4 |
+| 21 | ordinary cross-class reuse is separated for distinct trusted keys | current adversarial regression + implementation | `3acbd6d...` test + type-isolation code | covered path, trusted non-colliding key | universal memory safety/same-key/collision/spoofing protection | B7--B10 |
 | 24 | paper reported five environments and runtime has retargeting boundaries | historical + current functional probes | paper eval + PAL/fixed heap + platform artifacts | tested adapter/path | zero-porting/current five-platform aggregate closure | B13/B17 |
 | 26--27 | original prototype observed reported ranges | historical | paper eval | original setup | current reproduction | B14--B16 |
 | 28 | paper-performance reproduction was explicitly deferred while functional work continues | current audit snapshot | G001 stop handoff + G002 probes | exact source binding and evidence tier | mechanism is absent or deferred claims failed | B18 |
@@ -373,7 +379,7 @@ Deep answer: backup slide number
 | **15. 72.17% 的 denominator 是什么？是当前数字吗？** | 原论文表述为标准 Rust `alloc` benchmark 中“72.17% of objects”；它不是当前 source-bound 已闭合数字。 | 若 raw evidence 未定义 event/object denominator，不自行改名；给原方法、fallback 与 current audit。B14/B18 |
 | **16. 为什么现在会看到 99.851437% coverage？** | `430/430` 是 G001 freeze-bound functional coverage evidence；当前开发 HEAD 另有 actual runtime rewrite probes。源码继续变化后，不能把这个精确百分比无条件转移到新 digest。 | 先看 source digest、denominator、actual-rewrite evidence 和 evidence tier；不要把该数字写成 performance claim。B18 |
 | **17. Evaluation 是否公平？** | 需要相同 workload、baseline、配置、重复运行、明确 normalization、raw provenance 和 source binding 才能比较。 | 原论文旧 toolchain/hardware、simulation，以及没有单独 uncertainty/significance analysis 的限制必须主动说明。B14--B16 |
-| **18. Security benefit 真正测量了吗？** | 当前主要证据是 mechanism、coverage 与 cost；还不是系统性 exploit-success study。 | 下一步做 exploit corpus、reuse-success rate、attacker capabilities。B19 |
+| **18. Security benefit 真正测量了吗？** | 当前已有同 layout、跨线程 recovery、不同 trusted `type_id` 的 adversarial reuse regression，证明 covered cache path 的 cross-type address reuse 被阻断；但还不是系统性 exploit-success study。 | Same-type、fallback、spoofing/collision 与真实 exploit corpus 尚未覆盖；下一步测 reuse-success rate 与 attacker capabilities。B19 |
 | **19. 当前源码支持五个平台吗？** | G002 已有 macOS/Windows functional PASS、Redox build/run evidence，以及 current fixed/hosted smoke；Rust-for-Linux 与 BlogOS 的真实 kernel/boot validation 仍依赖外部 assets。 | 这支持 platform readiness 的分项陈述，不支持“当前同一 HEAD 已在五个平台全部实机闭合”。B17/B18 |
 | **20. 最重要的 dissertation 下一步是什么？** | 找出在 partial coverage、FFI 与 adversarial metadata 下仍有用的最小 stable identity contract。 | Source-bound matrix、exploit corpus 与跨平台实验是检验该问题的基础设施；随后扩展 cross-language/policy automation。B19 |
 
@@ -472,9 +478,10 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 | GlobalAlloc semantic/fallback routing | `unialloc/src/cache/mod.rs:536-695` |
 | Compiler MIR rewrite | `tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs` |
 | Bounded current mechanism validation | `docs/allocator-mir-and-backend-validation.md` |
-| Current H1 actual-rewrite evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-current-head-94b2523d8823-20260712T060330Z/identity-hash-manifest.json` |
-| Current H2 lifecycle evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h2-20260712T0604Z/audit.json`、`sha256sums.txt` |
-| Current H3 fixed/hosted smoke evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h3-20260712T060354Z-94b2523d8823/sha256-manifest.json` |
+| Source-bound H1 actual-rewrite evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-current-head-94b2523d8823-20260712T060330Z/identity-hash-manifest.json` |
+| External Rust application rewrite/coverage evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/external-oxipng-instrumented-actual-rewrite-addd743/evidence-note.md`、`instrumented-oxipng-summary.json` |
+| Source-bound H2 lifecycle evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h2-20260712T0604Z/audit.json`、`sha256sums.txt` |
+| Source-bound H3 fixed/hosted smoke evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h3-20260712T060354Z-94b2523d8823/sha256-manifest.json` |
 | Cache/footprint controls | `docs/allocator-memory-footprint.md` |
 | PAC functionality vs cost boundary | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/pac-current-head-94b2523d8823-20260712T060647Z/`、`docs/evaluation-toolchains.md:272-280` |
 | Hugepage domain/fallback vs backing boundary | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/hugepage-domain-smoke-20260712a/hugepage-domain-smoke-summary.json`；current domain/fallback PASS，real backing MISSING |
