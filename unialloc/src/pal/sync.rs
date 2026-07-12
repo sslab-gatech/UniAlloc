@@ -65,6 +65,7 @@ pub mod pthread_thread_local {
 pub mod win_thread_local {
     extern crate winapi;
     use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use libc::c_void as libc_c_void;
     use winapi::ctypes::c_void;
     use winapi::um::fibersapi;
     type TlsKey = winapi::shared::minwindef::DWORD;
@@ -72,6 +73,7 @@ pub mod win_thread_local {
     const FLS_OUT_OF_INDEXES: TlsKey = !0;
 
     static mut PKEY: TlsKey = FLS_OUT_OF_INDEXES;
+    static mut TLS_DESTRUCTOR: Option<unsafe extern "C" fn(*mut libc_c_void)> = None;
     static PKEY_READY: AtomicBool = AtomicBool::new(false);
     static TLS_SAVE_FAILURES: AtomicUsize = AtomicUsize::new(0);
     #[thread_local]
@@ -101,10 +103,15 @@ pub mod win_thread_local {
     ///
     /// register the cleanup function for tls data
     /// This function is expected to be called once for the whole program
-    pub unsafe fn register_tls_key(free_thread_cache: unsafe extern "C" fn(*mut c_void)) {
-        let x = free_thread_cache as *const ();
-        let ptr: unsafe extern "system" fn(*mut c_void) = core::mem::transmute(x);
-        PKEY = fibersapi::FlsAlloc(Some(ptr));
+    pub unsafe fn register_tls_key(free_thread_cache: unsafe extern "C" fn(*mut libc_c_void)) {
+        unsafe extern "system" fn fls_destructor(value: *mut c_void) {
+            if let Some(destructor) = TLS_DESTRUCTOR {
+                destructor(value.cast::<libc_c_void>());
+            }
+        }
+
+        TLS_DESTRUCTOR = Some(free_thread_cache);
+        PKEY = fibersapi::FlsAlloc(Some(fls_destructor));
         PKEY_READY.store(PKEY != FLS_OUT_OF_INDEXES, Ordering::Release);
     }
 
