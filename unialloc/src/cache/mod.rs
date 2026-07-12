@@ -4,7 +4,7 @@ use crate::alloc_api::type_isolation::{
     active_allocation_metadata, active_allocation_metadata_requires_recovery_record,
     auto_allocation_metadata, auto_deallocation_metadata, auto_reallocation_old_metadata,
     deallocation_metadata_after_recovery_record, recorded_reallocation_old_metadata,
-    semantic_allocation_slow_path_enabled,
+    select_auto_allocation_metadata, semantic_allocation_slow_path_enabled,
     semantic_fallback_attribution_record_raw_alloc_no_metadata,
     semantic_fallback_attribution_record_raw_dealloc_no_metadata,
     semantic_fallback_attribution_record_raw_realloc_moved_dealloc_no_metadata,
@@ -13,7 +13,7 @@ use crate::alloc_api::type_isolation::{
     semantic_realloc_can_reuse_in_place, semantic_runtime_slow_path_enabled,
     semantic_stats_recording_enabled, take_auto_deallocation_metadata,
     take_recorded_reallocation_old_metadata, with_auto_allocation_recovery_recording,
-    AllocationMetadata, SemanticAlloc, SEMANTIC_STATS,
+    without_auto_allocation_recovery_recording, AllocationMetadata, SemanticAlloc, SEMANTIC_STATS,
 };
 use crate::mm::BackendAllocator as GlobalBackend;
 #[cfg(not(feature = "fixed_heap"))]
@@ -33,6 +33,10 @@ mod thread_cache;
 use crate::page::{PageBumpAlloc, PG_BUMP};
 use crate::sc::META_BUMP;
 pub use thread_cache::*;
+
+#[cfg(test)]
+#[thread_local]
+static mut FAIL_NEXT_ACTIVE_LOCAL_REALLOC_ALLOCATION_FOR_TEST: bool = false;
 
 #[cfg(feature = "quarantine")]
 const COMPILED_QUARANTINE_METADATA: AllocationMetadata =
@@ -356,24 +360,46 @@ unsafe fn realloc_with_active_local_metadata(
     new_size: usize,
     alloc_metadata: AllocationMetadata,
 ) -> *mut u8 {
-    if let Some(dealloc_metadata) = take_recorded_reallocation_old_metadata(ptr, layout) {
+    if let Some(dealloc_metadata) = recorded_reallocation_old_metadata(ptr, layout) {
         if semantic_realloc_can_reuse_in_place(layout, new_size, dealloc_metadata, alloc_metadata) {
-            return alloc.realloc_with_split_metadata(
-                ptr,
-                layout,
-                new_size,
-                dealloc_metadata,
-                alloc_metadata,
-            );
+            // A local transition deliberately carries no new recovery record,
+            // even when an outer conservative ABI scope is recording.  Commit
+            // removal of the old key only after the in-place transition has
+            // succeeded.
+            let new_ptr = without_auto_allocation_recovery_recording(|| {
+                alloc.realloc_with_split_metadata(
+                    ptr,
+                    layout,
+                    new_size,
+                    dealloc_metadata,
+                    alloc_metadata,
+                )
+            });
+            if !new_ptr.is_null() {
+                let _ = take_recorded_reallocation_old_metadata(ptr, layout);
+            }
+            return new_ptr;
         }
-        let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
+        #[cfg(test)]
+        if FAIL_NEXT_ACTIVE_LOCAL_REALLOC_ALLOCATION_FOR_TEST {
+            // Deterministically model a backing-allocation failure at the
+            // transaction boundary.  Keeping this thread-local avoids
+            // perturbing unrelated parallel allocator tests.
+            FAIL_NEXT_ACTIVE_LOCAL_REALLOC_ALLOCATION_FOR_TEST = false;
+            return core::ptr::null_mut();
+        }
+        let new_ptr = without_auto_allocation_recovery_recording(|| {
+            alloc.alloc_with_metadata(new_layout, alloc_metadata)
+        });
         if !new_ptr.is_null() {
             copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-            alloc.dealloc_with_metadata(ptr, layout, dealloc_metadata);
+            dealloc_reallocated_old_ptr(alloc, ptr, layout, || Some(dealloc_metadata));
         }
         return new_ptr;
     }
-    alloc.realloc_with_metadata(ptr, layout, new_size, alloc_metadata)
+    without_auto_allocation_recovery_recording(|| {
+        alloc.realloc_with_metadata(ptr, layout, new_size, alloc_metadata)
+    })
 }
 
 #[derive(Copy, Clone)]
@@ -497,6 +523,82 @@ impl RustAllocator {
             }
             new_ptr
         }
+    }
+
+    #[inline]
+    unsafe fn move_reallocation_to_layout(
+        &self,
+        ptr: *mut u8,
+        old_layout: Layout,
+        new_layout: Layout,
+    ) -> *mut u8 {
+        let selected_metadata = if let Some(metadata) = active_allocation_metadata() {
+            let record_recovery = active_allocation_metadata_requires_recovery_record(metadata);
+            Some((metadata, record_recovery, !record_recovery, Some(metadata)))
+        } else {
+            // Preserve the distinction between "no auto policy configured"
+            // and a consuming compiler stream that deliberately yielded no
+            // identity for this event (UNKNOWN/exhausted).
+            let (auto_policy_enabled, auto_metadata) = select_auto_allocation_metadata(new_layout);
+            if let Some(metadata) = auto_metadata {
+                Some((
+                    metadata,
+                    !metadata.is_layout_derived(),
+                    false,
+                    auto_deallocation_metadata(old_layout),
+                ))
+            } else if !auto_policy_enabled {
+                recorded_reallocation_old_metadata(ptr, old_layout)
+                    .map(|metadata| (metadata, true, false, Some(metadata)))
+            } else {
+                None
+            }
+        };
+
+        if let Some((new_metadata, record_recovery, suppress_recovery, old_fallback_metadata)) =
+            selected_metadata
+        {
+            // Install the replacement allocation and, when required, its
+            // recovery record before touching the old allocation.  A backing
+            // allocation or record-install failure therefore leaves the old
+            // pointer, payload, and exact recovery record intact.
+            let new_ptr = if record_recovery {
+                self.alloc_with_recovery_metadata(new_layout, new_metadata)
+            } else if suppress_recovery {
+                without_auto_allocation_recovery_recording(|| {
+                    self.alloc_with_metadata(new_layout, new_metadata)
+                })
+            } else {
+                self.alloc_with_metadata(new_layout, new_metadata)
+            };
+            if new_ptr.is_null() {
+                return new_ptr;
+            }
+            copy_reallocated_prefix(ptr, new_ptr, old_layout.size(), new_layout.size());
+            dealloc_reallocated_old_ptr(self, ptr, old_layout, || old_fallback_metadata);
+            return new_ptr;
+        }
+
+        // `auto_allocation_metadata` above is a consuming compiler-site
+        // selector.  When it deliberately returns None (for example for an
+        // UNKNOWN stream entry), do not re-enter `GlobalAlloc::alloc` and
+        // accidentally consume a second site for this one allocation event.
+        #[cfg(feature = "quarantine")]
+        let new_ptr = self.alloc_with_metadata(new_layout, COMPILED_QUARANTINE_METADATA);
+        #[cfg(not(feature = "quarantine"))]
+        let new_ptr = {
+            let new_ptr = self.alloc_raw(new_layout);
+            if !new_ptr.is_null() && semantic_stats_recording_enabled() {
+                SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), new_layout.size());
+                semantic_fallback_attribution_record_raw_alloc_no_metadata(new_layout.size());
+            }
+            new_ptr
+        };
+        if !new_ptr.is_null() {
+            copy_reallocated_prefix(ptr, new_ptr, old_layout.size(), new_layout.size());
+            self.dealloc(ptr, old_layout);
+        }
+        new_ptr
     }
 
     ///
@@ -775,12 +877,10 @@ unsafe impl Allocator for RustAllocator {
             return alloc_ptr_to_layout_slice_result(new_ptr, new_layout);
         }
 
-        let new_ptr = self.alloc(new_layout);
+        let new_ptr = self.move_reallocation_to_layout(ptr.as_ptr(), old_layout, new_layout);
         if new_ptr.is_null() {
             return Err(AllocError);
         }
-        copy_reallocated_prefix(ptr.as_ptr(), new_ptr, old_layout.size(), new_layout.size());
-        self.dealloc(ptr.as_ptr(), old_layout);
         alloc_ptr_to_layout_slice_result(new_ptr, new_layout)
     }
 
@@ -820,12 +920,10 @@ unsafe impl Allocator for RustAllocator {
             return alloc_ptr_to_layout_slice_result(new_ptr, new_layout);
         }
 
-        let new_ptr = self.alloc(new_layout);
+        let new_ptr = self.move_reallocation_to_layout(ptr.as_ptr(), old_layout, new_layout);
         if new_ptr.is_null() {
             return Err(AllocError);
         }
-        copy_reallocated_prefix(ptr.as_ptr(), new_ptr, old_layout.size(), new_layout.size());
-        self.dealloc(ptr.as_ptr(), old_layout);
         alloc_ptr_to_layout_slice_result(new_ptr, new_layout)
     }
 }
@@ -841,10 +939,11 @@ mod tests {
         restore_active_metadata, semantic_test_guard, set_active_metadata,
     };
     use crate::alloc_api::type_isolation::{
-        semantic_auto_metadata_disable, semantic_metadata_validation_snapshot,
-        semantic_stats_recording_disable, semantic_stats_reset,
-        semantic_stats_test_exact_recording_enter, semantic_stats_test_exact_recording_exit,
-        FLAG_TYPE_ISOLATED, MIN_TYPE_CACHE_OBJECT_SIZE,
+        semantic_auto_compiler_metadata_stream_enable, semantic_auto_metadata_disable,
+        semantic_metadata_validation_snapshot, semantic_stats_recording_disable,
+        semantic_stats_reset, semantic_stats_test_exact_recording_enter,
+        semantic_stats_test_exact_recording_exit, FLAG_TYPE_ISOLATED, MIN_TYPE_CACHE_OBJECT_SIZE,
+        PLACEMENT_HINT_LOCAL_SCOPE_NO_RECOVERY, UNKNOWN_SEMANTIC_ID,
     };
     #[cfg(feature = "stats")]
     use crate::alloc_api::type_isolation::{
@@ -2097,6 +2196,473 @@ mod tests {
             take_auto_deallocation_metadata(new_ptr, overaligned_new_layout),
             None
         );
+    }
+
+    fn assert_allocator_alignment_change_preserves_scope_ended_recovery_metadata(
+        old_layout: Layout,
+        new_layout: Layout,
+        metadata: AllocationMetadata,
+        pattern: u8,
+        move_allocation: impl FnOnce(
+            &RustAllocator,
+            NonNull<u8>,
+            Layout,
+            Layout,
+        ) -> Result<NonNull<[u8]>, AllocError>,
+    ) {
+        let _guard = semantic_test_guard();
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        #[cfg(feature = "stats")]
+        let _stats = SemanticStatsRecordingScope::new();
+        #[cfg(feature = "stats")]
+        let fallback_before = semantic_fallback_attribution_snapshot();
+
+        let alloc = RustAllocator::new();
+        let previous = unsafe { set_active_metadata(metadata) };
+        let old_ptr = unsafe { alloc.alloc(old_layout) };
+        unsafe {
+            restore_active_metadata(previous);
+        }
+        assert!(!old_ptr.is_null());
+        assert_eq!(
+            recorded_reallocation_old_metadata(old_ptr, old_layout),
+            Some(metadata)
+        );
+        unsafe {
+            for offset in 0..old_layout.size() {
+                old_ptr.add(offset).write((offset as u8) ^ pattern);
+            }
+        }
+
+        let old_ptr = NonNull::new(old_ptr).unwrap();
+        let moved = move_allocation(&alloc, old_ptr, old_layout, new_layout)
+            .expect("alignment-changing allocator move");
+        let moved_ptr = moved.as_ptr() as *mut u8;
+        assert_eq!(moved.len(), new_layout.size());
+        assert_eq!(moved_ptr as usize % new_layout.align(), 0);
+        unsafe {
+            for offset in 0..core::cmp::min(old_layout.size(), new_layout.size()) {
+                assert_eq!(*moved_ptr.add(offset), (offset as u8) ^ pattern);
+            }
+        }
+        assert_eq!(
+            recorded_reallocation_old_metadata(old_ptr.as_ptr(), old_layout),
+            None,
+            "successful move must consume the old recovery record"
+        );
+        assert_eq!(
+            recorded_reallocation_old_metadata(moved_ptr, new_layout),
+            Some(metadata),
+            "replacement allocation must retain the old semantic identity"
+        );
+
+        unsafe {
+            alloc.deallocate(NonNull::new(moved_ptr).unwrap(), new_layout);
+        }
+        assert_eq!(take_auto_deallocation_metadata(moved_ptr, new_layout), None);
+        #[cfg(feature = "stats")]
+        {
+            let snapshot = semantic_stats_snapshot();
+            assert_eq!(snapshot.typed_allocations, 2);
+            assert_eq!(snapshot.fallback_allocations, 0);
+            assert_eq!(snapshot.typed_deallocations, 2);
+            assert_eq!(snapshot.fallback_deallocations, 0);
+            assert_eq!(
+                fallback_delta(fallback_before, semantic_fallback_attribution_snapshot()),
+                SemanticFallbackAttributionSnapshot {
+                    raw_alloc_no_metadata: 0,
+                    raw_alloc_no_metadata_bytes: 0,
+                    raw_dealloc_no_metadata: 0,
+                    raw_realloc_no_metadata: 0,
+                    raw_realloc_no_metadata_bytes: 0,
+                    raw_realloc_moved_dealloc_no_metadata: 0,
+                    realloc_recorded_old_metadata_new_allocations: 0,
+                    realloc_recorded_old_metadata_new_allocation_bytes: 0,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn allocator_grow_alignment_change_preserves_scope_ended_recovery_metadata() {
+        let metadata = AllocationMetadata::for_type(0xC003_DA62)
+            .with_module(0xC0DE_DA62)
+            .with_callsite(0xA110_C062)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        assert_allocator_alignment_change_preserves_scope_ended_recovery_metadata(
+            Layout::from_size_align(64, 8).unwrap(),
+            Layout::from_size_align(128, 64).unwrap(),
+            metadata,
+            0xA5,
+            |alloc, ptr, old_layout, new_layout| unsafe { alloc.grow(ptr, old_layout, new_layout) },
+        );
+    }
+
+    #[test]
+    fn allocator_shrink_alignment_change_preserves_scope_ended_recovery_metadata() {
+        let metadata = AllocationMetadata::for_type(0xC003_DA63)
+            .with_module(0xC0DE_DA63)
+            .with_callsite(0xA110_C063)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        assert_allocator_alignment_change_preserves_scope_ended_recovery_metadata(
+            Layout::from_size_align(128, 8).unwrap(),
+            Layout::from_size_align(64, 64).unwrap(),
+            metadata,
+            0x5A,
+            |alloc, ptr, old_layout, new_layout| unsafe {
+                alloc.shrink(ptr, old_layout, new_layout)
+            },
+        );
+    }
+
+    fn assert_allocator_alignment_change_splits_recorded_old_and_active_new_metadata(
+        old_layout: Layout,
+        new_layout: Layout,
+        old_metadata: AllocationMetadata,
+        new_metadata: AllocationMetadata,
+        move_allocation: impl FnOnce(
+            &RustAllocator,
+            NonNull<u8>,
+            Layout,
+            Layout,
+        ) -> Result<NonNull<[u8]>, AllocError>,
+    ) {
+        let _guard = semantic_test_guard();
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let old_ptr = unsafe { alloc.alloc_with_recovery_metadata(old_layout, old_metadata) };
+        assert!(!old_ptr.is_null());
+
+        let previous = unsafe { set_active_metadata(new_metadata) };
+        let moved = move_allocation(
+            &alloc,
+            NonNull::new(old_ptr).unwrap(),
+            old_layout,
+            new_layout,
+        )
+        .expect("active alignment-changing allocator move");
+        unsafe {
+            restore_active_metadata(previous);
+        }
+        let moved_ptr = moved.as_ptr() as *mut u8;
+
+        assert_eq!(moved_ptr as usize % new_layout.align(), 0);
+        assert_eq!(
+            recorded_reallocation_old_metadata(old_ptr, old_layout),
+            None,
+            "successful split move must consume the old allocation record"
+        );
+        assert_eq!(
+            recorded_reallocation_old_metadata(moved_ptr, new_layout),
+            Some(new_metadata),
+            "replacement must use the active scope identity"
+        );
+        let validation = semantic_metadata_validation_snapshot();
+        assert_eq!(validation.recovery_identity_mismatches, 0);
+
+        unsafe {
+            alloc.deallocate(NonNull::new(moved_ptr).unwrap(), new_layout);
+        }
+        assert_eq!(take_auto_deallocation_metadata(moved_ptr, new_layout), None);
+    }
+
+    #[test]
+    fn allocator_grow_alignment_change_splits_recorded_old_and_active_new_metadata() {
+        let old_metadata = AllocationMetadata::for_type(0xC003_DA64)
+            .with_module(0xC0DE_DA64)
+            .with_callsite(0xA110_C064)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let new_metadata = AllocationMetadata::for_type(0xC003_DA65)
+            .with_module(0xC0DE_DA65)
+            .with_callsite(0xA110_C065)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        assert_allocator_alignment_change_splits_recorded_old_and_active_new_metadata(
+            Layout::from_size_align(64, 8).unwrap(),
+            Layout::from_size_align(128, 64).unwrap(),
+            old_metadata,
+            new_metadata,
+            |alloc, ptr, old_layout, new_layout| unsafe { alloc.grow(ptr, old_layout, new_layout) },
+        );
+    }
+
+    #[test]
+    fn allocator_shrink_alignment_change_splits_recorded_old_and_active_new_metadata() {
+        let old_metadata = AllocationMetadata::for_type(0xC003_DA66)
+            .with_module(0xC0DE_DA66)
+            .with_callsite(0xA110_C066)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let new_metadata = AllocationMetadata::for_type(0xC003_DA67)
+            .with_module(0xC0DE_DA67)
+            .with_callsite(0xA110_C067)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        assert_allocator_alignment_change_splits_recorded_old_and_active_new_metadata(
+            Layout::from_size_align(128, 8).unwrap(),
+            Layout::from_size_align(64, 64).unwrap(),
+            old_metadata,
+            new_metadata,
+            |alloc, ptr, old_layout, new_layout| unsafe {
+                alloc.shrink(ptr, old_layout, new_layout)
+            },
+        );
+    }
+
+    #[test]
+    fn allocator_alignment_change_active_local_scope_consumes_old_record_without_new_record() {
+        let _guard = semantic_test_guard();
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(64, 8).unwrap();
+        let new_layout = Layout::from_size_align(128, 64).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xC003_DA68)
+            .with_module(0xC0DE_DA68)
+            .with_callsite(0xA110_C068)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let local_metadata = AllocationMetadata::for_type(0xC003_DA69)
+            .with_module(0xC0DE_DA69)
+            .with_callsite(0xA110_C069)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_LOCAL_SCOPE_NO_RECOVERY);
+        let old_ptr = unsafe { alloc.alloc_with_recovery_metadata(old_layout, old_metadata) };
+        assert!(!old_ptr.is_null());
+
+        let previous = unsafe { set_active_metadata(local_metadata) };
+        let moved = with_auto_allocation_recovery_recording(|| unsafe {
+            alloc.grow(NonNull::new(old_ptr).unwrap(), old_layout, new_layout)
+        })
+        .expect("local-scope alignment-changing grow");
+        unsafe {
+            restore_active_metadata(previous);
+        }
+        let moved_ptr = moved.as_ptr() as *mut u8;
+
+        assert_eq!(
+            recorded_reallocation_old_metadata(old_ptr, old_layout),
+            None
+        );
+        assert_eq!(
+            recorded_reallocation_old_metadata(moved_ptr, new_layout),
+            None,
+            "paired local scope must not install a recovery record"
+        );
+        unsafe {
+            alloc.dealloc_with_metadata(moved_ptr, new_layout, local_metadata);
+        }
+    }
+
+    #[test]
+    fn allocator_alignment_change_consumes_one_unknown_compiler_stream_entry() {
+        let _guard = semantic_test_guard();
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(64, 8).unwrap();
+        let new_layout = Layout::from_size_align(128, 64).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xC003_DA6F)
+            .with_module(0xC0DE_DA6F)
+            .with_callsite(0xA110_C06F)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let old_ptr = unsafe { alloc.alloc_with_recovery_metadata(old_layout, old_metadata) };
+        assert!(!old_ptr.is_null());
+        assert_eq!(
+            recorded_reallocation_old_metadata(old_ptr, old_layout),
+            Some(old_metadata)
+        );
+        unsafe {
+            old_ptr.write_bytes(0xD4, old_layout.size());
+        }
+
+        let typed_id = 0xC003_DA70;
+        let ids = [UNKNOWN_SEMANTIC_ID, typed_id];
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_stream_enable(
+                0xC0DE_DA70,
+                FLAG_TYPE_ISOLATED,
+                0xA110_C070,
+                ids.as_ptr(),
+                ids.len(),
+            )
+        });
+
+        let moved = unsafe { alloc.grow(NonNull::new(old_ptr).unwrap(), old_layout, new_layout) }
+            .expect("alignment-changing raw fallback after UNKNOWN stream entry");
+        let moved_ptr = moved.as_ptr() as *mut u8;
+        assert_eq!(
+            recorded_reallocation_old_metadata(old_ptr, old_layout),
+            None,
+            "the old typed identity must be consumed after the successful raw move"
+        );
+        assert_eq!(
+            recorded_reallocation_old_metadata(moved_ptr, new_layout),
+            None,
+            "the UNKNOWN site must leave this allocation raw instead of consuming the next typed site"
+        );
+        unsafe {
+            for offset in 0..old_layout.size() {
+                assert_eq!(*moved_ptr.add(offset), 0xD4);
+            }
+        }
+
+        let probe_layout = Layout::from_size_align(96, 8).unwrap();
+        let probe = unsafe { alloc.alloc(probe_layout) };
+        assert!(!probe.is_null());
+        assert_eq!(
+            take_auto_deallocation_metadata(probe, probe_layout).map(|metadata| metadata.type_id),
+            Some(typed_id),
+            "the next allocation event must receive the second compiler stream entry"
+        );
+
+        semantic_auto_metadata_disable();
+        unsafe {
+            alloc.dealloc_raw(moved_ptr, new_layout);
+            alloc.dealloc_raw(probe, probe_layout);
+        }
+    }
+
+    #[test]
+    fn active_local_realloc_injected_allocation_failure_preserves_old_record_and_payload() {
+        let _semantic_guard = semantic_test_guard();
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(64, 8).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xC003_DA6B)
+            .with_module(0xC0DE_DA6B)
+            .with_callsite(0xA110_C06B)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let local_metadata = AllocationMetadata::for_type(0xC003_DA6C)
+            .with_module(0xC0DE_DA6C)
+            .with_callsite(0xA110_C06C)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_LOCAL_SCOPE_NO_RECOVERY);
+        let old_ptr = unsafe { alloc.alloc_with_recovery_metadata(old_layout, old_metadata) };
+        assert!(!old_ptr.is_null());
+        unsafe {
+            old_ptr.write_bytes(0xC3, old_layout.size());
+        }
+
+        let moved_size = crate::size_class::MAX_SIZE.saturating_add(1);
+        assert!(Layout::from_size_align(moved_size, old_layout.align()).is_ok());
+        let previous = unsafe { set_active_metadata(local_metadata) };
+        let failed = unsafe {
+            FAIL_NEXT_ACTIVE_LOCAL_REALLOC_ALLOCATION_FOR_TEST = true;
+            alloc.realloc(old_ptr, old_layout, moved_size)
+        };
+        unsafe {
+            restore_active_metadata(previous);
+        }
+
+        assert!(failed.is_null());
+        assert_eq!(
+            recorded_reallocation_old_metadata(old_ptr, old_layout),
+            Some(old_metadata),
+            "failed local moved realloc must retain the old exact record"
+        );
+        unsafe {
+            for offset in 0..old_layout.size() {
+                assert_eq!(*old_ptr.add(offset), 0xC3);
+            }
+            alloc.dealloc(old_ptr, old_layout);
+        }
+        assert_eq!(take_auto_deallocation_metadata(old_ptr, old_layout), None);
+    }
+
+    #[test]
+    fn active_local_moved_realloc_ignores_outer_recovery_recording_scope() {
+        let _semantic_guard = semantic_test_guard();
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(64, 8).unwrap();
+        let new_size = 4096;
+        let new_layout = Layout::from_size_align(new_size, old_layout.align()).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xC003_DA71)
+            .with_module(0xC0DE_DA71)
+            .with_callsite(0xA110_C071)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let local_metadata = AllocationMetadata::for_type(0xC003_DA72)
+            .with_module(0xC0DE_DA72)
+            .with_callsite(0xA110_C072)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_LOCAL_SCOPE_NO_RECOVERY);
+        let old_ptr = unsafe { alloc.alloc_with_recovery_metadata(old_layout, old_metadata) };
+        assert!(!old_ptr.is_null());
+
+        let previous = unsafe { set_active_metadata(local_metadata) };
+        let moved_ptr = with_auto_allocation_recovery_recording(|| unsafe {
+            alloc.realloc(old_ptr, old_layout, new_size)
+        });
+        unsafe {
+            restore_active_metadata(previous);
+        }
+
+        assert!(!moved_ptr.is_null());
+        assert_ne!(moved_ptr, old_ptr);
+        assert_eq!(
+            recorded_reallocation_old_metadata(old_ptr, old_layout),
+            None
+        );
+        assert_eq!(
+            recorded_reallocation_old_metadata(moved_ptr, new_layout),
+            None,
+            "paired local moved realloc must suppress an outer conservative recovery scope"
+        );
+        unsafe {
+            alloc.dealloc_with_metadata(moved_ptr, new_layout, local_metadata);
+        }
+    }
+
+    #[test]
+    fn allocator_grow_zeroed_alignment_change_preserves_metadata_and_zeroes_tail() {
+        let _guard = semantic_test_guard();
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(64, 8).unwrap();
+        let new_layout = Layout::from_size_align(128, 64).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_DA6A)
+            .with_module(0xC0DE_DA6A)
+            .with_callsite(0xA110_C06A)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let old_ptr = unsafe { alloc.alloc_with_recovery_metadata(old_layout, metadata) };
+        assert!(!old_ptr.is_null());
+        unsafe {
+            old_ptr.write_bytes(0xA5, old_layout.size());
+        }
+
+        let moved =
+            unsafe { alloc.grow_zeroed(NonNull::new(old_ptr).unwrap(), old_layout, new_layout) }
+                .expect("alignment-changing grow_zeroed");
+        let moved_ptr = moved.as_ptr() as *mut u8;
+        unsafe {
+            for offset in 0..old_layout.size() {
+                assert_eq!(*moved_ptr.add(offset), 0xA5);
+            }
+            for offset in old_layout.size()..new_layout.size() {
+                assert_eq!(*moved_ptr.add(offset), 0);
+            }
+        }
+        assert_eq!(
+            recorded_reallocation_old_metadata(old_ptr, old_layout),
+            None
+        );
+        assert_eq!(
+            recorded_reallocation_old_metadata(moved_ptr, new_layout),
+            Some(metadata)
+        );
+        unsafe {
+            alloc.deallocate(NonNull::new(moved_ptr).unwrap(), new_layout);
+        }
+        assert_eq!(take_auto_deallocation_metadata(moved_ptr, new_layout), None);
     }
 
     #[test]

@@ -2598,6 +2598,18 @@ impl Drop for AutoAllocationRecoveryRecordingGuard {
     }
 }
 
+struct AutoAllocationRecoverySuppressionGuard {
+    previous_depth: usize,
+}
+
+impl Drop for AutoAllocationRecoverySuppressionGuard {
+    fn drop(&mut self) {
+        unsafe {
+            AUTO_ALLOCATION_RECOVERY_RECORDING_DEPTH = self.previous_depth;
+        }
+    }
+}
+
 /// Run `f` while semantic allocations create pointer-to-metadata recovery
 /// records for later ordinary `GlobalAlloc` dealloc/realloc calls.
 ///
@@ -2613,6 +2625,18 @@ pub(crate) fn with_auto_allocation_recovery_recording<R>(f: impl FnOnce() -> R) 
             AUTO_ALLOCATION_RECOVERY_RECORDING_DEPTH.saturating_add(1);
     }
     let _guard = AutoAllocationRecoveryRecordingGuard;
+    f()
+}
+
+/// Run `f` as an exact paired local ABI operation that must not publish a new
+/// recovery record, while restoring any outer conservative recording scope on
+/// return or unwind.
+pub(crate) fn without_auto_allocation_recovery_recording<R>(f: impl FnOnce() -> R) -> R {
+    let previous_depth = unsafe { AUTO_ALLOCATION_RECOVERY_RECORDING_DEPTH };
+    unsafe {
+        AUTO_ALLOCATION_RECOVERY_RECORDING_DEPTH = 0;
+    }
+    let _guard = AutoAllocationRecoverySuppressionGuard { previous_depth };
     f()
 }
 
@@ -3116,43 +3140,62 @@ fn next_auto_compiler_type_id_index(
     }
 }
 
-/// Synthesize evaluation-only metadata for an unscoped `GlobalAlloc` layout.
-pub fn auto_allocation_metadata(layout: Layout) -> Option<AllocationMetadata> {
+/// Select metadata for one unscoped allocation event while retaining whether
+/// an auto policy was active when that event was consumed.  The distinction is
+/// required for finite compiler streams: `None` can mean either "no policy"
+/// or a deliberate UNKNOWN/exhausted event that must remain raw.
+pub(crate) fn select_auto_allocation_metadata(
+    layout: Layout,
+) -> (bool, Option<AllocationMetadata>) {
     let config = AUTO_METADATA_CONFIG.read();
     if config.flags == 0 {
-        return None;
+        return (false, None);
     }
     if config.compiler_metadata_enabled() {
         let stream_mode = config.compiler_stream_enabled();
-        let idx = next_auto_compiler_type_id_index(
+        let idx = match next_auto_compiler_type_id_index(
             config.compiler_type_ids_len,
             stream_mode,
             config.compiler_type_ids_global_recovery,
-        )?;
+        ) {
+            Some(idx) => idx,
+            None => return (true, None),
+        };
         // The read guard intentionally remains live through this dereference.
         // Disable/reconfigure cannot acquire the write side and return control
         // to a caller that may free the old slice until this load completes.
         let type_id = unsafe { *((config.compiler_type_ids_ptr as *const u64).add(idx)) };
         if type_id != UNKNOWN_SEMANTIC_ID {
-            return Some(AllocationMetadata {
-                type_id,
-                module_id: config.module_id,
-                flags: config.flags,
-                lifetime_hint: 0,
-                placement_hint: 0,
-                callsite: config.callsite.wrapping_add(idx as u64),
-            });
+            return (
+                true,
+                Some(AllocationMetadata {
+                    type_id,
+                    module_id: config.module_id,
+                    flags: config.flags,
+                    lifetime_hint: 0,
+                    placement_hint: 0,
+                    callsite: config.callsite.wrapping_add(idx as u64),
+                }),
+            );
         }
         if stream_mode {
-            return None;
+            return (true, None);
         }
     }
-    Some(layout_auto_metadata(
-        layout,
-        config.flags,
-        config.module_id,
-        config.callsite,
-    ))
+    (
+        true,
+        Some(layout_auto_metadata(
+            layout,
+            config.flags,
+            config.module_id,
+            config.callsite,
+        )),
+    )
+}
+
+/// Synthesize evaluation-only metadata for an unscoped `GlobalAlloc` layout.
+pub fn auto_allocation_metadata(layout: Layout) -> Option<AllocationMetadata> {
+    select_auto_allocation_metadata(layout).1
 }
 
 /// Synthesize metadata for an unscoped `GlobalAlloc::dealloc` without
@@ -9264,15 +9307,6 @@ fn recovered_or_requested_reallocation_old_metadata(
 }
 
 #[inline]
-fn take_or_requested_reallocation_old_metadata(
-    ptr: *mut u8,
-    old_layout: Layout,
-    requested_metadata: AllocationMetadata,
-) -> AllocationMetadata {
-    take_auto_allocation_records_for_reallocation(ptr, old_layout).unwrap_or(requested_metadata)
-}
-
-#[inline]
 unsafe fn realloc_layout_with_ffi_metadata(
     ptr: *mut u8,
     old_layout: Layout,
@@ -9292,9 +9326,11 @@ unsafe fn realloc_layout_with_ffi_metadata(
 /// Reallocate through the metadata ABI without installing a recovery record for
 /// the new allocation.
 ///
-/// Any existing old-pointer recovery record is consumed first so mixed
-/// conservative-to-local transitions do not leave stale `(ptr, old_layout)`
-/// metadata behind.  The caller/compiler must still lower the later
+/// Any existing old-pointer recovery record is consumed only after the local
+/// reallocation commits, so allocation failure leaves the old allocation and
+/// its exact recovery identity intact. Mixed conservative-to-local transitions
+/// therefore do not leave stale `(ptr, old_layout)` metadata behind. The
+/// caller/compiler must still lower the later
 /// deallocation/reallocation with exact metadata because ordinary
 /// `GlobalAlloc::dealloc` will not be able to recover the new allocation's
 /// metadata from a side table.
@@ -9309,8 +9345,18 @@ unsafe fn realloc_layout_with_ffi_metadata_local(
         return core::ptr::null_mut();
     }
     let allocator = RustAllocator::new();
-    let old_metadata = take_or_requested_reallocation_old_metadata(ptr, old_layout, metadata);
-    allocator.realloc_with_split_metadata(ptr, old_layout, new_size, old_metadata, metadata)
+    let old_metadata = recovered_or_requested_reallocation_old_metadata(ptr, old_layout, metadata);
+    let new_ptr = without_auto_allocation_recovery_recording(|| {
+        allocator.realloc_with_split_metadata(ptr, old_layout, new_size, old_metadata, metadata)
+    });
+    if new_ptr == ptr && !new_ptr.is_null() {
+        // Moved and zero-sized transitions consume the old key during
+        // deallocation. Only an in-place transition leaves that key for this
+        // commit step; probing a freed old address afterward could steal a
+        // concurrently reused pointer's new record.
+        let _ = take_auto_allocation_records_for_reallocation(ptr, old_layout);
+    }
+    new_ptr
 }
 
 #[inline]
@@ -20552,7 +20598,7 @@ mod tests {
             "conservative compiler ABI keeps the old record until local realloc consumes it"
         );
 
-        let grown = unsafe {
+        let grown = with_auto_allocation_recovery_recording(|| unsafe {
             __unialloc_realloc_layout_with_metadata_hints_local(
                 ptr,
                 old_layout,
@@ -20564,7 +20610,7 @@ mod tests {
                 metadata.placement_hint,
                 metadata.callsite,
             )
-        };
+        });
         assert_eq!(
             grown, ptr,
             "same-size-class local compiler realloc should stay on the in-place fast path"
