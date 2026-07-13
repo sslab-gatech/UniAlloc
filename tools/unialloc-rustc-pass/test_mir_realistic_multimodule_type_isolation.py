@@ -173,6 +173,13 @@ use unialloc::{
 };
 
 const BYTES: usize = 768;
+const TYPE_ITEMS: usize = 24;
+
+#[repr(C)]
+struct Producer([u64; 4]);
+
+#[repr(C)]
+struct Consumer([u64; 4]);
 
 #[inline(never)]
 fn payload_byte(seed: u8, index: usize) -> u8 {
@@ -205,6 +212,74 @@ fn auto_cross_buffer(seed: u8) -> Vec<u8> {
             .expect("unreachable marker worker");
     }
     value
+}
+
+#[inline(never)]
+fn producer_item(seed: u64, index: usize) -> Producer {
+    Producer([
+        seed.wrapping_add(index as u64),
+        seed ^ 0x1111_1111_1111_1111 ^ index as u64,
+        seed ^ 0x2222_2222_2222_2222 ^ index as u64,
+        seed ^ 0x3333_3333_3333_3333 ^ index as u64,
+    ])
+}
+
+#[inline(never)]
+fn consumer_item(seed: u64, index: usize) -> Consumer {
+    Consumer([
+        seed.wrapping_add(index as u64),
+        seed ^ 0xAAAA_AAAA_AAAA_AAAA ^ index as u64,
+        seed ^ 0xBBBB_BBBB_BBBB_BBBB ^ index as u64,
+        seed ^ 0xCCCC_CCCC_CCCC_CCCC ^ index as u64,
+    ])
+}
+
+#[inline(never)]
+fn auto_cross_producer(seed: u64) -> Vec<Producer> {
+    let mut value = Vec::<Producer>::with_capacity(TYPE_ITEMS);
+    for index in 0..TYPE_ITEMS {
+        value.push(producer_item(seed, index));
+    }
+    if black_box(false) {
+        let marker = Vec::<Producer>::new();
+        thread::spawn(move || drop(marker))
+            .join()
+            .expect("unreachable Producer marker worker");
+    }
+    value
+}
+
+#[inline(never)]
+fn auto_cross_consumer(seed: u64) -> Vec<Consumer> {
+    let mut value = Vec::<Consumer>::with_capacity(TYPE_ITEMS);
+    for index in 0..TYPE_ITEMS {
+        value.push(consumer_item(seed, index));
+    }
+    if black_box(false) {
+        let marker = Vec::<Consumer>::new();
+        thread::spawn(move || drop(marker))
+            .join()
+            .expect("unreachable Consumer marker worker");
+    }
+    value
+}
+
+#[inline(never)]
+fn producer_matches(value: &[Producer], seed: u64) -> bool {
+    value.len() == TYPE_ITEMS
+        && value
+            .iter()
+            .enumerate()
+            .all(|(index, item)| item.0 == producer_item(seed, index).0)
+}
+
+#[inline(never)]
+fn consumer_matches(value: &[Consumer], seed: u64) -> bool {
+    value.len() == TYPE_ITEMS
+        && value
+            .iter()
+            .enumerate()
+            .all(|(index, item)| item.0 == consumer_item(seed, index).0)
 }
 
 #[inline(never)]
@@ -397,6 +472,137 @@ pub fn run_cross_placement_lane() {
     .join()
     .expect("cross-placement worker should finish");
 }
+
+pub fn run_cross_type_lane() {
+    // Keep allocation and the real spawn in one MIR body so the escaping
+    // Producer owner receives the automatic cross-thread placement bit.
+    let mut escaping = Vec::<Producer>::with_capacity(TYPE_ITEMS);
+    for index in 0..TYPE_ITEMS {
+        escaping.push(producer_item(0xA110_0000, index));
+    }
+    let escaping_pointer = escaping.as_ptr() as usize;
+
+    thread::spawn(move || {
+        assert!(producer_matches(&escaping, 0xA110_0000));
+
+        // Preserve the allocation-side recovery record while excluding thread
+        // creation noise from the measured functional window.
+        semantic_stats_reset();
+        let fallback_before = semantic_fallback_attribution_snapshot();
+        drop(escaping);
+
+        let wrong_owner = auto_cross_consumer(0xBE70_0000);
+        assert!(consumer_matches(&wrong_owner, 0xBE70_0000));
+        let wrong_owner_pointer = wrong_owner.as_ptr() as usize;
+        let wrong_type_reuse_blocked = wrong_owner_pointer != escaping_pointer;
+        assert!(wrong_type_reuse_blocked, "Consumer reused Producer storage");
+        drop(wrong_owner);
+
+        let exact_owner = auto_cross_producer(0xA110_4000);
+        assert!(producer_matches(&exact_owner, 0xA110_4000));
+        let exact_owner_pointer = exact_owner.as_ptr() as usize;
+        let exact_owner_reuse = exact_owner_pointer == escaping_pointer;
+        assert!(exact_owner_reuse, "Producer did not recover its cross-thread storage");
+        drop(exact_owner);
+
+        let stats = semantic_stats_snapshot();
+        let fallback = semantic_fallback_attribution_snapshot();
+        let validation = semantic_metadata_validation_snapshot();
+        let side_cache = type_isolation_side_cache_snapshot();
+        let mut rows = [SemanticTypeStatsSnapshot::empty(); 16];
+        let row_count = semantic_type_stats_snapshot(&mut rows);
+
+        assert_eq!(stats.typed_allocations, 2, "{stats:?}");
+        assert_eq!(stats.typed_deallocations, 3, "{stats:?}");
+        assert_eq!(stats.typed_cache_hits, 1, "{stats:?}");
+        assert_eq!(stats.typed_cache_inserts, 3, "{stats:?}");
+        assert_eq!(stats.fallback_allocations, 0, "{stats:?}");
+        assert_eq!(stats.fallback_deallocations, 0, "{stats:?}");
+        assert_eq!(stats.semantic_type_stats_dropped_events, 0, "{stats:?}");
+        assert_eq!(
+            fallback
+                .raw_alloc_no_metadata
+                .saturating_sub(fallback_before.raw_alloc_no_metadata),
+            0,
+            "{fallback:?}"
+        );
+        assert_eq!(
+            fallback
+                .raw_dealloc_no_metadata
+                .saturating_sub(fallback_before.raw_dealloc_no_metadata),
+            0,
+            "{fallback:?}"
+        );
+        assert_eq!(
+            fallback
+                .raw_realloc_no_metadata
+                .saturating_sub(fallback_before.raw_realloc_no_metadata),
+            0,
+            "{fallback:?}"
+        );
+        assert_eq!(validation.recovery_identity_mismatches, 0, "{validation:?}");
+        assert_eq!(side_cache.corrupt_slots, 0, "{side_cache:?}");
+
+        semantic_type_stats_recording_disable();
+        semantic_stats_recording_disable();
+        let type_rows = type_rows_json(&rows, row_count);
+        println!(
+            concat!(
+                "{{",
+                "\"source\":\"cross_type_lane\",",
+                "\"items\":{},",
+                "\"allocation_bytes\":{},",
+                "\"escaping_pointer\":{},",
+                "\"wrong_owner_pointer\":{},",
+                "\"exact_owner_pointer\":{},",
+                "\"wrong_type_reuse_blocked\":{},",
+                "\"exact_owner_reuse\":{},",
+                "\"typed_allocations\":{},",
+                "\"typed_deallocations\":{},",
+                "\"typed_cache_hits\":{},",
+                "\"typed_cache_inserts\":{},",
+                "\"fallback_allocations\":{},",
+                "\"fallback_deallocations\":{},",
+                "\"raw_alloc_no_metadata\":{},",
+                "\"raw_dealloc_no_metadata\":{},",
+                "\"raw_realloc_no_metadata\":{},",
+                "\"recovery_identity_mismatches\":{},",
+                "\"side_cache_corrupt_slots\":{},",
+                "\"semantic_type_stats_dropped_events\":{},",
+                "\"type_rows\":{}",
+                "}}"
+            ),
+            TYPE_ITEMS,
+            TYPE_ITEMS * std::mem::size_of::<Producer>(),
+            escaping_pointer,
+            wrong_owner_pointer,
+            exact_owner_pointer,
+            wrong_type_reuse_blocked,
+            exact_owner_reuse,
+            stats.typed_allocations,
+            stats.typed_deallocations,
+            stats.typed_cache_hits,
+            stats.typed_cache_inserts,
+            stats.fallback_allocations,
+            stats.fallback_deallocations,
+            fallback
+                .raw_alloc_no_metadata
+                .saturating_sub(fallback_before.raw_alloc_no_metadata),
+            fallback
+                .raw_dealloc_no_metadata
+                .saturating_sub(fallback_before.raw_dealloc_no_metadata),
+            fallback
+                .raw_realloc_no_metadata
+                .saturating_sub(fallback_before.raw_realloc_no_metadata),
+            validation.recovery_identity_mismatches,
+            side_cache.corrupt_slots,
+            stats.semantic_type_stats_dropped_events,
+            type_rows,
+        );
+    })
+    .join()
+    .expect("cross-type worker should finish");
+}
 ''',
         encoding="utf-8",
     )
@@ -467,6 +673,7 @@ fn main() {
     // actual rustc MIR rewrite path.
     semantic_auto_metadata_disable();
     handoff::run_cross_placement_lane();
+    handoff::run_cross_type_lane();
     semantic_stats_reset();
     let transfer_before = semantic_ownership_transfer_snapshot();
 
@@ -625,6 +832,26 @@ def one_scope_row(
     ]
     assert len(rows) == 1, (function_suffix, semantic_type, callee_hint, rows)
     return rows[0]
+
+
+def one_vec_payload_scope_row(
+    audit: dict[str, object], function_suffix: str, payload_marker: str
+) -> dict[str, object]:
+    rows = audit.get("rewrite_candidates")
+    assert isinstance(rows, list), rows
+    selected = [
+        row
+        for row in rows
+        if isinstance(row, dict)
+        and function_matches(row, function_suffix)
+        and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+        and row.get("rewrite_status") == APPLIED_SCOPE_STATUS
+        and "with_capacity" in str(row.get("callee") or "")
+        and "Vec<" in str(row.get("semantic_object_type") or "")
+        and payload_marker in str(row.get("semantic_object_type") or "")
+    ]
+    assert len(selected) == 1, (function_suffix, payload_marker, selected)
+    return selected[0]
 
 
 def parse_runtime(stdout: str, source: str = PROBE_NAME) -> dict[str, object]:
@@ -869,6 +1096,94 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         (vec_type_id, module_id, int(auto_cross_vec["callsite"]))
     ].get("cache_hits") or 0) == 1, cross_rows
 
+    escaped_producer = one_vec_payload_scope_row(
+        audit, "handoff::run_cross_type_lane", "Producer"
+    )
+    exact_producer = one_vec_payload_scope_row(
+        audit, "handoff::auto_cross_producer", "Producer"
+    )
+    wrong_consumer = one_vec_payload_scope_row(
+        audit, "handoff::auto_cross_consumer", "Consumer"
+    )
+    cross_type_rows = [escaped_producer, exact_producer, wrong_consumer]
+    producer_type_id = int(escaped_producer.get("type_id") or 0)
+    consumer_type_id = int(wrong_consumer.get("type_id") or 0)
+    assert producer_type_id != 0, escaped_producer
+    assert consumer_type_id != 0, wrong_consumer
+    assert int(exact_producer.get("type_id") or 0) == producer_type_id, exact_producer
+    assert producer_type_id != consumer_type_id, cross_type_rows
+    assert {int(row.get("module_id") or 0) for row in cross_type_rows} == {
+        module_id
+    }, cross_type_rows
+    cross_type_callsites = {int(row.get("callsite") or 0) for row in cross_type_rows}
+    assert len(cross_type_callsites) == 3 and 0 not in cross_type_callsites, cross_type_rows
+    for row in cross_type_rows:
+        assert int(row.get("flags") or 0) & TYPE_ISOLATED, row
+        assert int(row.get("placement_hint") or 0) == CROSS_THREAD_RECOVERY, row
+        assert row.get("cross_thread_recovery_hint") is True, row
+        assert row.get("placement_hint_basis") == "auto_cross_thread_escape", row
+
+    # A same-layout, different-Rust-type lane must prove that cross-thread
+    # recovery preserves the compiler-provided owner identity rather than
+    # collapsing all equally sized Vec allocations into one cache domain.
+    cross_type_runtime = parse_runtime(stdout, "cross_type_lane")
+    assert int(cross_type_runtime["items"]) == 24, cross_type_runtime
+    assert int(cross_type_runtime["allocation_bytes"]) == 768, cross_type_runtime
+    assert cross_type_runtime.get("wrong_type_reuse_blocked") is True, cross_type_runtime
+    assert cross_type_runtime.get("exact_owner_reuse") is True, cross_type_runtime
+    assert int(cross_type_runtime["escaping_pointer"]) != int(
+        cross_type_runtime["wrong_owner_pointer"]
+    ), cross_type_runtime
+    assert int(cross_type_runtime["escaping_pointer"]) == int(
+        cross_type_runtime["exact_owner_pointer"]
+    ), cross_type_runtime
+    for field, expected in (
+        ("typed_allocations", 2),
+        ("typed_deallocations", 3),
+        ("typed_cache_hits", 1),
+        ("typed_cache_inserts", 3),
+        ("fallback_allocations", 0),
+        ("fallback_deallocations", 0),
+        ("raw_alloc_no_metadata", 0),
+        ("raw_dealloc_no_metadata", 0),
+        ("raw_realloc_no_metadata", 0),
+        ("recovery_identity_mismatches", 0),
+        ("side_cache_corrupt_slots", 0),
+        ("semantic_type_stats_dropped_events", 0),
+    ):
+        assert int(cross_type_runtime[field]) == expected, (field, cross_type_runtime)
+    cross_type_runtime_rows = cross_type_runtime.get("type_rows")
+    assert isinstance(cross_type_runtime_rows, list), cross_type_runtime_rows
+    cross_type_runtime_identities = {
+        (
+            int(row.get("type_id") or 0),
+            int(row.get("module_id") or 0),
+            int(row.get("callsite") or 0),
+        ): row
+        for row in cross_type_runtime_rows
+        if isinstance(row, dict)
+    }
+
+    def cross_type_runtime_row(audit_row: dict[str, object]) -> dict[str, object]:
+        identity = (
+            int(audit_row.get("type_id") or 0),
+            int(audit_row.get("module_id") or 0),
+            int(audit_row.get("callsite") or 0),
+        )
+        row = cross_type_runtime_identities.get(identity)
+        assert row is not None, (identity, cross_type_runtime_rows)
+        return row
+
+    escaped_runtime_row = cross_type_runtime_row(escaped_producer)
+    assert int(escaped_runtime_row.get("allocations") or 0) == 0, escaped_runtime_row
+    assert int(escaped_runtime_row.get("deallocations") or 0) == 1, escaped_runtime_row
+    consumer_runtime_row = cross_type_runtime_row(wrong_consumer)
+    assert int(consumer_runtime_row.get("allocations") or 0) == 1, consumer_runtime_row
+    assert int(consumer_runtime_row.get("cache_hits") or 0) == 0, consumer_runtime_row
+    exact_runtime_row = cross_type_runtime_row(exact_producer)
+    assert int(exact_runtime_row.get("allocations") or 0) == 1, exact_runtime_row
+    assert int(exact_runtime_row.get("cache_hits") or 0) == 1, exact_runtime_row
+
     return {
         "actual_scope_rows": len(scope_rows),
         "ownership_transfer": {
@@ -899,6 +1214,12 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
             "local_callsite": int(local_vec.get("callsite") or 0),
             "exact_cross_probe_callsite": int(auto_cross_vec.get("callsite") or 0),
             "runtime": cross_runtime,
+        },
+        "cross_thread_type_isolation": {
+            "producer_type_id": producer_type_id,
+            "consumer_type_id": consumer_type_id,
+            "callsites": sorted(cross_type_callsites),
+            "runtime": cross_type_runtime,
         },
         "runtime": runtime,
     }
@@ -984,7 +1305,7 @@ def main() -> int:
                 "benchmark": False,
                 "boundaries": [
                     "Functional actual-rustc regression for one generated multi-module Cargo application; not arbitrary external-application coverage.",
-                    "The address oracle covers String-to-Vec ownership transfer and same-layout Box-slice versus Vec reuse under trusted compiler metadata; it is not a universal memory-safety proof.",
+                    "The address oracle covers String-to-Vec ownership transfer, Box-slice versus Vec reuse, and cross-thread same-layout Producer/Consumer isolation under trusted compiler metadata; it is not a universal memory-safety proof.",
                     "No timing or publication-grade performance claim is made.",
                 ],
                 "evidence": evidence,
