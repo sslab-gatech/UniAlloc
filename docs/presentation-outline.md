@@ -830,7 +830,7 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 
 **最终选择：** 把主 deck 做成“conventional Rust semantic gap → trusted optional compiler channel → bounded representative policy → retargetable boundary → evidence judgment”的单条论证。这样 slide 更容易制作，因为每页只服务一个假设；问答也更轻松，因为所有回答都能回到 H1/H2/H3、compatibility/TCB contract、evidence tier 和明确 boundary。
 
-## `982ee0b` current-source presentation checkpoint
+## Current implementation-first presentation checkpoint
 
 - **retained-cache fail-stop：** `e9d56f1` 用真实 retained typed entry 验证 raw
   dealloc/realloc 在 mutation 前 fail-stop，而 exact typed pop 仍精确取回并只做一次
@@ -869,9 +869,20 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   payload mutation 前 fail-stop，owner 随后 exact typed reuse、unregister、single
   release。hosted 与 `fixed_heap` exact tests 均 PASS；这是 test-only bounded safety
   evidence，不是 forged metadata、stale-pointer 或 universal linearizability proof。
-- **cross-thread + unwind probe 边界：** actual-wrapper probe 仍 pending independent
-  repair/review；现在只能作为 candidate follow-up 讲 manual placement + worker-thread
-  unwind + same-layout reuse oracle，不作为 accepted evidence。
+- **generic fallback realloc：** `c6c0152` 验证无 semantic metadata 的
+  `Allocator::allocate -> grow` 保留 payload prefix，同时保持 raw fallback；auto
+  allocation record、typed attribution、type cache、delayed free 与 stale ownership
+  均为零/不变，hosted 与 `fixed_heap` exact tests PASS。只支持一个 generic grow
+  functional invariant，不是 compiler-derived identity、全 collection coverage 或性能。
+- **cross-thread + unwind actual rewrite：** `87725dc` + `4999ddc` 的普通 Rust
+  fixture 把 `Vec<ProducerPayload>` 从 main move 到 worker；actual wrapper 重写
+  `reserve(usize::MAX)`，panic 时 represented depth `1`、unwind 后/最终 `0`，pointer
+  与 payload 保留。worker Drop 后 Consumer 同 layout 不复用，Producer exact reuse；
+  独立 cleanup window 为 typed dealloc/insert `2/2`，Producer/Consumer 各 `1`，
+  fallback/raw/mismatch/corrupt/dropped 全 `0`，7 个负控全部拒绝，independent
+  review `APPROVE`。artifact `cross-thread-unwind-cleanup-feff198-20260713` 的
+  summary/audit SHA 分别为 `7f150b77...` / `822bfaf6...`。placement 是 manual；不
+  声称 automatic escape inference、universal thread/unwind coverage 或性能。
 - **single-sample diagnostic performance：** default `16.59 ns/iter`、type isolation
   `25.47 ns/iter`，ratio `1.5353` / `+53.526%`；n=1 each、Darwin/current
   toolchain、layout-derived size/align identity、compiler-site replay disabled、无

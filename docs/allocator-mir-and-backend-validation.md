@@ -2090,7 +2090,7 @@ the ThreadCache change. It did not confirm the intended direction, so commit
 performed. These two one-shot values are diagnostic-only and support no stable
 percentage or paper claim.
 
-## Current-source presentation checkpoint at `982ee0b`
+## Current implementation-first presentation checkpoint
 
 The `ce52203` tree includes three additional bounded type-isolation security
 closures. Commit `e9d56f1` retains a real typed allocation in the type cache,
@@ -2157,11 +2157,35 @@ releases the allocation once. Hosted and `fixed_heap` exact tests pass for both
 regressions. These are test-only bounded safety checks, not arbitrary forged
 metadata, stale-pointer, or universal linearizability proofs.
 
-The cross-thread + unwind actual-wrapper probe is tracked separately and remains
-pending independent repair/review for this checkpoint. Until that review lands,
-it should be described only as a candidate follow-up for combining manual
-placement, worker-thread panic recovery, and same-layout non-reuse/reuse oracles;
-it is not current accepted evidence.
+Commit `c6c0152` adds the complementary generic fallback realloc regression.
+With semantic metadata disabled, `RustAllocator::allocate` followed by
+`Allocator::grow` preserves the initialized prefix while remaining raw fallback:
+no auto-allocation record, typed attribution, type-cache drift, delayed-free
+drift, or stale ownership is created. Hosted and `fixed_heap` exact tests pass.
+This proves that one generic grow path does not masquerade as typed isolation;
+it is not compiler-derived identity, all-collection coverage, or performance
+evidence.
+
+Commits `87725dc` and `4999ddc` integrate the actual-wrapper cross-thread +
+unwind regression. An ordinary Rust application moves
+`Vec<ProducerPayload>` from main to a worker and executes a rewritten
+`Vec::reserve(usize::MAX)` under `catch_unwind`. The panic hook sees represented
+scope depth `1`; both post-unwind and final depth return to `0`, and the source
+pointer and payload remain intact. After the worker drops the source, a
+same-layout Consumer cannot reuse its address while exact Producer recovery
+does. A separate cleanup window then observes exactly two typed deallocations
+and two cache inserts, one per live Producer/Consumer owner, with allocations,
+fallback, raw, mismatch, corrupt, and dropped events all zero. All seven
+negative controls reject tampered evidence, including missing normal Drop
+cleanup; independent review is `APPROVE`.
+
+The single repaired run is preserved at
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/cross-thread-unwind-cleanup-feff198-20260713/`;
+the summary and actual-wrapper audit SHA-256 values are respectively
+`7f150b77a318fe86e4c8ef613bfb74284fdf23d4d7c07d7ad258d999407b8ec8`
+and `822bfaf6bf141bea6ed4b16a7941025cfe95bcab52c5952d7dffeb32afc55bb6`.
+Placement is manually forced and the fixture is bounded, so this does not prove
+automatic escape inference, universal unwind/thread coverage, or performance.
 
 A single-sample diagnostic measured `vec::bench_with_capacity_1000` on this
 Darwin/current-toolchain setup as default `16.59 ns/iter` and type isolation
@@ -2177,5 +2201,5 @@ not an unmodified universal application result, whole-program proof, benchmark,
 or performance claim. The repository cargo-test hook observed the `std_bench`
 test-mode finite inventory as `430/430`, but this has no standalone log artifact
 and is not an independent actual-wrapper compiler-coverage gate or
-whole-program denominator. No timing, paper percentage, or publication-grade
-performance conclusion is made from this checkpoint.
+whole-program denominator. No stable timing, paper percentage, or
+publication-grade performance conclusion is made from this checkpoint.
