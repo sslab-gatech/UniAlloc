@@ -109,28 +109,30 @@ fn collect_borrowed(input: &[u8]) -> Vec<u8> {
     input.iter().copied().collect()
 }
 
-struct RawIter {
+struct RawRefIter<'a> {
     current: *const u8,
     end: *const u8,
+    marker: std::marker::PhantomData<&'a u8>,
 }
 
-impl RawIter {
-    fn new(input: &[u8]) -> Self {
+impl<'a> RawRefIter<'a> {
+    fn new(input: &'a [u8]) -> Self {
         Self {
             current: input.as_ptr(),
             end: unsafe { input.as_ptr().add(input.len()) },
+            marker: std::marker::PhantomData,
         }
     }
 }
 
-impl Iterator for RawIter {
-    type Item = u8;
+impl<'a> Iterator for RawRefIter<'a> {
+    type Item = &'a u8;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.current == self.end {
             return None;
         }
-        let value = unsafe { *self.current };
+        let value = unsafe { &*self.current };
         self.current = unsafe { self.current.add(1) };
         Some(value)
     }
@@ -138,7 +140,7 @@ impl Iterator for RawIter {
 
 #[inline(never)]
 fn collect_custom_raw(input: &[u8]) -> Vec<u8> {
-    RawIter::new(input).collect()
+    RawRefIter::new(input).copied().collect()
 }
 
 #[inline(never)]

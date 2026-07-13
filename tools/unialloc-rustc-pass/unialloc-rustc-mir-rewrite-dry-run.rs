@@ -91,7 +91,7 @@ const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const MODULE_ID_ALGORITHM: &str =
     "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))";
 const TYPE_ID_ALGORITHM: &str =
-    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity, String::with_capacity, String::from(&str), <str as ToOwned>::to_owned, <[u8] as ToOwned>::to_owned, Box::new, and Box<[u8]>::from(&[u8]) destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer identity because they can change or create only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; exact alloc::sync::Arc::new and alloc::rc::Rc::new calls select the direct destination Arc<T> or Rc<T> identity only after DefId/crate/path and destination-payload structural checks, without recursively treating nested owners inside T as owners of the ref-counted allocation; exact std::collections::HashMap::with_capacity and std::collections::HashSet::with_capacity calls likewise select the direct destination table identity only after exact std DefId/path, RandomState, optional Global allocator, and capacity-argument checks, without treating nested K/V/T owners as identities for the table allocation; exact std HashMap reserve/try_reserve/shrink calls remain callback-capable audit-only because rehash may execute user Hash/Eq code with unrelated allocations; constructor/factory scopes without an exact DefId/body allocation proof remain audit-only because a direct Vec/String/Result return type alone is not allocation provenance, regardless of whether the opaque callee is local, platform, or a third-party dependency; Result<T, E>/Option<T> candidates still select only the Ok/Some payload for hazard classification while Result Err owners remain fail-closed hazards; custom or aggregate destinations that merely contain a supported owner remain audit-only without an exact constructor matcher or sound callee-body allocation proof; for these shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut and str Split/SplitInclusive wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec/String/Box capacity/constructor, Arc::new, Rc::new, std HashMap::with_capacity, and std HashSet::with_capacity exceptions; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity, String::with_capacity, String::from(&str), <str as ToOwned>::to_owned, <[u8] as ToOwned>::to_owned, Copied<slice::Iter<u8>>::collect::<Vec<u8>>, Box::new, and Box<[u8]>::from(&[u8]) destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer identity because they can change or create only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; exact alloc::sync::Arc::new and alloc::rc::Rc::new calls select the direct destination Arc<T> or Rc<T> identity only after DefId/crate/path and destination-payload structural checks, without recursively treating nested owners inside T as owners of the ref-counted allocation; exact std::collections::HashMap::with_capacity and std::collections::HashSet::with_capacity calls likewise select the direct destination table identity only after exact std DefId/path, RandomState, optional Global allocator, and capacity-argument checks, without treating nested K/V/T owners as identities for the table allocation; exact std HashMap reserve/try_reserve/shrink calls remain callback-capable audit-only because rehash may execute user Hash/Eq code with unrelated allocations; constructor/factory scopes without an exact DefId/body allocation proof remain audit-only because a direct Vec/String/Result return type alone is not allocation provenance, regardless of whether the opaque callee is local, platform, or a third-party dependency; Result<T, E>/Option<T> candidates still select only the Ok/Some payload for hazard classification while Result Err owners remain fail-closed hazards; custom or aggregate destinations that merely contain a supported owner remain audit-only without an exact constructor matcher or sound callee-body allocation proof; for these shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut and str Split/SplitInclusive wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec/String/Box capacity/constructor, Arc::new, Rc::new, std HashMap::with_capacity, and std HashSet::with_capacity exceptions; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 
@@ -2434,6 +2434,20 @@ fn exact_core_into_iterator_into_iter_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> 
         && exact_core_into_iterator_into_iter_def_path(&tcx.def_path_str(def_id))
 }
 
+fn exact_core_iterator_collect_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "core::iter::traits::iterator::Iterator::collect"
+            | "core::iter::Iterator::collect"
+            | "std::iter::Iterator::collect"
+    )
+}
+
+fn exact_core_iterator_collect_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "core"
+        && exact_core_iterator_collect_def_path(&tcx.def_path_str(def_id))
+}
+
 #[cfg(unialloc_rustc_current)]
 fn generic_arg_type<'tcx>(arg: &ty::GenericArg<'tcx>) -> Option<Ty<'tcx>> {
     arg.as_type()
@@ -2467,6 +2481,18 @@ fn exact_core_borrowing_slice_iterator_def_path(path: &str) -> bool {
 fn exact_core_borrowing_slice_iterator_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
     tcx.crate_name(def_id.krate).as_str() == "core"
         && exact_core_borrowing_slice_iterator_def_path(&tcx.def_path_str(def_id))
+}
+
+fn exact_core_copied_iterator_adapter_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "core::iter::adapters::copied::Copied" | "std::iter::Copied"
+    )
+}
+
+fn exact_core_copied_iterator_adapter_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "core"
+        && exact_core_copied_iterator_adapter_def_path(&tcx.def_path_str(def_id))
 }
 
 fn exact_core_borrowing_str_iterator_def_path(path: &str) -> bool {
@@ -3973,6 +3999,91 @@ fn direct_outer_vec_u8_from_u8_slice_to_owned_destination_owner<'tcx>(
     Some(format!("{:?}", destination_ty))
 }
 
+fn direct_outer_vec_u8_from_copied_slice_iter_collect_destination_owner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<String> {
+    if !exact_core_iterator_collect_def_id(tcx, callee_def_id)
+        || clone_result_has_unresolved_params(destination_ty)
+        || argument_tys.len() != 1
+        || clone_result_has_unresolved_params(argument_tys[0])
+    {
+        return None;
+    }
+
+    let (destination_def, destination_args) = match destination_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, destination_def.did(), exact_alloc_vec_def_path)
+        || !matches!(destination_args.len(), 1 | 2)
+        || !matches!(
+            generic_arg_type(destination_args.get(0)?)?.kind(),
+            ty::Uint(ty::UintTy::U8)
+        )
+    {
+        return None;
+    }
+    if destination_args.len() == 2 {
+        let allocator_ty = generic_arg_type(destination_args.get(1)?)?;
+        let allocator_def = match allocator_ty.kind() {
+            ty::Adt(def, args) if args.is_empty() => def,
+            _ => return None,
+        };
+        if !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path)
+            || allocator_def.did().krate != destination_def.did().krate
+        {
+            return None;
+        }
+    }
+
+    let (copied_def, copied_args) = match argument_tys[0].kind() {
+        ty::Adt(def, args)
+            if exact_core_copied_iterator_adapter_def_id(tcx, def.did()) =>
+        {
+            let path = strip_rustc_crate_disambiguators(&tcx.def_path_str(def.did()));
+            if !matches!(
+                path.as_str(),
+                "core::iter::adapters::copied::Copied" | "std::iter::Copied"
+            ) {
+                return None;
+            }
+            (def, args)
+        }
+        _ => return None,
+    };
+    if tcx.crate_name(copied_def.did().krate).as_str() != "core" {
+        return None;
+    }
+    let copied_types = copied_args.types().collect::<Vec<_>>();
+    if copied_types.len() != 1 {
+        return None;
+    }
+    let (iter_def, iter_args) = match copied_types[0].kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if tcx.crate_name(iter_def.did().krate).as_str() != "core"
+        || !matches!(
+            strip_rustc_crate_disambiguators(&tcx.def_path_str(iter_def.did())).as_str(),
+            "core::slice::iter::Iter" | "std::slice::Iter"
+        )
+    {
+        return None;
+    }
+    let iter_types = iter_args.types().collect::<Vec<_>>();
+    if iter_types.len() != 1 || !matches!(iter_types[0].kind(), ty::Uint(ty::UintTy::U8)) {
+        return None;
+    }
+
+    // Exact core Copied<slice::Iter<u8>> has no user callback, and coherence
+    // fixes Vec<u8, Global>'s FromIterator implementation. The call can only
+    // allocate the returned byte vector, unlike arbitrary Iterator::collect.
+    Some(format!("{:?}", destination_ty))
+}
+
 fn direct_outer_box_u8_slice_from_u8_slice_destination_owner<'tcx>(
     tcx: TyCtxt<'tcx>,
     callee_def_id: DefId,
@@ -4326,6 +4437,18 @@ fn non_plain_semantic_scope_heap_class<'tcx>(
         // Exact alloc ToOwned::to_owned for &[u8] copies bytes into one direct
         // Global-backed Vec<u8> buffer. Other slice element types remain
         // audit-only because their Clone implementation can allocate.
+        SemanticScopeHeapClass::Single(owner)
+    } else if let Some(owner) = callee_def_id.and_then(|def_id| {
+        direct_outer_vec_u8_from_copied_slice_iter_collect_destination_owner(
+            tcx,
+            def_id,
+            destination_ty,
+            argument_tys,
+        )
+    }) {
+        // Exact Copied<slice::Iter<u8>>::collect::<Vec<u8, Global>>() has no
+        // user callback and allocates only the destination byte-vector backing.
+        // All other Iterator::collect shapes remain fail closed.
         SemanticScopeHeapClass::Single(owner)
     } else if let Some(owner) = callee_def_id.and_then(|def_id| {
         direct_outer_box_u8_slice_from_u8_slice_destination_owner(
@@ -4882,6 +5005,18 @@ mod tests {
         assert!(!exact_core_into_iterator_into_iter_def_path(
             "core::iter::traits::collect::IntoIterator::into_iter_extra"
         ));
+        assert!(exact_core_iterator_collect_def_path(
+            "core[2f33]::iter::traits::iterator::Iterator::collect"
+        ));
+        assert!(exact_core_iterator_collect_def_path(
+            "std::iter::Iterator::collect"
+        ));
+        assert!(!exact_core_iterator_collect_def_path(
+            "my_crate::core::iter::traits::iterator::Iterator::collect"
+        ));
+        assert!(!exact_core_iterator_collect_def_path(
+            "core::iter::traits::iterator::Iterator::collect_extra"
+        ));
         assert!(exact_core_borrowing_slice_iterator_def_path(
             "core[2f33]::slice::iter::Iter"
         ));
@@ -4897,6 +5032,21 @@ mod tests {
         assert!(!exact_core_borrowing_slice_iterator_def_path(
             "core::slice::iter::IterMutExtra"
         ));
+        assert!(
+            exact_core_copied_iterator_adapter_def_path(
+                "core[2f33]::iter::adapters::copied::Copied"
+            )
+        );
+        assert!(
+            !exact_core_copied_iterator_adapter_def_path(
+                "my_crate::core::iter::adapters::copied::Copied"
+            )
+        );
+        assert!(
+            !exact_core_copied_iterator_adapter_def_path(
+                "core::iter::adapters::copied::CopiedExtra"
+            )
+        );
         assert!(exact_core_borrowing_str_iterator_def_path(
             "core[2f33]::str::iter::Split"
         ));
