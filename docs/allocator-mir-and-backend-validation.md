@@ -1761,6 +1761,114 @@ or `missing` without inventing zeros. It did not rerun or rebind the preserved
 `24bb079` one-shot. That artifact's raw counters therefore remain missing, not
 zero.
 
+## Current-source exact `[u8]::to_owned` and Oxipng one-shot
+
+The source-bound Oxipng v4.0.3 artifact at
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-1a4127f-20260713-one-shot/`
+binds HEAD `1a4127f`. Its summary SHA-256 is
+`118894ee3e08990a4d616110ad9001976c5ef082e1d3225e88dc9d070c41ce78`.
+The pinned build and functional invocation returned `0/0`, and the output hash
+matched the expected output. The target-crate audit reports direct/scope/Drop
+`6/256/320`, unresolved semantic/Drop `570/2`, and
+`whole_program_compiler_coverage=false`.
+
+Runtime reports typed allocation/deallocation `860/850`, fallback
+allocation/deallocation `210/170`, explicit raw-no-metadata
+allocation/deallocation/reallocation `183/144/26`, 808 cache hits, and dynamic
+ownership transfer attempted/applied/rejected `3/1/2`. The sole recovery
+identity mismatch is exactly localized to a cross-crate `PathBuf`: allocation
+metadata was recorded by the Oxipng library crate, while Drop requested the same
+type id under the binary crate's module id. Runtime safely uses the
+allocation-time record, so the result remains `recovery_corrected_non_exact`
+rather than whole-application exact pairing.
+
+Relative to the source-bound `24bb079` artifact, scope count `250→256` and
+unresolved semantic count `576→570` correspond exactly to six audited
+`<[u8] as ToOwned>::to_owned(&[u8]) -> Vec<u8>` rows changing classification.
+This is an exact-row, cross-artifact comparison only; it does not rebind either
+artifact or establish a coverage percentage. The one-shot is bounded
+functional/diagnostic evidence with no timing loop. It is not a benchmark,
+universal compiler/isolation proof, paper percentage, or performance claim.
+
+## Cross-crate returned-owner module-isolation regression
+
+Commit `e352206` adds an actual-`RUSTC_WRAPPER` two-crate regression in
+`tools/unialloc-rustc-pass/test_mir_crosscrate_returned_string_recovery.py`.
+The producer returns `ReturnedString::Value(String)` to the application, which
+holds and drops the returned owner. Current and `nightly-2022-07-01` runs pass.
+The compiler assigns the same nonzero String type id in both crates and distinct
+nonzero producer/application module ids.
+
+The runtime exposes both allocation-identity corrections when the application
+drops producer-owned values. A same-type request under the wrong module does not
+reuse the producer address, while producer and application exact module
+identities each recover their own address. The bounded run reports typed
+allocation/deallocation `4/4`, recovery identity match/mismatch `2/2`, and zero
+fallback allocation/deallocation, raw-no-metadata allocation/deallocation/
+reallocation, or corrupt side-cache slots.
+
+This is a bounded enum(`String`) functional security regression demonstrating
+that allocation-time identity remains authoritative across this returned-owner
+boundary. It is not proof that the Oxipng aggregate `OutFile`/`PathBuf` path is
+closed, universal cross-crate owner coverage, or performance evidence.
+
+## Current/pinned type-isolation security-probe compatibility closure
+
+Commits `c9b2f4d..0cd7696` make the existing actual-`RUSTC_WRAPPER`
+type-isolation security probe accept the two MIR exposure shapes without
+weakening its runtime safety requirements. The current-toolchain run at
+`c9b2f4d` reports `validated=true`; its summary SHA-256 is
+`b302a0776d29e236521d8c22d58017cd6e3d3ea067da2a3d86e010306e5a2040`.
+It records typed allocation/deallocation `12/12`, cache
+hit/insert/bypass `4/12/8`, wrong-type non-reuse and exact-type reuse, and
+corrupt/dropped `0/0`. Current rustc exposes no target Drop/deallocation rows
+for either payload (`0/0`), so the selected pairing mechanism is
+`allocation_side_recovery`; runtime recovery match/mismatch is `8/0`.
+
+The final pinned `nightly-2022-07-01` run at `0cd7696` also reports
+`validated=true`; its summary SHA-256 is
+`cc242b2da1ebe7f013352c1571062b41342ae38f52f619175fa26014d335fc1d`.
+Pinned rustc exposes exact requested identities for producer/consumer target
+rows `4/4`, so the selected pairing mechanism is `exact_requested_identity`.
+Runtime recovery match/mismatch remains `8/0`; typed
+allocation/deallocation is `12/12`, cache hit/insert/bypass is `4/12/8`, and
+corrupt/dropped is `0/0`. Its generic Drop helper remains fail closed as one
+unresolved audit-only row and zero specialized generic-Drop rows
+(`unresolved/specialized=1/0`), not an applied scope.
+
+These results establish compatibility for two audited MIR exposure forms:
+current rustc safely relies on allocation-side recovery, while the pinned
+toolchain supplies exact requested identities. Both preserve wrong-type
+separation, exact reuse, and zero recovery mismatch. This is a bounded
+functional security-probe result, not universal toolchain compatibility,
+whole-program isolation, or performance evidence.
+
+## OutFile/PathBuf cross-crate mismatch-shape regression
+
+Commit `247a599` adds
+`tools/unialloc-rustc-pass/test_mir_crosscrate_outfile_pathbuf_recovery.py`, an
+actual-`RUSTC_WRAPPER` two-crate fixture whose producer derives `Clone` for an
+`OutFile`-like aggregate containing `Option<PathBuf>`. The compiler audit maps
+the producer-side `<OutFile as Clone>::clone` allocation and both consumer-side
+aggregate Drops to the same nonzero PathBuf type id
+`441353361075010719`, while producer and application module ids remain
+distinct. That type id is the same one observed for the localized Oxipng
+recovery mismatch.
+
+Current and `nightly-2022-07-01` runs both pass. Each of the two consumer Drops
+adds exactly one visible allocation-identity correction. A same-type request
+under the wrong module cannot reuse producer storage, while producer and
+application exact identities each recover their own address. Runtime reports
+recovery match/mismatch `2/2`, typed allocation/deallocation/cache-hit/
+cache-insert `4/4/2/4`, and zero fallback allocation/deallocation,
+raw-no-metadata allocation/deallocation/reallocation, or corrupt side-cache
+slots.
+
+This fixture minimizes the observed Oxipng `OutFile`/`PathBuf` mismatch shape
+and validates the allocation-time recovery mechanism. It does not rebind or
+close the whole Oxipng execution, prove universal cross-crate ownership, or
+provide performance evidence.
+
 A separate three-run diagnostic rejected an attempted inline type-cache POP
 fast-path change. The baseline median was `116.40 ns` with range
 `115.66–116.74 ns`; the modified path measured median `117.39 ns` with range
