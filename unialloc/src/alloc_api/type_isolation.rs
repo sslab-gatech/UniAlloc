@@ -28488,6 +28488,119 @@ mod tests {
     }
 
     #[test]
+    fn ffi_dealloc_type_id_collision_uses_recovered_allocation_identity() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        SEMANTIC_METADATA_VALIDATION.reset();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let collided_type_id = 0xC011_1510_C003_004C;
+        let allocation_metadata = AllocationMetadata::for_type(collided_type_id)
+            .with_module(0xC0DE_A)
+            .with_callsite(0xA110_C04C)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_lifetime_hint(0x11)
+            .with_placement_hint(0x21);
+        let colliding_dealloc_metadata = AllocationMetadata::for_type(collided_type_id)
+            .with_module(0xC0DE_B)
+            .with_callsite(0xD0D0_C04C)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_lifetime_hint(0x12)
+            .with_placement_hint(0x22);
+        assert_eq!(
+            allocation_metadata.type_id,
+            colliding_dealloc_metadata.type_id
+        );
+        assert_ne!(
+            allocation_metadata.module_id,
+            colliding_dealloc_metadata.module_id
+        );
+        assert_ne!(
+            allocation_metadata.lifetime_hint,
+            colliding_dealloc_metadata.lifetime_hint
+        );
+        assert_ne!(
+            allocation_metadata.placement_hint,
+            colliding_dealloc_metadata.placement_hint
+        );
+
+        let ptr = unsafe {
+            __unialloc_alloc_layout_with_metadata_hints(
+                layout,
+                allocation_metadata.type_id,
+                allocation_metadata.module_id,
+                allocation_metadata.flags,
+                allocation_metadata.lifetime_hint,
+                allocation_metadata.placement_hint,
+                allocation_metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(allocation_metadata)
+        );
+
+        unsafe {
+            __unialloc_dealloc_layout_with_metadata_hints(
+                ptr,
+                layout,
+                colliding_dealloc_metadata.type_id,
+                colliding_dealloc_metadata.module_id,
+                colliding_dealloc_metadata.flags,
+                colliding_dealloc_metadata.lifetime_hint,
+                colliding_dealloc_metadata.placement_hint,
+                colliding_dealloc_metadata.callsite,
+            );
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            None,
+            "colliding deallocation metadata must consume the exact recovery record once"
+        );
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(layout, colliding_dealloc_metadata) },
+            None,
+            "same-type-id FFI metadata collision must not cache storage under the colliding identity"
+        );
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(layout, allocation_metadata) },
+            Some(ptr),
+            "the recorded allocation identity remains authoritative after a collision"
+        );
+
+        let validation = semantic_metadata_validation_snapshot();
+        assert_eq!(validation.recovery_identity_matches, 0);
+        assert_eq!(validation.recovery_identity_mismatches, 1);
+        assert_eq!(
+            validation.last_mismatch_requested_type_id, collided_type_id,
+            "the diagnostic should preserve that this was a same-type-id collision"
+        );
+        assert_eq!(validation.last_mismatch_recorded_type_id, collided_type_id);
+        assert_eq!(
+            validation.last_mismatch_requested_module_id,
+            colliding_dealloc_metadata.module_id
+        );
+        assert_eq!(
+            validation.last_mismatch_recorded_module_id,
+            allocation_metadata.module_id
+        );
+
+        unsafe {
+            RustAllocator::new().dealloc_raw(ptr, layout);
+            clear_auto_allocation_records();
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
     fn ffi_dealloc_mismatched_metadata_segregated_type_uses_recovered_identity() {
         let _guard = test_guard();
         unsafe {
