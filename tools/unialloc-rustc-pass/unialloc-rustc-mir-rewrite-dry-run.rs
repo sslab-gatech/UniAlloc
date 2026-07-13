@@ -4083,7 +4083,8 @@ fn direct_outer_vec_u8_from_copied_slice_iter_collect_destination_owner<'tcx>(
         ty::Adt(def, args) => (def, args),
         _ => return None,
     };
-    if !exact_alloc_adt_def_id(tcx, destination_def.did(), exact_alloc_vec_def_path)
+    if !tcx.is_diagnostic_item(sym::Vec, destination_def.did())
+        || tcx.crate_name(destination_def.did().krate).as_str() != "alloc"
         || !matches!(destination_args.len(), 1 | 2)
         || !matches!(
             generic_arg_type(destination_args.get(0)?)?.kind(),
@@ -4144,9 +4145,12 @@ fn direct_outer_vec_u8_from_copied_slice_iter_collect_destination_owner<'tcx>(
         return None;
     }
 
-    // Exact core Copied<slice::Iter<u8>> has no user callback, and coherence
-    // fixes Vec<u8, Global>'s FromIterator implementation. The call can only
-    // allocate the returned byte vector, unlike arbitrary Iterator::collect.
+    // The canonical Vec diagnostic item prevents an external crate named
+    // `alloc` from spoofing this destination and supplying an arbitrary
+    // FromIterator callback. Exact core Copied<slice::Iter<u8>> has no user
+    // callback, and coherence fixes canonical Vec<u8, Global>'s FromIterator
+    // implementation. The call can only allocate the returned byte vector,
+    // unlike arbitrary Iterator::collect.
     Some(format!("{:?}", destination_ty))
 }
 

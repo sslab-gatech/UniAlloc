@@ -16,6 +16,7 @@ PASS_SOURCE = ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-r
 PROBE_NAME = "slice_iter_hazard_nonowner_probe"
 COLLECT_FUNCTION = "collect_borrowed"
 CUSTOM_RAW_FUNCTION = "collect_custom_raw"
+EXTERN_ALLOC_SPOOF_FUNCTION = "extern_alloc_collect_spoof"
 ZIP_FUNCTION = "drop_partially_consumed_zip"
 CLONE_FUNCTION = "clone_iter"
 INTO_ITER_TYPE_MARKER = "IntoIter<u8"
@@ -53,6 +54,55 @@ def current_rustc_cfg(toolchain: str) -> list[str]:
 
 
 def write_probe(workspace: Path) -> Path:
+    fake_alloc = workspace / "fake-alloc"
+    (fake_alloc / "src").mkdir(parents=True)
+    (fake_alloc / "Cargo.toml").write_text(
+        '''[package]
+name = "fake-alloc"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "alloc"
+''',
+        encoding="utf-8",
+    )
+    (fake_alloc / "src/lib.rs").write_text(
+        r'''pub mod alloc {
+    pub struct Global;
+}
+
+pub mod vec {
+    use super::alloc::Global;
+    use std::marker::PhantomData;
+
+    pub struct Vec<T, A = Global> {
+        values: std::vec::Vec<T>,
+        allocator: PhantomData<A>,
+    }
+
+    impl<T> FromIterator<T> for Vec<T> {
+        #[inline(never)]
+        fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+            let callback_allocation = String::with_capacity(32);
+            drop(callback_allocation);
+            Self {
+                values: iter.into_iter().collect::<std::vec::Vec<T>>(),
+                allocator: PhantomData,
+            }
+        }
+    }
+
+    impl<T, A> Vec<T, A> {
+        pub fn len(&self) -> usize {
+            self.values.len()
+        }
+    }
+}
+''',
+        encoding="utf-8",
+    )
+
     app = workspace / PROBE_NAME
     (app / "src").mkdir(parents=True)
     (app / "Cargo.toml").write_text(
@@ -62,13 +112,16 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+alloc = {{ package = "fake-alloc", path = {json.dumps(str(fake_alloc))} }}
 lock_api = "=0.4.3"
 unialloc = {{ path = {json.dumps(str(ROOT / "unialloc"))}, features = ["stats", "type_isolation"] }}
 ''',
         encoding="utf-8",
     )
     (app / "src/main.rs").write_text(
-        r'''use unialloc::{
+        r'''extern crate alloc;
+
+use unialloc::{
     semantic_auto_metadata_disable, semantic_fallback_attribution_snapshot,
     semantic_metadata_validation_snapshot, semantic_ownership_transfer_snapshot,
     semantic_stats_recording_disable, semantic_stats_reset, semantic_stats_snapshot,
@@ -144,6 +197,11 @@ fn collect_custom_raw(input: &[u8]) -> Vec<u8> {
 }
 
 #[inline(never)]
+fn extern_alloc_collect_spoof(input: &[u8]) -> alloc::vec::Vec<u8> {
+    input.iter().copied().collect()
+}
+
+#[inline(never)]
 fn opaque_false() -> bool {
     unsafe { std::ptr::read_volatile(&false) }
 }
@@ -189,6 +247,9 @@ fn main() {
         let custom = collect_custom_raw(&borrowed_input);
         assert_eq!(custom.as_slice(), borrowed_input.as_slice());
         drop(custom);
+        let spoof = extern_alloc_collect_spoof(&borrowed_input);
+        assert_eq!(spoof.len(), borrowed_input.len());
+        drop(spoof);
     }
 
     let source = make_vec(0x31);
@@ -349,6 +410,24 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         == "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
     ), custom_raw
 
+    extern_alloc_spoof_rows = [
+        row
+        for row in rows
+        if isinstance(row, dict)
+        and function_matches(row, EXTERN_ALLOC_SPOOF_FUNCTION)
+        and "collect" in str(row.get("callee") or "")
+    ]
+    assert len(extern_alloc_spoof_rows) == 1, extern_alloc_spoof_rows
+    extern_alloc_spoof = extern_alloc_spoof_rows[0]
+    assert (
+        extern_alloc_spoof.get("rewrite_status")
+        == "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+    ), extern_alloc_spoof
+    assert (
+        extern_alloc_spoof.get("metadata_pairing_contract")
+        == "audit_only_unresolved_heap_object_type"
+    ), extern_alloc_spoof
+
     zip_drop_rows = [
         row
         for row in rows
@@ -416,6 +495,7 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
             "type_id": borrowed_collect.get("type_id"),
         },
         "custom_raw_collect_status": custom_raw.get("rewrite_status"),
+        "extern_alloc_spoof_status": extern_alloc_spoof.get("rewrite_status"),
         "zip_drop_rows": len(zip_drop_rows),
         "unresolved_zip_drop_rows": len(unresolved),
         "applied_zip_drop_rows": len(applied),
