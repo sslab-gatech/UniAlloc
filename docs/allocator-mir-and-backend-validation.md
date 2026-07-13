@@ -1729,3 +1729,41 @@ rows agree with the 14 exact `str::to_owned` rows changing from unresolved to
 applied; this is cross-artifact arithmetic and matcher-consistent inference
 only, not rebinding, whole-program proof, or performance evidence. Summary
 SHA-256 is `113d2fadd5ba29f7e837c4a1a6931266c9ab1988e0ba46b5c92613da7dfda620`.
+
+## Intentional `fmt::format` fail-closed boundary and rejected POP diagnostic
+
+The current-source audit contains 11 unresolved rows for the exact
+`alloc::fmt::format` surface. They intentionally remain
+`semantic_scope_rewrite_skipped_unresolved_heap_object_type` /
+`audit_only_unresolved_heap_object_type`, rather than being lowered to an outer
+`String` scope. Exact callee and destination types are insufficient here:
+`fmt::Arguments` may execute arbitrary, reentrant `Display` callbacks, and such
+callbacks may allocate their own `Vec`, `Box`, or other heap objects. Scoping
+the whole call as `String` could therefore misattribute callback allocations to
+the returned `String` identity.
+
+The adversarial two-crate actual-wrapper regression
+`tools/unialloc-rustc-pass/test_mir_fmt_format_fail_closed.py` passes on both
+`nightly-2026-06-11` and `nightly-2022-07-01`. Its helper crate is deliberately
+excluded from rewrite, while the target crate calls exact `fmt::format` once
+with a reentrant allocating `Display` implementation and once with a plain
+string. Both runs preserve all exact `fmt::format` rows as audit-only and
+report callback count `1`, typed allocation/deallocation/cache-hit/cache-insert
+`0/0/0/0`, fallback allocation/deallocation `3/3`, raw-no-metadata
+allocation/deallocation/reallocation `3/3/0`, and mismatch/corrupt `0/0`.
+This is a bounded adversarial regression for this fixture and these two
+toolchains; it is not universal formatting-safety proof or performance
+evidence.
+
+Commit `1fcb5c2` only repairs **future** Oxipng runner capture and summaries so
+raw-no-metadata counters are preserved and reported as `reported`, `partial`,
+or `missing` without inventing zeros. It did not rerun or rebind the preserved
+`24bb079` one-shot. That artifact's raw counters therefore remain missing, not
+zero.
+
+A separate three-run diagnostic rejected an attempted inline type-cache POP
+fast-path change. The baseline median was `116.40 ns` with range
+`115.66–116.74 ns`; the modified path measured median `117.39 ns` with range
+`116.51–118.19 ns`, a `+0.85%` slowdown. The code change was reverted exactly.
+These small same-condition measurements only explain the rejection of that
+specific optimization; they are not a UniAlloc or paper performance claim.

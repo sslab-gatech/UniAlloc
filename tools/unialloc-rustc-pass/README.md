@@ -888,3 +888,44 @@ rows agree with the 14 exact `str::to_owned` rows changing from unresolved to
 applied; this is cross-artifact arithmetic and matcher-consistent inference
 only, not rebinding, whole-program proof, or performance evidence. Summary
 SHA-256 is `113d2fadd5ba29f7e837c4a1a6931266c9ab1988e0ba46b5c92613da7dfda620`.
+
+### Exact `alloc::fmt::format` remains fail closed
+
+The current-source audit contains 11 unresolved rows for exact
+`alloc::fmt::format`. This is intentional: exact callee and destination types
+do not prove that every allocation inside the call belongs to the returned
+`String`. `fmt::Arguments` can invoke arbitrary, reentrant `Display` callbacks,
+which may allocate their own `Vec`, `Box`, or other objects. Wrapping the whole
+call in a `String` semantic scope could assign those nested allocations the
+wrong identity, so these rows remain
+`semantic_scope_rewrite_skipped_unresolved_heap_object_type` and
+`audit_only_unresolved_heap_object_type`.
+
+Run the adversarial two-crate actual-wrapper regression on both supported
+probe toolchains:
+
+```sh
+python3 tools/unialloc-rustc-pass/test_mir_fmt_format_fail_closed.py
+python3 tools/unialloc-rustc-pass/test_mir_fmt_format_fail_closed.py \
+  --toolchain nightly-2022-07-01
+```
+
+The helper crate is deliberately excluded from rewrite. The target crate calls
+exact `fmt::format` with an allocating `Display` callback and with a plain
+string; both toolchains leave the exact rows audit-only. Both runs report
+callback count `1`, typed allocation/deallocation/cache-hit/cache-insert
+`0/0/0/0`, fallback allocation/deallocation `3/3`, raw-no-metadata
+allocation/deallocation/reallocation `3/3/0`, and mismatch/corrupt `0/0`. This is bounded functional
+evidence for this fixture and these two toolchains, not universal formatting
+safety or performance evidence.
+
+Commit `1fcb5c2` only preserves raw-no-metadata counters for future Oxipng
+runner outputs and distinguishes `reported`, `partial`, and `missing` values.
+It did not rerun or rebind the historical `24bb079` one-shot, whose raw counters
+remain missing rather than zero.
+
+An attempted inline type-cache POP optimization was also rejected after a
+separate three-run diagnostic changed from baseline median `116.40 ns` (range
+`115.66–116.74 ns`) to median `117.39 ns` (range `116.51–118.19 ns`), a
+`+0.85%` slowdown. The change was reverted exactly. This bounded measurement
+records an optimization decision only; it is not a performance claim.

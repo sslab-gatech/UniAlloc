@@ -573,6 +573,7 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 | Cross-thread Box-to-Vec actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_cross_thread_box_slice_into_vec_rebind.py` |
 | String-to-Vec actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_string_into_bytes_rebind.py`、`unialloc/tests/string_into_bytes_rebind.rs` |
 | Exact str-to-owned String actual-rewrite/isolation probe | `tools/unialloc-rustc-pass/test_mir_str_to_owned_outer_owner.py` (`24bb079`; current/pinned actual wrapper, slice/generic/custom fail-closed controls, functional only) |
+| Exact fmt-format adversarial fail-closed probe | `tools/unialloc-rustc-pass/test_mir_fmt_format_fail_closed.py` (two-crate current/pinned actual wrapper; reentrant allocating `Display`; functional only) |
 | Vec-to-boxed-slice actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_vec_into_boxed_slice_rebind.py`；runtime regressions `vec_into_boxed_slice_transfers_exact_and_moved_shrink_identities`、`vec_into_boxed_slice_rejection_preserves_exact_source_policy`、`vec_into_boxed_slice_missing_record_suppresses_outer_and_auto_attribution` |
 | VecDeque same-layout actual-rewrite/isolation probe | `tools/unialloc-rustc-pass/test_mir_vecdeque_same_layout_type_isolation.py` (`5eb25f5`; hosted/fixed one-shot functional evidence) |
 | VecDeque capacity outer-owner actual-rewrite probe | `tools/unialloc-rustc-pass/test_mir_vecdeque_capacity_outer_owner.py` (`c02baa6`; current/pinned exact capacity paths, fail-closed negatives, functional only) |
@@ -658,6 +659,22 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   raw-no-metadata counters，因此 raw 是 missing，不是 `0`。与 frozen
   `d50795f` 的 `236→250` / `590→576` 仅是和 14 条 exact matcher row 一致的
   跨 artifact 算术/推断，不是 rebinding、whole-program 或性能结论。
+- **exact `fmt::format` 有意 fail closed：** current-source 中 11 条 exact row
+  保持 unresolved/audit-only。原因不是尚未补 matcher，而是 `fmt::Arguments`
+  可执行任意、reentrant `Display` callback；callback 可自行分配 `Vec`/`Box`，
+  整体套用外层 `String` scope 会错误继承 identity。新的 two-crate actual-wrapper
+  probe 在 current 与 `nightly-2022-07-01` 均 PASS；helper 明确排除 rewrite，
+  两边 runtime 都是 callback `1`、typed alloc/dealloc/cache-hit/cache-insert
+  `0/0/0/0`、fallback/raw alloc `3/3`、fallback/raw dealloc `3/3`、
+  mismatch/corrupt `0/0`。
+  这是 bounded adversarial regression，不是 universal proof 或性能结果。
+- **runner 与历史 artifact 边界：** `1fcb5c2` 只让未来 Oxipng run 保留 raw
+  counters；没有重跑或 rebind `24bb079` one-shot，所以旧 artifact 的 raw
+  仍是 missing，不是 `0`。
+- **被拒绝的热点优化：** inline type-cache POP 三次 diagnostic baseline
+  median/range 为 `116.40 ns` / `115.66–116.74 ns`，修改后为 `117.39 ns` /
+  `116.51–118.19 ns`，方向 `+0.85%`（更慢）；修改已精确回退。这只解释
+  为什么不接受该优化，不是性能 claim。
 - `d50795f` 数字只绑定 `d50795f`，`24bb079` 数字只绑定 `24bb079`；跨
   artifact 对照不是 rebinding。没有 timing、论文百分比、universal
   coverage、whole-app exact-pairing 或性能 claim。
