@@ -499,25 +499,45 @@ impl RustAllocator {
             return;
         }
         reject_global_delayed_free_owned_pointer(ptr);
+        let _ = self.dealloc_raw_backend(ptr, layout);
+    }
+
+    /// Release a pointer while its process-visible retained-ownership record is
+    /// still published. The caller must be the unique owner of that record and
+    /// retire it only after this function reports that the backend release ran.
+    #[inline]
+    pub(crate) unsafe fn dealloc_raw_as_retained_owner(
+        &self,
+        ptr: *mut u8,
+        layout: Layout,
+    ) -> bool {
+        if ptr.is_null() || layout.size() == 0 {
+            return true;
+        }
+        self.dealloc_raw_backend(ptr, layout)
+    }
+
+    #[inline]
+    unsafe fn dealloc_raw_backend(&self, ptr: *mut u8, layout: Layout) -> bool {
         if layout_uses_over_page_alignment(layout) {
             dealloc_over_page_aligned_raw(ptr, layout);
-            return;
+            return true;
         }
         #[cfg(feature = "fixed_heap")]
         if !ensure_fixed_heap_runtime_ready() {
-            return;
+            return false;
         }
 
         #[cfg(not(feature = "fixed_heap"))]
         {
             let alloc = &mut (*GlobalTcache);
             alloc.deallocate(NonNull::new_unchecked(ptr), layout);
+            true
         }
         #[cfg(feature = "fixed_heap")]
         {
-            let _ = with_fixed_tcache_mut(|alloc| {
-                alloc.deallocate(NonNull::new_unchecked(ptr), layout)
-            });
+            with_fixed_tcache_mut(|alloc| alloc.deallocate(NonNull::new_unchecked(ptr), layout))
+                .is_some()
         }
     }
 

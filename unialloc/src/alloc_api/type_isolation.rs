@@ -2597,6 +2597,10 @@ static GLOBAL_DELAYED_FREE_OWNERSHIP: [Mutex<GlobalDelayedFreeOwnershipTable>;
 static GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_DELAYED_TO_TYPE_RECLAIM_PHASE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_DELAYED_TERMINAL_RELEASE_PHASE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_TYPE_CACHE_TERMINAL_RELEASE_PHASE: AtomicUsize = AtomicUsize::new(0);
 
 static GLOBAL_TYPE_CACHE_OWNERSHIP: [Mutex<GlobalTypeCacheOwnershipTable>;
     GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT] = [
@@ -8062,8 +8066,12 @@ unsafe fn release_evicted_segregated_type_cache_entry(
     if slot.metadata.requests(FLAG_FORCE_INITIALIZE) {
         core::ptr::write_bytes(slot.ptr, 0, evicted_layout.size());
     }
-    let _ = unregister_global_type_cache_ownership(slot.ptr);
-    alloc.dealloc_raw(slot.ptr, evicted_layout);
+    let _ = terminal_release_retained_raw(
+        alloc,
+        slot.ptr,
+        evicted_layout,
+        TerminalRetainedOwnership::TypeCache,
+    );
 }
 
 #[inline]
@@ -9446,6 +9454,19 @@ fn reject_missed_delayed_to_type_handoff_for_test() {
     }
 }
 
+#[cfg(test)]
+fn pause_before_terminal_raw_release_for_test(phase: &AtomicUsize) {
+    if phase
+        .compare_exchange(1, 2, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        while phase.load(Ordering::Acquire) == 2 {
+            core::hint::spin_loop();
+        }
+        phase.store(0, Ordering::Release);
+    }
+}
+
 /// Fail-stop before a caller can read, resize, release, or otherwise reclaim a
 /// pointer whose delayed-free ownership has already been published by another
 /// thread. Raw and trait-level allocator entry points call this in addition to
@@ -9510,6 +9531,79 @@ fn unregister_global_delayed_free_ownership(ptr: *mut u8) -> bool {
     };
     table.ptrs[idx] = 0;
     GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+    true
+}
+
+#[derive(Clone, Copy, Debug)]
+enum TerminalRetainedOwnership {
+    DelayedFree,
+    TypeCache,
+}
+
+impl TerminalRetainedOwnership {
+    #[inline]
+    fn contains(self, ptr: *mut u8) -> bool {
+        match self {
+            Self::DelayedFree => global_delayed_free_contains_ptr(ptr),
+            Self::TypeCache => global_type_cache_contains_ptr(ptr),
+        }
+    }
+
+    #[inline]
+    fn conflicting_domain_contains(self, ptr: *mut u8) -> bool {
+        match self {
+            Self::DelayedFree => global_type_cache_contains_ptr(ptr),
+            Self::TypeCache => global_delayed_free_contains_ptr(ptr),
+        }
+    }
+
+    #[inline]
+    fn unregister(self, ptr: *mut u8) -> bool {
+        match self {
+            Self::DelayedFree => unregister_global_delayed_free_ownership(ptr),
+            Self::TypeCache => unregister_global_type_cache_ownership(ptr),
+        }
+    }
+
+    #[cfg(test)]
+    #[inline]
+    fn test_phase(self) -> &'static AtomicUsize {
+        match self {
+            Self::DelayedFree => &TEST_DELAYED_TERMINAL_RELEASE_PHASE,
+            Self::TypeCache => &TEST_TYPE_CACHE_TERMINAL_RELEASE_PHASE,
+        }
+    }
+}
+
+/// Release the backend allocation before retiring its process-visible retained
+/// ownership. This closes the terminal-release interval in which a foreign
+/// stale reclaimer could otherwise pass both ownership guards and race the sole
+/// raw release.
+#[inline]
+unsafe fn terminal_release_retained_raw(
+    alloc: &RustAllocator,
+    ptr: *mut u8,
+    layout: Layout,
+    ownership: TerminalRetainedOwnership,
+) -> bool {
+    if !ownership.contains(ptr) {
+        // Preserve the existing immediate-release fallback for entries that
+        // could not reserve a bounded process-visible ownership slot.
+        alloc.dealloc_raw(ptr, layout);
+        return true;
+    }
+    if ownership.conflicting_domain_contains(ptr) {
+        panic!("retained pointer published in conflicting ownership domains");
+    }
+    #[cfg(test)]
+    pause_before_terminal_raw_release_for_test(ownership.test_phase());
+    if !alloc.dealloc_raw_as_retained_owner(ptr, layout) {
+        // Keep the record published if the backend could not run. Losing the
+        // memory is safer than exposing a pointer that still has a sole owner.
+        return false;
+    }
+    let removed = ownership.unregister(ptr);
+    debug_assert!(removed, "terminal retained ownership disappeared early");
     true
 }
 
@@ -9770,11 +9864,15 @@ unsafe fn release_delayed_slot(alloc: &RustAllocator, slot: DelayedFreeSlot) {
         let _ = unregister_global_delayed_free_ownership(slot.ptr);
         return;
     }
-    let _ = unregister_global_delayed_free_ownership(slot.ptr);
     if metadata.requests(FLAG_FORCE_INITIALIZE) {
         core::ptr::write_bytes(slot.ptr, 0, layout.size());
     }
-    alloc.dealloc_raw(slot.ptr, layout);
+    let _ = terminal_release_retained_raw(
+        alloc,
+        slot.ptr,
+        layout,
+        TerminalRetainedOwnership::DelayedFree,
+    );
 }
 
 #[inline]
@@ -9826,12 +9924,17 @@ pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAl
                     idx += 1;
                     continue;
                 }
-                let _ = unregister_global_delayed_free_ownership(slot.ptr);
                 if slot.metadata.requests(FLAG_FORCE_INITIALIZE) {
                     core::ptr::write_bytes(slot.ptr, 0, layout.size());
                 }
-                alloc.dealloc_raw(slot.ptr, layout);
-                released = released.saturating_add(1);
+                if terminal_release_retained_raw(
+                    alloc,
+                    slot.ptr,
+                    layout,
+                    TerminalRetainedOwnership::DelayedFree,
+                ) {
+                    released = released.saturating_add(1);
+                }
             }
         }
         idx += 1;
@@ -9846,9 +9949,14 @@ pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAl
     INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
     if !inline.is_empty() {
         if let Ok(layout) = Layout::from_size_align(inline.size, inline.align) {
-            let _ = unregister_global_type_cache_ownership(inline.ptr);
-            alloc.dealloc_raw(inline.ptr, layout);
-            released = released.saturating_add(1);
+            if terminal_release_retained_raw(
+                alloc,
+                inline.ptr,
+                layout,
+                TerminalRetainedOwnership::TypeCache,
+            ) {
+                released = released.saturating_add(1);
+            }
         }
     }
 
@@ -9868,9 +9976,14 @@ pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAl
             let align = node.add(2).read();
             match Layout::from_size_align(size, align) {
                 Ok(layout) => {
-                    let _ = unregister_global_type_cache_ownership(current);
-                    alloc.dealloc_raw(current, layout);
-                    released = released.saturating_add(1);
+                    if terminal_release_retained_raw(
+                        alloc,
+                        current,
+                        layout,
+                        TerminalRetainedOwnership::TypeCache,
+                    ) {
+                        released = released.saturating_add(1);
+                    }
                 }
                 Err(_) => {
                     break;
@@ -10069,9 +10182,12 @@ unsafe fn drain_segregated_entry_at_thread_exit(
     if entry.metadata.requests(FLAG_FORCE_INITIALIZE) {
         core::ptr::write_bytes(entry.ptr, 0, layout.size());
     }
-    let _ = unregister_global_type_cache_ownership(entry.ptr);
-    alloc.dealloc_raw(entry.ptr, layout);
-    true
+    terminal_release_retained_raw(
+        alloc,
+        entry.ptr,
+        layout,
+        TerminalRetainedOwnership::TypeCache,
+    )
 }
 
 const SEMANTIC_REALLOC_IN_PLACE_INCOMPATIBLE_FLAGS: u32 =
@@ -12876,6 +12992,52 @@ mod tests {
                     _ => 0,
                 };
                 if TEST_DELAYED_TO_TYPE_RECLAIM_PHASE
+                    .compare_exchange(phase, next, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+                {
+                    return;
+                }
+            }
+        }
+    }
+
+    struct TerminalReleasePhaseGuard {
+        phase: &'static AtomicUsize,
+    }
+
+    impl TerminalReleasePhaseGuard {
+        fn arm(phase: &'static AtomicUsize) -> Self {
+            assert!(
+                phase
+                    .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok(),
+                "terminal-release test phase must start idle"
+            );
+            Self { phase }
+        }
+
+        fn release_owner(&self) {
+            self.phase.store(3, Ordering::Release);
+        }
+
+        fn reset(&self) {
+            self.phase.store(0, Ordering::Release);
+        }
+    }
+
+    impl Drop for TerminalReleasePhaseGuard {
+        fn drop(&mut self) {
+            loop {
+                let phase = self.phase.load(Ordering::Acquire);
+                let next = match phase {
+                    0 => return,
+                    1 => 0,
+                    2 => 3,
+                    3 => return,
+                    _ => 0,
+                };
+                if self
+                    .phase
                     .compare_exchange(phase, next, Ordering::AcqRel, Ordering::Acquire)
                     .is_ok()
                 {
@@ -24200,6 +24362,116 @@ mod tests {
         assert!(
             !duplicate.1,
             "a foreign thread must not reuse storage while another thread quarantines it"
+        );
+    }
+
+    fn assert_terminal_release_keeps_process_ownership_until_raw_free(
+        domain: TerminalRetainedOwnership,
+    ) {
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = match domain {
+            TerminalRetainedOwnership::DelayedFree => AllocationMetadata::for_type(0xD17A_D0B8)
+                .with_module(0xC0DE_D0B8)
+                .with_callsite(0xA110_D0B8)
+                .with_flags(FLAG_DELAYED_FREE),
+            TerminalRetainedOwnership::TypeCache => AllocationMetadata::for_type(0x7A11_CACE)
+                .with_module(0xC0DE_CACE)
+                .with_callsite(0xA110_CACE)
+                .with_flags(FLAG_TYPE_ISOLATED),
+        };
+        let (retained_tx, retained_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (released_tx, released_rx) = std::sync::mpsc::channel();
+        let owner = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert!(!ptr.is_null());
+            unsafe {
+                alloc.dealloc_with_metadata(ptr, layout, metadata);
+            }
+            assert!(domain.contains(ptr));
+            if matches!(domain, TerminalRetainedOwnership::DelayedFree) {
+                assert_eq!(delayed_free_snapshot().occupied_slots, 1);
+            }
+            retained_tx.send(ptr as usize).unwrap();
+            release_rx.recv().unwrap();
+            unsafe {
+                match domain {
+                    TerminalRetainedOwnership::DelayedFree => release_delayed_free_for_test(&alloc),
+                    TerminalRetainedOwnership::TypeCache => {
+                        drain_current_thread_semantic_retained_state(&alloc);
+                    }
+                }
+            }
+            released_tx.send(()).unwrap();
+        });
+
+        let ptr = retained_rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("owner should publish retained pointer") as *mut u8;
+        assert!(domain.contains(ptr));
+        let phase = domain.test_phase();
+        let phase_guard = TerminalReleasePhaseGuard::arm(phase);
+        release_tx.send(()).unwrap();
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while phase.load(Ordering::Acquire) != 2 {
+            if std::time::Instant::now() >= deadline {
+                phase_guard.release_owner();
+                let _ = released_rx
+                    .recv_timeout(std::time::Duration::from_secs(10))
+                    .unwrap_or_else(|_| std::process::abort());
+                owner.join().expect("timed-out terminal-release owner");
+                phase_guard.reset();
+                panic!("terminal release did not reach the ownership boundary");
+            }
+            thread::yield_now();
+        }
+
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            reject_global_delayed_free_owned_pointer(ptr);
+        }))
+        .is_err();
+        phase_guard.release_owner();
+        released_rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("owner should complete terminal raw release");
+        owner.join().expect("terminal-release owner");
+        phase_guard.reset();
+
+        assert!(
+            rejected,
+            "{:?} terminal release must remain process-owned until the sole raw release completes",
+            domain
+        );
+        assert!(!domain.contains(ptr));
+    }
+
+    #[test]
+    fn delayed_terminal_release_keeps_process_ownership_until_raw_free() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        assert_terminal_release_keeps_process_ownership_until_raw_free(
+            TerminalRetainedOwnership::DelayedFree,
+        );
+    }
+
+    #[test]
+    fn type_cache_terminal_release_keeps_process_ownership_until_raw_free() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        assert_terminal_release_keeps_process_ownership_until_raw_free(
+            TerminalRetainedOwnership::TypeCache,
         );
     }
 
