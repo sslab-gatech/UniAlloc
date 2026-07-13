@@ -755,3 +755,31 @@ identity cache hit, and zero fallback/raw/mismatch/corrupt counters.  Stable
 `HashSet` exposes no deterministic raw-table address, so this is bounded
 identity-directed cache-selection evidence, not universal address behavior,
 external-application coverage, or performance evidence.
+
+### Recovery/TLS fail-closed fixes and exact `String::from(&str)`
+
+Commit `79d0184` makes `GlobalAlloc::dealloc` treat a live recovery record with
+a different valid caller `Layout` as a mismatch, not as missing. It returns
+before raw/fallback/cache effects, preserves the authoritative record, and
+accepts a later exact-layout retry. Commit `61233b6` publishes the Unix fast TLS
+pointer only after pthread destructor ownership and `pthread_setspecific`
+succeed; an injected save failure leaves it invisible and returns it for
+reclamation. These are bounded correctness results, not performance claims.
+
+`test_mir_string_from_str_outer_owner.py` drives an ordinary Cargo application
+through the actual `RUSTC_WRAPPER` on the current toolchain and
+`nightly-2022-07-01`. Commit `08a1bbf` rewrites only exact core `From::from` with
+alloc `String` destination and one immutable `&str` source. Other `From`/source
+shapes and arbitrary String factories remain audit-only and fail closed.
+
+```sh
+python3 tools/unialloc-rustc-pass/test_mir_string_from_str_outer_owner.py
+UNIALLOC_RUSTC_TOOLCHAIN=nightly-2022-07-01 \
+  python3 tools/unialloc-rustc-pass/test_mir_string_from_str_outer_owner.py
+```
+
+Both runs report typed allocation/deallocation `3/3`, wrong-type non-reuse,
+exact reuse, and zero fallback/raw, recovery-mismatch, or corrupt-slot events.
+This is bounded functional evidence, not universal `String`, external-app, or
+performance evidence. Oxipng was not rerun; the accepted `19ffb71` artifact
+remains stale and cannot be rebound.

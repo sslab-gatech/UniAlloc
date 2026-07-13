@@ -1611,3 +1611,30 @@ two exact recovery matches, zero authentication failures, and empty final
 recovery/tag/quarantine state.  The test found no production defect and does
 not establish arbitrary-size/error behavior, hardware PAC/hugepage execution,
 or performance.
+
+## Recovery-layout, Unix TLS publication, and exact `String::from(&str)`
+
+Commit `79d0184` makes `GlobalAlloc::dealloc` distinguish a missing recovery
+record from a live record whose authoritative `Layout` disagrees with the
+caller. A valid mismatch now fails closed before raw deallocation, fallback
+accounting, or cache publication; the record remains intact, and an exact-layout
+retry consumes it and routes the pointer under its allocation identity. The
+same-size-class regression proves this bounded retry invariant, not arbitrary
+forged-pointer safety or performance.
+
+Commit `61233b6` makes Unix TLS publication transactional with pthread destructor
+ownership. The generated path installs the pthread key and completes
+`pthread_setspecific` before publishing the fast Rust TLS pointer. An injected
+save failure leaves the pointer unpublished, returns it for reclamation, and
+observes a null TLS load plus one failure. This is bounded Unix failure-path
+evidence; Windows FLS is separate and no throughput claim is made.
+
+Commit `08a1bbf` adds current and `nightly-2022-07-01` actual-`RUSTC_WRAPPER`
+evidence for exact `String::from(immutable &str)`. The matcher requires the
+exact core `From::from` DefId, exact alloc `String` destination, and one immutable
+`&str`; other `From`/source shapes and arbitrary String factories remain
+audit-only and fail closed. Both toolchains report typed allocation/deallocation
+`3/3`, wrong-type non-reuse, exact reuse, and zero fallback/raw, mismatch, or
+corrupt-slot events. This is bounded functional evidence, not universal
+`String`, external-application, or performance evidence. Oxipng was not rerun;
+the accepted `19ffb71` artifact remains stale and cannot be rebound.
