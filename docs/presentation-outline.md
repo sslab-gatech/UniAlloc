@@ -572,6 +572,7 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 | Vec realloc/isolation actual-rewrite probe | `unialloc/src/bin/rustc_driver_mir_vec_realloc_identity_probe.rs`、`tools/unialloc-rustc-pass/test_mir_vec_realloc_identity_probe.py` |
 | Cross-thread Box-to-Vec actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_cross_thread_box_slice_into_vec_rebind.py` |
 | String-to-Vec actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_string_into_bytes_rebind.py`、`unialloc/tests/string_into_bytes_rebind.rs` |
+| Exact str-to-owned String actual-rewrite/isolation probe | `tools/unialloc-rustc-pass/test_mir_str_to_owned_outer_owner.py` (`24bb079`; current/pinned actual wrapper, slice/generic/custom fail-closed controls, functional only) |
 | Vec-to-boxed-slice actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_vec_into_boxed_slice_rebind.py`；runtime regressions `vec_into_boxed_slice_transfers_exact_and_moved_shrink_identities`、`vec_into_boxed_slice_rejection_preserves_exact_source_policy`、`vec_into_boxed_slice_missing_record_suppresses_outer_and_auto_attribution` |
 | VecDeque same-layout actual-rewrite/isolation probe | `tools/unialloc-rustc-pass/test_mir_vecdeque_same_layout_type_isolation.py` (`5eb25f5`; hosted/fixed one-shot functional evidence) |
 | VecDeque capacity outer-owner actual-rewrite probe | `tools/unialloc-rustc-pass/test_mir_vecdeque_capacity_outer_owner.py` (`c02baa6`; current/pinned exact capacity paths, fail-closed negatives, functional only) |
@@ -629,15 +630,37 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   runtime typed alloc/dealloc `856/846`、cache hits `808`，injected isolation
   oracle PASS。必须同时展示 `592` unresolved、one recovery-corrected mismatch
   与 `whole_program_compiler_coverage=false`；这是功能/隔离证据，不是 benchmark。
-- **realloc 安全：** `1827e4f` 对 local compiler realloc 的 recovery-layout
-  mismatch 在任何 mutation 前 fail closed；exact retry 成功。hosted/fixed
-  focused PASS，集成 hook 为 UniAlloc `680/680`、std-bench `430/430`。
+- **realloc 安全：** `1abb4dd` + `03a5ef0` 让 alignment-changing
+  `Allocator::{grow,shrink}` 在 recovery-layout mismatch 时先返回
+  `AllocError`；修复前的错误路径可能先分配/复制，再按 caller 的错误 layout
+  释放旧地址。`386759f` 同样修复 default/direct `SemanticAlloc`：minimized
+  pre-fix zero-size case 错误返回 `0x8` success sentinel，现在在
+  zero/in-place/move mutation 前返回 null。两条路径都保留 authoritative exact record，
+  hosted/fixed focused PASS。这是 P0 correctness evidence，不是性能结果。
 - **ownership transfer：** `003704a` 使 exact `Vec<u8>::from(String)` 在 current
   与 pinned toolchain 均 actual-rewrite PASS，static/runtime `1/1`、`1/1/0`，
   wrong String 不复用而 exact Vec 复用。不要宣称 explicit `From<&str>` 或
   custom allocator 已有动态覆盖。
-- 以上 Oxipng 数字只绑定 `d50795f`；后续提交不得 rebinding。没有 timing、
-  论文百分比、universal coverage 或 whole-app exact-pairing claim。
+- **exact `str::to_owned`：** `24bb079` 把 exact alloc
+  `<str as ToOwned>::to_owned(&str) -> String` 降低为 String scope；冻结的
+  `d50795f` Oxipng audit 中该 gap 出现 14 次，但没有跨 revision rebinding。
+  `nightly-2026-06-11` 与 `nightly-2022-07-01` actual `RUSTC_WRAPPER` 均 PASS；
+  slice/generic/custom controls fail closed，runtime typed alloc/dealloc `3/3`、
+  exact cache hit `1`、wrong-type non-reuse，fallback/raw/mismatch/corrupt 全为
+  `0`。这是 exact-surface 功能/隔离证据，不是 universal coverage 或性能。
+- **`24bb079` current-source Oxipng one-shot：** artifact
+  `oxipng-current-head-24bb079-20260713-one-shot` 绑定 clean scoped `24bb079`
+  与 pinned Oxipng `dea2321`；build/run `0/0`、输出 hash 匹配。audit
+  direct/scope/Drop `6/250/320`、transfer `12/12`，但仍有 semantic/Drop
+  unresolved `576/2` 且 `whole_program_compiler_coverage=false`。runtime typed
+  `856/846`、fallback `214/174`、cache hits `808`，injected oracle PASS；
+  whole-run mismatch `1`、状态 `recovery_corrected_non_exact`。runner 未输出
+  raw-no-metadata counters，因此 raw 是 missing，不是 `0`。与 frozen
+  `d50795f` 的 `236→250` / `590→576` 仅是和 14 条 exact matcher row 一致的
+  跨 artifact 算术/推断，不是 rebinding、whole-program 或性能结论。
+- `d50795f` 数字只绑定 `d50795f`，`24bb079` 数字只绑定 `24bb079`；跨
+  artifact 对照不是 rebinding。没有 timing、论文百分比、universal
+  coverage、whole-app exact-pairing 或性能 claim。
 
 ---
 

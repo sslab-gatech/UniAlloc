@@ -828,3 +828,63 @@ Reference, generic, and custom-allocator forms remain fail closed. The dynamic
 fixture does not claim explicit `From<&str>` or custom-allocator coverage.
 Commit `1827e4f` independently makes a mismatched recovery `Layout` in the local
 compiler realloc ABI fail before mutation while preserving exact retry.
+
+### Current recovery-layout P0 closure
+
+Commits `1abb4dd` and `03a5ef0` add a non-consuming `Missing / Mismatched /
+Exact` preflight to the alignment-changing `Allocator::{grow, shrink}` helper
+and make the regression's fail-first cleanup safe. Before the fix, a mismatch
+could enter the missing-record branch, allocate and copy a replacement, and
+release the old address under the caller's wrong layout. A mismatch now returns
+`AllocError` before allocation, copy, cache/delayed-free effects, or old-pointer
+release, leaving the exact record available for a correct retry.
+
+Commit `386759f` applies the same preflight to both the default and direct
+`RustAllocator` `SemanticAlloc::realloc_with_split_metadata` implementations.
+The minimized pre-fix zero-size call returned the aligned non-null sentinel
+`0x8` for a mismatched old layout; it now returns null before zero-size success,
+in-place record/stat/tag mutation, replacement allocation, copying, or release.
+Hosted and `fixed_heap` focused tests pass. This is bounded P0 fail-closed
+correctness evidence, not arbitrary-pointer safety or performance evidence.
+
+### Exact `<str as ToOwned>::to_owned` String scope
+
+Commit `24bb079` recognizes only alloc's exact `ToOwned::to_owned`
+monomorphization with immutable `&str` input and alloc `String` output. The
+preserved `d50795f` Oxipng audit contains 14 unresolved candidates for this exact
+surface; it is frozen motivation, not a current-source Oxipng rerun or rebound
+count. Run the actual wrapper probe on the current and pinned toolchains:
+
+```sh
+python3 tools/unialloc-rustc-pass/test_mir_str_to_owned_outer_owner.py
+python3 tools/unialloc-rustc-pass/test_mir_str_to_owned_outer_owner.py \
+  --toolchain nightly-2022-07-01
+```
+
+`nightly-2026-06-11` and `nightly-2022-07-01` both apply the exact `String`
+scope. Slice `ToOwned`, unresolved generic `T: ToOwned`, and custom same-name
+methods remain audit-only and fail closed. Runtime observes three typed
+allocations and three typed deallocations, one exact-type cache hit, wrong-type
+non-reuse, and zero fallback allocation/deallocation, raw
+allocation/deallocation/reallocation, recovery mismatch, or corrupt cache slot.
+This is exact-surface functional and isolation evidence, not universal
+`ToOwned`/`String` coverage or performance evidence.
+
+A separate source-bound Oxipng v4.0.3 one-shot at
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-24bb079-20260713-one-shot/`
+binds clean scoped source `24bb079846833dda1c3a30099903dcd37b80d989` and
+pinned application `dea23211ae6259007e068c59ab16929798d00d96` on
+`nightly-2022-07-01`. Build/run returned `0/0` and the output SHA-256 matched
+`565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`.
+The target-crate audit reports direct/scope/Drop `6/250/320`, static transfer
+`12/12`, unresolved semantic/Drop `576/2`, and
+`whole_program_compiler_coverage=false`; runtime reports typed alloc/dealloc
+`856/846`, fallback alloc/dealloc `214/174`, cache hits `808`, a passing injected
+wrong-type oracle, and one whole-run recovery mismatch
+(`recovery_corrected_non_exact`). The runner did not emit raw-no-metadata
+counters, so raw evidence is missing, not zero. Relative to the frozen
+`d50795f` artifact, `236→250` applied scopes and `590→576` unresolved semantic
+rows agree with the 14 exact `str::to_owned` rows changing from unresolved to
+applied; this is cross-artifact arithmetic and matcher-consistent inference
+only, not rebinding, whole-program proof, or performance evidence. Summary
+SHA-256 is `113d2fadd5ba29f7e837c4a1a6931266c9ab1988e0ba46b5c92613da7dfda620`.

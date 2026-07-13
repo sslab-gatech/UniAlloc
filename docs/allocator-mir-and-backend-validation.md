@@ -1680,3 +1680,52 @@ pointer/payload/capacity preserved, wrong-String non-reuse, exact-Vec reuse, and
 zero fallback/raw/mismatch/corrupt events. Reference, generic, and custom-
 allocator shapes remain fail closed; the dynamic fixture does not establish
 explicit `From<&str>` or custom-allocator execution coverage.
+
+## Current-source recovery-layout closure and exact `str::to_owned`
+
+Commits `1abb4dd` and `03a5ef0` close the remaining alignment-changing
+`Allocator::{grow, shrink}` recovery-layout path and make its regression safe to
+run against the old behavior. Before the fix, a live same-address record under a
+different valid `Layout` was collapsed into the missing-record path: the
+allocator could allocate and copy a replacement, then release the old address
+under the caller's wrong layout. The checked tri-state preflight now returns
+`AllocError` before allocation, copy, cache/delayed-free effects, or old-pointer
+release while preserving the authoritative exact record. Commit `386759f`
+applies the same rule to the default and `RustAllocator` `SemanticAlloc` split
+realloc boundaries. Its minimized pre-fix zero-size case returned the aligned
+zero-size success sentinel (`0x8`) for a mismatched old layout; the current path
+returns null before zero-size success, in-place mutation, or moved reallocation.
+Hosted and `fixed_heap` focused tests pass. These are bounded P0 fail-closed
+correctness results, not arbitrary-pointer safety or performance evidence.
+
+Commit `24bb079` adds an exact compiler proof for alloc's
+`<str as ToOwned>::to_owned` with immutable `&str` input and `String` output.
+The frozen `d50795f` Oxipng audit contains 14 unresolved candidates of this exact
+surface; that preserved count motivated the matcher but is not rebound to the
+new source. Actual `RUSTC_WRAPPER` probes pass on `nightly-2026-06-11` and
+`nightly-2022-07-01`: the exact call is rewritten to a `String` semantic scope,
+while slice, generic, and custom same-name controls remain audit-only. Runtime
+reports three typed allocations and three typed deallocations, one exact-type
+cache hit, wrong-type non-reuse, and zero fallback allocation/deallocation, raw
+allocation/deallocation/reallocation, recovery mismatch, or corrupt cache slot.
+This is exact-surface functional and isolation evidence, not universal
+`ToOwned`/`String` coverage, a new Oxipng execution, or performance evidence.
+
+A separate source-bound Oxipng v4.0.3 one-shot at
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-24bb079-20260713-one-shot/`
+binds clean scoped source `24bb079846833dda1c3a30099903dcd37b80d989` and
+pinned application `dea23211ae6259007e068c59ab16929798d00d96` on
+`nightly-2022-07-01`. Build/run returned `0/0` and the output SHA-256 matched
+`565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`.
+The target-crate audit reports direct/scope/Drop `6/250/320`, static transfer
+`12/12`, unresolved semantic/Drop `576/2`, and
+`whole_program_compiler_coverage=false`; runtime reports typed alloc/dealloc
+`856/846`, fallback alloc/dealloc `214/174`, cache hits `808`, a passing injected
+wrong-type oracle, and one whole-run recovery mismatch
+(`recovery_corrected_non_exact`). The runner did not emit raw-no-metadata
+counters, so raw evidence is missing, not zero. Relative to the frozen
+`d50795f` artifact, `236→250` applied scopes and `590→576` unresolved semantic
+rows agree with the 14 exact `str::to_owned` rows changing from unresolved to
+applied; this is cross-artifact arithmetic and matcher-consistent inference
+only, not rebinding, whole-program proof, or performance evidence. Summary
+SHA-256 is `113d2fadd5ba29f7e837c4a1a6931266c9ab1988e0ba46b5c92613da7dfda620`.
