@@ -293,11 +293,17 @@ pub fn tls_static(input: TokenStream) -> TokenStream {
                 }}
                 #[cfg(not(any(unialloc_target_arm64e, windows)))]
                 {{
-                    {name}_VALUE = ptr;
-                    if {ensure_tsd_name}() {{
-                        let _ = save_tls(ptr as *mut u8);
+                    // The pthread key owns thread-exit cleanup. Do not publish
+                    // the fast Rust TLS pointer unless destructor ownership is
+                    // registered and the matching pthread slot accepted it.
+                    // Otherwise the cache would remain reachable during the
+                    // thread lifetime but leak when Rust TLS is torn down.
+                    if !{ensure_tsd_name}() || !save_tls(ptr as *mut u8) {{
+                        core::result::Result::Err(ptr)
+                    }} else {{
+                        {name}_VALUE = ptr;
+                        core::result::Result::Ok(())
                     }}
-                    core::result::Result::Ok(())
                 }}
             }}
 

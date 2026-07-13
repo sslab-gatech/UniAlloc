@@ -2152,6 +2152,38 @@ mod tests {
 
     #[cfg(all(not(windows), not(feature = "fixed_heap")))]
     #[test]
+    fn unix_tls_save_failure_does_not_publish_unowned_cache() {
+        std::thread::spawn(|| unsafe {
+            use crate::pal::sync::general_thread_local::{
+                fail_next_tls_save_for_test, tls_save_failure_count,
+            };
+
+            assert!(globaltcache_load_tls_value().is_null());
+            let failures_before = tls_save_failure_count();
+            let layout = Layout::new::<ThreadCache>();
+            let allocation = MetadataAllocator {}
+                .allocate(layout)
+                .expect("metadata allocation should succeed");
+            let cache = allocation.as_non_null_ptr().as_ptr() as *mut ThreadCache;
+            core::ptr::write(cache, ThreadCache::new());
+
+            fail_next_tls_save_for_test();
+            let unpublished = globaltcache_store_tls_value(cache)
+                .expect_err("injected pthread_setspecific failure was not observed");
+            assert_eq!(unpublished, cache);
+            assert!(
+                globaltcache_load_tls_value().is_null(),
+                "failed pthread publication exposed a cache without destructor ownership"
+            );
+            assert_eq!(tls_save_failure_count(), failures_before + 1);
+            globaltcache_reclaim_unpublished_tls_value(unpublished);
+        })
+        .join()
+        .expect("Unix TLS publication-failure worker should finish");
+    }
+
+    #[cfg(all(not(windows), not(feature = "fixed_heap")))]
+    #[test]
     fn free_thread_cache_clears_tls_before_storage_reuse() {
         std::thread::spawn(|| unsafe {
             let _ = (&*GlobalTcache).footprint_snapshot();

@@ -10,6 +10,9 @@ pub mod pthread_thread_local {
     static mut PKEY: TlsKey = 0;
     static PKEY_READY: AtomicBool = AtomicBool::new(false);
     static TLS_SAVE_FAILURES: AtomicUsize = AtomicUsize::new(0);
+    #[cfg(test)]
+    #[thread_local]
+    static mut FAIL_NEXT_TLS_SAVE: bool = false;
 
     pub const fn backend_name() -> &'static str {
         "pthread_key_destructor"
@@ -51,6 +54,13 @@ pub mod pthread_thread_local {
     /// put tls ptr into cleanup function chain
     /// This function is expected to be called once per thread
     pub unsafe fn save_tls(ptr: *mut u8) -> bool {
+        #[cfg(test)]
+        if FAIL_NEXT_TLS_SAVE {
+            FAIL_NEXT_TLS_SAVE = false;
+            TLS_SAVE_FAILURES.fetch_add(1, Ordering::Relaxed);
+            return false;
+        }
+
         if PKEY_READY.load(Ordering::Acquire) {
             let saved = libc::pthread_setspecific(PKEY, ptr as *const c_void) == 0;
             if !saved {
@@ -60,6 +70,13 @@ pub mod pthread_thread_local {
         } else {
             TLS_SAVE_FAILURES.fetch_add(1, Ordering::Relaxed);
             false
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_tls_save_for_test() {
+        unsafe {
+            FAIL_NEXT_TLS_SAVE = true;
         }
     }
 }
