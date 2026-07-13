@@ -1239,6 +1239,37 @@ fn next_auto_metadata_config_generation(config: AutoMetadataConfig) -> usize {
 static AUTO_METADATA_CONFIG: RwLock<AutoMetadataConfig> =
     RwLock::new(AutoMetadataConfig::disabled());
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TypeCacheIdentity {
+    type_id: u64,
+    module_id: u64,
+    flags: u32,
+    lifetime_hint: u16,
+    placement_hint: u16,
+}
+
+impl TypeCacheIdentity {
+    const fn unknown() -> Self {
+        Self {
+            type_id: UNKNOWN_SEMANTIC_ID,
+            module_id: UNKNOWN_SEMANTIC_ID,
+            flags: 0,
+            lifetime_hint: 0,
+            placement_hint: 0,
+        }
+    }
+
+    const fn from_metadata(metadata: AllocationMetadata) -> Self {
+        Self {
+            type_id: metadata.type_id,
+            module_id: metadata.module_id,
+            flags: metadata.flags,
+            lifetime_hint: metadata.lifetime_hint,
+            placement_hint: metadata.placement_hint,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 struct AutoLayoutMetadataHotSlot {
     size: usize,
@@ -1276,7 +1307,7 @@ impl AutoLayoutMetadataHotSlot {
 #[derive(Clone, Copy)]
 struct TypeCacheSlot {
     cache_key: u64,
-    type_id: u64,
+    identity: TypeCacheIdentity,
     head: *mut u8,
     count: usize,
     /// Allocator-rounded bytes represented by the linked nodes in this slot.
@@ -1295,7 +1326,7 @@ impl TypeCacheSlot {
     const fn empty() -> Self {
         Self {
             cache_key: UNKNOWN_SEMANTIC_ID,
-            type_id: UNKNOWN_SEMANTIC_ID,
+            identity: TypeCacheIdentity::unknown(),
             head: core::ptr::null_mut(),
             count: 0,
             retained_bytes: 0,
@@ -1403,7 +1434,7 @@ impl MetadataRecordAuthHotSlot {
 #[derive(Clone, Copy)]
 struct InlineTypeCacheEntry {
     cache_key: u64,
-    metadata: AllocationMetadata,
+    identity: TypeCacheIdentity,
     ptr: *mut u8,
     size: usize,
     align: usize,
@@ -1413,7 +1444,7 @@ impl InlineTypeCacheEntry {
     const fn empty() -> Self {
         Self {
             cache_key: UNKNOWN_SEMANTIC_ID,
-            metadata: AllocationMetadata::unknown(),
+            identity: TypeCacheIdentity::unknown(),
             ptr: core::ptr::null_mut(),
             size: 0,
             align: 1,
@@ -1438,7 +1469,7 @@ impl InlineTypeCacheEntry {
         cache_key: u64,
     ) -> bool {
         self.cache_key == cache_key
-            && type_cache_identity_metadata_matches(self.metadata, metadata)
+            && self.identity == TypeCacheIdentity::from_metadata(metadata)
             && self.size == layout.size()
             && self.align == layout.align()
             && !self.ptr.is_null()
@@ -5869,15 +5900,18 @@ unsafe fn plain_type_cache_can_accept_retained_bytes(incoming_retained_bytes: us
 }
 
 #[inline]
-unsafe fn type_cache_hot_slot(cache_key: u64) -> Option<*mut TypeCacheSlot> {
+unsafe fn type_cache_hot_slot(
+    cache_key: u64,
+    identity: TypeCacheIdentity,
+) -> Option<*mut TypeCacheSlot> {
     if TYPE_CACHE_HOT_SLOT.cache_key == cache_key {
         let idx = TYPE_CACHE_HOT_SLOT.slot_idx & (TYPE_CACHE_SLOTS - 1);
         let slot = &mut TYPE_CACHE[idx];
-        if slot.cache_key == cache_key && !repair_type_cache_slot_accounting_if_possible(slot) {
-            clear_type_cache_slot(slot, cache_key);
-            return None;
-        }
-        if slot.cache_key == cache_key {
+        if slot.cache_key == cache_key && slot.identity == identity {
+            if !repair_type_cache_slot_accounting_if_possible(slot) {
+                clear_type_cache_slot(slot, cache_key);
+                return None;
+            }
             return Some(slot as *mut TypeCacheSlot);
         }
         clear_type_cache_hot_slot(cache_key);
@@ -5887,9 +5921,11 @@ unsafe fn type_cache_hot_slot(cache_key: u64) -> Option<*mut TypeCacheSlot> {
 
 unsafe fn type_cache_find_slot_for_key(
     cache_key: u64,
+    metadata: AllocationMetadata,
     allow_empty: bool,
 ) -> Option<*mut TypeCacheSlot> {
-    if let Some(slot) = type_cache_hot_slot(cache_key) {
+    let identity = TypeCacheIdentity::from_metadata(metadata);
+    if let Some(slot) = type_cache_hot_slot(cache_key, identity) {
         return Some(slot);
     }
 
@@ -5908,7 +5944,7 @@ unsafe fn type_cache_find_slot_for_key(
                 clear_type_cache_slot(slot, stale_cache_key);
             }
         }
-        if slot.cache_key == cache_key {
+        if slot.cache_key == cache_key && slot.identity == identity {
             remember_type_cache_hot_slot(cache_key, idx);
             return Some(slot as *mut TypeCacheSlot);
         }
@@ -6728,7 +6764,7 @@ unsafe fn push_inline_type_cache_eligible_with_key(
     {
         INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry {
             cache_key,
-            metadata,
+            identity: TypeCacheIdentity::from_metadata(metadata),
             ptr,
             size: layout.size(),
             align: layout.align(),
@@ -6763,7 +6799,7 @@ unsafe fn pop_type_cache_eligible_with_key(
     cache_key: u64,
 ) -> Option<*mut u8> {
     let slot_key = plain_type_cache_slot_key(cache_key, layout);
-    let slot = match type_cache_find_slot_for_key(slot_key, false) {
+    let slot = match type_cache_find_slot_for_key(slot_key, metadata, false) {
         Some(slot) => &mut *slot,
         None => {
             record_stats_type_cache_bypass(metadata);
@@ -6865,7 +6901,7 @@ unsafe fn push_type_cache_eligible_with_key(
     }
 
     let slot_key = plain_type_cache_slot_key(cache_key, layout);
-    let slot_ptr = match type_cache_find_slot_for_key(slot_key, true) {
+    let slot_ptr = match type_cache_find_slot_for_key(slot_key, metadata, true) {
         Some(slot) => slot,
         None => {
             record_stats_type_cache_bypass(metadata);
@@ -6907,7 +6943,7 @@ unsafe fn push_type_cache_eligible_with_key(
     node.add(2).write(layout.align());
     if slot.cache_key == UNKNOWN_SEMANTIC_ID {
         slot.cache_key = slot_key;
-        slot.type_id = metadata.type_id;
+        slot.identity = TypeCacheIdentity::from_metadata(metadata);
     }
     slot.head = ptr;
     slot.count += 1;
@@ -24854,7 +24890,7 @@ mod tests {
 
             TYPE_CACHE[slot_idx] = TypeCacheSlot {
                 cache_key: slot_key,
-                type_id: metadata.type_id,
+                identity: TypeCacheIdentity::from_metadata(metadata),
                 head: 1usize as *mut u8,
                 count: 1,
                 retained_bytes: type_cache_retained_bytes_for_layout(layout),
@@ -24863,7 +24899,7 @@ mod tests {
 
             assert_eq!(pop_type_cache(layout, metadata), None);
             assert_eq!(TYPE_CACHE[slot_idx].cache_key, UNKNOWN_SEMANTIC_ID);
-            assert_eq!(TYPE_CACHE[slot_idx].type_id, UNKNOWN_SEMANTIC_ID);
+            assert_eq!(TYPE_CACHE[slot_idx].identity, TypeCacheIdentity::unknown());
             assert!(TYPE_CACHE[slot_idx].head.is_null());
             assert_eq!(TYPE_CACHE[slot_idx].count, 0);
             assert_eq!(
@@ -24893,7 +24929,7 @@ mod tests {
 
             TYPE_CACHE[slot_idx] = TypeCacheSlot {
                 cache_key: slot_key,
-                type_id: metadata.type_id,
+                identity: TypeCacheIdentity::from_metadata(metadata),
                 head: storage.as_mut_ptr() as *mut u8,
                 count: 0,
                 retained_bytes: 0,
@@ -24952,7 +24988,7 @@ mod tests {
             assert!(cache_semantic_free(&alloc, ptr, layout, metadata));
             let inline = inline_type_cache_entry_snapshot_for_test();
             assert_eq!(inline.ptr, ptr);
-            assert_eq!(inline.metadata, metadata);
+            assert_eq!(inline.identity, TypeCacheIdentity::from_metadata(metadata));
             assert!(
                 type_cache_snapshot_for_test()
                     .iter()
@@ -25070,6 +25106,59 @@ mod tests {
                 pop_inline_type_cache_eligible_with_key(layout, module_a, forced_collision_key,),
                 Some(ptr),
                 "rejecting the colliding identity must preserve the entry for its exact owner",
+            );
+        }
+    }
+
+    #[test]
+    fn type_cache_linked_rejects_forced_identity_key_collision() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            let mut storage_a = [0usize; TYPE_CACHE_NODE_WORDS];
+            let mut storage_b = [0usize; TYPE_CACHE_NODE_WORDS];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage_a), align_of::<usize>()).unwrap();
+            let module_a = AllocationMetadata::for_type(0xC003_004B)
+                .with_module(0xC0DE_A)
+                .with_flags(FLAG_TYPE_ISOLATED)
+                .with_lifetime_hint(0x11)
+                .with_placement_hint(0x21);
+            let module_b = AllocationMetadata::for_type(module_a.type_id)
+                .with_module(0xC0DE_B)
+                .with_flags(module_a.flags)
+                .with_lifetime_hint(0x12)
+                .with_placement_hint(0x22);
+            let ptr_a = storage_a.as_mut_ptr() as *mut u8;
+            let ptr_b = storage_b.as_mut_ptr() as *mut u8;
+            let forced_collision_key = 0xC011_1510_C011_1511;
+
+            assert!(push_type_cache_with_key(
+                ptr_a,
+                layout,
+                module_a,
+                forced_collision_key,
+            ));
+            assert_eq!(
+                pop_type_cache_with_key(layout, module_b, forced_collision_key),
+                None,
+                "a linked-cache key collision must not bypass exact module/hint boundaries",
+            );
+            assert!(push_type_cache_with_key(
+                ptr_b,
+                layout,
+                module_b,
+                forced_collision_key,
+            ));
+            assert_eq!(
+                pop_type_cache_with_key(layout, module_b, forced_collision_key),
+                Some(ptr_b),
+                "colliding identities must occupy separate bounded-probe slots",
+            );
+            assert_eq!(
+                pop_type_cache_with_key(layout, module_a, forced_collision_key),
+                Some(ptr_a),
+                "rejecting the colliding identity must preserve the linked entry for its exact owner",
             );
         }
     }
@@ -27046,7 +27135,10 @@ mod tests {
             assert_eq!(cached.corrupt_slots, 0);
             let inline = unsafe { inline_type_cache_entry_snapshot_for_test() };
             assert_eq!(inline.ptr, ptr);
-            assert_eq!(inline.metadata, old_metadata);
+            assert_eq!(
+                inline.identity,
+                TypeCacheIdentity::from_metadata(old_metadata)
+            );
 
             assert_eq!(
                 unsafe { pop_semantic_type_cache(layout, requested_metadata) },
@@ -27812,7 +27904,10 @@ mod tests {
             assert!(hot_idx < TYPE_CACHE_SLOTS);
             let hot_cache_slot = type_cache_slot_snapshot_for_test(hot_idx);
             assert_eq!(hot_cache_slot.cache_key, slot_key);
-            assert_eq!(hot_cache_slot.type_id, metadata.type_id);
+            assert_eq!(
+                hot_cache_slot.identity,
+                TypeCacheIdentity::from_metadata(metadata)
+            );
 
             assert_eq!(pop_type_cache(layout, metadata), Some(ptr));
             assert_eq!(
@@ -27820,7 +27915,7 @@ mod tests {
                 UNKNOWN_SEMANTIC_ID
             );
             assert!(
-                type_cache_hot_slot(slot_key).is_none(),
+                type_cache_hot_slot(slot_key, TypeCacheIdentity::from_metadata(metadata)).is_none(),
                 "emptying a slot must clear the stale hot hint instead of rechecking it later"
             );
         }
@@ -27848,7 +27943,7 @@ mod tests {
             node.add(2).write(layout.align());
             TYPE_CACHE[idx] = TypeCacheSlot {
                 cache_key: slot_key,
-                type_id: metadata.type_id,
+                identity: TypeCacheIdentity::from_metadata(metadata),
                 head,
                 count: 1,
                 retained_bytes: type_cache_retained_bytes_for_layout(layout),
@@ -27857,7 +27952,7 @@ mod tests {
 
             assert_eq!(pop_type_cache(layout, metadata), Some(head));
             assert_eq!(TYPE_CACHE[idx].cache_key, UNKNOWN_SEMANTIC_ID);
-            assert_eq!(TYPE_CACHE[idx].type_id, UNKNOWN_SEMANTIC_ID);
+            assert_eq!(TYPE_CACHE[idx].identity, TypeCacheIdentity::unknown());
             assert!(TYPE_CACHE[idx].head.is_null());
             assert_eq!(TYPE_CACHE[idx].count, 0);
             assert_eq!(
@@ -27887,7 +27982,7 @@ mod tests {
             node.add(2).write(layout.align());
             TYPE_CACHE[idx] = TypeCacheSlot {
                 cache_key: slot_key,
-                type_id: metadata.type_id,
+                identity: TypeCacheIdentity::from_metadata(metadata),
                 head: ptr,
                 count: 2,
                 retained_bytes: type_cache_retained_bytes_for_layout(layout) * 2,
@@ -27921,7 +28016,7 @@ mod tests {
 
             TYPE_CACHE[idx] = TypeCacheSlot {
                 cache_key: slot_key,
-                type_id: metadata.type_id,
+                identity: TypeCacheIdentity::from_metadata(metadata),
                 head: ptr,
                 count: MAX_TYPE_CACHE_DEPTH + 1,
                 retained_bytes: type_cache_retained_bytes_for_layout(layout),
@@ -27955,7 +28050,7 @@ mod tests {
 
             TYPE_CACHE[idx] = TypeCacheSlot {
                 cache_key: slot_key,
-                type_id: metadata.type_id,
+                identity: TypeCacheIdentity::from_metadata(metadata),
                 head: core::ptr::null_mut(),
                 count: 1,
                 retained_bytes: type_cache_retained_bytes_for_layout(layout),
@@ -27967,7 +28062,10 @@ mod tests {
                 "push should clear stale null-head state instead of incrementing a corrupt count"
             );
             assert_eq!(TYPE_CACHE[idx].cache_key, slot_key);
-            assert_eq!(TYPE_CACHE[idx].type_id, metadata.type_id);
+            assert_eq!(
+                TYPE_CACHE[idx].identity,
+                TypeCacheIdentity::from_metadata(metadata)
+            );
             assert_eq!(TYPE_CACHE[idx].head, ptr);
             assert_eq!(TYPE_CACHE[idx].count, 1);
             assert_eq!(pop_type_cache(layout, metadata), Some(ptr));
@@ -28098,35 +28196,35 @@ mod tests {
                 small_slot_key, large_slot_key,
                 "plain cold-cache slots are layout-qualified to avoid mixing sizes"
             );
-            let slot = type_cache_find_slot_for_key(small_slot_key, false)
+            let slot = type_cache_find_slot_for_key(small_slot_key, metadata, false)
                 .expect("slot should exist after the first push");
             assert_eq!((*slot).count, 1);
             assert_eq!((*slot).retained_bytes, small_retained);
             assert_eq!(type_cache_slot_retained_bytes(&*slot), Some(small_retained));
 
             assert!(push_type_cache(large_ptr, large, metadata));
-            let small_slot = type_cache_find_slot_for_key(small_slot_key, false)
+            let small_slot = type_cache_find_slot_for_key(small_slot_key, metadata, false)
                 .expect("small-layout slot should remain after the large push");
             assert_eq!((*small_slot).count, 1);
             assert_eq!((*small_slot).retained_bytes, small_retained);
-            let large_slot = type_cache_find_slot_for_key(large_slot_key, false)
+            let large_slot = type_cache_find_slot_for_key(large_slot_key, metadata, false)
                 .expect("large-layout slot should exist after the large push");
             assert_eq!((*large_slot).count, 1);
             assert_eq!((*large_slot).retained_bytes, large_retained);
 
             assert_eq!(pop_type_cache(small, metadata), Some(small_ptr));
             assert!(
-                type_cache_find_slot_for_key(small_slot_key, false).is_none(),
+                type_cache_find_slot_for_key(small_slot_key, metadata, false).is_none(),
                 "emptying the small-layout slot should not clear the large-layout slot"
             );
-            let slot = type_cache_find_slot_for_key(large_slot_key, false)
+            let slot = type_cache_find_slot_for_key(large_slot_key, metadata, false)
                 .expect("large entry should remain after popping the tail small entry");
             assert_eq!((*slot).count, 1);
             assert_eq!((*slot).retained_bytes, large_retained);
             assert_eq!(type_cache_slot_retained_bytes(&*slot), Some(large_retained));
 
             assert_eq!(pop_type_cache(large, metadata), Some(large_ptr));
-            assert!(type_cache_find_slot_for_key(large_slot_key, false).is_none());
+            assert!(type_cache_find_slot_for_key(large_slot_key, metadata, false).is_none());
             assert_eq!(
                 type_cache_hot_slot_snapshot_for_test().cache_key,
                 UNKNOWN_SEMANTIC_ID
@@ -28202,7 +28300,7 @@ mod tests {
             );
             assert!(plain_type_cache_retained_bytes_trusted_for_test());
 
-            let slot = type_cache_find_slot_for_key(slot_key, false)
+            let slot = type_cache_find_slot_for_key(slot_key, metadata, false)
                 .expect("cold plain cache slot should exist after push");
             (*slot).retained_bytes = 0;
             assert_eq!(
@@ -28267,9 +28365,12 @@ mod tests {
 
             assert!(push_type_cache(ptr, layout, metadata));
             let cache_key = type_cache_identity_key(metadata);
-            let slot =
-                type_cache_find_slot_for_key(plain_type_cache_slot_key(cache_key, layout), false)
-                    .expect("slot should exist after push");
+            let slot = type_cache_find_slot_for_key(
+                plain_type_cache_slot_key(cache_key, layout),
+                metadata,
+                false,
+            )
+            .expect("slot should exist after push");
             assert_eq!((*slot).count, 1);
             assert_eq!((*slot).retained_bytes, retained);
             assert_eq!(type_cache_slot_retained_bytes(&*slot), Some(retained));
@@ -28277,6 +28378,7 @@ mod tests {
             assert_eq!(pop_type_cache(layout, metadata), Some(ptr));
             assert!(type_cache_find_slot_for_key(
                 plain_type_cache_slot_key(cache_key, layout),
+                metadata,
                 false
             )
             .is_none());
@@ -28312,9 +28414,12 @@ mod tests {
             }
 
             let cache_key = type_cache_identity_key(metadata);
-            let slot =
-                type_cache_find_slot_for_key(plain_type_cache_slot_key(cache_key, layout), false)
-                    .expect("slot should exist after four pushes");
+            let slot = type_cache_find_slot_for_key(
+                plain_type_cache_slot_key(cache_key, layout),
+                metadata,
+                false,
+            )
+            .expect("slot should exist after four pushes");
             assert_eq!(
                 type_cache_slot_retained_bytes(&*slot),
                 Some(MAX_TYPE_CACHE_SLOT_BYTES)
@@ -28326,9 +28431,12 @@ mod tests {
                 !push_type_cache(rejected.as_mut_ptr() as *mut u8, layout, metadata),
                 "a fifth 16KiB object would exceed the 64KiB cold-slot byte budget"
             );
-            let slot =
-                type_cache_find_slot_for_key(plain_type_cache_slot_key(cache_key, layout), false)
-                    .expect("rejected push must not clear existing valid cache entries");
+            let slot = type_cache_find_slot_for_key(
+                plain_type_cache_slot_key(cache_key, layout),
+                metadata,
+                false,
+            )
+            .expect("rejected push must not clear existing valid cache entries");
             assert_eq!(
                 type_cache_slot_retained_bytes(&*slot),
                 Some(MAX_TYPE_CACHE_SLOT_BYTES)
