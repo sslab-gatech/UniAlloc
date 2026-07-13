@@ -1869,6 +1869,26 @@ and validates the allocation-time recovery mechanism. It does not rebind or
 close the whole Oxipng execution, prove universal cross-crate ownership, or
 provide performance evidence.
 
+## OutFile/PathBuf cleanup-unwind recovery
+
+Commit `32eafa2` adds
+`tools/unialloc-rustc-pass/test_mir_crosscrate_outfile_pathbuf_unwind_recovery.py`.
+The generated two-crate Cargo fixture opts only that build into `panic=unwind`;
+repository profiles remain unchanged. A returned `OutFile` is destroyed by the
+consumer's existing MIR cleanup Drop. That audited Drop correctly reports
+`semantic_scope_unwind_pop_inserted=false`: the probe does not claim that the
+pass synthesized a second unwind-pop edge.
+
+A fresh current-`nightly-2026-06-11` single run reports recovery
+match/mismatch `1/1`, typed allocation/deallocation/cache-hit/cache-insert
+`2/2/1/2`, and zero fallback, raw-no-metadata, corrupt-slot, or dropped-stat
+events. The one mismatch is the expected consumer-module request corrected by
+the producer allocation-time record, and the producer exact identity recovers
+the released address after unwind. The normal-return sibling remains the
+evidence for wrong-module non-reuse. This is one bounded cleanup-unwind recovery
+lifecycle, not whole-Oxipng closure, universal cross-crate or memory safety, or
+performance evidence.
+
 A separate three-run diagnostic rejected an attempted inline type-cache POP
 fast-path change. The baseline median was `116.40 ns` with range
 `115.66–116.74 ns`; the modified path measured median `117.39 ns` with range
@@ -1899,6 +1919,26 @@ regressions. The claim is intentionally bounded: it prevents duplicate
 publication while an address remains cache-owned; it is not a universal stale-
 pointer detector after an address has legitimately left the cache and been
 reused.
+
+Commit `bbdda3c` adds three white-box regressions for the same bounded ownership
+boundary. A directly published registry owner causes raw deallocation and
+reallocation to reject independently allocated live pointers without changing
+their bytes or ownership count. Isolated child death tests exercise the
+corresponding `GlobalAlloc::{dealloc,realloc}` dispatch guards; their panic hook
+aborts before unwinding across `GlobalAlloc`. A separate test allocates a real
+typed object, fills its exact ownership probe window with synthetic colliders,
+and observes semantic-free cache bypass `1`, insert/hit `0`, no target ownership
+publication, and no mutation of existing colliding owners.
+
+The entrypoint tests inject registry ownership directly rather than constructing
+a complete retained cache entry; the pressure test uses a real allocation but
+synthetic pressure keys. These tests therefore support dispatch and bypass
+behavior for already-published bounded registry states. They are not a universal
+double-free or UAF detector, do not cover arbitrary races before or after
+ownership publication, and establish no general memory-safety or performance
+claim. Fresh hosted and fixed-heap targeted results are each `3/3`; the normal
+pre-commit gate then passed `689/689` allocator tests and the existing `430/430`
+compiler inventory.
 
 Commit `654e1d7` adds
 `tools/unialloc-rustc-pass/test_mir_generic_vec_type_isolation_fail_closed.py`,
