@@ -825,7 +825,17 @@ def validate_generic_drop_recovery_requirement(
         if row.get("lowering_kind")
         == "semantic_scope_drop_generic_type_parameter_skipped"
     ]
+    unresolved = [
+        row
+        for row in helper_rows
+        if row.get("lowering_kind")
+        == "semantic_scope_unsolved_heap_object_candidate"
+    ]
     if skipped:
+        assert not unresolved, (
+            f"{GENERIC_DROP_FUNCTION} must use one audit-only representation, got "
+            f"specialized={skipped}, unresolved={unresolved}"
+        )
         assert len(skipped) == 1, (
             f"{GENERIC_DROP_FUNCTION} must have exactly one generic Drop<T> "
             f"audit-only skip, got {len(skipped)}"
@@ -849,6 +859,24 @@ def validate_generic_drop_recovery_requirement(
             f"{GENERIC_DROP_FUNCTION} must audit the unresolved generic destination"
         )
         provider_exposure = "audit_only_generic_drop_skip"
+    elif unresolved:
+        assert len(unresolved) == 1, (
+            f"{GENERIC_DROP_FUNCTION} must have exactly one unresolved audit-only "
+            f"row, got {len(unresolved)}"
+        )
+        row = unresolved[0]
+        assert row.get("rewrite_status") == (
+            "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+        ), row
+        assert row.get("replacement_resolution_status") == (
+            "rustc_middle_heap_object_type_not_solved"
+        ), row
+        assert row.get("metadata_pairing_contract") == (
+            "audit_only_unresolved_heap_object_type"
+        ), row
+        assert row.get("semantic_object_type") == "<unknown-heap-object-type>", row
+        assert str(row.get("destination_type") or "") == "T", row
+        provider_exposure = "audit_only_unresolved_generic_drop_skip"
     else:
         assert not helper_rows, (
             f"{GENERIC_DROP_FUNCTION} was exposed without the required generic Drop "
@@ -924,7 +952,9 @@ def validate_generic_drop_recovery_requirement(
         )
     return {
         "generic_drop_recovery_validated": True,
-        "generic_drop_audit_only_skip_count": len(skipped),
+        "generic_drop_audit_only_skip_count": len(skipped) + len(unresolved),
+        "generic_drop_specialized_skip_count": len(skipped),
+        "generic_drop_unresolved_skip_count": len(unresolved),
         "generic_drop_provider_exposure": provider_exposure,
         **expected_deltas,
     }
@@ -1231,7 +1261,7 @@ def main() -> int:
             "The source contains no manual semantic metadata or allocation ABI calls; identities come from actual rustc_driver semantic-scope rewriting.",
             "The runner supplies the TYPE_ISOLATED policy and cross-thread-recovery placement bit uniformly so the compared cache keys differ only by compiler-derived type identity.",
             "The target lifecycle must use one of two audited pairing mechanisms: exact applied target drop/deallocation scopes with one runtime recovery match per scope, or no target scope and zero matches with allocation-side recovery. Both require zero identity mismatches; the selected mechanism and counts are recorded in validation.",
-            "The generic_drop helper must never receive an applied/planned semantic scope. If optimized_mir exposes its generic body, the audit requires exactly one audit-only generic Drop<T> skip; current rustc may instead codegen the monomorphized instance without exposing a helper row to this provider, which is reported as an evidence boundary rather than a manufactured skip. In both cases exact four-object runtime deltas require typed deallocation and cache insertion without fallback.",
+            "The generic_drop helper must never receive an applied/planned semantic scope. If optimized_mir exposes its generic body, the audit requires exactly one fail-closed row: either the specialized generic Drop<T> skip or the older unresolved-heap-object representation. Current rustc may instead codegen the monomorphized instance without exposing a helper row, which is reported as a provider boundary rather than a manufactured skip. Every representation still requires exact four-object typed deallocation/cache-insert deltas with zero fallback.",
             "Commit-bound evidence requires a clean HEAD, a repository-external output directory, and identical scoped source/toolchain bindings before and after the run.",
             "This covers two same-layout Rust types and one worker lifecycle, not universal UAF prevention or unmodified-toolchain deployment.",
         ],
