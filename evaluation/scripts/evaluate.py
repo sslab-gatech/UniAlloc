@@ -28291,6 +28291,75 @@ def run_arm64e_std_runtime_preflight(
     )
 
 
+def write_pac_nostd_probe_runner_crate(out_dir: Path, features: str) -> Dict[str, str]:
+    """Create a standalone no_std PAC runner that depends on UniAlloc as a normal dep.
+
+    Cargo treats package examples as dev targets, so `cargo run -p unialloc
+    --example ... -Z build-std` also compiles `unialloc` dev-dependencies such
+    as bench harness crates.  The arm64e PAC no_std probe must exercise the
+    allocator library without dragging those std-only dev-dependencies into the
+    target sysroot build.
+    """
+
+    crate_dir = out_dir / "pac-nostd-probe-runner"
+    src_dir = crate_dir / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    feature_names = [
+        item.strip()
+        for item in str(features or "").split(",")
+        if item.strip()
+    ]
+    feature_list = ", ".join(json.dumps(name) for name in feature_names)
+    (crate_dir / "Cargo.toml").write_text(
+        "\n".join(
+            [
+                "[package]",
+                'name = "unialloc_pac_nostd_probe_runner"',
+                'version = "0.0.0"',
+                'edition = "2021"',
+                "",
+                "[dependencies]",
+                (
+                    f'unialloc = {{ path = {json.dumps(str(ROOT / "unialloc"))}, '
+                    f'features = [{feature_list}] }}'
+                ),
+                "",
+                "[profile.dev]",
+                'panic = "abort"',
+                "",
+                "[profile.release]",
+                'panic = "abort"',
+                "",
+                "[workspace]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (crate_dir / "build.rs").write_text(
+        "\n".join(
+            [
+                "fn main() {",
+                '    println!("cargo:rustc-check-cfg=cfg(unialloc_target_arm64e)");',
+                '    if std::env::var("TARGET").ok().as_deref() == Some("arm64e-apple-darwin") {',
+                '        println!("cargo:rustc-cfg=unialloc_target_arm64e");',
+                "    }",
+                "}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    source_path = crate_dir / "src" / "main.rs"
+    shutil.copy2(ROOT / "unialloc" / "examples" / "pac_metadata_probe_nostd.rs", source_path)
+    return {
+        "crate_dir": str(crate_dir),
+        "manifest": str(crate_dir / "Cargo.toml"),
+        "source": str(source_path),
+        "build_rs": str(crate_dir / "build.rs"),
+    }
+
+
 def collect_pac_metadata_direct_probe(args: argparse.Namespace) -> int:
     """Run a real allocator/PAC metadata-auth side-cache probe."""
 
@@ -28308,6 +28377,8 @@ def collect_pac_metadata_direct_probe(args: argparse.Namespace) -> int:
         raise ValueError(f"unsupported PAC metadata probe runtime: {runtime}")
     example = "pac_metadata_probe_nostd" if runtime == "nostd" else "pac_metadata_probe"
     cargo = shutil.which("cargo") or "cargo"
+    cargo_target_dir = out_dir / "cargo-target"
+    nostd_runner: Optional[Dict[str, str]] = None
     cmd = [cargo, rust_toolchain_arg(toolchain), "run"]
     if build_std:
         # `arm64e-apple-darwin` is visible to current rustc, but rustup does not
@@ -28315,18 +28386,22 @@ def collect_pac_metadata_direct_probe(args: argparse.Namespace) -> int:
         # build-from-source choice explicit in the command line and audit record
         # instead of silently treating target-list visibility as buildability.
         cmd.extend(["-Z", f"build-std={build_std_crates}"])
-    cmd.extend(["-q", "-p", "unialloc"])
+    if runtime == "nostd":
+        nostd_runner = write_pac_nostd_probe_runner_crate(out_dir, features)
+        cmd.extend(["-q", "--manifest-path", nostd_runner["manifest"]])
+    else:
+        cmd.extend(["-q", "-p", "unialloc"]);
     if target:
         cmd.extend(["--target", target])
-    cmd.extend(
-        [
-            "--example",
-            example,
-            "--features",
-            features,
-        ]
-    )
-    cargo_target_dir = out_dir / "cargo-target"
+    if runtime != "nostd":
+        cmd.extend(
+            [
+                "--example",
+                example,
+                "--features",
+                features,
+            ]
+        )
     arm64e_std_preflight: Optional[Dict[str, Any]] = None
     skip_allocator_probe_due_to_preflight = False
     if target == "arm64e-apple-darwin" and runtime == "std" and build_std:
@@ -28419,6 +28494,7 @@ def collect_pac_metadata_direct_probe(args: argparse.Namespace) -> int:
         "cargo_target_dir": str(cargo_target_dir),
         "cargo_target_cleanup": cargo_target_cleanup,
         "arm64e_std_runtime_preflight": arm64e_std_preflight,
+        "nostd_runner": nostd_runner,
         "event": event,
         "summary": summary,
         "blockers": blockers,
