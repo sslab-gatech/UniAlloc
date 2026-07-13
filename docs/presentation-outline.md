@@ -896,6 +896,13 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   terminal release。hosted/fixed exact tests 与 full `693/693` suite PASS；它只闭合
   D->T registry observation gap，不是 universal UAF/double-free detector 或所有状态
   转移的 linearizability proof。
+- **terminal retained-ownership release：** `1d0d13f` 修复 delayed-free 与 type-cache
+  在 terminal raw release 前过早撤销 process-visible ownership 的窗口。两个确定性
+  tests 在旧顺序下分别 fail-first；修复后 hosted/fixed 各 `2/2` PASS。六个 terminal
+  release 点都先完成唯一 backend release、成功后才 unregister；backend 不可用则
+  fail-safe 保留 ownership。pre-commit full suite `696/696`、C002 `430/430` PASS。
+  该结论只闭合 concurrent terminal-release interval，不覆盖 release 完成后的任意
+  stale pointer，也不是通用 UAF/double-free 保证。
 - **current gates：** C002 current-source finite inventory 保持 `430/430`，但不是
   whole-program denominator，也不能替代 actual-wrapper evidence。
 - **fresh compiled-Rust application check：** 在 code-bearing `b2d5eab` 上，

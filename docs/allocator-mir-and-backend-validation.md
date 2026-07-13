@@ -2211,6 +2211,20 @@ tests pass, and the full allocator suite reports `693/693`. This closes the D->T
 registry observation race only; it does not establish universal UAF/double-free
 detection or linearize every terminal ownership transition.
 
+Commit `1d0d13f` closes the adjacent terminal-release interval. Delayed-free and
+type-cache entries previously retired their process-visible ownership before
+the sole backend raw release completed. A retained-owner backend path now keeps
+that ownership published across the release and unregisters only after success;
+if a fixed-heap backend cannot run, the record remains published and the object
+is fail-safe leaked. The helper covers segregated-cache eviction, delayed-free
+raw fallback and drain, inline and linked plain-cache drain, and segregated-cache
+drain. Normal cache pops and the delayed-to-type handoff are unchanged. Both
+deterministic tests fail against the old ordering and pass `2/2` under hosted
+and `fixed_heap`; the pre-commit suite reports `696/696`, with C002 still
+`430/430`. This closes only a concurrent terminal-release guard gap. It does not
+make a freed pointer safe after ownership retirement or prove universal
+UAF/double-free detection.
+
 The C002 current-source finite compiler inventory remains `430/430`. It is a
 functional coverage gate, not a whole-program denominator, and it does not
 replace the actual-wrapper application evidence above.
