@@ -118,12 +118,22 @@ fn clone_standalone_rc(value: &Rc<RefCountedPayload>) -> Rc<RefCountedPayload> {
 }
 
 #[inline(never)]
+fn black_box<T>(value: T) -> T {
+    unsafe {
+        let ret = std::ptr::read_volatile(&value);
+        std::mem::forget(value);
+        ret
+    }
+}
+
+#[inline(never)]
 fn expose_refcounted_clone_mir() {
-    // `black_box(false)` keeps the real Clone call sites in optimized MIR while
+    // The local volatile-read black box works on both the current and pinned
+    // nightly. It keeps the real Clone call sites in optimized MIR while
     // avoiding any runtime allocation/counter perturbation in this security
-    // probe.  The companion validator binds these functions to row-level actual
+    // probe. The companion validator binds these functions to row-level actual
     // rewrite audit evidence from this target crate.
-    if std::hint::black_box(false) {
+    if black_box(false) {
         let arc_owner = ArcVecCloneOwner {
             shared: Arc::new(RefCountedPayload(17)),
             values: Vec::new(),
