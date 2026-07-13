@@ -57,6 +57,10 @@ fn hugepage_and_pac_policy_composition_preserves_cache_identity() {
     let ordinary_ptr = ordinary.as_ptr() as usize;
     assert_eq!(ordinary.capacity(), CAPACITY);
     drop(ordinary);
+    let after_ordinary_free = semantic_stats_snapshot();
+    let ordinary_signs = after_ordinary_free.metadata_pac_auth_signs
+        + after_ordinary_free.metadata_pac_software_fallback_signs;
+    assert!(ordinary_signs > 0, "{:?}", after_ordinary_free);
 
     let hugepage = vec_with_metadata(authenticated_hugepage);
     let hugepage_ptr = hugepage.as_ptr() as usize;
@@ -66,12 +70,28 @@ fn hugepage_and_pac_policy_composition_preserves_cache_identity() {
         "adding the hugepage policy must not consume authenticated ordinary-domain storage"
     );
     drop(hugepage);
+    let after_hugepage_free = semantic_stats_snapshot();
+    let composed_signs = after_hugepage_free.metadata_pac_auth_signs
+        + after_hugepage_free.metadata_pac_software_fallback_signs;
+    assert!(
+        composed_signs > ordinary_signs,
+        "the PAC + hugepage policy must sign its own cached metadata: {:?}",
+        after_hugepage_free
+    );
 
     let recovered_ordinary = vec_with_metadata(authenticated);
     assert_eq!(
         recovered_ordinary.as_ptr() as usize,
         ordinary_ptr,
         "the authenticated ordinary policy must recover only its own entry"
+    );
+    let after_ordinary_recovery = semantic_stats_snapshot();
+    let ordinary_verifications = after_ordinary_recovery.metadata_pac_auth_verifications
+        + after_ordinary_recovery.metadata_pac_software_fallback_verifications;
+    assert!(
+        ordinary_verifications > 0,
+        "{:?}",
+        after_ordinary_recovery
     );
     drop(recovered_ordinary);
 
@@ -80,6 +100,14 @@ fn hugepage_and_pac_policy_composition_preserves_cache_identity() {
         recovered_hugepage.as_ptr() as usize,
         hugepage_ptr,
         "the authenticated hugepage policy must recover its own entry even when hugepage backing falls back"
+    );
+    let after_hugepage_recovery = semantic_stats_snapshot();
+    let composed_verifications = after_hugepage_recovery.metadata_pac_auth_verifications
+        + after_hugepage_recovery.metadata_pac_software_fallback_verifications;
+    assert!(
+        composed_verifications > ordinary_verifications,
+        "the PAC + hugepage policy must verify its own cached metadata: {:?}",
+        after_hugepage_recovery
     );
     drop(recovered_hugepage);
 
