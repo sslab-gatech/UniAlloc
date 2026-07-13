@@ -2187,14 +2187,45 @@ and `822bfaf6bf141bea6ed4b16a7941025cfe95bcab52c5952d7dffeb32afc55bb6`.
 Placement is manually forced and the fixture is bounded, so this does not prove
 automatic escape inference, universal unwind/thread coverage, or performance.
 
-A single-sample diagnostic measured `vec::bench_with_capacity_1000` on this
-Darwin/current-toolchain setup as default `16.59 ns/iter` and type isolation
+## Same-type-id recovery and delayed-to-type handoff closure
+
+Commit `107cabe` adds a runtime regression with identical `type_id` values but
+different module, lifetime, placement, and callsite identity. The allocation
+record is consumed once and remains authoritative: the colliding requested
+identity cannot retrieve the retained entry, while the recorded full identity
+does, and mismatch diagnostics preserve both equal type ids. Hosted and
+`fixed_heap` variants pass. This is a bounded defense for full-identity recovery
+when type ids collide; it does not prove compiler hash collision-freedom or
+global type-id uniqueness.
+
+Commit `b2d5eab` closes the concrete delayed-free-to-type-cache observation gap.
+`release_delayed_slot` publishes type-cache ownership before withdrawing
+delayed-free ownership, so the common reclaim guard now checks those domains in
+the same delayed-first, type-second order. Resolved semantic deallocation also
+uses that common two-domain guard. A deterministic regression forces the D->T
+handoff while raw deallocation, `GlobalAlloc::dealloc`, semantic deallocation,
+and resolved deallocation attempt reclamation. Every entrypoint fail-stops in
+the delayed domain; the owner then exact-pops the same address, validates its
+payload, and performs one terminal raw release. Hosted and `fixed_heap` focused
+tests pass, and the full allocator suite reports `693/693`. This closes the D->T
+registry observation race only; it does not establish universal UAF/double-free
+detection or linearize every terminal ownership transition.
+
+The C002 current-source finite compiler inventory remains `430/430`. It is a
+functional coverage gate, not a whole-program denominator, and it does not
+replace the actual-wrapper application evidence above.
+
+A historical single-sample diagnostic measured
+`vec::bench_with_capacity_1000` on this Darwin/current-toolchain setup as
+default `16.59 ns/iter` and type isolation
 `25.47 ns/iter` (ratio `1.5353`, `+53.526%`). Each variant ran once only; there
 is no median, range, or variance. The type-isolation harness used
 layout-derived size/align identity with compiler-site replay disabled. This is
-diagnostic direction only, not compiler-pass overhead, a stable regression
-percentage, a benchmark claim, or paper evidence. The checkpoint does not repeat
-this benchmark.
+retained as historical diagnostic evidence only. Later bounded profile samples
+did not reproduce the `+53%` direction and also exercised a layout-derived/raw
+allocator path rather than the compiler typed ABI. No optimization was adopted
+from these samples, and they support no compiler-pass overhead, stable
+percentage, benchmark claim, or paper evidence.
 
 This is pinned, instrumented real-application and bounded regression evidence,
 not an unmodified universal application result, whole-program proof, benchmark,

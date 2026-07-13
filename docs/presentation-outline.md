@@ -883,8 +883,25 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   review `APPROVE`。artifact `cross-thread-unwind-cleanup-feff198-20260713` 的
   summary/audit SHA 分别为 `7f150b77...` / `822bfaf6...`。placement 是 manual；不
   声称 automatic escape inference、universal thread/unwind coverage 或性能。
-- **single-sample diagnostic performance：** default `16.59 ns/iter`、type isolation
+- **same-type-id / full-identity recovery：** `107cabe` 构造相同 `type_id`、但
+  module/lifetime/placement/callsite 不同的 FFI metadata；runtime 只按 allocation-time
+  full identity 回收和缓存，colliding requested identity 不能取回该地址，mismatch
+  诊断保留相同 requested/recorded `type_id`。hosted 与 `fixed_heap` regression 均
+  PASS；这是 runtime recovery defense，不证明 compiler hash collision-freedom 或
+  global `type_id` uniqueness。
+- **delayed-free -> type-cache ownership handoff：** `b2d5eab` 让公共 reclaim guard
+  按实际 D->T 发布顺序先查 delayed-free、再查 type cache，并让 resolved dealloc
+  使用同一 guard。确定性 race regression 覆盖 raw、`GlobalAlloc`、semantic 与
+  resolved 四个 reclaim entrypoint；owner 仍能 exact pop、验证 payload 并只做一次
+  terminal release。hosted/fixed exact tests 与 full `693/693` suite PASS；它只闭合
+  D->T registry observation gap，不是 universal UAF/double-free detector 或所有状态
+  转移的 linearizability proof。
+- **current gates：** C002 current-source finite inventory 保持 `430/430`，但不是
+  whole-program denominator，也不能替代 actual-wrapper evidence。
+- **historical single-sample diagnostic performance：** default `16.59 ns/iter`、type isolation
   `25.47 ns/iter`，ratio `1.5353` / `+53.526%`；n=1 each、Darwin/current
   toolchain、layout-derived size/align identity、compiler-site replay disabled、无
-  median/range/variance。本轮不重复；这是 direction-only diagnostic，不是
-  compiler-pass overhead、stable regression、paper claim 或 publication-grade result。
+  median/range/variance。后续 bounded profile samples 没有复现该 `+53%` 方向，且同样
+  只走 layout-derived/raw allocator path、不是 compiler typed ABI；因此没有据此采用
+  优化，也不报告稳定百分比。这些数值不是 compiler-pass overhead、paper claim 或
+  publication-grade result。
