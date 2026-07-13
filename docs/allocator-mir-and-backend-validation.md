@@ -1878,7 +1878,7 @@ specific optimization; they are not a UniAlloc or paper performance claim.
 
 ## Presentation checkpoint: duplicate-free ownership and generic `Vec<T>` boundary
 
-At current HEAD `654e1d7`, commits `8a1cb06` and `a93cf97` close a P0
+At implementation checkpoint `654e1d7`, commits `8a1cb06` and `a93cf97` close a P0
 duplicate-free hole in semantic type-cache ownership. The regressions exercise
 plain conservative, metadata-segregated local, and cross-thread-hinted typed
 deallocation: a second free of an address already retained by a semantic cache
@@ -1892,7 +1892,7 @@ The transfer publishes type-cache ownership before retiring quarantine
 ownership, deliberately overlapping the two records so there is no
 cross-thread visibility gap.
 
-The current validation gate reports `685/685` hosted allocator tests and
+That checkpoint's validation gate reports `685/685` hosted allocator tests and
 `650/650` fixed-heap allocator tests. These results cover the affected retained
 cache and quarantine mutation paths, including the three new duplicate-free
 regressions. The claim is intentionally bounded: it prevents duplicate
@@ -1940,3 +1940,35 @@ the three-run rejected POP experiment above, are diagnostic optimization
 checks only. Full paper performance reproduction and its matrix are deferred
 by the explicit user scope change; reduced smoke runs make no publication-grade
 percentage claim.
+
+## Current-source Oxipng and rejected ThreadCache diagnostic
+
+The latest claim-bearing source one-shot is bound to `f5c4fa4` in
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-f5c4fa4-20260713-one-shot/`.
+Its summary SHA-256 is
+`448a634ec918fd8a9e9911fd092d0ef842e97074287ca2fe334514c31c78e5c5`.
+The pinned Oxipng v4.0.3 build and functional run both return `0`, and the
+output hash matches the expected PNG. Target-crate audit counts are `6` direct
+rewrites, `256` semantic scopes, and `320` Drop scopes; unresolved semantic and
+Drop candidates remain `570/2`, so `whole_program_compiler_coverage=false`.
+Runtime reports typed allocation/deallocation `860/850`, fallback
+allocation/deallocation `210/170`, raw-no-metadata
+allocation/deallocation/reallocation `183/144/26`, cache
+hit/insert/bypass `808/840/62`, and recovery match/mismatch `830/1`.
+The injected address oracle still observes wrong-type non-reuse and exact-type
+reuse with corrupt/dropped counters `0/0`. The single mismatch remains the
+cross-crate `PathBuf` library-allocation/binary-Drop module difference and is
+safely recovery-corrected, so whole-application pairing remains
+`recovery_corrected_non_exact`. This is one source-bound real-application
+functional run, not whole-program coverage, universal isolation, or performance
+evidence.
+
+A separate single-sample diagnostic evaluated commit `21c9e2b`, which reused a
+resolved ThreadCache rounded size instead of repeating table lookups. The
+earlier `24ff781` Collections sample was `14.44 ns/iter`; the `21c9e2b` sample
+was `16.02 ns/iter`. Because the two revisions also differ by the intervening
+P0 ownership fix, the measurement does not isolate or attribute the delta to
+the ThreadCache change. It did not confirm the intended direction, so commit
+`f5c4fa4` reverts the optimization exactly and no additional timing run was
+performed. These two one-shot values are diagnostic-only and support no stable
+percentage or paper claim.
