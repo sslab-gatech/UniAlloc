@@ -11111,11 +11111,21 @@ unsafe fn realloc_layout_with_ffi_metadata_local(
     if !semantic_realloc_old_pointer_supported(ptr, old_layout) {
         return core::ptr::null_mut();
     }
-    let allocator = RustAllocator::new();
     // Local ABI callers promise exact new-object metadata and must never
     // delegate it through a recovery record. A conservative old record may
     // still identify the moved-from object during a mixed transition.
-    let old_metadata = recorded_reallocation_old_metadata(ptr, old_layout).unwrap_or(metadata);
+    let old_metadata = match lookup_auto_allocation_record(ptr, old_layout, false) {
+        AutoAllocationRecordLookup::Exact(recorded_metadata) => recorded_metadata,
+        AutoAllocationRecordLookup::Missing => metadata,
+        AutoAllocationRecordLookup::Mismatched => {
+            // Do not collapse a live same-address/different-layout record into
+            // the local ABI's no-record case.  The record remains authoritative
+            // until an exact-layout retry consumes it; reallocating first could
+            // publish a second object while leaving the old allocation live.
+            return core::ptr::null_mut();
+        }
+    };
+    let allocator = RustAllocator::new();
     let new_ptr = without_auto_allocation_recovery_recording(|| {
         allocator.realloc_with_split_metadata(ptr, old_layout, new_size, old_metadata, metadata)
     });
@@ -26840,6 +26850,205 @@ mod tests {
             RustAllocator::new().dealloc_raw(reused, new_layout);
             INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
         }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn cross_thread_local_compiler_realloc_rejects_mismatched_global_recovery_layout() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_type_stats_recording_disable();
+
+        let allocation_size = (MIN_TYPE_CACHE_OBJECT_SIZE + 1..crate::size_class::MAX_SIZE - 1)
+            .find(|size| {
+                let class = crate::size_class::get_size_class(*size).index();
+                crate::size_class::get_size_class(*size - 1).index() == class
+                    && crate::size_class::get_size_class(*size + 1).index() == class
+            })
+            .expect("test needs three distinct layouts in one allocator size class");
+        let allocation_layout =
+            Layout::from_size_align(allocation_size, align_of::<usize>()).unwrap();
+        let wrong_layout =
+            Layout::from_size_align(allocation_size - 1, allocation_layout.align()).unwrap();
+        let new_layout =
+            Layout::from_size_align(allocation_size + 1, allocation_layout.align()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_0146)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_C146)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_lifetime_hint(0x35)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x46);
+        assert!(compiler_type_isolated_recovery_fast_path(metadata));
+        assert!(semantic_realloc_can_reuse_in_place(
+            allocation_layout,
+            new_layout.size(),
+            metadata,
+            metadata
+        ));
+
+        let ptr = unsafe {
+            __unialloc_alloc_layout_with_metadata_hints(
+                allocation_layout,
+                metadata.type_id,
+                metadata.module_id,
+                metadata.flags,
+                metadata.lifetime_hint,
+                metadata.placement_hint,
+                metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        unsafe {
+            core::ptr::write_bytes(ptr, 0xA5, allocation_layout.size());
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, allocation_layout),
+            Some(metadata),
+            "conservative compiler allocation must publish a process-visible recovery record"
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert!(!current_thread_fast_auto_allocation_records_active());
+
+        let stats_before = semantic_stats_snapshot();
+        let fallback_before = semantic_fallback_attribution_snapshot();
+        let validation_before = semantic_metadata_validation_snapshot();
+        let ptr_addr = ptr as usize;
+        let mismatch_observation = thread::spawn(move || {
+            let ptr = ptr_addr as *mut u8;
+            assert!(semantic_runtime_slow_path_enabled());
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, allocation_layout),
+                Some(metadata),
+                "foreign thread must see the global recovery identity"
+            );
+            let cache_before = type_isolation_side_cache_snapshot();
+            let delayed_before = delayed_free_snapshot();
+
+            let rejected = unsafe {
+                __unialloc_realloc_layout_with_metadata_hints_local(
+                    ptr,
+                    wrong_layout,
+                    new_layout.size(),
+                    metadata.type_id,
+                    metadata.module_id,
+                    metadata.flags,
+                    metadata.lifetime_hint,
+                    metadata.placement_hint,
+                    metadata.callsite,
+                )
+            };
+            let stats_after = semantic_stats_snapshot();
+            let fallback_after = semantic_fallback_attribution_snapshot();
+            let validation_after = semantic_metadata_validation_snapshot();
+            let cache_after = type_isolation_side_cache_snapshot();
+            let delayed_after = delayed_free_snapshot();
+            let exact_record_after = lookup_auto_allocation_metadata(ptr, allocation_layout);
+            let wrong_record_after = lookup_auto_allocation_metadata(ptr, wrong_layout);
+            let record_count_after = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+            let payload_preserved = (0..allocation_layout.size())
+                .all(|offset| unsafe { ptr.add(offset).read_volatile() } == 0xA5);
+
+            // Complete the intended mixed conservative-to-local transition even
+            // on the fail-first implementation so this regression never leaks or
+            // releases the same backing allocation twice when its first assertion
+            // is evaluated below.
+            let resized = unsafe {
+                __unialloc_realloc_layout_with_metadata_hints_local(
+                    ptr,
+                    allocation_layout,
+                    new_layout.size(),
+                    metadata.type_id,
+                    metadata.module_id,
+                    metadata.flags,
+                    metadata.lifetime_hint,
+                    metadata.placement_hint,
+                    metadata.callsite,
+                )
+            };
+            assert_eq!(
+                resized, ptr,
+                "the exact same-size-class retry should preserve the allocation address"
+            );
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, allocation_layout),
+                None
+            );
+            assert_eq!(lookup_auto_allocation_metadata(resized, new_layout), None);
+            assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+
+            unsafe {
+                __unialloc_dealloc_layout_with_metadata_hints_local(
+                    resized,
+                    new_layout,
+                    metadata.type_id,
+                    metadata.module_id,
+                    metadata.flags,
+                    metadata.lifetime_hint,
+                    metadata.placement_hint,
+                    metadata.callsite,
+                );
+            }
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(wrong_layout, metadata) },
+                None
+            );
+            let cached = unsafe { pop_semantic_type_cache(new_layout, metadata) }
+                .expect("paired local dealloc must publish only under the resized layout");
+            assert_eq!(cached, resized);
+            unsafe {
+                RustAllocator::new().dealloc_raw(cached, new_layout);
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+            }
+
+            (
+                rejected.is_null(),
+                stats_after,
+                fallback_after,
+                validation_after,
+                cache_before,
+                cache_after,
+                delayed_before,
+                delayed_after,
+                exact_record_after,
+                wrong_record_after,
+                record_count_after,
+                payload_preserved,
+            )
+        })
+        .join()
+        .expect("cross-thread local compiler realloc layout mismatch regression");
+
+        assert!(
+            mismatch_observation.0,
+            "wrong-layout local compiler realloc must fail closed before realloc mutation"
+        );
+        assert_eq!(mismatch_observation.1, stats_before);
+        assert_eq!(mismatch_observation.2, fallback_before);
+        assert_eq!(mismatch_observation.3, validation_before);
+        assert_eq!(mismatch_observation.4, mismatch_observation.5);
+        assert_eq!(mismatch_observation.6, mismatch_observation.7);
+        assert_eq!(mismatch_observation.8, Some(metadata));
+        assert_eq!(mismatch_observation.9, None);
+        assert_eq!(mismatch_observation.10, 1);
+        assert!(
+            mismatch_observation.11,
+            "wrong-layout attempt changed payload"
+        );
+
+        semantic_stats_recording_disable();
+        assert!(
+            !semantic_runtime_slow_path_enabled(),
+            "exact local retry must consume the final process-visible recovery record"
+        );
     }
 
     #[test]
