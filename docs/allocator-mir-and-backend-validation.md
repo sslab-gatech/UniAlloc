@@ -2005,6 +2005,34 @@ current `nightly-2026-06-11` result. The one pinned-nightly attempt stopped on a
 pre-existing explicit `std::mem::drop` audit-shape validator boundary before it
 reached the new Result gate, so it is not pinned compatibility evidence.
 
+## `Result` Clone partial-unwind isolation
+
+Commit `4d6a219` adds a generated Cargo application that executes ordinary
+`Result<Vec<ProducerPayload>, u8>::clone` under the actual `RUSTC_WRAPPER` and
+panics on the third element clone. The audit requires the supported Result call
+to have an applied semantic scope and an inserted unwind pop. Runtime observes
+scope depth `1 -> 0`, two completed element clones, one cleanup-witness Drop,
+and exactly one 256-byte typed partial-buffer deallocation/cache insertion.
+After unwind, the exact Producer identity recovers its seeded address while a
+same-layout Consumer identity cannot reuse Producer storage. Fallback, raw,
+recovery-mismatch, corrupt-slot, and dropped-stat counters remain zero.
+
+The first diagnostic version reported two deallocations because its statistics
+window remained open through `catch_unwind` panic-transport cleanup. The panic
+transport object had been allocated while statistics were disabled but the
+Result semantic scope was active, then freed after statistics were re-enabled.
+The final cleanup witness closes the window immediately after the partial Vec
+buffer release; independent review confirmed this was probe-accounting
+pollution, not source-Vec double-free or compiler cleanup-target corruption.
+
+The current-source artifact is
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/result-clone-partial-unwind-main-4d6a219-20260713/`;
+its `summary.json` SHA-256 is
+`3d9704c2c2fb5d43809b2007a9bf8f42266975a292a32dbc8dd1490a4dcb8629`.
+This is one bounded functional/security regression on
+`nightly-2026-06-11`, not universal panic/unwind coverage or performance
+evidence.
+
 ## Actual-wrapper cross-thread same-layout isolation
 
 Commit `8e462ad` extends the generated multi-module Cargo application in

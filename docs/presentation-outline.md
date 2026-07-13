@@ -680,6 +680,21 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   universal `Clone` coverage 或性能证据。不要宣称 pinned nightly PASS：该次
   尝试在进入新 Result gate 前命中了既有 explicit `std::mem::drop` audit-shape
   validator boundary。
+- **`Result` Clone partial unwind：** `4d6a219` 的 generated Cargo app 在 actual
+  `RUSTC_WRAPPER` 下执行普通
+  `Result<Vec<ProducerPayload>, u8>::clone`，第三个 element clone panic；audit
+  要求 Result scope actual applied 且 unwind pop inserted。运行时 scope depth
+  `1 -> 0`、成功 clone `2` 个 element、cleanup witness Drop `1` 次，并严格观察
+  partial Vec buffer `256 B` 的 typed dealloc/cache insert `1/1`。随后 exact
+  Producer 取回 seeded address，same-layout Consumer 不得取得 Producer storage；
+  fallback/raw/mismatch/corrupt/dropped 全为 `0`。最初 `2/2` 是统计窗口误把
+  `catch_unwind` panic transport cleanup 计入，不是 source double-free 或 pass
+  cleanup bug；final witness 已把窗口收窄到 partial-buffer cleanup，independent
+  review APPROVE。artifact `result-clone-partial-unwind-main-4d6a219-20260713`
+  的 `summary.json` SHA-256 为
+  `3d9704c2c2fb5d43809b2007a9bf8f42266975a292a32dbc8dd1490a4dcb8629`。
+  这是 bounded functional/security evidence，不是 universal unwind coverage
+  或性能证据。
 - **PAL mutex handoff：** `b197d4a` 的 OS-thread regression 使用零容量 channel
   编排 holder/observer，不依赖 sleep 或 timing guess；它验证 holder 持锁时
   `try_lock` 必须 busy，release 后 observer 能看到写入并把新值交回 main。
