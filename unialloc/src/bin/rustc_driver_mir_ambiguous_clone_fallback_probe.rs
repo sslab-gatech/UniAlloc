@@ -396,7 +396,10 @@ fn main() {
     let plain_result_cloned_buffer = plain_result_cloned_vec.as_ptr() as usize;
     let plain_result_cloned_len = plain_result_cloned_vec.len();
     assert_eq!(plain_result_cloned_len, 4);
-    assert_eq!(checksum(plain_result_cloned_vec), plain_result_source_checksum);
+    assert_eq!(
+        checksum(plain_result_cloned_vec),
+        plain_result_source_checksum
+    );
     assert_ne!(plain_result_cloned_buffer, plain_result_source_buffer);
     assert_eq!(
         plain_result_cloned_buffer, protected_buffer,
