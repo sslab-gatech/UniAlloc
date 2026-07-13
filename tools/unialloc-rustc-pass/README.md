@@ -661,6 +661,37 @@ same-name helper, and multi-owner `Drop` remain fail closed.  This is bounded
 diagnostic functional evidence, not universal container/compiler coverage or
 performance evidence.
 
+### Latest accepted Oxipng rewrite and isolation one-shot
+
+Commit `19ffb71` is the latest accepted source-bound external-application
+checkpoint in this evidence sequence.
+The pinned Oxipng v4.0.3 application and `nightly-2022-07-01` were built once
+and invoked once, with no retry or timing loop.  Start and end source bindings
+both equal `19ffb710752466a140067034650190dfdad60328`; the scoped tree is clean and
+the fingerprint is
+`13f72a5a3a5cd02657ae89500ea165c5238e9128c8f75c8e88aaba5158f3722f`.
+Build and run return `0/0`, and the output SHA-256 is
+`565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`.
+
+The target-crate audit records direct/scope/Drop rewrites `6/310/320`,
+ownership-transfer candidate/applied/selected rows `12/12/12` with nonzero
+selected identities, and fail-closed semantic/Drop rows `516/119` (including
+117 multi-owner Drop rows).  The runtime window records typed allocation/
+deallocation `871/860`, fallback allocation/deallocation `199/160`, dynamic
+transfer `3/1/2`, 53 type rows, and corrupt/dropped counts `0/0`.  The injected
+oracle proves wrong-type non-reuse and exact same-type reuse for one bounded
+same-layout address sequence.  The whole run retains one recovery correction,
+so its status is `recovery_corrected_non_exact`, not exact whole-application
+pairing.
+
+The accepted artifact is
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-19ffb71-20260712-one-shot/`;
+acceptance SHA-256 is
+`efa66ec14e491f27d5549d94d4a99761bc900ebaf57357c218833715778e9a2f`.
+This is functional/diagnostic evidence for an instrumented pinned application,
+not timing, performance, universal coverage, natural-application isolation, or
+whole-program exact-pairing evidence.
+
 ### Exact `HashSet::with_capacity` outer-table regression
 
 `test_mir_hashset_with_capacity_outer_owner.py` drives an ordinary Cargo

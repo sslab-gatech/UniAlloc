@@ -1487,6 +1487,47 @@ These entries are source-bound only to `41205d3`. They make no timing or
 performance claim and do not establish whole-program, universal, or natural-
 application isolation.
 
+## Latest accepted external Rust application evidence at `19ffb71`
+
+The latest accepted external-application checkpoint is bound to exact source
+`19ffb710752466a140067034650190dfdad60328`.  A first attempt at the preceding
+source was correctly rejected after another parallel lane changed
+`type_isolation.rs` during collection; its raw build/run evidence remains
+append-only but is not a current-source PASS.  After committing the repair and
+freezing the claim-bearing source, the pinned Oxipng v4.0.3 application was
+built once and invoked once under `nightly-2022-07-01`, without retry or timing.
+The accepted run has identical start/end HEAD, empty scoped status, and scoped
+fingerprint
+`13f72a5a3a5cd02657ae89500ea165c5238e9128c8f75c8e88aaba5158f3722f`.
+
+Build/run return codes are `0/0`, and the functional output SHA-256 is
+`565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`.
+The target-crate audit reports:
+
+- direct/scope/Drop rewrites `6/310/320`;
+- ownership-transfer candidate/applied/selected rows `12/12/12`, with every
+  selected type/module/callsite identity nonzero;
+- fail-closed semantic/Drop rows `516/119`, of which 117 Drop rows are
+  multi-owner.
+
+The runtime window reports typed allocation/deallocation `871/860`, fallback
+allocation/deallocation `199/160`, dynamic transfer `3/1/2`, 53 type rows, and
+corrupt/dropped counts `0/0`.  The injected oracle validates one bounded
+same-layout sequence: the wrong identity does not reuse the producer address,
+while the exact producer identity does.  The full workload still records one
+recovery correction, so it is explicitly classified
+`recovery_corrected_non_exact`; the oracle's zero mismatch delta cannot be used
+to claim exact whole-application pairing.
+
+Artifact:
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-19ffb71-20260712-one-shot/`.
+Acceptance SHA-256:
+`efa66ec14e491f27d5549d94d4a99761bc900ebaf57357c218833715778e9a2f`.
+This is bounded functional/diagnostic evidence for an instrumented pinned
+application.  It is not a benchmark, performance result, universal compiler
+coverage result, natural-application isolation proof, or whole-program exact
+pairing claim.
+
 ## Exact HashSet allocation identity and composed split-realloc safety
 
 Commit `39c827b` closes an actual compiler false negative for ordinary
