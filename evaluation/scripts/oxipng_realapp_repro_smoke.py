@@ -32,10 +32,19 @@ PASS_SOURCE = ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewri
 STATS_PREFIX = "UNIALLOC_STATS_JSON="
 OWNERSHIP_TRANSFER_RUNTIME_SOURCE = "instrumented-oxipng-workload-window"
 RAW_METADATA_RUNTIME_SOURCE = "semantic_fallback_attribution_snapshot"
+RECOVERY_IDENTITY_RUNTIME_SOURCE = "semantic_metadata_validation_snapshot"
 RAW_METADATA_COUNTER_FIELDS = (
     "raw_alloc_no_metadata",
     "raw_dealloc_no_metadata",
     "raw_realloc_no_metadata",
+)
+RECOVERY_IDENTITY_DETAIL_FIELDS = (
+    "last_mismatch_requested_type_id",
+    "last_mismatch_recorded_type_id",
+    "last_mismatch_requested_module_id",
+    "last_mismatch_recorded_module_id",
+    "last_mismatch_requested_callsite",
+    "last_mismatch_recorded_callsite",
 )
 SCOPED_STATUS_PATHS = [
     pathlib.Path("Cargo.toml"),
@@ -417,7 +426,7 @@ fn unialloc_type_rows_json(
     semantic_stats_recording_disable();
     let type_rows_json = unialloc_type_rows_json(&rows, row_count);
     eprintln!(
-        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"raw_alloc_no_metadata\":{},\"raw_dealloc_no_metadata\":{},\"raw_realloc_no_metadata\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"recovery_identity_mismatches\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{},\"semantic_ownership_transfer\":{{\"source\":\"instrumented-oxipng-workload-window\",\"before\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"after\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"delta\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"accounting_complete\":{},\"dynamic_execution_observed\":{},\"execution_status\":\"{}\"}},\"address_oracle\":{{\"source\":\"injected-oxipng-type-isolation-address-oracle\",\"producer_first_address\":{},\"wrong_type_address\":{},\"producer_recovery_address\":{},\"element_size\":{},\"element_align\":{},\"capacity\":{},\"allocation_size\":{},\"wrong_type_not_reused\":{},\"same_type_reused\":{},\"recovery_identity_mismatches_before\":{},\"recovery_identity_mismatches_after\":{},\"corrupt_slots_after\":{}}},\"type_rows\":{}}}",
+        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"raw_alloc_no_metadata\":{},\"raw_dealloc_no_metadata\":{},\"raw_realloc_no_metadata\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"recovery_identity_matches\":{},\"recovery_identity_mismatches\":{},\"last_mismatch_requested_type_id\":{},\"last_mismatch_recorded_type_id\":{},\"last_mismatch_requested_module_id\":{},\"last_mismatch_recorded_module_id\":{},\"last_mismatch_requested_callsite\":{},\"last_mismatch_recorded_callsite\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{},\"semantic_ownership_transfer\":{{\"source\":\"instrumented-oxipng-workload-window\",\"before\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"after\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"delta\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"accounting_complete\":{},\"dynamic_execution_observed\":{},\"execution_status\":\"{}\"}},\"address_oracle\":{{\"source\":\"injected-oxipng-type-isolation-address-oracle\",\"producer_first_address\":{},\"wrong_type_address\":{},\"producer_recovery_address\":{},\"element_size\":{},\"element_align\":{},\"capacity\":{},\"allocation_size\":{},\"wrong_type_not_reused\":{},\"same_type_reused\":{},\"recovery_identity_mismatches_before\":{},\"recovery_identity_mismatches_after\":{},\"corrupt_slots_after\":{}}},\"type_rows\":{}}}",
         stats.total_allocations,
         stats.typed_allocations,
         stats.fallback_allocations,
@@ -430,7 +439,14 @@ fn unialloc_type_rows_json(
         stats.typed_cache_inserts,
         stats.typed_cache_bypasses,
         stats.coverage_basis_points,
+        metadata_validation.recovery_identity_matches,
         metadata_validation.recovery_identity_mismatches,
+        metadata_validation.last_mismatch_requested_type_id,
+        metadata_validation.last_mismatch_recorded_type_id,
+        metadata_validation.last_mismatch_requested_module_id,
+        metadata_validation.last_mismatch_recorded_module_id,
+        metadata_validation.last_mismatch_requested_callsite,
+        metadata_validation.last_mismatch_recorded_callsite,
         row_count,
         stats.semantic_type_stats_dropped_events,
         side_cache.inline_occupied,
@@ -911,6 +927,130 @@ def mir_function_leaf(row: dict[str, Any]) -> str:
     return str(row.get("mir_function") or "").rsplit("::", 1)[-1]
 
 
+def recovery_identity_runtime_evidence(
+    stats: dict[str, Any], audits: list[dict[str, Any]]
+) -> dict[str, Any]:
+    def nonnegative_int(field: str) -> int:
+        observed = stats.get(field)
+        if isinstance(observed, bool) or not isinstance(observed, int) or observed < 0:
+            raise SmokeError(
+                f"runtime {field} must be an explicit nonnegative integer"
+            )
+        return observed
+
+    matches = nonnegative_int("recovery_identity_matches")
+    mismatches = nonnegative_int("recovery_identity_mismatches")
+    details = {field: nonnegative_int(field) for field in RECOVERY_IDENTITY_DETAIL_FIELDS}
+
+    if mismatches == 0:
+        nonzero = {field: value for field, value in details.items() if value != 0}
+        if nonzero:
+            raise SmokeError(
+                "zero recovery identity mismatches must not retain stale last-mismatch "
+                f"fields: {nonzero}"
+            )
+        last_mismatch = None
+    else:
+        zero_type_fields = [
+            field
+            for field in (
+                "last_mismatch_requested_type_id",
+                "last_mismatch_recorded_type_id",
+            )
+            if details[field] == 0
+        ]
+        if zero_type_fields:
+            raise SmokeError(
+                "nonzero recovery identity mismatches require nonzero requested/recorded "
+                f"typed identities; zero fields: {zero_type_fields}"
+            )
+        requested = {
+            "type_id": details["last_mismatch_requested_type_id"],
+            "module_id": details["last_mismatch_requested_module_id"],
+            "callsite": details["last_mismatch_requested_callsite"],
+        }
+        recorded = {
+            "type_id": details["last_mismatch_recorded_type_id"],
+            "module_id": details["last_mismatch_recorded_module_id"],
+            "callsite": details["last_mismatch_recorded_callsite"],
+        }
+
+        def compiler_rows(identity: dict[str, int]) -> list[dict[str, Any]]:
+            expected = (
+                identity["type_id"],
+                identity["module_id"],
+                identity["callsite"],
+            )
+            found = []
+            for audit in audits:
+                for role, key in (
+                    ("allocation_scope", "actual_type_scope_rows"),
+                    ("drop_scope", "actual_drop_scope_rows"),
+                ):
+                    for row in audit.get(key, []):
+                        if not isinstance(row, dict):
+                            continue
+                        observed = (
+                            int(row.get("type_id") or 0),
+                            int(row.get("module_id") or 0),
+                            int(row.get("callsite") or 0),
+                        )
+                        if observed != expected:
+                            continue
+                        found.append(
+                            {
+                                "role": role,
+                                "audit_file": audit.get("file"),
+                                "mir_function": row.get("mir_function"),
+                                "semantic_object_type": row.get(
+                                    "semantic_object_type"
+                                ),
+                                "source_span": row.get("source_span"),
+                                "rewrite_status": row.get("rewrite_status"),
+                            }
+                        )
+            return found
+
+        requested_rows = compiler_rows(requested)
+        recorded_rows = compiler_rows(recorded)
+        type_or_module_difference_observed = (
+            requested["type_id"], requested["module_id"]
+        ) != (recorded["type_id"], recorded["module_id"])
+        last_mismatch = {
+            "requested": {
+                **requested,
+                "compiler_rows": requested_rows,
+            },
+            "recorded": {
+                **recorded,
+                "compiler_rows": recorded_rows,
+            },
+            "type_or_module_difference_observed": type_or_module_difference_observed,
+            "callsite_difference_observed": (
+                requested["callsite"] != recorded["callsite"]
+            ),
+            "unserialized_policy_or_hint_difference_required": (
+                not type_or_module_difference_observed
+            ),
+            "compiler_row_mapping_complete": bool(requested_rows and recorded_rows),
+            "describes_all_mismatches": mismatches == 1,
+        }
+
+    return {
+        "source": RECOVERY_IDENTITY_RUNTIME_SOURCE,
+        "recovery_identity_matches": matches,
+        "recovery_identity_mismatches": mismatches,
+        "last_mismatch": last_mismatch,
+        "claim_boundary": (
+            "the runtime snapshot preserves the last requested/recorded identity; it "
+            "identifies the complete mismatch set only when the mismatch count is one; "
+            "the snapshot serializes type, module, and callsite but not flags, lifetime, "
+            "or placement hints, so equal type/module values imply an unobserved policy "
+            "or hint difference rather than proving an impossible mismatch"
+        ),
+    }
+
+
 def validate_injected_address_oracle(
     *,
     stats: dict[str, Any],
@@ -1131,13 +1271,10 @@ def validate_realapp_type_isolation(
         audits=audits,
         audit_totals=audit_totals,
     )
-    whole_run_recovery_identity_mismatches = int(
-        stats.get("recovery_identity_mismatches", -1)
-    )
-    if whole_run_recovery_identity_mismatches < 0:
-        raise SmokeError(
-            "whole-run recovery identity mismatch count must be explicitly reported"
-        )
+    recovery_identity_evidence = recovery_identity_runtime_evidence(stats, audits)
+    whole_run_recovery_identity_mismatches = recovery_identity_evidence[
+        "recovery_identity_mismatches"
+    ]
 
     compiler_rows = [
         row
@@ -1325,6 +1462,7 @@ def validate_realapp_type_isolation(
         "matched_lifecycle_row_count": len(matched_lifecycle_rows),
         "semantic_ownership_transfer_runtime": ownership_transfer_evidence,
         "raw_metadata_runtime": raw_metadata_evidence,
+        "recovery_identity_runtime": recovery_identity_evidence,
         "address_level_functional_oracle": address_oracle_evidence,
         "whole_run_recovery_identity_mismatches": whole_run_recovery_identity_mismatches,
         "whole_run_exact_compiler_identity": whole_run_recovery_identity_mismatches == 0,
@@ -1794,6 +1932,9 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
                 "semantic_ownership_transfer_runtime"
             ],
             "raw_metadata_runtime": type_isolation_evidence["raw_metadata_runtime"],
+            "recovery_identity_runtime": type_isolation_evidence[
+                "recovery_identity_runtime"
+            ],
             "type_isolation_evidence": type_isolation_evidence,
             "audits": audits,
         }

@@ -205,7 +205,14 @@ def valid_contract_stats() -> dict:
         "raw_alloc_no_metadata": 0,
         "raw_dealloc_no_metadata": 0,
         "raw_realloc_no_metadata": 0,
+        "recovery_identity_matches": 0,
         "recovery_identity_mismatches": 0,
+        "last_mismatch_requested_type_id": 0,
+        "last_mismatch_recorded_type_id": 0,
+        "last_mismatch_requested_module_id": 0,
+        "last_mismatch_recorded_module_id": 0,
+        "last_mismatch_requested_callsite": 0,
+        "last_mismatch_recorded_callsite": 0,
         "type_isolation_corrupt_slots": 0,
         "type_stats_rows": len(rows),
         "type_stats_dropped_events": 0,
@@ -355,6 +362,12 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertIn('\\"raw_alloc_no_metadata\\"', main)
             self.assertIn('\\"raw_dealloc_no_metadata\\"', main)
             self.assertIn('\\"raw_realloc_no_metadata\\"', main)
+            self.assertIn('\\"last_mismatch_requested_type_id\\"', main)
+            self.assertIn('\\"last_mismatch_recorded_type_id\\"', main)
+            self.assertIn('\\"last_mismatch_requested_module_id\\"', main)
+            self.assertIn('\\"last_mismatch_recorded_module_id\\"', main)
+            self.assertIn('\\"last_mismatch_requested_callsite\\"', main)
+            self.assertIn('\\"last_mismatch_recorded_callsite\\"', main)
             self.assertIn('\\"address_oracle\\"', main)
             self.assertNotIn("0xC002", main)
             self.assertIn("extern crate unialloc;", (oxipng / "src" / "lib.rs").read_text(encoding="utf-8"))
@@ -868,7 +881,18 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
     ) -> None:
         cmd = smoke.CommandResult(["cmd"], 0, "", "")
         recovery_corrected = valid_contract_stats()
-        recovery_corrected["recovery_identity_mismatches"] = 7
+        recovery_corrected.update(
+            {
+                "recovery_identity_matches": 3,
+                "recovery_identity_mismatches": 7,
+                "last_mismatch_requested_type_id": 202,
+                "last_mismatch_recorded_type_id": 101,
+                "last_mismatch_requested_module_id": 77,
+                "last_mismatch_recorded_module_id": 77,
+                "last_mismatch_requested_callsite": 4004,
+                "last_mismatch_recorded_callsite": 1001,
+            }
+        )
         evidence = smoke.assert_contract(
             build=cmd,
             run=cmd,
@@ -889,6 +913,132 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             evidence["address_level_functional_oracle"]["recovery_identity_mismatches"],
             0,
         )
+        recovery = evidence["recovery_identity_runtime"]
+        self.assertEqual(recovery["recovery_identity_matches"], 3)
+        self.assertFalse(recovery["last_mismatch"]["describes_all_mismatches"])
+        self.assertEqual(
+            recovery["last_mismatch"]["requested"]["compiler_rows"][0]["role"],
+            "drop_scope",
+        )
+        self.assertEqual(
+            recovery["last_mismatch"]["recorded"]["compiler_rows"][0]["role"],
+            "allocation_scope",
+        )
+        self.assertTrue(
+            recovery["last_mismatch"]["type_or_module_difference_observed"]
+        )
+        self.assertTrue(recovery["last_mismatch"]["compiler_row_mapping_complete"])
+
+    def test_single_recovery_mismatch_is_fully_localized(self) -> None:
+        stats = valid_contract_stats()
+        stats.update(
+            {
+                "recovery_identity_mismatches": 1,
+                "last_mismatch_requested_type_id": 202,
+                "last_mismatch_recorded_type_id": 101,
+                "last_mismatch_requested_module_id": 77,
+                "last_mismatch_recorded_module_id": 77,
+                "last_mismatch_requested_callsite": 4004,
+                "last_mismatch_recorded_callsite": 1001,
+            }
+        )
+
+        evidence = smoke.recovery_identity_runtime_evidence(
+            stats, valid_contract_audits()
+        )
+
+        self.assertTrue(evidence["last_mismatch"]["describes_all_mismatches"])
+        self.assertEqual(
+            evidence["last_mismatch"]["requested"]["compiler_rows"][0]["role"],
+            "drop_scope",
+        )
+        self.assertEqual(
+            evidence["last_mismatch"]["recorded"]["compiler_rows"][0]["role"],
+            "allocation_scope",
+        )
+
+    def test_recovery_mismatch_details_fail_closed(self) -> None:
+        missing_details = valid_contract_stats()
+        missing_details["recovery_identity_mismatches"] = 1
+        with self.assertRaisesRegex(smoke.SmokeError, "require nonzero"):
+            smoke.recovery_identity_runtime_evidence(
+                missing_details, valid_contract_audits()
+            )
+
+        missing_field = valid_contract_stats()
+        missing_field["recovery_identity_mismatches"] = 1
+        del missing_field["last_mismatch_recorded_callsite"]
+        with self.assertRaisesRegex(smoke.SmokeError, "explicit nonnegative"):
+            smoke.recovery_identity_runtime_evidence(
+                missing_field, valid_contract_audits()
+            )
+
+        stale_details = valid_contract_stats()
+        stale_details["last_mismatch_requested_type_id"] = 202
+        with self.assertRaisesRegex(smoke.SmokeError, "must not retain stale"):
+            smoke.recovery_identity_runtime_evidence(
+                stale_details, valid_contract_audits()
+            )
+
+        unserialized_difference = valid_contract_stats()
+        unserialized_difference.update(
+            {
+                "recovery_identity_mismatches": 1,
+                "last_mismatch_requested_type_id": 101,
+                "last_mismatch_recorded_type_id": 101,
+                "last_mismatch_requested_module_id": 77,
+                "last_mismatch_recorded_module_id": 77,
+                "last_mismatch_requested_callsite": 1001,
+                "last_mismatch_recorded_callsite": 1001,
+            }
+        )
+        evidence = smoke.recovery_identity_runtime_evidence(
+            unserialized_difference, valid_contract_audits()
+        )
+        last = evidence["last_mismatch"]
+        self.assertFalse(last["type_or_module_difference_observed"])
+        self.assertFalse(last["callsite_difference_observed"])
+        self.assertTrue(last["unserialized_policy_or_hint_difference_required"])
+
+        module_only = valid_contract_stats()
+        module_only.update(
+            {
+                "recovery_identity_mismatches": 1,
+                "last_mismatch_requested_type_id": 101,
+                "last_mismatch_recorded_type_id": 101,
+                "last_mismatch_requested_module_id": 88,
+                "last_mismatch_recorded_module_id": 77,
+                "last_mismatch_requested_callsite": 1001,
+                "last_mismatch_recorded_callsite": 1001,
+            }
+        )
+        module_evidence = smoke.recovery_identity_runtime_evidence(
+            module_only, valid_contract_audits()
+        )["last_mismatch"]
+        self.assertTrue(module_evidence["type_or_module_difference_observed"])
+        self.assertFalse(
+            module_evidence["unserialized_policy_or_hint_difference_required"]
+        )
+
+        zero_context = valid_contract_stats()
+        zero_context.update(
+            {
+                "recovery_identity_mismatches": 1,
+                "last_mismatch_requested_type_id": 202,
+                "last_mismatch_recorded_type_id": 101,
+                "last_mismatch_requested_module_id": 0,
+                "last_mismatch_recorded_module_id": 0,
+                "last_mismatch_requested_callsite": 0,
+                "last_mismatch_recorded_callsite": 0,
+            }
+        )
+        zero_context_evidence = smoke.recovery_identity_runtime_evidence(
+            zero_context, valid_contract_audits()
+        )["last_mismatch"]
+        self.assertTrue(
+            zero_context_evidence["type_or_module_difference_observed"]
+        )
+        self.assertFalse(zero_context_evidence["compiler_row_mapping_complete"])
 
     def test_address_oracle_rejects_nonzero_mismatch_before_or_after(self) -> None:
         cmd = smoke.CommandResult(["cmd"], 0, "", "")
