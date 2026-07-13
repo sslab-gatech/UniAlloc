@@ -905,6 +905,25 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   stale pointer，也不是通用 UAF/double-free 保证。
 - **current gates：** C002 current-source finite inventory 保持 `430/430`，但不是
   whole-program denominator，也不能替代 actual-wrapper evidence。
+- **两个 exact byte-Vec compiler surface：** `87e81e6` 让 current+pinned actual
+  wrapper 对 `slice::Iter<u8>.copied().collect::<Vec<u8>>()` 各实际应用 direct
+  `Vec<u8>` scope；custom raw-reference iterator 仍 fail closed，`Zip<IterMut,
+  IntoIter>` Drop 因 hidden `Vec -> IntoIter` transfer 尚未建模而保持 unresolved。
+  `3fc5a19` + `a57d318` 只支持 canonical sysroot `Vec` 的 exact
+  `vec![0u8; n]`；generic/custom-Clone/same-name 与 `--extern alloc` spoof 全部
+  fail closed。两项都有 wrong-type non-reuse 与 exact-Vec reuse，但都不是任意
+  iterator、通用 `vec![value; n]` 或 whole-program coverage。
+- **cache rejection owner continuity：** `3044166` 的 deterministic tests 分别证明
+  ordinary plain-cache rejection 在 sole raw release 前保留 type-cache owner，以及
+  delayed-free plain-cache rejection 只撤销 temporary type-cache registration、持续保留
+  delayed owner。segregated rejection 走同一 completion helper，但尚无独立 forced
+  delayed+segregated race，因此不能把 shared code path 写成已单独执行的 race evidence。
+- **最新 current-source multi-module check：** `a57d318` 上一次 generated Cargo
+  actual-wrapper build/run 为 `validated=true`：4 个 actual scope rows、transfer `1/1`，
+  wrong-record / wrong-Blob-Vec non-reuse、exact Vec/Box reuse，以及 cross-thread
+  same-layout Producer/Consumer wrong-type blocked 与 exact-owner reuse；fallback/raw/
+  mismatch/corrupt/dropped 全为 `0`。这是单个 generated application，不是任意
+  external app、whole-program coverage 或性能证据。
 - **fresh compiled-Rust application check：** 在 code-bearing `1d0d13f` 上，
   `test_mir_realistic_multimodule_type_isolation.py` 通过真实 `RUSTC_WRAPPER`/MIR
   pass 编译并运行一个 multi-module Cargo application，单次 PASS。它观察到 4 个
@@ -920,3 +939,11 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   只走 layout-derived/raw allocator path、不是 compiler typed ABI；因此没有据此采用
   优化，也不报告稳定百分比。这些数值不是 compiler-pass overhead、paper claim 或
   publication-grade result。
+- **profile-guided bounded A/B：** `908e12f` 对 empty delayed-owner lookup 做
+  inline fast path；source-bound A/B 是 baseline `3fc5a199` 对 detached candidate
+  `7964094`（同一六行 patch），一次 warmup 后交错各 3 次。相同
+  `vec::bench_with_capacity_1000` 的 baseline median/range 为 `15.36` /
+  `[15.27,15.46] ns/iter`，candidate 为 `14.41` / `[14.38,14.51] ns/iter`，
+  directional `-6.185%`。这是单机 Darwin、layout-derived/raw small benchmark
+  diagnostic，只支持保留该候选的方向性决策；不是稳定百分比、compiler-pass
+  overhead、论文或 publication-grade performance claim。

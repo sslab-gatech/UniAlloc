@@ -2246,6 +2246,43 @@ This is one generated compiled-Rust application and not arbitrary external-app
 coverage, a whole-program denominator, a universal safety proof, or performance
 evidence.
 
+## Current exact compiler surfaces and cache-rejection continuity
+
+Commit `87e81e6` recognizes only the exact
+`slice::Iter<u8>.copied().collect::<Vec<u8>>()` shape. Current and pinned
+actual-wrapper regressions each apply the semantic scope to the direct
+`Vec<u8>` owner and preserve wrong-String non-reuse plus exact-Vec reuse. A
+custom raw-reference iterator remains unresolved, and Drop of
+`Zip<IterMut, IntoIter>` remains audit-only because the hidden
+`Vec -> IntoIter` ownership transfer is not yet modeled. This is one exact
+borrowed-byte collection surface, not arbitrary `Iterator::collect`, hidden
+transfer closure, or whole-program coverage.
+
+Commits `3fc5a19` and `a57d318` add the adjacent exact `vec![0u8; n]` path. The
+positive rewrite is bound to rustc's canonical sysroot `Vec` diagnostic item;
+generic elements, custom `Clone`, same-name helpers, and an external crate that
+spoofs the name `alloc` all fail closed. Its address oracle observes wrong
+String non-reuse and exact `Vec<u8>` reuse. This supports only the specialized
+canonical byte-vector repetition shape, not general `vec![value; n]` coverage.
+
+Commit `3044166` preserves process-visible ownership when a type-cache insert
+is rejected. One deterministic regression covers the ordinary plain-cache path
+through its sole raw release; another proves that a delayed-free plain-cache
+flush keeps the delayed owner while retiring only its temporary type-cache
+registration. Segregated rejection uses the same completion helper, but there
+is no independent forced delayed-plus-segregated race regression, so that
+combination is shared-path reasoning rather than separately executed evidence.
+
+At current source `a57d318`, one generated multi-module Cargo application was
+compiled and run through the actual wrapper. It reports four applied scope
+rows, ownership transfer `1/1`, Box/Vec wrong-record and wrong-type non-reuse,
+exact Box/Vec reuse, and same-layout cross-thread Producer/Consumer wrong-type
+blocking plus exact-owner reuse. Fallback, raw, mismatch, corrupt, and dropped
+events are all zero. This is a single generated current-source application,
+not arbitrary external-app or whole-program coverage, and the C002 `430/430`
+gate remains a finite regression inventory rather than a whole-program
+denominator.
+
 A historical single-sample diagnostic measured
 `vec::bench_with_capacity_1000` on this Darwin/current-toolchain setup as
 default `16.59 ns/iter` and type isolation
@@ -2257,6 +2294,20 @@ did not reproduce the `+53%` direction and also exercised a layout-derived/raw
 allocator path rather than the compiler typed ABI. No optimization was adopted
 from these samples, and they support no compiler-pass overhead, stable
 percentage, benchmark claim, or paper evidence.
+
+A later profile-guided diagnostic evaluated the empty delayed-owner lookup
+split now present as `908e12f`. The source-bound A/B used baseline `3fc5a199`
+and detached candidate `7964094` (the same six-line patch), one warmup per
+variant, and interleaved `A1/B1/A2/B2/A3/B3` runs of
+`vec::bench_with_capacity_1000`. Baseline was median `15.36 ns/iter`, range
+`[15.27, 15.46]`; candidate was median `14.41 ns/iter`, range
+`[14.38, 14.51]`, a directional median change of `-6.185%`. The source-bound
+record is
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/delayed-owner-inline-diagnostic-3fc5a19-20260713/summary.json`
+(SHA-256 `0287056f0092e8eca86d898f60a42fea42f0cbb593f492338392ac9077feec40`).
+This is one three-repetition Darwin microbenchmark on a layout-derived/raw
+path. It is diagnostic-only: not compiler-typed ABI overhead, a stable
+percentage, a paper claim, or publication-grade performance evidence.
 
 This is pinned, instrumented real-application and bounded regression evidence,
 not an unmodified universal application result, whole-program proof, benchmark,
