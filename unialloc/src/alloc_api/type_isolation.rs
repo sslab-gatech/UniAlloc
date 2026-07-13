@@ -34115,6 +34115,100 @@ mod tests {
 
     #[cfg(feature = "stats")]
     #[test]
+    fn generic_allocator_grow_without_metadata_stays_raw_fallback() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let new_layout = Layout::from_size_align(4096, old_layout.align()).unwrap();
+        let initial_cache = type_isolation_side_cache_snapshot();
+        let initial_delayed = delayed_free_snapshot();
+
+        let old_block = alloc.allocate(old_layout).expect("raw fallback allocate");
+        let old_ptr = old_block.as_ptr() as *mut u8;
+        assert!(!old_ptr.is_null());
+        unsafe {
+            for offset in 0..old_layout.size() {
+                old_ptr
+                    .add(offset)
+                    .write((offset as u8).wrapping_mul(3).wrapping_add(1));
+            }
+        }
+        assert_eq!(lookup_auto_allocation_metadata(old_ptr, old_layout), None);
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+
+        let grown = unsafe {
+            alloc
+                .grow(
+                    NonNull::new(old_ptr).expect("old ptr"),
+                    old_layout,
+                    new_layout,
+                )
+                .expect("raw fallback grow")
+        };
+        let grown_ptr = grown.as_ptr() as *mut u8;
+        assert!(!grown_ptr.is_null());
+        for offset in 0..old_layout.size() {
+            assert_eq!(
+                unsafe { grown_ptr.add(offset).read_volatile() },
+                (offset as u8).wrapping_mul(3).wrapping_add(1),
+                "raw fallback realloc/grow must preserve the initialized prefix"
+            );
+        }
+
+        assert_eq!(lookup_auto_allocation_metadata(grown_ptr, new_layout), None);
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(type_isolation_side_cache_snapshot(), initial_cache);
+        assert_eq!(delayed_free_snapshot(), initial_delayed);
+
+        let stats = semantic_stats_snapshot();
+        assert_eq!(stats.typed_allocations, 0);
+        assert_eq!(stats.typed_deallocations, 0);
+        assert_eq!(stats.typed_cache_hits, 0);
+        assert_eq!(stats.typed_cache_inserts, 0);
+        assert_eq!(stats.typed_cache_bypasses, 0);
+        assert_eq!(stats.fallback_allocations, 2);
+        assert!(stats.fallback_deallocations <= 1);
+        assert_eq!(stats.policy_flags_seen, 0);
+        assert_eq!(stats.last_type_id, UNKNOWN_SEMANTIC_ID);
+
+        let fallback = semantic_fallback_attribution_snapshot();
+        assert_eq!(fallback.raw_alloc_no_metadata, 1);
+        assert_eq!(fallback.raw_alloc_no_metadata_bytes, old_layout.size());
+        assert_eq!(fallback.raw_realloc_no_metadata, 1);
+        assert_eq!(fallback.raw_realloc_no_metadata_bytes, new_layout.size());
+        assert_eq!(
+            fallback.raw_realloc_moved_dealloc_no_metadata,
+            stats.fallback_deallocations
+        );
+        assert_eq!(fallback.realloc_recorded_old_metadata_new_allocations, 0);
+        assert_eq!(
+            fallback.realloc_recorded_old_metadata_new_allocation_bytes,
+            0
+        );
+
+        unsafe {
+            alloc.deallocate(NonNull::new(grown_ptr).expect("grown ptr"), new_layout);
+        }
+        assert_eq!(lookup_auto_allocation_metadata(grown_ptr, new_layout), None);
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(type_isolation_side_cache_snapshot(), initial_cache);
+        assert_eq!(delayed_free_snapshot(), initial_delayed);
+        semantic_stats_recording_disable();
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
     fn fallback_global_realloc_to_zero_records_dealloc_not_alloc() {
         let _guard = test_guard();
         unsafe {
