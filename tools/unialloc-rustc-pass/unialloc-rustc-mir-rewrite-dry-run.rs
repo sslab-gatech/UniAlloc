@@ -90,7 +90,7 @@ const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const MODULE_ID_ALGORITHM: &str =
     "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))";
 const TYPE_ID_ALGORITHM: &str =
-    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer Vec identity because they can change only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; exact alloc::sync::Arc::new calls select the direct destination Arc<T> identity only after DefId/crate/path and destination-payload structural checks, without recursively treating nested owners inside T as owners of the Arc allocation; constructor/factory scopes otherwise attribute identity only from the MIR destination, with exact Result<T, E>/Option<T> destinations selecting only the Ok/Some payload while Result Err owners remain fail-closed hazards; for both shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut and str Split/SplitInclusive wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec capacity-only and Arc::new exceptions; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer Vec identity because they can change only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; exact alloc::sync::Arc::new calls select the direct destination Arc<T> identity only after DefId/crate/path and destination-payload structural checks, without recursively treating nested owners inside T as owners of the Arc allocation; exact std::collections::HashMap::with_capacity calls likewise select the direct destination HashMap<K, V> identity only after exact std DefId/path, RandomState, optional Global allocator, and capacity-argument checks, without treating nested K/V owners as identities for the table allocation; constructor/factory scopes otherwise attribute identity only from the MIR destination, with exact Result<T, E>/Option<T> destinations selecting only the Ok/Some payload while Result Err owners remain fail-closed hazards; for both shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut and str Split/SplitInclusive wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec capacity-only, Arc::new, and std HashMap::with_capacity exceptions; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 
@@ -2552,6 +2552,29 @@ fn exact_alloc_arc_new_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
         && exact_alloc_arc_new_def_path(&tcx.def_path_str(def_id))
 }
 
+fn exact_std_hash_map_def_path(path: &str) -> bool {
+    strip_rustc_crate_disambiguators(path) == "std::collections::HashMap"
+}
+
+fn exact_std_hash_map_with_capacity_def_path(path: &str) -> bool {
+    strip_rustc_crate_disambiguators(path)
+        == "std::collections::HashMap::<K, V>::with_capacity"
+}
+
+fn exact_std_hash_map_with_capacity_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "std"
+        && exact_std_hash_map_with_capacity_def_path(&tcx.def_path_str(def_id))
+}
+
+fn exact_std_hash_map_random_state_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        // Current std exposes RandomState through std::hash; the pinned
+        // nightly exposes the same std-owned type through hash_map.
+        "std::hash::RandomState" | "std::collections::hash_map::RandomState"
+    )
+}
+
 fn exact_alloc_vec_into_iter_def_path(path: &str) -> bool {
     matches!(
         strip_rustc_crate_disambiguators(path).as_str(),
@@ -3470,6 +3493,64 @@ fn direct_outer_arc_new_destination_owner<'tcx>(
     Some(format!("{:?}", destination_ty))
 }
 
+fn direct_outer_std_hash_map_with_capacity_destination_owner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<String> {
+    if !exact_std_hash_map_with_capacity_def_id(tcx, callee_def_id)
+        || clone_result_has_unresolved_params(destination_ty)
+        || argument_tys.len() != 1
+        || !matches!(argument_tys[0].kind(), ty::Uint(ty::UintTy::Usize))
+    {
+        return None;
+    }
+
+    let (destination_def, destination_args) = match destination_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if tcx.crate_name(destination_def.did().krate).as_str() != "std"
+        || destination_def.did().krate != callee_def_id.krate
+        || !exact_std_hash_map_def_path(&tcx.def_path_str(destination_def.did()))
+        || !matches!(destination_args.len(), 3 | 4)
+    {
+        return None;
+    }
+
+    // Both supported rustc surfaces expose K, V, RandomState in that order.
+    // `with_capacity` has no hasher argument, so accepting any other hasher
+    // would silently broaden this proof to with_capacity_and_hasher-like
+    // semantics.
+    let random_state_ty = generic_arg_type(destination_args.get(2)?)?;
+    let random_state_def = match random_state_ty.kind() {
+        ty::Adt(def, args) if args.is_empty() => def,
+        _ => return None,
+    };
+    if tcx.crate_name(random_state_def.did().krate).as_str() != "std"
+        || random_state_def.did().krate != destination_def.did().krate
+        || !exact_std_hash_map_random_state_def_path(&tcx.def_path_str(random_state_def.did()))
+    {
+        return None;
+    }
+
+    // Current std exposes HashMap<K, V, S, A>; the pinned nightly exposes
+    // HashMap<K, V, S>.  When A exists, exact with_capacity returns Global.
+    if destination_args.len() == 4 {
+        let allocator_ty = generic_arg_type(destination_args.get(3)?)?;
+        let allocator_def = match allocator_ty.kind() {
+            ty::Adt(def, args) if args.is_empty() => def,
+            _ => return None,
+        };
+        if !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path) {
+            return None;
+        }
+    }
+
+    Some(format!("{:?}", destination_ty))
+}
+
 fn non_plain_semantic_scope_heap_class<'tcx>(
     tcx: TyCtxt<'tcx>,
     callee_def_id: Option<DefId>,
@@ -3484,6 +3565,18 @@ fn non_plain_semantic_scope_heap_class<'tcx>(
         // destination. The moved T may itself contain supported owners, but
         // those allocations already exist before this exact constructor call
         // and are not identities for the new Arc allocation.
+        SemanticScopeHeapClass::Single(owner)
+    } else if let Some(owner) = callee_def_id.and_then(|def_id| {
+        direct_outer_std_hash_map_with_capacity_destination_owner(
+            tcx,
+            def_id,
+            destination_ty,
+            argument_tys,
+        )
+    }) {
+        // Exact std HashMap::with_capacity allocates only the direct raw table.
+        // K/V values do not exist yet, so nested supported owners inside K or V
+        // cannot be identities for that allocation.
         SemanticScopeHeapClass::Single(owner)
     } else if callee_def_id.map_or(false, |def_id| {
         exact_alloc_vec_with_capacity_def_id(tcx, def_id)
@@ -3995,6 +4088,30 @@ mod tests {
         ));
         assert!(!exact_alloc_arc_new_def_path(
             "my_crate::alloc::sync::Arc::<T>::new"
+        ));
+        assert!(exact_std_hash_map_def_path(
+            "std[efc3]::collections::HashMap"
+        ));
+        assert!(!exact_std_hash_map_def_path(
+            "hashbrown::map::HashMap"
+        ));
+        assert!(exact_std_hash_map_with_capacity_def_path(
+            "std[efc3]::collections::HashMap::<K, V>::with_capacity"
+        ));
+        assert!(!exact_std_hash_map_with_capacity_def_path(
+            "std::collections::HashMap::<K, V>::with_capacity_and_hasher"
+        ));
+        assert!(!exact_std_hash_map_with_capacity_def_path(
+            "HashMapLike::with_capacity"
+        ));
+        assert!(exact_std_hash_map_random_state_def_path(
+            "std[efc3]::hash::RandomState"
+        ));
+        assert!(exact_std_hash_map_random_state_def_path(
+            "std::collections::hash_map::RandomState"
+        ));
+        assert!(!exact_std_hash_map_random_state_def_path(
+            "hashbrown::hash_map::DefaultHashBuilder"
         ));
         assert!(exact_alloc_vec_into_iter_def_path(
             "alloc[d734]::vec::into_iter::IntoIter"
