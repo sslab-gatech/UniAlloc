@@ -474,7 +474,7 @@ Deep answer: backup slide number
 | **13. 如何证明真的用了 hugepage，而不是 ordinary-page fallback？** | Current HEAD 的 hugepage/ordinary domain 与 fallback tests 为 `17/17`，但本机 direct probe 没有观察到 real hugepage backing；macOS 返回 `KERN_INVALID_ARGUMENT`，因此 backing 仍是 missing。 | Domain separation/fallback PASS 不等于 mapping/backing PASS；需要合适 host 和与当前三对象 side-cache materialization 一致的 fresh probe。B13 |
 | **14. PAC 当前到底验证了什么？** | Current HEAD 验证了 allocator PAC metadata 的安全 software fallback 与 typed side-cache reuse；独立 `no_std` consumer contract 隔离了 std-only dev-dependencies，并允许用 `rust-src` 构建真实 arm64e allocator runtime probe。 | external ABI evidence 不能代替 allocator runtime；只有 source-bound arm64e `no_std` probe 才能支持 hardware functional evidence，且 C006 cost/percentage 仍 deferred。B12 |
 | **15. 72.17% 的 denominator 是什么？是当前数字吗？** | 原论文表述为标准 Rust `alloc` benchmark 中“72.17% of objects”；它不是当前 source-bound 已闭合数字。 | 若 raw evidence 未定义 event/object denominator，不自行改名；给原方法、fallback 与 current audit。B14/B18 |
-| **16. 为什么现在会看到 99.851437% coverage？** | `430/430` 是 G001 freeze-bound functional coverage evidence，不是性能。G002 的旧 `576df61...9bb9f8d...` one-shot 保留其精确 denominator；新的 `38b8b59...` current-source one-shot 单独报告静态 ownership transfer `6/6` 与动态 `1/1/0`，不能把它们换算或并入旧百分比。 | 先看 source digest、denominator、actual-rewrite/dynamic-execution evidence 和 evidence tier；不要跨 revision rebinding，也不要写成 performance claim。B18 |
+| **16. 为什么现在会看到 99.851437% coverage？** | Existing `430/430` compiler functional-coverage gate 是有限测试 inventory，不是性能或 whole-program coverage。历史 `99.851437%` 仍是 G001 freeze-bound evidence，未 rebind 到 current source；G002 的旧 `576df61...9bb9f8d...` one-shot 保留其精确 denominator，新的 `38b8b59...` current-source one-shot 单独报告静态 ownership transfer `6/6` 与动态 `1/1/0`，不能把它们换算或并入旧百分比。 | 先看 source digest、denominator、actual-rewrite/dynamic-execution evidence 和 evidence tier；不要跨 revision rebinding，也不要写成 performance claim。B18 |
 | **17. Evaluation 是否公平？** | 需要相同 workload、baseline、配置、重复运行、明确 normalization、raw provenance 和 source binding 才能比较。 | 原论文旧 toolchain/hardware、simulation，以及没有单独 uncertainty/significance analysis 的限制必须主动说明。B14--B16 |
 | **18. Security benefit 真正测量了吗？** | 当前已有同 layout、跨线程 recovery、不同 trusted `type_id` 的 adversarial reuse regression，证明 covered cache path 的 cross-type address reuse 被阻断；plain cache 另有强制 lookup-key collision regression，但还不是系统性 exploit-success study。 | Same-type、fallback、identical/spoofed metadata、compiler type-ID collision 与真实 exploit corpus 尚未覆盖；下一步测 reuse-success rate 与 attacker capabilities。B19 |
 | **19. 当前源码支持五个平台吗？** | G002 已有 macOS functional PASS、Windows FLS Wine 10 runtime `3/3` PASS、current-source Redox build/codegen/ABI PASS、Rust-for-Linux 与 BlogOS current-source no_std final-link contracts PASS、历史 artifact-hash-bound Redox target runtime evidence（未捕获 source revision），以及 current fixed/hosted smoke；当前 Redox runtime、Rust-for-Linux kernel load/run 和 BlogOS boot validation 仍依赖外部 runner/assets。 | 使用 `0bd84c1` 引入的 runner，`38b8b59` fresh Windows cross-build 在 Wine 10 上闭合 A-current/B-delete、A-null/B-populated 与 current-owner exit 三个 bounded lifecycle；早期 Wine 8 缺 DLL 只是 runner blocker。local link contract 与 Wine 证据都不等于 native/current-HEAD 五平台实机闭合。B17/B18 |
@@ -630,6 +630,36 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 
 ### 答辩前四天的 current-source evidence boundary
 
+- **P0 duplicate-free ownership closure：** `8a1cb06` 先加入 plain、
+  metadata-segregated 与 cross-thread-hinted typed-cache duplicate-free
+  regressions，`a93cf97` 再引入 bounded、allocation-free、process-visible 的
+  type-cache pointer registry。cache publish 先取得唯一 ownership；duplicate
+  直接 fail-stop，registry pressure 则绕过 cache 并 raw-free；pop、evict、thread
+  drain 和 delayed-free→type-cache transfer 都成对 retire/register，关闭同一地址
+  同时进入两个 TLS cache 的窗口。当前 `654e1d7` validation gate 为 hosted
+  `685/685`、fixed-heap `650/650`。这是 retained-cache ownership 的 P0
+  correctness closure，不是对任意已复用 stale pointer 的 universal detector，
+  也不是性能结论。
+- **真实 Cargo generic/concrete boundary：** `654e1d7` 的
+  `test_mir_generic_vec_type_isolation_fail_closed.py` 创建真实 Cargo 应用，使用
+  actual `RUSTC_WRAPPER`、`UNIALLOC_ACTUAL_MIR_REWRITE=1` 和
+  `UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE=1` 编译并运行，不是 dry-run。
+  `generic_roundtrip<T>` 的 `Vec<T>::with_capacity` 保持 unresolved/audit-only，
+  无 planned/applied row；运行时 generic typed `0/0/0/0`，fallback/raw
+  alloc/dealloc `8/8`，mismatch/corrupt/dropped `0/0/0`，证明未知泛型 identity
+  安全 fail closed。相同调用中的 same-layout `Vec<Producer>` / `Vec<Consumer>`
+  则各有一条 actual applied scope、distinct nonzero compiler type IDs；运行时
+  typed alloc/dealloc `12/12`、cache hit/insert `4/12`，wrong-type 地址集合不相交，
+  recovered Producer 集合精确等于原 Producer 集合，fallback/raw/mismatch/corrupt
+  全为 `0`。这个 concrete positive control 证明一条 bounded actual-rewrite
+  type-separation 路径；**generic positive isolation 仍缺**，需要
+  monomorphization-aware type evidence 后才能安全 rewrite。
+- **coverage / performance boundary：** existing compiler functional-coverage
+  gate 保持 `430/430`；它是有限测试 inventory，不是 whole-program 或 universal
+  coverage denominator，也不把历史 `99.851437%` 跨 source rebind。小规模三次
+  benchmark 只用于 diagnostic optimization decision；full paper performance
+  matrix 已由用户 scope change 明确 deferred，不从 reduced smoke runs 宣称论文
+  百分比。
 - **真实 Rust 应用：** Oxipng one-shot artifact
   `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-d50795f-20260713-one-shot/`
   绑定 `d50795f892bd38ca3e7fd083da7d6eacafd0db06`，summary SHA-256

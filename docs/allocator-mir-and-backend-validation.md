@@ -1875,3 +1875,68 @@ fast-path change. The baseline median was `116.40 ns` with range
 `116.51–118.19 ns`, a `+0.85%` slowdown. The code change was reverted exactly.
 These small same-condition measurements only explain the rejection of that
 specific optimization; they are not a UniAlloc or paper performance claim.
+
+## Presentation checkpoint: duplicate-free ownership and generic `Vec<T>` boundary
+
+At current HEAD `654e1d7`, commits `8a1cb06` and `a93cf97` close a P0
+duplicate-free hole in semantic type-cache ownership. The regressions exercise
+plain conservative, metadata-segregated local, and cross-thread-hinted typed
+deallocation: a second free of an address already retained by a semantic cache
+must fail-stop rather than publish an alias into another cache. The repair adds
+a bounded, allocation-free, sharded process-visible pointer registry while the
+payload caches remain thread-local. Cache insertion acquires registry ownership
+transactionally; a duplicate panics, a full probe window bypasses the semantic
+cache and releases through the raw allocator, and pop, eviction, drain, and
+delayed-free-to-type-cache transfer unregister the corresponding ownership.
+The transfer publishes type-cache ownership before retiring quarantine
+ownership, deliberately overlapping the two records so there is no
+cross-thread visibility gap.
+
+The current validation gate reports `685/685` hosted allocator tests and
+`650/650` fixed-heap allocator tests. These results cover the affected retained
+cache and quarantine mutation paths, including the three new duplicate-free
+regressions. The claim is intentionally bounded: it prevents duplicate
+publication while an address remains cache-owned; it is not a universal stale-
+pointer detector after an address has legitimately left the cache and been
+reused.
+
+Commit `654e1d7` adds
+`tools/unialloc-rustc-pass/test_mir_generic_vec_type_isolation_fail_closed.py`,
+which creates and runs a real Cargo application under the built compiler pass.
+The invocation uses actual `RUSTC_WRAPPER`,
+`UNIALLOC_ACTUAL_MIR_REWRITE=1`, and
+`UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE=1`; it therefore validates the compiled
+and executed rewrite path rather than a dry-run-only audit.
+
+The generic `generic_roundtrip<T>` positive case intentionally remains
+missing. Its `Vec<T>::with_capacity` row is
+`semantic_scope_unsolved_heap_object_candidate` /
+`semantic_scope_rewrite_skipped_unresolved_heap_object_type`, with pairing
+`audit_only_unresolved_heap_object_type`, unknown heap-object type, and no
+planned or applied generic row. Runtime observes generic typed allocation,
+deallocation, cache hit, and cache insert `0/0/0/0`; fallback and raw
+allocation/deallocation are `8/8`; recovery mismatch, corrupt slot, and dropped
+type-stat event are `0/0/0`. This is the required fail-closed safety behavior,
+not positive generic type-isolation coverage. Positive generic isolation still
+requires monomorphization-aware type evidence before a per-instantiation scope
+can be emitted safely.
+
+The same real Cargo run supplies concrete positive controls with identical
+allocation layout. `Vec<Producer>` and `Vec<Consumer>` each receive exactly one
+actual applied `with_capacity` scope, distinct nonzero compiler type IDs, a
+shared nonzero module ID, nonzero callsites, and the type-isolation policy flag.
+Runtime reports typed allocation/deallocation `12/12`, cache hit/insert `4/12`,
+and zero fallback, raw-no-metadata, recovery mismatch, corrupt slot, or dropped
+type-stat events. The Producer and Consumer address sets are disjoint, while
+the recovered Producer address set exactly equals the original Producer set.
+This proves wrong-type non-reuse and complete same-type reuse for this bounded
+same-layout actual-rewrite fixture; it is not universal `Vec` coverage.
+
+Separately, the existing compiler functional-coverage gate remains `430/430`.
+That denominator is a finite regression inventory, not whole-program or
+universal compiler coverage, and it does not rebind the historical
+`99.851437%` result to the current source. Small repeated measurements, such as
+the three-run rejected POP experiment above, are diagnostic optimization
+checks only. Full paper performance reproduction and its matrix are deferred
+by the explicit user scope change; reduced smoke runs make no publication-grade
+percentage claim.
