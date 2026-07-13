@@ -104,6 +104,14 @@ pub fn load_blob(seed: u8) -> Box<[u8]> {{
 }}
 
 #[inline(never)]
+pub fn clone_string_slice_negative(source: &[String]) -> Box<[String]> {{
+    // This superficially shares the core From::from callee shape with
+    // load_blob, but cloning String elements can allocate. It must therefore
+    // remain audit-only rather than inheriting the direct Box<[u8]> scope.
+    Box::<[String]>::from(source)
+}}
+
+#[inline(never)]
 pub fn record_matches(value: &[u8], seed: u8) -> bool {{
     value.len() == RECORD_BYTES
         && value
@@ -462,6 +470,11 @@ fn main() {
     semantic_stats_reset();
     let transfer_before = semantic_ownership_transfer_snapshot();
 
+    if std::hint::black_box(false) {
+        let source = [String::new()];
+        drop(ingest::clone_string_slice_negative(&source));
+    }
+
     let record = ingest::read_record(0x31);
     assert_eq!(record.len(), ingest::RECORD_BYTES);
     let record_pointer = record.as_ptr() as usize;
@@ -651,6 +664,24 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     blob_box = one_scope_row(audit, "ingest::load_blob", BOX_TYPE, "from")
     scope_rows = [record_string, record_vec, blob_vec, blob_box]
 
+    records = audit.get("rewrite_candidates")
+    assert isinstance(records, list), records
+    string_slice_box_rows = [
+        row
+        for row in records
+        if isinstance(row, dict)
+        and function_matches(row, "ingest::clone_string_slice_negative")
+        and "convert::From" in str(row.get("callee") or "")
+        and "::from" in str(row.get("callee") or "")
+    ]
+    assert len(string_slice_box_rows) == 1, string_slice_box_rows
+    string_slice_box = string_slice_box_rows[0]
+    assert string_slice_box.get("rewrite_status") != APPLIED_SCOPE_STATUS, string_slice_box
+    assert string_slice_box.get("metadata_pairing_contract") in {
+        "audit_only_ambiguous_heap_object_type",
+        "audit_only_unresolved_heap_object_type",
+    }, string_slice_box
+
     module_id = int(record_string.get("module_id") or 0)
     assert module_id != 0, record_string
     assert {int(row.get("module_id") or 0) for row in scope_rows} == {module_id}, scope_rows
@@ -664,8 +695,6 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert len({string_type_id, vec_type_id, box_type_id}) == 3, scope_rows
     assert int(blob_vec.get("type_id") or 0) == vec_type_id, blob_vec
 
-    records = audit.get("rewrite_candidates")
-    assert isinstance(records, list), records
     transfer_rows = [
         row
         for row in records
@@ -856,6 +885,13 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
             },
             "allocation_callsites": sorted(callsites),
             "modules": ["handoff", "ingest", "storage", "transform"],
+        },
+        "box_slice_from_slice_provenance": {
+            "u8_status": blob_box.get("rewrite_status"),
+            "string_status": string_slice_box.get("rewrite_status"),
+            "string_pairing_contract": string_slice_box.get(
+                "metadata_pairing_contract"
+            ),
         },
         "automatic_cross_placement": {
             "bit": CROSS_THREAD_RECOVERY,
