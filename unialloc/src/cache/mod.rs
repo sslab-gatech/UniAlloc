@@ -725,8 +725,19 @@ unsafe impl GlobalAlloc for RustAllocator {
             }
             return dealloc_with_active_or_recorded_metadata(self, ptr, layout, metadata);
         }
-        if let Some(metadata) = recorded_reallocation_old_metadata(ptr, layout) {
-            return self.dealloc_with_peeked_recovery_metadata(ptr, layout, metadata);
+        match checked_recorded_reallocation_old_metadata(ptr, layout) {
+            AutoAllocationRecordLookup::Exact(metadata) => {
+                return self.dealloc_with_peeked_recovery_metadata(ptr, layout, metadata);
+            }
+            AutoAllocationRecordLookup::Mismatched => {
+                // A recovery record for this address with a different layout
+                // proves that raw deallocation under the caller's layout is
+                // unsafe. Preserve the authoritative record for an exact
+                // retry instead of treating the mismatch as if no record
+                // existed.
+                return;
+            }
+            AutoAllocationRecordLookup::Missing => {}
         }
 
         #[cfg(feature = "quarantine")]

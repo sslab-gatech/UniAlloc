@@ -17711,6 +17711,76 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "stats")]
+    #[test]
+    fn global_dealloc_rejects_valid_but_mismatched_recovery_layout() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        let allocation_size = (MIN_TYPE_CACHE_OBJECT_SIZE..crate::size_class::MAX_SIZE)
+            .find(|size| {
+                crate::size_class::get_size_class(*size).index()
+                    == crate::size_class::get_size_class(*size + 1).index()
+            })
+            .expect("test needs a distinct layout in the same allocator size class");
+        let allocation_layout =
+            Layout::from_size_align(allocation_size, align_of::<usize>()).unwrap();
+        let wrong_size = allocation_size + 1;
+        let wrong_layout = Layout::from_size_align(wrong_size, allocation_layout.align()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_BAD2)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_BAD2)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let allocator = RustAllocator::new();
+        let ptr = unsafe { allocator.alloc_with_recovery_metadata(allocation_layout, metadata) };
+        assert!(!ptr.is_null());
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, allocation_layout),
+            Some(metadata)
+        );
+
+        let fallback_before = semantic_fallback_attribution_snapshot();
+        unsafe {
+            GlobalAlloc::dealloc(&allocator, ptr, wrong_layout);
+        }
+        let fallback_after = semantic_fallback_attribution_snapshot();
+        assert_eq!(
+            fallback_after.raw_dealloc_no_metadata,
+            fallback_before.raw_dealloc_no_metadata,
+            "a live same-pointer recovery mismatch must fail closed instead of falling through to raw GlobalAlloc deallocation"
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, allocation_layout),
+            Some(metadata),
+            "a rejected GlobalAlloc layout mismatch must preserve the exact recovery record for a correct retry"
+        );
+
+        unsafe {
+            GlobalAlloc::dealloc(&allocator, ptr, allocation_layout);
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, allocation_layout),
+            None
+        );
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(allocation_layout, metadata) },
+            Some(ptr),
+            "the exact retry must consume the record and publish only under the allocation layout"
+        );
+        unsafe {
+            allocator.dealloc_raw(ptr, allocation_layout);
+            clear_type_cache_for_test();
+        }
+        semantic_stats_recording_disable();
+    }
+
     #[test]
     fn ffi_realloc_rejects_valid_but_mismatched_recovery_layout() {
         let _guard = test_guard();
