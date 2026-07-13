@@ -817,8 +817,8 @@ the exact core `From::from` monomorphization whose concrete types are
 
 ```sh
 python3 tools/unialloc-rustc-pass/test_mir_vec_from_string_rebind.py
-UNIALLOC_RUSTC_TOOLCHAIN=nightly-2022-07-01 \
-  python3 tools/unialloc-rustc-pass/test_mir_vec_from_string_rebind.py
+python3 tools/unialloc-rustc-pass/test_mir_vec_from_string_rebind.py \
+  --toolchain nightly-2022-07-01
 ```
 
 Both report candidate/applied `1/1` and runtime attempted/applied/rejected
