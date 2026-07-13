@@ -297,6 +297,70 @@ def applied_type_rows(audit: Dict[str, Any], marker: str) -> List[Dict[str, Any]
     ]
 
 
+def validate_fail_closed_factory_provenance(audit: Dict[str, Any]) -> Dict[str, Any]:
+    summary = audit.get("summary") or {}
+    rows = [
+        row
+        for row in audit.get("rewrite_candidates") or []
+        if isinstance(row, dict)
+        and row.get("lowering_kind")
+        == "semantic_scope_unsolved_heap_object_candidate"
+    ]
+    assert int(summary.get("semantic_scope_unsolved_candidate_count") or 0) == len(rows), (
+        "unsolved semantic-scope summary must match row-level fail-closed evidence"
+    )
+
+    contracts = {
+        "semantic_scope_rewrite_skipped_unresolved_heap_object_type": (
+            "rustc_middle_heap_object_type_not_solved",
+            "audit_only_unresolved_heap_object_type",
+        ),
+        "semantic_scope_rewrite_skipped_ambiguous_heap_object_type": (
+            "rustc_middle_multiple_heap_object_types_not_lowered",
+            "audit_only_ambiguous_heap_object_type",
+        ),
+    }
+    for row in rows:
+        rewrite_status = str(row.get("rewrite_status") or "")
+        assert rewrite_status in contracts, (
+            f"unsolved factory candidate did not fail closed: {row}"
+        )
+        resolution, pairing = contracts[rewrite_status]
+        assert row.get("replacement_resolution_status") == resolution, row
+        assert row.get("metadata_pairing_contract") == pairing, row
+        assert row.get("semantic_object_type") == "<unknown-heap-object-type>", row
+
+    opaque_factory_counts: Dict[str, int] = {}
+    for function_name, destination_marker in (
+        ("producer_box", "Box<ProducerPayload"),
+        ("consumer_box", "Box<ConsumerPayload"),
+    ):
+        matching = [
+            row
+            for row in rows
+            if f"::{function_name}" in str(row.get("callee") or "")
+            and destination_marker in str(row.get("destination_type") or "")
+        ]
+        assert matching, (
+            f"opaque {function_name} calls must stay audit-only unless the pass proves "
+            "their factory body"
+        )
+        assert all(
+            row.get("rewrite_status")
+            == "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+            and row.get("metadata_pairing_contract")
+            == "audit_only_unresolved_heap_object_type"
+            for row in matching
+        ), matching
+        opaque_factory_counts[function_name] = len(matching)
+
+    return {
+        "validated": True,
+        "unsolved_candidate_count": len(rows),
+        "opaque_factory_fail_closed_rows": opaque_factory_counts,
+    }
+
+
 def clone_classification_rows(
     audit: Dict[str, Any], function_name: str
 ) -> List[Dict[str, Any]]:
@@ -880,9 +944,9 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     assert summary.get("body_clone_returned_to_rustc") is True
     assert summary.get("actual_semantic_scope_rewrite") is True
     assert int(summary.get("semantic_scope_rewrite_applied_count") or 0) > 0
-    assert int(summary.get("semantic_scope_unsolved_candidate_count") or 0) == 0
     assert int(summary.get("semantic_scope_drop_unsolved_candidate_count") or 0) == 0
     assert int(summary.get("cross_thread_recovery_hint_count") or 0) > 0
+    fail_closed_factory_provenance = validate_fail_closed_factory_provenance(audit)
     refcounted_clone_classification = (
         validate_actual_refcounted_clone_classification(audit)
     )
@@ -900,10 +964,12 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     for row in producer_rows + consumer_rows:
         assert int(row.get("flags") or 0) & TYPE_ISOLATED
         assert int(row.get("placement_hint") or 0) & CROSS_THREAD_RECOVERY
-    assert any(
-        row.get("placement_hint_basis") == "manual_and_auto_cross_thread_escape"
-        for row in producer_rows
-    ), "producer allocation scopes did not record the MIR-visible thread escape"
+        assert row.get("placement_hint_basis") == "manual_cross_thread_recovery_hint", row
+    # These exact Box::new scopes live inside opaque wrapper functions. The
+    # wrapper calls are deliberately fail-closed above, so the thread escape is
+    # not an interprocedural proof for their bodies. The runner's uniform manual
+    # placement bit makes allocation-side recovery explicit without pretending
+    # the pass proved that missing connection.
     recovery_requirement = validate_allocation_side_recovery_requirement(audit, runtime)
     generic_drop_recovery = validate_generic_drop_recovery_requirement(audit, runtime)
 
@@ -962,6 +1028,7 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         "consumer_runtime": consumer_runtime,
         "recovery_requirement": recovery_requirement,
         "generic_drop_recovery": generic_drop_recovery,
+        "fail_closed_factory_provenance": fail_closed_factory_provenance,
         "refcounted_clone_classification": refcounted_clone_classification,
     }
 
