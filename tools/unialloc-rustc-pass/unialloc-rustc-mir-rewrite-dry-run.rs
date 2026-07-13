@@ -70,6 +70,7 @@ use rustc_middle::util::Providers;
 use rustc_span::def_id::DefId;
 #[cfg(unialloc_rustc_current)]
 use rustc_span::def_id::{DefId, LocalDefId};
+use rustc_span::sym;
 use rustc_span::Span;
 #[cfg(unialloc_rustc_current)]
 use rustc_span::Spanned;
@@ -4033,7 +4034,7 @@ fn direct_outer_vec_u8_from_elem_destination_owner<'tcx>(
         ty::Adt(def, args) => (def, args),
         _ => return None,
     };
-    if !exact_alloc_adt_def_id(tcx, destination_def.did(), exact_alloc_vec_def_path)
+    if !tcx.is_diagnostic_item(sym::Vec, destination_def.did())
         || destination_def.did().krate != callee_def_id.krate
         || !matches!(destination_args.len(), 1 | 2)
         || !matches!(
@@ -4056,10 +4057,11 @@ fn direct_outer_vec_u8_from_elem_destination_owner<'tcx>(
         }
     }
 
-    // The exact alloc implementation specializes u8 repetition without any
+    // The canonical Vec diagnostic item binds this proof to the sysroot alloc
+    // crate; its exact implementation specializes u8 repetition without any
     // user Clone callback and creates only the returned Global-backed byte
-    // vector. Generic T, other element types, custom Clone, and same-name
-    // functions retain the fail-closed factory path below.
+    // vector. Generic T, other element types, custom Clone, same-name functions,
+    // and --extern alloc spoofs retain the fail-closed factory path below.
     Some(format!("{:?}", destination_ty))
 }
 

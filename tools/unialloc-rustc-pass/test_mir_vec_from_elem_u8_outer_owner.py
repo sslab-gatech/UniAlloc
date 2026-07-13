@@ -21,6 +21,7 @@ OTHER_ELEMENT_FUNCTION = "other_element_from_elem"
 CUSTOM_CLONE_FUNCTION = "custom_clone_from_elem"
 GENERIC_FUNCTION = "generic_from_elem"
 CUSTOM_SAME_NAME_FUNCTION = "custom_same_name"
+EXTERN_ALLOC_SPOOF_FUNCTION = "extern_alloc_spoof"
 APPLIED_STATUS = "actual_semantic_scope_enter_exit_rewrite_applied"
 UNRESOLVED_CONTRACT = "audit_only_unresolved_heap_object_type"
 AMBIGUOUS_CONTRACT = "audit_only_ambiguous_heap_object_type"
@@ -55,6 +56,59 @@ def current_rustc_cfg(toolchain: str) -> list[str]:
 
 
 def write_probe(workspace: Path) -> Path:
+    fake_alloc = workspace / "fake-alloc"
+    (fake_alloc / "src").mkdir(parents=True)
+    (fake_alloc / "Cargo.toml").write_text(
+        '''[package]
+name = "fake-alloc"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "alloc"
+''',
+        encoding="utf-8",
+    )
+    (fake_alloc / "src/lib.rs").write_text(
+        r'''pub mod alloc {
+    pub struct Global;
+}
+
+pub mod vec {
+    use super::alloc::Global;
+    use std::marker::PhantomData;
+
+    pub struct Vec<T, A = Global> {
+        value: T,
+        count: usize,
+        allocator: PhantomData<A>,
+    }
+
+    impl<T, A> Vec<T, A> {
+        pub fn observed_count(&self) -> usize {
+            self.count
+        }
+
+        pub fn value(&self) -> &T {
+            &self.value
+        }
+    }
+
+    #[inline(never)]
+    pub fn from_elem(value: u8, count: usize) -> Vec<u8> {
+        let callback_allocation = String::with_capacity(count);
+        drop(callback_allocation);
+        Vec {
+            value,
+            count,
+            allocator: PhantomData,
+        }
+    }
+}
+''',
+        encoding="utf-8",
+    )
+
     app = workspace / PROBE_NAME
     (app / "src").mkdir(parents=True)
     (app / "Cargo.toml").write_text(
@@ -64,6 +118,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+alloc = {{ package = "fake-alloc", path = {json.dumps(str(fake_alloc))} }}
 lock_api = "=0.4.3"
 unialloc = {{ path = {json.dumps(str(ROOT / "unialloc"))}, features = ["stats", "type_isolation"] }}
 ''',
@@ -76,6 +131,8 @@ unialloc = {{ path = {json.dumps(str(ROOT / "unialloc"))}, features = ["stats", 
     semantic_stats_reset, semantic_stats_snapshot, type_isolation_side_cache_snapshot,
     UniAlloc,
 };
+
+extern crate alloc;
 
 #[global_allocator]
 static ALLOCATOR: UniAlloc = UniAlloc;
@@ -133,6 +190,11 @@ fn custom_same_name() -> Vec<u8> {
 }
 
 #[inline(never)]
+fn extern_alloc_spoof() -> alloc::vec::Vec<u8> {
+    alloc::vec::from_elem(0, BYTES)
+}
+
+#[inline(never)]
 fn opaque_false() -> bool {
     unsafe { std::ptr::read_volatile(&false) }
 }
@@ -143,6 +205,9 @@ fn main() {
         assert_eq!(custom_clone_from_elem().len(), 2);
         assert_eq!(generic_from_elem(0u8, BYTES).len(), BYTES);
         assert_eq!(custom_same_name().len(), BYTES);
+        let spoof = extern_alloc_spoof();
+        assert_eq!(spoof.observed_count(), BYTES);
+        assert_eq!(*spoof.value(), 0);
     }
 
     semantic_auto_metadata_disable();
@@ -304,6 +369,12 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert len(custom_matches) == 1, custom_matches
     assert_fail_closed(custom_matches[0])
 
+    extern_alloc_spoof_matches = rows_for(
+        rows, EXTERN_ALLOC_SPOOF_FUNCTION, "vec::from_elem"
+    )
+    assert len(extern_alloc_spoof_matches) == 1, extern_alloc_spoof_matches
+    assert_fail_closed(extern_alloc_spoof_matches[0])
+
     runtime = next(
         json.loads(line)
         for line in stdout.splitlines()
@@ -350,6 +421,7 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
                 ("custom_clone", custom_clone_matches[0]),
                 ("generic", generic_matches[0]),
                 ("custom_same_name", custom_matches[0]),
+                ("extern_alloc_spoof", extern_alloc_spoof_matches[0]),
             )
         },
         "runtime": runtime,
@@ -443,7 +515,7 @@ def main() -> int:
                 "validated": True,
                 "evidence": evidence,
                 "boundaries": [
-                    "Only exact alloc-owned vec::from_elem with concrete u8, usize arguments and a Global-backed Vec<u8> destination is scoped; generic T, custom Clone, other element types, and custom same-name functions remain fail closed.",
+                    "Only the sysroot canonical Vec crate's exact vec::from_elem with concrete u8, usize arguments and a Global-backed Vec<u8> destination is scoped; generic T, custom Clone, other element types, custom same-name functions, and an --extern alloc spoof remain fail closed.",
                     "The address oracle covers one same-layout Vec<u8>/String cache sequence in one process; it is type-isolation correctness evidence, not whole-application coverage or performance evidence.",
                 ],
             },
