@@ -12525,6 +12525,20 @@ mod tests {
         panic!("test size classes must include an internally rounded semantic-cache object");
     }
 
+    unsafe fn dealloc_unique_test_pair(
+        alloc: &RustAllocator,
+        layout: Layout,
+        first: *mut u8,
+        second: *mut u8,
+    ) {
+        if !first.is_null() {
+            alloc.dealloc_raw(first, layout);
+        }
+        if !second.is_null() && second != first {
+            alloc.dealloc_raw(second, layout);
+        }
+    }
+
     struct SemanticStateCleanup;
 
     impl Drop for SemanticStateCleanup {
@@ -22714,6 +22728,201 @@ mod tests {
         assert!(snap.policy_flags_seen & FLAG_GUARD_PAGES != 0);
         semantic_stats_recording_disable();
     }
+    #[test]
+    fn typed_duplicate_free_plain_conservative_does_not_publish_cache_aliases() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xD0B1_EF01)
+            .with_module(0xC0DE_D0B1)
+            .with_callsite(0xA110_D0B1)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = unsafe { alloc.alloc_with_recovery_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+
+        unsafe {
+            alloc.dealloc_with_metadata(ptr, layout, metadata);
+        }
+        let duplicate_rejected =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                alloc.dealloc_with_metadata(ptr, layout, metadata);
+            }))
+            .is_err();
+
+        // Pop through the no-recovery path so a duplicate recovery-record insert
+        // cannot hide two cache entries that claim the same allocation address.
+        let first = unsafe { alloc.alloc_with_no_recovery_metadata(layout, metadata) };
+        let second = unsafe { alloc.alloc_with_no_recovery_metadata(layout, metadata) };
+        let allocations_succeeded = !first.is_null() && !second.is_null();
+        let aliases = first == second;
+        unsafe {
+            dealloc_unique_test_pair(&alloc, layout, first, second);
+            clear_type_cache_for_test();
+            clear_auto_allocation_records();
+        }
+
+        assert!(
+            allocations_succeeded,
+            "duplicate-free probe allocations failed"
+        );
+        assert!(
+            !aliases,
+            "a conservative typed duplicate free published the same address twice; duplicate_rejected={}",
+            duplicate_rejected
+        );
+    }
+
+    #[test]
+    fn typed_duplicate_free_metadata_segregated_local_does_not_publish_cache_aliases() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(4 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xD0B1_EF02)
+            .with_module(0xC0DE_D0B2)
+            .with_callsite(0xA110_D0B2)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+        let ptr = unsafe { alloc.alloc_with_no_recovery_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+
+        unsafe {
+            alloc.dealloc_with_recovered_metadata(ptr, layout, metadata);
+        }
+        let duplicate_rejected =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                alloc.dealloc_with_recovered_metadata(ptr, layout, metadata);
+            }))
+            .is_err();
+
+        let first = unsafe { alloc.alloc_with_no_recovery_metadata(layout, metadata) };
+        let second = unsafe { alloc.alloc_with_no_recovery_metadata(layout, metadata) };
+        let allocations_succeeded = !first.is_null() && !second.is_null();
+        let aliases = first == second;
+        unsafe {
+            dealloc_unique_test_pair(&alloc, layout, first, second);
+            clear_type_cache_for_test();
+            clear_auto_allocation_records();
+        }
+
+        assert!(
+            allocations_succeeded,
+            "duplicate-free probe allocations failed"
+        );
+        assert!(
+            !aliases,
+            "a local metadata-segregated duplicate free published the same address twice; duplicate_rejected={}",
+            duplicate_rejected
+        );
+    }
+
+    #[test]
+    fn typed_duplicate_free_cross_thread_hinted_does_not_publish_tls_aliases() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xD0B1_EF03)
+            .with_module(0xC0DE_D0B3)
+            .with_callsite(0xA110_D0B3)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x73);
+        let ptr = unsafe { alloc.alloc_with_recovery_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+        let ptr_addr = ptr as usize;
+
+        let (first_freed_tx, first_freed_rx) = std::sync::mpsc::channel();
+        let (first_alloc_tx, first_alloc_rx) = std::sync::mpsc::channel();
+        let first_worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = ptr_addr as *mut u8;
+            let dealloc_rejected =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                    alloc.dealloc_with_metadata(ptr, layout, metadata);
+                }))
+                .is_err();
+            first_freed_tx.send(()).unwrap();
+            first_alloc_rx.recv().unwrap();
+            let reused = unsafe { alloc.alloc_with_no_recovery_metadata(layout, metadata) };
+            (dealloc_rejected, reused as usize)
+        });
+        first_freed_rx.recv().unwrap();
+
+        let (second_freed_tx, second_freed_rx) = std::sync::mpsc::channel();
+        let (second_alloc_tx, second_alloc_rx) = std::sync::mpsc::channel();
+        let second_worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = ptr_addr as *mut u8;
+            let dealloc_rejected =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                    alloc.dealloc_with_metadata(ptr, layout, metadata);
+                }))
+                .is_err();
+            second_freed_tx.send(()).unwrap();
+            second_alloc_rx.recv().unwrap();
+            let reused = unsafe { alloc.alloc_with_no_recovery_metadata(layout, metadata) };
+            (dealloc_rejected, reused as usize)
+        });
+        second_freed_rx.recv().unwrap();
+
+        first_alloc_tx.send(()).unwrap();
+        second_alloc_tx.send(()).unwrap();
+        let (first_dealloc_rejected, first_addr) = first_worker.join().unwrap();
+        let (second_dealloc_rejected, second_addr) = second_worker.join().unwrap();
+        let first = first_addr as *mut u8;
+        let second = second_addr as *mut u8;
+        let allocations_succeeded = !first.is_null() && !second.is_null();
+        let aliases = first == second;
+        unsafe {
+            dealloc_unique_test_pair(&alloc, layout, first, second);
+            clear_type_cache_for_test();
+            clear_auto_allocation_records();
+        }
+
+        assert!(
+            !first_dealloc_rejected,
+            "the first cross-thread owner release must remain valid"
+        );
+        assert!(
+            allocations_succeeded,
+            "cross-thread probe allocations failed"
+        );
+        assert!(
+            !aliases,
+            "two TLS caches published the same typed address; second_dealloc_rejected={}",
+            second_dealloc_rejected
+        );
+    }
+
     #[cfg(feature = "stats")]
     #[test]
     fn memory_tagging_records_and_clears_matching_allocation() {
