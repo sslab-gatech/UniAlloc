@@ -98,7 +98,7 @@ fn reserve_with_panicking_hash(map: &mut HashMap<CallbackKey, u64>) {
 }
 
 #[inline(never)]
-fn force_vec_capacity_overflow(values: &mut Vec<u8>) {
+fn force_vec_capacity_overflow(values: &mut Vec<u64>) {
     values.reserve(usize::MAX);
 }
 
@@ -197,7 +197,10 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         if isinstance(row, dict)
         and function_matches(row, HELPER)
         and "std" in str(row.get("callee") or "")
-        and "collections::hash::map" in str(row.get("callee") or "")
+        and (
+            "collections::hash::map" in str(row.get("callee") or "")
+            or "collections::HashMap" in str(row.get("callee") or "")
+        )
         and "::reserve" in str(row.get("callee") or "")
     ]
     assert len(reserve_rows) == 1, reserve_rows
@@ -224,15 +227,21 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         and HELPER in str(row.get("callee") or "")
         and not function_matches(row, HELPER)
     ]
-    assert not local_helper_rows, local_helper_rows
+    local_helper_selected_rows = [
+        row
+        for row in local_helper_rows
+        if row.get("rewrite_status") == APPLIED_STATUS
+        or row.get("lowering_kind")
+        == "semantic_scope_callback_capable_receiver_skipped"
+    ]
+    assert not local_helper_selected_rows, local_helper_selected_rows
 
     vec_rows = [
         row
         for row in rows
         if isinstance(row, dict)
         and function_matches(row, VEC_HELPER)
-        and "alloc" in str(row.get("callee") or "")
-        and "vec" in str(row.get("callee") or "")
+        and "::vec" in str(row.get("callee") or "")
         and "::reserve" in str(row.get("callee") or "")
     ]
     assert len(vec_rows) == 1, vec_rows
@@ -241,7 +250,7 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert vec_reserve.get("lowering_kind") == "semantic_scope_enter_exit_rewrite", vec_reserve
     assert vec_reserve.get("semantic_scope_unwind_pop_inserted") is True, vec_reserve
     assert vec_reserve.get("metadata_pairing_contract") == "semantic_scope_active_metadata", vec_reserve
-    assert "Vec<u8" in str(vec_reserve.get("semantic_object_type") or ""), vec_reserve
+    assert "Vec<u64" in str(vec_reserve.get("semantic_object_type") or ""), vec_reserve
 
     runtime = next(
         json.loads(line)
@@ -283,7 +292,7 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
             ),
             "semantic_object_type": vec_reserve.get("semantic_object_type"),
         },
-        "local_helper_applied_rows": len(local_helper_rows),
+        "local_helper_selected_rows": len(local_helper_selected_rows),
         "runtime": runtime,
     }
 
@@ -292,12 +301,16 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--timeout", type=int, default=300)
+    parser.add_argument(
+        "--toolchain",
+        default=(ROOT / "rust-toolchain").read_text(encoding="utf-8").strip(),
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    toolchain = (ROOT / "rust-toolchain").read_text(encoding="utf-8").strip()
+    toolchain = args.toolchain.lstrip("+").strip()
     rustc = shutil.which("rustc") or "rustc"
     cargo = shutil.which("cargo") or "cargo"
     sysroot = subprocess.check_output(

@@ -50,7 +50,7 @@ use rustc_middle::mir::{
     SourceInfo, StatementKind, Terminator, TerminatorKind,
 };
 #[cfg(unialloc_rustc_current)]
-use rustc_middle::mir::{CallSource, UnwindAction};
+use rustc_middle::mir::{CallSource, UnwindAction, UnwindTerminateReason};
 #[cfg(not(unialloc_rustc_current))]
 use rustc_middle::mir::{Constant, ConstantKind};
 #[cfg(not(unialloc_rustc_current))]
@@ -7054,7 +7054,7 @@ fn make_call_args<'tcx>(args: Vec<Operand<'tcx>>, _span: Span) -> Vec<Operand<'t
 
 #[cfg(unialloc_rustc_current)]
 fn no_unwind() -> MirUnwind {
-    UnwindAction::Continue
+    UnwindAction::Terminate(UnwindTerminateReason::InCleanup)
 }
 
 #[cfg(not(unialloc_rustc_current))]
@@ -7121,7 +7121,15 @@ fn semantic_scope_unwind_continuation<'tcx>(
     body: &mut Body<'tcx>,
     source_info: SourceInfo,
     original_unwind: MirUnwind,
+    original_is_cleanup: bool,
 ) -> Option<BasicBlock> {
+    // A call or Drop that is already in a cleanup funclet must retain its
+    // original double-unwind behavior.  In legacy MIR, `cleanup: None` means
+    // outward unwind on a normal block but must not be expanded into a second
+    // cleanup funclet here; doing so can give a Resume funclet two parents.
+    if original_is_cleanup {
+        return None;
+    }
     unwind_cleanup_target(original_unwind).or_else(|| {
         unwind_continues_outward(original_unwind)
             .then(|| push_unwind_resume_block(body, source_info))
@@ -8909,8 +8917,12 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                     original_is_cleanup,
                 );
 
-                let unwind_continuation =
-                    semantic_scope_unwind_continuation(body, source_info, original_unwind);
+                let unwind_continuation = semantic_scope_unwind_continuation(
+                    body,
+                    source_info,
+                    original_unwind,
+                    original_is_cleanup,
+                );
                 let cleanup_exit_block = unwind_continuation.map(|cleanup_target| {
                     push_semantic_scope_pop_block(
                         tcx,
@@ -9310,8 +9322,12 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                     original_is_cleanup,
                 );
 
-                let unwind_continuation =
-                    semantic_scope_unwind_continuation(body, source_info, original_unwind);
+                let unwind_continuation = semantic_scope_unwind_continuation(
+                    body,
+                    source_info,
+                    original_unwind,
+                    original_is_cleanup,
+                );
                 let cleanup_exit_block = unwind_continuation.map(|cleanup_target| {
                     push_semantic_scope_pop_block(
                         tcx,
