@@ -35,6 +35,11 @@ Remote: `git@github.com:sslab-gatech/UniAlloc.git`
   Python verification after the final edits: `430/430` unit tests, `py_compile`,
   JSON parse, and `git diff --check` passed. It was committed with `--no-verify`
   only because the preceding P0 WIP makes the repository-wide Cargo hook fail.
+- `9072fb3` — fail-first regression proving that cold `Released` lifecycle
+  entries exhaust reclaim admission when more than the bounded capacity is
+  consumed without exact-address reuse. The test currently fails with
+  `Released history must not exhaust reclaim admission: Full`; this is the next
+  P0 implementation target, not a passing correctness claim.
 
 ## P0 WIP: do not claim complete
 
@@ -108,3 +113,21 @@ These were deliberately not pushed because they are not necessary source:
 
 No credentials, `target/`, Swoop campaign data, or formal performance matrix
 records are included.
+
+## Additional remote preservation branches
+
+These branches are intentionally separate from the G002 continuation branch:
+
+- `origin/g001-source-freeze-235549b2` at `0df377b224d660cc938f024654eb7d1e52649eaa`
+  preserves the clean G001 historical source-freeze line. Do not merge it into
+  G002 or reinterpret its evidence as current-source evidence.
+- `origin/wip/pac-nostd-runner-20260713` at
+  `5598ee78cea9eb0709fc6c478b338e8ea5368e61` preserves the only useful
+  unmerged dirty-worktree change found by the cross-machine audit: a standalone
+  no_std PAC probe runner that avoids package dev-target dependencies. It is a
+  WIP candidate and is not part of G002 until reviewed/cherry-picked.
+
+The remaining local branch names and temporary worktrees were not pushed:
+their commits are already present or patch-equivalent on G002, are superseded
+G001 candidates, or contain generated/raw diagnostic files rather than needed
+source. No unique reviewed G002 source change was left only in those worktrees.
