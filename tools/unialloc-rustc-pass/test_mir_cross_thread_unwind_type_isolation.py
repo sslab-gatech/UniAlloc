@@ -254,8 +254,6 @@ fn main() {
         assert!(panic_observed);
         assert!(source_preserved_after_unwind);
 
-        let fallback_before = semantic_fallback_attribution_snapshot();
-        let validation_before = semantic_metadata_validation_snapshot();
         semantic_stats_reset();
 
         // Cross-thread drop must retain the Producer allocation in its typed
@@ -277,17 +275,31 @@ fn main() {
         let fallback = semantic_fallback_attribution_snapshot();
         let validation = semantic_metadata_validation_snapshot();
         let side_cache = type_isolation_side_cache_snapshot();
-        let final_depth = semantic_scope_depth_snapshot();
+        let pre_cleanup_depth = semantic_scope_depth_snapshot();
         let mut rows = [SemanticTypeStatsSnapshot::empty(); 32];
         let row_count = semantic_type_stats_snapshot(&mut rows);
 
-        semantic_type_stats_recording_disable();
-        semantic_stats_recording_disable();
+        // The address oracle above intentionally snapshots before the two live
+        // owners are destroyed. Use a fresh, absolute-count window to prove
+        // their normal Drop scopes pair with typed deallocation and cache
+        // insertion as well; do not subtract counters across a reset.
+        semantic_stats_reset();
         drop(recovered);
         drop(consumer);
+        let cleanup_stats = semantic_stats_snapshot();
+        let cleanup_fallback = semantic_fallback_attribution_snapshot();
+        let cleanup_validation = semantic_metadata_validation_snapshot();
+        let cleanup_side_cache = type_isolation_side_cache_snapshot();
+        let final_depth = semantic_scope_depth_snapshot();
+        let mut cleanup_rows = [SemanticTypeStatsSnapshot::empty(); 32];
+        let cleanup_row_count = semantic_type_stats_snapshot(&mut cleanup_rows);
+
+        semantic_type_stats_recording_disable();
+        semantic_stats_recording_disable();
         let _ = std::panic::take_hook();
 
         let type_rows = type_rows_json(&rows, row_count);
+        let cleanup_type_rows = type_rows_json(&cleanup_rows, cleanup_row_count);
         println!(
             concat!(
                 "{{",
@@ -312,6 +324,9 @@ fn main() {
                 "\"post_unwind_main_depth\":{},",
                 "\"post_unwind_overflow_depth\":{},",
                 "\"post_unwind_represented_depth\":{},",
+                "\"pre_cleanup_main_depth\":{},",
+                "\"pre_cleanup_overflow_depth\":{},",
+                "\"pre_cleanup_represented_depth\":{},",
                 "\"final_main_depth\":{},",
                 "\"final_overflow_depth\":{},",
                 "\"final_represented_depth\":{},",
@@ -331,7 +346,23 @@ fn main() {
                 "\"recovery_identity_mismatches\":{},",
                 "\"side_cache_corrupt_slots\":{},",
                 "\"semantic_type_stats_dropped_events\":{},",
-                "\"type_rows\":{}",
+                "\"type_rows\":{},",
+                "\"cleanup_total_allocations\":{},",
+                "\"cleanup_typed_allocations\":{},",
+                "\"cleanup_total_deallocations\":{},",
+                "\"cleanup_typed_deallocations\":{},",
+                "\"cleanup_typed_cache_hits\":{},",
+                "\"cleanup_typed_cache_inserts\":{},",
+                "\"cleanup_typed_cache_bypasses\":{},",
+                "\"cleanup_fallback_allocations\":{},",
+                "\"cleanup_fallback_deallocations\":{},",
+                "\"cleanup_raw_alloc_no_metadata\":{},",
+                "\"cleanup_raw_dealloc_no_metadata\":{},",
+                "\"cleanup_raw_realloc_no_metadata\":{},",
+                "\"cleanup_recovery_identity_mismatches\":{},",
+                "\"cleanup_side_cache_corrupt_slots\":{},",
+                "\"cleanup_semantic_type_stats_dropped_events\":{},",
+                "\"cleanup_type_rows\":{}",
                 "}}"
             ),
             ELEMENTS,
@@ -353,6 +384,9 @@ fn main() {
             post_unwind_depth.main_depth,
             post_unwind_depth.overflow_depth,
             post_unwind_depth.represented_depth,
+            pre_cleanup_depth.main_depth,
+            pre_cleanup_depth.overflow_depth,
+            pre_cleanup_depth.represented_depth,
             final_depth.main_depth,
             final_depth.overflow_depth,
             final_depth.represented_depth,
@@ -366,21 +400,29 @@ fn main() {
             stats.typed_cache_bypasses,
             stats.fallback_allocations,
             stats.fallback_deallocations,
-            fallback
-                .raw_alloc_no_metadata
-                .saturating_sub(fallback_before.raw_alloc_no_metadata),
-            fallback
-                .raw_dealloc_no_metadata
-                .saturating_sub(fallback_before.raw_dealloc_no_metadata),
-            fallback
-                .raw_realloc_no_metadata
-                .saturating_sub(fallback_before.raw_realloc_no_metadata),
-            validation
-                .recovery_identity_mismatches
-                .saturating_sub(validation_before.recovery_identity_mismatches),
+            fallback.raw_alloc_no_metadata,
+            fallback.raw_dealloc_no_metadata,
+            fallback.raw_realloc_no_metadata,
+            validation.recovery_identity_mismatches,
             side_cache.corrupt_slots,
             stats.semantic_type_stats_dropped_events,
             type_rows,
+            cleanup_stats.total_allocations,
+            cleanup_stats.typed_allocations,
+            cleanup_stats.total_deallocations,
+            cleanup_stats.typed_deallocations,
+            cleanup_stats.typed_cache_hits,
+            cleanup_stats.typed_cache_inserts,
+            cleanup_stats.typed_cache_bypasses,
+            cleanup_stats.fallback_allocations,
+            cleanup_stats.fallback_deallocations,
+            cleanup_fallback.raw_alloc_no_metadata,
+            cleanup_fallback.raw_dealloc_no_metadata,
+            cleanup_fallback.raw_realloc_no_metadata,
+            cleanup_validation.recovery_identity_mismatches,
+            cleanup_side_cache.corrupt_slots,
+            cleanup_stats.semantic_type_stats_dropped_events,
+            cleanup_type_rows,
         );
     });
 
@@ -571,7 +613,7 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert main_pointer == worker_pointer == recovered_pointer, runtime
     assert consumer_pointer != main_pointer, runtime
 
-    for prefix in ("initial", "post_unwind", "final"):
+    for prefix in ("initial", "post_unwind", "pre_cleanup", "final"):
         assert int(runtime.get(f"{prefix}_main_depth") or 0) == 0, runtime
         assert int(runtime.get(f"{prefix}_overflow_depth") or 0) == 0, runtime
         assert int(runtime.get(f"{prefix}_represented_depth") or 0) == 0, runtime
@@ -625,6 +667,44 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         "cache_bypasses": 1,
     }, consumer_runtime
 
+    for field, expected in (
+        ("cleanup_total_allocations", 0),
+        ("cleanup_typed_allocations", 0),
+        ("cleanup_total_deallocations", 2),
+        ("cleanup_typed_deallocations", 2),
+        ("cleanup_typed_cache_hits", 0),
+        ("cleanup_typed_cache_inserts", 2),
+        ("cleanup_typed_cache_bypasses", 0),
+        ("cleanup_fallback_allocations", 0),
+        ("cleanup_fallback_deallocations", 0),
+        ("cleanup_raw_alloc_no_metadata", 0),
+        ("cleanup_raw_dealloc_no_metadata", 0),
+        ("cleanup_raw_realloc_no_metadata", 0),
+        ("cleanup_recovery_identity_mismatches", 0),
+        ("cleanup_side_cache_corrupt_slots", 0),
+        ("cleanup_semantic_type_stats_dropped_events", 0),
+    ):
+        assert int(runtime.get(field) or 0) == expected, (field, runtime)
+
+    cleanup_runtime = dict(runtime)
+    cleanup_runtime["type_rows"] = runtime.get("cleanup_type_rows")
+    producer_cleanup_runtime = aggregate_type_rows(
+        cleanup_runtime, type_id=producer_type_id, module_id=module_id
+    )
+    consumer_cleanup_runtime = aggregate_type_rows(
+        cleanup_runtime, type_id=consumer_type_id, module_id=module_id
+    )
+    expected_cleanup_row = {
+        "allocations": 0,
+        "allocated_bytes": 0,
+        "deallocations": 1,
+        "cache_hits": 0,
+        "cache_inserts": 1,
+        "cache_bypasses": 0,
+    }
+    assert producer_cleanup_runtime == expected_cleanup_row, producer_cleanup_runtime
+    assert consumer_cleanup_runtime == expected_cleanup_row, consumer_cleanup_runtime
+
     return {
         "reserve_scope": {
             "type_id": producer_type_id,
@@ -639,6 +719,8 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         "runtime": runtime,
         "producer_runtime": producer_runtime,
         "consumer_runtime": consumer_runtime,
+        "producer_cleanup_runtime": producer_cleanup_runtime,
+        "consumer_cleanup_runtime": consumer_cleanup_runtime,
     }
 
 
@@ -699,6 +781,9 @@ def validate_negative_controls(
     bad_isolation = runtime_stdout_with_override(
         stdout, "consumer_avoided_producer_storage", False
     )
+    missing_normal_drop_cleanup = runtime_stdout_with_override(
+        stdout, "cleanup_typed_deallocations", 1
+    )
     duplicate_runtime = (
         stdout.rstrip("\n")
         + "\n"
@@ -721,6 +806,9 @@ def validate_negative_controls(
         ),
         "same_layout_cross_reuse_rejected": assert_validation_rejected(
             "same-layout cross reuse", audit, bad_isolation
+        ),
+        "missing_normal_drop_cleanup_rejected": assert_validation_rejected(
+            "normal Drop cleanup", audit, missing_normal_drop_cleanup
         ),
         "duplicate_runtime_event_rejected": assert_validation_rejected(
             "duplicate runtime event", audit, duplicate_runtime
