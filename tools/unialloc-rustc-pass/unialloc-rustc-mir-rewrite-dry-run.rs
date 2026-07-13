@@ -294,6 +294,17 @@ enum SemanticOwnershipTransferKind {
     BoxedStrIntoString,
     CStringIntoBytesWithNul,
     VecIntoIter,
+    VecIntoIterViaZip,
+}
+
+#[derive(Clone, Debug)]
+enum SemanticOwnershipTransferCallShape<'tcx> {
+    Direct,
+    IteratorZip {
+        zip_def_id: DefId,
+        iterator_ty: Ty<'tcx>,
+        into_iter_ty: Ty<'tcx>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -310,9 +321,11 @@ struct SemanticOwnershipTransferCandidate<'tcx> {
     callee: String,
     call_arguments: Vec<String>,
     argument_types: Vec<String>,
+    destination: Place<'tcx>,
     destination_place: String,
     destination_type: String,
     kind: SemanticOwnershipTransferKind,
+    call_shape: SemanticOwnershipTransferCallShape<'tcx>,
     proof: SemanticOwnershipTransferProof<'tcx>,
     expected_old_owner_type: String,
     expected_old_owner_basis: &'static str,
@@ -2449,6 +2462,20 @@ fn exact_core_iterator_collect_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
         && exact_core_iterator_collect_def_path(&tcx.def_path_str(def_id))
 }
 
+fn exact_core_iterator_zip_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "core::iter::traits::iterator::Iterator::zip"
+            | "core::iter::Iterator::zip"
+            | "std::iter::Iterator::zip"
+    )
+}
+
+fn exact_core_iterator_zip_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "core"
+        && exact_core_iterator_zip_def_path(&tcx.def_path_str(def_id))
+}
+
 #[cfg(unialloc_rustc_current)]
 fn generic_arg_type<'tcx>(arg: &ty::GenericArg<'tcx>) -> Option<Ty<'tcx>> {
     arg.as_type()
@@ -2482,6 +2509,30 @@ fn exact_core_borrowing_slice_iterator_def_path(path: &str) -> bool {
 fn exact_core_borrowing_slice_iterator_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
     tcx.crate_name(def_id.krate).as_str() == "core"
         && exact_core_borrowing_slice_iterator_def_path(&tcx.def_path_str(def_id))
+}
+
+fn exact_core_slice_iter_mut_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "core::slice::iter::IterMut" | "std::slice::IterMut"
+    )
+}
+
+fn exact_core_slice_iter_mut_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "core"
+        && exact_core_slice_iter_mut_def_path(&tcx.def_path_str(def_id))
+}
+
+fn exact_core_zip_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "core::iter::adapters::zip::Zip" | "std::iter::Zip"
+    )
+}
+
+fn exact_core_zip_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "core"
+        && exact_core_zip_def_path(&tcx.def_path_str(def_id))
 }
 
 fn exact_core_copied_iterator_adapter_def_path(path: &str) -> bool {
@@ -3316,6 +3367,156 @@ fn exact_vec_into_iter_transfer_proof<'tcx>(
     })
 }
 
+/// Prove only the real-application `slice::IterMut<u8>.zip(Vec<u8, Global>)`
+/// shape. `Iterator::zip` performs `Vec::into_iter` inside core, so the local
+/// MIR has no direct ownership-transfer call to retarget. The proof binds the
+/// core method/Zip/IterMut DefIds, the alloc Vec/IntoIter/Global DefIds, both
+/// generic substitutions, and the exact destination before the rewrite splits
+/// the call into the existing Vec -> IntoIter helper followed by zip(IntoIter).
+fn exact_vec_into_iter_via_zip_transfer_proof<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    callee_generic_types: &[Ty<'tcx>],
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<(
+    SemanticOwnershipTransferProof<'tcx>,
+    SemanticOwnershipTransferCallShape<'tcx>,
+)> {
+    if !exact_core_iterator_zip_def_id(tcx, callee_def_id)
+        || argument_tys.len() != 2
+        || clone_result_has_unresolved_params(destination_ty)
+        || argument_tys
+            .iter()
+            .any(|ty| clone_result_has_unresolved_params(*ty))
+    {
+        return None;
+    }
+
+    let iterator_ty = argument_tys[0];
+    let (iterator_def, iterator_args) = match iterator_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_core_slice_iter_mut_def_id(tcx, iterator_def.did())
+        || iterator_args.types().collect::<Vec<_>>() != [tcx.types.u8]
+    {
+        return None;
+    }
+
+    let source_ty = argument_tys[1];
+    let (source_def, source_args) = match source_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, source_def.did(), exact_alloc_vec_def_path)
+        || source_args.len() != 2
+    {
+        return None;
+    }
+    let source_element_ty = generic_arg_type(source_args.get(0)?)?;
+    let source_allocator_ty = generic_arg_type(source_args.get(1)?)?;
+    let (allocator_def, allocator_args) = match source_allocator_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if source_element_ty != tcx.types.u8
+        || !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path)
+        || !allocator_args.is_empty()
+        || allocator_def.did().krate != source_def.did().krate
+    {
+        return None;
+    }
+
+    let (destination_def, destination_args) = match destination_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_core_zip_def_id(tcx, destination_def.did()) || destination_args.len() != 2 {
+        return None;
+    }
+    let destination_iterator_ty = generic_arg_type(destination_args.get(0)?)?;
+    let into_iter_ty = generic_arg_type(destination_args.get(1)?)?;
+    let (into_iter_def, into_iter_args) = match into_iter_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if destination_iterator_ty != iterator_ty
+        || !exact_alloc_adt_def_id(tcx, into_iter_def.did(), exact_alloc_vec_into_iter_def_path)
+        || into_iter_def.did().krate != source_def.did().krate
+        || into_iter_args.len() != 2
+        || generic_arg_type(into_iter_args.get(0)?)? != source_element_ty
+        || generic_arg_type(into_iter_args.get(1)?)? != source_allocator_ty
+        || callee_generic_types != [iterator_ty, source_ty]
+    {
+        return None;
+    }
+
+    Some((
+        SemanticOwnershipTransferProof {
+            element_ty: source_element_ty,
+            allocator_ty: source_allocator_ty,
+            old_owner_type: format!("{:?}", source_ty),
+            new_owner_type: format!("{:?}", into_iter_ty),
+        },
+        SemanticOwnershipTransferCallShape::IteratorZip {
+            zip_def_id: callee_def_id,
+            iterator_ty,
+            into_iter_ty,
+        },
+    ))
+}
+
+/// Return the sole allocator-visible owner only for the exact canonical Zip
+/// shape paired with the hidden-transfer rewrite above. Arbitrary Zip-like
+/// ADTs, `Iter`, non-u8 elements, custom allocators, and unresolved types keep
+/// the general fail-closed Drop scan.
+fn exact_zip_iter_mut_u8_into_iter_drop_owner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    drop_ty: Ty<'tcx>,
+) -> Option<String> {
+    let (zip_def, zip_args) = match drop_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_core_zip_def_id(tcx, zip_def.did()) || zip_args.len() != 2 {
+        return None;
+    }
+    let iterator_ty = generic_arg_type(zip_args.get(0)?)?;
+    let into_iter_ty = generic_arg_type(zip_args.get(1)?)?;
+    let (iterator_def, iterator_args) = match iterator_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_core_slice_iter_mut_def_id(tcx, iterator_def.did())
+        || iterator_args.types().collect::<Vec<_>>() != [tcx.types.u8]
+    {
+        return None;
+    }
+    let (into_iter_def, into_iter_args) = match into_iter_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, into_iter_def.did(), exact_alloc_vec_into_iter_def_path)
+        || into_iter_args.len() != 2
+        || generic_arg_type(into_iter_args.get(0)?)? != tcx.types.u8
+    {
+        return None;
+    }
+    let allocator_ty = generic_arg_type(into_iter_args.get(1)?)?;
+    let (allocator_def, allocator_args) = match allocator_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path)
+        || !allocator_args.is_empty()
+        || allocator_def.did().krate != into_iter_def.did().krate
+    {
+        return None;
+    }
+    Some(format!("{:?}", into_iter_ty))
+}
+
 #[cfg(unialloc_rustc_current)]
 fn exact_pointer_unsize_cast_kind(kind: &CastKind) -> bool {
     matches!(kind, CastKind::PointerCoercion(PointerCoercion::Unsize, _))
@@ -4107,9 +4308,7 @@ fn direct_outer_vec_u8_from_copied_slice_iter_collect_destination_owner<'tcx>(
     }
 
     let (copied_def, copied_args) = match argument_tys[0].kind() {
-        ty::Adt(def, args)
-            if exact_core_copied_iterator_adapter_def_id(tcx, def.did()) =>
-        {
+        ty::Adt(def, args) if exact_core_copied_iterator_adapter_def_id(tcx, def.did()) => {
             let path = strip_rustc_crate_disambiguators(&tcx.def_path_str(def.did()));
             if !matches!(
                 path.as_str(),
@@ -5110,21 +5309,15 @@ mod tests {
         assert!(!exact_core_borrowing_slice_iterator_def_path(
             "core::slice::iter::IterMutExtra"
         ));
-        assert!(
-            exact_core_copied_iterator_adapter_def_path(
-                "core[2f33]::iter::adapters::copied::Copied"
-            )
-        );
-        assert!(
-            !exact_core_copied_iterator_adapter_def_path(
-                "my_crate::core::iter::adapters::copied::Copied"
-            )
-        );
-        assert!(
-            !exact_core_copied_iterator_adapter_def_path(
-                "core::iter::adapters::copied::CopiedExtra"
-            )
-        );
+        assert!(exact_core_copied_iterator_adapter_def_path(
+            "core[2f33]::iter::adapters::copied::Copied"
+        ));
+        assert!(!exact_core_copied_iterator_adapter_def_path(
+            "my_crate::core::iter::adapters::copied::Copied"
+        ));
+        assert!(!exact_core_copied_iterator_adapter_def_path(
+            "core::iter::adapters::copied::CopiedExtra"
+        ));
         assert!(exact_core_borrowing_str_iterator_def_path(
             "core[2f33]::str::iter::Split"
         ));
@@ -7501,6 +7694,45 @@ fn call_terminator_kind<'tcx>(
     }
 }
 
+fn call_terminator_kind_with_two_types<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: DefId,
+    first: Ty<'tcx>,
+    second: Ty<'tcx>,
+    args: Vec<Operand<'tcx>>,
+    destination: Place<'tcx>,
+    target: Option<BasicBlock>,
+    unwind: MirUnwind,
+    from_hir_call: MirCallSource,
+    fn_span: Span,
+) -> TerminatorKind<'tcx> {
+    #[cfg(unialloc_rustc_current)]
+    {
+        let _ = from_hir_call;
+        TerminatorKind::Call {
+            func: unialloc_function_handle_with_two_types(tcx, def_id, first, second, fn_span),
+            args: make_call_args(args, fn_span),
+            destination,
+            target,
+            unwind,
+            call_source: CallSource::Misc,
+            fn_span,
+        }
+    }
+    #[cfg(not(unialloc_rustc_current))]
+    {
+        TerminatorKind::Call {
+            func: unialloc_function_handle_with_two_types(tcx, def_id, first, second, fn_span),
+            args: make_call_args(args, fn_span),
+            destination,
+            target,
+            cleanup: unwind,
+            from_hir_call,
+            fn_span,
+        }
+    }
+}
+
 #[cfg(unialloc_rustc_current)]
 fn basic_block_data<'tcx>(terminator: Terminator<'tcx>, is_cleanup: bool) -> BasicBlockData<'tcx> {
     BasicBlockData::new_stmts(Vec::new(), Some(terminator), is_cleanup)
@@ -7621,6 +7853,143 @@ fn const_u16_operand<'tcx>(tcx: TyCtxt<'tcx>, value: u16, span: Span) -> Operand
 struct SemanticLocalOwnershipProof {
     allocation_pairs: BTreeSet<(String, String)>,
     drop_pairs: BTreeSet<(String, String)>,
+    exact_zip_drop_pairs: BTreeSet<(String, String)>,
+}
+
+struct ExactZipDestinationWriteVisitor<'tcx> {
+    destination: Place<'tcx>,
+    initializer_block: BasicBlock,
+    initializer_statement_index: usize,
+    saw_initializer: bool,
+    disqualified: bool,
+}
+
+fn exact_zip_destination_write_context(context: PlaceContext) -> bool {
+    match context {
+        PlaceContext::MutatingUse(
+            MutatingUseContext::Store
+            | MutatingUseContext::SetDiscriminant
+            | MutatingUseContext::AsmOutput
+            | MutatingUseContext::Call
+            | MutatingUseContext::Yield,
+        ) => true,
+        #[cfg(not(unialloc_rustc_current))]
+        PlaceContext::MutatingUse(MutatingUseContext::Deinit) => true,
+        _ => false,
+    }
+}
+
+impl<'tcx> Visitor<'tcx> for ExactZipDestinationWriteVisitor<'tcx> {
+    fn visit_place(&mut self, place: &Place<'tcx>, context: PlaceContext, location: Location) {
+        if self.disqualified
+            || place.local != self.destination.local
+            || !exact_zip_destination_write_context(context)
+        {
+            return;
+        }
+
+        let exact_initializer = *place == self.destination
+            && location.block == self.initializer_block
+            && location.statement_index == self.initializer_statement_index
+            && matches!(context, PlaceContext::MutatingUse(MutatingUseContext::Call));
+        if exact_initializer && !self.saw_initializer {
+            self.saw_initializer = true;
+        } else {
+            // A second assignment/call destination/reinitialization anywhere in
+            // the body means the rewritten Zip call is not the sole static
+            // initializer for this unprojected local. Drop flags may select
+            // initialized paths, but they do not make mixed initializers share
+            // ownership provenance.
+            self.disqualified = true;
+        }
+    }
+}
+
+/// Bind hidden Vec -> IntoIter Drop attribution to the exact MIR rewrite that
+/// created the Zip value. The destination must be an unprojected local and the
+/// newly inserted Zip call must be its only static initializer. This
+/// deliberately rejects branch joins and later reassignments that reuse the
+/// same local for an already-bound IntoIter, even when one sibling branch was
+/// rewritten successfully. Only exact `(Drop block, place)` pairs are returned;
+/// dry-run/planned candidates never call this helper.
+fn exact_zip_drop_pairs_after_applied_rewrite<'tcx>(
+    body: &Body<'tcx>,
+    zip_block: BasicBlock,
+    destination: Place<'tcx>,
+) -> BTreeSet<(String, String)> {
+    if !destination.projection.is_empty() {
+        return BTreeSet::new();
+    }
+
+    let initializer_statement_index = body[zip_block].statements.len();
+    let exact_zip_destination = match &body[zip_block].terminator().kind {
+        TerminatorKind::Call {
+            destination: rewritten_destination,
+            ..
+        } => *rewritten_destination == destination,
+        _ => false,
+    };
+    if !exact_zip_destination {
+        return BTreeSet::new();
+    }
+
+    let mut visitor = ExactZipDestinationWriteVisitor {
+        destination,
+        initializer_block: zip_block,
+        initializer_statement_index,
+        saw_initializer: false,
+        disqualified: false,
+    };
+    for (bb, data) in body_basic_blocks!(body).iter_enumerated() {
+        for (statement_index, statement) in data.statements.iter().enumerate() {
+            visitor.visit_statement(
+                statement,
+                Location {
+                    block: bb,
+                    statement_index,
+                },
+            );
+            if visitor.disqualified {
+                return BTreeSet::new();
+            }
+        }
+        if let Some(terminator) = &data.terminator {
+            #[cfg(not(unialloc_rustc_current))]
+            if matches!(
+                &terminator.kind,
+                TerminatorKind::DropAndReplace { place, .. }
+                    if place.local == destination.local
+            ) {
+                return BTreeSet::new();
+            }
+            visitor.visit_terminator(
+                terminator,
+                Location {
+                    block: bb,
+                    statement_index: data.statements.len(),
+                },
+            );
+            if visitor.disqualified {
+                return BTreeSet::new();
+            }
+        }
+    }
+    if !visitor.saw_initializer {
+        return BTreeSet::new();
+    }
+
+    body_basic_blocks!(body)
+        .iter_enumerated()
+        .filter_map(|(bb, data)| match &data.terminator {
+            Some(Terminator {
+                kind: TerminatorKind::Drop { place, .. },
+                ..
+            }) if *place == destination => {
+                Some((format!("{:?}", bb), format!("{:?}", destination)))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 struct SemanticOwnerUseVisitor<'tcx> {
@@ -8196,6 +8565,7 @@ fn record_or_rewrite_candidates<'tcx>(
         semantic_scope_abi,
         semantic_scope_local_abi,
         &local_ownership.drop_pairs,
+        &local_ownership.exact_zip_drop_pairs,
         records,
     );
 }
@@ -8251,7 +8621,7 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
     semantic_scope_rewrite: bool,
     transfer_abi: Option<SemanticOwnershipTransferAbi>,
     records: &mut Vec<RewriteRecord>,
-) -> BTreeSet<BasicBlock> {
+) -> (BTreeSet<BasicBlock>, BTreeSet<(String, String)>) {
     let function_name = tcx.def_path_str(def_id);
     let mut candidates = Vec::new();
 
@@ -8285,14 +8655,18 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             .map(|arg| arg.ty(&body.local_decls, tcx))
             .collect::<Vec<_>>();
         let destination_ty = destination.ty(&body.local_decls, tcx).ty;
-        let (kind, proof) = if let Some(proof) = exact_box_slice_into_vec_transfer_proof(
+        let (kind, proof, call_shape) = if let Some(proof) = exact_box_slice_into_vec_transfer_proof(
             tcx,
             callee_def_id,
             &callee_generic_types,
             destination_ty,
             &argument_tys,
         ) {
-            (SemanticOwnershipTransferKind::BoxSliceIntoVec, proof)
+            (
+                SemanticOwnershipTransferKind::BoxSliceIntoVec,
+                proof,
+                SemanticOwnershipTransferCallShape::Direct,
+            )
         } else if let Some(proof) = exact_vec_into_boxed_slice_transfer_proof(
             tcx,
             callee_def_id,
@@ -8300,7 +8674,11 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             destination_ty,
             &argument_tys,
         ) {
-            (SemanticOwnershipTransferKind::VecIntoBoxedSlice, proof)
+            (
+                SemanticOwnershipTransferKind::VecIntoBoxedSlice,
+                proof,
+                SemanticOwnershipTransferCallShape::Direct,
+            )
         } else if let Some(proof) = exact_string_into_bytes_transfer_proof(
             tcx,
             callee_def_id,
@@ -8308,7 +8686,11 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             destination_ty,
             &argument_tys,
         ) {
-            (SemanticOwnershipTransferKind::StringIntoBytes, proof)
+            (
+                SemanticOwnershipTransferKind::StringIntoBytes,
+                proof,
+                SemanticOwnershipTransferCallShape::Direct,
+            )
         } else if let Some(proof) = exact_string_into_boxed_str_transfer_proof(
             tcx,
             callee_def_id,
@@ -8316,7 +8698,11 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             destination_ty,
             &argument_tys,
         ) {
-            (SemanticOwnershipTransferKind::StringIntoBoxedStr, proof)
+            (
+                SemanticOwnershipTransferKind::StringIntoBoxedStr,
+                proof,
+                SemanticOwnershipTransferCallShape::Direct,
+            )
         } else if let Some(proof) = exact_boxed_str_into_string_transfer_proof(
             tcx,
             callee_def_id,
@@ -8324,7 +8710,11 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             destination_ty,
             &argument_tys,
         ) {
-            (SemanticOwnershipTransferKind::BoxedStrIntoString, proof)
+            (
+                SemanticOwnershipTransferKind::BoxedStrIntoString,
+                proof,
+                SemanticOwnershipTransferCallShape::Direct,
+            )
         } else if let Some(proof) = exact_cstring_into_bytes_with_nul_transfer_proof(
             tcx,
             callee_def_id,
@@ -8335,6 +8725,7 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             (
                 SemanticOwnershipTransferKind::CStringIntoBytesWithNul,
                 proof,
+                SemanticOwnershipTransferCallShape::Direct,
             )
         } else if let Some(proof) = exact_vec_into_iter_transfer_proof(
             tcx,
@@ -8343,10 +8734,29 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             destination_ty,
             &argument_tys,
         ) {
-            (SemanticOwnershipTransferKind::VecIntoIter, proof)
+            (
+                SemanticOwnershipTransferKind::VecIntoIter,
+                proof,
+                SemanticOwnershipTransferCallShape::Direct,
+            )
+        } else if let Some((proof, call_shape)) = exact_vec_into_iter_via_zip_transfer_proof(
+            tcx,
+            callee_def_id,
+            &callee_generic_types,
+            destination_ty,
+            &argument_tys,
+        ) {
+            (
+                SemanticOwnershipTransferKind::VecIntoIterViaZip,
+                proof,
+                call_shape,
+            )
         } else {
             continue;
         };
+        if kind == SemanticOwnershipTransferKind::VecIntoIterViaZip && data.is_cleanup {
+            continue;
+        }
         let (expected_old_owner_type, expected_old_owner_basis) = match kind {
             SemanticOwnershipTransferKind::BoxSliceIntoVec => {
                 match exact_immediate_box_array_unsize_owner_type(
@@ -8379,6 +8789,9 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             SemanticOwnershipTransferKind::VecIntoIter => {
                 (proof.old_owner_type.clone(), "exact_vec_argument")
             }
+            SemanticOwnershipTransferKind::VecIntoIterViaZip => {
+                (proof.old_owner_type.clone(), "exact_vec_zip_argument")
+            }
         };
 
         candidates.push(SemanticOwnershipTransferCandidate {
@@ -8392,9 +8805,11 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                 .iter()
                 .map(|arg_ty| format!("{:?}", arg_ty))
                 .collect(),
+            destination: *destination,
             destination_place: format!("{:?}", destination),
             destination_type: format!("{:?}", destination_ty),
             kind,
+            call_shape,
             proof,
             expected_old_owner_type,
             expected_old_owner_basis,
@@ -8404,6 +8819,7 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
     }
 
     let mut handled_blocks = BTreeSet::new();
+    let mut exact_zip_drop_pairs = BTreeSet::new();
     for candidate in candidates {
         let basic_block = format!("{:?}", candidate.bb);
         let key = format!(
@@ -8512,6 +8928,16 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                                 &argument_tys,
                             )
                         }
+                        SemanticOwnershipTransferKind::VecIntoIterViaZip => {
+                            exact_vec_into_iter_via_zip_transfer_proof(
+                                tcx,
+                                callee_def_id,
+                                &callee_generic_types,
+                                destination_ty,
+                                &argument_tys,
+                            )
+                            .map(|(proof, _)| proof)
+                        }
                     };
                     proof.map_or(false, |proof| {
                         proof.element_ty == candidate.proof.element_ty
@@ -8545,38 +8971,128 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                     abi.cstring_into_bytes_with_nul_def_id
                 }
                 SemanticOwnershipTransferKind::VecIntoIter => abi.vec_into_iter_def_id,
+                SemanticOwnershipTransferKind::VecIntoIterViaZip => abi.vec_into_iter_def_id,
             };
-            let terminator = body[candidate.bb].terminator_mut();
-            let (func, args) = match &mut terminator.kind {
-                TerminatorKind::Call { func, args, .. } if args.len() == 1 => (func, args),
-                _ => continue,
-            };
-            let rewritten_args = vec![
-                clone_call_arg_operand(args, 0),
-                const_u64_operand(tcx, old_type_id, candidate.fn_span),
-                const_u64_operand(tcx, new_type_id, candidate.fn_span),
-            ];
-            *func = match candidate.kind {
-                SemanticOwnershipTransferKind::StringIntoBytes
-                | SemanticOwnershipTransferKind::StringIntoBoxedStr
-                | SemanticOwnershipTransferKind::BoxedStrIntoString
-                | SemanticOwnershipTransferKind::CStringIntoBytesWithNul => {
-                    unialloc_function_handle(tcx, transfer_def_id, candidate.fn_span)
+            let applied_zip_rewrite = match candidate.call_shape.clone() {
+                SemanticOwnershipTransferCallShape::Direct => {
+                    let terminator = body[candidate.bb].terminator_mut();
+                    let (func, args) = match &mut terminator.kind {
+                        TerminatorKind::Call { func, args, .. } if args.len() == 1 => (func, args),
+                        _ => continue,
+                    };
+                    let rewritten_args = vec![
+                        clone_call_arg_operand(args, 0),
+                        const_u64_operand(tcx, old_type_id, candidate.fn_span),
+                        const_u64_operand(tcx, new_type_id, candidate.fn_span),
+                    ];
+                    *func = match candidate.kind {
+                        SemanticOwnershipTransferKind::StringIntoBytes
+                        | SemanticOwnershipTransferKind::StringIntoBoxedStr
+                        | SemanticOwnershipTransferKind::BoxedStrIntoString
+                        | SemanticOwnershipTransferKind::CStringIntoBytesWithNul => {
+                            unialloc_function_handle(tcx, transfer_def_id, candidate.fn_span)
+                        }
+                        SemanticOwnershipTransferKind::BoxSliceIntoVec
+                        | SemanticOwnershipTransferKind::VecIntoBoxedSlice
+                        | SemanticOwnershipTransferKind::VecIntoIter => {
+                            unialloc_function_handle_with_two_types(
+                                tcx,
+                                transfer_def_id,
+                                candidate.proof.element_ty,
+                                candidate.proof.allocator_ty,
+                                candidate.fn_span,
+                            )
+                        }
+                        SemanticOwnershipTransferKind::VecIntoIterViaZip => continue,
+                    };
+                    *args = make_call_args(rewritten_args, candidate.fn_span);
+                    None
                 }
-                SemanticOwnershipTransferKind::BoxSliceIntoVec
-                | SemanticOwnershipTransferKind::VecIntoBoxedSlice
-                | SemanticOwnershipTransferKind::VecIntoIter => {
-                    unialloc_function_handle_with_two_types(
+                SemanticOwnershipTransferCallShape::IteratorZip {
+                    zip_def_id,
+                    iterator_ty,
+                    into_iter_ty,
+                } => {
+                    let mut zip_terminator = body[candidate.bb].terminator().clone();
+                    let source_info = zip_terminator.source_info;
+                    let (iterator_arg, vec_arg) = match &zip_terminator.kind {
+                        TerminatorKind::Call { args, .. } if args.len() == 2 => (
+                            clone_call_arg_operand(args, 0),
+                            clone_call_arg_operand(args, 1),
+                        ),
+                        _ => continue,
+                    };
+                    #[cfg(unialloc_rustc_current)]
+                    let (original_unwind, original_call_source) = match &zip_terminator.kind {
+                        TerminatorKind::Call {
+                            unwind,
+                            call_source,
+                            ..
+                        } => (*unwind, *call_source),
+                        _ => continue,
+                    };
+                    #[cfg(not(unialloc_rustc_current))]
+                    let (original_unwind, original_call_source) = match &zip_terminator.kind {
+                        TerminatorKind::Call {
+                            cleanup,
+                            from_hir_call,
+                            ..
+                        } => (*cleanup, *from_hir_call),
+                        _ => continue,
+                    };
+
+                    let into_iter_local =
+                        push_internal_local(body, into_iter_ty, candidate.fn_span);
+                    let into_iter_place = Place::from(into_iter_local);
+                    if let TerminatorKind::Call { func, args, .. } = &mut zip_terminator.kind {
+                        *func = unialloc_function_handle_with_two_types(
+                            tcx,
+                            zip_def_id,
+                            iterator_ty,
+                            into_iter_ty,
+                            candidate.fn_span,
+                        );
+                        *args = make_call_args(
+                            vec![iterator_arg, Operand::Move(into_iter_place)],
+                            candidate.fn_span,
+                        );
+                    } else {
+                        continue;
+                    }
+                    let zip_block = body
+                        .basic_blocks_mut()
+                        .push(basic_block_data(zip_terminator, false));
+                    handled_blocks.insert(zip_block);
+
+                    let transfer_call = call_terminator_kind_with_two_types(
                         tcx,
                         transfer_def_id,
                         candidate.proof.element_ty,
                         candidate.proof.allocator_ty,
+                        vec![
+                            vec_arg,
+                            const_u64_operand(tcx, old_type_id, candidate.fn_span),
+                            const_u64_operand(tcx, new_type_id, candidate.fn_span),
+                        ],
+                        into_iter_place,
+                        Some(zip_block),
+                        original_unwind,
+                        original_call_source,
                         candidate.fn_span,
-                    )
+                    );
+                    body[candidate.bb].terminator_mut().kind = transfer_call;
+                    body[candidate.bb].terminator_mut().source_info = source_info;
+                    Some(zip_block)
                 }
             };
-            *args = make_call_args(rewritten_args, candidate.fn_span);
             rewrite_status = "actual_semantic_ownership_transfer_rewrite_applied";
+            if let Some(zip_block) = applied_zip_rewrite {
+                exact_zip_drop_pairs.extend(exact_zip_drop_pairs_after_applied_rewrite(
+                    body,
+                    zip_block,
+                    candidate.destination,
+                ));
+            }
             replacement_resolution_status = match candidate.kind {
                 SemanticOwnershipTransferKind::BoxSliceIntoVec => {
                     "resolved_unialloc_semantic_box_slice_into_vec"
@@ -8598,6 +9114,9 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                 }
                 SemanticOwnershipTransferKind::VecIntoIter => {
                     "resolved_unialloc_semantic_vec_into_iter"
+                }
+                SemanticOwnershipTransferKind::VecIntoIterViaZip => {
+                    "resolved_unialloc_semantic_vec_into_iter_via_zip"
                 }
             };
         }
@@ -8696,6 +9215,19 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                     ),
                     "pointer_preserving_owner_identity_rebind",
                 ),
+                SemanticOwnershipTransferKind::VecIntoIterViaZip => (
+                    "rustc_middle_exact_vec_into_iter_via_zip_owner_transfer",
+                    SEMANTIC_VEC_INTO_ITER_SYMBOL,
+                    format!(
+                        "Split exact core Iterator::zip<canonical Vec<u8, Global>> into pointer-preserving Vec -> IntoIter ownership transfer followed by zip<IntoIter>; old_owner_type={}; old_type_id={}; old_owner_basis={}; new_owner_type={}; new_type_id={}",
+                        candidate.expected_old_owner_type,
+                        old_type_id,
+                        candidate.expected_old_owner_basis,
+                        candidate.proof.new_owner_type,
+                        new_type_id,
+                    ),
+                    "pointer_preserving_hidden_zip_owner_identity_rebind",
+                ),
             };
 
         records.push(RewriteRecord {
@@ -8738,7 +9270,7 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
         handled_blocks.insert(candidate.bb);
     }
 
-    handled_blocks
+    (handled_blocks, exact_zip_drop_pairs)
 }
 
 fn record_or_rewrite_semantic_scope_candidates<'tcx>(
@@ -8758,14 +9290,15 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
     } else {
         BTreeSet::new()
     };
-    let ownership_transfer_blocks = record_or_rewrite_semantic_ownership_transfers(
-        tcx,
-        def_id,
-        body,
-        semantic_scope_rewrite,
-        semantic_ownership_transfer_abi,
-        records,
-    );
+    let (ownership_transfer_blocks, exact_zip_drop_pairs) =
+        record_or_rewrite_semantic_ownership_transfers(
+            tcx,
+            def_id,
+            body,
+            semantic_scope_rewrite,
+            semantic_ownership_transfer_abi,
+            records,
+        );
     let mut candidate_blocks = Vec::new();
     for (bb, data) in body_basic_blocks!(body).iter_enumerated() {
         if ownership_transfer_blocks.contains(&bb) {
@@ -8895,7 +9428,8 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
     // Authorize the type group only when every allocation destination follows
     // one non-cleanup normal path, is not moved or passed to a call, and reaches
     // its exact destination-matched Drop before any normal exit.
-    let local_ownership = exact_semantic_local_ownership_proof(body, &candidate_blocks);
+    let mut local_ownership = exact_semantic_local_ownership_proof(body, &candidate_blocks);
+    local_ownership.exact_zip_drop_pairs = exact_zip_drop_pairs;
 
     for SemanticScopeCandidate {
         bb,
@@ -9285,6 +9819,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
     semantic_scope_abi: Option<SemanticScopeAbi>,
     semantic_scope_local_abi: Option<SemanticScopeAbi>,
     local_drop_pairs: &BTreeSet<(String, String)>,
+    exact_zip_drop_pairs: &BTreeSet<(String, String)>,
     records: &mut Vec<RewriteRecord>,
 ) {
     let function_name = tcx.def_path_str(def_id);
@@ -9320,10 +9855,19 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             _ => continue,
         };
         let place_ty = place.ty(&body.local_decls, tcx).ty;
+        let drop_place = format!("{:?}", place);
         let drop_type = format!("{:?}", place_ty);
-        let heap_owner_scan = heap_object_type_scan_from_ty(tcx, place_ty);
-        let drop_owner_graph_unresolved = heap_owner_scan.unresolved;
-        let heap_owner_types = heap_owner_scan.owners;
+        let exact_zip_owner = exact_zip_drop_pairs
+            .contains(&(format!("{:?}", bb), drop_place.clone()))
+            .then(|| exact_zip_iter_mut_u8_into_iter_drop_owner(tcx, place_ty))
+            .flatten();
+        let (drop_owner_graph_unresolved, heap_owner_types) = match exact_zip_owner {
+            Some(owner) => (false, BTreeSet::from([owner])),
+            None => {
+                let heap_owner_scan = heap_object_type_scan_from_ty(tcx, place_ty);
+                (heap_owner_scan.unresolved, heap_owner_scan.owners)
+            }
+        };
         let drop_type_has_multiple_heap_owners =
             !drop_owner_graph_unresolved && heap_owner_types.len() > 1;
         let semantic_object_type = if drop_owner_graph_unresolved {
@@ -9348,7 +9892,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
         candidate_blocks.push(SemanticDropCandidate {
             bb,
             original_is_cleanup: data.is_cleanup,
-            drop_place: format!("{:?}", place),
+            drop_place,
             drop_type,
             semantic_object_type,
             drop_type_has_generic_param,
@@ -9881,9 +10425,7 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .count();
     let semantic_scope_callback_capable_skipped_count = records
         .iter()
-        .filter(|record| {
-            record.lowering_kind == "semantic_scope_callback_capable_receiver_skipped"
-        })
+        .filter(|record| record.lowering_kind == "semantic_scope_callback_capable_receiver_skipped")
         .count();
     let semantic_scope_drop_candidate_count = records
         .iter()
@@ -10767,9 +11309,7 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .count();
     let semantic_scope_callback_capable_skipped_count = records
         .iter()
-        .filter(|record| {
-            record.lowering_kind == "semantic_scope_callback_capable_receiver_skipped"
-        })
+        .filter(|record| record.lowering_kind == "semantic_scope_callback_capable_receiver_skipped")
         .count();
     let semantic_scope_drop_candidate_count = records
         .iter()

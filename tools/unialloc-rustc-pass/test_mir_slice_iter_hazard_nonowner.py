@@ -18,11 +18,18 @@ COLLECT_FUNCTION = "collect_borrowed"
 CUSTOM_RAW_FUNCTION = "collect_custom_raw"
 EXTERN_ALLOC_SPOOF_FUNCTION = "extern_alloc_collect_spoof"
 ZIP_FUNCTION = "drop_partially_consumed_zip"
+ZIP_VEC_FUNCTION = "drop_partially_consumed_zip_vec"
+ZIP_VEC_U16_FUNCTION = "drop_partially_consumed_zip_vec_u16"
+ZIP_VEC_ITER_FUNCTION = "drop_partially_consumed_zip_vec_iter"
+ZIP_FAKE_VEC_FUNCTION = "drop_partially_consumed_zip_fake_vec"
+ZIP_MIXED_FUNCTION = "drop_partially_consumed_zip_mixed"
 CLONE_FUNCTION = "clone_iter"
 INTO_ITER_TYPE_MARKER = "IntoIter<u8"
 ZIP_TYPE_MARKER = "Zip<"
 APPLIED_DROP_STATUS = "actual_semantic_scope_drop_rewrite_applied"
 UNRESOLVED_DROP_STATUS = "semantic_scope_drop_rewrite_skipped_unresolved_heap_object_type"
+TRANSFER_STATUS = "actual_semantic_ownership_transfer_rewrite_applied"
+ZIP_TRANSFER_TYPE_ID_BASIS = "rustc_middle_exact_vec_into_iter_via_zip_owner_transfer"
 
 
 def run(
@@ -98,6 +105,15 @@ pub mod vec {
             self.values.len()
         }
     }
+
+    impl<T, A> IntoIterator for Vec<T, A> {
+        type Item = T;
+        type IntoIter = std::vec::IntoIter<T>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.values.into_iter()
+        }
+    }
 }
 ''',
         encoding="utf-8",
@@ -132,6 +148,7 @@ use unialloc::{
 static ALLOCATOR: UniAlloc = UniAlloc;
 
 const BYTES: usize = 256;
+const HIDDEN_BYTES: usize = 1024;
 
 #[inline(never)]
 fn payload_byte(seed: u8, index: usize) -> u8 {
@@ -142,6 +159,15 @@ fn payload_byte(seed: u8, index: usize) -> u8 {
 fn make_vec(seed: u8) -> Vec<u8> {
     let mut value = Vec::with_capacity(BYTES);
     for index in 0..BYTES {
+        value.push(payload_byte(seed, index));
+    }
+    value
+}
+
+#[inline(never)]
+fn make_hidden_vec(seed: u8) -> Vec<u8> {
+    let mut value = Vec::with_capacity(HIDDEN_BYTES);
+    for index in 0..HIDDEN_BYTES {
         value.push(payload_byte(seed, index));
     }
     value
@@ -214,11 +240,66 @@ fn drop_partially_consumed_zip(
     let mut zipped = targets.iter_mut().zip(source);
     let (target, first) = zipped.next().expect("non-empty zip");
     *target = first;
-    // This focused fixture passes an already-rebound IntoIter.  General Drop
-    // analysis must nevertheless remain unchanged/fail closed: the real-app
-    // `zip(Vec)` shape additionally needs proof of its hidden Vec -> IntoIter
-    // conversion before that Drop can be attributed safely.
+    // This focused fixture passes an already-rebound IntoIter across a function
+    // boundary. The Zip type alone does not prove the local Vec -> IntoIter
+    // transfer provenance, so this sibling remains fail closed.
     first
+}
+
+#[inline(never)]
+fn drop_partially_consumed_zip_vec(
+    mut targets: &mut [u8; HIDDEN_BYTES],
+    source: Vec<u8>,
+) -> u8 {
+    // This is the exact real-application shape: Iterator::zip receives the
+    // Vec by value and performs Vec -> IntoIter inside core, outside the local
+    // MIR body. The pass must make that hidden ownership transfer explicit
+    // before attributing the enclosing Zip Drop to IntoIter.
+    let mut zipped = targets.iter_mut().zip(source);
+    let (target, first) = zipped.next().expect("non-empty zip");
+    *target = first;
+    first
+}
+
+#[inline(never)]
+fn drop_partially_consumed_zip_vec_u16(targets: &mut [u16; 4], source: Vec<u16>) {
+    let mut zipped = targets.iter_mut().zip(source);
+    let _ = zipped.next();
+}
+
+#[inline(never)]
+fn drop_partially_consumed_zip_vec_iter(targets: &[u8; 4], source: Vec<u8>) {
+    let mut zipped = targets.iter().zip(source);
+    let _ = zipped.next();
+}
+
+#[inline(never)]
+fn drop_partially_consumed_zip_fake_vec(
+    targets: &mut [u8; 4],
+    source: alloc::vec::Vec<u8>,
+) {
+    let mut zipped = targets.iter_mut().zip(source);
+    let _ = zipped.next();
+}
+
+#[inline(never)]
+fn drop_partially_consumed_zip_mixed(
+    mut targets: &mut [u8; 4],
+    source: Vec<u8>,
+    prebound: std::vec::IntoIter<u8>,
+    use_hidden_transfer: bool,
+) {
+    // Both branches initialize the same Zip local. Only the first has the
+    // canonical hidden Vec -> IntoIter rewrite provenance; the second arrives
+    // already rebound. A place-name-only authorization would incorrectly
+    // lower their joined Drop, so this body must remain fail closed.
+    let mut zipped;
+    if use_hidden_transfer {
+        zipped = targets.iter_mut().zip(source);
+    } else {
+        zipped = targets.iter_mut().zip(prebound);
+    }
+    let _ = zipped.next();
 }
 
 fn main() {
@@ -250,6 +331,19 @@ fn main() {
         let spoof = extern_alloc_collect_spoof(&borrowed_input);
         assert_eq!(spoof.len(), borrowed_input.len());
         drop(spoof);
+        drop_partially_consumed_zip_vec_u16(&mut [0u16; 4], vec![1u16; 4]);
+        drop_partially_consumed_zip_vec_iter(&[0u8; 4], vec![1u8; 4]);
+        let fake = [1u8; 4]
+            .into_iter()
+            .collect::<alloc::vec::Vec<u8>>();
+        drop_partially_consumed_zip_fake_vec(&mut [0u8; 4], fake);
+        let mixed_prebound = into_iter(vec![2u8; 4]);
+        drop_partially_consumed_zip_mixed(
+            &mut [0u8; 4],
+            vec![1u8; 4],
+            mixed_prebound,
+            opaque_false(),
+        );
     }
 
     let source = make_vec(0x31);
@@ -277,6 +371,30 @@ fn main() {
     let same_into_iter_reuse = cloned_pointer == transferred_pointer;
     let clone_distinct_from_live_source = cloned_pointer != clone_source_pointer;
 
+    let hidden_source = make_hidden_vec(0x42);
+    let hidden_transferred_pointer = hidden_source.as_ptr() as usize;
+    let mut hidden_targets = [0u8; HIDDEN_BYTES];
+    let hidden_first = drop_partially_consumed_zip_vec(&mut hidden_targets, hidden_source);
+    assert_eq!(hidden_first, payload_byte(0x42, 0));
+    assert_eq!(hidden_targets[0], hidden_first);
+
+    // Once zip's hidden conversion is rebound to IntoIter, a same-layout Vec
+    // must not consume the released pointer.
+    let hidden_wrong_vec = make_hidden_vec(0x63);
+    let hidden_wrong_vec_pointer = hidden_wrong_vec.as_ptr() as usize;
+    let hidden_wrong_vec_non_reuse = hidden_wrong_vec_pointer != hidden_transferred_pointer;
+
+    // The exact IntoIter identity must recover the pointer released by Zip,
+    // without aliasing the still-live source iterator.
+    let hidden_clone_source_vec = make_hidden_vec(0x84);
+    let hidden_clone_source = into_iter(hidden_clone_source_vec);
+    let hidden_clone_source_pointer = hidden_clone_source.as_slice().as_ptr() as usize;
+    let hidden_cloned = clone_iter(&hidden_clone_source);
+    let hidden_cloned_pointer = hidden_cloned.as_slice().as_ptr() as usize;
+    let hidden_same_intoiter_reuse = hidden_cloned_pointer == hidden_transferred_pointer;
+    let hidden_clone_distinct_from_live_source =
+        hidden_cloned_pointer != hidden_clone_source_pointer;
+
     let transfer_after = semantic_ownership_transfer_snapshot();
     let stats = semantic_stats_snapshot();
     let fallback = semantic_fallback_attribution_snapshot();
@@ -300,6 +418,13 @@ fn main() {
             "\"wrong_vec_non_reuse\":{},",
             "\"same_into_iter_reuse\":{},",
             "\"clone_distinct_from_live_source\":{},",
+            "\"hidden_transferred_pointer\":{},",
+            "\"hidden_wrong_vec_pointer\":{},",
+            "\"hidden_clone_source_pointer\":{},",
+            "\"hidden_cloned_pointer\":{},",
+            "\"hidden_wrong_vec_non_reuse\":{},",
+            "\"hidden_same_intoiter_reuse\":{},",
+            "\"hidden_clone_distinct_from_live_source\":{},",
             "\"transfer_attempted\":{},",
             "\"transfer_applied\":{},",
             "\"transfer_rejected\":{},",
@@ -324,6 +449,13 @@ fn main() {
         wrong_vec_non_reuse,
         same_into_iter_reuse,
         clone_distinct_from_live_source,
+        hidden_transferred_pointer,
+        hidden_wrong_vec_pointer,
+        hidden_clone_source_pointer,
+        hidden_cloned_pointer,
+        hidden_wrong_vec_non_reuse,
+        hidden_same_intoiter_reuse,
+        hidden_clone_distinct_from_live_source,
         transfer_after.attempted.saturating_sub(transfer_before.attempted),
         transfer_after.applied.saturating_sub(transfer_before.applied),
         transfer_after.rejected.saturating_sub(transfer_before.rejected),
@@ -338,6 +470,9 @@ fn main() {
 
     drop(cloned);
     drop(clone_source);
+    drop(hidden_cloned);
+    drop(hidden_clone_source);
+    drop(hidden_wrong_vec);
     drop(wrong_vec);
     drop(second_collected);
     drop(wrong_string);
@@ -437,14 +572,113 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         and ZIP_TYPE_MARKER in str(row.get("destination_type") or "")
     ]
     assert zip_drop_rows, "missing Zip<IterMut, IntoIter> Drop candidate"
+    applied = [
+        row for row in zip_drop_rows if row.get("rewrite_status") == APPLIED_DROP_STATUS
+    ]
     unresolved = [
         row for row in zip_drop_rows if row.get("rewrite_status") == UNRESOLVED_DROP_STATUS
     ]
     assert unresolved, zip_drop_rows
-    applied = [
-        row for row in zip_drop_rows if row.get("rewrite_status") == APPLIED_DROP_STATUS
-    ]
     assert not applied, applied
+
+    zip_vec_transfer_rows = [
+        row
+        for row in rows
+        if isinstance(row, dict)
+        and function_matches(row, ZIP_VEC_FUNCTION)
+        and row.get("lowering_kind") == "semantic_ownership_transfer_rewrite"
+        and row.get("type_id_basis") == ZIP_TRANSFER_TYPE_ID_BASIS
+    ]
+    assert len(zip_vec_transfer_rows) == 1, zip_vec_transfer_rows
+    assert zip_vec_transfer_rows[0].get("rewrite_status") == TRANSFER_STATUS, (
+        zip_vec_transfer_rows
+    )
+
+    zip_vec_drop_rows = [
+        row
+        for row in rows
+        if isinstance(row, dict)
+        and function_matches(row, ZIP_VEC_FUNCTION)
+        and row.get("callee") == "TerminatorKind::Drop"
+        and ZIP_TYPE_MARKER in str(row.get("destination_type") or "")
+    ]
+    assert zip_vec_drop_rows, "missing hidden Vec -> IntoIter Zip Drop candidate"
+    zip_vec_applied = [
+        row
+        for row in zip_vec_drop_rows
+        if row.get("rewrite_status") == APPLIED_DROP_STATUS
+        and INTO_ITER_TYPE_MARKER in str(row.get("semantic_object_type") or "")
+    ]
+    assert zip_vec_applied, zip_vec_drop_rows
+    assert not [
+        row for row in zip_vec_drop_rows if row.get("rewrite_status") == UNRESOLVED_DROP_STATUS
+    ], zip_vec_drop_rows
+
+    negative_zip_functions = (
+        ZIP_VEC_U16_FUNCTION,
+        ZIP_VEC_ITER_FUNCTION,
+        ZIP_FAKE_VEC_FUNCTION,
+    )
+    negative_transfer_rows = [
+        row
+        for row in rows
+        if isinstance(row, dict)
+        and any(function_matches(row, name) for name in negative_zip_functions)
+        and row.get("lowering_kind") == "semantic_ownership_transfer_rewrite"
+    ]
+    assert not negative_transfer_rows, negative_transfer_rows
+    for function_name in negative_zip_functions:
+        negative_drop_rows = [
+            row
+            for row in rows
+            if isinstance(row, dict)
+            and function_matches(row, function_name)
+            and row.get("callee") == "TerminatorKind::Drop"
+            and ZIP_TYPE_MARKER in str(row.get("destination_type") or "")
+        ]
+        assert negative_drop_rows, (function_name, negative_drop_rows)
+        assert not [
+            row
+            for row in negative_drop_rows
+            if row.get("rewrite_status") == APPLIED_DROP_STATUS
+        ], (function_name, negative_drop_rows)
+        assert [
+            row
+            for row in negative_drop_rows
+            if row.get("rewrite_status") == UNRESOLVED_DROP_STATUS
+        ], (function_name, negative_drop_rows)
+
+    mixed_transfer_rows = [
+        row
+        for row in rows
+        if isinstance(row, dict)
+        and function_matches(row, ZIP_MIXED_FUNCTION)
+        and row.get("lowering_kind") == "semantic_ownership_transfer_rewrite"
+        and row.get("type_id_basis") == ZIP_TRANSFER_TYPE_ID_BASIS
+    ]
+    assert len(mixed_transfer_rows) == 1, mixed_transfer_rows
+    assert mixed_transfer_rows[0].get("rewrite_status") == TRANSFER_STATUS, (
+        mixed_transfer_rows
+    )
+    mixed_drop_rows = [
+        row
+        for row in rows
+        if isinstance(row, dict)
+        and function_matches(row, ZIP_MIXED_FUNCTION)
+        and row.get("callee") == "TerminatorKind::Drop"
+        and ZIP_TYPE_MARKER in str(row.get("destination_type") or "")
+    ]
+    assert mixed_drop_rows, mixed_drop_rows
+    assert not [
+        row
+        for row in mixed_drop_rows
+        if row.get("rewrite_status") == APPLIED_DROP_STATUS
+    ], mixed_drop_rows
+    assert [
+        row
+        for row in mixed_drop_rows
+        if row.get("rewrite_status") == UNRESOLVED_DROP_STATUS
+    ], mixed_drop_rows
 
     clone_rows = [
         row
@@ -464,6 +698,9 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         "wrong_vec_non_reuse",
         "same_into_iter_reuse",
         "clone_distinct_from_live_source",
+        "hidden_wrong_vec_non_reuse",
+        "hidden_same_intoiter_reuse",
+        "hidden_clone_distinct_from_live_source",
     ):
         assert runtime[field] is True, (field, runtime)
     assert int(runtime["first_collected_pointer"]) != int(
@@ -475,8 +712,8 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert int(runtime["transferred_pointer"]) != int(runtime["wrong_vec_pointer"]), runtime
     assert int(runtime["transferred_pointer"]) == int(runtime["cloned_pointer"]), runtime
     for field, expected in (
-        ("transfer_attempted", 2),
-        ("transfer_applied", 2),
+        ("transfer_attempted", 4),
+        ("transfer_applied", 4),
         ("transfer_rejected", 0),
         ("fallback_allocations", 0),
         ("fallback_deallocations", 0),
@@ -499,6 +736,17 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         "zip_drop_rows": len(zip_drop_rows),
         "unresolved_zip_drop_rows": len(unresolved),
         "applied_zip_drop_rows": len(applied),
+        "hidden_zip_transfer_rows": len(zip_vec_transfer_rows),
+        "hidden_zip_applied_drop_rows": len(zip_vec_applied),
+        "negative_zip_transfer_rows": len(negative_transfer_rows),
+        "mixed_zip_transfer_rows": len(mixed_transfer_rows),
+        "mixed_zip_unresolved_drop_rows": len(
+            [
+                row
+                for row in mixed_drop_rows
+                if row.get("rewrite_status") == UNRESOLVED_DROP_STATUS
+            ]
+        ),
         "runtime": runtime,
     }
 
