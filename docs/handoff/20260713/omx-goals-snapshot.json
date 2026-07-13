@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "createdAt": "2026-06-11T09:29:21.131Z",
+  "updatedAt": "2026-07-12T03:05:25.955Z",
+  "briefPath": ".omx/ultragoal/brief.md",
+  "goalsPath": ".omx/ultragoal/goals.json",
+  "ledgerPath": ".omx/ultragoal/ledger.jsonl",
+  "codexGoalMode": "aggregate",
+  "goals": [
+    {
+      "id": "G001-users-hqzhao-downloads-rust-alloc-pa",
+      "title": "根据论文 /Users/hqzhao/Downloads/rust-alloc-paper 完全重构 /Users/hqzhao/Down...",
+      "objective": "根据论文 /Users/hqzhao/Downloads/rust-alloc-paper 完全重构 /Users/hqzhao/Downloads/UniAlloc。本项目需要补全论文主张对应的 allocator 实现与完整 evaluation framework，能够复现实验、产出数据/表格/报告，并以当前源码和可运行验证作为证据逐步达成论文 overclaim 中最好的效果。不要缩小目标；每个阶段都要有文件/命令/测试证据。",
+      "status": "in_progress",
+      "attempt": 2,
+      "createdAt": "2026-06-11T09:29:21.131Z",
+      "updatedAt": "2026-07-12T03:05:17.036Z",
+      "startedAt": "2026-06-12T03:25:07.611Z",
+      "steeringStatus": "superseded",
+      "supersededBy": [
+        "G002-unialloc-functional-correctness-and"
+      ],
+      "steeringEvidence": ".omx/handoff/g001-performance-campaign-stop-user-objective-change-20260712T030350Z.json sha256=8102bf15ba9314f3d599b16536e418d2aead0cab0b40c710b4d391a79ef95eed; explicit user steering authorizes objective replacement and requires G001 superseded rather than complete.",
+      "steeringRationale": "user explicitly replaced paper-performance-matrix completion with implementation-first correctness and optimization"
+    },
+    {
+      "id": "G002-unialloc-functional-correctness-and",
+      "title": "UniAlloc functional correctness and optimization",
+      "objective": "Complete UniAlloc allocator, compiler integration, metadata semantics, type isolation, PAC, hugepage, cache/backend/PAL, and cross-platform functionality; repair known correctness and robustness defects, add runnable regression and integration tests including actual compiler rewrites, and perform at least one profile-guided code optimization with bounded same-condition diagnostic before/after evidence. Preserve the G001 freeze as read-only historical evidence. Full 168-cell/1008-run paper performance reproduction and publication-grade percentage claims are explicitly deferred and are not completion gates; reduced benchmarks are diagnostic only. Success is determined by correctness, functional coverage, maintainability, platform readiness, targeted validation, and documented external blockers/deferred claims.",
+      "status": "in_progress",
+      "attempt": 1,
+      "createdAt": "2026-07-12T03:05:17.036Z",
+      "updatedAt": "2026-07-12T03:05:25.955Z",
+      "evidence": ".omx/handoff/g001-performance-campaign-stop-user-objective-change-20260712T030350Z.json sha256=8102bf15ba9314f3d599b16536e418d2aead0cab0b40c710b4d391a79ef95eed; explicit user steering authorizes objective replacement and requires G001 superseded rather than complete.",
+      "supersedes": [
+        "G001-users-hqzhao-downloads-rust-alloc-pa"
+      ],
+      "startedAt": "2026-07-12T03:05:25.955Z"
+    }
+  ],
+  "codexObjective": "Complete the durable ultragoal plan in .omx/ultragoal/goals.json, including later accepted/appended stories, under the original brief constraints; use .omx/ultragoal/ledger.jsonl as the audit trail.",
+  "activeGoalId": "G002-unialloc-functional-correctness-and"
+}

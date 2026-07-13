@@ -1,0 +1,30 @@
+{
+  "active_goal": "G002-unialloc-functional-correctness-and",
+  "branch": "g002-functional-correctness-20260713",
+  "commits": {
+    "compiler_zip_provenance": "f8966ca93d320b35141b9bad4c6a6efa5a65c130",
+    "diagnostic_evaluation_tooling": "6b73a556a009753e5388161f46a0cc2d1bb7f73e",
+    "type_isolation_lifecycle_wip": "c820338a142e861b90ea4dc17675e63f79a1d121"
+  },
+  "files": {
+    "docs/handoff/20260713/G002-CONTINUATION.md": "ba9e2f7f5af2256c07e8f8f91fbf4c2ac4649f990c87bcd965c0344ae1048e48",
+    "docs/handoff/20260713/g001-stop-user-objective-change.json": "8102bf15ba9314f3d599b16536e418d2aead0cab0b40c710b4d391a79ef95eed",
+    "docs/handoff/20260713/omx-goals-snapshot.json": "c51de3fb17cb6607d0c493e6342038bb00f5cff889118ce322d3204dae6e6c99"
+  },
+  "generated_at_utc": "2026-07-13T14:33:13.169415+00:00",
+  "paper_performance_matrix": "deferred_by_explicit_user_scope_change",
+  "remote": "origin",
+  "schema_version": 1,
+  "superseded_goal": "G001-users-hqzhao-downloads-rust-alloc-pa",
+  "validation": {
+    "evaluation_python_unittests": {
+      "failed": 0,
+      "passed": 430
+    },
+    "p0_repository_cargo_hook": {
+      "failed": 11,
+      "passed": 695,
+      "status": "known_wip_failure"
+    }
+  }
+}
