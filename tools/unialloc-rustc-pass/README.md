@@ -503,6 +503,15 @@ identity, and same-layout Box storage to reject a Vec identity and accept the
 exact Box identity.  Fallback, raw-without-metadata, recovery-mismatch,
 corruption, and dropped-stat counters must remain zero.
 
+- **Current closure (`c477339`, `6640305`, `95d3d8a`, `cfd887e`).** Redox/Linux
+  tests type-check with portable `mincore`, but Redox runtime still needs an
+  external linker/runner; cross-thread wrong-layout deallocation preserves its
+  record until exact retry. The current generated app proves exact `Box<[u8]>`,
+  Box/Vec wrong-type non-reuse, exact Box reuse, and zero raw/fallback/mismatch/
+  corrupt while `Box<[String]>` stays audit-only. This is bounded functional
+  evidence, not universal-app, paper-percentage, or performance evidence; Oxipng
+  `19ffb71` remains stale and is not rebound.
+
 The same run also enables automatic cross-thread placement with no manual
 placement value.  A `Vec<u8>` allocated in the MIR body that performs a real
 `thread::spawn(move || ...)` must carry placement bit `0x8000` with basis
