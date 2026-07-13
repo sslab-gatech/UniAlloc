@@ -7,12 +7,11 @@ extern crate alloc;
 use alloc::boxed::Box;
 use core::alloc::{GlobalAlloc, Layout};
 use core::panic::PanicInfo;
-use core::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use unialloc::UniAlloc;
 
-const INIT_UNINITIALIZED: u8 = 0;
-const INIT_IN_PROGRESS: u8 = 1;
-const INIT_READY: u8 = 2;
+mod boot_init_state;
+
+use boot_init_state::BootInitState;
 
 // This is a linkable contract fixture, not a replacement for the heap mapping
 // performed by the real BlogOS boot path.  The aligned BSS range lets the
@@ -23,9 +22,7 @@ const CONTRACT_HEAP_BYTES: usize = 64 * 1024 * 1024;
 #[repr(align(4096))]
 struct ContractHeap([u8; CONTRACT_HEAP_BYTES]);
 
-static INIT_STATE: AtomicU8 = AtomicU8::new(INIT_UNINITIALIZED);
-static PUBLISHED_HEAP_START: AtomicUsize = AtomicUsize::new(0);
-static PUBLISHED_HEAP_SIZE: AtomicUsize = AtomicUsize::new(0);
+static BOOT_INIT: BootInitState = BootInitState::new();
 static INNER: UniAlloc = UniAlloc::new();
 static mut CONTRACT_HEAP: ContractHeap = ContractHeap([0; CONTRACT_HEAP_BYTES]);
 
@@ -36,13 +33,7 @@ static GLOBAL_ALLOCATOR: BlogOsGlobalAllocator = BlogOsGlobalAllocator;
 
 #[inline]
 fn allocator_ready() -> bool {
-    INIT_STATE.load(Ordering::Acquire) == INIT_READY
-}
-
-#[inline]
-fn published_heap_matches(heap_start: usize, heap_size: usize) -> bool {
-    PUBLISHED_HEAP_START.load(Ordering::Relaxed) == heap_start
-        && PUBLISHED_HEAP_SIZE.load(Ordering::Relaxed) == heap_size
+    BOOT_INIT.ready()
 }
 
 unsafe impl GlobalAlloc for BlogOsGlobalAllocator {
@@ -92,53 +83,18 @@ unsafe impl GlobalAlloc for BlogOsGlobalAllocator {
 /// wrapper; this wrapper must be the sole owner of fixed-heap publication.
 #[no_mangle]
 pub unsafe extern "C" fn blogos_unialloc_boot_init(heap_start: usize, heap_size: usize) -> bool {
-    loop {
-        match INIT_STATE.load(Ordering::Acquire) {
-            INIT_READY => return published_heap_matches(heap_start, heap_size),
-            INIT_IN_PROGRESS => core::hint::spin_loop(),
-            INIT_UNINITIALIZED => {
-                if INIT_STATE
-                    .compare_exchange(
-                        INIT_UNINITIALIZED,
-                        INIT_IN_PROGRESS,
-                        Ordering::AcqRel,
-                        Ordering::Acquire,
-                    )
-                    .is_err()
-                {
-                    continue;
-                }
-
-                // `UniAlloc::try_init` treats an already-ready fixed heap as a
-                // successful no-op.  Reject that state here rather than
-                // falsely publishing this caller's unrelated range as the
-                // active heap.  The safety contract above excludes the
-                // remaining cross-API race between this check and `try_init`.
-                if unialloc::fixed_heap_ready() {
-                    INIT_STATE.store(INIT_UNINITIALIZED, Ordering::Release);
-                    return false;
-                }
-
-                let initialized = INNER.try_init(heap_start, heap_size, unialloc::PAGE_SIZE);
-                if initialized {
-                    // These values are published by the following Release
-                    // store to INIT_STATE and observed after its Acquire load.
-                    PUBLISHED_HEAP_START.store(heap_start, Ordering::Relaxed);
-                    PUBLISHED_HEAP_SIZE.store(heap_size, Ordering::Relaxed);
-                }
-                INIT_STATE.store(
-                    if initialized {
-                        INIT_READY
-                    } else {
-                        INIT_UNINITIALIZED
-                    },
-                    Ordering::Release,
-                );
-                return initialized;
-            }
-            _ => return false,
+    BOOT_INIT.publish(heap_start, heap_size, || {
+        // `UniAlloc::try_init` treats an already-ready fixed heap as a
+        // successful no-op.  Reject that state here rather than falsely
+        // publishing this caller's unrelated range as the active heap.  The
+        // safety contract above excludes the remaining cross-API race between
+        // this check and `try_init`.
+        if unialloc::fixed_heap_ready() {
+            return false;
         }
-    }
+
+        INNER.try_init(heap_start, heap_size, unialloc::PAGE_SIZE)
+    })
 }
 
 /// Exercise the boot-to-global-allocation handoff used by the build contract.

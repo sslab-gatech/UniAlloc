@@ -28,6 +28,7 @@ REQUIRED_SYMBOL_FRAGMENTS = {
     "___rust_dealloc",
     "rust_begin_unwind",
 }
+BOOT_INIT_BEHAVIOR_TESTS = 5
 
 
 def run(command: list[str], *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -58,6 +59,27 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="unialloc-blogos-contract-") as target_dir:
         env = os.environ.copy()
         env["CARGO_TARGET_DIR"] = target_dir
+        host_test_command = [
+            cargo,
+            f"+{toolchain}",
+            "test",
+            "--offline",
+            "--locked",
+            "--manifest-path",
+            str(MANIFEST),
+            "--test",
+            "boot_init_state",
+        ]
+        host_test = run(host_test_command, env=env)
+        expected_host_test_result = (
+            f"test result: ok. {BOOT_INIT_BEHAVIOR_TESTS} passed; "
+            "0 failed; 0 ignored; 0 measured; 0 filtered out"
+        )
+        if expected_host_test_result not in host_test.stdout:
+            raise RuntimeError(
+                "BlogOS boot-init behavior test count/result did not match the contract\n"
+                f"stdout:\n{host_test.stdout}\nstderr:\n{host_test.stderr}"
+            )
         command = [
             cargo,
             f"+{toolchain}",
@@ -70,6 +92,8 @@ def main() -> int:
             str(MANIFEST),
             "--target",
             TARGET,
+            "--features",
+            "baremetal-contract",
         ]
         build = run(command, env=env)
         binary = Path(target_dir) / TARGET / "debug" / "unialloc_blogos_contract"
@@ -109,7 +133,12 @@ def main() -> int:
             "required_symbol_fragments": sorted(REQUIRED_SYMBOL_FRAGMENTS),
             "binary_sha256": hashlib.sha256(image).hexdigest(),
             "global_allocator_contract": True,
-            "boot_heap_init_contract": True,
+            "boot_heap_init_wiring": True,
+            "boot_heap_init_behavior_tested": True,
+            "boot_heap_init_behavior_tests": BOOT_INIT_BEHAVIOR_TESTS,
+            "host_behavior_test_command": host_test_command,
+            "host_behavior_test_stdout_tail": host_test.stdout.splitlines()[-8:],
+            "host_behavior_test_stderr_tail": host_test.stderr.splitlines()[-8:],
             "panic_and_alloc_error_handlers": True,
             "validated": True,
             "runtime_boot_validation": False,

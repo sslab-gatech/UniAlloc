@@ -4,6 +4,17 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[[bin]]
+name = "unialloc_blogos_contract"
+path = "src/main.rs"
+test = false
+bench = false
+required-features = ["baremetal-contract"]
+
+[features]
+default = []
+baremetal-contract = []
+
 [dependencies]
 unialloc = { path = "../../unialloc", default-features = false, features = ["fixed_heap", "type_isolation"] }
 
