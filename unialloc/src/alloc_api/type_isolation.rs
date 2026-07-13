@@ -23098,6 +23098,62 @@ mod tests {
     }
 
     #[test]
+    fn global_type_cache_ownership_concurrent_duplicate_registration_has_single_owner() {
+        const WORKERS: usize = 16;
+
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+        }
+
+        let baseline = GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire);
+        let ptr_addr = 0x1000usize;
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(WORKERS));
+        let mut workers = Vec::with_capacity(WORKERS);
+        for _ in 0..WORKERS {
+            let barrier = barrier.clone();
+            workers.push(thread::spawn(move || {
+                barrier.wait();
+                register_global_type_cache_ownership(ptr_addr as *mut u8)
+            }));
+        }
+
+        let mut inserted = 0usize;
+        let mut duplicate = 0usize;
+        let mut full = 0usize;
+        for worker in workers {
+            match worker
+                .join()
+                .expect("ownership registration worker panicked")
+            {
+                GlobalTypeCacheOwnershipRegistration::Inserted => inserted += 1,
+                GlobalTypeCacheOwnershipRegistration::Duplicate => duplicate += 1,
+                GlobalTypeCacheOwnershipRegistration::Full => full += 1,
+            }
+        }
+
+        assert_eq!(
+            inserted, 1,
+            "exactly one concurrent registrant owns the key"
+        );
+        assert_eq!(duplicate, WORKERS - 1);
+        assert_eq!(full, 0);
+        assert!(global_type_cache_contains_ptr(ptr_addr as *mut u8));
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            baseline + 1
+        );
+
+        assert!(unregister_global_type_cache_ownership(ptr_addr as *mut u8));
+        assert!(!global_type_cache_contains_ptr(ptr_addr as *mut u8));
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            baseline
+        );
+    }
+
+    #[test]
     fn type_cache_owned_pointer_rejects_raw_reclaim_without_mutation() {
         let _guard = test_guard();
         let _cleanup = SemanticStateCleanup;
@@ -23410,6 +23466,185 @@ mod tests {
                     action
                 )),
                 "retained-cache raw {} child omitted its completion marker: {}",
+                action,
+                stderr
+            );
+        }
+    }
+
+    #[test]
+    fn foreign_thread_raw_reclaim_of_real_retained_entry_fails_stop() {
+        const CHILD_ENV: &str = "UNIALLOC_FOREIGN_RETAINED_TYPE_CACHE_RAW_GUARD";
+        const TEST_NAME: &str = concat!(
+            "alloc_api::type_isolation::tests::",
+            "foreign_thread_raw_reclaim_of_real_retained_entry_fails_stop"
+        );
+
+        if let Some(action) = std::env::var_os(CHILD_ENV) {
+            let action = std::string::String::from(action.to_str().expect("ASCII child action"));
+            let _guard = test_guard();
+            let _cleanup = SemanticStateCleanup;
+            unsafe {
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+                clear_auto_allocation_records();
+            }
+            semantic_auto_metadata_disable();
+            semantic_stats_recording_disable();
+            semantic_type_stats_recording_disable();
+
+            let alloc = RustAllocator::new();
+            let layout =
+                Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+            let metadata = AllocationMetadata::for_type(0xD0B1_EF06)
+                .with_module(0xC0DE_D0B6)
+                .with_callsite(0xA110_D0B6)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let sentinel = match action.as_str() {
+                "dealloc" => 0xA6,
+                "realloc" => 0x5B,
+                other => panic!("unknown foreign raw reclaim action: {}", other),
+            };
+
+            let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert!(!ptr.is_null());
+            unsafe {
+                ptr.write_bytes(sentinel, layout.size());
+                alloc.dealloc_with_metadata(ptr, layout, metadata);
+            }
+
+            let retained = unsafe { inline_type_cache_entry_snapshot_for_test() };
+            assert_eq!(retained.ptr, ptr);
+            assert_eq!(
+                retained.identity,
+                TypeCacheIdentity::from_metadata(metadata)
+            );
+            assert!(global_type_cache_contains_ptr(ptr));
+            assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+
+            let foreign_action = action.clone();
+            let ptr_addr = ptr as usize;
+            let foreign = thread::spawn(move || {
+                let foreign_alloc = RustAllocator::new();
+                let foreign_ptr = ptr_addr as *mut u8;
+                let rejection = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                    match foreign_action.as_str() {
+                        "dealloc" => foreign_alloc.dealloc_raw(foreign_ptr, layout),
+                        "realloc" => {
+                            let _ =
+                                foreign_alloc.realloc_raw(foreign_ptr, layout, layout.size() * 4);
+                        }
+                        _ => unreachable!(),
+                    }
+                }));
+                let payload = match rejection {
+                    Err(payload) => payload,
+                    Ok(()) => {
+                        let _ = std::io::Write::write_all(
+                            &mut std::io::stderr(),
+                            b"UNIALLOC_FOREIGN_RETAINED_CACHE_RAW_RETURNED\n",
+                        );
+                        // A missing guard may already have reclaimed or moved
+                        // the allocation. Abort the isolated child before the
+                        // owner can inspect, pop, or release the stale entry.
+                        std::process::abort();
+                    }
+                };
+                let expected = payload
+                    .downcast_ref::<&str>()
+                    .is_some_and(|message| *message == "type-cache pointer already retained")
+                    || payload
+                        .downcast_ref::<std::string::String>()
+                        .is_some_and(|message| message == "type-cache pointer already retained");
+                if !expected {
+                    let _ = std::io::Write::write_all(
+                        &mut std::io::stderr(),
+                        b"UNIALLOC_FOREIGN_RETAINED_CACHE_RAW_UNEXPECTED_PANIC\n",
+                    );
+                    std::process::abort();
+                }
+                if !global_type_cache_contains_ptr(foreign_ptr)
+                    || GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire) != 1
+                {
+                    let _ = std::io::Write::write_all(
+                        &mut std::io::stderr(),
+                        b"UNIALLOC_FOREIGN_RETAINED_CACHE_OWNERSHIP_MUTATED\n",
+                    );
+                    std::process::abort();
+                }
+            });
+            if foreign.join().is_err() {
+                let _ = std::io::Write::write_all(
+                    &mut std::io::stderr(),
+                    b"UNIALLOC_FOREIGN_RETAINED_CACHE_THREAD_PANICKED\n",
+                );
+                std::process::abort();
+            }
+
+            // Only the owner thread can see and pop its thread-local retained
+            // entry. Exact typed reuse must retire global ownership before the
+            // allocation receives its single terminal raw release.
+            let retained_after_rejection = unsafe { inline_type_cache_entry_snapshot_for_test() };
+            assert_eq!(retained_after_rejection.ptr, ptr);
+            assert_eq!(
+                retained_after_rejection.identity,
+                TypeCacheIdentity::from_metadata(metadata)
+            );
+            assert!(global_type_cache_contains_ptr(ptr));
+            assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+            for offset in 0..layout.size() {
+                assert_eq!(unsafe { ptr.add(offset).read() }, sentinel);
+            }
+
+            let reused = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert_eq!(reused, ptr);
+            assert!(!global_type_cache_contains_ptr(reused));
+            assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+            assert!(unsafe { inline_type_cache_entry_snapshot_for_test() }.is_empty());
+            for offset in 0..layout.size() {
+                assert_eq!(unsafe { reused.add(offset).read() }, sentinel);
+            }
+            unsafe {
+                alloc.dealloc_raw(reused, layout);
+            }
+            std::eprintln!(
+                "UNIALLOC_FOREIGN_RETAINED_TYPE_CACHE_RAW_GUARD_OK:{}",
+                action
+            );
+            return;
+        }
+
+        for action in ["dealloc", "realloc"] {
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("current type-isolation test executable"),
+            )
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .env(CHILD_ENV, action)
+            .env("RUST_BACKTRACE", "0")
+            .output()
+            .expect("spawn isolated foreign-thread raw-reclaim regression");
+            let stderr = std::string::String::from_utf8_lossy(&output.stderr);
+            assert!(
+                output.status.success(),
+                "foreign-thread raw {} child failed: {}",
+                action,
+                stderr
+            );
+            assert!(
+                stderr.contains(&std::format!(
+                    "UNIALLOC_FOREIGN_RETAINED_TYPE_CACHE_RAW_GUARD_OK:{}",
+                    action
+                )),
+                "foreign-thread raw {} child omitted its completion marker: {}",
+                action,
+                stderr
+            );
+            assert!(
+                !stderr.contains("UNIALLOC_FOREIGN_RETAINED_CACHE_RAW_RETURNED")
+                    && !stderr.contains("UNIALLOC_FOREIGN_RETAINED_CACHE_RAW_UNEXPECTED_PANIC")
+                    && !stderr.contains("UNIALLOC_FOREIGN_RETAINED_CACHE_OWNERSHIP_MUTATED")
+                    && !stderr.contains("UNIALLOC_FOREIGN_RETAINED_CACHE_THREAD_PANICKED"),
+                "foreign-thread raw {} bypassed the ownership guard: {}",
                 action,
                 stderr
             );
