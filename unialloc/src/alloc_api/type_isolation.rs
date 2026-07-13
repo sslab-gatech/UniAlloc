@@ -25164,6 +25164,148 @@ mod tests {
     }
 
     #[test]
+    fn type_cache_linked_probe_exhaustion_preserves_exact_owners_and_accounting() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            const REJECTED_COLLISIONS: usize = 8;
+            const COLLISION_COUNT: usize = TYPE_CACHE_PROBE_LIMIT + REJECTED_COLLISIONS;
+
+            let mut storage = [[0usize; TYPE_CACHE_NODE_WORDS]; COLLISION_COUNT];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage[0]), align_of::<usize>()).unwrap();
+            let forced_collision_key = 0xC011_1510_C011_1512;
+            let mut metadata = [AllocationMetadata::unknown(); COLLISION_COUNT];
+            let mut idx = 0usize;
+            while idx < COLLISION_COUNT {
+                metadata[idx] = AllocationMetadata::for_type(0xC003_004C)
+                    .with_module(0xC0DE_1000 + idx as u64)
+                    .with_flags(FLAG_TYPE_ISOLATED)
+                    .with_lifetime_hint(0x30 + idx as u16)
+                    .with_placement_hint(0x40 + idx as u16);
+                idx += 1;
+            }
+
+            idx = 0;
+            while idx < TYPE_CACHE_PROBE_LIMIT {
+                assert!(
+                    push_type_cache_with_key(
+                        storage[idx].as_mut_ptr() as *mut u8,
+                        layout,
+                        metadata[idx],
+                        forced_collision_key,
+                    ),
+                    "each exact identity should occupy one slot in the bounded collision window",
+                );
+                idx += 1;
+            }
+
+            let retained_per_entry = type_cache_retained_bytes_for_layout(layout);
+            let before_storm = type_cache_snapshot_for_test();
+            let before_snapshot = type_isolation_side_cache_snapshot();
+            assert!(!before_snapshot.inline_occupied);
+            assert_eq!(before_snapshot.occupied_slots, TYPE_CACHE_PROBE_LIMIT);
+            assert_eq!(before_snapshot.occupied_entries, TYPE_CACHE_PROBE_LIMIT);
+            assert_eq!(
+                before_snapshot.retained_bytes,
+                retained_per_entry * TYPE_CACHE_PROBE_LIMIT,
+            );
+            assert_eq!(
+                plain_type_cache_retained_bytes_snapshot_for_test(),
+                before_snapshot.retained_bytes,
+            );
+            assert!(plain_type_cache_retained_bytes_trusted_for_test());
+
+            while idx < COLLISION_COUNT {
+                assert!(
+                    !push_type_cache_with_key(
+                        storage[idx].as_mut_ptr() as *mut u8,
+                        layout,
+                        metadata[idx],
+                        forced_collision_key,
+                    ),
+                    "a full bounded probe window must fail closed instead of replacing another identity",
+                );
+                assert_eq!(
+                    pop_type_cache_with_key(layout, metadata[idx], forced_collision_key),
+                    None,
+                    "a rejected colliding identity must not consume a retained foreign pointer",
+                );
+                assert!(
+                    storage[idx].iter().all(|word| *word == 0),
+                    "a failed cache insertion must not write an in-object list header",
+                );
+                idx += 1;
+            }
+
+            let after_storm = type_cache_snapshot_for_test();
+            idx = 0;
+            while idx < TYPE_CACHE_SLOTS {
+                assert_eq!(after_storm[idx].cache_key, before_storm[idx].cache_key);
+                assert_eq!(after_storm[idx].identity, before_storm[idx].identity);
+                assert_eq!(after_storm[idx].head, before_storm[idx].head);
+                assert_eq!(after_storm[idx].count, before_storm[idx].count);
+                assert_eq!(
+                    after_storm[idx].retained_bytes,
+                    before_storm[idx].retained_bytes,
+                );
+                idx += 1;
+            }
+            let after_storm_snapshot = type_isolation_side_cache_snapshot();
+            assert_eq!(
+                after_storm_snapshot.inline_occupied,
+                before_snapshot.inline_occupied,
+            );
+            assert_eq!(
+                after_storm_snapshot.occupied_slots,
+                before_snapshot.occupied_slots,
+            );
+            assert_eq!(
+                after_storm_snapshot.occupied_entries,
+                before_snapshot.occupied_entries,
+            );
+            assert_eq!(
+                after_storm_snapshot.retained_bytes,
+                before_snapshot.retained_bytes,
+            );
+            assert_eq!(
+                after_storm_snapshot.corrupt_slots,
+                before_snapshot.corrupt_slots,
+            );
+            assert!(
+                !after_storm_snapshot.hot_slot_active,
+                "a colliding identity miss should invalidate the non-authoritative hot hint",
+            );
+            assert_eq!(
+                plain_type_cache_retained_bytes_snapshot_for_test(),
+                before_snapshot.retained_bytes,
+            );
+            assert!(plain_type_cache_retained_bytes_trusted_for_test());
+
+            idx = 0;
+            while idx < TYPE_CACHE_PROBE_LIMIT {
+                let expected = storage[idx].as_mut_ptr() as *mut u8;
+                assert_eq!(
+                    pop_type_cache_with_key(layout, metadata[idx], forced_collision_key),
+                    Some(expected),
+                    "each retained pointer must remain recoverable only by its exact identity",
+                );
+                let remaining = TYPE_CACHE_PROBE_LIMIT - idx - 1;
+                let snapshot = type_isolation_side_cache_snapshot();
+                assert_eq!(snapshot.occupied_slots, remaining);
+                assert_eq!(snapshot.occupied_entries, remaining);
+                assert_eq!(snapshot.retained_bytes, retained_per_entry * remaining);
+                assert_eq!(
+                    plain_type_cache_retained_bytes_snapshot_for_test(),
+                    snapshot.retained_bytes,
+                );
+                assert!(plain_type_cache_retained_bytes_trusted_for_test());
+                idx += 1;
+            }
+        }
+    }
+
+    #[test]
     fn semantic_allocator_does_not_reuse_cached_object_across_type_ids() {
         let _guard = test_guard();
         unsafe {
