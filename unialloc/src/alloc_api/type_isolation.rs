@@ -23041,6 +23041,63 @@ mod tests {
     }
 
     #[test]
+    fn global_type_cache_ownership_reuses_tombstone_without_hiding_colliding_owner() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+        }
+
+        // These synthetic aligned addresses are registry keys only; the test
+        // never dereferences or releases them. Fill one complete bounded probe
+        // window so the next key must fail closed under registry pressure.
+        let target = global_type_cache_ownership_shard_and_slot(8usize as *mut u8);
+        let mut colliders = Vec::with_capacity(GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT + 1);
+        let mut address = 8usize;
+        while colliders.len() <= GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
+            let ptr = address as *mut u8;
+            if global_type_cache_ownership_shard_and_slot(ptr) == target {
+                colliders.push(ptr);
+            }
+            address = address.checked_add(8).unwrap();
+        }
+
+        for &ptr in &colliders[..GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT] {
+            assert_eq!(
+                register_global_type_cache_ownership(ptr),
+                GlobalTypeCacheOwnershipRegistration::Inserted
+            );
+        }
+        let replacement = colliders[GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT];
+        assert_eq!(
+            register_global_type_cache_ownership(replacement),
+            GlobalTypeCacheOwnershipRegistration::Full
+        );
+
+        let removed = colliders[GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT / 2];
+        let tail = colliders[GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT - 1];
+        assert!(unregister_global_type_cache_ownership(removed));
+        assert!(global_type_cache_contains_ptr(tail));
+        assert_eq!(
+            register_global_type_cache_ownership(tail),
+            GlobalTypeCacheOwnershipRegistration::Duplicate
+        );
+        assert_eq!(
+            register_global_type_cache_ownership(replacement),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        assert!(global_type_cache_contains_ptr(replacement));
+
+        for &ptr in &colliders[..GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT] {
+            if ptr != removed {
+                assert!(unregister_global_type_cache_ownership(ptr));
+            }
+        }
+        assert!(unregister_global_type_cache_ownership(replacement));
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
     fn typed_duplicate_free_metadata_segregated_local_does_not_publish_cache_aliases() {
         let _guard = test_guard();
         let _cleanup = SemanticStateCleanup;
