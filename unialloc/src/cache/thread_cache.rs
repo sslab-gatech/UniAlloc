@@ -1070,12 +1070,23 @@ impl ThreadCacheUnit {
 
     pub fn allocate(&mut self, idx: usize, align: usize) -> Result<NonNull<u8>> {
         let mut alignment_miss_streak = 0;
-        self.allocate_with_alignment_miss_state(idx, align, &mut alignment_miss_streak)
+        let rounded_size = if idx < TOTAL_SIZE_CLASS {
+            get_rounded_size_by_idx(idx)
+        } else {
+            0
+        };
+        self.allocate_with_alignment_miss_state(
+            idx,
+            rounded_size,
+            align,
+            &mut alignment_miss_streak,
+        )
     }
 
     fn allocate_with_alignment_miss_state(
         &mut self,
         idx: usize,
+        rounded_size: usize,
         align: usize,
         alignment_miss_streak: &mut u8,
     ) -> Result<NonNull<u8>> {
@@ -1094,11 +1105,7 @@ impl ThreadCacheUnit {
             }
             if align > align_of::<usize>() && idx < TOTAL_SIZE_CLASS {
                 recorded_strict_alignment_miss = true;
-                self.trim_after_alignment_miss(
-                    idx,
-                    get_rounded_size_by_idx(idx),
-                    alignment_miss_streak,
-                );
+                self.trim_after_alignment_miss(idx, rounded_size, alignment_miss_streak);
             }
         }
         // case 2: consume the current contiguous bump batch.
@@ -1130,15 +1137,11 @@ impl ThreadCacheUnit {
                 && idx < TOTAL_SIZE_CLASS
             {
                 if !recorded_strict_alignment_miss {
-                    self.trim_after_alignment_miss(
-                        idx,
-                        get_rounded_size_by_idx(idx),
-                        alignment_miss_streak,
-                    );
+                    self.trim_after_alignment_miss(idx, rounded_size, alignment_miss_streak);
                 } else {
                     self.trim_after_recorded_alignment_miss(
                         idx,
-                        get_rounded_size_by_idx(idx),
+                        rounded_size,
                         *alignment_miss_streak,
                     );
                 }
@@ -1194,10 +1197,18 @@ impl ThreadCache {
         if idx == 0 || idx >= TOTAL_SIZE_CLASS {
             return 0;
         }
+        Self::class_cached_object_bytes_for_rounded_size(get_rounded_size_by_idx(idx), unit)
+    }
+
+    #[inline]
+    fn class_cached_object_bytes_for_rounded_size(
+        rounded_size: usize,
+        unit: &ThreadCacheUnit,
+    ) -> usize {
         unit.list
             .length
             .saturating_add(unit.bump_len())
-            .saturating_mul(get_rounded_size_by_idx(idx))
+            .saturating_mul(rounded_size)
     }
 
     fn recompute_cached_object_accounting(&self) -> (usize, usize, ActiveCachedClassBits) {
@@ -1579,25 +1590,28 @@ impl ThreadCache {
         }
 
         // 1. round the size up to next size class
-        let cls = get_size_class(layout.size());
+        let (cls, rounded_size) = get_size_class_tuple(layout.size());
 
         // 2. try to pop one from freelist
         if let SizeClass::Base(idx) = cls {
             if unlikely(idx == 0) {
                 return NonNull::new(layout.align() as *mut u8).ok_or(AllocError::ENOMEM);
             }
-            let before_bytes = Self::class_cached_object_bytes(idx, &self.list[idx]);
+            let before_bytes =
+                Self::class_cached_object_bytes_for_rounded_size(rounded_size, &self.list[idx]);
             let mut alignment_miss_streak = self.alignment_miss_streaks.get(idx);
             let result = {
                 let size_cache: &mut ThreadCacheUnit = &mut self.list[idx];
                 size_cache.allocate_with_alignment_miss_state(
                     idx,
+                    rounded_size,
                     layout.align(),
                     &mut alignment_miss_streak,
                 )
             };
             self.alignment_miss_streaks.set(idx, alignment_miss_streak);
-            let after_bytes = Self::class_cached_object_bytes(idx, &self.list[idx]);
+            let after_bytes =
+                Self::class_cached_object_bytes_for_rounded_size(rounded_size, &self.list[idx]);
             self.account_class_cached_object_change(idx, before_bytes, after_bytes);
             self.trim_total_cached_object_bytes(Some(idx));
             result
@@ -1611,15 +1625,15 @@ impl ThreadCache {
 
     pub fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
         // 1. round the size up to next size class
-        let cls = get_size_class(layout.size());
+        let (cls, rounded_size) = get_size_class_tuple(layout.size());
 
         // 2. try to push the ptr to freelist
         if let SizeClass::Base(idx) = cls {
             if unlikely(idx == 0) {
                 return;
             }
-            let rounded_size = get_rounded_size_by_idx(idx);
-            let before_bytes = Self::class_cached_object_bytes(idx, &self.list[idx]);
+            let before_bytes =
+                Self::class_cached_object_bytes_for_rounded_size(rounded_size, &self.list[idx]);
             let disposition = {
                 let size_cache: &mut ThreadCacheUnit = &mut self.list[idx];
                 if thread_cache_should_bypass_local_cache(idx, rounded_size) {
@@ -1634,7 +1648,8 @@ impl ThreadCache {
                     size_cache.deallocate(idx, ptr, rounded_size)
                 }
             };
-            let after_bytes = Self::class_cached_object_bytes(idx, &self.list[idx]);
+            let after_bytes =
+                Self::class_cached_object_bytes_for_rounded_size(rounded_size, &self.list[idx]);
             if let Some(disposition) = disposition {
                 self.account_class_cached_object_change_after_flush(
                     idx,
@@ -2373,6 +2388,43 @@ mod tests {
             .expect("zero-sized thread-cache allocation should be representable");
         assert_ne!(ptr.as_ptr() as usize, 0);
         assert_eq!((ptr.as_ptr() as usize) % layout.align(), 0);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn thread_cache_rounded_layout_reuse_keeps_exact_byte_accounting() {
+        let mut cache = ThreadCache::new();
+        let layout = Layout::from_size_align(9, align_of::<usize>())
+            .expect("non-canonical size should still form a valid layout");
+        let (SizeClass::Base(idx), rounded_size) = get_size_class_tuple(layout.size()) else {
+            panic!("small test layout should use a base size class");
+        };
+        assert!(rounded_size > layout.size());
+
+        let first = cache
+            .allocate(layout)
+            .expect("thread cache should allocate the rounded base class");
+        cache.deallocate(first, layout);
+        let cached_before_reuse = cache.cached_object_bytes;
+        assert_eq!(cached_before_reuse, cache.recompute_cached_object_bytes());
+
+        let reused = cache
+            .allocate(layout)
+            .expect("thread cache should reuse the locally freed object");
+        assert_eq!(reused, first);
+        assert_eq!(
+            cache.cached_object_bytes,
+            cached_before_reuse.saturating_sub(rounded_size)
+        );
+        assert_eq!(
+            cache.cached_object_bytes,
+            cache.recompute_cached_object_bytes()
+        );
+
+        cache.deallocate(reused, layout);
+        assert!(cache.active_cached_class_bits.is_present(idx));
+        cache.cleanup_cache_unchecked();
+        assert_eq!(cache.cached_object_bytes, 0);
     }
 
     #[cfg(not(feature = "fixed_heap"))]
