@@ -898,6 +898,14 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   转移的 linearizability proof。
 - **current gates：** C002 current-source finite inventory 保持 `430/430`，但不是
   whole-program denominator，也不能替代 actual-wrapper evidence。
+- **fresh compiled-Rust application check：** 在 code-bearing `b2d5eab` 上，
+  `test_mir_realistic_multimodule_type_isolation.py` 通过真实 `RUSTC_WRAPPER`/MIR
+  pass 编译并运行一个 multi-module Cargo application，单次 PASS。它观察到 4 个
+  actual scope rows、String->Vec ownership transfer、Box/Vec wrong/exact reuse、自动
+  cross-thread placement，以及 same-layout Producer/Consumer 的 wrong-type non-reuse
+  与 exact-type reuse；fallback/raw/mismatch/corrupt/dropped 均为 `0`。结果保存在
+  `current-source-realistic-typeiso-b2d5eab-20260713` artifact；这是 bounded functional
+  evidence，不是 arbitrary external-app、whole-program coverage、安全证明或性能结果。
 - **historical single-sample diagnostic performance：** default `16.59 ns/iter`、type isolation
   `25.47 ns/iter`，ratio `1.5353` / `+53.526%`；n=1 each、Darwin/current
   toolchain、layout-derived size/align identity、compiler-site replay disabled、无

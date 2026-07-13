@@ -2215,6 +2215,19 @@ The C002 current-source finite compiler inventory remains `430/430`. It is a
 functional coverage gate, not a whole-program denominator, and it does not
 replace the actual-wrapper application evidence above.
 
+The realistic multi-module Cargo application was also rerun once against the
+code-bearing `b2d5eab` source through the actual `RUSTC_WRAPPER`/MIR pass. It
+reports four actual scope rows, an applied String-to-Vec ownership transfer,
+Box/Vec wrong-versus-exact reuse, automatic cross-thread placement, and
+same-layout Producer/Consumer wrong-type non-reuse plus exact-type reuse.
+Fallback/raw paths, recovery mismatches, corrupt slots, and dropped statistic
+events are all zero. The result is preserved under
+`current-source-realistic-typeiso-b2d5eab-20260713` with result SHA-256
+`efecd93e579272c0fc3dbff14cead9c95dfac7d2d800df7efbd5897bf374c5c1`.
+This is one generated compiled-Rust application and not arbitrary external-app
+coverage, a whole-program denominator, a universal safety proof, or performance
+evidence.
+
 A historical single-sample diagnostic measured
 `vec::bench_with_capacity_1000` on this Darwin/current-toolchain setup as
 default `16.59 ns/iter` and type isolation
