@@ -2283,6 +2283,21 @@ not arbitrary external-app or whole-program coverage, and the C002 `430/430`
 gate remains a finite regression inventory rather than a whole-program
 denominator.
 
+The same code-bearing commit was then exercised once against pinned Oxipng
+`v4.0.3` in a clean detached worktree. Build and functional run both returned
+zero and the output hash matched the known reference. The actual pass applied
+6 direct rewrites, 260 allocation scopes, 320 Drop scopes, and 12 ownership
+transfers; four natural `reduction::alpha::reduced_alpha_*` functions exercised
+the new canonical `Vec<u8>` repetition matcher. The injected address oracle
+blocked wrong-type reuse, preserved exact-type reuse, and reported zero corrupt
+slots. The accepted artifact is
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-a57d318-20260713/acceptance.json`
+(SHA-256 `b84e5a56c19e9f79537dc33cc5a09cd2e9d184f10e6052de40c9f34252d3651b`).
+This remains bounded functional evidence: 566 semantic candidates, 2 Drop
+candidates, and 117 multi-owner Drops remain fail closed; whole-program
+coverage is false, and one PathBuf recovery correction plus raw/fallback
+activity prevents an exact whole-application pairing claim.
+
 A historical single-sample diagnostic measured
 `vec::bench_with_capacity_1000` on this Darwin/current-toolchain setup as
 default `16.59 ns/iter` and type isolation

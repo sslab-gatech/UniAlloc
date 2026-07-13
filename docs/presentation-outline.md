@@ -924,6 +924,15 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   same-layout Producer/Consumer wrong-type blocked 与 exact-owner reuse；fallback/raw/
   mismatch/corrupt/dropped 全为 `0`。这是单个 generated application，不是任意
   external app、whole-program coverage 或性能证据。
+- **current-source 真实 Rust 应用：** 同一 code-bearing `a57d318` 在 clean detached
+  worktree 中单次编译并运行 pinned Oxipng `v4.0.3`；build/run `0/0` 且输出 hash
+  精确匹配。actual pass 应用 direct/scope/Drop/ownership `6/260/320/12`，其中 4 个
+  自然 `reduced_alpha_*` 函数命中 canonical `Vec<u8>` repetition scope。独立标注的
+  address oracle 证明 wrong-type non-reuse、
+  same-type reuse、corrupt `0`。同时必须展示边界：semantic/Drop unresolved
+  `566/2`、multi-owner Drop `117`、`whole_program=false`、1 个 PathBuf recovery
+  correction，以及 raw/fallback 非零；所以这是 bounded functional PASS，不是
+  exact whole-app pairing、普适安全/coverage 或性能结论。
 - **fresh compiled-Rust application check：** 在 code-bearing `1d0d13f` 上，
   `test_mir_realistic_multimodule_type_isolation.py` 通过真实 `RUSTC_WRAPPER`/MIR
   pass 编译并运行一个 multi-module Cargo application，单次 PASS。它观察到 4 个
