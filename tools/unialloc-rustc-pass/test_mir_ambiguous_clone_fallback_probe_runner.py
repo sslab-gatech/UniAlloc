@@ -86,6 +86,30 @@ def plain_clone_row(**overrides: object) -> dict:
     return row
 
 
+def plain_result_clone_row(**overrides: object) -> dict:
+    row = {
+        "mir_function": runner.PLAIN_RESULT_CLONE_HELPER,
+        "callee": "<Result<Vec<ProducerPayload>, u8> as Clone>::clone",
+        "destination_type": (
+            "std::result::Result<std::vec::Vec<ProducerPayload, "
+            "std::alloc::Global>, u8>"
+        ),
+        "semantic_object_type": (
+            "std::vec::Vec<ProducerPayload, std::alloc::Global>"
+        ),
+        "type_id": 11,
+        "module_id": 0xC002,
+        "flags": runner.TYPE_ISOLATED,
+        "metadata_pairing_contract": "semantic_scope_active_metadata",
+        "replacement_resolution_status": "resolved_unialloc_semantic_scope_push_pop",
+        "lowering_kind": "semantic_scope_enter_exit_rewrite",
+        "rewrite_status": "actual_semantic_scope_enter_exit_rewrite_applied",
+        "source_span": "probe.rs:110:5: 110:70",
+    }
+    row.update(overrides)
+    return row
+
+
 def valid_audit() -> dict:
     return {
         "summary": {
@@ -104,6 +128,7 @@ def valid_audit() -> dict:
                 payload="ConsumerPayload",
             ),
             plain_clone_row(),
+            plain_result_clone_row(),
         ],
     }
 
@@ -115,6 +140,27 @@ def valid_runtime() -> dict:
         "result_variant": "Ok",
         "plain_clone_function": "Option::clone",
         "plain_clone_variant": "Some",
+        "plain_result_clone": {
+            "clone_function": "Result::clone",
+            "variant": "Ok",
+            "source_buffer": 0x6000,
+            "cloned_buffer": 0x3000,
+            "cloned_len": 4,
+            "buffers_distinct": True,
+            "reused_protected_buffer": True,
+            "avoided_wrong_type_buffer": True,
+            "checksum": 456,
+            "type_id": 11,
+            "typed_allocations": 1,
+            "typed_deallocations": 1,
+            "typed_cache_hits": 1,
+            "typed_cache_inserts": 1,
+            "fallback_allocations": 0,
+            "fallback_deallocations": 0,
+            "raw_alloc_no_metadata": 0,
+            "raw_dealloc_no_metadata": 0,
+            "raw_realloc_no_metadata": 0,
+        },
         "same_layout_bytes": 64,
         "source_len": 4,
         "cloned_len": 4,
@@ -187,9 +233,18 @@ class MirAmbiguousCloneFallbackRunnerTests(unittest.TestCase):
             evidence["audit"]["supported_controls"]["type_id"], 11
         )
         self.assertEqual(evidence["audit"]["plain_clone_control"]["type_id"], 11)
+        self.assertEqual(
+            evidence["audit"]["plain_result_clone_control"]["type_id"], 11
+        )
         self.assertEqual(evidence["audit"]["wrong_type_control"]["type_id"], 22)
         self.assertTrue(evidence["runtime"]["plain_clone_reused_protected_buffer"])
         self.assertTrue(evidence["runtime"]["plain_clone_avoided_wrong_type_buffer"])
+        self.assertTrue(
+            evidence["runtime"]["plain_result_clone_reused_protected_buffer"]
+        )
+        self.assertTrue(
+            evidence["runtime"]["plain_result_clone_avoided_wrong_type_buffer"]
+        )
         for function_name in runner.SUPPORTED_FUNCTIONS:
             function_evidence = evidence["audit"]["supported_controls"][
                 "functions"
@@ -236,6 +291,26 @@ class MirAmbiguousCloneFallbackRunnerTests(unittest.TestCase):
         runtime = valid_runtime()
         runtime["plain_clone_fallback_allocations"] = 1
         with self.assertRaisesRegex(AssertionError, "unexpectedly used fallback"):
+            runner.validate_runtime(runtime, compiler_type_id=11, wrong_type_id=22)
+
+    def test_validate_rejects_plain_result_clone_scope_not_actually_applied(self) -> None:
+        audit = valid_audit()
+        for row in audit["rewrite_candidates"]:
+            if row.get("mir_function") == runner.PLAIN_RESULT_CLONE_HELPER:
+                row["rewrite_status"] = "semantic_scope_enter_exit_rewrite_planned"
+        with self.assertRaisesRegex(AssertionError, "was not actually applied"):
+            runner.validate_audit(audit)
+
+    def test_validate_rejects_plain_result_clone_fallback_allocation(self) -> None:
+        runtime = valid_runtime()
+        runtime["plain_result_clone"]["fallback_allocations"] = 1
+        with self.assertRaisesRegex(AssertionError, "unexpectedly used fallback"):
+            runner.validate_runtime(runtime, compiler_type_id=11, wrong_type_id=22)
+
+    def test_validate_rejects_plain_result_clone_reusing_wrong_type(self) -> None:
+        runtime = valid_runtime()
+        runtime["plain_result_clone"]["cloned_buffer"] = runtime["wrong_type_buffer"]
+        with self.assertRaisesRegex(AssertionError, "same-layout Consumer"):
             runner.validate_runtime(runtime, compiler_type_id=11, wrong_type_id=22)
 
     def test_validate_rejects_plain_clone_reusing_same_layout_wrong_type(self) -> None:

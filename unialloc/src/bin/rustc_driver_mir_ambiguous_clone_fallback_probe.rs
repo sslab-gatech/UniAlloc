@@ -105,6 +105,13 @@ fn supported_plain_option_clone(
     <Option<Vec<ProducerPayload>> as Clone>::clone(source)
 }
 
+#[inline(never)]
+fn supported_plain_result_clone(
+    source: &Result<Vec<ProducerPayload>, u8>,
+) -> Result<Vec<ProducerPayload>, u8> {
+    <Result<Vec<ProducerPayload>, u8> as Clone>::clone(source)
+}
+
 fn stats_delta(before: SemanticStatsSnapshot, after: SemanticStatsSnapshot, field: &str) -> usize {
     match field {
         "typed_allocations" => after
@@ -166,8 +173,8 @@ fn main() {
     // The binary intentionally uses only ordinary Rust `Vec`, `Option::clone`,
     // and `Result::clone` operations. It does not manually call UniAlloc
     // metadata or allocator ABIs. The companion runner proves the single-owner
-    // Option clone and supported Vec controls received actual scope rewrites
-    // while the multi-owner Result clone stayed fail-closed.
+    // Option and Result clones plus supported Vec controls received actual scope
+    // rewrites while the multi-owner Result clone stayed fail-closed.
     semantic_auto_metadata_disable();
 
     // Keep the source allocation live so the protected seed below cannot
@@ -188,6 +195,16 @@ fn main() {
     let plain_source_checksum = checksum(&plain_source_vec);
     let plain_source = Some(plain_source_vec);
     assert_ne!(plain_source_buffer, source_buffer);
+
+    let mut plain_result_source_vec = Vec::with_capacity(4);
+    for index in 0..4_u64 {
+        plain_result_source_vec.push(payload(0xAE50_1700 + index));
+    }
+    let plain_result_source_buffer = plain_result_source_vec.as_ptr() as usize;
+    let plain_result_source_checksum = checksum(&plain_result_source_vec);
+    let plain_result_source = Ok::<Vec<ProducerPayload>, u8>(plain_result_source_vec);
+    assert_ne!(plain_result_source_buffer, source_buffer);
+    assert_ne!(plain_result_source_buffer, plain_source_buffer);
 
     semantic_stats_reset();
 
@@ -368,6 +385,97 @@ fn main() {
     assert_eq!(plain_clone_fallback_deallocations, 0);
     assert_eq!(plain_clone_raw_dealloc_no_metadata, 0);
 
+    let before_plain_result_clone_stats = semantic_stats_snapshot();
+    let before_plain_result_clone_fallback = semantic_fallback_attribution_snapshot();
+    let plain_result_cloned = supported_plain_result_clone(&plain_result_source);
+    let after_plain_result_clone_stats = semantic_stats_snapshot();
+    let after_plain_result_clone_fallback = semantic_fallback_attribution_snapshot();
+    let plain_result_cloned_vec = plain_result_cloned
+        .as_ref()
+        .expect("single-owner Result clone should preserve Ok variant");
+    let plain_result_cloned_buffer = plain_result_cloned_vec.as_ptr() as usize;
+    let plain_result_cloned_len = plain_result_cloned_vec.len();
+    assert_eq!(plain_result_cloned_len, 4);
+    assert_eq!(checksum(plain_result_cloned_vec), plain_result_source_checksum);
+    assert_ne!(plain_result_cloned_buffer, plain_result_source_buffer);
+    assert_eq!(
+        plain_result_cloned_buffer, protected_buffer,
+        "supported Result clone should recover the protected Producer cache entry"
+    );
+    assert_ne!(
+        plain_result_cloned_buffer, wrong_type_buffer,
+        "supported Result clone reused same-layout Consumer storage"
+    );
+
+    let plain_result_typed_allocations = stats_delta(
+        before_plain_result_clone_stats,
+        after_plain_result_clone_stats,
+        "typed_allocations",
+    );
+    let plain_result_typed_cache_hits = stats_delta(
+        before_plain_result_clone_stats,
+        after_plain_result_clone_stats,
+        "typed_cache_hits",
+    );
+    let plain_result_fallback_allocations = stats_delta(
+        before_plain_result_clone_stats,
+        after_plain_result_clone_stats,
+        "fallback_allocations",
+    );
+    let plain_result_raw_alloc_no_metadata = fallback_delta(
+        before_plain_result_clone_fallback,
+        after_plain_result_clone_fallback,
+        "raw_alloc_no_metadata",
+    );
+    let plain_result_raw_realloc_no_metadata = fallback_delta(
+        before_plain_result_clone_fallback,
+        after_plain_result_clone_fallback,
+        "raw_realloc_no_metadata",
+    );
+    assert_eq!(plain_result_typed_allocations, 1);
+    assert_eq!(plain_result_typed_cache_hits, 1);
+    assert_eq!(
+        stats_delta(
+            before_plain_result_clone_stats,
+            after_plain_result_clone_stats,
+            "typed_deallocations"
+        ),
+        0
+    );
+    assert_eq!(plain_result_fallback_allocations, 0);
+    assert_eq!(plain_result_raw_alloc_no_metadata, 0);
+    assert_eq!(plain_result_raw_realloc_no_metadata, 0);
+    let plain_result_type_id = after_plain_result_clone_stats.last_type_id;
+    assert_eq!(plain_result_type_id, seed_type_id);
+
+    drop(plain_result_cloned);
+    let after_plain_result_drop_stats = semantic_stats_snapshot();
+    let after_plain_result_drop_fallback = semantic_fallback_attribution_snapshot();
+    let plain_result_typed_deallocations = stats_delta(
+        after_plain_result_clone_stats,
+        after_plain_result_drop_stats,
+        "typed_deallocations",
+    );
+    let plain_result_typed_cache_inserts = stats_delta(
+        after_plain_result_clone_stats,
+        after_plain_result_drop_stats,
+        "typed_cache_inserts",
+    );
+    let plain_result_fallback_deallocations = stats_delta(
+        after_plain_result_clone_stats,
+        after_plain_result_drop_stats,
+        "fallback_deallocations",
+    );
+    let plain_result_raw_dealloc_no_metadata = fallback_delta(
+        after_plain_result_clone_fallback,
+        after_plain_result_drop_fallback,
+        "raw_dealloc_no_metadata",
+    );
+    assert_eq!(plain_result_typed_deallocations, 1);
+    assert_eq!(plain_result_typed_cache_inserts, 1);
+    assert_eq!(plain_result_fallback_deallocations, 0);
+    assert_eq!(plain_result_raw_dealloc_no_metadata, 0);
+
     let before_stats = semantic_stats_snapshot();
     let before_fallback = semantic_fallback_attribution_snapshot();
 
@@ -511,6 +619,7 @@ fn main() {
     };
     drop(retained_source);
     drop(plain_source);
+    drop(plain_result_source);
     let validation = semantic_metadata_validation_snapshot();
     let side_cache = type_isolation_side_cache_snapshot();
 
@@ -526,6 +635,46 @@ fn main() {
         "side cache must remain uncorrupted"
     );
 
+    let plain_result_clone_json = format!(
+        concat!(
+            "{{",
+            "\"clone_function\":\"Result::clone\",",
+            "\"variant\":\"Ok\",",
+            "\"source_buffer\":{},",
+            "\"cloned_buffer\":{},",
+            "\"cloned_len\":{},",
+            "\"buffers_distinct\":true,",
+            "\"reused_protected_buffer\":true,",
+            "\"avoided_wrong_type_buffer\":true,",
+            "\"checksum\":{},",
+            "\"type_id\":{},",
+            "\"typed_allocations\":{},",
+            "\"typed_deallocations\":{},",
+            "\"typed_cache_hits\":{},",
+            "\"typed_cache_inserts\":{},",
+            "\"fallback_allocations\":{},",
+            "\"fallback_deallocations\":{},",
+            "\"raw_alloc_no_metadata\":{},",
+            "\"raw_dealloc_no_metadata\":{},",
+            "\"raw_realloc_no_metadata\":{}",
+            "}}"
+        ),
+        plain_result_source_buffer,
+        plain_result_cloned_buffer,
+        plain_result_cloned_len,
+        plain_result_source_checksum,
+        plain_result_type_id,
+        plain_result_typed_allocations,
+        plain_result_typed_deallocations,
+        plain_result_typed_cache_hits,
+        plain_result_typed_cache_inserts,
+        plain_result_fallback_allocations,
+        plain_result_fallback_deallocations,
+        plain_result_raw_alloc_no_metadata,
+        plain_result_raw_dealloc_no_metadata,
+        plain_result_raw_realloc_no_metadata,
+    );
+
     let mut output = String::new();
     let _ = write!(
         output,
@@ -536,6 +685,7 @@ fn main() {
             "\"result_variant\":\"Ok\",",
             "\"plain_clone_function\":\"Option::clone\",",
             "\"plain_clone_variant\":\"Some\",",
+            "\"plain_result_clone\":{},",
             "\"same_layout_bytes\":{},",
             "\"source_len\":{},",
             "\"cloned_len\":{},",
@@ -597,6 +747,7 @@ fn main() {
             "\"side_cache_corrupt_slots\":{}",
             "}}"
         ),
+        plain_result_clone_json,
         size_of::<ProducerPayload>(),
         4,
         cloned_len,
