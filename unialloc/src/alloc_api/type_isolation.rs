@@ -5589,18 +5589,6 @@ pub(crate) fn checked_recorded_reallocation_old_metadata(
     lookup_auto_allocation_record(ptr, layout, false)
 }
 
-pub(crate) fn auto_reallocation_old_metadata(
-    ptr: *mut u8,
-    layout: Layout,
-) -> Option<AllocationMetadata> {
-    // The current auto configuration describes the new allocation event, not
-    // the provenance of an existing pointer. In particular, the pointer may
-    // predate auto metadata entirely or may come from a raw-only generation.
-    // Only an exact pointer/layout recovery record can safely authorize
-    // semantic old-side realloc behavior.
-    recorded_reallocation_old_metadata(ptr, layout)
-}
-
 /// Recover compiler-stream auto metadata for an ordinary `GlobalAlloc`
 /// deallocation without consuming the next allocation-site stream entry.
 pub fn take_auto_deallocation_metadata(ptr: *mut u8, layout: Layout) -> Option<AllocationMetadata> {
@@ -27561,6 +27549,248 @@ mod tests {
         })
         .join()
         .expect("cross-thread wrong-layout GlobalAlloc regression");
+
+        semantic_stats_recording_disable();
+        assert!(
+            !semantic_runtime_slow_path_enabled(),
+            "the exact retry must consume the final process-visible recovery record"
+        );
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn cross_thread_global_realloc_layout_mismatch_preserves_recovery_identity() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_type_stats_recording_disable();
+
+        let allocation_size = (MIN_TYPE_CACHE_OBJECT_SIZE + 1..crate::size_class::MAX_SIZE - 1)
+            .find(|size| {
+                let class = crate::size_class::get_size_class(*size).index();
+                crate::size_class::get_size_class(*size - 1).index() == class
+                    && crate::size_class::get_size_class(*size + 1).index() == class
+            })
+            .expect("test needs three distinct layouts in one allocator size class");
+        let allocation_layout =
+            Layout::from_size_align(allocation_size, align_of::<usize>()).unwrap();
+        let wrong_layout =
+            Layout::from_size_align(allocation_size - 1, allocation_layout.align()).unwrap();
+        let new_layout =
+            Layout::from_size_align(allocation_size + 1, allocation_layout.align()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_8044)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_8044)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x44);
+        let allocator = RustAllocator::new();
+        let ptr = unsafe { allocator.alloc_with_recovery_metadata(allocation_layout, metadata) };
+        assert!(!ptr.is_null());
+        unsafe {
+            core::ptr::write_bytes(ptr, 0xA5, allocation_layout.size());
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, allocation_layout),
+            Some(metadata)
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert!(!current_thread_fast_auto_allocation_records_active());
+
+        let stats_before = semantic_stats_snapshot();
+        let fallback_before = semantic_fallback_attribution_snapshot();
+        let validation_before = semantic_metadata_validation_snapshot();
+        let ptr_addr = ptr as usize;
+        thread::spawn(move || {
+            let allocator = RustAllocator::new();
+            let ptr = ptr_addr as *mut u8;
+            assert!(semantic_runtime_slow_path_enabled());
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, allocation_layout),
+                Some(metadata),
+                "foreign thread must observe the process-visible allocation identity"
+            );
+            let cache_before = type_isolation_side_cache_snapshot();
+            let delayed_before = delayed_free_snapshot();
+
+            let rejected = unsafe {
+                GlobalAlloc::realloc(&allocator, ptr, wrong_layout, new_layout.size())
+            };
+            let stats_after_mismatch = semantic_stats_snapshot();
+            let fallback_after_mismatch = semantic_fallback_attribution_snapshot();
+            assert!(
+                rejected.is_null(),
+                "foreign wrong-layout realloc must fail closed before raw fallback; result={:p}, fallback_before={:?}, fallback_after={:?}",
+                rejected,
+                fallback_before,
+                fallback_after_mismatch,
+            );
+            assert_eq!(stats_after_mismatch, stats_before);
+            assert_eq!(fallback_after_mismatch, fallback_before);
+            assert_eq!(semantic_metadata_validation_snapshot(), validation_before);
+            assert_eq!(type_isolation_side_cache_snapshot(), cache_before);
+            assert_eq!(delayed_free_snapshot(), delayed_before);
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, allocation_layout),
+                Some(metadata),
+                "wrong-layout realloc must preserve the authoritative recovery record"
+            );
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, wrong_layout),
+                None
+            );
+            assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+            for offset in 0..allocation_layout.size() {
+                assert_eq!(unsafe { ptr.add(offset).read_volatile() }, 0xA5);
+            }
+
+            semantic_auto_metadata_enable(
+                AUTO_LAYOUT_MODULE_ID,
+                FLAG_TYPE_ISOLATED,
+                0xA110_8045,
+            );
+            let auto_stats_before = semantic_stats_snapshot();
+            let auto_fallback_before = semantic_fallback_attribution_snapshot();
+            let auto_validation_before = semantic_metadata_validation_snapshot();
+            let auto_cache_before = type_isolation_side_cache_snapshot();
+            let auto_delayed_before = delayed_free_snapshot();
+            let rejected_with_auto_metadata = unsafe {
+                GlobalAlloc::realloc(&allocator, ptr, wrong_layout, new_layout.size())
+            };
+            assert!(
+                rejected_with_auto_metadata.is_null(),
+                "wrong-layout realloc must fail before auto metadata can bypass recovery identity"
+            );
+            assert_eq!(semantic_stats_snapshot(), auto_stats_before);
+            assert_eq!(
+                semantic_fallback_attribution_snapshot(),
+                auto_fallback_before
+            );
+            assert_eq!(
+                semantic_metadata_validation_snapshot(),
+                auto_validation_before
+            );
+            assert_eq!(type_isolation_side_cache_snapshot(), auto_cache_before);
+            assert_eq!(delayed_free_snapshot(), auto_delayed_before);
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, allocation_layout),
+                Some(metadata)
+            );
+            semantic_auto_metadata_disable();
+
+            let active_local_metadata = AllocationMetadata::for_type(0xC003_8046)
+                .with_module(0xC0DE)
+                .with_callsite(0xA110_8046)
+                .with_flags(FLAG_TYPE_ISOLATED)
+                .with_placement_hint(PLACEMENT_HINT_LOCAL_SCOPE_NO_RECOVERY | 0x46);
+            let previous = unsafe { set_active_metadata(active_local_metadata) };
+            let local_stats_before = semantic_stats_snapshot();
+            let local_fallback_before = semantic_fallback_attribution_snapshot();
+            let local_validation_before = semantic_metadata_validation_snapshot();
+            let local_cache_before = type_isolation_side_cache_snapshot();
+            let local_delayed_before = delayed_free_snapshot();
+            let rejected_with_active_local = unsafe {
+                GlobalAlloc::realloc(&allocator, ptr, wrong_layout, new_layout.size())
+            };
+            unsafe {
+                restore_active_metadata(previous);
+            }
+            assert!(
+                rejected_with_active_local.is_null(),
+                "wrong-layout realloc must fail before active-local metadata can bypass recovery identity"
+            );
+            assert_eq!(semantic_stats_snapshot(), local_stats_before);
+            assert_eq!(
+                semantic_fallback_attribution_snapshot(),
+                local_fallback_before
+            );
+            assert_eq!(
+                semantic_metadata_validation_snapshot(),
+                local_validation_before
+            );
+            assert_eq!(type_isolation_side_cache_snapshot(), local_cache_before);
+            assert_eq!(delayed_free_snapshot(), local_delayed_before);
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, allocation_layout),
+                Some(metadata)
+            );
+
+            let zero_stats_before = semantic_stats_snapshot();
+            let zero_fallback_before = semantic_fallback_attribution_snapshot();
+            let zero_validation_before = semantic_metadata_validation_snapshot();
+            let zero_cache_before = type_isolation_side_cache_snapshot();
+            let zero_delayed_before = delayed_free_snapshot();
+            let rejected_zero_size = unsafe { GlobalAlloc::realloc(&allocator, ptr, wrong_layout, 0) };
+            assert!(
+                rejected_zero_size.is_null(),
+                "wrong-layout zero-size realloc must fail before deallocation or dangling-pointer handling"
+            );
+            assert_eq!(semantic_stats_snapshot(), zero_stats_before);
+            assert_eq!(
+                semantic_fallback_attribution_snapshot(),
+                zero_fallback_before
+            );
+            assert_eq!(
+                semantic_metadata_validation_snapshot(),
+                zero_validation_before
+            );
+            assert_eq!(type_isolation_side_cache_snapshot(), zero_cache_before);
+            assert_eq!(delayed_free_snapshot(), zero_delayed_before);
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, allocation_layout),
+                Some(metadata),
+                "wrong-layout zero-size realloc must preserve the recovery record"
+            );
+            assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+            for offset in 0..allocation_layout.size() {
+                assert_eq!(unsafe { ptr.add(offset).read_volatile() }, 0xA5);
+            }
+
+            let resized = unsafe {
+                GlobalAlloc::realloc(&allocator, ptr, allocation_layout, new_layout.size())
+            };
+            assert_eq!(
+                resized, ptr,
+                "the exact same-size-class retry should preserve the allocation address"
+            );
+            assert_eq!(
+                lookup_auto_allocation_metadata(resized, allocation_layout),
+                None
+            );
+            assert_eq!(
+                lookup_auto_allocation_metadata(resized, new_layout),
+                Some(metadata),
+                "the exact retry must move the recovery key to the new layout"
+            );
+            for offset in 0..allocation_layout.size() {
+                assert_eq!(unsafe { resized.add(offset).read_volatile() }, 0xA5);
+            }
+
+            unsafe {
+                GlobalAlloc::dealloc(&allocator, resized, new_layout);
+            }
+            assert_eq!(lookup_auto_allocation_metadata(resized, new_layout), None);
+            assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+            assert_eq!(unsafe { pop_semantic_type_cache(wrong_layout, metadata) }, None);
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(new_layout, metadata) },
+                Some(resized),
+                "the exact deallocation retry must publish only under the resized layout"
+            );
+            unsafe {
+                allocator.dealloc_raw(resized, new_layout);
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+            }
+        })
+        .join()
+        .expect("cross-thread wrong-layout GlobalAlloc realloc regression");
 
         semantic_stats_recording_disable();
         assert!(

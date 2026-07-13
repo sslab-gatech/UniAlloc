@@ -2,10 +2,10 @@
 use crate::alloc_api::type_isolation::FLAG_DELAYED_FREE;
 use crate::alloc_api::type_isolation::{
     active_allocation_metadata, active_allocation_metadata_requires_recovery_record,
-    auto_allocation_metadata, auto_reallocation_old_metadata,
-    checked_recorded_reallocation_old_metadata, deallocation_metadata_after_recovery_record,
-    recorded_reallocation_old_metadata, reject_global_delayed_free_owned_pointer,
-    select_auto_allocation_metadata, semantic_allocation_slow_path_enabled,
+    auto_allocation_metadata, checked_recorded_reallocation_old_metadata,
+    deallocation_metadata_after_recovery_record, recorded_reallocation_old_metadata,
+    reject_global_delayed_free_owned_pointer, select_auto_allocation_metadata,
+    semantic_allocation_slow_path_enabled,
     semantic_fallback_attribution_record_raw_alloc_no_metadata,
     semantic_fallback_attribution_record_raw_dealloc_no_metadata,
     semantic_fallback_attribution_record_raw_realloc_moved_dealloc_no_metadata,
@@ -304,24 +304,41 @@ unsafe fn realloc_with_auto_metadata(
     new_layout: Layout,
     new_size: usize,
     alloc_metadata: AllocationMetadata,
+    old_recovery: AutoAllocationRecordLookup,
 ) -> *mut u8 {
-    if let Some(dealloc_metadata) = auto_reallocation_old_metadata(ptr, layout) {
-        if semantic_realloc_can_reuse_in_place(layout, new_size, dealloc_metadata, alloc_metadata) {
-            return alloc.realloc_with_split_metadata(
-                ptr,
+    match old_recovery {
+        AutoAllocationRecordLookup::Exact(dealloc_metadata) => {
+            if semantic_realloc_can_reuse_in_place(
                 layout,
                 new_size,
                 dealloc_metadata,
                 alloc_metadata,
-            );
+            ) {
+                return alloc.realloc_with_split_metadata(
+                    ptr,
+                    layout,
+                    new_size,
+                    dealloc_metadata,
+                    alloc_metadata,
+                );
+            }
+            let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
+            if !new_ptr.is_null() {
+                copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
+                alloc.dealloc_with_peeked_recovery_metadata(ptr, layout, dealloc_metadata);
+            }
+            new_ptr
         }
+        AutoAllocationRecordLookup::Missing => {
+            let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
+            if !new_ptr.is_null() {
+                copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
+                alloc.dealloc_raw(ptr, layout);
+            }
+            new_ptr
+        }
+        AutoAllocationRecordLookup::Mismatched => core::ptr::null_mut(),
     }
-    let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
-    if !new_ptr.is_null() {
-        copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-        dealloc_reallocated_old_ptr(alloc, ptr, layout, || None);
-    }
-    new_ptr
 }
 
 #[inline]
@@ -332,8 +349,9 @@ unsafe fn realloc_with_active_metadata(
     new_layout: Layout,
     new_size: usize,
     alloc_metadata: AllocationMetadata,
+    old_recovery: AutoAllocationRecordLookup,
 ) -> *mut u8 {
-    match checked_recorded_reallocation_old_metadata(ptr, layout) {
+    match old_recovery {
         AutoAllocationRecordLookup::Exact(dealloc_metadata) => {
             if semantic_realloc_can_reuse_in_place(
                 layout,
@@ -380,47 +398,56 @@ unsafe fn realloc_with_active_local_metadata(
     new_layout: Layout,
     new_size: usize,
     alloc_metadata: AllocationMetadata,
+    old_recovery: AutoAllocationRecordLookup,
 ) -> *mut u8 {
-    if let Some(dealloc_metadata) = recorded_reallocation_old_metadata(ptr, layout) {
-        if semantic_realloc_can_reuse_in_place(layout, new_size, dealloc_metadata, alloc_metadata) {
-            // A local transition deliberately carries no new recovery record,
-            // even when an outer conservative ABI scope is recording.  Commit
-            // removal of the old key only after the in-place transition has
-            // succeeded.
+    match old_recovery {
+        AutoAllocationRecordLookup::Exact(dealloc_metadata) => {
+            if semantic_realloc_can_reuse_in_place(
+                layout,
+                new_size,
+                dealloc_metadata,
+                alloc_metadata,
+            ) {
+                // A local transition deliberately carries no new recovery record,
+                // even when an outer conservative ABI scope is recording.  Commit
+                // removal of the old key only after the in-place transition has
+                // succeeded.
+                let new_ptr = without_auto_allocation_recovery_recording(|| {
+                    alloc.realloc_with_split_metadata(
+                        ptr,
+                        layout,
+                        new_size,
+                        dealloc_metadata,
+                        alloc_metadata,
+                    )
+                });
+                if !new_ptr.is_null() {
+                    let _ = take_recorded_reallocation_old_metadata(ptr, layout);
+                }
+                return new_ptr;
+            }
+            #[cfg(test)]
+            if FAIL_NEXT_ACTIVE_LOCAL_REALLOC_ALLOCATION_FOR_TEST {
+                // Deterministically model a backing-allocation failure at the
+                // transaction boundary.  Keeping this thread-local avoids
+                // perturbing unrelated parallel allocator tests.
+                FAIL_NEXT_ACTIVE_LOCAL_REALLOC_ALLOCATION_FOR_TEST = false;
+                return core::ptr::null_mut();
+            }
             let new_ptr = without_auto_allocation_recovery_recording(|| {
-                alloc.realloc_with_split_metadata(
-                    ptr,
-                    layout,
-                    new_size,
-                    dealloc_metadata,
-                    alloc_metadata,
-                )
+                alloc.alloc_with_metadata(new_layout, alloc_metadata)
             });
             if !new_ptr.is_null() {
-                let _ = take_recorded_reallocation_old_metadata(ptr, layout);
+                copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
+                dealloc_reallocated_old_ptr(alloc, ptr, layout, || Some(dealloc_metadata));
             }
-            return new_ptr;
+            new_ptr
         }
-        #[cfg(test)]
-        if FAIL_NEXT_ACTIVE_LOCAL_REALLOC_ALLOCATION_FOR_TEST {
-            // Deterministically model a backing-allocation failure at the
-            // transaction boundary.  Keeping this thread-local avoids
-            // perturbing unrelated parallel allocator tests.
-            FAIL_NEXT_ACTIVE_LOCAL_REALLOC_ALLOCATION_FOR_TEST = false;
-            return core::ptr::null_mut();
-        }
-        let new_ptr = without_auto_allocation_recovery_recording(|| {
-            alloc.alloc_with_metadata(new_layout, alloc_metadata)
-        });
-        if !new_ptr.is_null() {
-            copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-            dealloc_reallocated_old_ptr(alloc, ptr, layout, || Some(dealloc_metadata));
-        }
-        return new_ptr;
+        AutoAllocationRecordLookup::Missing => without_auto_allocation_recovery_recording(|| {
+            alloc.realloc_with_metadata(ptr, layout, new_size, alloc_metadata)
+        }),
+        AutoAllocationRecordLookup::Mismatched => core::ptr::null_mut(),
     }
-    without_auto_allocation_recovery_recording(|| {
-        alloc.realloc_with_metadata(ptr, layout, new_size, alloc_metadata)
-    })
 }
 
 #[derive(Copy, Clone)]
@@ -758,6 +785,17 @@ unsafe impl GlobalAlloc for RustAllocator {
         if ptr.is_null() && layout.size() != 0 {
             return core::ptr::null_mut();
         }
+        let old_recovery = if ptr.is_null() {
+            AutoAllocationRecordLookup::Missing
+        } else {
+            checked_recorded_reallocation_old_metadata(ptr, layout)
+        };
+        if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched) {
+            // Reject a live same-address/different-layout record before the
+            // zero-size, active, auto, quarantine, statistics, or raw paths can
+            // mutate allocator state or return a misleading dangling pointer.
+            return core::ptr::null_mut();
+        }
         reject_global_delayed_free_owned_pointer(ptr);
         if !cfg!(feature = "quarantine") && !semantic_runtime_slow_path_enabled() {
             return self.realloc_raw(ptr, layout, new_size);
@@ -770,7 +808,50 @@ unsafe impl GlobalAlloc for RustAllocator {
             return core::ptr::null_mut();
         }
         if new_size == 0 {
-            self.dealloc(ptr, layout);
+            if ptr.is_null() || layout.size() == 0 {
+                return dangling_ptr_for_layout(new_layout);
+            }
+            match (active_allocation_metadata(), old_recovery) {
+                (Some(active_metadata), AutoAllocationRecordLookup::Exact(recorded_metadata))
+                    if active_allocation_metadata_requires_recovery_record(active_metadata) =>
+                {
+                    let dealloc_metadata = deallocation_metadata_after_recovery_record(
+                        active_metadata,
+                        recorded_metadata,
+                    );
+                    self.dealloc_with_peeked_recovery_metadata(ptr, layout, dealloc_metadata);
+                }
+                (Some(active_metadata), AutoAllocationRecordLookup::Missing)
+                    if active_allocation_metadata_requires_recovery_record(active_metadata) =>
+                {
+                    if semantic_stats_recording_enabled() {
+                        SEMANTIC_STATS.record_dealloc(AllocationMetadata::unknown());
+                        semantic_fallback_attribution_record_raw_dealloc_no_metadata();
+                    }
+                    self.dealloc_raw(ptr, layout);
+                }
+                (Some(active_metadata), AutoAllocationRecordLookup::Exact(_))
+                | (Some(active_metadata), AutoAllocationRecordLookup::Missing) => {
+                    self.dealloc_with_metadata(ptr, layout, active_metadata);
+                }
+                (None, AutoAllocationRecordLookup::Exact(recorded_metadata)) => {
+                    self.dealloc_with_peeked_recovery_metadata(ptr, layout, recorded_metadata);
+                }
+                (None, AutoAllocationRecordLookup::Missing) => {
+                    #[cfg(feature = "quarantine")]
+                    self.dealloc_with_metadata(ptr, layout, COMPILED_QUARANTINE_METADATA);
+                    #[cfg(not(feature = "quarantine"))]
+                    {
+                        if semantic_stats_recording_enabled() {
+                            SEMANTIC_STATS.record_dealloc(AllocationMetadata::unknown());
+                            semantic_fallback_attribution_record_raw_dealloc_no_metadata();
+                        }
+                        self.dealloc_raw(ptr, layout);
+                    }
+                }
+                (Some(_), AutoAllocationRecordLookup::Mismatched)
+                | (None, AutoAllocationRecordLookup::Mismatched) => unreachable!(),
+            }
             return dangling_ptr_for_layout(new_layout);
         }
         if let Some(alloc_metadata) = active_allocation_metadata() {
@@ -783,6 +864,7 @@ unsafe impl GlobalAlloc for RustAllocator {
                         new_layout,
                         new_size,
                         alloc_metadata,
+                        old_recovery,
                     )
                 });
             }
@@ -793,50 +875,69 @@ unsafe impl GlobalAlloc for RustAllocator {
                 new_layout,
                 new_size,
                 alloc_metadata,
+                old_recovery,
             );
         }
         if let Some(alloc_metadata) = auto_allocation_metadata(new_layout) {
             return with_auto_allocation_recovery_recording(|| {
-                realloc_with_auto_metadata(self, ptr, layout, new_layout, new_size, alloc_metadata)
+                realloc_with_auto_metadata(
+                    self,
+                    ptr,
+                    layout,
+                    new_layout,
+                    new_size,
+                    alloc_metadata,
+                    old_recovery,
+                )
             });
         }
-        if let Some(dealloc_metadata) = recorded_reallocation_old_metadata(ptr, layout) {
-            if semantic_realloc_can_reuse_in_place(
-                layout,
-                new_size,
-                dealloc_metadata,
-                dealloc_metadata,
-            ) {
-                // This is not a shrink-only special case: the recovered old
-                // metadata is the best available identity for both sides of
-                // this unscoped realloc, so preserving the same semantic
-                // object/size-class in place avoids an unnecessary raw
-                // allocation, prefix copy, and old-pointer release. Temporarily
-                // enable recovery-recording so same-pointer, changed-size
-                // in-place realloc moves the exact recovery key from the old
-                // layout to the new layout instead of leaving stale metadata.
-                return with_auto_allocation_recovery_recording(|| {
-                    self.realloc_with_split_metadata(
-                        ptr,
-                        layout,
-                        new_size,
-                        dealloc_metadata,
-                        dealloc_metadata,
-                    )
-                });
-            }
-            let new_ptr = self.alloc_raw(new_layout);
-            if !new_ptr.is_null() {
-                if semantic_stats_recording_enabled() {
-                    SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), new_size);
-                    semantic_fallback_attribution_record_realloc_recorded_old_metadata_new_allocation(
-                        new_size,
-                    );
+        match old_recovery {
+            AutoAllocationRecordLookup::Exact(dealloc_metadata) => {
+                if semantic_realloc_can_reuse_in_place(
+                    layout,
+                    new_size,
+                    dealloc_metadata,
+                    dealloc_metadata,
+                ) {
+                    // This is not a shrink-only special case: the recovered old
+                    // metadata is the best available identity for both sides of
+                    // this unscoped realloc, so preserving the same semantic
+                    // object/size-class in place avoids an unnecessary raw
+                    // allocation, prefix copy, and old-pointer release. Temporarily
+                    // enable recovery-recording so same-pointer, changed-size
+                    // in-place realloc moves the exact recovery key from the old
+                    // layout to the new layout instead of leaving stale metadata.
+                    return with_auto_allocation_recovery_recording(|| {
+                        self.realloc_with_split_metadata(
+                            ptr,
+                            layout,
+                            new_size,
+                            dealloc_metadata,
+                            dealloc_metadata,
+                        )
+                    });
                 }
-                copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-                dealloc_reallocated_old_ptr(self, ptr, layout, || Some(dealloc_metadata));
+                let new_ptr = self.alloc_raw(new_layout);
+                if !new_ptr.is_null() {
+                    if semantic_stats_recording_enabled() {
+                        SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), new_size);
+                        semantic_fallback_attribution_record_realloc_recorded_old_metadata_new_allocation(
+                            new_size,
+                        );
+                    }
+                    copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
+                    dealloc_reallocated_old_ptr(self, ptr, layout, || Some(dealloc_metadata));
+                }
+                return new_ptr;
             }
-            return new_ptr;
+            AutoAllocationRecordLookup::Mismatched => {
+                // A live recovery record for this address with a different
+                // layout makes both raw reallocation and semantic cache/tag
+                // mutation unsafe. Preserve the authoritative old allocation
+                // unchanged so an exact-layout retry can still succeed.
+                return core::ptr::null_mut();
+            }
+            AutoAllocationRecordLookup::Missing => {}
         }
 
         #[cfg(feature = "quarantine")]
@@ -2529,6 +2630,7 @@ mod tests {
                 overaligned_new_layout,
                 overaligned_new_layout.size(),
                 new_metadata,
+                checked_recorded_reallocation_old_metadata(ptr, layout),
             )
         });
         assert!(!new_ptr.is_null());
@@ -2583,6 +2685,7 @@ mod tests {
                 overaligned_new_layout,
                 overaligned_new_layout.size(),
                 new_metadata,
+                checked_recorded_reallocation_old_metadata(ptr, layout),
             )
         });
         assert!(!new_ptr.is_null());
