@@ -83,6 +83,12 @@ ADDRESS_ORACLE_WRONG_HELPER = "unialloc_address_oracle_wrong_type_vec"
 ADDRESS_ORACLE_PRODUCER_MARKER = "UniAllocAddressOracleProducer"
 ADDRESS_ORACLE_WRONG_MARKER = "UniAllocAddressOracleWrongType"
 FAIL_CLOSED_CONTRACTS = {
+    "semantic_scope_callback_capable_receiver_skipped": {
+        (
+            "semantic_scope_rewrite_skipped_callback_capable_receiver",
+            "exact_receiver_call_callback_capable_not_lowered",
+        ),
+    },
     "semantic_scope_unsolved_heap_object_candidate": {
         (
             "semantic_scope_rewrite_skipped_unresolved_heap_object_type",
@@ -827,10 +833,12 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
         "semantic_scope_rewrite_applied_count": 0,
         "semantic_scope_drop_rewrite_applied_count": 0,
         "semantic_scope_unsolved_candidate_count": 0,
+        "semantic_scope_callback_capable_skipped_count": 0,
         "semantic_scope_drop_unsolved_candidate_count": 0,
         "actual_type_scope_row_count": 0,
         "actual_drop_scope_row_count": 0,
         "fail_closed_semantic_row_count": 0,
+        "fail_closed_callback_capable_row_count": 0,
         "fail_closed_drop_row_count": 0,
         "fail_closed_multi_owner_drop_row_count": 0,
     }
@@ -879,6 +887,13 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
             "semantic_scope_unsolved_candidate_count": int(
                 compiler.get("semantic_scope_unsolved_candidate_count", summary.get("semantic_scope_unsolved_candidate_count", 0)) or 0
             ),
+            "semantic_scope_callback_capable_skipped_count": int(
+                compiler.get(
+                    "semantic_scope_callback_capable_skipped_count",
+                    summary.get("semantic_scope_callback_capable_skipped_count", 0),
+                )
+                or 0
+            ),
             "semantic_scope_drop_unsolved_candidate_count": int(
                 compiler.get("semantic_scope_drop_unsolved_candidate_count", summary.get("semantic_scope_drop_unsolved_candidate_count", 0)) or 0
             ),
@@ -891,6 +906,11 @@ def collect_audits(audit_dir: pathlib.Path, target_crate: str) -> tuple[list[dic
             "fail_closed_semantic_row_count": sum(
                 candidate["lowering_kind"]
                 == "semantic_scope_unsolved_heap_object_candidate"
+                for candidate in unresolved_rows
+            ),
+            "fail_closed_callback_capable_row_count": sum(
+                candidate["lowering_kind"]
+                == "semantic_scope_callback_capable_receiver_skipped"
                 for candidate in unresolved_rows
             ),
             "fail_closed_drop_row_count": sum(
@@ -1385,11 +1405,19 @@ def validate_realapp_type_isolation(
         if expected is None or observed not in expected:
             raise SmokeError(f"row-level unresolved candidate is not fail-closed: {row}")
     semantic_unsolved = int(audit_totals.get("semantic_scope_unsolved_candidate_count", 0))
+    callback_capable_skipped = int(
+        audit_totals.get("semantic_scope_callback_capable_skipped_count", 0)
+    )
     drop_unsolved = int(
         audit_totals.get("semantic_scope_drop_unsolved_candidate_count", 0)
     )
     row_semantic_unsolved = sum(
         row.get("lowering_kind") == "semantic_scope_unsolved_heap_object_candidate"
+        for row in fail_closed_evidence
+    )
+    row_callback_capable_skipped = sum(
+        row.get("lowering_kind")
+        == "semantic_scope_callback_capable_receiver_skipped"
         for row in fail_closed_evidence
     )
     row_drop_unsolved = sum(
@@ -1404,6 +1432,11 @@ def validate_realapp_type_isolation(
         raise SmokeError(
             "semantic unresolved aggregate is not backed by exact row-level evidence: "
             f"aggregate={semantic_unsolved}, rows={row_semantic_unsolved}"
+        )
+    if callback_capable_skipped != row_callback_capable_skipped:
+        raise SmokeError(
+            "callback-capable skipped aggregate is not backed by exact row-level evidence: "
+            f"aggregate={callback_capable_skipped}, rows={row_callback_capable_skipped}"
         )
     if drop_unsolved not in {
         row_drop_unsolved,
@@ -1420,20 +1453,23 @@ def validate_realapp_type_isolation(
     )
     expected_fail_closed = (
         semantic_unsolved
+        + callback_capable_skipped
         + drop_unsolved
         + (0 if multi_owner_already_aggregated else row_drop_multi_owner)
     )
     aggregate_fail_closed = int(
         audit_totals.get("fail_closed_semantic_row_count", 0)
+    ) + int(
+        audit_totals.get("fail_closed_callback_capable_row_count", 0)
     ) + int(audit_totals.get("fail_closed_drop_row_count", 0))
     observed_fail_closed = len(fail_closed_evidence)
     if expected_fail_closed <= 0:
         raise SmokeError(
-            "pinned real application no longer exercises an unresolved fail-closed candidate"
+            "pinned real application no longer exercises a fail-closed candidate"
         )
     if observed_fail_closed != aggregate_fail_closed or observed_fail_closed != expected_fail_closed:
         raise SmokeError(
-            "aggregate unresolved candidate count is not backed by row-level fail-closed evidence: "
+            "aggregate fail-closed candidate count is not backed by row-level evidence: "
             f"expected {expected_fail_closed}, aggregate {aggregate_fail_closed}, "
             f"observed {observed_fail_closed}"
         )
@@ -1477,7 +1513,8 @@ def validate_realapp_type_isolation(
         "claim_boundary": (
             "one pinned Oxipng functional run binds actual target-crate MIR type identities "
             "to complete runtime type-class lifecycle rows, exercises row-level fail-closed "
-            "unresolved candidates, and includes a separately labeled injected functional oracle "
+            "unresolved or callback-capable candidates, and includes a separately labeled "
+            "injected functional oracle "
             "for the required address-level same-layout sequence; a natural-app same-layout pair "
             "is reported only when observed and is not a gate; whole-run recovery identity "
             "mismatches are preserved as recovery-corrected non-exact compiler attribution and "
@@ -1492,24 +1529,33 @@ def validate_realapp_type_isolation(
 def compiler_coverage_summary(audit_totals: dict[str, int]) -> dict[str, Any]:
     unsolved_semantic = int(audit_totals.get("semantic_scope_unsolved_candidate_count", 0))
     unsolved_drop = int(audit_totals.get("semantic_scope_drop_unsolved_candidate_count", 0))
+    callback_capable_skipped = int(
+        audit_totals.get("semantic_scope_callback_capable_skipped_count", 0)
+    )
     unsolved_total = unsolved_semantic + unsolved_drop
     row_fail_closed_total = int(
         audit_totals.get("fail_closed_semantic_row_count", 0)
+    ) + int(
+        audit_totals.get("fail_closed_callback_capable_row_count", 0)
     ) + int(audit_totals.get("fail_closed_drop_row_count", 0))
     # Older audit summaries do not expose row-level fail-closed totals.  When
     # they do, use those exact rows so deliberate multi-owner Drop skips cannot
     # be mislabeled as fully resolved merely because the legacy Drop-unsolved
     # aggregate omits them.
-    fail_closed_total = max(unsolved_total, row_fail_closed_total)
+    fail_closed_total = max(
+        unsolved_total + callback_capable_skipped,
+        row_fail_closed_total,
+    )
     return {
         "audited_candidates_resolved": fail_closed_total == 0,
-        "has_unresolved_audited_candidates": fail_closed_total != 0,
+        "has_unresolved_audited_candidates": unsolved_total != 0,
         "has_fail_closed_audited_candidates": fail_closed_total != 0,
         "coverage_scope": "target_crate_audited_semantic_and_drop_candidates",
         "whole_program_compiler_coverage": False,
         "unsolved_candidate_count": unsolved_total,
         "fail_closed_candidate_count": fail_closed_total,
         "semantic_scope_unsolved_candidate_count": unsolved_semantic,
+        "semantic_scope_callback_capable_skipped_count": callback_capable_skipped,
         "semantic_scope_drop_unsolved_candidate_count": unsolved_drop,
         "multi_owner_drop_fail_closed_count": int(
             audit_totals.get("fail_closed_multi_owner_drop_row_count", 0)
@@ -1530,7 +1576,8 @@ def compiler_coverage_summary(audit_totals: dict[str, int]) -> dict[str, Any]:
             "not whole-program or object coverage"
             if fail_closed_total == 0
             else "audited target-crate MIR still has explicitly counted unresolved "
-            "or fail-closed semantic/drop candidates; not whole-program or object coverage"
+            "or fail-closed semantic/drop/callback-capable candidates; not whole-program "
+            "or object coverage"
         ),
     }
 

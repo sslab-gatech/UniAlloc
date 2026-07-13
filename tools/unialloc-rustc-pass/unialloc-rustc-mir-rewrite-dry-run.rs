@@ -91,7 +91,7 @@ const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const MODULE_ID_ALGORITHM: &str =
     "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))";
 const TYPE_ID_ALGORITHM: &str =
-    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity, String::with_capacity, String::from(&str), <str as ToOwned>::to_owned, <[u8] as ToOwned>::to_owned, Box::new, and Box<[u8]>::from(&[u8]) destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer identity because they can change or create only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; exact alloc::sync::Arc::new and alloc::rc::Rc::new calls select the direct destination Arc<T> or Rc<T> identity only after DefId/crate/path and destination-payload structural checks, without recursively treating nested owners inside T as owners of the ref-counted allocation; exact std::collections::HashMap::with_capacity and std::collections::HashSet::with_capacity calls likewise select the direct destination table identity only after exact std DefId/path, RandomState, optional Global allocator, and capacity-argument checks, without treating nested K/V/T owners as identities for the table allocation; constructor/factory scopes without an exact DefId/body allocation proof remain audit-only because a direct Vec/String/Result return type alone is not allocation provenance, regardless of whether the opaque callee is local, platform, or a third-party dependency; Result<T, E>/Option<T> candidates still select only the Ok/Some payload for hazard classification while Result Err owners remain fail-closed hazards; custom or aggregate destinations that merely contain a supported owner remain audit-only without an exact constructor matcher or sound callee-body allocation proof; for these shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut and str Split/SplitInclusive wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec/String/Box capacity/constructor, Arc::new, Rc::new, std HashMap::with_capacity, and std HashSet::with_capacity exceptions; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity, String::with_capacity, String::from(&str), <str as ToOwned>::to_owned, <[u8] as ToOwned>::to_owned, Box::new, and Box<[u8]>::from(&[u8]) destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer identity because they can change or create only that backing allocation, while resize/extend/push/clone_from/Drop and other element-affecting calls retain full owner-graph fail-closed classification; exact alloc::sync::Arc::new and alloc::rc::Rc::new calls select the direct destination Arc<T> or Rc<T> identity only after DefId/crate/path and destination-payload structural checks, without recursively treating nested owners inside T as owners of the ref-counted allocation; exact std::collections::HashMap::with_capacity and std::collections::HashSet::with_capacity calls likewise select the direct destination table identity only after exact std DefId/path, RandomState, optional Global allocator, and capacity-argument checks, without treating nested K/V/T owners as identities for the table allocation; exact std HashMap reserve/try_reserve/shrink calls remain callback-capable audit-only because rehash may execute user Hash/Eq code with unrelated allocations; constructor/factory scopes without an exact DefId/body allocation proof remain audit-only because a direct Vec/String/Result return type alone is not allocation provenance, regardless of whether the opaque callee is local, platform, or a third-party dependency; Result<T, E>/Option<T> candidates still select only the Ok/Some payload for hazard classification while Result Err owners remain fail-closed hazards; custom or aggregate destinations that merely contain a supported owner remain audit-only without an exact constructor matcher or sound callee-body allocation proof; for these shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut and str Split/SplitInclusive wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec/String/Box capacity/constructor, Arc::new, Rc::new, std HashMap::with_capacity, and std HashSet::with_capacity exceptions; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 
@@ -424,6 +424,7 @@ enum PlainCloneHeapClass {
 enum SemanticScopeHeapClass {
     Single(String),
     Ambiguous(Vec<String>),
+    CallbackCapable,
     Unresolved,
 }
 
@@ -2707,6 +2708,36 @@ fn exact_std_hash_map_with_capacity_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bo
         && exact_std_hash_map_with_capacity_def_path(&tcx.def_path_str(def_id))
 }
 
+fn exact_std_hash_map_method_def_path(path: &str, method: &str) -> bool {
+    let normalized = strip_rustc_crate_disambiguators(path);
+    if [
+        "std::collections::HashMap::<K, V>::",
+        "std::collections::HashMap::<K, V, S>::",
+        "std::collections::HashMap::<K, V, S, A>::",
+    ]
+    .iter()
+    .any(|prefix| normalized.strip_prefix(prefix) == Some(method))
+    {
+        return true;
+    }
+
+    let impl_index = match normalized
+        .strip_prefix("std::collections::hash::map::{impl#")
+        .and_then(|rest| rest.strip_suffix(&format!("}}::{method}")))
+    {
+        Some(index) => index,
+        None => return false,
+    };
+    !impl_index.is_empty() && impl_index.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn exact_std_hash_map_capacity_only_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "std"
+        && ["reserve", "try_reserve", "shrink_to", "shrink_to_fit"]
+            .iter()
+            .any(|method| exact_std_hash_map_method_def_path(&tcx.def_path_str(def_id), method))
+}
+
 fn exact_std_hash_set_def_path(path: &str) -> bool {
     strip_rustc_crate_disambiguators(path) == "std::collections::HashSet"
 }
@@ -4349,6 +4380,15 @@ fn non_plain_semantic_scope_heap_class<'tcx>(
         // be identities for that allocation.
         SemanticScopeHeapClass::Single(owner)
     } else if callee_def_id.map_or(false, |def_id| {
+        exact_std_hash_map_capacity_only_def_id(tcx, def_id)
+    }) {
+        // HashMap capacity changes may rehash and invoke user Hash/Eq callbacks.
+        // Those callbacks can allocate arbitrary unrelated objects, so even an
+        // exact std DefId cannot soundly scope the whole call as the table's
+        // allocation identity. Keep reserve*/shrink* calls explicit and
+        // audit-only until a narrower internal allocation boundary is proven.
+        SemanticScopeHeapClass::CallbackCapable
+    } else if callee_def_id.map_or(false, |def_id| {
         exact_alloc_vec_with_capacity_def_id(tcx, def_id)
     }) {
         // Exact Vec::with_capacity creates only the direct destination Vec
@@ -4971,6 +5011,30 @@ mod tests {
         ));
         assert!(!exact_std_hash_map_with_capacity_def_path(
             "HashMapLike::with_capacity"
+        ));
+        assert!(exact_std_hash_map_method_def_path(
+            "std[efc3]::collections::hash::map::{impl#4}::reserve",
+            "reserve"
+        ));
+        assert!(exact_std_hash_map_method_def_path(
+            "std::collections::HashMap::<K, V, S, A>::try_reserve",
+            "try_reserve"
+        ));
+        assert!(!exact_std_hash_map_method_def_path(
+            "hashmap_reserve_callback_audit::reserve_with_panicking_hash",
+            "reserve"
+        ));
+        assert!(!exact_std_hash_map_method_def_path(
+            "std::collections::hash::map::{impl#4}::reserve_with_callback",
+            "reserve"
+        ));
+        assert!(callee_contains_method_name(
+            "std[efc3]::collections::hash::map::{impl#4}::reserve",
+            "reserve"
+        ));
+        assert!(!callee_contains_method_name(
+            "hashmap_reserve_callback_audit::reserve_with_panicking_hash",
+            "reserve"
         ));
         assert!(exact_std_hash_set_def_path(
             "std[efc3]::collections::HashSet"
@@ -6389,10 +6453,6 @@ fn semantic_scope_receiver_mutating_allocation_like_call(callee: &str) -> bool {
     // `Box::new`, `Rc::new`, `Arc::new`, `to_vec`) keep destination-first
     // solving through `semantic_heap_object_type_from_mir`.
     const RECEIVER_MUTATING_ALLOCATION_MARKERS: &[&str] = &[
-        "::reserve",
-        "::reserve_exact",
-        "::try_reserve",
-        "::try_reserve_exact",
         "::push}",
         "::push::<",
         "::push_back}",
@@ -6410,6 +6470,14 @@ fn semantic_scope_receiver_mutating_allocation_like_call(callee: &str) -> bool {
     RECEIVER_MUTATING_ALLOCATION_MARKERS
         .iter()
         .any(|marker| callee.contains(marker))
+        || [
+            "reserve",
+            "reserve_exact",
+            "try_reserve",
+            "try_reserve_exact",
+        ]
+        .iter()
+        .any(|method| callee_contains_method_name(callee, method))
         || semantic_scope_named_receiver_mutating_call(callee)
         || semantic_scope_current_impl_receiver_mutating_call(callee)
 }
@@ -6729,10 +6797,6 @@ fn semantic_scope_allocation_like_call(callee: &str) -> bool {
     const ALLOCATION_MARKERS: &[&str] = &[
         "::with_capacity",
         "::with_capacity_in",
-        "::reserve",
-        "::reserve_exact",
-        "::try_reserve",
-        "::try_reserve_exact",
         "::push}",
         "::push::<",
         "::push_back}",
@@ -6761,6 +6825,14 @@ fn semantic_scope_allocation_like_call(callee: &str) -> bool {
     ALLOCATION_MARKERS
         .iter()
         .any(|marker| callee.contains(marker))
+        || [
+            "reserve",
+            "reserve_exact",
+            "try_reserve",
+            "try_reserve_exact",
+        ]
+        .iter()
+        .any(|method| callee_contains_method_name(callee, method))
 }
 
 fn semantic_scope_returns_owned_heap_container(callee: &str) -> bool {
@@ -6872,6 +6944,14 @@ fn callee_contains_path_method(callee: &str, receiver_path: &str, method: &str) 
         rest.match_indices(&method_marker)
             .any(|(method_idx, _)| path_marker_has_boundary(rest, method_idx, &method_marker))
     })
+}
+
+fn callee_contains_method_name(callee: &str, method: &str) -> bool {
+    let callee = strip_rustc_crate_disambiguators(callee);
+    let marker = format!("::{method}");
+    callee
+        .match_indices(&marker)
+        .any(|(idx, _)| path_marker_has_boundary(&callee, idx, &marker))
 }
 
 fn cross_thread_escape_call(callee: &str) -> bool {
@@ -7005,6 +7085,47 @@ fn unwind_cleanup_target(unwind: MirUnwind) -> Option<BasicBlock> {
 #[cfg(not(unialloc_rustc_current))]
 fn unwind_cleanup_target(unwind: MirUnwind) -> Option<BasicBlock> {
     unwind
+}
+
+#[cfg(unialloc_rustc_current)]
+fn unwind_continues_outward(unwind: MirUnwind) -> bool {
+    matches!(unwind, UnwindAction::Continue)
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn unwind_continues_outward(unwind: MirUnwind) -> bool {
+    unwind.is_none()
+}
+
+#[cfg(unialloc_rustc_current)]
+fn unwind_resume_terminator_kind<'tcx>() -> TerminatorKind<'tcx> {
+    TerminatorKind::UnwindResume
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn unwind_resume_terminator_kind<'tcx>() -> TerminatorKind<'tcx> {
+    TerminatorKind::Resume
+}
+
+fn push_unwind_resume_block<'tcx>(body: &mut Body<'tcx>, source_info: SourceInfo) -> BasicBlock {
+    body.basic_blocks_mut().push(basic_block_data(
+        Terminator {
+            source_info,
+            kind: unwind_resume_terminator_kind(),
+        },
+        true,
+    ))
+}
+
+fn semantic_scope_unwind_continuation<'tcx>(
+    body: &mut Body<'tcx>,
+    source_info: SourceInfo,
+    original_unwind: MirUnwind,
+) -> Option<BasicBlock> {
+    unwind_cleanup_target(original_unwind).or_else(|| {
+        unwind_continues_outward(original_unwind)
+            .then(|| push_unwind_resume_block(body, source_info))
+    })
 }
 
 fn inserted_call_unwind(original_unwind: MirUnwind, is_cleanup: bool) -> MirUnwind {
@@ -8493,6 +8614,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             PlainCloneHeapClass::NotPlainClone => match &non_plain_heap_class {
                 Some(SemanticScopeHeapClass::Single(owner)) => owner.clone(),
                 Some(SemanticScopeHeapClass::Ambiguous(_))
+                | Some(SemanticScopeHeapClass::CallbackCapable)
                 | Some(SemanticScopeHeapClass::Unresolved)
                 | None => UNKNOWN_HEAP_OBJECT_TYPE.to_string(),
             },
@@ -8673,9 +8795,18 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             // Do not turn non-heap iterator/Bencher/helper calls into typed
             // allocation evidence.  Keep an explicit audit row so the solver
             // gap is visible instead of silently disappearing from reports.
+            let callback_capable = matches!(
+                &non_plain_heap_class,
+                Some(SemanticScopeHeapClass::CallbackCapable)
+            );
             records.push(RewriteRecord {
                 allocation_site_id: format!(
-                    "rustc-driver-mir-semantic-scope-unsolved:{:016x}",
+                    "rustc-driver-mir-semantic-scope-{}:{:016x}",
+                    if callback_capable {
+                        "callback-capable"
+                    } else {
+                        "unsolved"
+                    },
                     callsite
                 ),
                 type_id,
@@ -8698,19 +8829,39 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 type_id_basis,
                 size_operand: None,
                 align_operand: None,
-                rewrite_status: "semantic_scope_rewrite_skipped_unresolved_heap_object_type",
+                rewrite_status: if callback_capable {
+                    "semantic_scope_rewrite_skipped_callback_capable_receiver"
+                } else {
+                    "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+                },
                 replacement_symbol: if lowering_metadata_hints_requested() {
                     "__unialloc_semantic_scope_push_hints"
                 } else {
                     "__unialloc_semantic_scope_push"
                 },
-                replacement_resolution_status: "rustc_middle_heap_object_type_not_solved",
-                replacement_preview:
+                replacement_resolution_status: if callback_capable {
+                    "exact_receiver_call_callback_capable_not_lowered"
+                } else {
+                    "rustc_middle_heap_object_type_not_solved"
+                },
+                replacement_preview: if callback_capable {
+                    "Skipped semantic-scope lowering because the exact receiver call may execute user callbacks with unrelated allocations"
+                        .to_string()
+                } else {
                     "Skipped semantic-scope lowering because rustc_middle did not solve a supported heap object type"
-                        .to_string(),
+                        .to_string()
+                },
                 semantic_scope_unwind_pop_inserted: false,
-                metadata_pairing_contract: "audit_only_unresolved_heap_object_type",
-                lowering_kind: "semantic_scope_unsolved_heap_object_candidate",
+                metadata_pairing_contract: if callback_capable {
+                    "audit_only_callback_capable_receiver"
+                } else {
+                    "audit_only_unresolved_heap_object_type"
+                },
+                lowering_kind: if callback_capable {
+                    "semantic_scope_callback_capable_receiver_skipped"
+                } else {
+                    "semantic_scope_unsolved_heap_object_candidate"
+                },
             });
             continue;
         }
@@ -8744,6 +8895,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 let push_unit_local = push_internal_local(body, unit_ty(tcx), fn_span);
                 let push_unit_place = Place::from(push_unit_local);
                 let source_info = body[bb].terminator().source_info;
+                let original_cleanup_target = unwind_cleanup_target(original_unwind);
 
                 let exit_block = push_semantic_scope_pop_block(
                     tcx,
@@ -8752,25 +8904,26 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                     source_info,
                     fn_span,
                     original_target,
-                    unwind_cleanup_target(original_unwind),
+                    original_cleanup_target,
                     original_from_hir_call,
                     original_is_cleanup,
                 );
 
-                let cleanup_exit_block =
-                    unwind_cleanup_target(original_unwind).map(|cleanup_target| {
-                        push_semantic_scope_pop_block(
-                            tcx,
-                            body,
-                            scope_abi.pop_def_id,
-                            source_info,
-                            fn_span,
-                            cleanup_target,
-                            None,
-                            original_from_hir_call,
-                            true,
-                        )
-                    });
+                let unwind_continuation =
+                    semantic_scope_unwind_continuation(body, source_info, original_unwind);
+                let cleanup_exit_block = unwind_continuation.map(|cleanup_target| {
+                    push_semantic_scope_pop_block(
+                        tcx,
+                        body,
+                        scope_abi.pop_def_id,
+                        source_info,
+                        fn_span,
+                        cleanup_target,
+                        None,
+                        original_from_hir_call,
+                        true,
+                    )
+                });
 
                 #[cfg(unialloc_rustc_current)]
                 if let TerminatorKind::Call { target, unwind, .. } = &mut original_terminator.kind {
@@ -9143,6 +9296,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                 let push_unit_local = push_internal_local(body, unit_ty(tcx), fn_span);
                 let push_unit_place = Place::from(push_unit_local);
                 let source_info = body[bb].terminator().source_info;
+                let original_cleanup_target = unwind_cleanup_target(original_unwind);
 
                 let exit_block = push_semantic_scope_pop_block(
                     tcx,
@@ -9151,25 +9305,26 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                     source_info,
                     fn_span,
                     original_target,
-                    unwind_cleanup_target(original_unwind),
+                    original_cleanup_target,
                     synthetic_call_source(),
                     original_is_cleanup,
                 );
 
-                let cleanup_exit_block =
-                    unwind_cleanup_target(original_unwind).map(|cleanup_target| {
-                        push_semantic_scope_pop_block(
-                            tcx,
-                            body,
-                            scope_abi.pop_def_id,
-                            source_info,
-                            fn_span,
-                            cleanup_target,
-                            None,
-                            synthetic_call_source(),
-                            true,
-                        )
-                    });
+                let unwind_continuation =
+                    semantic_scope_unwind_continuation(body, source_info, original_unwind);
+                let cleanup_exit_block = unwind_continuation.map(|cleanup_target| {
+                    push_semantic_scope_pop_block(
+                        tcx,
+                        body,
+                        scope_abi.pop_def_id,
+                        source_info,
+                        fn_span,
+                        cleanup_target,
+                        None,
+                        synthetic_call_source(),
+                        true,
+                    )
+                });
 
                 if let TerminatorKind::Drop { target, unwind, .. } = &mut original_terminator.kind {
                     *target = exit_block;
@@ -9466,6 +9621,12 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let semantic_scope_unsolved_candidate_count = records
         .iter()
         .filter(|record| record.lowering_kind == "semantic_scope_unsolved_heap_object_candidate")
+        .count();
+    let semantic_scope_callback_capable_skipped_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_callback_capable_receiver_skipped"
+        })
         .count();
     let semantic_scope_drop_candidate_count = records
         .iter()
@@ -9824,6 +9985,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(
         json,
+        "    \"semantic_scope_callback_capable_skipped_count\": {},",
+        semantic_scope_callback_capable_skipped_count
+    );
+    let _ = writeln!(
+        json,
         "    \"semantic_scope_drop_candidate_count\": {},",
         semantic_scope_drop_candidate_count
     );
@@ -9955,6 +10121,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         json,
         "    \"semantic_scope_unsolved_candidate_count\": {},",
         semantic_scope_unsolved_candidate_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"semantic_scope_callback_capable_skipped_count\": {},",
+        semantic_scope_callback_capable_skipped_count
     );
     let _ = writeln!(
         json,
@@ -10337,6 +10508,12 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .iter()
         .filter(|record| record.lowering_kind == "semantic_scope_unsolved_heap_object_candidate")
         .count();
+    let semantic_scope_callback_capable_skipped_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_callback_capable_receiver_skipped"
+        })
+        .count();
     let semantic_scope_drop_candidate_count = records
         .iter()
         .filter(|record| record.lowering_kind == "semantic_scope_drop_rewrite")
@@ -10478,6 +10655,11 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         text,
         "semantic_scope_unsolved_candidate_count: {}",
         semantic_scope_unsolved_candidate_count
+    );
+    let _ = writeln!(
+        text,
+        "semantic_scope_callback_capable_skipped_count: {}",
+        semantic_scope_callback_capable_skipped_count
     );
     let _ = writeln!(
         text,

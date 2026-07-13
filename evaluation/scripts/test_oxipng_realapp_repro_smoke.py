@@ -127,6 +127,20 @@ def fail_closed_row() -> dict:
     }
 
 
+def fail_closed_callback_capable_row() -> dict:
+    return {
+        "mir_function": "fixture::hashmap_reserve",
+        "lowering_kind": "semantic_scope_callback_capable_receiver_skipped",
+        "rewrite_status": "semantic_scope_rewrite_skipped_callback_capable_receiver",
+        "replacement_resolution_status": (
+            "exact_receiver_call_callback_capable_not_lowered"
+        ),
+        "destination_type": "()",
+        "semantic_object_type": "std::collections::HashMap<Key,Value>",
+        "source_span": "fixture.rs:30:2",
+    }
+
+
 def fail_closed_multi_owner_drop_row() -> dict:
     return {
         "mir_function": "fixture::multi_owner_drop",
@@ -308,10 +322,12 @@ def valid_contract_totals() -> dict:
         "semantic_scope_rewrite_applied_count": 4,
         "semantic_scope_drop_rewrite_applied_count": 1,
         "semantic_scope_unsolved_candidate_count": 1,
+        "semantic_scope_callback_capable_skipped_count": 0,
         "semantic_scope_drop_unsolved_candidate_count": 0,
         "actual_type_scope_row_count": 4,
         "actual_drop_scope_row_count": 3,
         "fail_closed_semantic_row_count": 1,
+        "fail_closed_callback_capable_row_count": 0,
         "fail_closed_drop_row_count": 0,
         "fail_closed_multi_owner_drop_row_count": 0,
     }
@@ -469,6 +485,7 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                             "semantic_scope_rewrite_applied_count": 2,
                             "semantic_scope_drop_rewrite_applied_count": 4,
                             "semantic_scope_unsolved_candidate_count": 1,
+                            "semantic_scope_callback_capable_skipped_count": 1,
                             "semantic_scope_drop_unsolved_candidate_count": 0,
                         },
                         "rewrite_candidates": [
@@ -485,6 +502,7 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                             ownership_transfer_row(applied=True),
                             ownership_transfer_row(applied=False),
                             fail_closed_row(),
+                            fail_closed_callback_capable_row(),
                             fail_closed_multi_owner_drop_row(),
                         ],
                     }
@@ -506,10 +524,14 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertEqual(totals["semantic_scope_rewrite_applied_count"], 2)
             self.assertEqual(totals["semantic_scope_drop_rewrite_applied_count"], 4)
             self.assertEqual(totals["semantic_scope_unsolved_candidate_count"], 1)
+            self.assertEqual(
+                totals["semantic_scope_callback_capable_skipped_count"], 1
+            )
             self.assertEqual(totals["semantic_scope_drop_unsolved_candidate_count"], 0)
             self.assertEqual(totals["actual_type_scope_row_count"], 2)
             self.assertEqual(totals["actual_drop_scope_row_count"], 0)
             self.assertEqual(totals["fail_closed_semantic_row_count"], 1)
+            self.assertEqual(totals["fail_closed_callback_capable_row_count"], 1)
             self.assertEqual(totals["fail_closed_drop_row_count"], 1)
             self.assertEqual(totals["fail_closed_multi_owner_drop_row_count"], 1)
             self.assertEqual(len(audits[0]["actual_type_scope_rows"]), 2)
@@ -526,14 +548,17 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                 audits[0]["semantic_ownership_transfer_rows"][0]["lowering_kind"],
                 smoke.SEMANTIC_OWNERSHIP_TRANSFER_KIND,
             )
-            self.assertEqual(len(audits[0]["fail_closed_rows"]), 2)
+            self.assertEqual(len(audits[0]["fail_closed_rows"]), 3)
             coverage = smoke.compiler_coverage_summary(totals)
             self.assertFalse(coverage["audited_candidates_resolved"])
             self.assertTrue(coverage["has_unresolved_audited_candidates"])
             self.assertTrue(coverage["has_fail_closed_audited_candidates"])
             self.assertFalse(coverage["whole_program_compiler_coverage"])
             self.assertEqual(coverage["unsolved_candidate_count"], 1)
-            self.assertEqual(coverage["fail_closed_candidate_count"], 2)
+            self.assertEqual(coverage["fail_closed_candidate_count"], 3)
+            self.assertEqual(
+                coverage["semantic_scope_callback_capable_skipped_count"], 1
+            )
             self.assertEqual(coverage["multi_owner_drop_fail_closed_count"], 1)
             self.assertEqual(
                 coverage["semantic_ownership_transfer_candidate_count"], 2
@@ -553,6 +578,7 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
                 "semantic_scope_rewrite_applied_count": 846,
                 "semantic_scope_drop_rewrite_applied_count": 532,
                 "semantic_scope_unsolved_candidate_count": 0,
+                "semantic_scope_callback_capable_skipped_count": 0,
                 "semantic_scope_drop_unsolved_candidate_count": 0,
             }
         )
@@ -569,6 +595,47 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         self.assertIn("audited target-crate MIR", coverage["claim_boundary"])
         self.assertIn("not whole-program or object coverage", coverage["claim_boundary"])
         self.assertNotIn("complete compiler coverage", coverage["claim_boundary"])
+
+    def test_callback_capable_skips_are_fail_closed_but_not_unsolved(self) -> None:
+        coverage = smoke.compiler_coverage_summary(
+            {
+                "semantic_scope_unsolved_candidate_count": 0,
+                "semantic_scope_callback_capable_skipped_count": 1,
+                "semantic_scope_drop_unsolved_candidate_count": 0,
+                "fail_closed_callback_capable_row_count": 1,
+            }
+        )
+
+        self.assertFalse(coverage["audited_candidates_resolved"])
+        self.assertFalse(coverage["has_unresolved_audited_candidates"])
+        self.assertTrue(coverage["has_fail_closed_audited_candidates"])
+        self.assertEqual(coverage["unsolved_candidate_count"], 0)
+        self.assertEqual(coverage["fail_closed_candidate_count"], 1)
+        self.assertEqual(
+            coverage["semantic_scope_callback_capable_skipped_count"], 1
+        )
+        self.assertIn("callback-capable", coverage["claim_boundary"])
+
+    def test_callback_capable_row_is_never_hidden_by_aggregate_shape(self) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+        audits = valid_contract_audits()
+        audits[0]["fail_closed_rows"].append(fail_closed_callback_capable_row())
+        totals = valid_contract_totals()
+        totals["semantic_scope_callback_capable_skipped_count"] = 1
+        totals["fail_closed_callback_capable_row_count"] = 1
+
+        evidence = smoke.assert_contract(
+            build=cmd,
+            run=cmd,
+            stats=valid_contract_stats(),
+            output_sha256="a",
+            expected_output_sha256="a",
+            audits=audits,
+            audit_totals=totals,
+            fallback_note="reported fallback_allocations=0",
+        )
+
+        self.assertEqual(evidence["fail_closed_candidate_count"], 2)
 
     def test_multi_owner_drop_rows_prevent_false_resolved_coverage(self) -> None:
         coverage = smoke.compiler_coverage_summary(
