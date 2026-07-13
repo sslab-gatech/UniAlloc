@@ -9869,7 +9869,6 @@ pub unsafe trait SemanticAlloc {
         old_metadata: AllocationMetadata,
         new_metadata: AllocationMetadata,
     ) -> *mut u8 {
-        reject_global_delayed_free_owned_pointer(ptr);
         let new_layout = match Layout::from_size_align(new_size, old_layout.align()) {
             Ok(layout) => layout,
             Err(_) => return core::ptr::null_mut(),
@@ -9877,6 +9876,16 @@ pub unsafe trait SemanticAlloc {
         if !semantic_realloc_old_pointer_supported(ptr, old_layout) {
             return core::ptr::null_mut();
         }
+        if !ptr.is_null()
+            && old_layout.size() != 0
+            && matches!(
+                lookup_auto_allocation_record(ptr, old_layout, false),
+                AutoAllocationRecordLookup::Mismatched
+            )
+        {
+            return core::ptr::null_mut();
+        }
+        reject_global_delayed_free_owned_pointer(ptr);
         if new_size == 0 {
             if !ptr.is_null() && old_layout.size() != 0 {
                 self.dealloc_with_metadata(ptr, old_layout, old_metadata);
@@ -10375,7 +10384,6 @@ unsafe impl SemanticAlloc for RustAllocator {
         old_metadata: AllocationMetadata,
         new_metadata: AllocationMetadata,
     ) -> *mut u8 {
-        reject_global_delayed_free_owned_pointer(ptr);
         let new_layout = match Layout::from_size_align(new_size, old_layout.align()) {
             Ok(layout) => layout,
             Err(_) => return core::ptr::null_mut(),
@@ -10383,6 +10391,20 @@ unsafe impl SemanticAlloc for RustAllocator {
         if !semantic_realloc_old_pointer_supported(ptr, old_layout) {
             return core::ptr::null_mut();
         }
+        let old_recovery = if ptr.is_null() || old_layout.size() == 0 {
+            AutoAllocationRecordLookup::Missing
+        } else {
+            lookup_auto_allocation_record(ptr, old_layout, false)
+        };
+        if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched) {
+            // The recovery record is the authoritative allocation Layout.
+            // Reject before zero-size success, in-place statistics/tag changes,
+            // replacement allocation, or old-pointer release can make a live
+            // same-address/different-Layout record look like a successful
+            // realloc. The exact record remains available for a correct retry.
+            return core::ptr::null_mut();
+        }
+        reject_global_delayed_free_owned_pointer(ptr);
         if new_size == 0 {
             if !ptr.is_null() && old_layout.size() != 0 {
                 self.dealloc_with_metadata(ptr, old_layout, old_metadata);
@@ -10416,8 +10438,11 @@ unsafe impl SemanticAlloc for RustAllocator {
             // Mirror the metadata choice made by `dealloc_with_metadata_inner`
             // without recording recovery match/mismatch counters twice.  The
             // exact allocation record is authoritative whenever it exists.
-            let dealloc_metadata = recover_auto_allocation_record_metadata(ptr, old_layout, false)
-                .unwrap_or(old_metadata);
+            let dealloc_metadata = match old_recovery {
+                AutoAllocationRecordLookup::Exact(recorded_metadata) => recorded_metadata,
+                AutoAllocationRecordLookup::Missing => old_metadata,
+                AutoAllocationRecordLookup::Mismatched => unreachable!(),
+            };
             verify_memory_tagged_reallocation_source(ptr, old_layout, dealloc_metadata);
         }
 
@@ -17895,6 +17920,111 @@ mod tests {
             RustAllocator::new().dealloc_raw(ptr, allocation_layout);
             clear_type_cache_for_test();
         }
+    }
+
+    #[test]
+    fn semantic_realloc_rejects_valid_but_mismatched_recovery_layout_before_zero_size() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let allocation_size = (MIN_TYPE_CACHE_OBJECT_SIZE + 1..crate::size_class::MAX_SIZE - 1)
+            .find(|size| {
+                crate::size_class::get_size_class(*size).index()
+                    == crate::size_class::get_size_class(*size - 1).index()
+            })
+            .expect("test needs a distinct smaller Layout in one allocator size class");
+        let allocation_layout =
+            Layout::from_size_align(allocation_size, align_of::<usize>()).unwrap();
+        let wrong_old_layout =
+            Layout::from_size_align(allocation_size - 1, allocation_layout.align()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_BAD4)
+            .with_module(0xC0DE_BAD4)
+            .with_callsite(0xA110_BAD4)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let new_metadata = AllocationMetadata::for_type(0xC002_BAD5)
+            .with_module(metadata.module_id)
+            .with_callsite(0xA110_BAD5)
+            .with_flags(metadata.flags);
+        let allocator = RustAllocator::new();
+        let ptr = unsafe { allocator.alloc_with_recovery_metadata(allocation_layout, metadata) };
+        assert!(!ptr.is_null());
+        unsafe {
+            core::ptr::write_bytes(ptr, 0xA5, allocation_layout.size());
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, allocation_layout),
+            Some(metadata)
+        );
+
+        let validation_before = semantic_metadata_validation_snapshot();
+        let cache_before = type_isolation_side_cache_snapshot();
+        let delayed_before = delayed_free_snapshot();
+        let record_count_before = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        let result = unsafe {
+            SemanticAlloc::realloc_with_split_metadata(
+                &allocator,
+                ptr,
+                wrong_old_layout,
+                0,
+                metadata,
+                new_metadata,
+            )
+        };
+        let validation_after = semantic_metadata_validation_snapshot();
+        let cache_after = type_isolation_side_cache_snapshot();
+        let delayed_after = delayed_free_snapshot();
+        let record_count_after = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        let exact_record_after = lookup_auto_allocation_metadata(ptr, allocation_layout);
+        let wrong_record_after = lookup_auto_allocation_metadata(ptr, wrong_old_layout);
+        let wrong_cache_after = unsafe { pop_semantic_type_cache(wrong_old_layout, metadata) };
+
+        let payload_preserved = if result.is_null() {
+            let preserved = (0..allocation_layout.size())
+                .all(|offset| unsafe { ptr.add(offset).read_volatile() } == 0xA5);
+            unsafe {
+                allocator.dealloc_with_metadata(ptr, allocation_layout, metadata);
+            }
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(allocation_layout, metadata) },
+                Some(ptr),
+                "exact cleanup must consume the record and publish only under the allocation Layout"
+            );
+            unsafe {
+                allocator.dealloc_raw(ptr, allocation_layout);
+                clear_type_cache_for_test();
+            }
+            preserved
+        } else {
+            // A fail-first implementation returned a non-null zero-size
+            // sentinel while the old allocation remained live. Remove only the
+            // stale record before failing; do not assume it is safe to touch or
+            // release the old address after an unexpected success.
+            let _ = take_recorded_reallocation_old_metadata(ptr, allocation_layout);
+            false
+        };
+
+        assert!(
+            result.is_null(),
+            "direct SemanticAlloc split realloc must reject a live same-address/different-Layout record instead of returning a zero-size success sentinel"
+        );
+        assert_eq!(validation_after, validation_before);
+        assert_eq!(cache_after, cache_before);
+        assert_eq!(delayed_after, delayed_before);
+        assert_eq!(record_count_after, record_count_before);
+        assert_eq!(exact_record_after, Some(metadata));
+        assert_eq!(wrong_record_after, None);
+        assert_eq!(wrong_cache_after, None);
+        assert!(
+            payload_preserved,
+            "mismatched semantic realloc changed payload"
+        );
     }
 
     #[test]
