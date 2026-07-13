@@ -24695,6 +24695,194 @@ mod tests {
     }
 
     #[test]
+    fn delayed_flush_segregated_cache_rejection_preserves_delayed_owner() {
+        struct SegregatedRejectionFixtureGuard;
+
+        impl SegregatedRejectionFixtureGuard {
+            fn clear(&mut self) {
+                unsafe {
+                    INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry::empty();
+                    INLINE_SEGREGATED_TYPE_CACHE_ENTRY_SECOND = SegregatedTypeCacheEntry::empty();
+                    set_segregated_type_cache_bucket_retained_bytes(
+                        SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                        0,
+                        false,
+                    );
+                }
+            }
+        }
+
+        impl Drop for SegregatedRejectionFixtureGuard {
+            fn drop(&mut self) {
+                self.clear();
+            }
+        }
+
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xD17A_5E61)
+            .with_module(0xC0DE_5E61)
+            .with_callsite(0xA110_5E61)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED | FLAG_DELAYED_FREE);
+        let (retained_tx, retained_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (released_tx, released_rx) = std::sync::mpsc::channel();
+        let owner = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert!(!ptr.is_null());
+            unsafe {
+                ptr.write_bytes(0xA9, layout.size());
+                alloc.dealloc_with_metadata(ptr, layout, metadata);
+            }
+            assert!(global_delayed_free_contains_ptr(ptr));
+            assert!(!global_type_cache_contains_ptr(ptr));
+
+            let mut fixture_guard = SegregatedRejectionFixtureGuard;
+            unsafe {
+                // Fill the two inline positions with structurally valid,
+                // distinct synthetic fixture keys, then make the bucket
+                // aggregate budget reject growth.  The fixture pointers are
+                // registry-free keys only: they are never dereferenced or
+                // released and are removed before the post-release snapshot.
+                let first_fixture_metadata = AllocationMetadata::for_type(0xF17E_5E61)
+                    .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+                let second_fixture_metadata = AllocationMetadata::for_type(0xF17E_5E62)
+                    .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+                INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry::new(
+                    type_cache_identity_key(first_fixture_metadata),
+                    segregated_type_cache_policy_key(first_fixture_metadata),
+                    0x5100_0000usize as *mut u8,
+                    layout,
+                    first_fixture_metadata,
+                );
+                INLINE_SEGREGATED_TYPE_CACHE_ENTRY_SECOND = SegregatedTypeCacheEntry::new(
+                    type_cache_identity_key(second_fixture_metadata),
+                    segregated_type_cache_policy_key(second_fixture_metadata),
+                    0x5200_0000usize as *mut u8,
+                    layout,
+                    second_fixture_metadata,
+                );
+                set_segregated_type_cache_bucket_retained_bytes(
+                    SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                    MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES,
+                    true,
+                );
+            }
+            retained_tx.send(ptr as usize).unwrap();
+            release_rx.recv().unwrap();
+
+            unsafe {
+                release_delayed_free_for_test(&alloc);
+            }
+            fixture_guard.clear();
+            let side_cache = metadata_segregation_side_cache_snapshot();
+            assert_eq!(side_cache.occupied_entries, 0);
+            assert_eq!(side_cache.corrupt_buckets, 0);
+            assert!(!global_delayed_free_contains_ptr(ptr));
+            assert!(!global_type_cache_contains_ptr(ptr));
+
+            // A duplicate backend release can publish the same free-list node
+            // twice.  Two immediate raw allocations on the releasing thread
+            // must therefore remain distinct and independently writable.
+            let first = unsafe { alloc.alloc_raw(layout) };
+            let second = unsafe { alloc.alloc_raw(layout) };
+            assert!(!first.is_null() && !second.is_null());
+            assert_ne!(
+                first, second,
+                "terminal raw release published a duplicate free-list node"
+            );
+            unsafe {
+                first.write_bytes(0x51, layout.size());
+                second.write_bytes(0xA2, layout.size());
+                for offset in 0..layout.size() {
+                    assert_eq!(first.add(offset).read(), 0x51);
+                    assert_eq!(second.add(offset).read(), 0xA2);
+                }
+                dealloc_unique_test_pair(&alloc, layout, first, second);
+            }
+            released_tx.send(()).unwrap();
+        });
+
+        let ptr = retained_rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("owner should publish delayed metadata-segregated pointer")
+            as *mut u8;
+        assert!(global_delayed_free_contains_ptr(ptr));
+        assert!(!global_type_cache_contains_ptr(ptr));
+        let phase = &TEST_DELAYED_TERMINAL_RELEASE_PHASE;
+        let phase_guard = TerminalReleasePhaseGuard::arm(phase);
+        release_tx.send(()).unwrap();
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while phase.load(Ordering::Acquire) != 2 {
+            if std::time::Instant::now() >= deadline {
+                phase_guard.release_owner();
+                let _ = released_rx
+                    .recv_timeout(std::time::Duration::from_secs(10))
+                    .unwrap_or_else(|_| std::process::abort());
+                owner
+                    .join()
+                    .expect("timed-out delayed segregated-rejection owner");
+                phase_guard.reset();
+                panic!("delayed segregated rejection did not reach the raw-release boundary");
+            }
+            thread::yield_now();
+        }
+
+        assert!(
+            global_delayed_free_contains_ptr(ptr),
+            "delayed ownership must remain published across the sole backend release"
+        );
+        assert!(
+            !global_type_cache_contains_ptr(ptr),
+            "rejected segregated insertion must roll back temporary type-cache ownership"
+        );
+        assert_eq!(
+            GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            1
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        for offset in 0..layout.size() {
+            assert_eq!(unsafe { ptr.add(offset).read() }, 0xA9);
+        }
+        let duplicate_rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            reject_global_delayed_free_owned_pointer(ptr);
+        }))
+        .is_err();
+        assert!(
+            duplicate_rejected,
+            "a foreign reclaimer must not race the delayed owner's backend release"
+        );
+
+        phase_guard.release_owner();
+        released_rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("owner should complete delayed segregated-rejection release");
+        owner.join().expect("delayed segregated-rejection owner");
+        phase_guard.reset();
+
+        assert!(!global_delayed_free_contains_ptr(ptr));
+        assert!(!global_type_cache_contains_ptr(ptr));
+        assert_eq!(
+            GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            0
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
     fn delayed_to_type_handoff_rejects_forced_reclaim_entrypoint_race() {
         let _guard = test_guard();
         let _cleanup = SemanticStateCleanup;
