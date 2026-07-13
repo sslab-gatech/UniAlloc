@@ -2595,6 +2595,8 @@ static GLOBAL_DELAYED_FREE_OWNERSHIP: [Mutex<GlobalDelayedFreeOwnershipTable>;
     Mutex::new(GlobalDelayedFreeOwnershipTable::empty()),
 ];
 static GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_DELAYED_TO_TYPE_RECLAIM_PHASE: AtomicUsize = AtomicUsize::new(0);
 
 static GLOBAL_TYPE_CACHE_OWNERSHIP: [Mutex<GlobalTypeCacheOwnershipTable>;
     GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT] = [
@@ -9352,6 +9354,8 @@ fn reject_global_type_cache_owned_pointer(ptr: *mut u8) {
     if global_type_cache_contains_ptr(ptr) {
         panic!("type-cache pointer already retained");
     }
+    #[cfg(test)]
+    pause_after_type_cache_reclaim_miss_for_test();
 }
 
 #[cfg(test)]
@@ -9419,16 +9423,46 @@ fn global_delayed_free_contains_ptr(ptr: *mut u8) -> bool {
         .any(|candidate| *candidate == ptr_key)
 }
 
+#[cfg(test)]
+fn pause_after_type_cache_reclaim_miss_for_test() {
+    if TEST_DELAYED_TO_TYPE_RECLAIM_PHASE
+        .compare_exchange(1, 2, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        while TEST_DELAYED_TO_TYPE_RECLAIM_PHASE.load(Ordering::Acquire) == 2 {
+            core::hint::spin_loop();
+        }
+    }
+}
+
+#[cfg(test)]
+fn reject_missed_delayed_to_type_handoff_for_test() {
+    if TEST_DELAYED_TO_TYPE_RECLAIM_PHASE
+        .compare_exchange(3, 4, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        TEST_DELAYED_TO_TYPE_RECLAIM_PHASE.store(0, Ordering::Release);
+        panic!("test ownership guard missed delayed-to-type handoff");
+    }
+}
+
 /// Fail-stop before a caller can read, resize, release, or otherwise reclaim a
 /// pointer whose delayed-free ownership has already been published by another
 /// thread. Raw and trait-level allocator entry points call this in addition to
 /// the metadata-aware deallocation transaction.
 #[inline]
 pub(crate) fn reject_global_delayed_free_owned_pointer(ptr: *mut u8) {
-    reject_global_type_cache_owned_pointer(ptr);
+    // `release_delayed_slot` publishes type-cache ownership before retiring
+    // delayed-free ownership. Inspect those domains in the matching order: a
+    // caller that observes delayed-free retirement is then guaranteed to make
+    // its later type-cache observation after publication. Type-first would let
+    // a caller observe the two opposite sides of the overlap and miss both.
     if global_delayed_free_contains_ptr(ptr) {
         panic!("delayed-free pointer already quarantined");
     }
+    reject_global_type_cache_owned_pointer(ptr);
+    #[cfg(test)]
+    reject_missed_delayed_to_type_handoff_for_test();
 }
 
 fn register_global_delayed_free_ownership(ptr: *mut u8) -> GlobalDelayedFreeRegistration {
@@ -10500,11 +10534,11 @@ impl RustAllocator {
         metadata: AllocationMetadata,
         consume_recovery_record: bool,
     ) {
-        // Type-cache ownership is process-visible even though the payload cache
-        // itself is TLS. Reject a duplicate before recovery-record consumption,
-        // statistics, cache mutation, or raw release can publish the same address
-        // under a second owner.
-        reject_global_type_cache_owned_pointer(ptr);
+        // Both delayed-free and type-cache ownership are process-visible even
+        // though their payload stores are TLS. Use the common delayed-first
+        // guard before recovery-record consumption, statistics, cache mutation,
+        // or raw release can publish the same address under a second owner.
+        reject_global_delayed_free_owned_pointer(ptr);
 
         // Local TLS state remains a defensive authority if a stale/corrupt
         // test or older caller produced an entry without the process-visible
@@ -12803,6 +12837,51 @@ mod tests {
                 clear_delayed_free_for_test();
             }
             semantic_stats_recording_disable();
+        }
+    }
+
+    struct DelayedToTypeReclaimPhaseGuard;
+
+    impl DelayedToTypeReclaimPhaseGuard {
+        fn arm() -> Self {
+            assert!(
+                TEST_DELAYED_TO_TYPE_RECLAIM_PHASE
+                    .compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok(),
+                "delayed-to-type reclaim test phase must start idle"
+            );
+            Self
+        }
+
+        fn release_worker(&self) {
+            TEST_DELAYED_TO_TYPE_RECLAIM_PHASE.store(3, Ordering::Release);
+        }
+
+        fn reset(&self) {
+            TEST_DELAYED_TO_TYPE_RECLAIM_PHASE.store(0, Ordering::Release);
+        }
+    }
+
+    impl Drop for DelayedToTypeReclaimPhaseGuard {
+        fn drop(&mut self) {
+            loop {
+                let phase = TEST_DELAYED_TO_TYPE_RECLAIM_PHASE.load(Ordering::Acquire);
+                let next = match phase {
+                    0 => return,
+                    1 => 0,
+                    2 => 3,
+                    // The worker resets these states after consuming the
+                    // synthetic missed-handoff sentinel.
+                    3 | 4 => return,
+                    _ => 0,
+                };
+                if TEST_DELAYED_TO_TYPE_RECLAIM_PHASE
+                    .compare_exchange(phase, next, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+                {
+                    return;
+                }
+            }
         }
     }
 
@@ -24122,6 +24201,201 @@ mod tests {
             !duplicate.1,
             "a foreign thread must not reuse storage while another thread quarantines it"
         );
+    }
+
+    #[test]
+    fn delayed_to_type_handoff_rejects_forced_reclaim_entrypoint_race() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let delayed_metadata = AllocationMetadata::for_type(0xD17A_D0B7)
+            .with_module(0xC0DE_D0B7)
+            .with_callsite(0xA110_D0B7)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE);
+        let immediate_metadata = delayed_metadata.with_flags(FLAG_TYPE_ISOLATED);
+        let mutating_bypass_metadata = delayed_metadata.with_flags(FLAG_FORCE_INITIALIZE);
+
+        for (action, sentinel) in [
+            ("raw", 0xA7),
+            ("trait", 0x5C),
+            ("semantic", 0xE4),
+            ("resolved", 0xD3),
+        ] {
+            let ptr = unsafe { alloc.alloc_with_metadata(layout, delayed_metadata) };
+            assert!(!ptr.is_null());
+            unsafe {
+                ptr.write_bytes(sentinel, layout.size());
+                alloc.dealloc_with_metadata(ptr, layout, delayed_metadata);
+            }
+            assert!(global_delayed_free_contains_ptr(ptr));
+            assert!(!global_type_cache_contains_ptr(ptr));
+
+            let phase_guard = DelayedToTypeReclaimPhaseGuard::arm();
+            let ptr_addr = ptr as usize;
+            let (outcome_tx, outcome_rx) = std::sync::mpsc::channel();
+            let worker = thread::spawn(move || {
+                let foreign_alloc = RustAllocator::new();
+                let foreign_ptr = ptr_addr as *mut u8;
+                let rejection = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                    match action {
+                        "raw" => foreign_alloc.dealloc_raw(foreign_ptr, layout),
+                        "trait" => <RustAllocator as GlobalAlloc>::dealloc(
+                            &foreign_alloc,
+                            foreign_ptr,
+                            layout,
+                        ),
+                        "resolved" => foreign_alloc.dealloc_with_resolved_metadata(
+                            foreign_ptr,
+                            layout,
+                            mutating_bypass_metadata,
+                            false,
+                        ),
+                        "semantic" => <RustAllocator as SemanticAlloc>::dealloc_with_metadata(
+                            &foreign_alloc,
+                            foreign_ptr,
+                            layout,
+                            immediate_metadata,
+                        ),
+                        _ => unreachable!(),
+                    }
+                }));
+                let outcome = match rejection {
+                    Ok(()) => 0,
+                    Err(payload) => {
+                        let message = payload
+                            .downcast_ref::<&str>()
+                            .copied()
+                            .or_else(|| {
+                                payload
+                                    .downcast_ref::<std::string::String>()
+                                    .map(|message| message.as_str())
+                            })
+                            .unwrap_or("unexpected non-string panic");
+                        match message {
+                            "delayed-free pointer already quarantined" => 1,
+                            "type-cache pointer already retained" => 2,
+                            "test ownership guard missed delayed-to-type handoff" => 3,
+                            _ => 4,
+                        }
+                    }
+                };
+                outcome_tx.send(outcome).unwrap();
+            });
+
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            let mut forced_handoff = false;
+            let mut early_outcome = None;
+            loop {
+                if TEST_DELAYED_TO_TYPE_RECLAIM_PHASE.load(Ordering::Acquire) == 2 {
+                    unsafe {
+                        release_delayed_free_for_test(&alloc);
+                    }
+                    phase_guard.release_worker();
+                    forced_handoff = true;
+                    break;
+                }
+                match outcome_rx.try_recv() {
+                    Ok(outcome) => {
+                        early_outcome = Some(outcome);
+                        break;
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        // A disconnected sender means the worker has already
+                        // terminated and cannot consume a synthetic resume.
+                        phase_guard.reset();
+                        unsafe {
+                            clear_delayed_free_for_test();
+                            clear_type_cache_for_test();
+                        }
+                        panic!("foreign reclaim worker disconnected")
+                    }
+                }
+                if std::time::Instant::now() >= deadline {
+                    phase_guard.release_worker();
+                    let _ = outcome_rx
+                        .recv_timeout(std::time::Duration::from_secs(10))
+                        .unwrap_or_else(|_| std::process::abort());
+                    worker.join().expect("timed-out foreign reclaim worker");
+                    phase_guard.reset();
+                    unsafe {
+                        clear_delayed_free_for_test();
+                        clear_type_cache_for_test();
+                    }
+                    panic!("foreign reclaim did not reach an ownership decision");
+                }
+                thread::yield_now();
+            }
+
+            let outcome = match early_outcome {
+                Some(outcome) => outcome,
+                None => match outcome_rx.recv_timeout(std::time::Duration::from_secs(10)) {
+                    Ok(outcome) => outcome,
+                    Err(_) => {
+                        phase_guard.release_worker();
+                        let _ = outcome_rx
+                            .recv_timeout(std::time::Duration::from_secs(10))
+                            .unwrap_or_else(|_| std::process::abort());
+                        worker.join().expect("released foreign reclaim worker");
+                        phase_guard.reset();
+                        unsafe {
+                            clear_delayed_free_for_test();
+                            clear_type_cache_for_test();
+                        }
+                        panic!("foreign reclaim did not finish after ownership handoff");
+                    }
+                },
+            };
+            worker.join().expect("foreign reclaim worker");
+            phase_guard.reset();
+
+            if outcome != 1 {
+                // A returned or unexpectedly panicking reclaim may already
+                // have released or moved the allocation. Retire only the
+                // test registries/TLS slots and deliberately leak the backing
+                // storage on this failing path; never inspect or free a
+                // potentially stale pointer.
+                unsafe {
+                    clear_delayed_free_for_test();
+                    clear_type_cache_for_test();
+                }
+                panic!(
+                    "{} reclaim produced ownership outcome {}; expected delayed-free fail-stop",
+                    action, outcome
+                );
+            }
+
+            if !forced_handoff {
+                unsafe {
+                    release_delayed_free_for_test(&alloc);
+                }
+            }
+            assert!(!global_delayed_free_contains_ptr(ptr));
+            assert!(global_type_cache_contains_ptr(ptr));
+            let released = unsafe {
+                pop_semantic_type_cache(layout, immediate_metadata)
+                    .expect("owner must retain the handed-off quarantine entry")
+            };
+            assert_eq!(released, ptr);
+            assert!(!global_type_cache_contains_ptr(ptr));
+            for offset in 0..layout.size() {
+                assert_eq!(unsafe { released.add(offset).read() }, sentinel);
+            }
+            unsafe {
+                alloc.dealloc_raw(released, layout);
+            }
+        }
     }
 
     #[test]
