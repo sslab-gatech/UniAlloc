@@ -476,7 +476,7 @@ Deep answer: backup slide number
 | **13. 如何证明真的用了 hugepage，而不是 ordinary-page fallback？** | Current HEAD 的 hugepage/ordinary domain 与 fallback tests 为 `17/17`，但本机 direct probe 没有观察到 real hugepage backing；macOS 返回 `KERN_INVALID_ARGUMENT`，因此 backing 仍是 missing。 | Domain separation/fallback PASS 不等于 mapping/backing PASS；需要合适 host 和与当前三对象 side-cache materialization 一致的 fresh probe。B13 |
 | **14. PAC 当前到底验证了什么？** | Current HEAD 验证了 allocator PAC metadata 的安全 software fallback 与 typed side-cache reuse；独立 `no_std` consumer contract 隔离了 std-only dev-dependencies，并允许用 `rust-src` 构建真实 arm64e allocator runtime probe。 | external ABI evidence 不能代替 allocator runtime；只有 source-bound arm64e `no_std` probe 才能支持 hardware functional evidence，且 C006 cost/percentage 仍 deferred。B12 |
 | **15. 72.17% 的 denominator 是什么？是当前数字吗？** | 原论文表述为标准 Rust `alloc` benchmark 中“72.17% of objects”；它不是当前 source-bound 已闭合数字。 | 若 raw evidence 未定义 event/object denominator，不自行改名；给原方法、fallback 与 current audit。B14/B18 |
-| **16. 为什么现在会看到 99.851437% coverage？** | Existing `430/430` compiler functional-coverage gate 是有限测试 inventory，不是性能或 whole-program coverage。历史 `99.851437%` 仍是 G001 freeze-bound evidence，未 rebind 到 current source；G002 的旧 `576df61...9bb9f8d...` one-shot 保留其精确 denominator，新的 `38b8b59...` current-source one-shot 单独报告静态 ownership transfer `6/6` 与动态 `1/1/0`，不能把它们换算或并入旧百分比。 | 先看 source digest、denominator、actual-rewrite/dynamic-execution evidence 和 evidence tier；不要跨 revision rebinding，也不要写成 performance claim。B18 |
+| **16. 为什么现在会看到 99.851437% coverage？** | Repository cargo-test hook observed `std_bench` test-mode `430/430` finite inventory；它不是 independent actual-wrapper compiler coverage、性能或 whole-program denominator，且无独立 log artifact。历史 `99.851437%` 仍是 G001 freeze-bound evidence，未 rebind 到 current source；G002 的旧 `576df61...9bb9f8d...` one-shot 保留其精确 denominator，新的 `38b8b59...` current-source one-shot 单独报告静态 ownership transfer `6/6` 与动态 `1/1/0`，不能把它们换算或并入旧百分比。 | 先看 source digest、denominator、actual-rewrite/dynamic-execution evidence 和 evidence tier；不要跨 revision rebinding，也不要写成 performance claim。B18 |
 | **17. Evaluation 是否公平？** | 需要相同 workload、baseline、配置、重复运行、明确 normalization、raw provenance 和 source binding 才能比较。 | 原论文旧 toolchain/hardware、simulation，以及没有单独 uncertainty/significance analysis 的限制必须主动说明。B14--B16 |
 | **18. Security benefit 真正测量了吗？** | 当前已有同 layout、跨线程 recovery、不同 trusted `type_id` 的 adversarial reuse regression，证明 covered cache path 的 cross-type address reuse 被阻断；plain cache 另有强制 lookup-key collision regression，但还不是系统性 exploit-success study。 | Same-type、fallback、identical/spoofed metadata、compiler type-ID collision 与真实 exploit corpus 尚未覆盖；下一步测 reuse-success rate 与 attacker capabilities。B19 |
 | **19. 当前源码支持五个平台吗？** | G002 已有 macOS functional PASS、Windows FLS Wine 10 runtime `3/3` PASS、current-source Redox build/codegen/ABI PASS、Rust-for-Linux 与 BlogOS current-source no_std final-link contracts PASS、历史 artifact-hash-bound Redox target runtime evidence（未捕获 source revision），以及 current fixed/hosted smoke；当前 Redox runtime、Rust-for-Linux kernel load/run 和 BlogOS boot validation 仍依赖外部 runner/assets。 | 使用 `0bd84c1` 引入的 runner，`38b8b59` fresh Windows cross-build 在 Wine 10 上闭合 A-current/B-delete、A-null/B-populated 与 current-owner exit 三个 bounded lifecycle；早期 Wine 8 缺 DLL 只是 runner blocker。local link contract 与 Wine 证据都不等于 native/current-HEAD 五平台实机闭合。B17/B18 |
@@ -659,9 +659,12 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   cache bypass `1`、insert/hit `0`，不发布目标 pointer，也不扰动既有 colliding
   owners。entrypoint tests 注入的是 registry state，而不是完整真实 cache
   insertion；pressure test 的对象是真实 allocation，但压力 keys 是 synthetic。
-  hosted/fixed targeted 均为 `3/3`，normal pre-commit gate 为 allocator `689/689`
-  与 compiler inventory `430/430`。这些结果只验证 already-published bounded
-  ownership state 的 dispatch/bypass 行为，不是通用 double-free、UAF、任意并发
+  hosted/fixed targeted 均为 `3/3`，normal pre-commit gate 为 allocator `689/689`；
+  repository cargo-test hook observed `std_bench` test-mode `430/430` finite
+  inventory。该 hook 结果不是 independent actual-wrapper compiler coverage 或
+  whole-program denominator，且无独立 log artifact；这些结果只验证
+  already-published bounded ownership state 的 dispatch/bypass 行为，不是通用
+  double-free、UAF、任意并发
   race 或 universal memory-safety proof，也没有 benchmark claim。
 - **single-owner `Result` Clone actual rewrite：** `55148cd`（格式收口
   `52342fb`）让普通 Rust
@@ -734,9 +737,9 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   `PathBuf` module mismatch 被 allocation-time identity 安全 correction，状态
   `recovery_corrected_non_exact`；因此这证明 bounded actual rewrite 与隔离机制
   在真实应用中执行，不证明 whole-program coverage、universal isolation 或性能。
-- **coverage / performance boundary：** existing compiler functional-coverage
-  gate 保持 `430/430`；它是有限测试 inventory，不是 whole-program 或 universal
-  coverage denominator，也不把历史 `99.851437%` 跨 source rebind。小规模三次
+- **coverage / performance boundary：** repository cargo-test hook observed `std_bench` test-mode `430/430` finite inventory；这不是
+  independent actual-wrapper compiler coverage、whole-program/universal denominator，
+  且无独立 log artifact，也不把历史 `99.851437%` 跨 source rebind。小规模
   benchmark 只用于 diagnostic optimization decision；full paper performance
   matrix 已由用户 scope change 明确 deferred，不从 reduced smoke runs 宣称论文
   百分比。
@@ -827,7 +830,7 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 
 **最终选择：** 把主 deck 做成“conventional Rust semantic gap → trusted optional compiler channel → bounded representative policy → retargetable boundary → evidence judgment”的单条论证。这样 slide 更容易制作，因为每页只服务一个假设；问答也更轻松，因为所有回答都能回到 H1/H2/H3、compatibility/TCB contract、evidence tier 和明确 boundary。
 
-## `ce52203` current-source presentation checkpoint
+## `982ee0b` current-source presentation checkpoint
 
 - **retained-cache fail-stop：** `e9d56f1` 用真实 retained typed entry 验证 raw
   dealloc/realloc 在 mutation 前 fail-stop，而 exact typed pop 仍精确取回并只做一次
@@ -857,4 +860,20 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   non-reuse、exact reuse、corrupt/dropped `0/0`。PathBuf mismatch 状态是
   `recovery_corrected_non_exact`。这是 instrumented/pinned functional evidence，
   不是 unmodified/universal application、performance 或 paper percentage claim；
-  `430/430` 也只是 finite compiler inventory，不是 whole-program coverage。
+  repository cargo-test hook observed `std_bench` test-mode `430/430` finite inventory；
+  这不是 independent actual-wrapper compiler coverage、whole-program denominator，且无
+  standalone log artifact。
+- **`982ee0b` type-cache safety regressions：** 16-thread same-key publication test
+  要求 exactly one owner (`Inserted` 一次、`Duplicate` 十五次、`Full` 零)，并回到
+  baseline；foreign-thread raw dealloc/realloc 对 real retained entry 在 allocator/TLS/
+  payload mutation 前 fail-stop，owner 随后 exact typed reuse、unregister、single
+  release。hosted 与 `fixed_heap` exact tests 均 PASS；这是 test-only bounded safety
+  evidence，不是 forged metadata、stale-pointer 或 universal linearizability proof。
+- **cross-thread + unwind probe 边界：** actual-wrapper probe 仍 pending independent
+  repair/review；现在只能作为 candidate follow-up 讲 manual placement + worker-thread
+  unwind + same-layout reuse oracle，不作为 accepted evidence。
+- **single-sample diagnostic performance：** default `16.59 ns/iter`、type isolation
+  `25.47 ns/iter`，ratio `1.5353` / `+53.526%`；n=1 each、Darwin/current
+  toolchain、layout-derived size/align identity、compiler-site replay disabled、无
+  median/range/variance。本轮不重复；这是 direction-only diagnostic，不是
+  compiler-pass overhead、stable regression、paper claim 或 publication-grade result。

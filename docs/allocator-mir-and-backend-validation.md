@@ -1937,8 +1937,10 @@ behavior for already-published bounded registry states. They are not a universal
 double-free or UAF detector, do not cover arbitrary races before or after
 ownership publication, and establish no general memory-safety or performance
 claim. Fresh hosted and fixed-heap targeted results are each `3/3`; the normal
-pre-commit gate then passed `689/689` allocator tests and the existing `430/430`
-compiler inventory.
+pre-commit gate then passed `689/689` allocator tests. The repository
+cargo-test hook also observed the `std_bench` test-mode finite inventory as
+`430/430`; that hook result has no standalone log artifact and is not an
+independent actual-wrapper compiler-coverage gate or whole-program denominator.
 
 Commit `654e1d7` adds
 `tools/unialloc-rustc-pass/test_mir_generic_vec_type_isolation_fail_closed.py`,
@@ -1972,7 +1974,10 @@ the recovered Producer address set exactly equals the original Producer set.
 This proves wrong-type non-reuse and complete same-type reuse for this bounded
 same-layout actual-rewrite fixture; it is not universal `Vec` coverage.
 
-Separately, the existing compiler functional-coverage gate remains `430/430`.
+Separately, the repository cargo-test hook observed the `std_bench` test-mode
+finite inventory as `430/430`; this is not an independent actual-wrapper
+compiler-coverage gate, not a whole-program denominator, and has no standalone
+log artifact.
 That denominator is a finite regression inventory, not whole-program or
 universal compiler coverage, and it does not rebind the historical
 `99.851437%` result to the current source. Small repeated measurements, such as
@@ -2085,7 +2090,7 @@ the ThreadCache change. It did not confirm the intended direction, so commit
 performed. These two one-shot values are diagnostic-only and support no stable
 percentage or paper claim.
 
-## Current-source presentation checkpoint at `ce52203`
+## Current-source presentation checkpoint at `982ee0b`
 
 The `ce52203` tree includes three additional bounded type-isolation security
 closures. Commit `e9d56f1` retains a real typed allocation in the type cache,
@@ -2140,8 +2145,37 @@ non-reuse and exact-type reuse with corrupt/dropped `0/0`. The one PathBuf
 mismatch is safely allocation-record corrected, so the whole-run status remains
 `recovery_corrected_non_exact`, not exact pairing.
 
-This is a pinned, instrumented real-application functional check, not an
-unmodified universal application result, whole-program proof, benchmark, or
-performance claim. The compiler `430/430` gate is a finite regression inventory,
-not whole-program coverage. No timing, paper percentage, or publication-grade
+Commit `982ee0b` adds two type-cache safety regressions without changing
+production code. The 16-thread publication test concurrently registers the same
+synthetic aligned key and requires exactly one owner (`Inserted` once,
+`Duplicate` fifteen times, `Full` zero), with the ownership count returning to
+baseline. The foreign-thread retained-entry test deallocates a real typed
+allocation into the owner thread cache, then proves that raw deallocation and raw
+reallocation from a foreign thread fail-stop before allocator, TLS, or payload
+mutation; the owner then performs exact typed reuse, unregisters the entry, and
+releases the allocation once. Hosted and `fixed_heap` exact tests pass for both
+regressions. These are test-only bounded safety checks, not arbitrary forged
+metadata, stale-pointer, or universal linearizability proofs.
+
+The cross-thread + unwind actual-wrapper probe is tracked separately and remains
+pending independent repair/review for this checkpoint. Until that review lands,
+it should be described only as a candidate follow-up for combining manual
+placement, worker-thread panic recovery, and same-layout non-reuse/reuse oracles;
+it is not current accepted evidence.
+
+A single-sample diagnostic measured `vec::bench_with_capacity_1000` on this
+Darwin/current-toolchain setup as default `16.59 ns/iter` and type isolation
+`25.47 ns/iter` (ratio `1.5353`, `+53.526%`). Each variant ran once only; there
+is no median, range, or variance. The type-isolation harness used
+layout-derived size/align identity with compiler-site replay disabled. This is
+diagnostic direction only, not compiler-pass overhead, a stable regression
+percentage, a benchmark claim, or paper evidence. The checkpoint does not repeat
+this benchmark.
+
+This is pinned, instrumented real-application and bounded regression evidence,
+not an unmodified universal application result, whole-program proof, benchmark,
+or performance claim. The repository cargo-test hook observed the `std_bench`
+test-mode finite inventory as `430/430`, but this has no standalone log artifact
+and is not an independent actual-wrapper compiler-coverage gate or
+whole-program denominator. No timing, paper percentage, or publication-grade
 performance conclusion is made from this checkpoint.
