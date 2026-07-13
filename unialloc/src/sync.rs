@@ -91,7 +91,11 @@ impl<'a, T: ?Sized> Drop for PthreadMutexGuard<'a, T> {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
     use super::*;
+    use std::sync::{mpsc, Arc};
+    use std::thread;
 
     #[test]
     fn pthread_mutex_try_lock_reports_busy_and_guard_drop_releases() {
@@ -113,5 +117,59 @@ mod tests {
 
         let final_guard = mutex.lock();
         assert_eq!(*final_guard, 8);
+    }
+
+    #[test]
+    fn pthread_mutex_cross_thread_handoff_preserves_exclusion_and_visibility() {
+        let mutex = Arc::new(PthreadMutex::new(0usize));
+        let (held_tx, held_rx) = mpsc::sync_channel(0);
+        let (release_tx, release_rx) = mpsc::sync_channel(0);
+
+        let holder_mutex = Arc::clone(&mutex);
+        let holder = thread::spawn(move || {
+            let mut guard = holder_mutex.lock();
+            *guard = 1;
+            held_tx
+                .send(())
+                .expect("test coordinator dropped before observing the held lock");
+            release_rx
+                .recv()
+                .expect("test coordinator dropped before releasing the holder");
+            assert_eq!(
+                *guard, 1,
+                "protected data changed while the holder owned the mutex"
+            );
+            drop(guard);
+        });
+
+        held_rx
+            .recv()
+            .expect("holder exited before publishing its protected write");
+        assert!(
+            mutex.try_lock().is_none(),
+            "another thread acquired the mutex while the holder guard was live"
+        );
+
+        let observer_mutex = Arc::clone(&mutex);
+        let observer = thread::spawn(move || {
+            let mut guard = observer_mutex.lock();
+            assert_eq!(
+                *guard, 1,
+                "the acquiring thread did not observe the holder's protected write"
+            );
+            *guard = 2;
+        });
+
+        release_tx
+            .send(())
+            .expect("holder exited before the coordinated handoff");
+        holder.join().expect("holder thread panicked");
+        observer.join().expect("observer thread panicked");
+
+        let final_guard = mutex.lock();
+        assert_eq!(
+            *final_guard, 2,
+            "observer's protected write was not visible after the handoff"
+        );
     }
 }
