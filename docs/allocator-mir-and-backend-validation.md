@@ -1432,3 +1432,48 @@ are `2/1`, and PAC sign/verification/failure counts are `3/2/0`.  This closes
 the local allocator-runtime PAC functionality lane while preserving the safe
 fallback on non-arm64e targets.  It does not measure PAC cost, so the optional
 C006 performance percentage remains deferred.
+
+## Presentation-ready type-isolation evidence at `41205d3`
+
+- **Realistic actual rewrite and placement isolation (`f007c7b`).** One generated
+  `ingest/transform/storage/handoff` Cargo application runs through the real
+  `RUSTC_WRAPPER`: four allocation scopes and one `String::into_bytes` transfer
+  are actually applied, compiler identities match runtime rows, and the
+  String/Vec plus same-layout Box/Vec oracles show wrong-identity non-reuse and
+  exact-identity reuse with fallback/raw/mismatch/corrupt/dropped all zero. A
+  real `thread::spawn(move || ...)` body automatically receives placement
+  `0x8000` / `auto_cross_thread_escape`, while its local control remains
+  placement `0` / `default`; cross-to-local non-reuse and exact reuse in both
+  classes pass, with typed alloc/dealloc/hit/insert `3/4/2/4`.
+
+- **Pinned-nightly and exact split support (`38dfe17`, `522c7f5`).** The first
+  commit restores the historical `alloc_c_string` feature gate for the pinned
+  pre-release 1.64 nightly without enabling it on current rustc. The second
+  treats only exact `str::Split` and `SplitInclusive` as borrowed non-owners in
+  the by-value hazard scan. Current and pinned actual-rustc regressions apply
+  both `collect::<Vec<&str>>()` scopes, preserve wrong-type non-reuse and
+  exact-type reuse, and keep a custom raw-pointer iterator fail closed; the
+  relevant fallback/raw/mismatch/corrupt counters are zero.
+
+- **Test hygiene (`41205d3`).** Delayed-free regressions now install
+  `SemanticStateCleanup`, and the test that temporarily extracts a delayed slot
+  retains `PendingGlobalDelayedFreeOwnership` until release. This prevents
+  test-order/state leakage; it is not a new production-behavior claim.
+
+- **Current-source Oxipng one-shot (`41205d3`).** The pinned-nightly build/run
+  returns `0/0` and output SHA-256 is `565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`.
+  Direct/scope/Drop are `6/369/320`, static transfer is `12/12`, runtime transfer
+  is `3/1/2`, typed allocations are `873/1070`, fallback allocations are `197`,
+  there are 58 runtime rows and 527 fail-closed rows, corrupt/dropped are `0/0`,
+  and the injected wrong-type non-reuse / same-type reuse oracle passes. The one
+  whole-run mismatch is preserved as `recovery_corrected_non_exact`. Artifact:
+  `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-typeiso-41205d3-20260712a/`;
+  summary SHA-256
+  `c95808092c197b01399d4723e52e47c92478c8dafd5c498148fa70560c2dc7f4`.
+  Versus the prior `46d5aaa` summary, `+2` applied scopes and `-2` fail-closed
+  rows are a direct arithmetic inference matching the two new exact Split rows,
+  not a coverage percentage or performance result.
+
+These entries are source-bound only to `41205d3`. They make no timing or
+performance claim and do not establish whole-program, universal, or natural-
+application isolation.
