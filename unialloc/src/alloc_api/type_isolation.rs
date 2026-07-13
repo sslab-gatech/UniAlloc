@@ -23270,6 +23270,152 @@ mod tests {
         }
     }
 
+    #[test]
+    fn retained_type_cache_ownership_rejects_raw_reclaim_and_preserves_exact_reuse() {
+        const CHILD_ENV: &str = "UNIALLOC_RETAINED_TYPE_CACHE_RAW_GUARD";
+        const TEST_NAME: &str = concat!(
+            "alloc_api::type_isolation::tests::",
+            "retained_type_cache_ownership_rejects_raw_reclaim_and_preserves_exact_reuse"
+        );
+
+        if let Some(action) = std::env::var_os(CHILD_ENV) {
+            let action = action.to_str().expect("ASCII child action");
+            let _guard = test_guard();
+            let _cleanup = SemanticStateCleanup;
+            unsafe {
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+                clear_auto_allocation_records();
+            }
+            semantic_auto_metadata_disable();
+            semantic_stats_recording_disable();
+            semantic_type_stats_recording_disable();
+
+            let alloc = RustAllocator::new();
+            let layout =
+                Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+            let metadata = AllocationMetadata::for_type(0xD0B1_EF05)
+                .with_module(0xC0DE_D0B5)
+                .with_callsite(0xA110_D0B5)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let sentinel = match action {
+                "dealloc" => 0xA5,
+                "realloc" => 0x5A,
+                other => panic!("unknown raw reclaim action: {}", other),
+            };
+
+            let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert!(!ptr.is_null());
+            unsafe {
+                ptr.write_bytes(sentinel, layout.size());
+                alloc.dealloc_with_metadata(ptr, layout, metadata);
+            }
+
+            let retained = unsafe { inline_type_cache_entry_snapshot_for_test() };
+            assert_eq!(retained.ptr, ptr);
+            assert_eq!(
+                retained.identity,
+                TypeCacheIdentity::from_metadata(metadata)
+            );
+            assert!(global_type_cache_contains_ptr(ptr));
+            assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+
+            // Each action runs in its own process. If a missing guard reclaims
+            // the retained pointer, fail without touching that pointer again;
+            // process exit contains the leaked/stale test-only cache state.
+            let rejection = match action {
+                "dealloc" => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                    alloc.dealloc_raw(ptr, layout);
+                })),
+                "realloc" => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                    let _ = alloc.realloc_raw(ptr, layout, layout.size() * 4);
+                })),
+                _ => unreachable!(),
+            };
+            let payload = match rejection {
+                Err(payload) => payload,
+                Ok(()) => {
+                    let marker: &[u8] = match action {
+                        "dealloc" => b"UNIALLOC_RETAINED_CACHE_RAW_DEALLOC_RETURNED\n",
+                        "realloc" => b"UNIALLOC_RETAINED_CACHE_RAW_REALLOC_RETURNED\n",
+                        _ => unreachable!(),
+                    };
+                    let _ = std::io::Write::write_all(&mut std::io::stderr(), marker);
+                    std::process::abort();
+                }
+            };
+            let expected = payload
+                .downcast_ref::<&str>()
+                .is_some_and(|message| *message == "type-cache pointer already retained")
+                || payload
+                    .downcast_ref::<std::string::String>()
+                    .is_some_and(|message| message == "type-cache pointer already retained");
+            if !expected {
+                let _ = std::io::Write::write_all(
+                    &mut std::io::stderr(),
+                    b"UNIALLOC_RETAINED_CACHE_RAW_UNEXPECTED_PANIC\n",
+                );
+                std::process::abort();
+            }
+
+            // The exact ownership guard fires before registry, cache-entry, or
+            // payload mutation. An exact typed pop must then retire ownership
+            // and return the original allocation for one terminal raw release.
+            let retained_after_rejection = unsafe { inline_type_cache_entry_snapshot_for_test() };
+            assert_eq!(retained_after_rejection.ptr, ptr);
+            assert_eq!(
+                retained_after_rejection.identity,
+                TypeCacheIdentity::from_metadata(metadata)
+            );
+            assert!(global_type_cache_contains_ptr(ptr));
+            assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+            for offset in 0..layout.size() {
+                assert_eq!(unsafe { ptr.add(offset).read() }, sentinel);
+            }
+
+            let reused = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert_eq!(reused, ptr);
+            assert!(!global_type_cache_contains_ptr(reused));
+            assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+            assert!(unsafe { inline_type_cache_entry_snapshot_for_test() }.is_empty());
+            for offset in 0..layout.size() {
+                assert_eq!(unsafe { reused.add(offset).read() }, sentinel);
+            }
+            unsafe {
+                alloc.dealloc_raw(reused, layout);
+            }
+            std::eprintln!("UNIALLOC_RETAINED_TYPE_CACHE_RAW_GUARD_OK:{}", action);
+            return;
+        }
+
+        for action in ["dealloc", "realloc"] {
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("current type-isolation test executable"),
+            )
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .env(CHILD_ENV, action)
+            .env("RUST_BACKTRACE", "0")
+            .output()
+            .expect("spawn isolated retained-cache raw-reclaim regression");
+            let stderr = std::string::String::from_utf8_lossy(&output.stderr);
+            assert!(
+                output.status.success(),
+                "retained-cache raw {} child failed: {}",
+                action,
+                stderr
+            );
+            assert!(
+                stderr.contains(&std::format!(
+                    "UNIALLOC_RETAINED_TYPE_CACHE_RAW_GUARD_OK:{}",
+                    action
+                )),
+                "retained-cache raw {} child omitted its completion marker: {}",
+                action,
+                stderr
+            );
+        }
+    }
+
     #[cfg(feature = "stats")]
     #[test]
     fn type_cache_registry_pressure_bypasses_real_semantic_free() {
