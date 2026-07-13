@@ -25,11 +25,29 @@ use spin::{Mutex, RwLock};
 
 /// No semantic information was available for this allocation site.
 pub const UNKNOWN_SEMANTIC_ID: u64 = 0;
+/// Empty side-table records deliberately carry no valid allocation layout.
+///
+/// Record liveness is determined by the pointer/key/active sentinel before a
+/// layout is reconstructed. Keeping the unused layout fields zero makes the
+/// static tables demand-zero data instead of a large initialized TLS/image
+/// payload for applications that do not enable semantic policies.
+const EMPTY_LAYOUT_ALIGN: usize = 0;
 const FNV1A_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV1A_PRIME: u64 = 0x0000_0100_0000_01b3;
 const TYPE_CACHE_SLOTS: usize = 64;
 const TYPE_CACHE_PROBE_LIMIT: usize = 4;
 const MAX_TYPE_CACHE_DEPTH: usize = 64;
+/// Per-bucket metadata-segregated cache depth.
+///
+/// Two inline entries already cover the common alternating pair. Four cold
+/// entries per bucket retain bounded reuse without reserving eight full
+/// authenticated metadata records in every thread; excess frees safely bypass
+/// the cache and return to the ordinary allocator.
+#[cfg(not(feature = "fixed_heap"))]
+const SEGREGATED_TYPE_CACHE_DEPTH: usize = 4;
+/// Fixed-heap targets have no hosted spill mapping and keep the prior cache
+/// geometry; this RSS optimization is for hosted per-thread TLS.
+#[cfg(feature = "fixed_heap")]
 const SEGREGATED_TYPE_CACHE_DEPTH: usize = 8;
 const SEGREGATED_TYPE_CACHE_PROBE_LIMIT: usize = 4;
 const SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY: u8 = 0;
@@ -57,16 +75,20 @@ pub const MAX_DELAYED_FREE_RETAINED_BYTES: usize = 256 * 1024;
 /// Memory tagging is a guarded/debug-style policy.  Keeping 1024 full
 /// `TaggedAllocation` records in every thread and again in the global table was
 /// a large fixed cost for a feature that already has correctness-preserving
-/// overflow pages on hosted targets.  A 256-entry fast tier stays power-of-two
-/// for cheap hashing and is currently 16KiB on 64-bit targets; overflow keeps
+/// overflow pages on hosted targets. A hosted 128-entry fast tier stays power-of-two
+/// for cheap hashing and is currently 8KiB on 64-bit targets; overflow keeps
 /// uncommon high-cardinality tag sets correct without reserving the whole side
-/// table up front.
+/// table up front. Fixed-heap builds retain the prior 256-entry capacity because
+/// they cannot allocate hosted overflow pages.
+#[cfg(not(feature = "fixed_heap"))]
+const MEMORY_TAG_FAST_SLOTS: usize = 128;
+#[cfg(feature = "fixed_heap")]
 const MEMORY_TAG_FAST_SLOTS: usize = 256;
 const MEMORY_TAG_FAST_PROBE_LIMIT: usize = 16;
 /// Cross-thread memory-tag records are sharded to avoid one global lock.
 ///
 /// The total fast-tier footprint intentionally stays the same as the TLS table:
-/// 8 shards * 32 records = 256 records.  Hosted targets still have cold
+/// Hosted builds use 8 shards * 16 records = 128 records and retain cold
 /// overflow pages per shard when a bounded probe cannot place a record.
 const GLOBAL_MEMORY_TAG_SHARD_COUNT: usize = 8;
 const GLOBAL_MEMORY_TAG_SHARD_SLOTS: usize = MEMORY_TAG_FAST_SLOTS / GLOBAL_MEMORY_TAG_SHARD_COUNT;
@@ -90,11 +112,14 @@ const AUTO_ALLOCATION_RECORD_TOMBSTONE_PTR: usize = usize::MAX;
 const AUTO_ALLOCATION_RECORD_OVERFLOW_SLOTS: usize = 512;
 /// Same-thread compiler recovery is a TLS cache, not the full side table.
 ///
-/// Keep it deliberately small (256 records, currently 16KiB on 64-bit targets)
+/// Keep the hosted tier deliberately small (128 records, currently 8KiB on 64-bit targets)
 /// so every thread does not reserve a large fixed recovery table just because
 /// type-isolation support is compiled in.  When this bounded cache is full the
 /// existing sharded global recovery table remains the correctness-preserving
-/// spill path.
+/// spill path. Fixed-heap builds keep the prior 256-record fast tier.
+#[cfg(not(feature = "fixed_heap"))]
+const FAST_AUTO_ALLOCATION_RECORD_SLOTS: usize = 128;
+#[cfg(feature = "fixed_heap")]
 const FAST_AUTO_ALLOCATION_RECORD_SLOTS: usize = 256;
 const FAST_AUTO_ALLOCATION_RECORD_PROBE_LIMIT: usize = 4;
 const SEMANTIC_TYPE_STATS_SLOTS: usize = 512;
@@ -1284,7 +1309,7 @@ impl AutoLayoutMetadataHotSlot {
     const fn empty() -> Self {
         Self {
             size: 0,
-            align: 1,
+            align: EMPTY_LAYOUT_ALIGN,
             flags: 0,
             module_id: UNKNOWN_SEMANTIC_ID,
             callsite: 0,
@@ -1407,7 +1432,7 @@ impl MetadataRecordAuthHotSlot {
             seed: 0,
             ptr: 0,
             size: 0,
-            align: 1,
+            align: EMPTY_LAYOUT_ALIGN,
             metadata: AllocationMetadata::unknown(),
             auth: 0,
             active: false,
@@ -1447,7 +1472,7 @@ impl InlineTypeCacheEntry {
             identity: TypeCacheIdentity::unknown(),
             ptr: core::ptr::null_mut(),
             size: 0,
-            align: 1,
+            align: EMPTY_LAYOUT_ALIGN,
         }
     }
 
@@ -1542,7 +1567,7 @@ impl SegregatedTypeCacheEntry {
             policy_key: 0,
             ptr: core::ptr::null_mut(),
             size: 0,
-            align: 1,
+            align: EMPTY_LAYOUT_ALIGN,
             auth: 0,
             metadata: AllocationMetadata::unknown(),
         }
@@ -1791,7 +1816,7 @@ impl SegregatedTypeCacheHotBucket {
         Self {
             cache_key: UNKNOWN_SEMANTIC_ID,
             size: 0,
-            align: 1,
+            align: EMPTY_LAYOUT_ALIGN,
             policy_key: 0,
             cache_domain: SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
             bucket_idx: 0,
@@ -2306,7 +2331,7 @@ impl DelayedFreeSlot {
         Self {
             ptr: core::ptr::null_mut(),
             size: 0,
-            align: 1,
+            align: EMPTY_LAYOUT_ALIGN,
             auth: 0,
             metadata: AllocationMetadata::unknown(),
         }
@@ -2336,7 +2361,7 @@ impl TaggedAllocation {
         Self {
             ptr: core::ptr::null_mut(),
             size: 0,
-            align: 1,
+            align: EMPTY_LAYOUT_ALIGN,
             tag: UNKNOWN_SEMANTIC_ID,
             metadata: AllocationMetadata::unknown(),
         }
@@ -2545,7 +2570,7 @@ impl AutoAllocationRecord {
         Self {
             ptr: 0,
             size: 0,
-            align: 1,
+            align: EMPTY_LAYOUT_ALIGN,
             auth: 0,
             metadata: AllocationMetadata::unknown(),
         }
@@ -12229,6 +12254,86 @@ mod tests {
         semantic_test_guard()
     }
 
+    #[test]
+    fn empty_semantic_records_use_zero_field_initializers() {
+        let auto_layout = AutoLayoutMetadataHotSlot::empty();
+        assert_eq!((auto_layout.size, auto_layout.align), (0, 0));
+
+        let auth = MetadataRecordAuthHotSlot::empty();
+        assert_eq!(
+            (auth.seed, auth.ptr, auth.size, auth.align, auth.auth),
+            (0, 0, 0, 0, 0)
+        );
+        assert!(!auth.active);
+
+        let inline = InlineTypeCacheEntry::empty();
+        assert!(inline.ptr.is_null());
+        assert_eq!((inline.cache_key, inline.size, inline.align), (0, 0, 0));
+
+        let segregated = SegregatedTypeCacheEntry::empty();
+        assert!(segregated.ptr.is_null());
+        assert_eq!(
+            (
+                segregated.cache_key,
+                segregated.type_id,
+                segregated.policy_key,
+                segregated.size,
+                segregated.align,
+                segregated.auth,
+            ),
+            (0, 0, 0, 0, 0, 0)
+        );
+
+        let hot_bucket = SegregatedTypeCacheHotBucket::empty();
+        assert_eq!(
+            (
+                hot_bucket.cache_key,
+                hot_bucket.size,
+                hot_bucket.align,
+                hot_bucket.policy_key,
+                hot_bucket.cache_domain,
+                hot_bucket.bucket_idx,
+            ),
+            (0, 0, 0, 0, 0, 0)
+        );
+
+        let delayed = DelayedFreeSlot::empty();
+        assert!(delayed.ptr.is_null());
+        assert_eq!((delayed.size, delayed.align, delayed.auth), (0, 0, 0));
+
+        let tagged = TaggedAllocation::empty();
+        assert!(tagged.ptr.is_null());
+        assert_eq!((tagged.size, tagged.align, tagged.tag), (0, 0, 0));
+
+        let recovery = AutoAllocationRecord::empty();
+        assert_eq!(
+            (recovery.ptr, recovery.size, recovery.align, recovery.auth),
+            (0, 0, 0, 0)
+        );
+
+        assert_eq!(
+            TypeCacheIdentity::unknown(),
+            TypeCacheIdentity {
+                type_id: 0,
+                module_id: 0,
+                flags: 0,
+                lifetime_hint: 0,
+                placement_hint: 0,
+            }
+        );
+        assert_eq!(
+            AllocationMetadata::unknown(),
+            AllocationMetadata {
+                type_id: 0,
+                module_id: 0,
+                flags: 0,
+                lifetime_hint: 0,
+                placement_hint: 0,
+                callsite: 0,
+            }
+        );
+    }
+
     fn assert_delayed_free_snapshot_accounting(snapshot: DelayedFreeSnapshot) {
         assert_eq!(
             snapshot.tracked_retained_bytes, snapshot.retained_bytes,
@@ -12552,17 +12657,41 @@ mod tests {
     fn fast_auto_allocation_record_tls_cache_has_bounded_footprint() {
         let _guard = test_guard();
         let bytes = size_of::<[AutoAllocationRecord; FAST_AUTO_ALLOCATION_RECORD_SLOTS]>();
+        let max_bytes = if cfg!(feature = "fixed_heap") {
+            16 * 1024
+        } else {
+            8 * 1024
+        };
         assert!(
             FAST_AUTO_ALLOCATION_RECORD_SLOTS.is_power_of_two(),
             "open-addressed TLS recovery cache requires a power-of-two slot count"
         );
         assert!(
-            bytes <= 16 * 1024,
+            bytes <= max_bytes,
             "same-thread recovery cache should stay a small TLS hot cache, not a large per-thread side table"
         );
         assert!(
             FAST_AUTO_ALLOCATION_RECORD_SLOTS < AUTO_ALLOCATION_RECORD_SLOTS,
             "global sharded recovery table remains the spill path for many live records"
+        );
+    }
+
+    #[test]
+    fn metadata_segregated_bucket_table_has_bounded_tls_footprint() {
+        let bytes = size_of::<[SegregatedTypeCacheBucket; TYPE_CACHE_SLOTS]>();
+        let (max_depth, max_bytes) = if cfg!(feature = "fixed_heap") {
+            (8, 48 * 1024)
+        } else {
+            (4, 24 * 1024)
+        };
+        assert!(SEGREGATED_TYPE_CACHE_DEPTH.is_power_of_two());
+        assert!(
+            SEGREGATED_TYPE_CACHE_DEPTH <= max_depth,
+            "segregated cache depth must stay within the target-specific footprint budget"
+        );
+        assert!(
+            bytes <= max_bytes,
+            "metadata-segregated bucket table must stay within the target-specific footprint budget"
         );
     }
 
@@ -22813,6 +22942,11 @@ mod tests {
         let tls_fast_table_bytes = size_of::<[TaggedAllocation; MEMORY_TAG_FAST_SLOTS]>();
         let global_fast_table_bytes = GLOBAL_MEMORY_TAG_SHARD_COUNT
             * size_of::<[TaggedAllocation; GLOBAL_MEMORY_TAG_SHARD_SLOTS]>();
+        let max_fast_tier_bytes = if cfg!(feature = "fixed_heap") {
+            16 * 1024
+        } else {
+            8 * 1024
+        };
 
         assert!(
             MEMORY_TAG_FAST_SLOTS.is_power_of_two(),
@@ -22841,12 +22975,12 @@ mod tests {
             "8 global shards should keep the same aggregate fast-tier footprint"
         );
         assert!(
-            tls_fast_table_bytes <= 16 * 1024,
-            "memory-tag fast tier should not reserve more than 16KiB per TLS table"
+            tls_fast_table_bytes <= max_fast_tier_bytes,
+            "memory-tag fast tier must stay within the target-specific footprint budget"
         );
         assert!(
-            global_fast_table_bytes <= 16 * 1024,
-            "global shards should not reserve more than the old single-table footprint"
+            global_fast_table_bytes <= max_fast_tier_bytes,
+            "global shards should not reserve more than the TLS fast-tier footprint"
         );
     }
 
@@ -29426,28 +29560,27 @@ mod tests {
 
     #[test]
     fn segregated_type_cache_bucket_byte_budget_allows_replacement_but_rejects_growth() {
-        const EIGHTH_BUCKET_WORDS: usize =
-            (MAX_SEGREGATED_TYPE_CACHE_BUCKET_BYTES / 8) / core::mem::size_of::<usize>();
-        const QUARTER_BUCKET_WORDS: usize =
-            (MAX_SEGREGATED_TYPE_CACHE_BUCKET_BYTES / 4) / core::mem::size_of::<usize>();
+        const ENTRY_WORDS: usize = (MAX_SEGREGATED_TYPE_CACHE_BUCKET_BYTES
+            / SEGREGATED_TYPE_CACHE_DEPTH)
+            / core::mem::size_of::<usize>();
+        const LARGER_ENTRY_WORDS: usize =
+            (MAX_SEGREGATED_TYPE_CACHE_BUCKET_BYTES / 2) / core::mem::size_of::<usize>();
 
         let _guard = test_guard();
         unsafe {
             clear_type_cache_for_test();
             let metadata = AllocationMetadata::for_type(0xC003_5209)
                 .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
-            let small_layout = Layout::from_size_align(
-                EIGHTH_BUCKET_WORDS * size_of::<usize>(),
-                align_of::<usize>(),
-            )
-            .unwrap();
+            let small_layout =
+                Layout::from_size_align(ENTRY_WORDS * size_of::<usize>(), align_of::<usize>())
+                    .unwrap();
             let large_layout = Layout::from_size_align(
-                QUARTER_BUCKET_WORDS * size_of::<usize>(),
+                LARGER_ENTRY_WORDS * size_of::<usize>(),
                 align_of::<usize>(),
             )
             .unwrap();
-            let mut storage = [[0usize; EIGHTH_BUCKET_WORDS]; SEGREGATED_TYPE_CACHE_DEPTH];
-            let mut replacement = [0usize; EIGHTH_BUCKET_WORDS];
+            let mut storage = [[0usize; ENTRY_WORDS]; SEGREGATED_TYPE_CACHE_DEPTH];
+            let mut replacement = [0usize; ENTRY_WORDS];
             let mut bucket = SegregatedTypeCacheBucket::empty();
 
             for item in storage.iter_mut() {

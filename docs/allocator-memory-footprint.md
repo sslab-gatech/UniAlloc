@@ -120,6 +120,13 @@ identity.  They are bounded by retained bytes as well as entry counts:
   of 1,040 bytes per thread; callsite is intentionally excluded because cache
   reuse is allocation-site agnostic;
 - metadata-segregated buckets keep per-bucket retained-byte counters;
+- hosted metadata-segregated buckets retain four cold entries per bucket after
+  the two inline hot entries; excess frees bypass the cache and return to the
+  ordinary allocator rather than inflating every thread's TLS image;
+- hosted memory-tag and same-thread recovery fast tiers keep 128 records
+  (currently 8 KiB each on 64-bit targets) and preserve correctness through
+  their existing overflow/global spill paths; `fixed_heap` keeps the prior
+  larger capacities because hosted overflow mappings are unavailable there;
 - delayed-free quarantine has its own retained-byte budget;
 - hugepage metadata side-cache mappings are released when empty;
 - inline side-cache entries serve the common one-object reuse case without
@@ -127,6 +134,12 @@ identity.  They are bounded by retained bytes as well as entry counts:
 - ordinary and hugepage metadata keep separate one-entry inline hot slots, so a
   hot object in one domain does not force the other domain to allocate or scan a
   bucket table.
+
+Empty semantic side-table records use an all-zero field representation. Their
+zero alignment is intentionally not a valid `Layout`: pointer/key/active
+liveness is checked before layout reconstruction. This keeps inactive tables in
+demand-zero storage instead of embedding initialized records in every binary and
+thread image.
 
 The compiler metadata fast path uses the same cache classification policy as the
 generic semantic path after the compiler ABI has already proved the typed,
