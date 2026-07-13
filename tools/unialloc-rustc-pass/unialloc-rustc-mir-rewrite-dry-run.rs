@@ -2927,8 +2927,10 @@ fn exact_string_into_bytes_transfer_proof<'tcx>(
     destination_ty: Ty<'tcx>,
     argument_tys: &[Ty<'tcx>],
 ) -> Option<SemanticOwnershipTransferProof<'tcx>> {
-    if !exact_alloc_string_into_bytes_def_id(tcx, callee_def_id)
-        || !callee_generic_types.is_empty()
+    let exact_inherent_into_bytes = exact_alloc_string_into_bytes_def_id(tcx, callee_def_id);
+    let exact_from_string = exact_core_from_from_def_id(tcx, callee_def_id);
+    if (!exact_inherent_into_bytes && !exact_from_string)
+        || (exact_inherent_into_bytes && !callee_generic_types.is_empty())
         || argument_tys.len() != 1
         || clone_result_has_unresolved_params(destination_ty)
         || clone_result_has_unresolved_params(argument_tys[0])
@@ -2952,7 +2954,6 @@ fn exact_string_into_bytes_transfer_proof<'tcx>(
         _ => return None,
     };
     if !exact_alloc_adt_def_id(tcx, destination_def.did(), exact_alloc_vec_def_path)
-        || callee_def_id.krate != source_def.did().krate
         || destination_def.did().krate != source_def.did().krate
         || destination_args.len() != 2
     {
@@ -2969,6 +2970,21 @@ fn exact_string_into_bytes_transfer_proof<'tcx>(
         || allocator_def.did().krate != source_def.did().krate
         || !allocator_args.is_empty()
     {
+        return None;
+    }
+
+    // The inherent method has no type arguments and is defined in `alloc`.
+    // `Vec::<u8>::from(String)` instead lowers to the exact `core::convert::From::from`
+    // trait item with concrete `[Self = Vec<u8, Global>, T = String]` type
+    // arguments. Match that monomorphized pair structurally rather than by
+    // debug text so the current and pinned legacy printers may respectively
+    // show or omit the default allocator without widening to generic/custom
+    // conversions.
+    if exact_from_string {
+        if callee_generic_types != [destination_ty, source_ty] {
+            return None;
+        }
+    } else if callee_def_id.krate != source_def.did().krate {
         return None;
     }
 
@@ -4613,6 +4629,16 @@ mod tests {
         ));
         assert!(!exact_alloc_string_into_bytes_def_path(
             "my_crate::alloc::string::{impl#0}::into_bytes"
+        ));
+        assert!(exact_core_from_from_def_path(
+            "core[2f33]::convert::From::from"
+        ));
+        assert!(exact_core_from_from_def_path("std::convert::From::from"));
+        assert!(!exact_core_from_from_def_path(
+            "my_crate::core::convert::From::from"
+        ));
+        assert!(!exact_core_from_from_def_path(
+            "core::convert::From::from_ref"
         ));
         assert!(exact_alloc_cstring_into_bytes_with_nul_def_path(
             "alloc[d734]::ffi::c_str::{impl#1}::into_bytes_with_nul"
