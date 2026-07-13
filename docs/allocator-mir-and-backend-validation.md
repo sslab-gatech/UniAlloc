@@ -1477,3 +1477,31 @@ C006 performance percentage remains deferred.
 These entries are source-bound only to `41205d3`. They make no timing or
 performance claim and do not establish whole-program, universal, or natural-
 application isolation.
+
+## Exact HashSet allocation identity and composed split-realloc safety
+
+Commit `39c827b` closes an actual compiler false negative for ordinary
+`std::collections::HashSet::with_capacity`.  Before the repair, both current
+and paper-pinned rustc classified an outer `HashSet` whose element contained a
+`Vec` or `Box` as ambiguous and routed all three observed allocations through
+fallback/raw paths.  The exact matcher now requires the std DefId/path, exact
+HashSet destination, one `usize` argument, `RandomState`, and optional current
+`Global` allocator.  Current and pinned actual-wrapper probes each report typed
+alloc/dealloc `3/3`, cache hit/insert `1/3`, wrong-identity hit `0`, exact hit
+`1`, and zero fallback/raw/mismatch/corrupt counters.  Custom same-name,
+hashbrown, IndexSet, alternate-hasher, and allocator-specific constructors
+remain fail closed.  This is a bounded functional/cache-selection result, not
+external-application coverage or performance evidence.
+
+Commit `7ec42d4` adds a test-only cross-thread split-metadata realloc regression
+combining type isolation, memory tagging, delayed free, hugepage metadata, PAC,
+and process-visible recovery.  Stale caller old metadata cannot override the
+allocation record; the old recovery/tag state transfers transactionally, the
+moved-from pointer remains authenticated under its old hugepage/quarantine
+identity, duplicate free fails before stats/cache mutation, and the replacement
+is recoverable only under its distinct ordinary-domain identity.  Hosted and
+fixed-heap exact tests each pass `1/1`, with one audited old-identity mismatch,
+two exact recovery matches, zero authentication failures, and empty final
+recovery/tag/quarantine state.  The test found no production defect and does
+not establish arbitrary-size/error behavior, hardware PAC/hugepage execution,
+or performance.

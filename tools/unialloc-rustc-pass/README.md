@@ -648,3 +648,25 @@ nonzero compiler/runtime identities, wrong-type non-reuse, same-type exact
 recovery, one cache hit, and zero mismatch/corruption, while
 `Vec<String>::resize` remains ambiguous.  This is current-source bounded
 capacity-path evidence, not updated Oxipng coverage or performance evidence.
+
+### Exact `HashSet::with_capacity` outer-table regression
+
+`test_mir_hashset_with_capacity_outer_owner.py` drives an ordinary Cargo
+application through the actual `RUSTC_WRAPPER` on the selected toolchain.  It
+proves only exact std-owned `HashSet::<T>::with_capacity` with one `usize`
+argument, `RandomState`, and the optional current-rustc `Global` allocator.
+Nested heap owners inside `T` are not identities for the empty table allocation.
+`with_capacity_and_hasher`, `with_hasher`, allocator-specific constructors,
+hashbrown `HashSet`, `IndexSet`, and local same-name helpers remain fail closed.
+
+```sh
+python3 tools/unialloc-rustc-pass/test_mir_hashset_with_capacity_outer_owner.py
+UNIALLOC_RUSTC_TOOLCHAIN=nightly-2022-07-01 \
+  python3 tools/unialloc-rustc-pass/test_mir_hashset_with_capacity_outer_owner.py
+```
+
+The oracle checks distinct compiler identities, wrong-identity cache miss, exact
+identity cache hit, and zero fallback/raw/mismatch/corrupt counters.  Stable
+`HashSet` exposes no deterministic raw-table address, so this is bounded
+identity-directed cache-selection evidence, not universal address behavior,
+external-application coverage, or performance evidence.
