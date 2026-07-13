@@ -202,6 +202,9 @@ def valid_contract_stats() -> dict:
     return {
         "typed_allocations": 9,
         "fallback_allocations": 0,
+        "raw_alloc_no_metadata": 0,
+        "raw_dealloc_no_metadata": 0,
+        "raw_realloc_no_metadata": 0,
         "recovery_identity_mismatches": 0,
         "type_isolation_corrupt_slots": 0,
         "type_stats_rows": len(rows),
@@ -346,8 +349,12 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertIn("unialloc_address_oracle_producer_vec", main)
             self.assertIn("unialloc_address_oracle_wrong_type_vec", main)
             self.assertIn("semantic_ownership_transfer_snapshot", main)
+            self.assertIn("semantic_fallback_attribution_snapshot", main)
             self.assertIn("unialloc_ownership_transfer_before", main)
             self.assertIn("unialloc_ownership_transfer_after", main)
+            self.assertIn('\\"raw_alloc_no_metadata\\"', main)
+            self.assertIn('\\"raw_dealloc_no_metadata\\"', main)
+            self.assertIn('\\"raw_realloc_no_metadata\\"', main)
             self.assertIn('\\"address_oracle\\"', main)
             self.assertNotIn("0xC002", main)
             self.assertIn("extern crate unialloc;", (oxipng / "src" / "lib.rs").read_text(encoding="utf-8"))
@@ -702,6 +709,82 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
         self.assertEqual(address["wrong_type_drop_identity_count"], 1)
         self.assertIn("injected functional oracle", evidence["claim_boundary"])
         self.assertIn("not natural application coverage", evidence["claim_boundary"])
+
+    def test_contract_preserves_raw_metadata_counters_and_distinguishes_missing_from_zero(
+        self,
+    ) -> None:
+        cmd = smoke.CommandResult(["cmd"], 0, "", "")
+
+        reported_stats = valid_contract_stats()
+        reported_stats.update(
+            {
+                "raw_alloc_no_metadata": 7,
+                "raw_dealloc_no_metadata": 11,
+                "raw_realloc_no_metadata": 13,
+            }
+        )
+        reported = smoke.assert_contract(
+            build=cmd,
+            run=cmd,
+            stats=reported_stats,
+            output_sha256="a",
+            expected_output_sha256="a",
+            audits=valid_contract_audits(),
+            audit_totals=valid_contract_totals(),
+            fallback_note="reported fallback_allocations=0",
+        )["raw_metadata_runtime"]
+        self.assertEqual(reported["reporting_status"], "reported")
+        self.assertTrue(reported["complete"])
+        self.assertFalse(reported["all_zero"])
+        self.assertEqual(reported["raw_alloc_no_metadata"], 7)
+        self.assertEqual(reported["raw_dealloc_no_metadata"], 11)
+        self.assertEqual(reported["raw_realloc_no_metadata"], 13)
+        self.assertEqual(reported["missing_fields"], [])
+
+        zero = smoke.assert_contract(
+            build=cmd,
+            run=cmd,
+            stats=valid_contract_stats(),
+            output_sha256="a",
+            expected_output_sha256="a",
+            audits=valid_contract_audits(),
+            audit_totals=valid_contract_totals(),
+            fallback_note="reported fallback_allocations=0",
+        )["raw_metadata_runtime"]
+        self.assertEqual(zero["reporting_status"], "reported")
+        self.assertTrue(zero["all_zero"])
+
+        missing_stats = valid_contract_stats()
+        for field in (
+            "raw_alloc_no_metadata",
+            "raw_dealloc_no_metadata",
+            "raw_realloc_no_metadata",
+        ):
+            del missing_stats[field]
+        missing = smoke.assert_contract(
+            build=cmd,
+            run=cmd,
+            stats=missing_stats,
+            output_sha256="a",
+            expected_output_sha256="a",
+            audits=valid_contract_audits(),
+            audit_totals=valid_contract_totals(),
+            fallback_note="reported fallback_allocations=0",
+        )["raw_metadata_runtime"]
+        self.assertEqual(missing["reporting_status"], "missing")
+        self.assertFalse(missing["complete"])
+        self.assertIsNone(missing["all_zero"])
+        self.assertIsNone(missing["raw_alloc_no_metadata"])
+        self.assertIsNone(missing["raw_dealloc_no_metadata"])
+        self.assertIsNone(missing["raw_realloc_no_metadata"])
+        self.assertEqual(
+            missing["missing_fields"],
+            [
+                "raw_alloc_no_metadata",
+                "raw_dealloc_no_metadata",
+                "raw_realloc_no_metadata",
+            ],
+        )
 
     def test_address_oracle_fails_closed_without_compiler_derived_identity(self) -> None:
         cmd = smoke.CommandResult(["cmd"], 0, "", "")

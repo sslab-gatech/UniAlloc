@@ -31,6 +31,12 @@ DEFAULT_PINNED_CHECKOUT = ROOT / "evaluation" / "external" / "_checkouts" / "ext
 PASS_SOURCE = ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewrite-dry-run.rs"
 STATS_PREFIX = "UNIALLOC_STATS_JSON="
 OWNERSHIP_TRANSFER_RUNTIME_SOURCE = "instrumented-oxipng-workload-window"
+RAW_METADATA_RUNTIME_SOURCE = "semantic_fallback_attribution_snapshot"
+RAW_METADATA_COUNTER_FIELDS = (
+    "raw_alloc_no_metadata",
+    "raw_dealloc_no_metadata",
+    "raw_realloc_no_metadata",
+)
 SCOPED_STATUS_PATHS = [
     pathlib.Path("Cargo.toml"),
     pathlib.Path("Cargo.lock"),
@@ -213,7 +219,8 @@ def apply_instrumentation(oxipng: pathlib.Path, unialloc_crate: pathlib.Path) ->
     import_line = (
         "use std::fmt::Write as _;\n"
         "use unialloc::{semantic_stats_recording_disable, semantic_stats_recording_enable, "
-        "semantic_metadata_validation_snapshot, semantic_ownership_transfer_snapshot, "
+        "semantic_fallback_attribution_snapshot, semantic_metadata_validation_snapshot, "
+        "semantic_ownership_transfer_snapshot, "
         "semantic_stats_reset, semantic_stats_snapshot, "
         "semantic_type_stats_recording_disable, "
         "semantic_type_stats_recording_enable, semantic_type_stats_snapshot, "
@@ -401,6 +408,7 @@ fn unialloc_type_rows_json(
         "zero_dynamic_execution_observed"
     };
     let stats = semantic_stats_snapshot();
+    let fallback_attribution = semantic_fallback_attribution_snapshot();
     let metadata_validation = semantic_metadata_validation_snapshot();
     let side_cache = type_isolation_side_cache_snapshot();
     let mut rows = [SemanticTypeStatsSnapshot::empty(); 256];
@@ -409,12 +417,15 @@ fn unialloc_type_rows_json(
     semantic_stats_recording_disable();
     let type_rows_json = unialloc_type_rows_json(&rows, row_count);
     eprintln!(
-        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"recovery_identity_mismatches\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{},\"semantic_ownership_transfer\":{{\"source\":\"instrumented-oxipng-workload-window\",\"before\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"after\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"delta\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"accounting_complete\":{},\"dynamic_execution_observed\":{},\"execution_status\":\"{}\"}},\"address_oracle\":{{\"source\":\"injected-oxipng-type-isolation-address-oracle\",\"producer_first_address\":{},\"wrong_type_address\":{},\"producer_recovery_address\":{},\"element_size\":{},\"element_align\":{},\"capacity\":{},\"allocation_size\":{},\"wrong_type_not_reused\":{},\"same_type_reused\":{},\"recovery_identity_mismatches_before\":{},\"recovery_identity_mismatches_after\":{},\"corrupt_slots_after\":{}}},\"type_rows\":{}}}",
+        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"raw_alloc_no_metadata\":{},\"raw_dealloc_no_metadata\":{},\"raw_realloc_no_metadata\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"recovery_identity_mismatches\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{},\"semantic_ownership_transfer\":{{\"source\":\"instrumented-oxipng-workload-window\",\"before\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"after\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"delta\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"accounting_complete\":{},\"dynamic_execution_observed\":{},\"execution_status\":\"{}\"}},\"address_oracle\":{{\"source\":\"injected-oxipng-type-isolation-address-oracle\",\"producer_first_address\":{},\"wrong_type_address\":{},\"producer_recovery_address\":{},\"element_size\":{},\"element_align\":{},\"capacity\":{},\"allocation_size\":{},\"wrong_type_not_reused\":{},\"same_type_reused\":{},\"recovery_identity_mismatches_before\":{},\"recovery_identity_mismatches_after\":{},\"corrupt_slots_after\":{}}},\"type_rows\":{}}}",
         stats.total_allocations,
         stats.typed_allocations,
         stats.fallback_allocations,
         stats.typed_deallocations,
         stats.fallback_deallocations,
+        fallback_attribution.raw_alloc_no_metadata,
+        fallback_attribution.raw_dealloc_no_metadata,
+        fallback_attribution.raw_realloc_no_metadata,
         stats.typed_cache_hits,
         stats.typed_cache_inserts,
         stats.typed_cache_bypasses,
@@ -547,6 +558,42 @@ def parse_stats(stderr: str) -> dict[str, Any]:
     except json.JSONDecodeError as exc:
         raise SmokeError(f"invalid UniAlloc stats JSON: {exc}") from exc
     return value
+
+
+def raw_metadata_runtime_evidence(stats: dict[str, Any]) -> dict[str, Any]:
+    counters: dict[str, int | None] = {}
+    missing_fields: list[str] = []
+    for field in RAW_METADATA_COUNTER_FIELDS:
+        if field not in stats:
+            counters[field] = None
+            missing_fields.append(field)
+            continue
+        observed = stats[field]
+        if isinstance(observed, bool) or not isinstance(observed, int) or observed < 0:
+            raise SmokeError(
+                f"runtime {field} must be an explicit nonnegative integer when reported"
+            )
+        counters[field] = observed
+
+    complete = not missing_fields
+    if complete:
+        reporting_status = "reported"
+    elif len(missing_fields) == len(RAW_METADATA_COUNTER_FIELDS):
+        reporting_status = "missing"
+    else:
+        reporting_status = "partial"
+    return {
+        "source": RAW_METADATA_RUNTIME_SOURCE,
+        "reporting_status": reporting_status,
+        "complete": complete,
+        "missing_fields": missing_fields,
+        **counters,
+        "all_zero": (
+            all(counters[field] == 0 for field in RAW_METADATA_COUNTER_FIELDS)
+            if complete
+            else None
+        ),
+    }
 
 
 def ownership_transfer_counts(value: Any, *, label: str) -> dict[str, int]:
@@ -1065,6 +1112,7 @@ def validate_realapp_type_isolation(
     audit_totals: dict[str, int],
 ) -> dict[str, Any]:
     ownership_transfer_evidence = validate_semantic_ownership_transfer_runtime(stats)
+    raw_metadata_evidence = raw_metadata_runtime_evidence(stats)
     runtime_rows = stats.get("type_rows")
     if not isinstance(runtime_rows, list):
         raise SmokeError("runtime type-class rows must be explicitly reported")
@@ -1276,6 +1324,7 @@ def validate_realapp_type_isolation(
         "runtime_type_row_count": reported_runtime_rows,
         "matched_lifecycle_row_count": len(matched_lifecycle_rows),
         "semantic_ownership_transfer_runtime": ownership_transfer_evidence,
+        "raw_metadata_runtime": raw_metadata_evidence,
         "address_level_functional_oracle": address_oracle_evidence,
         "whole_run_recovery_identity_mismatches": whole_run_recovery_identity_mismatches,
         "whole_run_exact_compiler_identity": whole_run_recovery_identity_mismatches == 0,
@@ -1294,7 +1343,8 @@ def validate_realapp_type_isolation(
             "for the required address-level same-layout sequence; a natural-app same-layout pair "
             "is reported only when observed and is not a gate; whole-run recovery identity "
             "mismatches are preserved as recovery-corrected non-exact compiler attribution and "
-            "prevent an exact whole-application pairing claim; this is not natural application "
+            "prevent an exact whole-application pairing claim; raw no-metadata counters preserve "
+            "missing versus reported-zero semantics; this is not natural application "
             "coverage, whole-program/address universality, or performance evidence"
         ),
     }
@@ -1743,6 +1793,7 @@ def run_smoke(args: argparse.Namespace) -> dict[str, Any]:
             "semantic_ownership_transfer_runtime": type_isolation_evidence[
                 "semantic_ownership_transfer_runtime"
             ],
+            "raw_metadata_runtime": type_isolation_evidence["raw_metadata_runtime"],
             "type_isolation_evidence": type_isolation_evidence,
             "audits": audits,
         }
