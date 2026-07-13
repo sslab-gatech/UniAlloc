@@ -2229,15 +2229,19 @@ The C002 current-source finite compiler inventory remains `430/430`. It is a
 functional coverage gate, not a whole-program denominator, and it does not
 replace the actual-wrapper application evidence above.
 
-The realistic multi-module Cargo application was also rerun once against the
-code-bearing `b2d5eab` source through the actual `RUSTC_WRAPPER`/MIR pass. It
+The realistic multi-module Cargo application was first rerun against
+code-bearing `b2d5eab`, then rerun once after the terminal-ownership fix against
+code-bearing `1d0d13f` through the actual `RUSTC_WRAPPER`/MIR pass. The latter
 reports four actual scope rows, an applied String-to-Vec ownership transfer,
 Box/Vec wrong-versus-exact reuse, automatic cross-thread placement, and
 same-layout Producer/Consumer wrong-type non-reuse plus exact-type reuse.
 Fallback/raw paths, recovery mismatches, corrupt slots, and dropped statistic
-events are all zero. The result is preserved under
-`current-source-realistic-typeiso-b2d5eab-20260713` with result SHA-256
-`efecd93e579272c0fc3dbff14cead9c95dfac7d2d800df7efbd5897bf374c5c1`.
+events are all zero. The current result is preserved under
+`current-source-realistic-typeiso-1d0d13f-20260713` with result SHA-256
+`386a77c2b708e8ea77b265bed01a40b177111f2316f5b102c76b7f9660b8b323`.
+The earlier `b2d5eab` artifact and its
+`efecd93e579272c0fc3dbff14cead9c95dfac7d2d800df7efbd5897bf374c5c1`
+result remain retained as source-bound history rather than being rebound.
 This is one generated compiled-Rust application and not arbitrary external-app
 coverage, a whole-program denominator, a universal safety proof, or performance
 evidence.
