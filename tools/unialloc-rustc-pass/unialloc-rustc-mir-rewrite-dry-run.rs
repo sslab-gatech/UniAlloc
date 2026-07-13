@@ -5438,12 +5438,19 @@ fn semantic_scope_candidate_for_mir<'tcx>(
         return true;
     }
 
-    // Do not rely only on rustc debug text for candidate discovery.  Indirect
+    // Do not rely only on rustc debug text for candidate discovery. Indirect
     // calls, generic factories, and wrapper functions may not expose an owned
     // heap return marker in the callee text, while the MIR destination still has
-    // the exact rustc_middle type.  Actual lowering remains gated by the same
-    // heap-object solver used below, so non-heap returns stay out of evidence.
+    // the exact rustc_middle type. Preserve the existing first-owner signal for
+    // generic-argument hazards, then add the same complete owner-graph scan as
+    // the classifier below: the older helper cannot inspect concrete fields on
+    // current rustc and silently missed non-generic wrappers such as
+    // `struct Buffer { bytes: Vec<u8> }`. Structurally unresolved destinations
+    // remain explicit audit candidates; actual lowering still fails closed.
+    let destination_scan = heap_object_type_scan_from_ty(tcx, destination_ty);
     heap_object_type_from_ty(tcx, destination_ty).is_some()
+        || destination_scan.unresolved
+        || !destination_scan.owners.is_empty()
 }
 
 fn semantic_scope_explicit_drop_call(callee: &str) -> bool {
