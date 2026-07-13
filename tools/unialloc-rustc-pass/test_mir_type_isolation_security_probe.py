@@ -875,7 +875,9 @@ def validate_generic_drop_recovery_requirement(
             "audit_only_unresolved_heap_object_type"
         ), row
         assert row.get("semantic_object_type") == "<unknown-heap-object-type>", row
-        assert str(row.get("destination_type") or "") == "T", row
+        assert "drop::<T>" in str(row.get("callee") or ""), row
+        assert row.get("argument_types") == ["T"], row
+        assert str(row.get("destination_type") or "") == "()", row
         provider_exposure = "audit_only_unresolved_generic_drop_skip"
     else:
         assert not helper_rows, (
