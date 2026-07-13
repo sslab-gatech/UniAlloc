@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove exact ``<str as ToOwned>::to_owned`` scopes use String identity."""
+"""Prove exact byte-copy ``ToOwned::to_owned`` scopes use outer identity."""
 
 from __future__ import annotations
 
@@ -16,12 +16,14 @@ ROOT = Path(__file__).resolve().parents[2]
 PASS_SOURCE = ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
 PROBE_NAME = "str_to_owned_outer_owner_probe"
 STRING_FUNCTION = "make_string"
-VEC_FUNCTION = "make_vec"
-SLICE_NEGATIVE_FUNCTION = "slice_to_owned_negative"
+SLICE_FUNCTION = "slice_to_owned"
+WRONG_VEC_FUNCTION = "make_wrong_vec"
+CALLBACK_SLICE_NEGATIVE_FUNCTION = "callback_slice_to_owned_negative"
 CUSTOM_NEGATIVE_FUNCTION = "custom_to_owned_negative"
 GENERIC_NEGATIVE_FUNCTION = "generic_to_owned_negative"
 APPLIED_STATUS = "actual_semantic_scope_enter_exit_rewrite_applied"
 UNRESOLVED_CONTRACT = "audit_only_unresolved_heap_object_type"
+AMBIGUOUS_CONTRACT = "audit_only_ambiguous_heap_object_type"
 
 
 def run(
@@ -86,12 +88,17 @@ fn make_string(input: &str) -> String {
 }
 
 #[inline(never)]
-fn make_vec(capacity: usize) -> Vec<u8> {
+fn make_wrong_vec(capacity: usize) -> Vec<i8> {
     Vec::with_capacity(capacity)
 }
 
 #[inline(never)]
-fn slice_to_owned_negative(input: &[u8]) -> Vec<u8> {
+fn slice_to_owned(input: &[u8]) -> Vec<u8> {
+    input.to_owned()
+}
+
+#[inline(never)]
+fn callback_slice_to_owned_negative(input: &[String]) -> Vec<String> {
     input.to_owned()
 }
 
@@ -122,7 +129,8 @@ fn opaque_false() -> bool {
 fn main() {
     assert_eq!(PAYLOAD.len(), 192);
     if opaque_false() {
-        assert_eq!(slice_to_owned_negative(PAYLOAD.as_bytes()), PAYLOAD.as_bytes());
+        let callback_values = [String::new()];
+        assert_eq!(callback_slice_to_owned_negative(&callback_values).len(), 1);
         assert_eq!(custom_to_owned_negative(&Custom), "custom");
         assert_eq!(generic_to_owned_negative(PAYLOAD), PAYLOAD);
     }
@@ -136,19 +144,34 @@ fn main() {
     let first_type_id = semantic_stats_snapshot().last_type_id;
     drop(first);
 
-    let wrong = make_vec(PAYLOAD.len());
-    assert!(wrong.is_empty());
-    assert!(wrong.capacity() >= PAYLOAD.len());
-    let wrong_pointer = wrong.as_ptr() as usize;
-    let wrong_type_id = semantic_stats_snapshot().last_type_id;
-    drop(wrong);
+    let first_slice = slice_to_owned(PAYLOAD.as_bytes());
+    assert_eq!(first_slice, PAYLOAD.as_bytes());
+    assert_eq!(first_slice.capacity(), PAYLOAD.len());
+    let first_slice_pointer = first_slice.as_ptr() as usize;
+    let first_slice_type_id = semantic_stats_snapshot().last_type_id;
+    drop(first_slice);
+
+    let wrong_vec = make_wrong_vec(PAYLOAD.len());
+    assert!(wrong_vec.is_empty());
+    assert!(wrong_vec.capacity() >= PAYLOAD.len());
+    let wrong_vec_pointer = wrong_vec.as_ptr() as usize;
+    let wrong_vec_type_id = semantic_stats_snapshot().last_type_id;
+    drop(wrong_vec);
+
+    let recovered_slice = slice_to_owned(PAYLOAD.as_bytes());
+    assert_eq!(recovered_slice, PAYLOAD.as_bytes());
+    let recovered_slice_pointer = recovered_slice.as_ptr() as usize;
+    let recovered_slice_type_id = semantic_stats_snapshot().last_type_id;
+    drop(recovered_slice);
 
     let recovered = make_string(PAYLOAD);
     assert_eq!(recovered, PAYLOAD);
     let recovered_pointer = recovered.as_ptr() as usize;
     let recovered_type_id = semantic_stats_snapshot().last_type_id;
-    let wrong_type_non_reuse = wrong_pointer != first_pointer;
-    let exact_type_reuse = recovered_pointer == first_pointer;
+    let string_wrong_type_non_reuse = first_slice_pointer != first_pointer;
+    let string_exact_type_reuse = recovered_pointer == first_pointer;
+    let slice_wrong_vec_non_reuse = wrong_vec_pointer != first_slice_pointer;
+    let slice_exact_type_reuse = recovered_slice_pointer == first_slice_pointer;
     drop(recovered);
 
     let stats = semantic_stats_snapshot();
@@ -162,13 +185,19 @@ fn main() {
             "{{",
             "\"source\":\"str_to_owned_outer_owner_probe\",",
             "\"first_pointer\":{},",
-            "\"wrong_pointer\":{},",
             "\"recovered_pointer\":{},",
             "\"first_type_id\":{},",
-            "\"wrong_type_id\":{},",
             "\"recovered_type_id\":{},",
-            "\"wrong_type_non_reuse\":{},",
-            "\"exact_type_reuse\":{},",
+            "\"first_slice_pointer\":{},",
+            "\"wrong_vec_pointer\":{},",
+            "\"recovered_slice_pointer\":{},",
+            "\"first_slice_type_id\":{},",
+            "\"wrong_vec_type_id\":{},",
+            "\"recovered_slice_type_id\":{},",
+            "\"string_wrong_type_non_reuse\":{},",
+            "\"string_exact_type_reuse\":{},",
+            "\"slice_wrong_vec_non_reuse\":{},",
+            "\"slice_exact_type_reuse\":{},",
             "\"typed_allocations\":{},",
             "\"typed_deallocations\":{},",
             "\"typed_cache_hits\":{},",
@@ -182,13 +211,19 @@ fn main() {
             "}}"
         ),
         first_pointer,
-        wrong_pointer,
         recovered_pointer,
         first_type_id,
-        wrong_type_id,
         recovered_type_id,
-        wrong_type_non_reuse,
-        exact_type_reuse,
+        first_slice_pointer,
+        wrong_vec_pointer,
+        recovered_slice_pointer,
+        first_slice_type_id,
+        wrong_vec_type_id,
+        recovered_slice_type_id,
+        string_wrong_type_non_reuse,
+        string_exact_type_reuse,
+        slice_wrong_vec_non_reuse,
+        slice_exact_type_reuse,
         stats.typed_allocations,
         stats.typed_deallocations,
         stats.typed_cache_hits,
@@ -242,6 +277,14 @@ def assert_unresolved(row: dict[str, object]) -> None:
     assert row.get("metadata_pairing_contract") == UNRESOLVED_CONTRACT, row
 
 
+def assert_fail_closed(row: dict[str, object]) -> None:
+    assert row.get("rewrite_status") != APPLIED_STATUS, row
+    assert row.get("metadata_pairing_contract") in {
+        UNRESOLVED_CONTRACT,
+        AMBIGUOUS_CONTRACT,
+    }, row
+
+
 def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     summary = audit.get("summary")
     assert isinstance(summary, dict), summary
@@ -268,17 +311,36 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     assert int(string_row.get("type_id") or 0) != 0, string_row
     assert string_row.get("metadata_pairing_contract") == "semantic_scope_active_metadata", string_row
 
-    vec_matches = rows_for(rows, VEC_FUNCTION, "with_capacity")
-    assert len(vec_matches) == 1, vec_matches
-    vec_row = vec_matches[0]
-    assert vec_row.get("rewrite_status") == APPLIED_STATUS, vec_row
-    assert "Vec<u8" in str(vec_row.get("semantic_object_type") or ""), vec_row
-    assert int(vec_row.get("type_id") or 0) != 0, vec_row
-    assert int(string_row["type_id"]) != int(vec_row["type_id"]), (string_row, vec_row)
-
-    slice_matches = trait_to_owned_rows(rows, SLICE_NEGATIVE_FUNCTION)
+    slice_matches = trait_to_owned_rows(rows, SLICE_FUNCTION)
     assert len(slice_matches) == 1, slice_matches
-    assert_unresolved(slice_matches[0])
+    slice_row = slice_matches[0]
+    assert slice_row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite", slice_row
+    assert slice_row.get("rewrite_status") == APPLIED_STATUS, slice_row
+    assert "Vec<u8" in str(slice_row.get("semantic_object_type") or ""), slice_row
+    assert "[u8]" in json.dumps(slice_row.get("argument_types") or []), slice_row
+    assert int(slice_row.get("type_id") or 0) != 0, slice_row
+    assert slice_row.get("metadata_pairing_contract") == "semantic_scope_active_metadata", slice_row
+    assert int(string_row["type_id"]) != int(slice_row["type_id"]), (
+        string_row,
+        slice_row,
+    )
+
+    wrong_vec_matches = rows_for(rows, WRONG_VEC_FUNCTION, "with_capacity")
+    assert len(wrong_vec_matches) == 1, wrong_vec_matches
+    wrong_vec_row = wrong_vec_matches[0]
+    assert wrong_vec_row.get("rewrite_status") == APPLIED_STATUS, wrong_vec_row
+    assert "Vec<i8" in str(wrong_vec_row.get("semantic_object_type") or ""), wrong_vec_row
+    assert int(wrong_vec_row.get("type_id") or 0) != 0, wrong_vec_row
+    assert int(wrong_vec_row["type_id"]) not in {
+        int(string_row["type_id"]),
+        int(slice_row["type_id"]),
+    }, (string_row, slice_row, wrong_vec_row)
+
+    callback_slice_matches = trait_to_owned_rows(
+        rows, CALLBACK_SLICE_NEGATIVE_FUNCTION
+    )
+    assert len(callback_slice_matches) == 1, callback_slice_matches
+    assert_fail_closed(callback_slice_matches[0])
 
     generic_matches = trait_to_owned_rows(rows, GENERIC_NEGATIVE_FUNCTION)
     assert len(generic_matches) == 1, generic_matches
@@ -297,16 +359,24 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         for line in stdout.splitlines()
         if line.startswith("{") and PROBE_NAME in line
     )
-    assert runtime["wrong_type_non_reuse"] is True, runtime
-    assert runtime["exact_type_reuse"] is True, runtime
-    assert int(runtime["first_pointer"]) != int(runtime["wrong_pointer"]), runtime
+    assert runtime["string_wrong_type_non_reuse"] is True, runtime
+    assert runtime["string_exact_type_reuse"] is True, runtime
+    assert runtime["slice_wrong_vec_non_reuse"] is True, runtime
+    assert runtime["slice_exact_type_reuse"] is True, runtime
+    assert int(runtime["first_pointer"]) != int(runtime["first_slice_pointer"]), runtime
     assert int(runtime["first_pointer"]) == int(runtime["recovered_pointer"]), runtime
+    assert int(runtime["first_slice_pointer"]) != int(runtime["wrong_vec_pointer"]), runtime
+    assert int(runtime["first_slice_pointer"]) == int(
+        runtime["recovered_slice_pointer"]
+    ), runtime
     assert int(runtime["first_type_id"]) == int(string_row["type_id"]), runtime
-    assert int(runtime["wrong_type_id"]) == int(vec_row["type_id"]), runtime
     assert int(runtime["recovered_type_id"]) == int(string_row["type_id"]), runtime
-    assert int(runtime["typed_allocations"]) == 3, runtime
-    assert int(runtime["typed_deallocations"]) == 3, runtime
-    assert int(runtime["typed_cache_hits"]) == 1, runtime
+    assert int(runtime["first_slice_type_id"]) == int(slice_row["type_id"]), runtime
+    assert int(runtime["wrong_vec_type_id"]) == int(wrong_vec_row["type_id"]), runtime
+    assert int(runtime["recovered_slice_type_id"]) == int(slice_row["type_id"]), runtime
+    assert int(runtime["typed_allocations"]) == 5, runtime
+    assert int(runtime["typed_deallocations"]) == 5, runtime
+    assert int(runtime["typed_cache_hits"]) == 2, runtime
     for field in (
         "fallback_allocations",
         "fallback_deallocations",
@@ -323,8 +393,12 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
             key: string_row.get(key)
             for key in ("callee", "semantic_object_type", "type_id", "rewrite_status")
         },
-        "vec_control": {
-            key: vec_row.get(key)
+        "slice_to_owned": {
+            key: slice_row.get(key)
+            for key in ("callee", "semantic_object_type", "type_id", "rewrite_status")
+        },
+        "wrong_vec_control": {
+            key: wrong_vec_row.get(key)
             for key in ("callee", "semantic_object_type", "type_id", "rewrite_status")
         },
         "fail_closed_controls": {
@@ -333,7 +407,7 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
                 for key in ("callee", "rewrite_status", "metadata_pairing_contract")
             }
             for name, row in (
-                ("slice", slice_matches[0]),
+                ("callback_slice", callback_slice_matches[0]),
                 ("generic", generic_matches[0]),
                 ("custom", custom_matches[0]),
             )
@@ -429,8 +503,8 @@ def main() -> int:
                 "validated": True,
                 "evidence": evidence,
                 "boundaries": [
-                    "Exact alloc-owned ToOwned::to_owned monomorphized as String <- &str only; slice, generic, custom same-name, and arbitrary String factories remain fail closed.",
-                    "The address oracle covers one same-size String/Vec pair and exact typed-cache reuse in one process, not universal String safety or performance.",
+                    "Exact alloc-owned ToOwned::to_owned is scoped only for String <- &str and Global-backed Vec<u8> <- &[u8]; callback-bearing slices, generic calls, custom same-name methods, and arbitrary factories remain fail closed.",
+                    "The address oracle covers same-layout String/Vec<u8>/Vec<i8> allocations and exact typed-cache reuse in one process, not universal ToOwned safety or performance.",
                 ],
             },
             sort_keys=True,
