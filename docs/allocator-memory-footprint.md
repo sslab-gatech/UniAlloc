@@ -134,6 +134,13 @@ identity.  They are bounded by retained bytes as well as entry counts:
 - ordinary and hugepage metadata keep separate one-entry inline hot slots, so a
   hot object in one domain does not force the other domain to allocate or scan a
   bucket table.
+- retained semantic-cache pointers also enter the allocation-free,
+  process-visible ownership registry added by `a93cf97`: eight shards with
+  1,024 `usize` slots per shard on hosted targets and 128 per shard under
+  `fixed_heap`, with bounded probe limits 64 and 32 respectively. Duplicate
+  publication fail-stops; a full probe window bypasses the semantic cache and
+  returns the allocation through the raw allocator; tombstones preserve lookup
+  and later safe slot reuse.
 
 Empty semantic side-table records use an all-zero field representation. Their
 zero alignment is intentionally not a valid `Layout`: pointer/key/active
@@ -149,6 +156,19 @@ cache instead, while preserving neighbor probing for distinct colliding
 identities. Hosted and `fixed_heap` type-isolation suites pass, including a
 deterministic 512 KiB aggregate-cap regression that proves rejection does not
 replace or shift any cached owner.
+
+That process-visible type-cache ownership registry has a deterministic
+probe-window regression at `45c5e8c`. It fills one shard/probe window with
+`PROBE_LIMIT` synthetic aligned pointer keys, verifies that the next key returns
+`Full`, removes an interior owner, then proves that lookup and duplicate
+detection traverse the tombstone before the slot is reused. All keys are only
+hashed, stored, and compared; they are never dereferenced or deallocated. The
+test finishes with zero registered owners and passes in hosted and `fixed_heap`
+configurations. This bounds registry-pressure and deletion-chain correctness;
+it is not a universal address-collision or concurrent linearizability claim.
+The registry only prevents duplicate ownership while a pointer is retained by
+these caches; it is not universal stale-pointer or UAF detection and supplies
+no performance claim.
 
 A source-bound 64-thread diagnostic compares baseline `318b66c` with repaired
 current `25d316c` using the same release harness, host, toolchain, and input,

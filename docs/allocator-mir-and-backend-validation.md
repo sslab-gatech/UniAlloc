@@ -1941,6 +1941,30 @@ checks only. Full paper performance reproduction and its matrix are deferred
 by the explicit user scope change; reduced smoke runs make no publication-grade
 percentage claim.
 
+## Single-owner `Result` Clone actual-rewrite boundary
+
+Commit `55148cd` (with the formatting-only follow-up `52342fb`) extends the
+existing actual-`RUSTC_WRAPPER` Clone fixture with ordinary Rust
+`Result<Vec<ProducerPayload>, u8>::clone`. The compiler audit requires exactly
+one applied semantic scope rather than a planned-only row. The compiler and
+runtime Producer type id is `11653960357981974603`; the same-layout Consumer
+uses a distinct identity. Runtime typed allocation, deallocation, cache hit,
+and cache insert are `1/1/1/1`, while fallback and raw allocation/deallocation
+are zero. The clone buffer is distinct from the source, can recover retained
+Producer storage exactly, and cannot reuse Consumer storage.
+
+The same fixture keeps `Result<Vec<ProducerPayload>, String>::clone` ambiguous
+and fail closed through one raw allocation/deallocation. This positive/negative
+pair is source-bound under
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/result-clone-current-head-52342fbe-20260713/`;
+its `summary.json` SHA-256 is
+`b7bbe7e16249d594da895a6a170d1b85120176dc1d7513ca4406897e7919c3e9`.
+It proves only this bounded single-owner lowering and ambiguous fallback, not
+universal Clone/container coverage or performance. This final artifact is a
+current `nightly-2026-06-11` result. The one pinned-nightly attempt stopped on a
+pre-existing explicit `std::mem::drop` audit-shape validator boundary before it
+reached the new Result gate, so it is not pinned compatibility evidence.
+
 ## Current-source Oxipng and rejected ThreadCache diagnostic
 
 The latest claim-bearing source one-shot is bound to `f5c4fa4` in

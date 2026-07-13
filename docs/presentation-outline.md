@@ -641,6 +641,36 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   `685/685`、fixed-heap `650/650`。这是 retained-cache ownership 的 P0
   correctness closure，不是对任意已复用 stale pointer 的 universal detector，
   也不是性能结论。
+- **registry saturation / tombstone safety：** `45c5e8c` 的 deterministic
+  regression 构造同一 ownership shard/probe-window 的 `PROBE_LIMIT + 1` 个
+  synthetic aligned keys，验证 full window 返回 `Full`、删除中间 owner 后仍能
+  穿过 tombstone 查找/拒绝 duplicate、随后安全复用 tombstone，并在收尾时把
+  global ownership count 恢复为 `0`。这些 keys 只参与 hash/store/compare，绝不
+  dereference 或交给 allocator。hosted 与 `fixed_heap` exact regression 各
+  `1/1` PASS；这是 bounded registry-pressure correctness evidence，不是任意地址
+  空间碰撞或并发 linearizability 的通用证明。
+- **single-owner `Result` Clone actual rewrite：** `55148cd`（格式收口
+  `52342fb`）让普通 Rust
+  `Result<Vec<ProducerPayload>, u8>::clone` 通过 actual `RUSTC_WRAPPER` 得到
+  exactly one applied semantic scope。compiler/runtime type id 同为
+  `11653960357981974603`，same-layout Consumer identity 不同；runtime typed
+  alloc/dealloc/cache-hit/cache-insert 为 `1/1/1/1`，fallback/raw 为 `0`，clone
+  只精确复用 Producer storage、不得取得 Consumer storage。已有 ambiguous
+  `Result<Vec<ProducerPayload>, String>::clone` 仍保持一条 fail-closed raw
+  fallback。current-source artifact 位于
+  `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/result-clone-current-head-52342fbe-20260713/`，
+  `summary.json` SHA-256 为
+  `b7bbe7e16249d594da895a6a170d1b85120176dc1d7513ca4406897e7919c3e9`。
+  这是 current `nightly-2026-06-11` 上一个 supported single-owner 与一个
+  ambiguous negative control 的 bounded functional/security probe，不是
+  universal `Clone` coverage 或性能证据。不要宣称 pinned nightly PASS：该次
+  尝试在进入新 Result gate 前命中了既有 explicit `std::mem::drop` audit-shape
+  validator boundary。
+- **PAL mutex handoff：** `b197d4a` 的 OS-thread regression 使用零容量 channel
+  编排 holder/observer，不依赖 sleep 或 timing guess；它验证 holder 持锁时
+  `try_lock` 必须 busy，release 后 observer 能看到写入并把新值交回 main。
+  exact test `1/1`、`sync::tests` `2/2` PASS。这是当前 hosted pthread PAL 的
+  exclusion/visibility 功能证据，不替代其他平台 runtime 验证。
 - **真实 Cargo generic/concrete boundary：** `654e1d7` 的
   `test_mir_generic_vec_type_isolation_fail_closed.py` 创建真实 Cargo 应用，使用
   actual `RUSTC_WRAPPER`、`UNIALLOC_ACTUAL_MIR_REWRITE=1` 和
