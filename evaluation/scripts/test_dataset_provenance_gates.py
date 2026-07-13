@@ -239,6 +239,39 @@ class DatasetProvenanceGateTests(unittest.TestCase):
                 " ".join(fresh["blockers"]),
             )
 
+    def test_cached_dataset_finite_and_total_slot_counts_are_integrity_checked(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            root = pathlib.Path(raw_tmp)
+            fingerprint = source_fingerprint()
+            data_dir, _dataset, _provenance = write_source_fixture(
+                root / "source",
+                fingerprint,
+            )
+            args = argparse.Namespace(
+                data_dir=str(data_dir),
+                manifest=str(data_dir / "dataset-manifest.json"),
+                dataset=[DATASET_NAME],
+                quiet=True,
+            )
+            with isolated_dataset_environment(root, fingerprint=fingerprint) as (_, results, _):
+                self.assertEqual(evaluate.import_current_datasets(args), 0)
+                cached = evaluate.read_json(results / "current_datasets_summary.json")
+                cached_dataset = cached["datasets"][DATASET_NAME]
+                cached_dataset["finite_value_count"] = 999
+                cached_dataset["total_slot_count"] = 999
+
+                fresh = evaluate.fresh_current_dataset_integrity_status(
+                    cached,
+                    DATASET_NAME,
+                    current=fingerprint,
+                )
+
+            self.assertFalse(fresh["ready"])
+            self.assertEqual(
+                fresh["metric_mismatches"],
+                ["finite_value_count", "total_slot_count"],
+            )
+
     def test_cached_dataset_claim_state_is_recomputed_from_manifest_and_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp:
             root = pathlib.Path(raw_tmp)
@@ -348,6 +381,186 @@ class DatasetProvenanceGateTests(unittest.TestCase):
                 ]
             )
         )
+
+    def test_import_returns_nonzero_when_source_drifts_before_results_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            root = pathlib.Path(raw_tmp)
+            recorded = source_fingerprint(digest="c" * 64)
+            drifted = source_fingerprint(digest="d" * 64, dirty=True)
+            data_dir, _dataset, _provenance = write_source_fixture(
+                root / "source",
+                recorded,
+            )
+            paper_dir = root / "paper"
+            paper_dir.mkdir()
+            (paper_dir / DATASET_FILE).write_text(DATASET_TEXT, encoding="utf-8")
+            results = root / "results"
+            reports = root / "reports"
+            results.mkdir()
+            reports.mkdir()
+            args = argparse.Namespace(
+                data_dir=str(data_dir),
+                manifest=str(data_dir / "dataset-manifest.json"),
+                dataset=[DATASET_NAME],
+                quiet=True,
+                require_source_binding=True,
+            )
+
+            with (
+                mock.patch.object(evaluate, "RESULTS", results),
+                mock.patch.object(evaluate, "REPORTS", reports),
+                mock.patch.object(
+                    evaluate,
+                    "load_config",
+                    return_value=dataset_config(paper_dir),
+                ),
+                mock.patch.object(
+                    evaluate,
+                    "repository_source_fingerprint",
+                    side_effect=[recorded, drifted],
+                ) as fingerprint,
+            ):
+                status = evaluate.import_current_datasets(args)
+
+            self.assertEqual(fingerprint.call_count, 2)
+            self.assertEqual(status, 1)
+            summary = evaluate.read_json(results / "current_datasets_summary.json")
+            self.assertFalse(summary["source_binding_ready"], summary)
+            self.assertIn(
+                "does not match the current working tree",
+                " ".join(summary["evidence_source_binding_blockers"]),
+            )
+            dataset = summary["datasets"][DATASET_NAME]
+            self.assertFalse(dataset["claim_grade"], dataset)
+            self.assertFalse(dataset["scope"]["complete_for_claim"], dataset)
+            self.assertFalse(
+                dataset["scope"]["evidence_source_binding_ready"],
+                dataset,
+            )
+            self.assertIn(
+                "does not match the current working tree",
+                " ".join(dataset["scope"]["claim_grade_blockers"]),
+            )
+
+    def test_claim_grade_sample_import_propagates_post_manifest_source_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            root = pathlib.Path(raw_tmp)
+            recorded = source_fingerprint(digest="e" * 64)
+            drifted = source_fingerprint(digest="f" * 64, dirty=True)
+            paper_dir = root / "paper"
+            paper_dir.mkdir()
+            (paper_dir / DATASET_FILE).write_text(DATASET_TEXT, encoding="utf-8")
+            samples_path = root / "samples.jsonl"
+            samples_path.write_text(
+                json.dumps(
+                    {
+                        "dataset": DATASET_NAME,
+                        "benchmark": "Collections",
+                        "allocator": "unialloc",
+                        "run_index": 1,
+                        "success": True,
+                        "seconds": 1.0,
+                        "claim_grade": True,
+                        "evidence_source_fingerprint": recorded,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            out_dir = root / "import-data"
+            manifest_path = out_dir / "dataset-manifest.json"
+            results = root / "results"
+            reports = root / "reports"
+            results.mkdir()
+            reports.mkdir()
+            cfg = {
+                **dataset_config(paper_dir),
+                "methodology": {
+                    "runs_per_benchmark": 1,
+                    "warmup_runs_discarded": 0,
+                },
+            }
+            preflight = {
+                "summary": {
+                    "ready_for_claim_grade_import": True,
+                    "source_binding_ready": True,
+                },
+                "source_binding_ready": True,
+                "evidence_source_binding_blockers": [],
+                "evidence_source_fingerprint": recorded,
+            }
+            dataset = evaluate.dataset_from_rows(
+                str(samples_path),
+                ["jemalloc"],
+                [
+                    {
+                        "id": "1",
+                        "benchmark": "Collections",
+                        "values": {"jemalloc": 1.0},
+                    }
+                ],
+                scope={},
+            )
+            diagnostics = {
+                "missing_baselines": [],
+                "missing_cells": [],
+                "insufficient_samples": [],
+                "sample_claim_grade_blockers": [],
+            }
+            args = argparse.Namespace(
+                paper_dir=str(paper_dir),
+                samples=str(samples_path),
+                dataset=[DATASET_NAME],
+                run_id="post-manifest-source-drift",
+                output_dir=str(out_dir),
+                warmup=0,
+                claim_grade=True,
+                evidence=[],
+                import_results=True,
+                quiet=True,
+            )
+
+            def live_fingerprint() -> dict:
+                return drifted if manifest_path.exists() else recorded
+
+            with (
+                mock.patch.object(evaluate, "RESULTS", results),
+                mock.patch.object(evaluate, "REPORTS", reports),
+                mock.patch.object(evaluate, "load_config", return_value=cfg),
+                mock.patch.object(
+                    evaluate,
+                    "build_paper_performance_samples_audit",
+                    return_value=preflight,
+                ),
+                mock.patch.object(
+                    evaluate,
+                    "build_dataset_from_performance_samples",
+                    return_value=(dataset, diagnostics),
+                ),
+                mock.patch.object(
+                    evaluate,
+                    "repository_source_fingerprint",
+                    side_effect=live_fingerprint,
+                ),
+            ):
+                status = evaluate.import_paper_performance_samples(args)
+
+            self.assertEqual(status, 1)
+            summary = evaluate.read_json(out_dir / "sample-import-summary.json")
+            self.assertTrue(summary["import_results"]["attempted"], summary)
+            self.assertEqual(summary["import_results"]["status"], 1, summary)
+            self.assertFalse(summary["source_binding_ready"], summary)
+            self.assertIn(
+                "does not match the current working tree",
+                " ".join(summary["evidence_source_binding_blockers"]),
+            )
+            imported = evaluate.read_json(results / "current_datasets_summary.json")
+            imported_dataset = imported["datasets"][DATASET_NAME]
+            self.assertFalse(imported_dataset["claim_grade"], imported_dataset)
+            self.assertFalse(
+                imported_dataset["scope"]["complete_for_claim"],
+                imported_dataset,
+            )
 
 
 if __name__ == "__main__":

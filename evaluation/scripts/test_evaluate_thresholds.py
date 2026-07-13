@@ -86,6 +86,140 @@ def rpolars_zero_row_input_provenance(csv_path: pathlib.Path) -> dict:
     }
 
 
+def exact_source_contract_fixture() -> dict:
+    return {
+        "paper_exact_ref_complete": True,
+        "claim_grade_complete": True,
+        "exact_checkout_pin_complete": True,
+        "checkout_pin": {"pinned": True, "exact_pinned": True},
+        "blockers": [],
+    }
+
+
+def benchmark_owned_sample_evidence(tmp_path: pathlib.Path) -> dict:
+    evidence_path = tmp_path / "stdout.txt"
+    evidence_path.write_text("test bench_unit ... bench:  1,234 ns/iter (+/- 56)\n", encoding="utf-8")
+    return {"path": str(evidence_path), "sha256": hashlib.sha256(evidence_path.read_bytes()).hexdigest()}
+
+
+def roxipng_claim_grade_sample(
+    tmp_path: pathlib.Path,
+    *,
+    run_index: int = 1,
+    plan_fragment_id: str | None = None,
+) -> dict:
+    sample = {
+        "source": "paper-external-cargo-bench-json",
+        "success": True,
+        "dataset": "type_isolation",
+        "benchmark": "R-Oxipng*",
+        "allocator": "jemalloc",
+        "run_index": run_index,
+        "seconds": 0.001,
+        "ns_per_iter": 1234.0,
+        "benchmark_owned_json": True,
+        "measurement_source": "libtest_bench_stdout",
+        "claim_grade": True,
+        "claim_grade_scope": "roxipng-paper-equivalent-matrix-fragment",
+        "claim_grade_blockers": [],
+        "command": ["cargo", "bench", "--bench", "deflate"],
+        "host_system": "Linux",
+        "evidence": [benchmark_owned_sample_evidence(tmp_path)],
+        "bench_rows": [
+            {
+                "name": "bench_unit",
+                "ns_per_iter": 1234.0,
+                "measurement_source": "libtest_bench_stdout",
+                "cargo_bench_target": "deflate",
+            }
+        ],
+        "cargo_bench_targets": ["deflate"],
+        "source_contract": exact_source_contract_fixture(),
+        "source_provenance_class": "paper_exact_ref",
+        "evidence_source_fingerprint": evaluate.repository_source_fingerprint(),
+    }
+    if plan_fragment_id is not None:
+        sample["plan_fragment_id"] = plan_fragment_id
+    return sample
+
+
+class DatasetFiniteAccountingTests(unittest.TestCase):
+    def test_parse_dat_tracks_finite_values_separately_from_total_slots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "mixed.dat"
+            path.write_text(
+                "\n".join(
+                    [
+                        "# # jemalloc mimalloc",
+                        "1 Collections 1.25 nan",
+                        "2 R-Oxipng 2.50 inf",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            data = evaluate.parse_dat(path)
+
+        self.assertEqual(data["count"], 2)
+        self.assertEqual(data["finite_value_count"], 2)
+        self.assertEqual(data["total_slot_count"], 4)
+
+    def test_dataset_from_rows_tracks_finite_values_separately_from_total_slots(self) -> None:
+        data = evaluate.dataset_from_rows(
+            "fixture.dat",
+            ["jemalloc", "mimalloc"],
+            [
+                {"id": "1", "benchmark": "Collections", "values": {"jemalloc": 1.25, "mimalloc": float("nan")}},
+                {"id": "2", "benchmark": "R-Oxipng", "values": {"jemalloc": 2.50, "mimalloc": float("inf")}},
+            ],
+        )
+
+        self.assertEqual(data["count"], 2)
+        self.assertEqual(data["finite_value_count"], 2)
+        self.assertEqual(data["total_slot_count"], 4)
+
+    def test_sparse_dataset_uses_the_declared_column_grid_for_total_slots(self) -> None:
+        data = evaluate.dataset_from_rows(
+            "fixture.dat",
+            ["jemalloc", "mimalloc"],
+            [{"id": "1", "benchmark": "Collections", "values": {"jemalloc": 1.25}}],
+        )
+
+        self.assertEqual(data["count"], 1)
+        self.assertEqual(data["finite_value_count"], 1)
+        self.assertEqual(data["total_slot_count"], 2)
+        self.assertAlmostEqual(data["geomean"], 1.25)
+        self.assertLessEqual(data["count"], data["total_slot_count"])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "sparse.dat"
+            evaluate.write_dat(path, data)
+            reparsed = evaluate.parse_dat(path)
+
+        self.assertEqual(reparsed["count"], 1)
+        self.assertEqual(reparsed["finite_value_count"], 1)
+        self.assertEqual(reparsed["total_slot_count"], 2)
+
+    def test_markdown_report_distinguishes_finite_values_from_total_slots(self) -> None:
+        dataset = evaluate.dataset_from_rows(
+            "fixture.dat",
+            ["jemalloc", "mimalloc"],
+            [{"id": "1", "benchmark": "Collections", "values": {"jemalloc": 1.25}}],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = pathlib.Path(tmp) / "summary.md"
+            evaluate.write_markdown_report(
+                path,
+                {"generated_at": "fixture", "datasets": {"default_performance": dataset}},
+                source="current-datasets",
+            )
+            report = path.read_text(encoding="utf-8")
+
+        self.assertIn("| dataset | finite / total slots |", report)
+        self.assertIn("| default_performance | 1 / 2 |", report)
+
+
 class MixedJsonlSampleReadTests(unittest.TestCase):
     def test_sample_entries_tolerate_retained_benchmark_stdout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -3034,6 +3168,131 @@ def roxipng_test_workload(allocator: str, target: str, leaf: str = "") -> dict:
     return workload
 
 
+class PaperPerformanceSamplesRoxipngFragmentTests(unittest.TestCase):
+    def test_generic_samples_audit_rejects_unfolded_roxipng_fragments_sharing_cell_run_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = pathlib.Path(tmp)
+            required_cell = {
+                "dataset": "type_isolation",
+                "benchmark": "R-Oxipng*",
+                "allocator": "jemalloc",
+                "role": "paper",
+            }
+            samples_path = tmp_path / "samples.jsonl"
+            samples = [
+                roxipng_claim_grade_sample(
+                    tmp_path,
+                    run_index=1,
+                    plan_fragment_id=f"type_isolation|R-Oxipng*|jemalloc|deflate|leaf_{index}",
+                )
+                for index in range(6)
+            ]
+            samples_path.write_text(
+                "".join(json.dumps(sample) + "\n" for sample in samples),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(evaluate, "required_performance_sample_cells", return_value=([required_cell], [])):
+                audit = evaluate.build_paper_performance_samples_audit(
+                    cfg={"methodology": {"runs_per_benchmark": 6}},
+                    paper_dir=tmp_path,
+                    samples_path=samples_path,
+                    samples=samples,
+                    dataset_names=["type_isolation"],
+                    required_runs=6,
+                )
+
+        self.assertEqual(audit["summary"]["raw_covered_cell_count"], 0, audit)
+        self.assertEqual(audit["summary"]["usable_covered_cell_count"], 0, audit)
+        self.assertEqual(audit["summary"]["invalid_sample_count"], 6, audit)
+        self.assertEqual(audit["summary"]["missing_raw_cell_count"], 1, audit)
+        self.assertEqual(audit["summary"]["missing_usable_cell_count"], 1, audit)
+        self.assertFalse(audit["summary"]["ready_for_claim_grade_import"], audit)
+        self.assertEqual(len(audit["invalid_samples"]), 6, audit)
+        self.assertTrue(
+            all(
+                "requires specialized surface folding" in " ".join(record["issues"])
+                for record in audit["invalid_samples"]
+            ),
+            audit,
+        )
+        self.assertNotIn(
+            ("type_isolation", "R-Oxipng*", "jemalloc"),
+            evaluate.build_sample_groups(samples),
+        )
+
+    def test_generic_samples_audit_keeps_folded_roxipng_sample_without_plan_fragment_groupable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = pathlib.Path(tmp)
+            required_cell = {
+                "dataset": "type_isolation",
+                "benchmark": "R-Oxipng*",
+                "allocator": "jemalloc",
+                "role": "paper",
+            }
+            samples_path = tmp_path / "samples.jsonl"
+            sample = roxipng_claim_grade_sample(tmp_path, run_index=1)
+            samples_path.write_text(json.dumps(sample) + "\n", encoding="utf-8")
+
+            with mock.patch.object(evaluate, "required_performance_sample_cells", return_value=([required_cell], [])):
+                audit = evaluate.build_paper_performance_samples_audit(
+                    cfg={"methodology": {"runs_per_benchmark": 1}},
+                    paper_dir=tmp_path,
+                    samples_path=samples_path,
+                    samples=[sample],
+                    dataset_names=["type_isolation"],
+                    required_runs=1,
+                )
+
+        self.assertEqual(audit["summary"]["raw_covered_cell_count"], 1, audit)
+        self.assertEqual(audit["summary"]["usable_covered_cell_count"], 1, audit)
+        self.assertEqual(audit["summary"]["invalid_sample_count"], 0, audit)
+        self.assertTrue(audit["summary"]["ready_for_claim_grade_import"], audit)
+        self.assertEqual(
+            evaluate.build_sample_groups([sample])[("type_isolation", "R-Oxipng*", "jemalloc")],
+            [sample],
+        )
+
+    def test_nested_roxipng_plan_fragment_id_is_excluded_generically_and_preserved_for_specialized_folding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sample = roxipng_claim_grade_sample(pathlib.Path(tmp), run_index=1)
+            sample["metric_metadata"] = {
+                "child_record": {
+                    "plan_fragment_id": "type_isolation|R-Oxipng*|jemalloc|deflate|bench_unit"
+                }
+            }
+
+            self.assertTrue(evaluate.is_unfolded_roxipng_plan_fragment(sample))
+            self.assertEqual(evaluate.build_sample_groups([sample]), {})
+
+        fragment_only = {
+            "benchmark": "R-Oxipng*",
+            "metric_metadata": {
+                "child_record": {
+                    "plan_fragment_id": "type_isolation|R-Oxipng*|jemalloc|deflate|bench_unit"
+                }
+            },
+        }
+        self.assertEqual(
+            evaluate.roxipng_sample_fragment_keys(fragment_only),
+            ["type_isolation|R-Oxipng*|jemalloc|deflate|bench_unit"],
+        )
+
+    def test_non_roxipng_plan_fragment_id_remains_groupable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sample = roxipng_claim_grade_sample(
+                pathlib.Path(tmp),
+                run_index=1,
+                plan_fragment_id="type_isolation|Collections|jemalloc|fragment",
+            )
+            sample["benchmark"] = "Collections"
+
+            self.assertFalse(evaluate.is_unfolded_roxipng_plan_fragment(sample))
+            groups = evaluate.build_sample_groups([sample])
+
+        self.assertEqual(groups[("type_isolation", "Collections", "jemalloc")], [sample])
+
+
 class RoxipngPaperPlanTargetCommandTests(unittest.TestCase):
     def test_roxipng_target_split_plan_aligns_child_bench_target(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -3209,6 +3468,15 @@ class RoxipngClaimMatrixGapPlanTests(unittest.TestCase):
         )
         self.assertEqual(rendered[1], value[1])
         self.assertEqual(rendered[3], "3")
+
+    def test_roxipng_gap_run_commands_are_claim_grade_fail_closed(self) -> None:
+        commands = evaluate.roxipng_claim_gap_run_commands(
+            pathlib.Path("roxipng-gap-plan.json")
+        )
+
+        for name in ("one_record_probe", "fill_selected_gap_plan"):
+            with self.subTest(name=name):
+                self.assertIn("--claim-grade", commands[name])
 
     def test_raw_probe_selects_one_short_fragment_per_missing_cell(self) -> None:
         claim_matrix = {
@@ -3496,6 +3764,7 @@ class RoxipngClaimMatrixGapPlanTests(unittest.TestCase):
                 "cargo_bench_targets": ["deflate"],
                 "source_contract": source_contract,
                 "source_provenance_class": "paper_exact_ref",
+                "plan_fragment_id": "type_isolation|R-Oxipng*|jemalloc|deflate|bench_unit",
             }
             old_diagnostic = {
                 **base,
@@ -3544,6 +3813,11 @@ class RoxipngClaimMatrixGapPlanTests(unittest.TestCase):
         self.assertTrue(observed_run["claim_usable"], observed_run)
         self.assertEqual(observed_run["effective_claim_usable_record_count"], 1, observed_run)
         self.assertEqual(observed_run["effective_issues"], [], observed_run)
+        self.assertEqual(
+            [record["fragment_key"] for record in observed_run["effective_fragment_records"]],
+            ["deflate|bench_unit"],
+            observed_run,
+        )
 
 
 def pac_direct_hardware_fixture() -> dict:

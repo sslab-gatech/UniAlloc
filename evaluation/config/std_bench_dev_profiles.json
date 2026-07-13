@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "name": "std-bench-development-profiles",
+  "purpose": "Bounded real std_bench E2E presets for edit-test loops; never paper timing evidence.",
+  "claim_grade": false,
+  "default_profile": "quick-e2e",
+  "defaults": {
+    "recommended_libtest_mode": "test-once",
+    "recommended_libtest_fail_fast": true
+  },
+  "profiles": {
+    "quick-e2e": {
+      "purpose": "Default short real E2E check across three distinct allocator-facing collection paths.",
+      "recommended_timeout_seconds": 12,
+      "stop_policy": "Each leaf has a 12-second cap. Stop on the first failure or timeout and fix that case before broadening.",
+      "benchmarks": [
+        "binary_heap::bench_push",
+        "string::bench_exact_size_shrink_to_fit",
+        "vec::bench_with_capacity_1000"
+      ]
+    },
+    "family-smoke": {
+      "purpose": "Non-claim regression coverage across every top-level std_bench family.",
+      "recommended_timeout_seconds": 20,
+      "stop_policy": "Each leaf has a 20-second cap. Stop on the first failure or timeout; do not broaden to the full surface until the focused failure is fixed.",
+      "benchmarks": [
+        "binary_heap::bench_push",
+        "btree::map::insert_rand_10_000",
+        "btree::set::clone_10k_and_remove_half",
+        "linked_list::bench_push_back_pop_back",
+        "slice::random_inserts",
+        "str::bench_join",
+        "string::bench_exact_size_shrink_to_fit",
+        "vec::bench_with_capacity_1000",
+        "vec::bench_in_place_collect_droppable",
+        "vec_deque::bench_grow_1025"
+      ]
+    },
+    "pathology": {
+      "purpose": "Isolate known high-cost cases one at a time; a reproduced timeout or pathological slowdown is sufficient diagnostic evidence.",
+      "recommended_timeout_seconds": 5,
+      "stop_policy": "Run exactly one singleton with a five-second observation budget. On timeout or obvious pathological degradation, keep the bounded evidence and stop.",
+      "recommended_shards": [
+        {
+          "batch_index": 0,
+          "benchmarks": [
+            "slice::sort_unstable_by_key_lexicographic"
+          ],
+          "reason": "Key materialization and sort cost sentinel."
+        },
+        {
+          "batch_index": 1,
+          "benchmarks": [
+            "btree::map::iter_1m"
+          ],
+          "reason": "Million-entry iteration and memory pressure sentinel."
+        },
+        {
+          "batch_index": 2,
+          "benchmarks": [
+            "slice::rotate_huge_by1234577_big"
+          ],
+          "reason": "Huge rotation and memory bandwidth sentinel."
+        }
+      ]
+    }
+  }
+}

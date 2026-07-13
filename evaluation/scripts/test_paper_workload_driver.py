@@ -9,10 +9,19 @@ sentinel rows must not be counted as workload timing.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
+import io
 import json
+import os
 import pathlib
+import re
+import signal
+import subprocess
+import sys
 import tempfile
+import threading
+import time
 import unittest
 from unittest import mock
 
@@ -36,6 +45,7 @@ def args(**overrides: object) -> argparse.Namespace:
         "bench_filter": "vec::bench_with_capacity_1000",
         "extra_feature": None,
         "timeout": 180,
+        "build_timeout": None,
         "cargo": "cargo",
         "rust_toolchain": None,
         "dry_run": True,
@@ -54,6 +64,394 @@ def args(**overrides: object) -> argparse.Namespace:
 
 
 class PaperWorkloadDriverSemanticHarnessTests(unittest.TestCase):
+    def test_cli_benchmark_timeout_emits_elapsed_logs_and_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            fake_cargo = tmp / "fake-cargo.py"
+            fake_cargo.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env python3",
+                        "import sys, time",
+                        "args = sys.argv[1:]",
+                        "if '--list' in args:",
+                        "    print('vec::bench_with_capacity_1000: benchmark')",
+                        "else:",
+                        "    print('PATHOLOGY_MARKER benchmark-timeout', flush=True)",
+                        "    while True: time.sleep(1)",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cargo.chmod(0o755)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            argv = [
+                "--dataset",
+                "default_performance",
+                "--benchmark",
+                "Collections",
+                "--allocator",
+                "unialloc",
+                "--bench-filter",
+                "vec::bench_with_capacity_1000",
+                "--timeout",
+                "1",
+                "--rust-toolchain",
+                "system",
+                "--cargo",
+                str(fake_cargo),
+            ]
+            with mock.patch.object(
+                driver,
+                "bench_list_cache_paths",
+                return_value=[str(tmp / "bench-list.json")],
+            ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = driver.main(argv)
+
+            self.assertEqual(exit_code, 124, stderr.getvalue())
+            record = json.loads(stderr.getvalue())
+            self.assertEqual(record["phase"], "benchmark", record)
+            self.assertGreaterEqual(record["elapsed_seconds"], 1.0, record)
+            self.assertIn("PATHOLOGY_MARKER benchmark-timeout", record["stdout_tail"])
+            self.assertTrue(record["process_group_terminated"], record)
+            self.assertTrue(record["process_group_absent_after_cleanup"], record)
+
+    def test_bench_list_timeout_terminates_descendant_process_group(self) -> None:
+        if os.name != "posix":
+            self.skipTest("process-group descendant cleanup is POSIX-specific")
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            marker = tmp / "list-child-terminated"
+            fake_cargo = tmp / "fake-cargo.py"
+            fake_cargo.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env python3",
+                        "import os, pathlib, subprocess, sys, time",
+                        "marker = pathlib.Path(os.environ['UNIALLOC_LIST_TIMEOUT_MARKER'])",
+                        "child = '''import pathlib, signal, sys, time",
+                        "marker = pathlib.Path(sys.argv[1])",
+                        "def stop(_signum, _frame):",
+                        "    marker.write_text('terminated', encoding='utf-8')",
+                        "    raise SystemExit(0)",
+                        "signal.signal(signal.SIGTERM, stop)",
+                        "while True: time.sleep(1)'''",
+                        "subprocess.Popen([sys.executable, '-c', child, str(marker)])",
+                        "while True: time.sleep(1)",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cargo.chmod(0o755)
+            env = os.environ.copy()
+            env["UNIALLOC_LIST_TIMEOUT_MARKER"] = str(marker)
+            with mock.patch.object(
+                driver,
+                "bench_list_cache_paths",
+                return_value=[str(tmp / "bench-list.json")],
+            ):
+                with self.assertRaises(driver.BenchListCommandError) as caught:
+                    driver.collect_bench_list(
+                        str(fake_cargo),
+                        ["bench_ourself"],
+                        1,
+                        env,
+                        "",
+                    )
+
+            record = caught.exception.record
+            self.assertEqual(caught.exception.code, 124, record)
+            self.assertTrue(record["timed_out"], record)
+            self.assertTrue(record["process_group_terminated"], record)
+            self.assertTrue(record["process_group_absent_after_cleanup"], record)
+            self.assertTrue(marker.exists(), record)
+            self.assertEqual(marker.read_text(encoding="utf-8"), "terminated")
+
+    def test_legacy_timeout_does_not_trigger_explicit_prebuild_without_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            fake_cargo = tmp / "fake-cargo.py"
+            fake_cargo.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env python3",
+                        "import sys",
+                        "args = sys.argv[1:]",
+                        "if '--list' in args:",
+                        "    print('vec::bench_with_capacity_1000: benchmark')",
+                        "elif '--no-run' in args:",
+                        "    raise SystemExit('unexpected explicit prebuild')",
+                        "else:",
+                        "    print('test vec::bench_with_capacity_1000 ... bench: 10 ns/iter (+/- 1)')",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cargo.chmod(0o755)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            argv = [
+                "--dataset",
+                "default_performance",
+                "--benchmark",
+                "Collections",
+                "--allocator",
+                "unialloc",
+                "--bench-filter",
+                "vec::bench_with_capacity_1000",
+                "--timeout",
+                "1",
+                "--rust-toolchain",
+                "system",
+                "--cargo",
+                str(fake_cargo),
+            ]
+            with mock.patch.object(
+                driver,
+                "bench_list_cache_paths",
+                return_value=[str(tmp / "bench-list.json")],
+            ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = driver.main(argv)
+
+            self.assertEqual(exit_code, 0, stderr.getvalue())
+            record = json.loads(stdout.getvalue())
+            self.assertTrue(record["ok"], record)
+            self.assertNotIn("build", record)
+            self.assertNotIn("build_command", record)
+            self.assertNotIn("benchmark_timeout_seconds", record)
+            self.assertNotIn("total_wall_seconds", record)
+
+    def test_filtered_smoke_build_time_does_not_consume_per_benchmark_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            marker = tmp / "build-complete"
+            fake_cargo = tmp / "fake-cargo.py"
+            fake_cargo.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env python3",
+                        "import os, pathlib, sys, time",
+                        "args = sys.argv[1:]",
+                        "marker = pathlib.Path(os.environ['UNIALLOC_FAKE_BUILD_MARKER'])",
+                        "if '--list' in args:",
+                        "    print('vec::bench_with_capacity_1000: benchmark')",
+                        "    print('vec::bench_new: benchmark')",
+                        "elif '--no-run' in args:",
+                        "    time.sleep(1.25)",
+                        "    marker.write_text('built', encoding='utf-8')",
+                        "else:",
+                        "    if not marker.exists():",
+                        "        raise SystemExit('benchmark ran before build completed')",
+                        "    time.sleep(0.05)",
+                        "    print('test vec::bench_with_capacity_1000 ... bench: 10 ns/iter (+/- 1)')",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cargo.chmod(0o755)
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            argv = [
+                "--dataset",
+                "default_performance",
+                "--benchmark",
+                "Collections",
+                "--allocator",
+                "unialloc",
+                "--bench-filter",
+                "vec::bench_with_capacity_1000",
+                "--timeout",
+                "1",
+                "--build-timeout",
+                "3",
+                "--rust-toolchain",
+                "system",
+                "--cargo",
+                str(fake_cargo),
+            ]
+            started = time.monotonic()
+            with mock.patch.object(
+                driver,
+                "bench_list_cache_paths",
+                return_value=[str(tmp / "bench-list.json")],
+            ), mock.patch.dict(
+                driver.os.environ,
+                {"UNIALLOC_FAKE_BUILD_MARKER": str(marker)},
+                clear=False,
+            ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                exit_code = driver.main(argv)
+            elapsed = time.monotonic() - started
+
+            self.assertEqual(exit_code, 0, stderr.getvalue())
+            self.assertGreater(elapsed, 1.0)
+            record = json.loads(stdout.getvalue())
+            self.assertTrue(record["ok"], record)
+            self.assertFalse(record["claim_grade"], record)
+            self.assertEqual(record["benchmarks"], ["vec::bench_with_capacity_1000"])
+            self.assertEqual(record["build"]["timeout_seconds"], 3)
+            self.assertEqual(record["build"]["status"], "passed")
+            self.assertEqual(record["benchmark_timeout_seconds"], 1)
+
+    def test_benchmark_interrupt_preserves_partial_result_and_cleans_process_group(self) -> None:
+        if os.name != "posix":
+            self.skipTest("process-group interrupt cleanup is POSIX-specific")
+        previous_sigint = signal.signal(signal.SIGINT, signal.default_int_handler)
+        self.addCleanup(signal.signal, signal.SIGINT, previous_sigint)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            ready = tmp / "benchmark.ready"
+            child_pid_file = tmp / "nested-child.pid"
+            child_stopped = tmp / "nested-child.stopped"
+            benchmark = tmp / "interruptible-benchmark.py"
+            benchmark.write_text(
+                "\n".join(
+                    [
+                        "import os, pathlib, signal, subprocess, sys, time",
+                        "ready = pathlib.Path(sys.argv[1])",
+                        "child_pid_file = pathlib.Path(sys.argv[2])",
+                        "child_stopped = pathlib.Path(sys.argv[3])",
+                        "child = '''import os, pathlib, signal, sys, time",
+                        "pid_file = pathlib.Path(sys.argv[1])",
+                        "stopped = pathlib.Path(sys.argv[2])",
+                        "def stop(_signum, _frame):",
+                        "    stopped.write_text('terminated', encoding='utf-8')",
+                        "    raise SystemExit(0)",
+                        "signal.signal(signal.SIGINT, stop)",
+                        "signal.signal(signal.SIGTERM, stop)",
+                        "pid_file.write_text(str(os.getpid()), encoding='utf-8')",
+                        "while True: time.sleep(1)'''",
+                        "subprocess.Popen([sys.executable, '-c', child, str(child_pid_file), str(child_stopped)])",
+                        "while not child_pid_file.exists(): time.sleep(0.01)",
+                        "print('noise-' + ('x' * 8192), flush=True)",
+                        "print('PATHOLOGY_MARKER direct-driver-partial-output', flush=True)",
+                        "ready.write_text('ready', encoding='utf-8')",
+                        "while True: time.sleep(1)",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            stop_sender = threading.Event()
+
+            def interrupt_when_ready() -> None:
+                deadline = time.monotonic() + 10
+                while not stop_sender.is_set() and time.monotonic() < deadline:
+                    if ready.exists():
+                        os.kill(os.getpid(), signal.SIGINT)
+                        return
+                    time.sleep(0.01)
+
+            sender = threading.Thread(target=interrupt_when_ready, daemon=True)
+            sender.start()
+            child_pid = None
+            process_group_id = None
+            result = {}
+            try:
+                with self.assertRaises(KeyboardInterrupt) as interrupted:
+                    driver.run_benchmark_command(
+                        [
+                            sys.executable,
+                            str(benchmark),
+                            str(ready),
+                            str(child_pid_file),
+                            str(child_stopped),
+                        ],
+                        cwd=tmp,
+                        env=os.environ.copy(),
+                        timeout_seconds=60,
+                    )
+                self.assertIs(type(interrupted.exception), KeyboardInterrupt)
+                result = getattr(
+                    interrupted.exception,
+                    "_unialloc_bounded_child_result",
+                    None,
+                )
+                self.assertIsInstance(result, dict)
+                assert isinstance(result, dict)
+                process_group_id = result.get("process_group_pid")
+                self.assertTrue(result.get("interrupted"), result)
+                self.assertEqual(result.get("exit_code"), 130, result)
+                self.assertTrue(result.get("process_group_terminated"), result)
+                self.assertIn("PATHOLOGY_MARKER", str(result.get("stdout") or ""))
+                self.assertTrue(child_pid_file.exists(), result)
+                child_pid = int(child_pid_file.read_text(encoding="utf-8"))
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline and not child_stopped.exists():
+                    time.sleep(0.05)
+                self.assertTrue(child_stopped.exists(), result)
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(child_pid, 0)
+                if process_group_id is not None:
+                    with self.assertRaises(ProcessLookupError):
+                        os.killpg(int(process_group_id), 0)
+            finally:
+                stop_sender.set()
+                sender.join(timeout=1)
+                if child_pid is None and child_pid_file.exists():
+                    child_pid = int(child_pid_file.read_text(encoding="utf-8"))
+                if process_group_id is None and isinstance(result, dict):
+                    process_group_id = result.get("process_group_pid")
+                if process_group_id is not None:
+                    try:
+                        os.killpg(int(process_group_id), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                if child_pid is not None:
+                    try:
+                        os.kill(child_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
+    def test_benchmark_timeout_terminates_descendant_process_group(self) -> None:
+        if os.name != "posix":
+            self.skipTest("process-group descendant cleanup is POSIX-specific")
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            marker = tmp / "child-terminated"
+            parent = tmp / "parent.py"
+            parent.write_text(
+                "\n".join(
+                    [
+                        "import pathlib, subprocess, sys, time",
+                        "marker = pathlib.Path(sys.argv[1])",
+                        "ready = marker.with_suffix('.ready')",
+                        "child = '''import pathlib, signal, sys, time",
+                        "marker = pathlib.Path(sys.argv[1])",
+                        "ready = pathlib.Path(sys.argv[2])",
+                        "def stop(_signum, _frame):",
+                        "    marker.write_text('terminated', encoding='utf-8')",
+                        "    raise SystemExit(0)",
+                        "signal.signal(signal.SIGTERM, stop)",
+                        "ready.write_text('ready', encoding='utf-8')",
+                        "while True: time.sleep(1)'''",
+                        "proc = subprocess.Popen([sys.executable, '-c', child, str(marker), str(ready)])",
+                        "while not ready.exists(): time.sleep(0.01)",
+                        "print(proc.pid, flush=True)",
+                        "while True: time.sleep(1)",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            result = driver.run_benchmark_command(
+                [sys.executable, str(parent), str(marker)],
+                cwd=tmp,
+                env=os.environ.copy(),
+                timeout_seconds=1,
+            )
+
+            self.assertTrue(result["timed_out"], result)
+            self.assertEqual(result["exit_code"], 124)
+            self.assertTrue(result["process_group_terminated"])
+            self.assertTrue(marker.exists(), result)
+            self.assertEqual(marker.read_text(encoding="utf-8"), "terminated")
+
     def test_semantic_variants_do_not_force_stats_into_timing(self) -> None:
         features = driver.resolve_features(args())
         self.assertEqual(features, ["bench_ourself", "pac"])
@@ -225,6 +623,91 @@ class PaperWorkloadDriverSemanticHarnessTests(unittest.TestCase):
         )
         self.assertTrue(provenance["paper_exact_toolchain"])
         self.assertEqual(driver.toolchain_claim_grade_blockers(provenance), [])
+
+    def test_paper_toolchain_workspace_graph_is_cargo_164_compatible(self) -> None:
+        manifest = (ROOT / "unialloc" / "Cargo.toml").read_text(encoding="utf-8")
+        lock = (ROOT / "Cargo.lock").read_text(encoding="utf-8")
+        unialloc_lock_match = re.search(
+            r'\[\[package\]\]\s+name = "unialloc".*?(?=\n\[\[package\]\]|\Z)',
+            lock,
+            flags=re.DOTALL,
+        )
+
+        self.assertRegex(manifest, r'(?m)^rust-version = "1\.64"$')
+        self.assertNotRegex(manifest, r'(?m)^criterion\s*=')
+        self.assertRegex(lock, r'(?m)^version = 3$')
+        self.assertIsNotNone(unialloc_lock_match)
+        self.assertNotIn('"criterion"', unialloc_lock_match.group(0))
+        self.assertNotRegex(lock, r'(?m)^name = "criterion"$')
+
+    def test_paper_toolchain_source_uses_conditional_old_nightly_feature_gates(self) -> None:
+        build_rs = (ROOT / "unialloc" / "build.rs").read_text(encoding="utf-8")
+        lib_rs = (ROOT / "unialloc" / "src" / "lib.rs").read_text(encoding="utf-8")
+        bench_rs = (ROOT / "unialloc" / "benches" / "lib.rs").read_text(encoding="utf-8")
+        direct_probe_rs = (
+            ROOT / "unialloc" / "src" / "bin" / "rustc_driver_direct_allocator_mir_probe.rs"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('"unialloc_has_stable_raw_ref_op", 82', build_rs)
+        self.assertIn('"unialloc_has_stable_map_first_last", 66', build_rs)
+        self.assertIn("feature(raw_ref_op)", lib_rs)
+        self.assertIn("feature(map_first_last)", bench_rs)
+        self.assertIn("feature(alloc_layout_extra)", direct_probe_rs)
+
+    def test_paper_toolchain_workspace_probe_uses_resolved_features(self) -> None:
+        ns = args(rust_toolchain="nightly-2022-07-01")
+        completed = driver.subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+        with mock.patch.object(driver.subprocess, "run", return_value=completed) as run:
+            probe = driver.paper_toolchain_workspace_probe(
+                ns,
+                ["bench_jemalloc", "hugepage"],
+            )
+
+        self.assertTrue(probe["ok"])
+        self.assertEqual(
+            run.call_args.args[0],
+            [
+                "cargo",
+                "+nightly-2022-07-01",
+                "tree",
+                "-p",
+                "unialloc",
+                "--features",
+                "bench_jemalloc,hugepage",
+                "--locked",
+                "--offline",
+            ],
+        )
+
+    def test_paper_exact_dry_run_rejects_unreadable_workspace_graph(self) -> None:
+        ns = args(
+            dataset="default_performance",
+            allocator="unialloc",
+            variant_feature=None,
+            rust_toolchain="nightly-2022-07-01",
+            bench_filter=None,
+            dry_run=True,
+        )
+        failed_probe = {
+            "ok": False,
+            "exit_code": 101,
+            "stderr_tail": "lock file version `4` was found",
+        }
+        with mock.patch.object(
+            driver,
+            "paper_toolchain_workspace_probe",
+            return_value=failed_probe,
+            create=True,
+        ) as probe:
+            with mock.patch.object(driver, "semantic_harness_selection") as selection:
+                self.assertEqual(driver.run(ns), 2)
+                probe.assert_called_once_with(ns, ["bench_ourself"])
+                selection.assert_not_called()
 
     def test_rust_toolchain_system_omits_rustup_override(self) -> None:
         ns = args(

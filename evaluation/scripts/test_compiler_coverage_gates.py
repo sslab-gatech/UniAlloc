@@ -10,6 +10,8 @@ import io
 import json
 import os
 import pathlib
+import signal
+import subprocess
 import sys
 import tempfile
 import threading
@@ -288,6 +290,59 @@ def write_mir_semantic_scope_runtime_audit_fixture(
     return audit
 
 
+def promote_runtime_audit_fixture_to_locked_full_surface(
+    audit_path: pathlib.Path,
+) -> dict:
+    """Give a small event fixture the locked canonical selection metadata."""
+
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    canonical = evaluate.canonical_std_bench_names()
+    runtime_surface = evaluate.exact_dynamic_std_bench_surface_status(
+        canonical,
+        canonical_benchmarks=canonical,
+        canonical_source="same-run cargo bench --bench std_bench -- --list inventory",
+    )
+    if runtime_surface.get("full_surface_candidate") is not True:
+        raise AssertionError(runtime_surface.get("blockers"))
+    audit["selected_benches"] = list(canonical)
+    audit["selected_target_benches"] = list(canonical)
+    audit["derived_skip_count"] = 0
+    audit["derived_skips"] = []
+    audit["runtime_surface"] = runtime_surface
+    audit["runtime"] = {
+        "command": [
+            "cargo",
+            "bench",
+            "-p",
+            "unialloc",
+            "--bench",
+            "std_bench",
+        ],
+        "returncode": 0,
+        "timed_out": False,
+    }
+    summary = audit["summary"]
+    summary.update(
+        {
+            "runtime_full_surface_candidate_validated": True,
+            "runtime_surface_full_surface_candidate": True,
+            "runtime_surface_status": "full-surface-candidate",
+            "canonical_expected_benchmark_count": len(canonical),
+            "canonical_missing_benchmark_count": 0,
+            "selected_benchmark_count": len(canonical),
+            "selected_bench_with_sentinel_count": len(canonical),
+            "derived_skip_count": 0,
+            "selection_mode": "full-surface",
+            "full_surface_requested": True,
+            "direct_claim_evidence_ready": True,
+            "runtime_claim_ready": True,
+            "ready_for_claim_grade_import": True,
+        }
+    )
+    write_json(audit_path, audit)
+    return audit
+
+
 def tamper_mir_semantic_scope_runtime_artifact(
     audit_path: pathlib.Path,
     artifact_key: str,
@@ -422,7 +477,7 @@ def write_ready_mir_semantic_scope_runtime_companion(
             "rewrite_candidates": [
                 {
                     "rewrite_status": "actual_semantic_scope_enter_exit_rewrite_applied",
-                    "replacement_symbol": "__unialloc_semantic_scope_enter_exit",
+                    "replacement_symbol": "__unialloc_semantic_scope_push",
                     "source_span": "unialloc/benches/binary_heap.rs:9:42: 9:51",
                 }
             ],
@@ -457,7 +512,7 @@ def write_ready_mir_semantic_scope_runtime_companion(
             "lowered_module_type_id_bases": [
                 "compiler-assigned-allocation-site-object-type-id-rustc-driver-mir-semantic-scope"
             ],
-            "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_enter_exit",
+            "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_pop",
             "unknown_semantic_object_type_row_count": 0,
             "type_mapping_record_count": 541,
         },
@@ -471,8 +526,8 @@ def write_ready_mir_semantic_scope_runtime_companion(
             "actual_semantic_scope_rewrite_requested": True,
             "actual_semantic_scope_rewrite": True,
             "semantic_scope_rewrite_applied_count": 541,
-            "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_enter_exit",
-            "replacement_resolution_status": "resolved_unialloc_semantic_scope_enter_exit",
+            "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_pop",
+            "replacement_resolution_status": "resolved_unialloc_semantic_scope_push_pop",
             "path": str(rewrite_path),
         },
     }
@@ -496,6 +551,11 @@ def write_fresh_compiler_integrity_fixture(
     runtime_dir.mkdir()
     manifest_dir.mkdir()
 
+    write_ready_mir_probe_companions(
+        evaluate.RESULTS,
+        source_fingerprint=current,
+    )
+
     runtime_audit_path = write_mir_semantic_scope_runtime_audit_fixture(
         runtime_dir,
         run_id="fresh-integrity-runtime",
@@ -510,9 +570,10 @@ def write_fresh_compiler_integrity_fixture(
         source_fingerprint=current,
         artifacts=runtime_audit["artifacts"],
     )
-
-    if "rustc-driver-mir-semantic-scope" in basis:
-        write_ready_mir_probe_companions(evaluate.RESULTS)
+    bind_ready_mir_probe_companions_to_runtime(
+        runtime_audit_path,
+        source_fingerprint=current,
+    )
     manifest_path = write_manifest_fixture(
         manifest_dir,
         basis=basis,
@@ -696,7 +757,12 @@ def mark_direct_allocator_probe_as_local_no_recovery(audit: dict) -> dict:
     return audit
 
 
-def write_ready_mir_semantic_scope_probe_companion(results: pathlib.Path) -> pathlib.Path:
+def write_ready_mir_semantic_scope_probe_companion(
+    results: pathlib.Path,
+    *,
+    source_fingerprint: dict | None = None,
+    rust_toolchain: str = "nightly-2022-07-01",
+) -> pathlib.Path:
     path = results / "rustc_driver_mir_semantic_scope_probe_audit.json"
     rewrite_path = write_probe_rewrite_map(
         run_id="unit-semantic-scope-probe",
@@ -717,13 +783,18 @@ def write_ready_mir_semantic_scope_probe_companion(results: pathlib.Path) -> pat
             "schema_version": 1,
             "source": "rustc-driver-mir-semantic-scope-probe-audit",
             "run_id": "unit-semantic-scope-probe",
+            "generated_at": "2026-07-09T00:00:00Z",
+            "evidence_source_fingerprint": copy.deepcopy(
+                source_fingerprint or evaluate.repository_source_fingerprint()
+            ),
+            "toolchain": {"rust_toolchain": rust_toolchain, "host_triple": "unit-host"},
             "summary": {
                 "runtime_probe_validated": True,
                 "run_returncode": 0,
                 "actual_semantic_scope_rewrite": True,
                 "semantic_scope_rewrite_applied_count": 9,
                 "semantic_scope_unwind_pop_inserted_count": 1,
-                "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_enter_exit",
+                "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_pop",
                 "typed_allocations": 21,
                 "typed_deallocations": 21,
                 **ready_semantic_metadata_validation_fields(),
@@ -802,8 +873,8 @@ def write_ready_mir_semantic_scope_probe_companion(results: pathlib.Path) -> pat
                 "actual_semantic_scope_rewrite_requested": True,
                 "actual_semantic_scope_rewrite": True,
                 "semantic_scope_rewrite_applied_count": 9,
-                "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_enter_exit",
-                "replacement_resolution_status": "resolved_unialloc_semantic_scope_enter_exit",
+                "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_push_pop",
+                "replacement_resolution_status": "resolved_unialloc_semantic_scope_push_pop",
                 "path": str(rewrite_path),
             },
         },
@@ -811,7 +882,12 @@ def write_ready_mir_semantic_scope_probe_companion(results: pathlib.Path) -> pat
     return path
 
 
-def write_ready_direct_allocator_mir_probe_companion(results: pathlib.Path) -> pathlib.Path:
+def write_ready_direct_allocator_mir_probe_companion(
+    results: pathlib.Path,
+    *,
+    source_fingerprint: dict | None = None,
+    rust_toolchain: str = "nightly-2022-07-01",
+) -> pathlib.Path:
     path = results / "rustc_driver_direct_allocator_mir_probe_audit.json"
     rewrite_path = write_probe_rewrite_map(
         run_id="unit-direct-allocator-probe",
@@ -837,6 +913,11 @@ def write_ready_direct_allocator_mir_probe_companion(results: pathlib.Path) -> p
             "schema_version": 1,
             "source": "rustc-driver-direct-allocator-mir-probe-audit",
             "run_id": "unit-direct-allocator-probe",
+            "generated_at": "2026-07-09T00:00:00Z",
+            "evidence_source_fingerprint": copy.deepcopy(
+                source_fingerprint or evaluate.repository_source_fingerprint()
+            ),
+            "toolchain": {"rust_toolchain": rust_toolchain, "host_triple": "unit-host"},
             "summary": {
                 "runtime_probe_validated": True,
                 "run_returncode": 0,
@@ -930,7 +1011,12 @@ def write_ready_direct_allocator_mir_probe_companion(results: pathlib.Path) -> p
     return path
 
 
-def write_ready_mir_cross_thread_hint_probe_companion(results: pathlib.Path) -> pathlib.Path:
+def write_ready_mir_cross_thread_hint_probe_companion(
+    results: pathlib.Path,
+    *,
+    source_fingerprint: dict | None = None,
+    rust_toolchain: str = "nightly-2022-07-01",
+) -> pathlib.Path:
     path = results / "rustc_driver_mir_cross_thread_hint_probe_audit.json"
     rewrite_path = write_probe_rewrite_map(
         run_id="unit-cross-thread-hint-probe",
@@ -964,6 +1050,11 @@ def write_ready_mir_cross_thread_hint_probe_companion(results: pathlib.Path) -> 
             "schema_version": 1,
             "source": "rustc-driver-mir-cross-thread-hint-probe-audit",
             "run_id": "unit-cross-thread-hint-probe",
+            "generated_at": "2026-07-09T00:00:00Z",
+            "evidence_source_fingerprint": copy.deepcopy(
+                source_fingerprint or evaluate.repository_source_fingerprint()
+            ),
+            "toolchain": {"rust_toolchain": rust_toolchain, "host_triple": "unit-host"},
             "summary": {
                 "runtime_probe_validated": True,
                 "run_returncode": 0,
@@ -1025,10 +1116,54 @@ def write_ready_mir_cross_thread_hint_probe_companion(results: pathlib.Path) -> 
     return path
 
 
-def write_ready_mir_probe_companions(results: pathlib.Path) -> None:
-    write_ready_mir_semantic_scope_probe_companion(results)
-    write_ready_direct_allocator_mir_probe_companion(results)
-    write_ready_mir_cross_thread_hint_probe_companion(results)
+def write_ready_mir_probe_companions(
+    results: pathlib.Path,
+    *,
+    source_fingerprint: dict | None = None,
+    rust_toolchain: str = "nightly-2022-07-01",
+) -> None:
+    write_ready_mir_semantic_scope_probe_companion(
+        results,
+        source_fingerprint=source_fingerprint,
+        rust_toolchain=rust_toolchain,
+    )
+    write_ready_direct_allocator_mir_probe_companion(
+        results,
+        source_fingerprint=source_fingerprint,
+        rust_toolchain=rust_toolchain,
+    )
+    write_ready_mir_cross_thread_hint_probe_companion(
+        results,
+        source_fingerprint=source_fingerprint,
+        rust_toolchain=rust_toolchain,
+    )
+
+
+def bind_ready_mir_probe_companions_to_runtime(
+    audit_path: pathlib.Path,
+    *,
+    source_fingerprint: dict | None = None,
+    rust_toolchain: str = "nightly-2022-07-01",
+) -> dict:
+    """Bind the current ready probe identities and hashes into a runtime audit."""
+
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    bound_source_fingerprint = copy.deepcopy(
+        source_fingerprint
+        or audit.get("evidence_source_fingerprint")
+        or evaluate.repository_source_fingerprint()
+    )
+    audit["evidence_source_fingerprint"] = bound_source_fingerprint
+    audit["toolchain"] = {"rust_toolchain": rust_toolchain}
+    bundle = evaluate.rustc_driver_mir_probe_companion_status(
+        required_source_fingerprint=bound_source_fingerprint,
+        required_rust_toolchain=rust_toolchain,
+    )
+    if bundle.get("ready") is not True:
+        raise AssertionError(bundle.get("blockers"))
+    audit["mir_probe_companions"] = bundle
+    write_json(audit_path, audit)
+    return audit
 
 
 class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
@@ -1071,6 +1206,86 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                 time.sleep(0.1)
             else:
                 self.fail(f"timed-out subprocess child still exists: pid={child_pid}")
+
+    def test_logged_subprocess_interrupt_kills_process_group_and_retains_logs(self) -> None:
+        if os.name != "posix":
+            self.skipTest("process-group interrupt behavior is POSIX-specific")
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = pathlib.Path(raw_tmp)
+            leader_pid_file = tmp / "leader.pid"
+            child_pid_file = tmp / "child.pid"
+            script = tmp / "spawn_child.py"
+            script.write_text(
+                "\n".join(
+                    [
+                        "import os, pathlib, subprocess, sys, time",
+                        "leader_pid = pathlib.Path(sys.argv[1])",
+                        "child_pid = pathlib.Path(sys.argv[2])",
+                        "child_code = '''import os, pathlib, signal, sys, time",
+                        "signal.signal(signal.SIGINT, signal.SIG_IGN)",
+                        "pathlib.Path(sys.argv[1]).write_text(str(os.getpid()), encoding='utf-8')",
+                        "while True: time.sleep(1)'''",
+                        "child = subprocess.Popen([sys.executable, '-c', child_code, str(child_pid)])",
+                        "leader_pid.write_text(str(os.getpid()), encoding='utf-8')",
+                        "while not child_pid.exists(): time.sleep(0.01)",
+                        "print('pathological slowdown reproduced', flush=True)",
+                        "while True: time.sleep(1)",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            stop_sender = threading.Event()
+
+            def interrupt_when_ready() -> None:
+                deadline = time.monotonic() + 10
+                while not stop_sender.is_set() and time.monotonic() < deadline:
+                    if leader_pid_file.exists() and child_pid_file.exists():
+                        os.kill(os.getpid(), signal.SIGINT)
+                        return
+                    time.sleep(0.01)
+
+            sender = threading.Thread(target=interrupt_when_ready, daemon=True)
+            sender.start()
+            leader_pid = None
+            child_pid = None
+            try:
+                with self.assertRaises(KeyboardInterrupt):
+                    evaluate.run_logged_subprocess(
+                        tmp,
+                        "interrupt-tree",
+                        [
+                            sys.executable,
+                            str(script),
+                            str(leader_pid_file),
+                            str(child_pid_file),
+                        ],
+                        timeout=60,
+                    )
+                leader_pid = int(leader_pid_file.read_text(encoding="utf-8"))
+                child_pid = int(child_pid_file.read_text(encoding="utf-8"))
+                self.assertIn(
+                    "pathological slowdown reproduced",
+                    (tmp / "interrupt-tree.stdout.txt").read_text(encoding="utf-8"),
+                )
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(leader_pid, 0)
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(child_pid, 0)
+            finally:
+                stop_sender.set()
+                sender.join(timeout=1)
+                if leader_pid is None and leader_pid_file.exists():
+                    leader_pid = int(leader_pid_file.read_text(encoding="utf-8"))
+                if child_pid is None and child_pid_file.exists():
+                    child_pid = int(child_pid_file.read_text(encoding="utf-8"))
+                for process_group_id in (leader_pid, child_pid):
+                    if process_group_id is None:
+                        continue
+                    try:
+                        os.killpg(process_group_id, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
 
     def test_cycle_count_text_parser_requires_explicit_cycle_markers(self) -> None:
         noisy_log = "\n".join(
@@ -1349,6 +1564,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             extra_features=["stats"],
             scudo_mode="ld-preload",
             scudo_runtime_library="/usr/lib/libclang_rt.scudo_standalone-test.so",
+            timeout=77,
         )
         self.assertTrue(evaluate.command_targets_paper_collections_docker_driver(command))
         self.assertIn("evaluation/scripts/paper_collections_docker_driver.py", command)
@@ -1360,6 +1576,8 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         self.assertIn("--scudo-mode", command)
         self.assertIn("ld-preload", command)
         self.assertIn("--scudo-runtime-library", command)
+        self.assertEqual(evaluate.command_option_value(command, "--inner-timeout"), "77")
+        self.assertEqual(evaluate.command_option_value(command, "--timeout"), "197")
         self.assertNotIn("paper_workload_placeholder.py", " ".join(command))
 
     def test_paper_collections_docker_driver_marks_only_historical_pin_paper_exact(self) -> None:
@@ -1409,6 +1627,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         )
         inner = paper_collections_docker_driver.inner_driver_args(args)
         self.assertEqual(inner[:2], ["python3", "evaluation/scripts/paper_workload_driver.py"])
+        self.assertEqual(evaluate.command_option_value(inner, "--timeout"), "30")
         self.assertIn("--dry-run", inner)
         self.assertIn("--bench-filter", inner)
         self.assertIn("vec::bench_new", inner)
@@ -1443,6 +1662,10 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             }
             probe = paper_collections_docker_driver.container_probe(args)
         command = run_command.call_args.args[0]
+        self.assertIn("--name", command)
+        self.assertIn("--cidfile", command)
+        self.assertLess(command.index("--name"), command.index(args.image))
+        self.assertLess(command.index("--cidfile"), command.index(args.image))
         self.assertIn("sh", command)
         shell_index = command.index("sh")
         self.assertEqual(command[shell_index + 1], "-c")
@@ -1484,8 +1707,272 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             }
             inner = paper_collections_docker_driver.run_inner_driver(args)
         self.assertFalse(inner["ok"])
+        self.assertEqual(run_command.call_args.kwargs["timeout"], 150)
         self.assertEqual(inner["record"]["error"], stderr_record["error"])
         self.assertEqual(inner["record"]["source"], "paper-workload-driver")
+
+    def test_paper_collections_docker_driver_reserves_grace_for_explicit_inner_timeout(self) -> None:
+        for inner_timeout, expected_docker_timeout in ((10, 130), (60, 180)):
+            with self.subTest(inner_timeout=inner_timeout):
+                args = types.SimpleNamespace(
+                    docker_bin="/usr/bin/docker",
+                    platform="linux/arm64",
+                    image="paper:latest",
+                    target_volume="",
+                    writable_mount=False,
+                    timeout=30,
+                    inner_timeout=inner_timeout,
+                    dataset="default_performance",
+                    benchmark="Collections",
+                    allocator="ptmalloc",
+                    variant_feature=None,
+                    bench_filter=None,
+                    extra_feature=[],
+                    tcmalloc_lib_dir=None,
+                    cmake_bin=None,
+                    allow_host_allocator_mismatch=False,
+                    dry_run=False,
+                )
+                error_record = {
+                    "ok": False,
+                    "source": "paper-workload-driver",
+                    "error": "cargo bench timed out",
+                    "code": 124,
+                }
+                with mock.patch.object(paper_collections_docker_driver, "run_command") as run_command:
+                    run_command.return_value = {
+                        "ok": False,
+                        "exit_code": 124,
+                        "duration_seconds": 0.1,
+                        "stdout": "",
+                        "stderr": json.dumps(error_record) + "\n",
+                    }
+                    result = paper_collections_docker_driver.run_inner_driver(args)
+                self.assertEqual(
+                    evaluate.command_option_value(result["inner_command"], "--timeout"),
+                    str(inner_timeout),
+                )
+                self.assertEqual(run_command.call_args.kwargs["timeout"], expected_docker_timeout)
+                self.assertEqual(result["returncode"], 124)
+                self.assertEqual(result["record"]["error"], "cargo bench timed out")
+
+    def test_paper_collections_docker_driver_normalizes_wrapper_timeout(self) -> None:
+        args = types.SimpleNamespace(
+            docker_bin="/usr/bin/docker",
+            platform="linux/arm64",
+            image="paper:latest",
+            target_volume="",
+            writable_mount=False,
+            timeout=30,
+            inner_timeout=10,
+            dataset="default_performance",
+            benchmark="Collections",
+            allocator="ptmalloc",
+            variant_feature=None,
+            bench_filter=None,
+            extra_feature=[],
+            tcmalloc_lib_dir=None,
+            cmake_bin=None,
+            allow_host_allocator_mismatch=False,
+            dry_run=False,
+        )
+        with mock.patch.object(
+            paper_collections_docker_driver,
+            "run_command",
+            return_value={
+                "ok": False,
+                "exit_code": None,
+                "timed_out": True,
+                "duration_seconds": 130.0,
+                "stdout": "",
+                "stderr": "",
+            },
+        ):
+            result = paper_collections_docker_driver.run_inner_driver(args)
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["timed_out"])
+        self.assertEqual(result["returncode"], 124)
+        self.assertEqual(result["record"]["code"], 124)
+        self.assertIn("Docker invocation timed out", result["record"]["error"])
+        self.assertFalse(
+            result["docker_timeout_cleanup"]["cleanup_confirmed_absent"],
+            result,
+        )
+        self.assertTrue(result["record"]["docker_cleanup_blockers"], result)
+
+    def test_paper_collections_run_command_bounds_success_output(self) -> None:
+        cap = 128
+        command = [
+            sys.executable,
+            "-c",
+            (
+                "import os; "
+                "os.write(1, b'x' * 4096 + b'STDOUT_END'); "
+                "os.write(2, b'y' * 4096 + b'STDERR_END')"
+            ),
+        ]
+        with mock.patch.object(
+            paper_collections_docker_driver,
+            "COMMAND_OUTPUT_RING_BYTES",
+            cap,
+        ):
+            result = paper_collections_docker_driver.run_command(
+                command,
+                timeout=5,
+            )
+
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["exit_code"], 0, result)
+        self.assertEqual(result["capture_ring_bytes_per_stream"], cap, result)
+        for stream, marker in (("stdout", "STDOUT_END"), ("stderr", "STDERR_END")):
+            retained = result[stream].encode("utf-8")
+            self.assertGreater(result[f"{stream}_bytes"], len(retained), result)
+            self.assertEqual(result[f"{stream}_retained_bytes"], len(retained), result)
+            self.assertTrue(result[f"{stream}_truncated"], result)
+            self.assertLessEqual(len(retained), cap, result)
+            self.assertTrue(result[stream].endswith(marker), result)
+
+    def test_paper_collections_docker_timeout_cleans_container_by_cid(self) -> None:
+        args = types.SimpleNamespace(
+            docker_bin="/usr/bin/docker",
+            platform="linux/arm64",
+            image="paper:latest",
+            target_volume="unialloc-collections-target-nightly-2022-07-01",
+            writable_mount=False,
+            timeout=30,
+            inner_timeout=10,
+            dataset="default_performance",
+            benchmark="Collections",
+            allocator="ptmalloc",
+            variant_feature=None,
+            bench_filter=None,
+            extra_feature=[],
+            tcmalloc_lib_dir=None,
+            cmake_bin=None,
+            allow_host_allocator_mismatch=False,
+            dry_run=False,
+        )
+        container_id = "a" * 64
+        observed_commands = []
+
+        def fake_run(command, *, timeout, cwd=ROOT):
+            observed_commands.append((list(command), timeout))
+            if command[1] == "run":
+                cidfile = pathlib.Path(command[command.index("--cidfile") + 1])
+                self.assertFalse(cidfile.exists())
+                cidfile.write_text(container_id, encoding="utf-8")
+                return {
+                    "command": command,
+                    "ok": False,
+                    "exit_code": None,
+                    "timed_out": True,
+                    "stdout": "",
+                    "stderr": "",
+                    "duration_seconds": 130.0,
+                }
+            action = command[2]
+            if action == "stop":
+                return {"command": command, "ok": False, "exit_code": 1, "stdout": "", "stderr": "stop failed"}
+            if action in {"kill", "rm"}:
+                return {"command": command, "ok": True, "exit_code": 0, "stdout": "", "stderr": ""}
+            self.assertEqual(action, "inspect")
+            return {
+                "command": command,
+                "ok": False,
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": f"Error: No such container: {container_id}",
+            }
+
+        with mock.patch.object(paper_collections_docker_driver, "run_command", side_effect=fake_run):
+            result = paper_collections_docker_driver.run_inner_driver(args)
+
+        cleanup = result["docker_timeout_cleanup"]
+        self.assertTrue(cleanup["cleanup_confirmed_absent"], cleanup)
+        self.assertEqual(cleanup["container_reference"], container_id)
+        self.assertEqual(
+            [command[0][2] for command in observed_commands[1:]],
+            ["stop", "kill", "rm", "inspect"],
+        )
+        self.assertIn(
+            f"{args.target_volume}:/cargo-target",
+            observed_commands[0][0],
+        )
+        remove_command = next(
+            command for command, _timeout in observed_commands if len(command) > 2 and command[2] == "rm"
+        )
+        self.assertNotIn("-v", remove_command)
+        self.assertTrue(
+            all(
+                timeout == paper_collections_docker_driver.DOCKER_CLEANUP_COMMAND_TIMEOUT_SECONDS
+                for _command, timeout in observed_commands[1:]
+            )
+        )
+        self.assertEqual(result["returncode"], 124)
+
+    def test_paper_collections_docker_timeout_falls_back_to_name(self) -> None:
+        args = types.SimpleNamespace(
+            docker_bin="/usr/bin/docker",
+            platform="linux/arm64",
+            image="paper:latest",
+            target_volume="",
+            writable_mount=False,
+            timeout=30,
+            inner_timeout=10,
+            dataset="default_performance",
+            benchmark="Collections",
+            allocator="ptmalloc",
+            variant_feature=None,
+            bench_filter=None,
+            extra_feature=[],
+            tcmalloc_lib_dir=None,
+            cmake_bin=None,
+            allow_host_allocator_mismatch=False,
+            dry_run=False,
+        )
+        for invalid_cid in (None, "a" * 12, "a" * 63):
+            with self.subTest(invalid_cid=invalid_cid):
+                observed_commands = []
+
+                def fake_run(command, *, timeout, cwd=ROOT):
+                    observed_commands.append(list(command))
+                    if command[1] == "run":
+                        if invalid_cid is not None:
+                            cidfile = pathlib.Path(command[command.index("--cidfile") + 1])
+                            cidfile.write_text(invalid_cid, encoding="utf-8")
+                        return {
+                            "command": command,
+                            "ok": False,
+                            "exit_code": None,
+                            "timed_out": True,
+                            "stdout": "",
+                            "stderr": "",
+                            "duration_seconds": 130.0,
+                        }
+                    action = command[2]
+                    if action in {"stop", "rm"}:
+                        return {"command": command, "ok": True, "exit_code": 0, "stdout": "", "stderr": ""}
+                    self.assertEqual(action, "inspect")
+                    return {
+                        "command": command,
+                        "ok": False,
+                        "exit_code": 1,
+                        "stdout": "",
+                        "stderr": "Error: No such container",
+                    }
+
+                with mock.patch.object(paper_collections_docker_driver, "run_command", side_effect=fake_run):
+                    result = paper_collections_docker_driver.run_inner_driver(args)
+
+                run_command = observed_commands[0]
+                container_name = run_command[run_command.index("--name") + 1]
+                cleanup = result["docker_timeout_cleanup"]
+                self.assertEqual(cleanup["container_reference"], container_name)
+                self.assertTrue(cleanup["cleanup_confirmed_absent"], cleanup)
+                self.assertEqual(
+                    [command[2] for command in observed_commands[1:]],
+                    ["stop", "rm", "inspect"],
+                )
 
     def test_paper_collections_docker_driver_forwards_scudo_runtime_mode(self) -> None:
         args = types.SimpleNamespace(
@@ -1523,10 +2010,8 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             "--image",
             "paper:latest",
         ]
-        completed = types.SimpleNamespace(
-            returncode=2,
-            stdout="",
-            stderr=json.dumps(
+        stderr = (
+            json.dumps(
                 {
                     "ok": False,
                     "source": "paper-collections-docker-driver",
@@ -1534,9 +2019,26 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                 },
                 sort_keys=True,
             )
-            + "\n",
-        )
-        with mock.patch.object(evaluate.subprocess, "run", return_value=completed) as run_mock:
+            + "\n"
+        ).encode()
+        with mock.patch.object(
+            evaluate,
+            "run_plan_command_bounded",
+            return_value={
+                "exit_code": 2,
+                "error": None,
+                "stdout_tail": b"",
+                "stderr_tail": stderr,
+                "stdout_bytes": 0,
+                "stderr_bytes": len(stderr),
+                "stdout_retained_bytes": 0,
+                "stderr_retained_bytes": len(stderr),
+                "stdout_truncated": False,
+                "stderr_truncated": False,
+                "process_group_pid": 123,
+                "process_group_terminated": False,
+            },
+        ) as bounded_run:
             probe = evaluate.docker_collections_driver_dry_run_probe(
                 command,
                 {"cwd": "."},
@@ -1551,8 +2053,341 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         assert probe is not None
         self.assertFalse(probe["ok"])
         self.assertIn("Docker Collections driver dry-run exited 2", probe["issue"])
-        self.assertIn("--dry-run", run_mock.call_args.args[0])
+        bounded_command = bounded_run.call_args.args[0]
+        self.assertIn("--dry-run", bounded_command)
+        self.assertEqual(evaluate.command_option_value(bounded_command, "--inner-timeout"), "1")
+        self.assertEqual(evaluate.command_option_value(bounded_command, "--timeout"), "121")
+        self.assertEqual(bounded_run.call_args.kwargs["timeout_seconds"], 392)
+        self.assertEqual(
+            bounded_run.call_args.kwargs["max_output_bytes"],
+            evaluate.DEFAULT_MAX_PROBE_OUTPUT_BYTES,
+        )
+        self.assertFalse(bounded_run.call_args.kwargs["shell"])
         self.assertEqual(probe["record"]["source"], "paper-collections-docker-driver")
+        self.assertFalse(probe["process_group_terminated"])
+
+    def test_plan_local_collections_dry_run_probe_rewrites_and_budgets_timeout(self) -> None:
+        command = [
+            sys.executable,
+            "evaluation/scripts/paper_workload_driver.py",
+            "--dataset",
+            "default_performance",
+            "--benchmark",
+            "Collections",
+            "--allocator",
+            "unialloc",
+            "--timeout=1800",
+        ]
+        output = json.dumps(
+            {
+                "ok": True,
+                "source": "paper-workload-driver",
+                "dry_run": True,
+                "dataset": "default_performance",
+                "benchmark": "Collections",
+                "allocator": "unialloc",
+            }
+        ).encode()
+        with mock.patch.object(
+            evaluate,
+            "run_plan_command_bounded",
+            return_value={
+                "exit_code": 0,
+                "error": None,
+                "stdout_tail": output,
+                "stderr_tail": b"",
+                "stdout_bytes": len(output),
+                "stderr_bytes": 0,
+                "stdout_retained_bytes": len(output),
+                "stderr_retained_bytes": 0,
+                "stdout_truncated": False,
+                "stderr_truncated": False,
+                "process_group_pid": 456,
+                "process_group_terminated": False,
+            },
+        ) as bounded_run:
+            probe = evaluate.local_collections_driver_dry_run_probe(
+                command,
+                {"cwd": "."},
+                {
+                    "dataset": "default_performance",
+                    "benchmark": "Collections",
+                    "allocator": "unialloc",
+                },
+                timeout=2,
+            )
+        self.assertIsNotNone(probe)
+        assert probe is not None
+        self.assertTrue(probe["ok"], probe)
+        bounded_command = bounded_run.call_args.args[0]
+        self.assertNotIn("--timeout=1800", bounded_command)
+        self.assertEqual(evaluate.command_option_value(bounded_command, "--timeout"), "2")
+        self.assertEqual(bounded_run.call_args.kwargs["timeout_seconds"], 122)
+        self.assertEqual(probe["outer_timeout"]["outer_timeout_seconds"], 122)
+
+    def test_plan_collections_preflight_timeout_kills_descendants_and_bounds_output(self) -> None:
+        if os.name != "posix":
+            self.skipTest("process-group timeout behavior is POSIX-specific")
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = pathlib.Path(raw_tmp)
+            pid_file = tmp / "child.pid"
+            driver = tmp / "paper_workload_driver.py"
+            driver.write_text(
+                "\n".join(
+                    [
+                        "import pathlib, subprocess, sys, time",
+                        f"pid_file = pathlib.Path({str(pid_file)!r})",
+                        "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])",
+                        "pid_file.write_text(str(child.pid), encoding='utf-8')",
+                        "print('x' * 4096, flush=True)",
+                        "time.sleep(30)",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with mock.patch.object(evaluate, "DEFAULT_MAX_PROBE_OUTPUT_BYTES", 128), mock.patch.object(
+                evaluate,
+                "paper_plan_subprocess_timeout",
+                return_value=(1, {"outer_timeout_seconds": 1}),
+            ):
+                probe = evaluate.local_collections_driver_dry_run_probe(
+                    [sys.executable, str(driver)],
+                    {"cwd": str(tmp)},
+                    {
+                        "dataset": "default_performance",
+                        "benchmark": "Collections",
+                        "allocator": "unialloc",
+                    },
+                    timeout=1,
+                )
+            self.assertIsNotNone(probe)
+            assert probe is not None
+            self.assertFalse(probe["ok"])
+            self.assertEqual(probe["returncode"], 124)
+            self.assertTrue(probe["process_group_terminated"])
+            self.assertTrue(probe["stdout_truncated"])
+            self.assertGreater(probe["stdout_bytes"], probe["stdout_retained_bytes"])
+            self.assertLessEqual(len(probe["stdout"].encode()), 128)
+            self.assertIn("timeout after 1s", probe["issue"])
+            self.assertTrue(pid_file.exists())
+            child_pid = int(pid_file.read_text(encoding="utf-8"))
+            for _ in range(30):
+                try:
+                    os.kill(child_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.1)
+            else:
+                self.fail(f"timed-out preflight child still exists: pid={child_pid}")
+
+    def test_plan_runner_timeout_kills_group_after_leader_exits(self) -> None:
+        """A dead group leader must not hide a SIGTERM-resistant descendant."""
+
+        if os.name != "posix":
+            self.skipTest("process-group timeout behavior is POSIX-specific")
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = pathlib.Path(raw_tmp)
+            child_pid_file = tmp / "child.pid"
+            leader = tmp / "leader.py"
+            leader.write_text(
+                "\n".join(
+                    [
+                        "import pathlib, signal, subprocess, sys, time",
+                        f"pid_file = pathlib.Path({str(child_pid_file)!r})",
+                        "child = '''import os, pathlib, signal, sys, time",
+                        "signal.signal(signal.SIGTERM, signal.SIG_IGN)",
+                        "pathlib.Path(sys.argv[1]).write_text(str(os.getpid()), encoding='utf-8')",
+                        "while True: time.sleep(1)'''",
+                        "subprocess.Popen([sys.executable, '-c', child, str(pid_file)])",
+                        "while not pid_file.exists(): time.sleep(0.01)",
+                        "while True: time.sleep(1)",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            child_pid = None
+            process_group_id = None
+            try:
+                result = evaluate.run_plan_command_bounded(
+                    [sys.executable, str(leader)],
+                    cwd=tmp,
+                    env=os.environ.copy(),
+                    shell=False,
+                    timeout_seconds=1,
+                    max_output_bytes=128,
+                )
+                process_group_id = result["process_group_pid"]
+                self.assertTrue(child_pid_file.exists(), result)
+                child_pid = int(child_pid_file.read_text(encoding="utf-8"))
+                self.assertEqual(result["exit_code"], 124, result)
+                self.assertTrue(result["process_group_terminated"], result)
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(child_pid, 0)
+                with self.assertRaises(ProcessLookupError):
+                    os.killpg(process_group_id, 0)
+            finally:
+                if process_group_id is not None:
+                    try:
+                        os.killpg(process_group_id, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                if child_pid is not None:
+                    try:
+                        os.kill(child_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
+    def test_plan_runner_interrupt_allows_wrapper_to_clean_nested_session(self) -> None:
+        """Ctrl-C must reach the wrapper before TERM/KILL fallback cleanup."""
+
+        if os.name != "posix":
+            self.skipTest("nested-session interrupt behavior is POSIX-specific")
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = pathlib.Path(raw_tmp)
+            child_pid_file = tmp / "nested-child.pid"
+            child_stopped = tmp / "nested-child.stopped"
+            wrapper = tmp / "wrapper.py"
+            wrapper.write_text(
+                "\n".join(
+                    [
+                        "import os, pathlib, signal, subprocess, sys, time",
+                        f"pid_file = pathlib.Path({str(child_pid_file)!r})",
+                        f"stopped = pathlib.Path({str(child_stopped)!r})",
+                        "child = '''import os, pathlib, signal, sys, time",
+                        "pid_file = pathlib.Path(sys.argv[1])",
+                        "stopped = pathlib.Path(sys.argv[2])",
+                        "def stop(_signum, _frame):",
+                        "    stopped.write_text('terminated', encoding='utf-8')",
+                        "    raise SystemExit(0)",
+                        "signal.signal(signal.SIGTERM, stop)",
+                        "pid_file.write_text(str(os.getpid()), encoding='utf-8')",
+                        "while True: time.sleep(1)'''",
+                        "proc = subprocess.Popen(",
+                        "    [sys.executable, '-c', child, str(pid_file), str(stopped)],",
+                        "    start_new_session=True,",
+                        ")",
+                        "while not pid_file.exists(): time.sleep(0.01)",
+                        "try:",
+                        "    proc.wait()",
+                        "except KeyboardInterrupt:",
+                        "    os.killpg(proc.pid, signal.SIGTERM)",
+                        "    try:",
+                        "        proc.wait(timeout=2)",
+                        "    except subprocess.TimeoutExpired:",
+                        "        os.killpg(proc.pid, signal.SIGKILL)",
+                        "        proc.wait(timeout=2)",
+                        "    raise",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            stop_sender = threading.Event()
+
+            def interrupt_when_ready() -> None:
+                deadline = time.monotonic() + 10
+                while not stop_sender.is_set() and time.monotonic() < deadline:
+                    if child_pid_file.exists():
+                        os.kill(os.getpid(), signal.SIGINT)
+                        return
+                    time.sleep(0.01)
+
+            sender = threading.Thread(target=interrupt_when_ready, daemon=True)
+            sender.start()
+            child_pid = None
+            try:
+                with self.assertRaises(KeyboardInterrupt):
+                    evaluate.run_plan_command_bounded(
+                        [sys.executable, str(wrapper)],
+                        cwd=tmp,
+                        env=os.environ.copy(),
+                        shell=False,
+                        timeout_seconds=60,
+                        max_output_bytes=128,
+                    )
+                self.assertTrue(child_pid_file.exists())
+                child_pid = int(child_pid_file.read_text(encoding="utf-8"))
+                deadline = time.monotonic() + 3
+                while time.monotonic() < deadline and not child_stopped.exists():
+                    time.sleep(0.05)
+                self.assertTrue(child_stopped.exists(), "wrapper did not clean its nested process group")
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(child_pid, 0)
+            finally:
+                stop_sender.set()
+                sender.join(timeout=1)
+                if child_pid is None and child_pid_file.exists():
+                    child_pid = int(child_pid_file.read_text(encoding="utf-8"))
+                if child_pid is not None:
+                    try:
+                        os.killpg(child_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
+    def test_fake_docker_preserves_inner_timeout_json_during_wrapper_grace(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = pathlib.Path(raw_tmp)
+            fake_docker = tmp / "fake-docker"
+            fake_docker.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env python3",
+                        "import json, sys, time",
+                        "args = sys.argv[1:]",
+                        "if args and args[0] == 'version':",
+                        "    print('{}')",
+                        "    raise SystemExit(0)",
+                        "if 'paper_workload_driver.py' in ' '.join(args):",
+                        "    time.sleep(1.2)",
+                        "    print(json.dumps({'ok': False, 'source': 'paper-workload-driver', 'error': 'cargo bench timed out', 'code': 124}), file=sys.stderr)",
+                        "    raise SystemExit(124)",
+                        "print('UNAME=Linux-aarch64')",
+                        "print('ldd (Debian GLIBC 2.31) 2.31')",
+                        "print('/usr/bin/python3')",
+                        "print('Python 3.9.2')",
+                        "print('/usr/local/cargo/bin/cargo')",
+                        "print('cargo 1.64.0')",
+                        "print('/usr/bin/cmake')",
+                        "print('cmake version 3.18.4')",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_docker.chmod(0o755)
+            command = evaluate.paper_collections_docker_driver_command(
+                {
+                    "dataset": "default_performance",
+                    "benchmark": "Collections",
+                    "allocator": "ptmalloc",
+                },
+                image="paper:test",
+                platform_name="linux/arm64",
+                timeout=1,
+            )
+            command.extend(["--docker-bin", str(fake_docker), "--target-volume", ""])
+            proc = subprocess.run(
+                command,
+                cwd=str(ROOT),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=10,
+            )
+            self.assertEqual(proc.returncode, 124, proc.stderr)
+            record = evaluate.parse_last_json_object_from_text(proc.stdout)
+            self.assertIsInstance(record, dict, proc.stdout)
+            assert isinstance(record, dict)
+            self.assertFalse(record["ok"])
+            self.assertEqual(record["error"], "cargo bench timed out")
+            self.assertEqual(record["code"], 124)
+            self.assertEqual(record["inner_driver"]["returncode"], 124)
+            self.assertFalse(record["inner_driver"]["timed_out"])
+            self.assertEqual(record["inner_driver"]["inner_timeout_seconds"], 1)
+            self.assertEqual(record["inner_driver"]["docker_timeout_seconds"], 121)
 
     def test_wrapper_manifest_can_route_blocked_collections_rule_to_docker_driver(self) -> None:
         contract = {
@@ -1675,6 +2510,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                     timeout=30,
                     cwd=str(tmp_path),
                     collections_driver=True,
+                    driver_build_timeout=60,
                 )
                 audit = evaluate.build_paper_performance_plan_audit(
                     {"methodology": {"runs_per_benchmark": 1}},
@@ -1688,6 +2524,8 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         workload = plan["workloads"][0]
         self.assertEqual(workload["driver_kind"], "local-collections-driver")
         self.assertIn("evaluation/scripts/paper_workload_driver.py", workload["command"])
+        self.assertEqual(evaluate.command_option_value(workload["command"], "--timeout"), "30")
+        self.assertEqual(evaluate.command_option_value(workload["command"], "--build-timeout"), "60")
         self.assertNotIn("claim_grade_blockers", workload)
         self.assertEqual(audit["summary"]["invalid_workload_count"], 0, audit)
         self.assertTrue(audit["summary"]["ready_for_claim_grade_import"], audit)
@@ -1922,6 +2760,15 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             blocked_jemalloc["current_evidence"]["sample_claim_grade_blockers"],
         )
         self.assertIn("run-paper-performance-plan", gap_plan["run_commands"]["one_record_probe"])
+
+    def test_paper_performance_gap_run_commands_are_claim_grade_fail_closed(self) -> None:
+        commands = evaluate.paper_performance_gap_run_commands(
+            pathlib.Path("gap-plan.json")
+        )
+
+        for name in ("one_record_probe", "fill_gap_plan"):
+            with self.subTest(name=name):
+                self.assertIn("--claim-grade", commands[name])
 
     def test_paper_performance_gap_plan_blocks_invalid_source_plan_workloads(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp:
@@ -2481,6 +3328,189 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         self.assertEqual(selection["runner"], str(runner.resolve()))
         self.assertEqual(evaluate.windows_runtime_command_prefix(selection), [str(runner.resolve())])
         self.assertEqual(selection["docker_image"]["image_id"], "sha256:test")
+
+    def test_windows_runtime_success_replaces_smoke_only_target_metadata(self) -> None:
+        """A validated Windows runtime must not retain the pre-run smoke label."""
+
+        target = "x86_64-pc-windows-gnu"
+        source_fingerprint = {
+            "schema_version": evaluate.REPOSITORY_SOURCE_FINGERPRINT_SCHEMA_VERSION,
+            "algorithm": "sha256",
+            "source_digest": "a" * 64,
+            "source_file_count": 1,
+            "git_head": "b" * 40,
+            "git_dirty": True,
+        }
+        event = {
+            "source": "platform_allocator_workload",
+            "passed": True,
+            "allocator": "UniAlloc",
+            "global_allocator": "UniAlloc",
+            "global_allocator_active": True,
+            "allocator_backend": "page_heap_thread_cache",
+            "system_backend": "windows_virtual_alloc",
+            "thread_local_backend": "fls_callback",
+            "thread_local_key_ready": True,
+            "thread_local_save_failures": 0,
+            "allocator_stats_recording_active": True,
+            "unialloc_allocator_activity_observed": True,
+            "allocator_allocation_counters_consistent": True,
+            "allocator_deallocation_counters_consistent": True,
+            "allocator_allocated_byte_counters_consistent": True,
+            "allocator_coverage_basis_points_valid": True,
+            "allocator_total_allocations": 7,
+            "allocator_typed_allocations": 0,
+            "allocator_fallback_allocations": 7,
+            "allocator_live_allocations": 0,
+            "allocator_total_deallocations": 7,
+            "allocator_typed_deallocations": 0,
+            "allocator_fallback_deallocations": 7,
+            "allocator_total_allocated_bytes": 4096,
+            "allocator_typed_allocated_bytes": 0,
+            "allocator_fallback_allocated_bytes": 4096,
+            "allocator_coverage_basis_points": 0,
+            "target_os": "windows",
+            "target_family": "windows",
+            "target_arch": "x86_64",
+            "threads": 1,
+            "iters": 2,
+            "max_len": 3,
+            "duration_ns": 12345,
+            "checksum": 99,
+        }
+
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = pathlib.Path(raw_tmp)
+            results = tmp / "results"
+            results.mkdir()
+            fake_exe = tmp / "platform_allocator_workload.exe"
+            fake_exe.write_bytes(b"MZ-unit-fixture")
+
+            def fake_platform_command(
+                out_dir: pathlib.Path,
+                label: str,
+                command: list[str],
+                timeout: int,
+                *,
+                extra_env=None,
+            ) -> dict:
+                stdout = out_dir / f"{label}.stdout.txt"
+                stderr = out_dir / f"{label}.stderr.txt"
+                is_runtime_sample = label.startswith("windows-runtime-workload-") and label.rsplit("-", 1)[-1].isdigit()
+                stdout.write_text(
+                    json.dumps(event, sort_keys=True) + "\n" if is_runtime_sample else "passed\n",
+                    encoding="utf-8",
+                )
+                stderr.write_text("", encoding="utf-8")
+                return {
+                    "schema_version": 1,
+                    "label": label,
+                    "command": list(command),
+                    "started_at": "2026-07-10T00:00:00Z",
+                    "ended_at": "2026-07-10T00:00:01Z",
+                    "wall_seconds": 0.01,
+                    "exit_code": 0,
+                    "error": None,
+                    "stdout": str(stdout),
+                    "stderr": str(stderr),
+                    "env_overrides": dict(extra_env or {}),
+                    "passed": True,
+                }
+
+            args = types.SimpleNamespace(
+                run_id="windows-runtime-success-metadata",
+                timeout=10,
+                rust_toolchain=None,
+                platforms=["windows"],
+                windows_rust_target=target,
+                windows_linker=None,
+                windows_runtime_workload=True,
+                windows_runtime_import_log=None,
+                windows_runtime_runner="fake-wine",
+                windows_runtime_samples=1,
+                windows_runtime_threads=1,
+                windows_runtime_iters=2,
+                windows_runtime_max_len=3,
+                no_import=True,
+            )
+            runner_selection = {
+                "runner": "/tmp/fake-wine",
+                "source": "unit-harness",
+                "mode": "runner",
+                "available": True,
+                "command_prefix": ["/tmp/fake-wine"],
+                "diagnostics": [],
+                "candidates": [],
+            }
+            linker_selection = {
+                "target": target,
+                "required": True,
+                "env_key": evaluate.windows_linker_env_key(target),
+                "linker": "/tmp/fake-linker",
+                "source": "unit-harness",
+                "available": True,
+                "diagnostics": [],
+                "candidates": [],
+            }
+
+            with temporary_eval_results_and_raw(results) as raw, mock.patch.object(
+                evaluate,
+                "repository_source_fingerprint",
+                return_value=source_fingerprint,
+            ), mock.patch.object(
+                evaluate,
+                "installed_rust_targets",
+                return_value=[target],
+            ), mock.patch.object(
+                evaluate,
+                "windows_linker_selection",
+                return_value=linker_selection,
+            ), mock.patch.object(
+                evaluate,
+                "windows_runtime_runner_selection",
+                return_value=runner_selection,
+            ), mock.patch.object(
+                evaluate,
+                "windows_example_executable",
+                return_value=fake_exe,
+            ), mock.patch.object(
+                evaluate,
+                "run_platform_command",
+                side_effect=fake_platform_command,
+            ), mock.patch.object(
+                evaluate,
+                "preserve_unselected_platform_matrix_entries",
+                return_value=None,
+            ):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    status = evaluate.collect_platform_smoke(args)
+
+                out_dir = raw / args.run_id
+                matrix = json.loads(
+                    (out_dir / "platform-matrix.generated.json").read_text(encoding="utf-8")
+                )
+                run_summary = json.loads(
+                    (out_dir / "windows-run-summary.json").read_text(encoding="utf-8")
+                )
+                performance = json.loads(
+                    (out_dir / "windows-performance-data.json").read_text(encoding="utf-8")
+                )
+                preflight = json.loads(
+                    (out_dir / "platform-matrix-preflight-audit.json").read_text(encoding="utf-8")
+                )
+
+        self.assertEqual(status, 0)
+        windows = matrix["windows"]
+        self.assertTrue(windows["passed"])
+        self.assertTrue(windows["claim_grade"])
+        self.assertNotIn("smoke_scope", windows["target_metadata"])
+        self.assertNotIn("smoke_scope", run_summary["target_metadata"])
+        self.assertNotIn("smoke_scope", performance["target_metadata"])
+        self.assertFalse(evaluate.platform_smoke_only_marker(windows))
+        self.assertTrue(
+            preflight["platforms"]["windows"]["ready_for_claim_grade_import"],
+            preflight["platforms"]["windows"]["blockers"],
+        )
 
     def test_platform_command_artifact_preserves_command_log_and_env(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp:
@@ -3194,6 +4224,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw_tmp:
             tmp = pathlib.Path(raw_tmp)
             boot_log = tmp / "blogos-boot.log"
+            source_fingerprint = evaluate.repository_source_fingerprint()
             boot_log.write_text(
                 "BlogOS boot\n"
                 "UniAlloc fixed_heap initialized\n"
@@ -3202,6 +4233,9 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                 "platform=blogos "
                 f"image_sha256={'1' * 64} "
                 f"boot_config_sha256={'2' * 64} "
+                f"schema_version={source_fingerprint['schema_version']} "
+                f"algorithm={source_fingerprint['algorithm']} "
+                f"source_digest={source_fingerprint['source_digest']} "
                 "emulator=qemu-system-x86_64 "
                 "emulator_version=8.2.0\n"
                 f"{evaluate.CONSTRAINED_BOOT_SAMPLE_MARKER} "
@@ -3624,6 +4658,54 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             audit = evaluate.audit_platform_entry("windows", preserved, new_raw)
             self.assertTrue(audit["ready_for_claim_grade_import"], audit["blockers"])
 
+    def test_latest_raw_platform_rejects_stale_source_before_expensive_audit(self) -> None:
+        """Stale raw entries must not hash evidence before fail-closed rejection."""
+
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            raw_root = pathlib.Path(raw_tmp)
+            stale_run = raw_root / "stale-redox-run"
+            stale_run.mkdir()
+            write_json(
+                stale_run / "platform-matrix.generated.json",
+                {
+                    "redox": {
+                        "target": "historical Redox image",
+                        "passed": True,
+                        "claim_grade": True,
+                        "complete_for_claim": True,
+                        "evidence": [
+                            {
+                                "path": "large-historical-image.bin",
+                                "kind": "boot_image",
+                            }
+                        ],
+                    }
+                },
+            )
+            write_json(
+                stale_run / "platform-matrix-preflight-audit.json",
+                {"platforms": {"redox": {"ready_for_claim_grade_import": True}}},
+            )
+            current = {"source_digest": "c" * 64}
+            with mock.patch.object(
+                evaluate,
+                "repository_source_fingerprint",
+                return_value=current,
+            ), mock.patch.object(
+                evaluate,
+                "audit_platform_entry",
+                side_effect=AssertionError(
+                    "stale source binding must be rejected before evidence audit"
+                ),
+            ) as expensive_audit:
+                selected = evaluate.latest_reusable_raw_platform_matrix_entry(
+                    "redox",
+                    raw_root=raw_root,
+                )
+
+        self.assertIsNone(selected)
+        expensive_audit.assert_not_called()
+
     def test_partial_platform_refresh_does_not_reuse_selected_missing_platform(self) -> None:
         old_results = evaluate.RESULTS
         with tempfile.TemporaryDirectory() as raw_tmp:
@@ -3677,6 +4759,97 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             )
             audit = evaluate.build_compiler_coverage_audit(manifest)
         self.assertTrue(audit["summary"]["ready_for_claim_grade_import"], audit["blockers"])
+
+    def test_type_mapping_allows_ffi_in_compiler_derived_object_type(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            mapping_path = pathlib.Path(raw_tmp) / "type-mapping.json"
+            write_json(
+                mapping_path,
+                {
+                    "source": "rustc-driver-mir-semantic-scope-std-bench-runtime-type-map",
+                    "allocation_sites": [
+                        {
+                            "allocation_site_id": "mir:os_string:bb0:stmt0",
+                            "type_id": 17,
+                            "callsite": 4096,
+                            "semantic_object_type": "std::ffi::OsString",
+                            "source_span": "unialloc/benches/os_string.rs:12:5: 12:24",
+                            "compiler_pass": "rustc_driver_optimized_mir_provider_override",
+                            "type_id_basis": "rustc_middle_ty_destination_or_argument_heap_object_type",
+                        }
+                    ],
+                },
+            )
+            status = evaluate.audit_compiler_type_mapping_evidence(
+                {
+                    "claim_grade": True,
+                    "complete_for_claim": True,
+                    "type_id_basis": "compiler-assigned-allocation-site-object-type-id-rustc-driver-mir-semantic-scope",
+                    "compiler_pass": {
+                        "kind": "rustc_driver_optimized_mir_provider_override"
+                    },
+                },
+                [
+                    {
+                        "kind": "type_mapping",
+                        "resolved": str(mapping_path),
+                        "path": str(mapping_path),
+                        "exists": True,
+                        "placeholder": False,
+                    }
+                ],
+            )
+
+        self.assertEqual(status["status"], "pass", status["blockers"])
+        self.assertEqual(status["valid_record_count"], 1)
+        self.assertEqual(status["provenance_markers"], [])
+
+    def test_type_mapping_rejects_ffi_proxy_type_id_basis(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            mapping_path = pathlib.Path(raw_tmp) / "type-mapping.json"
+            write_json(
+                mapping_path,
+                {
+                    "source": "rustc-driver-mir-semantic-scope-std-bench-runtime-type-map",
+                    "allocation_sites": [
+                        {
+                            "allocation_site_id": "mir:os_string:bb0:stmt0",
+                            "type_id": 17,
+                            "callsite": 4096,
+                            "semantic_object_type": "std::ffi::OsString",
+                            "source_span": "unialloc/benches/os_string.rs:12:5: 12:24",
+                            "compiler_pass": "rustc_driver_optimized_mir_provider_override",
+                            "type_id_basis": "ffi-abi-proxy-rust-type-id",
+                        }
+                    ],
+                },
+            )
+            status = evaluate.audit_compiler_type_mapping_evidence(
+                {
+                    "claim_grade": True,
+                    "complete_for_claim": True,
+                    "type_id_basis": "compiler-assigned-allocation-site-object-type-id-rustc-driver-mir-semantic-scope",
+                    "compiler_pass": {
+                        "kind": "rustc_driver_optimized_mir_provider_override"
+                    },
+                },
+                [
+                    {
+                        "kind": "type_mapping",
+                        "resolved": str(mapping_path),
+                        "path": str(mapping_path),
+                        "exists": True,
+                        "placeholder": False,
+                    }
+                ],
+            )
+
+        self.assertEqual(status["status"], "fail")
+        self.assertEqual(status["provenance_markers"], ["proxy"])
+        self.assertIn(
+            "type_mapping provenance still indicates non-compiler/prototype data",
+            " | ".join(status["blockers"]),
+        )
 
     def test_fresh_compiler_coverage_integrity_rechecks_manifest_evidence_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp:
@@ -3887,8 +5060,9 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             results = pathlib.Path(raw_tmp) / "results"
             results.mkdir()
             with temporary_eval_results_and_raw(results):
-                write_ready_mir_semantic_scope_runtime_companion(results)
                 write_ready_mir_probe_companions(results)
+                runtime_path = write_ready_mir_semantic_scope_runtime_companion(results)
+                bind_ready_mir_probe_companions_to_runtime(runtime_path)
                 status = evaluate.compiler_coverage_claim_grade_status(
                     ready_mir_semantic_scope_compiler_audit(coverage=99.91),
                     threshold=72.17,
@@ -3951,6 +5125,184 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         )
         self.assertFalse(blocked["runtime_claim_ready"], blocked)
         self.assertIn("MIR probe companion blocker: missing probe", blocked["blockers"])
+
+    def test_runtime_collector_boundary_recheck_rejects_postcheck_companion_tamper(self) -> None:
+        stable_source = evaluate.repository_source_fingerprint()
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = pathlib.Path(raw_tmp)
+            results = tmp / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                write_ready_mir_probe_companions(
+                    results,
+                    source_fingerprint=stable_source,
+                )
+                audit_path = write_mir_semantic_scope_runtime_audit_fixture(
+                    tmp,
+                    run_id="collector-late-source-drift",
+                    benchmark="bench_a",
+                    source_fingerprint=stable_source,
+                )
+                audit = bind_ready_mir_probe_companions_to_runtime(
+                    audit_path,
+                    source_fingerprint=stable_source,
+                )
+                audit["summary"].update(
+                    {
+                        "runtime_claim_ready": True,
+                        "ready_for_claim_grade_import": True,
+                        "claim_grade": True,
+                        "complete_for_claim": True,
+                    }
+                )
+                write_json(audit_path, audit)
+                initial_publication = evaluate.runtime_claim_publication_status(
+                    audit,
+                    audit_path=audit_path,
+                    expected_source_fingerprint=stable_source,
+                )
+                direct_path = (
+                    results / "rustc_driver_direct_allocator_mir_probe_audit.json"
+                )
+                direct = json.loads(direct_path.read_text(encoding="utf-8"))
+                direct["tampered_after_initial_publication_check"] = True
+                write_json(direct_path, direct)
+                results_audit_path = (
+                    results
+                    / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json"
+                )
+                boundary = evaluate.publish_runtime_claim_audit_if_current(
+                    audit,
+                    audit_path=audit_path,
+                    results_audit_path=results_audit_path,
+                    expected_source_fingerprint=stable_source,
+                )
+                downgraded = json.loads(audit_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(initial_publication["ready"], initial_publication)
+        self.assertFalse(boundary["published"], boundary)
+        self.assertFalse(results_audit_path.exists())
+        self.assertIn(
+            "embedded MIR probe identities/hashes do not match current referenced files",
+            " | ".join(boundary["publication_status"]["blockers"]),
+        )
+        for key in (
+            "runtime_claim_ready",
+            "ready_for_claim_grade_import",
+            "claim_grade",
+            "complete_for_claim",
+        ):
+            self.assertFalse(downgraded["summary"][key], downgraded)
+
+    def test_mir_runtime_claim_gate_accepts_strict_direct_probe_fallback_for_zero_target_sites(self) -> None:
+        gate = evaluate.rustc_driver_mir_semantic_scope_runtime_claim_gate(
+            runtime_smoke_validated=True,
+            runtime_full_surface_candidate_validated=True,
+            runtime_surface_blockers=[],
+            target_rewrite={
+                "provider_override_installed": True,
+                "compiler_pass": {
+                    "kind": "rustc_driver_optimized_mir_provider_override",
+                    "query_overridden": "optimized_mir",
+                },
+                "body_clone_returned_to_rustc": True,
+                "actual_semantic_scope_rewrite": True,
+            },
+            target_rewrite_summary={},
+            actual_semantic_scope_rewrite=True,
+            semantic_scope_rewrite_applied_count=1329,
+            missing_runtime_pairs_from_mapping=[],
+            direct_allocator_rewrite_requested=True,
+            direct_allocator_rewrite_validated=False,
+            direct_local_size_align_with_semantic_drop_requested=True,
+            direct_size_align_local_pairing_validated=False,
+            mir_probe_companions={
+                "ready": True,
+                "blockers": [],
+                "direct_allocator_probe": {"ready": True, "blockers": []},
+            },
+        )
+        self.assertTrue(gate["runtime_claim_ready"], gate)
+        self.assertTrue(gate["direct_allocator_probe_companion_ready"], gate)
+        self.assertTrue(gate["direct_claim_companion_fallback_ready"], gate)
+        self.assertTrue(gate["direct_claim_companion_fallback_used"], gate)
+        self.assertTrue(gate["direct_allocator_rewrite_evidence_ready"], gate)
+        self.assertTrue(gate["direct_size_align_local_pairing_evidence_ready"], gate)
+        self.assertTrue(gate["direct_claim_evidence_ready"], gate)
+        self.assertEqual(gate["blockers"], [])
+
+    def test_mir_runtime_claim_gate_rejects_absent_or_nonready_strict_direct_probe_fallback(self) -> None:
+        base = dict(
+            runtime_smoke_validated=True,
+            runtime_full_surface_candidate_validated=True,
+            runtime_surface_blockers=[],
+            target_rewrite={
+                "provider_override_installed": True,
+                "compiler_pass": {
+                    "kind": "rustc_driver_optimized_mir_provider_override",
+                    "query_overridden": "optimized_mir",
+                },
+                "body_clone_returned_to_rustc": True,
+                "actual_semantic_scope_rewrite": True,
+            },
+            target_rewrite_summary={},
+            actual_semantic_scope_rewrite=True,
+            semantic_scope_rewrite_applied_count=1329,
+            missing_runtime_pairs_from_mapping=[],
+            direct_allocator_rewrite_requested=True,
+            direct_allocator_rewrite_validated=False,
+            direct_local_size_align_with_semantic_drop_requested=True,
+            direct_size_align_local_pairing_validated=False,
+        )
+        cases = {
+            "absent_companion_bundle": (
+                None,
+                False,
+            ),
+            "absent_direct_probe": (
+                {"ready": True, "blockers": []},
+                False,
+            ),
+            "nonready_direct_probe": (
+                {
+                    "ready": True,
+                    "blockers": [],
+                    "direct_allocator_probe": {
+                        "ready": False,
+                        "blockers": ["strict direct probe not ready"],
+                    },
+                },
+                False,
+            ),
+            "nonready_companion_aggregate": (
+                {
+                    "ready": False,
+                    "blockers": ["semantic-scope probe missing"],
+                    "direct_allocator_probe": {"ready": True, "blockers": []},
+                },
+                True,
+            ),
+        }
+        for name, (companions, direct_probe_ready) in cases.items():
+            with self.subTest(name=name):
+                gate = evaluate.rustc_driver_mir_semantic_scope_runtime_claim_gate(
+                    **base,
+                    mir_probe_companions=companions,
+                )
+                self.assertFalse(gate["runtime_claim_ready"], gate)
+                self.assertEqual(
+                    gate["direct_allocator_probe_companion_ready"],
+                    direct_probe_ready,
+                    gate,
+                )
+                self.assertFalse(gate["direct_claim_companion_fallback_ready"], gate)
+                self.assertFalse(gate["direct_claim_companion_fallback_used"], gate)
+                self.assertFalse(gate["direct_allocator_rewrite_evidence_ready"], gate)
+                self.assertFalse(gate["direct_size_align_local_pairing_evidence_ready"], gate)
+                self.assertFalse(gate["direct_claim_evidence_ready"], gate)
+                joined = " | ".join(gate["blockers"])
+                self.assertIn("direct allocator rewrite validation is not satisfied", joined)
+                self.assertIn("direct size/align local ABI pairing validation is not satisfied", joined)
 
 
     def test_mir_runtime_claim_gate_requires_explicit_compiler_pass_query(self) -> None:
@@ -4161,6 +5513,29 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             with temporary_eval_results_and_raw(results):
                 audit_path = write_ready_mir_cross_thread_hint_probe_companion(results)
                 audit = json.loads(audit_path.read_text(encoding="utf-8"))
+                status = evaluate.rustc_driver_mir_cross_thread_hint_probe_companion_status(audit)
+                self.assertTrue(status["ready"], status["blockers"])
+                rewrite_path = pathlib.Path(audit["target_rewrite"]["path"])
+                rewrite = json.loads(rewrite_path.read_text(encoding="utf-8"))
+                rewrite["rewrite_candidates"][0][
+                    "replacement_symbol"
+                ] = "__unialloc_semantic_scope_push_hints_local"
+                rewrite["rewrite_candidates"][0][
+                    "replacement_resolution_status"
+                ] = "resolved_unialloc_semantic_scope_push_hints_local_pop"
+                write_json(rewrite_path, rewrite)
+                hints_local_status = (
+                    "resolved_unialloc_semantic_scope_push_hints_local_pop"
+                )
+                audit["summary"][
+                    "semantic_scope_replacement_resolution_status"
+                ] = hints_local_status
+                audit["target_rewrite"][
+                    "semantic_scope_replacement_resolution_status"
+                ] = hints_local_status
+                audit["target_rewrite"][
+                    "replacement_resolution_status"
+                ] = hints_local_status
                 status = evaluate.rustc_driver_mir_cross_thread_hint_probe_companion_status(audit)
                 self.assertTrue(status["ready"], status["blockers"])
                 summary = audit["summary"]
@@ -4460,6 +5835,75 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                         self.assertFalse(status["ready"])
                         self.assertIn("optimized_mir provider override", " | ".join(status["blockers"]))
 
+    def test_ready_mir_probe_bundle_rejects_source_digest_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            results = pathlib.Path(raw_tmp) / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                write_ready_mir_probe_companions(
+                    results,
+                    source_fingerprint=source_fingerprint_fixture("a"),
+                )
+                status = evaluate.rustc_driver_mir_probe_companion_status(
+                    required_source_fingerprint=source_fingerprint_fixture("b"),
+                    required_rust_toolchain="+nightly-2022-07-01",
+                )
+        self.assertFalse(status["ready"], status)
+        joined = " | ".join(status["blockers"])
+        self.assertIn("semantic-scope probe: artifact repository source fingerprint digest", joined)
+        self.assertIn("direct allocator probe: artifact repository source fingerprint digest", joined)
+        self.assertIn("cross-thread hint probe: artifact repository source fingerprint digest", joined)
+
+    def test_ready_mir_probe_bundle_rejects_runtime_toolchain_mismatch(self) -> None:
+        source_fingerprint = source_fingerprint_fixture("c")
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            results = pathlib.Path(raw_tmp) / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                write_ready_mir_probe_companions(
+                    results,
+                    source_fingerprint=source_fingerprint,
+                    rust_toolchain="+nightly-2022-07-01",
+                )
+                status = evaluate.rustc_driver_mir_probe_companion_status(
+                    required_source_fingerprint=source_fingerprint,
+                    required_rust_toolchain="nightly-2026-07-01",
+                )
+        self.assertFalse(status["ready"], status)
+        self.assertIn(
+            "rust toolchain does not match the runtime audit",
+            " | ".join(status["blockers"]),
+        )
+
+    def test_runtime_claim_audit_source_drift_cannot_promote_results(self) -> None:
+        started = source_fingerprint_fixture("d")
+        finished = source_fingerprint_fixture("e")
+        finalized = evaluate.finalize_runtime_claim_audit_source_binding(
+            {
+                "summary": {
+                    "runtime_claim_ready": True,
+                    "ready_for_claim_grade_import": True,
+                    "claim_grade": True,
+                    "complete_for_claim": True,
+                    "blockers": [],
+                }
+            },
+            started=started,
+            finished=finished,
+        )
+        self.assertNotIn("evidence_source_fingerprint", finalized)
+        for key in (
+            "runtime_claim_ready",
+            "ready_for_claim_grade_import",
+            "claim_grade",
+            "complete_for_claim",
+        ):
+            self.assertFalse(finalized["summary"][key], finalized)
+        self.assertIn(
+            "repository source changed while evidence was being collected",
+            " | ".join(finalized["summary"]["blockers"]),
+        )
+
     def test_compiler_coverage_claim_grade_status_requires_runtime_companion(self) -> None:
         old_results = evaluate.RESULTS
         with tempfile.TemporaryDirectory() as raw_tmp:
@@ -4483,7 +5927,9 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             results = pathlib.Path(raw_tmp) / "results"
             results.mkdir()
             with temporary_eval_results_and_raw(results):
+                write_ready_mir_probe_companions(results)
                 audit_path = write_ready_mir_semantic_scope_runtime_companion(results)
+                bind_ready_mir_probe_companions_to_runtime(audit_path)
                 audit = json.loads(audit_path.read_text(encoding="utf-8"))
 
                 status = evaluate.rustc_driver_mir_semantic_scope_runtime_companion_status(audit)
@@ -4543,6 +5989,76 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                 joined = " | ".join(status["blockers"])
                 self.assertIn("no applied candidates from unialloc/benches/", joined)
 
+    def test_mir_semantic_scope_runtime_companion_accepts_local_rewrite_symbols(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            results = pathlib.Path(raw_tmp) / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                write_ready_mir_probe_companions(results)
+                audit_path = write_ready_mir_semantic_scope_runtime_companion(results)
+                bind_ready_mir_probe_companions_to_runtime(audit_path)
+                base_audit = json.loads(audit_path.read_text(encoding="utf-8"))
+                rewrite_path = pathlib.Path(base_audit["target_rewrite"]["path"])
+                base_rewrite = json.loads(rewrite_path.read_text(encoding="utf-8"))
+
+                for replacement_symbol, resolution_status in (
+                    (
+                        "__unialloc_semantic_scope_push_local",
+                        "resolved_unialloc_semantic_scope_push_local_pop",
+                    ),
+                    (
+                        "__unialloc_semantic_scope_push_hints_local",
+                        "resolved_unialloc_semantic_scope_push_hints_local_pop",
+                    ),
+                ):
+                    with self.subTest(replacement_symbol=replacement_symbol):
+                        rewrite = copy.deepcopy(base_rewrite)
+                        rewrite["rewrite_candidates"][0][
+                            "replacement_symbol"
+                        ] = replacement_symbol
+                        write_json(rewrite_path, rewrite)
+                        audit = copy.deepcopy(base_audit)
+                        audit["summary"][
+                            "semantic_scope_replacement_resolution_status"
+                        ] = resolution_status
+                        audit["target_rewrite"][
+                            "semantic_scope_replacement_resolution_status"
+                        ] = resolution_status
+                        audit["target_rewrite"][
+                            "replacement_resolution_status"
+                        ] = resolution_status
+
+                        status = evaluate.rustc_driver_mir_semantic_scope_runtime_companion_status(
+                            audit
+                        )
+                        self.assertTrue(status["ready"], status["blockers"])
+
+    def test_mir_semantic_scope_runtime_companion_rejects_unknown_rewrite_symbol(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            results = pathlib.Path(raw_tmp) / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                write_ready_mir_probe_companions(results)
+                audit_path = write_ready_mir_semantic_scope_runtime_companion(results)
+                bind_ready_mir_probe_companions_to_runtime(audit_path)
+                audit = json.loads(audit_path.read_text(encoding="utf-8"))
+                rewrite_path = pathlib.Path(audit["target_rewrite"]["path"])
+                rewrite = json.loads(rewrite_path.read_text(encoding="utf-8"))
+                rewrite["rewrite_candidates"][0][
+                    "replacement_symbol"
+                ] = "__unialloc_semantic_scope_push_unknown"
+                write_json(rewrite_path, rewrite)
+
+                status = evaluate.rustc_driver_mir_semantic_scope_runtime_companion_status(
+                    audit
+                )
+
+        self.assertFalse(status["ready"])
+        self.assertIn(
+            "rewrite-map contains no actual applied semantic-scope candidates",
+            " | ".join(status["blockers"]),
+        )
+
     def test_mir_semantic_scope_runtime_companion_requires_explicit_compiler_pass_query(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp:
             results = pathlib.Path(raw_tmp) / "results"
@@ -4598,6 +6114,168 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         self.assertIn("direct allocator rewrite validation is not satisfied", joined)
         self.assertIn("direct local size/align semantic-drop mode was not requested", joined)
         self.assertIn("direct size/align local ABI pairing validation is not satisfied", joined)
+
+    def test_runtime_consumer_does_not_waive_unrequested_direct_modes(self) -> None:
+        source_fingerprint = evaluate.repository_source_fingerprint()
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            results = pathlib.Path(raw_tmp) / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                write_ready_mir_probe_companions(
+                    results,
+                    source_fingerprint=source_fingerprint,
+                )
+                audit_path = write_ready_mir_semantic_scope_runtime_companion(
+                    results,
+                    source_fingerprint=source_fingerprint,
+                )
+                audit = json.loads(audit_path.read_text(encoding="utf-8"))
+                audit["toolchain"] = {"rust_toolchain": "nightly-2022-07-01"}
+                audit["mir_probe_companions"] = (
+                    evaluate.rustc_driver_mir_probe_companion_status(
+                        required_source_fingerprint=source_fingerprint,
+                        required_rust_toolchain="nightly-2022-07-01",
+                    )
+                )
+                audit["summary"].update(
+                    {
+                        "direct_allocator_rewrite_requested": False,
+                        "direct_allocator_rewrite_validated": False,
+                        "direct_local_size_align_with_semantic_drop": False,
+                        "direct_size_align_local_pairing_validated": False,
+                    }
+                )
+                status = evaluate.rustc_driver_mir_semantic_scope_runtime_companion_status(
+                    audit
+                )
+        self.assertFalse(status["ready"], status)
+        joined = " | ".join(status["blockers"])
+        self.assertIn("direct allocator rewrite mode was not requested", joined)
+        self.assertIn("direct local size/align semantic-drop mode was not requested", joined)
+
+    def test_runtime_consumer_rejects_embedded_companion_hash_mismatch(self) -> None:
+        source_fingerprint = evaluate.repository_source_fingerprint()
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            results = pathlib.Path(raw_tmp) / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                write_ready_mir_probe_companions(
+                    results,
+                    source_fingerprint=source_fingerprint,
+                )
+                audit_path = write_ready_mir_semantic_scope_runtime_companion(
+                    results,
+                    source_fingerprint=source_fingerprint,
+                )
+                audit = json.loads(audit_path.read_text(encoding="utf-8"))
+                audit["toolchain"] = {"rust_toolchain": "nightly-2022-07-01"}
+                audit["mir_probe_companions"] = (
+                    evaluate.rustc_driver_mir_probe_companion_status(
+                        required_source_fingerprint=source_fingerprint,
+                        required_rust_toolchain="nightly-2022-07-01",
+                    )
+                )
+                audit["summary"]["direct_allocator_rewrite_validated"] = False
+                audit["summary"]["direct_size_align_local_pairing_validated"] = False
+                direct_path = results / "rustc_driver_direct_allocator_mir_probe_audit.json"
+                direct = json.loads(direct_path.read_text(encoding="utf-8"))
+                direct["tampered_after_embedding"] = True
+                write_json(direct_path, direct)
+                status = evaluate.rustc_driver_mir_semantic_scope_runtime_companion_status(
+                    audit
+                )
+        self.assertFalse(status["ready"], status)
+        self.assertIn(
+            "embedded MIR probe identities/hashes do not match current referenced files",
+            " | ".join(status["blockers"]),
+        )
+
+    def test_runtime_and_compiler_consumers_reject_embedded_hash_mismatch_when_direct_is_valid(self) -> None:
+        source_fingerprint = evaluate.repository_source_fingerprint()
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            results = pathlib.Path(raw_tmp) / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                write_ready_mir_probe_companions(
+                    results,
+                    source_fingerprint=source_fingerprint,
+                )
+                audit_path = write_ready_mir_semantic_scope_runtime_companion(
+                    results,
+                    source_fingerprint=source_fingerprint,
+                )
+                runtime_audit = bind_ready_mir_probe_companions_to_runtime(
+                    audit_path,
+                    source_fingerprint=source_fingerprint,
+                )
+                self.assertTrue(
+                    runtime_audit["summary"]["direct_allocator_rewrite_validated"]
+                )
+                self.assertTrue(
+                    runtime_audit["summary"][
+                        "direct_size_align_local_pairing_validated"
+                    ]
+                )
+
+                direct_path = (
+                    results / "rustc_driver_direct_allocator_mir_probe_audit.json"
+                )
+                direct = json.loads(direct_path.read_text(encoding="utf-8"))
+                direct["tampered_after_embedding"] = True
+                write_json(direct_path, direct)
+
+                runtime_status = (
+                    evaluate.rustc_driver_mir_semantic_scope_runtime_companion_status(
+                        runtime_audit
+                    )
+                )
+                compiler_status = evaluate.compiler_coverage_claim_grade_status(
+                    ready_mir_semantic_scope_compiler_audit(
+                        coverage=99.91,
+                        runtime_audit_path=audit_path,
+                    ),
+                    threshold=72.17,
+                )
+
+        self.assertFalse(runtime_status["ready"], runtime_status)
+        self.assertFalse(compiler_status["ready"], compiler_status)
+        mismatch = (
+            "embedded MIR probe identities/hashes do not match current referenced files"
+        )
+        self.assertIn(mismatch, " | ".join(runtime_status["blockers"]))
+        self.assertIn(mismatch, " | ".join(compiler_status["blockers"]))
+
+    def test_mir_probe_companion_bundle_requires_nonempty_identity_fields_for_every_probe(self) -> None:
+        source_fingerprint = evaluate.repository_source_fingerprint()
+        probes = {
+            "semantic-scope probe": "rustc_driver_mir_semantic_scope_probe_audit.json",
+            "direct allocator probe": "rustc_driver_direct_allocator_mir_probe_audit.json",
+            "cross-thread hint probe": "rustc_driver_mir_cross_thread_hint_probe_audit.json",
+        }
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            results = pathlib.Path(raw_tmp) / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                for label, filename in probes.items():
+                    for field in ("run_id", "generated_at"):
+                        with self.subTest(probe=label, field=field):
+                            write_ready_mir_probe_companions(
+                                results,
+                                source_fingerprint=source_fingerprint,
+                            )
+                            path = results / filename
+                            audit = json.loads(path.read_text(encoding="utf-8"))
+                            audit[field] = ""
+                            write_json(path, audit)
+                            status = evaluate.rustc_driver_mir_probe_companion_status(
+                                required_source_fingerprint=source_fingerprint,
+                                required_rust_toolchain="nightly-2022-07-01",
+                            )
+                            self.assertFalse(status["ready"], status)
+                            self.assertIn(
+                                f"{label}: evidence identity is missing nonempty {field}",
+                                " | ".join(status["blockers"]),
+                            )
 
     def test_compiler_coverage_claim_grade_status_requires_mir_probe_companions(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp:
@@ -4692,8 +6370,9 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                     results / "compiler_coverage_evidence_audit.json",
                     ready_mir_semantic_scope_compiler_audit(coverage=99.91),
                 )
-                write_ready_mir_semantic_scope_runtime_companion(results)
                 write_ready_mir_probe_companions(results)
+                runtime_path = write_ready_mir_semantic_scope_runtime_companion(results)
+                bind_ready_mir_probe_companions_to_runtime(runtime_path)
                 write_json(
                     results / "compiler_dynamic_attribution_gap_audit.json",
                     {
@@ -4738,8 +6417,9 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                     results / "compiler_coverage_evidence_audit.json",
                     ready_mir_semantic_scope_compiler_audit(coverage=99.5),
                 )
-                write_ready_mir_semantic_scope_runtime_companion(results)
                 write_ready_mir_probe_companions(results)
+                runtime_path = write_ready_mir_semantic_scope_runtime_companion(results)
+                bind_ready_mir_probe_companions_to_runtime(runtime_path)
                 result = evaluate.evaluate_claim(claim, {"source": "current"}, "current")
         self.assertEqual(result["status"], "pass", result["evidence"])
         self.assertEqual(result["observed"], 99.5)
@@ -4863,6 +6543,52 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             )
             benches = evaluate.load_std_bench_recommended_batch_requests([str(path)], batch_index=1)
         self.assertEqual(benches, ["bench_c", "bench_d"])
+
+    def test_checked_in_std_bench_dev_presets_are_exact_canonical_subsets(self) -> None:
+        manifest = json.loads(
+            (ROOT / "evaluation/config/compiler_coverage_manifest.template.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        canonical = set(manifest["benchmark_suite"]["expected_benchmarks"])
+        self.assertEqual(len(canonical), 430)
+
+        catalog = ROOT / "evaluation/config/std_bench_dev_profiles.json"
+        quick = evaluate.load_std_bench_dev_profile(catalog)
+        family = evaluate.load_std_bench_dev_profile(
+            catalog,
+            preset="family-smoke",
+        )
+        self.assertTrue(set(quick["benchmarks"]).issubset(canonical))
+        self.assertTrue(set(family["benchmarks"]).issubset(canonical))
+        self.assertEqual(
+            {bench.split("::", 1)[0] for bench in family["benchmarks"]},
+            {"binary_heap", "btree", "linked_list", "slice", "str", "string", "vec", "vec_deque"},
+        )
+
+        selected = []
+        for index in range(3):
+            profile = evaluate.load_std_bench_dev_profile(
+                catalog,
+                preset="pathology",
+                batch_index=index,
+            )
+            self.assertEqual(len(profile["benchmarks"]), 1)
+            selected.extend(profile["benchmarks"])
+        self.assertEqual(len(set(selected)), 3)
+        self.assertTrue(set(selected).issubset(canonical))
+
+    def test_generated_std_bench_root_tracks_current_unstable_feature_gates(self) -> None:
+        source = evaluate.compiler_proto_root_source(
+            "generated_modules",
+            evaluate.COMPILER_EXACT_DYNAMIC_TYPE_ID_BASIS,
+            exact_dynamic=True,
+        )
+        self.assertIn("feature(portable_simd)", source)
+        self.assertIn("not(unialloc_btree_extract_if_range)", source)
+        self.assertIn("not(unialloc_has_stable_map_first_last)", source)
+        self.assertNotIn("#![feature(repr_simd)]", source)
+        self.assertNotIn("#![feature(btree_drain_filter)]", source)
 
     def test_load_std_bench_recommended_batch_requests_reads_consecutive_range(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp:
@@ -5036,19 +6762,41 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                 "zzz_semantic_auto_metadata_report",
             ],
             libtest_mode="test-once",
+            libtest_fail_fast=True,
         )
         self.assertEqual(args[:2], ["--nocapture", "--test-threads=1"])
+        self.assertEqual(args[2:5], ["-Z", "unstable-options", "--fail-fast"])
         self.assertIn("--exact", args)
         self.assertIn("aaa_semantic_auto_metadata_enable", args)
         self.assertIn("zzz_semantic_auto_metadata_report", args)
+        command = evaluate.mir_semantic_scope_std_bench_runtime_command(
+            "cargo",
+            "+nightly-2026-06-11",
+            features="bench_ourself,stats",
+            selected_benches=["vec::bench_from_slice_0000"],
+            libtest_mode="test-once",
+            libtest_fail_fast=True,
+        )
+        self.assertIn("--fail-fast", command)
+
+    def test_test_once_libtest_args_default_keeps_paper_nightly_compatible(self) -> None:
+        args = evaluate.std_bench_runtime_libtest_args(
+            ["vec::bench_from_slice_0000"],
+            libtest_mode="test-once",
+        )
+        self.assertIn("--test-threads=1", args)
+        self.assertNotIn("--fail-fast", args)
+        self.assertNotIn("unstable-options", args)
 
     def test_bench_libtest_args_preserve_historical_parallel_bench_mode(self) -> None:
         args = evaluate.std_bench_runtime_libtest_args(
             ["vec::bench_from_slice_0000"],
             libtest_mode="bench",
+            libtest_fail_fast=True,
         )
         self.assertEqual(args[:2], ["--nocapture", "--exact"])
         self.assertNotIn("--test-threads=1", args)
+        self.assertNotIn("--fail-fast", args)
 
     def test_normalize_std_bench_libtest_mode_accepts_coverage_aliases(self) -> None:
         self.assertEqual(evaluate.normalize_std_bench_libtest_mode("coverage"), "test-once")
@@ -5109,6 +6857,48 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
     def test_parse_bench_stdout_ignores_directory_stdout_path(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp:
             self.assertEqual(evaluate.parse_bench_stdout(pathlib.Path(raw_tmp)), [])
+
+    def test_parse_bench_stdout_accepts_integer_libtest_format(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            path = pathlib.Path(raw_tmp) / "stdout.txt"
+            path.write_text(
+                "test vec::bench_new ... bench:       1,234 ns/iter (+/- 56)\n",
+                encoding="utf-8",
+            )
+            rows = evaluate.parse_bench_stdout(path)
+        self.assertEqual(
+            rows,
+            [
+                {
+                    "benchmark": "vec::bench_new",
+                    "ns_per_iter": 1234,
+                    "deviation_ns": 56,
+                }
+            ],
+        )
+        self.assertIs(type(rows[0]["ns_per_iter"]), int)
+        self.assertIs(type(rows[0]["deviation_ns"]), int)
+
+    def test_parse_bench_stdout_accepts_decimal_grouped_libtest_format(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            path = pathlib.Path(raw_tmp) / "stdout.txt"
+            path.write_text(
+                "test vec::bench_with_capacity_1000 ... bench: 564,233.30 ns/iter (+/- 28,338.34)\n",
+                encoding="utf-8",
+            )
+            rows = evaluate.parse_bench_stdout(path)
+        self.assertEqual(
+            rows,
+            [
+                {
+                    "benchmark": "vec::bench_with_capacity_1000",
+                    "ns_per_iter": 564233.30,
+                    "deviation_ns": 28338.34,
+                }
+            ],
+        )
+        self.assertIs(type(rows[0]["ns_per_iter"]), float)
+        self.assertIs(type(rows[0]["deviation_ns"]), float)
 
     def test_coverage_stats_keeps_deallocation_only_type_rows(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp:
@@ -6268,7 +8058,9 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         self.assertEqual(selected_path, hardware_path)
         self.assertEqual(selected_audit.get("run_id"), "hardware-pac-claim-grade")
 
-    def test_claim_check_runtime_gate_accepts_metadata_segregation_probe(self) -> None:
+    def test_claim_check_runtime_gate_accepts_metadata_segregation_probe_and_semantic_smoke(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             raw = pathlib.Path(tmpdir) / "raw"
             run = raw / "metadata-probe"
@@ -6280,6 +8072,42 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                     "features": "bench_ourself,stats,metadata_segregation",
                     "metadata_segregation_side_cache_validated": True,
                     "metadata_segregation_side_cache_probe": {"event_count": 1},
+                },
+            )
+            smoke_run = raw / "metadata-semantic-smoke"
+            smoke_run.mkdir(parents=True)
+            write_json(
+                smoke_run
+                / "rustc-driver-mir-semantic-scope-std-bench-paper-performance-smoke-audit.json",
+                {
+                    "source": (
+                        "rustc-driver-mir-semantic-scope-std-bench-paper-performance-smoke"
+                    ),
+                    "run_id": "metadata-semantic-smoke",
+                    "dataset": "metadata_segregation",
+                    "performance_rows": [
+                        {
+                            "dataset": "metadata_segregation",
+                            "ns_per_iter": 1.0,
+                            "semantic_policy_ready": True,
+                            "type_id_basis_status": "compiler-assigned",
+                            "timing_features": "bench_ourself,metadata_segregation",
+                            "validation_features": (
+                                "bench_ourself,metadata_segregation,stats"
+                            ),
+                        }
+                    ],
+                    "summary": {
+                        "paper_performance_smoke_validated": True,
+                        "timing_returncode": 0,
+                        "validation_returncode": 0,
+                        "timing_bench_result_count": 1,
+                        "typed_allocation_site_event_count": 1,
+                        "lowered_module_typed_allocation_site_event_count": 1,
+                        "lowered_module_compiler_basis_present": True,
+                        "actual_semantic_scope_rewrite": True,
+                        "semantic_scope_rewrite_applied_count": 1,
+                    },
                 },
             )
             old_raw = evaluate.RAW
@@ -6601,6 +8429,175 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             [],
         )
 
+    def test_exact_dynamic_surface_uses_fresh_explicit_inventory_without_raw_summary(self) -> None:
+        old_surface = evaluate.latest_complete_std_bench_surface
+        canonical = evaluate.canonical_std_bench_names()
+
+        def unexpected_raw_summary_lookup() -> dict:
+            raise AssertionError("explicit inventory must not consult evaluation/raw summaries")
+
+        evaluate.latest_complete_std_bench_surface = unexpected_raw_summary_lookup
+        try:
+            status = evaluate.exact_dynamic_std_bench_surface_status(
+                canonical,
+                canonical_benchmarks=[
+                    "aaa_semantic_auto_metadata_enable",
+                    *canonical,
+                    "zzz_semantic_auto_metadata_report",
+                ],
+                canonical_source="same-run cargo bench --bench std_bench -- --list inventory",
+            )
+        finally:
+            evaluate.latest_complete_std_bench_surface = old_surface
+
+        self.assertTrue(status["full_surface_candidate"], status["blockers"])
+        self.assertEqual(status["canonical_surface_status"], "present")
+        self.assertIsNone(status["canonical_surface_summary"])
+        self.assertEqual(
+            status["canonical_surface_source"],
+            "same-run cargo bench --bench std_bench -- --list inventory",
+        )
+        self.assertEqual(
+            status["canonical_surface_source_kind"],
+            "explicit-canonical-benchmark-inventory",
+        )
+        self.assertTrue(status["canonical_inventory_locked_identity_validated"])
+        self.assertEqual(status["canonical_inventory_name_sha256"], evaluate.STD_BENCH_CANONICAL_NAME_SHA256)
+        self.assertEqual(status["expected_benchmarks"], canonical)
+        self.assertEqual(status["expected_benchmark_count"], len(canonical))
+
+    def test_exact_dynamic_surface_rejects_429_name_inventory_self_certification(self) -> None:
+        canonical = evaluate.canonical_std_bench_names()
+        truncated = canonical[:-1]
+        status = evaluate.exact_dynamic_std_bench_surface_status(
+            truncated,
+            canonical_benchmarks=truncated,
+            canonical_source="same-run cargo bench --bench std_bench -- --list inventory",
+        )
+
+        self.assertFalse(status["full_surface_candidate"])
+        self.assertFalse(status["canonical_inventory_locked_identity_validated"])
+        self.assertEqual(status["expected_benchmark_count"], len(canonical))
+        self.assertEqual(status["missing_expected_benchmarks"], [canonical[-1]])
+        self.assertIn(
+            "built std_bench surface does not match canonical 430-name identity",
+            " | ".join(status["blockers"]),
+        )
+
+    def test_exact_dynamic_surface_rejects_noncanonical_superset(self) -> None:
+        canonical = evaluate.canonical_std_bench_names()
+        unexpected = "arbitrary_noncanonical_benchmark"
+        status = evaluate.exact_dynamic_std_bench_surface_status(
+            [*canonical, unexpected],
+            canonical_benchmarks=canonical,
+            canonical_source="same-run cargo bench --bench std_bench -- --list inventory",
+        )
+
+        self.assertFalse(status["full_surface_candidate"])
+        self.assertEqual(status["status"], "slice-or-incomplete")
+        self.assertTrue(status["canonical_inventory_locked_identity_validated"])
+        self.assertEqual(status["expected_benchmark_count"], len(canonical))
+        self.assertEqual(status["observed_benchmark_count"], len(canonical) + 1)
+        self.assertEqual(status["unexpected_observed_benchmarks"], [unexpected])
+        self.assertIn(
+            "run reports non-canonical std_bench benchmarks: " + unexpected,
+            status["blockers"],
+        )
+
+    def test_compiler_benchmark_surface_rejects_noncanonical_superset(self) -> None:
+        canonical = evaluate.canonical_std_bench_names()
+        unexpected = "arbitrary_noncanonical_benchmark"
+        manifest = {
+            "benchmark_suite": {
+                "name": "std_bench rustc_driver MIR semantic-scope runtime",
+                "benchmark_target": "std_bench",
+                "expected_benchmark_target": "std_bench",
+                "without_source_changes": True,
+                "complete_for_claim": True,
+                "paper_equivalent": True,
+                "coverage_surface_complete": True,
+                "expected_benchmarks": canonical,
+                "observed_benchmarks": [*canonical, unexpected],
+                "observed_benchmark_source": {
+                    "kind": "rustc-driver-mir-semantic-scope-final-c002-runtime",
+                    "compiler_instrumented": True,
+                    "claim_grade": True,
+                    "complete_for_claim": True,
+                    "coverage_surface_complete": True,
+                    "compiler_site_replay": False,
+                    "compiler_site_id_stream_mode": "rustc-driver-mir-semantic-scope",
+                },
+                "limitations": [
+                    "fallback allocator traffic is included and reported"
+                ],
+            }
+        }
+
+        audit = evaluate.compiler_coverage_benchmark_surface_audit(manifest, [])
+
+        self.assertEqual(audit["status"], "fail")
+        self.assertEqual(audit["unexpected_observed_benchmarks"], [unexpected])
+        self.assertIn(
+            "benchmark surface contains unexpected benchmarks: " + unexpected,
+            audit["blockers"],
+        )
+
+    def test_exact_dynamic_surface_keeps_filtered_explicit_inventory_non_claim(self) -> None:
+        canonical = evaluate.canonical_std_bench_names()
+        status = evaluate.exact_dynamic_std_bench_surface_status(
+            canonical[:1],
+            skip=canonical[1:],
+            derived_skip_count=len(canonical) - 1,
+            canonical_benchmarks=canonical,
+            canonical_source="same-run cargo bench --bench std_bench -- --list inventory",
+        )
+
+        self.assertFalse(status["full_surface_candidate"])
+        self.assertEqual(status["status"], "slice-or-incomplete")
+        self.assertTrue(status["filter_options_present"])
+        self.assertEqual(
+            status["missing_expected_benchmark_count"],
+            len(canonical) - 1,
+        )
+        self.assertIn(
+            "run used libtest filters, skips, or sentinel-only selection",
+            status["blockers"],
+        )
+
+    def test_exact_dynamic_surface_rejects_missing_or_empty_explicit_inventory(self) -> None:
+        canonical = evaluate.canonical_std_bench_names()
+        cases = (
+            (
+                "missing",
+                {
+                    "canonical_source": "same-run cargo bench --bench std_bench -- --list inventory"
+                },
+                "explicit canonical std_bench benchmark inventory is missing",
+            ),
+            (
+                "empty",
+                {
+                    "canonical_benchmarks": [],
+                    "canonical_source": "same-run cargo bench --bench std_bench -- --list inventory",
+                },
+                "explicit canonical std_bench benchmark inventory is empty after normalization",
+            ),
+            (
+                "missing-source",
+                {"canonical_benchmarks": canonical},
+                "explicit canonical std_bench benchmark inventory is missing a source label",
+            ),
+        )
+        for name, kwargs, blocker in cases:
+            with self.subTest(name=name):
+                status = evaluate.exact_dynamic_std_bench_surface_status(
+                    ["bench_a"],
+                    **kwargs,
+                )
+                self.assertFalse(status["full_surface_candidate"])
+                self.assertEqual(status["canonical_surface_status"], "invalid")
+                self.assertIn(blocker, status["blockers"])
+
     def test_mir_semantic_scope_runtime_shard_aggregate_detects_full_surface_union(self) -> None:
         old_surface = evaluate.latest_complete_std_bench_surface
         evaluate.latest_complete_std_bench_surface = lambda: {
@@ -6753,7 +8750,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                     stale,
                     stale,
                     False,
-                    "runtime shard source binding: artifact repository source digest does not match the current working tree",
+                    "runtime shard source binding: artifact repository source fingerprint digest does not match the current working tree",
                 ),
             )
             for case_name, fingerprint_a, fingerprint_b, expected_valid, expected_blocker in cases:
@@ -7192,6 +9189,405 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         self.assertEqual(payload["results_audit"], str(results_audit))
         self.assertTrue(updated["summary"]["runtime_full_surface_candidate_validated"])
 
+    def test_mir_semantic_scope_runtime_shard_merge_suppresses_results_on_late_source_drift(self) -> None:
+        old_surface = evaluate.latest_complete_std_bench_surface
+        evaluate.latest_complete_std_bench_surface = lambda: {
+            "status": "present",
+            "benchmarks": ["bench_a", "bench_b"],
+            "source_summary": "unit-surface",
+            "run_id": "unit",
+            "bench_count": 2,
+            "blockers": [],
+        }
+        try:
+            with tempfile.TemporaryDirectory() as raw_tmp:
+                tmp = pathlib.Path(raw_tmp)
+                results = tmp / "results"
+                results.mkdir()
+                stable_source = evaluate.repository_source_fingerprint()
+                changed_source = source_fingerprint_fixture("0")
+                with temporary_eval_results_and_raw(results):
+                    write_ready_mir_probe_companions(
+                        results,
+                        source_fingerprint=stable_source,
+                    )
+                    audit_a = write_mir_semantic_scope_runtime_audit_fixture(
+                        tmp,
+                        run_id="late-drift-shard-a",
+                        benchmark="bench_a",
+                        source_fingerprint=stable_source,
+                    )
+                    audit_b = write_mir_semantic_scope_runtime_audit_fixture(
+                        tmp,
+                        run_id="late-drift-shard-b",
+                        benchmark="bench_b",
+                        source_fingerprint=stable_source,
+                    )
+                    aggregate = evaluate.aggregate_rustc_driver_mir_semantic_scope_runtime_audits(
+                        [audit_a, audit_b],
+                        out_dir=tmp,
+                        run_id="late-drift-aggregate",
+                    )
+                    self.assertTrue(
+                        aggregate["summary"]["runtime_claim_ready"],
+                        aggregate["summary"].get("blockers"),
+                    )
+                    output_dir = tmp / "late-drift-merge-output"
+                    args = type(
+                        "Args",
+                        (),
+                        {
+                            "runtime_smoke_audit_paths": [str(audit_a), str(audit_b)],
+                            "runtime_smoke_audits": [],
+                            "plan_json_paths": [],
+                            "run_id": "late-drift-merge-output",
+                            "output_dir": str(output_dir),
+                            "no_update_results": False,
+                        },
+                    )()
+                    stdout = io.StringIO()
+                    with mock.patch.object(
+                        evaluate,
+                        "aggregate_rustc_driver_mir_semantic_scope_runtime_audits",
+                        return_value=aggregate,
+                    ), mock.patch.object(
+                        evaluate,
+                        "repository_source_fingerprint",
+                        return_value=changed_source,
+                    ):
+                        with contextlib.redirect_stdout(stdout):
+                            rc = evaluate.merge_rustc_driver_mir_semantic_scope_std_bench_runtime_shards(
+                                args
+                            )
+                    payload = json.loads(stdout.getvalue())
+                    raw_aggregate = json.loads(
+                        (
+                            output_dir
+                            / "rustc-driver-mir-semantic-scope-std-bench-runtime-aggregate-audit.json"
+                        ).read_text(encoding="utf-8")
+                    )
+                    results_audit = (
+                        results
+                        / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json"
+                    )
+        finally:
+            evaluate.latest_complete_std_bench_surface = old_surface
+
+        self.assertEqual(rc, 0)
+        self.assertFalse(results_audit.exists())
+        self.assertIsNone(payload["results_audit"])
+        self.assertFalse(payload["publication_status"]["ready"])
+        self.assertIn(
+            "repository source changed before runtime evidence publication",
+            " | ".join(payload["publication_status"]["blockers"]),
+        )
+        for key in (
+            "runtime_claim_ready",
+            "ready_for_claim_grade_import",
+            "claim_grade",
+            "complete_for_claim",
+        ):
+            self.assertFalse(raw_aggregate["summary"][key], raw_aggregate)
+
+    def test_mir_semantic_scope_runtime_shard_merge_boundary_recheck_catches_postcheck_artifact_tamper(self) -> None:
+        old_surface = evaluate.latest_complete_std_bench_surface
+        evaluate.latest_complete_std_bench_surface = lambda: {
+            "status": "present",
+            "benchmarks": ["bench_a", "bench_b"],
+            "source_summary": "unit-surface",
+            "run_id": "unit",
+            "bench_count": 2,
+            "blockers": [],
+        }
+        try:
+            with tempfile.TemporaryDirectory() as raw_tmp:
+                tmp = pathlib.Path(raw_tmp)
+                results = tmp / "results"
+                results.mkdir()
+                source_fingerprint = evaluate.repository_source_fingerprint()
+                with temporary_eval_results_and_raw(results):
+                    write_ready_mir_probe_companions(
+                        results,
+                        source_fingerprint=source_fingerprint,
+                    )
+                    audit_a = write_mir_semantic_scope_runtime_audit_fixture(
+                        tmp,
+                        run_id="boundary-tamper-shard-a",
+                        benchmark="bench_a",
+                        source_fingerprint=source_fingerprint,
+                    )
+                    audit_b = write_mir_semantic_scope_runtime_audit_fixture(
+                        tmp,
+                        run_id="boundary-tamper-shard-b",
+                        benchmark="bench_b",
+                        source_fingerprint=source_fingerprint,
+                    )
+                    output_dir = tmp / "boundary-tamper-aggregate"
+                    raw_aggregate_path = (
+                        output_dir
+                        / "rustc-driver-mir-semantic-scope-std-bench-runtime-aggregate-audit.json"
+                    )
+                    args = type(
+                        "Args",
+                        (),
+                        {
+                            "runtime_smoke_audit_paths": [str(audit_a), str(audit_b)],
+                            "runtime_smoke_audits": [],
+                            "plan_json_paths": [],
+                            "run_id": "boundary-tamper-aggregate",
+                            "output_dir": str(output_dir),
+                            "no_update_results": False,
+                        },
+                    )()
+                    original_write_json = evaluate.write_json
+                    raw_write_count = 0
+
+                    def write_json_and_tamper_after_second_raw(path, data):
+                        nonlocal raw_write_count
+                        original_write_json(path, data)
+                        if pathlib.Path(path) == raw_aggregate_path:
+                            raw_write_count += 1
+                            if raw_write_count == 2:
+                                runtime_events = pathlib.Path(
+                                    data["artifacts"]["runtime_events"]
+                                )
+                                runtime_events.write_text(
+                                    runtime_events.read_text(encoding="utf-8")
+                                    + '{"postcheck_tamper": true}\n',
+                                    encoding="utf-8",
+                                )
+
+                    stdout = io.StringIO()
+                    with mock.patch.object(
+                        evaluate,
+                        "write_json",
+                        side_effect=write_json_and_tamper_after_second_raw,
+                    ):
+                        with contextlib.redirect_stdout(stdout):
+                            rc = evaluate.merge_rustc_driver_mir_semantic_scope_std_bench_runtime_shards(
+                                args
+                            )
+                    payload = json.loads(stdout.getvalue())
+                    raw_aggregate = json.loads(
+                        raw_aggregate_path.read_text(encoding="utf-8")
+                    )
+                    results_audit = (
+                        results
+                        / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json"
+                    )
+        finally:
+            evaluate.latest_complete_std_bench_surface = old_surface
+
+        self.assertEqual(rc, 0)
+        self.assertGreaterEqual(raw_write_count, 3)
+        self.assertFalse(results_audit.exists())
+        self.assertIsNone(payload["results_audit"])
+        self.assertFalse(payload["publication_status"]["ready"])
+        self.assertIn(
+            "runtime_events sha256 mismatch",
+            " | ".join(payload["publication_status"]["blockers"]),
+        )
+        for key in (
+            "runtime_claim_ready",
+            "ready_for_claim_grade_import",
+            "claim_grade",
+            "complete_for_claim",
+        ):
+            self.assertFalse(raw_aggregate["summary"][key], raw_aggregate)
+
+    def test_mir_semantic_scope_package_propagates_locked_surface_without_raw_lookup(self) -> None:
+        canonical = evaluate.canonical_std_bench_names()
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = pathlib.Path(raw_tmp)
+            results = tmp / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                source_fingerprint = evaluate.repository_source_fingerprint()
+                write_ready_mir_probe_companions(
+                    results,
+                    source_fingerprint=source_fingerprint,
+                )
+                runtime_audit_path = write_mir_semantic_scope_runtime_audit_fixture(
+                    tmp,
+                    run_id="locked-surface-runtime",
+                    benchmark=canonical[0],
+                    source_fingerprint=source_fingerprint,
+                )
+                runtime_fixture = json.loads(
+                    runtime_audit_path.read_text(encoding="utf-8")
+                )
+                write_ready_mir_semantic_scope_runtime_companion(
+                    results,
+                    audit_path=runtime_audit_path,
+                    run_id="locked-surface-runtime",
+                    source_fingerprint=source_fingerprint,
+                    artifacts=runtime_fixture["artifacts"],
+                )
+                promote_runtime_audit_fixture_to_locked_full_surface(
+                    runtime_audit_path
+                )
+                bind_ready_mir_probe_companions_to_runtime(
+                    runtime_audit_path,
+                    source_fingerprint=source_fingerprint,
+                )
+                output_dir = tmp / "package-locked-surface"
+                args = type(
+                    "Args",
+                    (),
+                    {
+                        "runtime_smoke_audit": str(runtime_audit_path),
+                        "run_id": "package-locked-surface",
+                        "output_dir": str(output_dir),
+                        "manifest_out": None,
+                        "update_compiler_coverage_result": False,
+                        "no_update_results": True,
+                        "claim_grade": True,
+                    },
+                )()
+                with mock.patch.object(
+                    evaluate,
+                    "latest_complete_std_bench_surface",
+                    side_effect=AssertionError(
+                        "package must not consult evaluation/raw std_bench summaries"
+                    ),
+                ):
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        rc = evaluate.package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(
+                            args
+                        )
+                manifest = json.loads(
+                    (
+                        output_dir
+                        / "rustc-driver-mir-semantic-scope-std-bench-runtime.manifest.json"
+                    ).read_text(encoding="utf-8")
+                )
+                import_audit = json.loads(
+                    (
+                        output_dir
+                        / "rustc-driver-mir-semantic-scope-std-bench-runtime-import-audit.json"
+                    ).read_text(encoding="utf-8")
+                )
+
+        self.assertEqual(rc, 0, import_audit.get("blockers"))
+        self.assertTrue(import_audit["summary"]["claim_grade"])
+        suite = manifest["benchmark_suite"]
+        self.assertEqual(suite["expected_benchmarks"], canonical)
+        self.assertEqual(
+            suite["expected_benchmark_source"]["source"],
+            "same-run cargo bench --bench std_bench -- --list inventory",
+        )
+        self.assertEqual(
+            suite["expected_benchmark_source"]["inventory_name_sha256"],
+            evaluate.STD_BENCH_CANONICAL_NAME_SHA256,
+        )
+        self.assertTrue(
+            suite["expected_benchmark_source"]["locked_identity_validated"]
+        )
+        self.assertNotIn("smoke", json.dumps(suite, sort_keys=True).lower())
+
+    def test_mir_semantic_scope_package_rejects_noncanonical_surface_superset(self) -> None:
+        canonical = evaluate.canonical_std_bench_names()
+        unexpected = "arbitrary_noncanonical_benchmark"
+        with tempfile.TemporaryDirectory() as raw_tmp:
+            tmp = pathlib.Path(raw_tmp)
+            results = tmp / "results"
+            results.mkdir()
+            with temporary_eval_results_and_raw(results):
+                source_fingerprint = evaluate.repository_source_fingerprint()
+                write_ready_mir_probe_companions(
+                    results,
+                    source_fingerprint=source_fingerprint,
+                )
+                runtime_audit_path = write_mir_semantic_scope_runtime_audit_fixture(
+                    tmp,
+                    run_id="noncanonical-superset-runtime",
+                    benchmark=canonical[0],
+                    source_fingerprint=source_fingerprint,
+                )
+                runtime_fixture = json.loads(
+                    runtime_audit_path.read_text(encoding="utf-8")
+                )
+                write_ready_mir_semantic_scope_runtime_companion(
+                    results,
+                    audit_path=runtime_audit_path,
+                    run_id="noncanonical-superset-runtime",
+                    source_fingerprint=source_fingerprint,
+                    artifacts=runtime_fixture["artifacts"],
+                )
+                promote_runtime_audit_fixture_to_locked_full_surface(
+                    runtime_audit_path
+                )
+                runtime_fixture = json.loads(
+                    runtime_audit_path.read_text(encoding="utf-8")
+                )
+                runtime_fixture["selected_benches"].append(unexpected)
+                runtime_fixture["selected_target_benches"].append(unexpected)
+                runtime_fixture["summary"]["selected_benchmark_count"] = (
+                    len(canonical) + 1
+                )
+                runtime_fixture["summary"]["selected_bench_with_sentinel_count"] = (
+                    len(canonical) + 1
+                )
+                write_json(runtime_audit_path, runtime_fixture)
+                bind_ready_mir_probe_companions_to_runtime(
+                    runtime_audit_path,
+                    source_fingerprint=source_fingerprint,
+                )
+                output_dir = tmp / "package-noncanonical-superset"
+                args = type(
+                    "Args",
+                    (),
+                    {
+                        "runtime_smoke_audit": str(runtime_audit_path),
+                        "run_id": "package-noncanonical-superset",
+                        "output_dir": str(output_dir),
+                        "manifest_out": None,
+                        "update_compiler_coverage_result": False,
+                        "no_update_results": True,
+                        "claim_grade": True,
+                    },
+                )()
+                with mock.patch.object(
+                    evaluate,
+                    "latest_complete_std_bench_surface",
+                    side_effect=AssertionError(
+                        "package must not consult evaluation/raw std_bench summaries"
+                    ),
+                ):
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        rc = evaluate.package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(
+                            args
+                        )
+                manifest = json.loads(
+                    (
+                        output_dir
+                        / "rustc-driver-mir-semantic-scope-std-bench-runtime.manifest.json"
+                    ).read_text(encoding="utf-8")
+                )
+                import_audit = json.loads(
+                    (
+                        output_dir
+                        / "rustc-driver-mir-semantic-scope-std-bench-runtime-import-audit.json"
+                    ).read_text(encoding="utf-8")
+                )
+
+        self.assertEqual(rc, 1)
+        self.assertFalse(import_audit["summary"]["claim_grade"])
+        self.assertFalse(manifest["claim_grade"])
+        self.assertIn(unexpected, manifest["benchmark_suite"]["observed_benchmarks"])
+        self.assertIn(
+            "run reports non-canonical std_bench benchmarks: " + unexpected,
+            import_audit["blockers"],
+        )
+        compiler_surface = import_audit["compiler_coverage_audit"][
+            "benchmark_surface_audit"
+        ]
+        self.assertEqual(compiler_surface["status"], "fail")
+        self.assertEqual(
+            compiler_surface["unexpected_observed_benchmarks"],
+            [unexpected],
+        )
+
     def test_mir_semantic_scope_claim_grade_package_is_fail_closed_but_can_pass_full_surface(self) -> None:
         old_surface = evaluate.latest_complete_std_bench_surface
         old_results = evaluate.RESULTS
@@ -7225,8 +9621,75 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                         out_dir=tmp,
                         run_id="aggregate",
                     )
+                    blocked_aggregate = copy.deepcopy(aggregate)
+                    blocked_aggregate["summary"]["runtime_claim_ready"] = False
+                    blocked_path = tmp / "aggregate-not-runtime-ready.audit.json"
+                    write_json(blocked_path, blocked_aggregate)
+                    blocked_output_dir = tmp / "package-not-runtime-ready"
+                    blocked_args = type(
+                        "Args",
+                        (),
+                        {
+                            "runtime_smoke_audit": str(blocked_path),
+                            "run_id": "package-not-runtime-ready",
+                            "output_dir": str(blocked_output_dir),
+                            "manifest_out": None,
+                            "update_compiler_coverage_result": True,
+                            "update_runtime_result": True,
+                            "no_update_results": False,
+                            "claim_grade": True,
+                        },
+                    )()
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        blocked_rc = evaluate.package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(
+                            blocked_args
+                        )
+                    blocked_import_audit = json.loads(
+                        (
+                            blocked_output_dir
+                            / "rustc-driver-mir-semantic-scope-std-bench-runtime-import-audit.json"
+                        ).read_text(encoding="utf-8")
+                    )
+                    direct_probe_path = (
+                        results / "rustc_driver_direct_allocator_mir_probe_audit.json"
+                    )
+                    direct_probe = json.loads(
+                        direct_probe_path.read_text(encoding="utf-8")
+                    )
+                    direct_probe["tampered_after_aggregate"] = True
+                    write_json(direct_probe_path, direct_probe)
+                    hash_mismatch_path = tmp / "aggregate-probe-hash-mismatch.audit.json"
+                    write_json(hash_mismatch_path, aggregate)
+                    hash_mismatch_output_dir = tmp / "package-probe-hash-mismatch"
+                    hash_mismatch_args = type(
+                        "Args",
+                        (),
+                        {
+                            "runtime_smoke_audit": str(hash_mismatch_path),
+                            "run_id": "package-probe-hash-mismatch",
+                            "output_dir": str(hash_mismatch_output_dir),
+                            "manifest_out": None,
+                            "update_compiler_coverage_result": False,
+                            "no_update_results": True,
+                            "claim_grade": True,
+                        },
+                    )()
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        hash_mismatch_rc = evaluate.package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(
+                            hash_mismatch_args
+                        )
+                    hash_mismatch_import_audit = json.loads(
+                        (
+                            hash_mismatch_output_dir
+                            / "rustc-driver-mir-semantic-scope-std-bench-runtime-import-audit.json"
+                        ).read_text(encoding="utf-8")
+                    )
+                    write_ready_direct_allocator_mir_probe_companion(results)
                     aggregate_path = tmp / "aggregate.audit.json"
                     write_json(aggregate_path, aggregate)
+                    promote_runtime_audit_fixture_to_locked_full_surface(
+                        aggregate_path
+                    )
                     output_dir = tmp / "package"
                     args = type(
                         "Args",
@@ -7251,6 +9714,32 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         finally:
             evaluate.latest_complete_std_bench_surface = old_surface
             evaluate.RESULTS = old_results
+        self.assertEqual(blocked_rc, 1)
+        self.assertFalse(blocked_import_audit["summary"]["claim_grade"])
+        self.assertFalse(
+            blocked_import_audit["summary"][
+                "mir_semantic_scope_runtime_import_preflight_validated"
+            ]
+        )
+        self.assertIn(
+            "runtime audit summary.runtime_claim_ready is not true",
+            " | ".join(blocked_import_audit["blockers"]),
+        )
+        self.assertFalse(
+            (results / "compiler_coverage_evidence_audit.json").exists()
+        )
+        self.assertFalse(
+            (
+                results
+                / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json"
+            ).exists()
+        )
+        self.assertEqual(hash_mismatch_rc, 1)
+        self.assertFalse(hash_mismatch_import_audit["summary"]["claim_grade"])
+        self.assertIn(
+            "embedded MIR probe identities/hashes do not match current referenced files",
+            " | ".join(hash_mismatch_import_audit["blockers"]),
+        )
         self.assertEqual(rc, 0, import_audit.get("blockers"))
         self.assertTrue(import_audit["summary"]["claim_grade"])
         self.assertTrue(import_audit["summary"]["compiler_audit_ready_for_claim_grade_import"])
@@ -7270,10 +9759,13 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                 tmp = pathlib.Path(raw_tmp)
                 results = tmp / "results"
                 results.mkdir()
-                stable_source = source_fingerprint_fixture("f")
+                stable_source = evaluate.repository_source_fingerprint()
                 changed_source = source_fingerprint_fixture("0")
                 with temporary_eval_results_and_raw(results):
-                    write_ready_mir_probe_companions(results)
+                    write_ready_mir_probe_companions(
+                        results,
+                        source_fingerprint=stable_source,
+                    )
                     audit_a = write_mir_semantic_scope_runtime_audit_fixture(
                         tmp,
                         run_id="publication-source-shard-a",
@@ -7293,6 +9785,9 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                     )
                     aggregate_path = tmp / "publication-source-aggregate.audit.json"
                     write_json(aggregate_path, aggregate)
+                    promote_runtime_audit_fixture_to_locked_full_surface(
+                        aggregate_path
+                    )
                     output_dir = tmp / "publication-source-package"
                     args = type(
                         "Args",
@@ -7322,6 +9817,24 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                             / "rustc-driver-mir-semantic-scope-std-bench-runtime-import-audit.json"
                         ).read_text(encoding="utf-8")
                     )
+                    manifest = json.loads(
+                        (
+                            output_dir
+                            / "rustc-driver-mir-semantic-scope-std-bench-runtime.manifest.json"
+                        ).read_text(encoding="utf-8")
+                    )
+                    run_summary = json.loads(
+                        (
+                            output_dir
+                            / "rustc-driver-mir-semantic-scope-std-bench-runtime-summary.json"
+                        ).read_text(encoding="utf-8")
+                    )
+                    compiler_audit = json.loads(
+                        (
+                            output_dir
+                            / "rustc-driver-mir-semantic-scope-std-bench-runtime.compiler-audit.json"
+                        ).read_text(encoding="utf-8")
+                    )
         finally:
             evaluate.latest_complete_std_bench_surface = old_surface
 
@@ -7332,10 +9845,258 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         self.assertFalse(
             import_audit["summary"]["mir_semantic_scope_runtime_import_preflight_validated"]
         )
+        self.assertFalse(manifest["claim_grade"])
+        self.assertFalse(manifest["complete_for_claim"])
+        self.assertFalse(manifest["benchmark_suite"]["complete_for_claim"])
+        self.assertFalse(manifest["benchmark_suite"]["paper_equivalent"])
+        self.assertFalse(run_summary["claim_grade"])
+        self.assertFalse(run_summary["complete_for_claim"])
+        self.assertFalse(
+            compiler_audit["summary"]["ready_for_claim_grade_import"],
+            compiler_audit,
+        )
+        self.assertFalse(
+            import_audit["compiler_coverage_audit"]["summary"][
+                "ready_for_claim_grade_import"
+            ]
+        )
         self.assertIn(
             "repository source changed before runtime evidence publication",
             " | ".join(import_audit["blockers"]),
         )
+
+    def test_mir_semantic_scope_claim_grade_package_downgrades_on_final_integrity_tamper(self) -> None:
+        old_surface = evaluate.latest_complete_std_bench_surface
+        evaluate.latest_complete_std_bench_surface = lambda: {
+            "status": "present",
+            "benchmarks": ["bench_a", "bench_b"],
+            "source_summary": "unit-surface",
+            "run_id": "unit",
+            "bench_count": 2,
+            "blockers": [],
+        }
+        try:
+            for tamper_kind in (
+                "runtime-artifact",
+                "companion-bundle",
+                "between-runtime-and-compiler",
+                "between-runtime-and-compiler-preexisting",
+            ):
+                with self.subTest(tamper_kind=tamper_kind):
+                    with tempfile.TemporaryDirectory() as raw_tmp:
+                        tmp = pathlib.Path(raw_tmp)
+                        results = tmp / "results"
+                        results.mkdir()
+                        source_fingerprint = evaluate.repository_source_fingerprint()
+                        with temporary_eval_results_and_raw(results):
+                            write_ready_mir_probe_companions(
+                                results,
+                                source_fingerprint=source_fingerprint,
+                            )
+                            audit_a = write_mir_semantic_scope_runtime_audit_fixture(
+                                tmp,
+                                run_id=f"final-tamper-a-{tamper_kind}",
+                                benchmark="bench_a",
+                                source_fingerprint=source_fingerprint,
+                            )
+                            audit_b = write_mir_semantic_scope_runtime_audit_fixture(
+                                tmp,
+                                run_id=f"final-tamper-b-{tamper_kind}",
+                                benchmark="bench_b",
+                                source_fingerprint=source_fingerprint,
+                            )
+                            aggregate = evaluate.aggregate_rustc_driver_mir_semantic_scope_runtime_audits(
+                                [audit_a, audit_b],
+                                out_dir=tmp,
+                                run_id=f"final-tamper-aggregate-{tamper_kind}",
+                            )
+                            self.assertTrue(
+                                aggregate["summary"]["runtime_claim_ready"],
+                                aggregate["summary"].get("blockers"),
+                            )
+                            aggregate_path = tmp / f"final-tamper-{tamper_kind}.audit.json"
+                            write_json(aggregate_path, aggregate)
+                            promote_runtime_audit_fixture_to_locked_full_surface(
+                                aggregate_path
+                            )
+                            output_dir = tmp / f"final-tamper-package-{tamper_kind}"
+                            args = type(
+                                "Args",
+                                (),
+                                {
+                                    "runtime_smoke_audit": str(aggregate_path),
+                                    "run_id": f"final-tamper-package-{tamper_kind}",
+                                    "output_dir": str(output_dir),
+                                    "manifest_out": None,
+                                    "update_compiler_coverage_result": True,
+                                    "update_runtime_result": True,
+                                    "no_update_results": False,
+                                    "claim_grade": True,
+                                },
+                            )()
+                            raw_import_path = (
+                                output_dir
+                                / "rustc-driver-mir-semantic-scope-std-bench-runtime-import-audit.json"
+                            )
+                            results_runtime_path = (
+                                results
+                                / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json"
+                            )
+                            results_compiler_path = (
+                                results / "compiler_coverage_evidence_audit.json"
+                            )
+                            prior_runtime_bytes = b"prior runtime canonical bytes\x00\xff"
+                            prior_compiler_bytes = b"prior compiler canonical bytes\x00\xfe"
+                            if tamper_kind.endswith("preexisting"):
+                                results_runtime_path.write_bytes(prior_runtime_bytes)
+                                results_compiler_path.write_bytes(prior_compiler_bytes)
+                            original_write_json = evaluate.write_json
+                            tampered_after_initial_check = False
+
+                            def write_json_and_tamper_after_raw_import(path, data):
+                                nonlocal tampered_after_initial_check
+                                original_write_json(path, data)
+                                if (
+                                    pathlib.Path(path) == raw_import_path
+                                    and not tampered_after_initial_check
+                                    and not tamper_kind.startswith(
+                                        "between-runtime-and-compiler"
+                                    )
+                                ):
+                                    tampered_after_initial_check = True
+                                    if tamper_kind == "runtime-artifact":
+                                        runtime_events = pathlib.Path(
+                                            aggregate["artifacts"]["runtime_events"]
+                                        )
+                                        runtime_events.write_text(
+                                            runtime_events.read_text(encoding="utf-8")
+                                            + '{"postcheck_tamper": true}\n',
+                                            encoding="utf-8",
+                                        )
+                                    else:
+                                        direct_path = (
+                                            results
+                                            / "rustc_driver_direct_allocator_mir_probe_audit.json"
+                                        )
+                                        direct = json.loads(
+                                            direct_path.read_text(encoding="utf-8")
+                                        )
+                                        direct[
+                                            "tampered_after_initial_publication_check"
+                                        ] = True
+                                        original_write_json(direct_path, direct)
+                                if (
+                                    pathlib.Path(path) == results_runtime_path
+                                    and not tampered_after_initial_check
+                                    and tamper_kind.startswith(
+                                        "between-runtime-and-compiler"
+                                    )
+                                ):
+                                    tampered_after_initial_check = True
+                                    direct_path = (
+                                        results
+                                        / "rustc_driver_direct_allocator_mir_probe_audit.json"
+                                    )
+                                    direct = json.loads(
+                                        direct_path.read_text(encoding="utf-8")
+                                    )
+                                    direct[
+                                        "tampered_between_runtime_and_compiler_publication"
+                                    ] = True
+                                    original_write_json(direct_path, direct)
+
+                            with mock.patch.object(
+                                evaluate,
+                                "write_json",
+                                side_effect=write_json_and_tamper_after_raw_import,
+                            ):
+                                with contextlib.redirect_stdout(io.StringIO()):
+                                    rc = evaluate.package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(
+                                        args
+                                    )
+                            import_audit = json.loads(
+                                (
+                                    output_dir
+                                    / "rustc-driver-mir-semantic-scope-std-bench-runtime-import-audit.json"
+                                ).read_text(encoding="utf-8")
+                            )
+                            manifest = json.loads(
+                                (
+                                    output_dir
+                                    / "rustc-driver-mir-semantic-scope-std-bench-runtime.manifest.json"
+                                ).read_text(encoding="utf-8")
+                            )
+                            run_summary = json.loads(
+                                (
+                                    output_dir
+                                    / "rustc-driver-mir-semantic-scope-std-bench-runtime-summary.json"
+                                ).read_text(encoding="utf-8")
+                            )
+                            compiler_audit = json.loads(
+                                (
+                                    output_dir
+                                    / "rustc-driver-mir-semantic-scope-std-bench-runtime.compiler-audit.json"
+                                ).read_text(encoding="utf-8")
+                            )
+
+                        self.assertEqual(rc, 1)
+                        self.assertFalse(import_audit["summary"]["publication_ready"])
+                        self.assertFalse(import_audit["summary"]["claim_grade"])
+                        self.assertFalse(import_audit["summary"]["complete_for_claim"])
+                        self.assertFalse(
+                            import_audit["summary"][
+                                "mir_semantic_scope_runtime_import_preflight_validated"
+                            ]
+                        )
+                        self.assertFalse(manifest["claim_grade"])
+                        self.assertFalse(manifest["complete_for_claim"])
+                        self.assertFalse(run_summary["claim_grade"])
+                        self.assertFalse(run_summary["complete_for_claim"])
+                        self.assertFalse(
+                            compiler_audit["summary"][
+                                "ready_for_claim_grade_import"
+                            ],
+                            compiler_audit,
+                        )
+                        self.assertTrue(tampered_after_initial_check)
+                        if tamper_kind.endswith("preexisting"):
+                            self.assertEqual(
+                                results_runtime_path.read_bytes(),
+                                prior_runtime_bytes,
+                            )
+                            self.assertEqual(
+                                results_compiler_path.read_bytes(),
+                                prior_compiler_bytes,
+                            )
+                        else:
+                            self.assertFalse(results_runtime_path.exists())
+                            self.assertFalse(results_compiler_path.exists())
+                        diagnostic_import = json.loads(
+                            (
+                                results
+                                / "rustc_driver_mir_semantic_scope_std_bench_runtime_import_audit.json"
+                            ).read_text(encoding="utf-8")
+                        )
+                        self.assertFalse(
+                            diagnostic_import["summary"]["publication_ready"]
+                        )
+                        if tamper_kind.startswith("between-runtime-and-compiler"):
+                            self.assertTrue(
+                                diagnostic_import["summary"][
+                                    "canonical_claim_results_rolled_back"
+                                ]
+                            )
+                        expected = (
+                            "runtime_events sha256 mismatch"
+                            if tamper_kind == "runtime-artifact"
+                            else "embedded MIR probe identities/hashes do not match current referenced files"
+                        )
+                        self.assertIn(
+                            expected,
+                            " | ".join(import_audit["blockers"]),
+                        )
+        finally:
+            evaluate.latest_complete_std_bench_surface = old_surface
 
     def test_mir_semantic_scope_claim_grade_package_rejects_tampered_runtime_artifacts(self) -> None:
         old_surface = evaluate.latest_complete_std_bench_surface
@@ -7376,6 +10137,9 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                             )
                             aggregate_path = tmp / f"aggregate-{artifact_key}.audit.json"
                             write_json(aggregate_path, aggregate)
+                            promote_runtime_audit_fixture_to_locked_full_surface(
+                                aggregate_path
+                            )
                             tamper_mir_semantic_scope_runtime_artifact(
                                 aggregate_path,
                                 artifact_key,
@@ -8134,6 +10898,211 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
 
 
 class StdBenchSourceCorrectnessAuditTests(unittest.TestCase):
+    def test_bench_in_place_recycle_adapter_audit_rejects_missing_peekable(self) -> None:
+        source = """
+fn bench_in_place_recycle(b: &mut Bencher) {
+    b.iter(|| {
+        let tmp = std::mem::take(&mut data);
+        data = black_box(
+            tmp.into_iter()
+                .enumerate()
+                .map(|(idx, e)| idx.wrapping_add(e))
+                .fuse()
+                .collect::<Vec<usize>>(),
+        );
+    });
+}
+"""
+        findings = evaluate.bench_in_place_recycle_adapter_findings_for_code(source)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(
+            findings[0]["pattern"],
+            "bench_in_place_recycle_adapter_chain_drift",
+        )
+        self.assertEqual(
+            findings[0]["observed_adapters"],
+            ["into_iter", "enumerate", "map", "fuse", "collect"],
+        )
+
+    def test_bench_in_place_recycle_adapter_audit_accepts_peekable_collect(self) -> None:
+        source = """
+fn bench_in_place_recycle(b: &mut Bencher) {
+    b.iter(|| {
+        let tmp = std::mem::take(&mut data);
+        data = black_box(
+            tmp.into_iter()
+                .enumerate()
+                .map(|(idx, e)| idx.wrapping_add(e))
+                .fuse()
+                .peekable()
+                .collect::<Vec<usize>>(),
+        );
+    });
+}
+"""
+        self.assertEqual(
+            evaluate.bench_in_place_recycle_adapter_findings_for_code(source),
+            [],
+        )
+
+    def test_bench_in_place_recycle_adapter_audit_accepts_one_line_chain(self) -> None:
+        source = """
+fn bench_in_place_recycle(b: &mut Bencher) {
+    data = black_box(tmp.into_iter().enumerate().map(|(idx, e)| idx.wrapping_add(e)).fuse().peekable().collect::<Vec<usize>>());
+}
+"""
+        self.assertEqual(
+            evaluate.bench_in_place_recycle_adapter_findings_for_code(
+                source,
+                require_function=True,
+            ),
+            [],
+        )
+
+    def test_bench_in_place_recycle_adapter_audit_rejects_one_line_missing_peekable(self) -> None:
+        source = """
+fn bench_in_place_recycle(b: &mut Bencher) {
+    data = black_box(tmp.into_iter().enumerate().map(|(idx, e)| idx.wrapping_add(e)).fuse().collect::<Vec<usize>>());
+}
+"""
+        findings = evaluate.bench_in_place_recycle_adapter_findings_for_code(
+            source,
+            require_function=True,
+        )
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(
+            findings[0]["observed_adapters"],
+            ["into_iter", "enumerate", "map", "fuse", "collect"],
+        )
+
+    def test_bench_in_place_recycle_adapter_audit_ignores_commented_chain(self) -> None:
+        source = """
+fn bench_in_place_recycle(b: &mut Bencher) {
+    // tmp.into_iter().enumerate().map(identity).fuse().collect::<Vec<usize>>()
+    /* outer /* nested */
+       tmp.into_iter().enumerate().map(identity).fuse().collect::<Vec<usize>>() */
+    black_box(&data);
+}
+"""
+        findings = evaluate.bench_in_place_recycle_adapter_findings_for_code(
+            source,
+            require_function=True,
+        )
+        self.assertEqual(
+            [finding["pattern"] for finding in findings],
+            ["bench_in_place_recycle_adapter_chain_missing"],
+        )
+
+    def test_bench_in_place_recycle_adapter_audit_ignores_string_chain(self) -> None:
+        source = r'''
+fn bench_in_place_recycle(b: &mut Bencher) {
+    black_box("tmp.into_iter().enumerate().map(identity).fuse().collect::<Vec<usize>>()");
+    black_box(r#"tmp.into_iter().enumerate().map(identity).fuse().collect::<Vec<usize>>()"#);
+    black_box(br"tmp.into_iter().enumerate().map(identity).fuse().collect::<Vec<usize>>()");
+}
+'''
+        findings = evaluate.bench_in_place_recycle_adapter_findings_for_code(
+            source,
+            require_function=True,
+        )
+        self.assertEqual(
+            [finding["pattern"] for finding in findings],
+            ["bench_in_place_recycle_adapter_chain_missing"],
+        )
+
+    def test_bench_in_place_recycle_adapter_audit_requires_function(self) -> None:
+        findings = evaluate.bench_in_place_recycle_adapter_findings_for_code(
+            "fn another_benchmark() {}",
+            require_function=True,
+        )
+        self.assertEqual(
+            [finding["pattern"] for finding in findings],
+            ["bench_in_place_recycle_function_missing"],
+        )
+
+    def test_bench_in_place_recycle_adapter_audit_rejects_duplicate_function(self) -> None:
+        source = """
+fn bench_in_place_recycle() {}
+fn bench_in_place_recycle() {}
+"""
+        findings = evaluate.bench_in_place_recycle_adapter_findings_for_code(
+            source,
+            require_function=True,
+        )
+        self.assertEqual(
+            [finding["pattern"] for finding in findings],
+            ["bench_in_place_recycle_function_duplicate"],
+        )
+
+    def test_bench_in_place_recycle_adapter_audit_rejects_duplicate_chain(self) -> None:
+        source = """
+fn bench_in_place_recycle(b: &mut Bencher) {
+    let first = tmp.into_iter().enumerate().map(identity).fuse().peekable().collect::<Vec<usize>>();
+    let second = tmp.into_iter().enumerate().map(identity).fuse().peekable().collect::<Vec<usize>>();
+}
+"""
+        findings = evaluate.bench_in_place_recycle_adapter_findings_for_code(
+            source,
+            require_function=True,
+        )
+        self.assertEqual(
+            [finding["pattern"] for finding in findings],
+            ["bench_in_place_recycle_adapter_chain_duplicate"],
+        )
+
+    def test_checked_in_bench_in_place_recycle_copies_share_adapter_chain(self) -> None:
+        paths = (
+            ROOT / "unialloc" / "benches" / "vec.rs",
+            ROOT / "unialloc" / "tests" / "vec.rs",
+            ROOT / "kernel" / "kernel-modules" / "benchmarking" / "rust_bench.rs",
+        )
+        for path in paths:
+            with self.subTest(path=path.relative_to(ROOT)):
+                source = path.read_text(encoding="utf-8")
+                self.assertEqual(
+                    evaluate.bench_in_place_recycle_adapter_findings_for_code(
+                        source,
+                        require_function=True,
+                    ),
+                    [],
+                )
+
+    def test_clone_from_destination_length_audit_rejects_ignored_dst_len(self) -> None:
+        source = """
+fn do_bench_clone_from(times: usize, dst_len: usize, src_len: usize) {
+    let dst: Vec<_> = FromIterator::from_iter(0..src_len);
+    let src: Vec<_> = FromIterator::from_iter(dst_len..dst_len + src_len);
+}
+"""
+        findings = evaluate.clone_from_destination_length_findings_for_code(source)
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0]["pattern"], "clone_from_destination_length_ignored")
+        self.assertEqual(findings[0]["observed_length"], "src_len")
+        self.assertEqual(findings[0]["expected_length"], "dst_len")
+
+    def test_clone_from_destination_length_audit_accepts_dst_len(self) -> None:
+        source = """
+fn do_bench_clone_from(times: usize, dst_len: usize, src_len: usize) {
+    let dst: Vec<_> = FromIterator::from_iter(0..dst_len);
+    let src: Vec<_> = FromIterator::from_iter(dst_len..dst_len + src_len);
+}
+"""
+        self.assertEqual(evaluate.clone_from_destination_length_findings_for_code(source), [])
+
+    def test_checked_in_clone_from_benchmark_copies_use_dst_len(self) -> None:
+        paths = (
+            ROOT / "unialloc" / "benches" / "vec.rs",
+            ROOT / "unialloc" / "tests" / "vec.rs",
+            ROOT / "kernel" / "kernel-modules" / "benchmarking" / "rust_bench.rs",
+        )
+        for path in paths:
+            with self.subTest(path=path.relative_to(ROOT)):
+                source = path.read_text(encoding="utf-8")
+                self.assertEqual(
+                    evaluate.clone_from_destination_length_findings_for_code(source),
+                    [],
+                )
+
     def test_direct_allocator_local_metadata_abi_statuses_are_gate_known(self) -> None:
         expected = {
             "resolved_unialloc_alloc_with_metadata_local",
@@ -9345,6 +12314,630 @@ class PaperPerformanceSampleClaimGradeTests(unittest.TestCase):
 
 
 class PaperPerformancePlanRunnerResourceTests(unittest.TestCase):
+    def assert_interrupted_plan_artifacts(
+        self,
+        *,
+        out_dir: pathlib.Path,
+        max_output_bytes: int,
+        marker: str,
+        expected_allocator: str = "unialloc",
+    ) -> tuple[dict, str, dict]:
+        interruption_path = out_dir / "paper-performance-plan-interruption.json"
+        interruptions_path = out_dir / "paper-performance.interruptions.jsonl"
+        summary_path = out_dir / "paper-performance-plan-run-summary.json"
+        self.assertTrue(interruption_path.exists())
+        self.assertTrue(interruptions_path.exists())
+        self.assertTrue(summary_path.exists())
+
+        interruption = json.loads(interruption_path.read_text(encoding="utf-8"))
+        self.assertEqual(interruption["source"], "paper-performance-plan-interruption")
+        self.assertTrue(interruption["interrupted"], interruption)
+        self.assertFalse(interruption["success"], interruption)
+        self.assertEqual(interruption["benchmark"], "Collections")
+        self.assertEqual(interruption["allocator"], expected_allocator)
+        self.assertEqual(interruption["run_index"], 1)
+        self.assertGreater(
+            float(interruption.get("wall_seconds") or interruption.get("elapsed_seconds") or 0),
+            0,
+        )
+        self.assertIsNone(interruption.get("seconds"), interruption)
+        self.assertFalse(interruption["sample_persisted"], interruption)
+        self.assertFalse(interruption["import_attempted"], interruption)
+        self.assertTrue(interruption["process_group_absent_after_cleanup"], interruption)
+        self.assertTrue(interruption["process_group_terminated"], interruption)
+        self.assertTrue(
+            interruption.get("stdout_truncated") or interruption.get("stderr_truncated"),
+            interruption,
+        )
+        for stream in ("stdout", "stderr"):
+            retained = int(interruption.get(f"{stream}_retained_bytes") or 0)
+            total = int(interruption.get(f"{stream}_bytes") or 0)
+            self.assertLessEqual(retained, max_output_bytes, interruption)
+            if interruption.get(f"{stream}_truncated"):
+                self.assertGreater(total, retained, interruption)
+
+        interruption_lines = [
+            json.loads(line)
+            for line in interruptions_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        self.assertEqual(len(interruption_lines), 1, interruption_lines)
+        self.assertEqual(interruption_lines[0]["label"], interruption["label"])
+        self.assertFalse(interruption_lines[0]["sample_persisted"])
+
+        sidecars = list((out_dir / "logs").glob("*.interruption.json"))
+        self.assertEqual(len(sidecars), 1, sidecars)
+        sidecar = json.loads(sidecars[0].read_text(encoding="utf-8"))
+        self.assertEqual(sidecar["label"], interruption["label"])
+        self.assertTrue(sidecar["interrupted"])
+
+        stdout_log = pathlib.Path(interruption["stdout"])
+        stderr_log = pathlib.Path(interruption["stderr"])
+        self.assertLessEqual(stdout_log.stat().st_size, max_output_bytes)
+        self.assertLessEqual(stderr_log.stat().st_size, max_output_bytes)
+        retained_logs = stdout_log.read_text(
+            encoding="utf-8", errors="replace"
+        ) + stderr_log.read_text(encoding="utf-8", errors="replace")
+        self.assertIn(marker, retained_logs)
+
+        samples_path = out_dir / "paper-performance.samples.jsonl"
+        self.assertFalse(samples_path.exists() and samples_path.stat().st_size > 0)
+        self.assertFalse((out_dir / "data").exists())
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        self.assertTrue(summary["interrupted"], summary)
+        self.assertEqual(summary["record_count"], 0, summary)
+        self.assertEqual(summary["executed_record_count"], 0, summary)
+        self.assertFalse(summary["import_attempted"], summary)
+        self.assertNotIn("import_status", summary)
+        return interruption, retained_logs, summary
+
+    def test_ctrl_c_cli_persists_bounded_interruption_without_sample_or_import(self) -> None:
+        if os.name != "posix":
+            self.skipTest("real process-group interrupt behavior is POSIX-specific")
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            state = tmp / "fake-cargo-state"
+            state.mkdir()
+            cargo_pid_file = state / "cargo.pid"
+            cargo_stopped = state / "cargo.stopped"
+            fake_cargo = tmp / "fake-cargo"
+            fake_cargo.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env python3",
+                        "import os, pathlib, signal, sys, time",
+                        "state = pathlib.Path(os.environ['UNIALLOC_TEST_FAKE_CARGO_STATE'])",
+                        "if '--list' in sys.argv:",
+                        "    print('vec::bench_with_capacity_1000_PATHOLOGY_MARKER: benchmark', flush=True)",
+                        "    raise SystemExit(0)",
+                        "pid_file = state / 'cargo.pid'",
+                        "stopped = state / 'cargo.stopped'",
+                        "def ignore_term(signum, _frame):",
+                        "    stopped.write_text(f'ignored-signal={signum}', encoding='utf-8')",
+                        "signal.signal(signal.SIGTERM, ignore_term)",
+                        "print('noise-' + ('x' * 65536), flush=True)",
+                        "print('PATHOLOGY_MARKER nested-fake-cargo-running', flush=True)",
+                        "pid_file.write_text(str(os.getpid()), encoding='utf-8')",
+                        "while True: time.sleep(1)",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cargo.chmod(0o755)
+
+            plan = {
+                "schema_version": 1,
+                "runs": 1,
+                "workloads": [
+                    {
+                        "label": "pathology-interrupt",
+                        "dataset": "default_performance",
+                        "benchmark": "Collections",
+                        "allocator": "unialloc",
+                        "command": [
+                            sys.executable,
+                            str(ROOT / "evaluation" / "scripts" / "paper_workload_driver.py"),
+                            "--dataset",
+                            "default_performance",
+                            "--benchmark",
+                            "Collections",
+                            "--allocator",
+                            "unialloc",
+                            "--bench-filter",
+                            "vec::bench_with_capacity_1000_PATHOLOGY_MARKER",
+                            "--cargo",
+                            str(fake_cargo),
+                            "--rust-toolchain",
+                            "system",
+                            "--timeout",
+                            "60",
+                        ],
+                        "cwd": str(ROOT),
+                        "env": {
+                            "UNIALLOC_TEST_FAKE_CARGO_STATE": str(state),
+                            "UNIALLOC_BENCH_LIST_CACHE_DIR": str(tmp / "bench-list-cache"),
+                        },
+                        "timeout": 60,
+                        "measurement": "stdout_json",
+                        "time_field": "seconds",
+                        "claim_grade": False,
+                    }
+                ],
+            }
+            plan_path = tmp / "plan.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            out_dir = tmp / "out"
+            missing_paper_dir = tmp / "missing-paper-dir"
+            max_output_bytes = 4096
+            command = [
+                sys.executable,
+                str(EVALUATE_PATH),
+                "run-paper-performance-plan",
+                "--plan",
+                str(plan_path),
+                "--paper-dir",
+                str(missing_paper_dir),
+                "--run-id",
+                "ctrl-c-e2e",
+                "--output-dir",
+                str(out_dir),
+                "--runs",
+                "1",
+                "--timeout",
+                "60",
+                "--max-records",
+                "1",
+                "--max-output-bytes",
+                str(max_output_bytes),
+                "--import-results",
+            ]
+
+            proc = None
+            cargo_pid = None
+            stdout_text = ""
+            stderr_text = ""
+            try:
+                proc = subprocess.Popen(
+                    command,
+                    cwd=str(ROOT),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
+                )
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    if cargo_pid_file.exists():
+                        cargo_pid = int(cargo_pid_file.read_text(encoding="utf-8"))
+                        break
+                    if proc.poll() is not None:
+                        stdout_text, stderr_text = proc.communicate()
+                        self.fail(
+                            "plan runner exited before fake Cargo became ready: "
+                            f"returncode={proc.returncode}\nstdout={stdout_text}\nstderr={stderr_text}"
+                        )
+                    time.sleep(0.05)
+                self.assertIsNotNone(cargo_pid, "fake Cargo did not become ready before the E2E deadline")
+
+                os.kill(proc.pid, signal.SIGINT)
+                stdout_text, stderr_text = proc.communicate(timeout=20)
+                self.assertIn(proc.returncode, (-signal.SIGINT, 130), stderr_text)
+
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline and not cargo_stopped.exists():
+                    time.sleep(0.05)
+                self.assertTrue(
+                    cargo_stopped.exists(),
+                    "stubborn fake Cargo did not receive TERM before forced cleanup",
+                )
+                assert cargo_pid is not None
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(cargo_pid, 0)
+                with self.assertRaises(ProcessLookupError):
+                    os.killpg(cargo_pid, 0)
+
+                self.assert_interrupted_plan_artifacts(
+                    out_dir=out_dir,
+                    max_output_bytes=max_output_bytes,
+                    marker="PATHOLOGY_MARKER",
+                )
+            finally:
+                if proc is not None and proc.poll() is None:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        proc.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        pass
+                if cargo_pid is None and cargo_pid_file.exists():
+                    cargo_pid = int(cargo_pid_file.read_text(encoding="utf-8"))
+                if cargo_pid is not None:
+                    try:
+                        os.killpg(cargo_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
+    def test_ctrl_c_docker_collections_cleans_independent_container_and_persists_evidence(
+        self,
+    ) -> None:
+        if os.name != "posix":
+            self.skipTest("real process-group interrupt behavior is POSIX-specific")
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            state = tmp / "fake-docker-state"
+            state.mkdir()
+            commands_path = state / "commands.jsonl"
+            docker_ready = state / "docker-run.ready"
+            docker_pid_file = state / "docker-client.pid"
+            container_pid_file = state / "container.pid"
+            fake_docker = tmp / "fake-docker"
+            fake_docker.write_text(
+                """#!/usr/bin/env python3
+import json
+import os
+import pathlib
+import signal
+import subprocess
+import sys
+import time
+
+state = pathlib.Path(os.environ["UNIALLOC_TEST_FAKE_DOCKER_STATE"])
+args = sys.argv[1:]
+with (state / "commands.jsonl").open("a", encoding="utf-8") as stream:
+    stream.write(json.dumps(args) + "\\n")
+
+if args and args[0] == "version":
+    print(json.dumps({"Server": {"Version": "test"}}), flush=True)
+    raise SystemExit(0)
+
+if args and args[0] == "run":
+    name = args[args.index("--name") + 1]
+    cidfile = pathlib.Path(args[args.index("--cidfile") + 1])
+    if "-probe-" in name:
+        cidfile.write_text("c" * 64, encoding="utf-8")
+        print("UNAME=Linux-x86_64")
+        print("ldd (GNU libc) 2.31")
+        print("/usr/bin/python3")
+        print("Python 3.11.0")
+        print("/usr/bin/cargo")
+        print("cargo 1.70.0")
+        print("/usr/bin/cmake")
+        print("cmake version 3.25.0")
+        raise SystemExit(0)
+    if "-run-" not in name:
+        raise SystemExit("unexpected Docker run purpose")
+
+    container_id = "d" * 64
+    cidfile.write_text(container_id, encoding="utf-8")
+    (state / "container.id").write_text(container_id, encoding="utf-8")
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    container_code = '''
+import os
+import pathlib
+import signal
+import sys
+import time
+
+state = pathlib.Path(sys.argv[1])
+signal.signal(signal.SIGINT, signal.SIG_IGN)
+def ignore_term(signum, _frame):
+    (state / "container.term").write_text(str(signum), encoding="utf-8")
+signal.signal(signal.SIGTERM, ignore_term)
+(state / "container.pid").write_text(str(os.getpid()), encoding="utf-8")
+(state / "container.ready").write_text("ready", encoding="utf-8")
+while True:
+    time.sleep(1)
+'''
+    container = subprocess.Popen(
+        [sys.executable, "-c", container_code, str(state)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    (state / "docker-client.pid").write_text(str(os.getpid()), encoding="utf-8")
+    deadline = time.monotonic() + 5
+    while not (state / "container.ready").exists():
+        if time.monotonic() >= deadline:
+            raise SystemExit("independent container did not become ready")
+        time.sleep(0.01)
+    print("noise-" + ("x" * 131072), flush=True)
+    print("PATHOLOGY_MARKER docker-container-running", flush=True)
+    (state / "docker-run.ready").write_text("ready", encoding="utf-8")
+    container.wait()
+    raise SystemExit(container.returncode)
+
+if args[:2] == ["container", "stop"]:
+    (state / "unexpected-stop").write_text(" ".join(args), encoding="utf-8")
+    raise SystemExit(99)
+
+if args[:2] == ["container", "kill"]:
+    reference = args[-1]
+    pid = int((state / "container.pid").read_text(encoding="utf-8"))
+    try:
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    (state / "kill.invoked").write_text(reference, encoding="utf-8")
+    (state / "cleanup-started").write_text(reference, encoding="utf-8")
+    time.sleep(0.5)
+    raise SystemExit(0)
+
+if args[:2] == ["container", "rm"]:
+    (state / "removed").write_text(args[-1], encoding="utf-8")
+    raise SystemExit(0)
+
+if args[:2] == ["container", "inspect"]:
+    print(f"Error: No such container: {args[-1]}", file=sys.stderr, flush=True)
+    raise SystemExit(1)
+
+raise SystemExit(f"unexpected fake Docker command: {args!r}")
+""",
+                encoding="utf-8",
+            )
+            fake_docker.chmod(0o755)
+
+            plan = {
+                "schema_version": 1,
+                "runs": 1,
+                "workloads": [
+                    {
+                        "label": "docker-pathology-interrupt",
+                        "dataset": "default_performance",
+                        "benchmark": "Collections",
+                        "allocator": "unialloc",
+                        "command": [
+                            sys.executable,
+                            str(DOCKER_DRIVER_PATH),
+                            "--dataset",
+                            "default_performance",
+                            "--benchmark",
+                            "Collections",
+                            "--allocator",
+                            "unialloc",
+                            "--image",
+                            "paper:test",
+                            "--platform",
+                            "linux/amd64",
+                            "--docker-bin",
+                            str(fake_docker),
+                            "--target-volume",
+                            "",
+                            "--rust-toolchain",
+                            "system",
+                            "--bench-filter",
+                            "vec::bench_with_capacity_1000_PATHOLOGY_MARKER",
+                            "--timeout",
+                            "60",
+                            "--inner-timeout",
+                            "60",
+                        ],
+                        "cwd": str(ROOT),
+                        "env": {
+                            "UNIALLOC_TEST_FAKE_DOCKER_STATE": str(state),
+                        },
+                        "timeout": 60,
+                        "measurement": "stdout_json",
+                        "time_field": "seconds",
+                        "claim_grade": False,
+                    }
+                ],
+            }
+            plan_path = tmp / "plan.json"
+            plan_path.write_text(json.dumps(plan), encoding="utf-8")
+            out_dir = tmp / "out"
+            max_output_bytes = 4096
+            command = [
+                sys.executable,
+                str(EVALUATE_PATH),
+                "run-paper-performance-plan",
+                "--plan",
+                str(plan_path),
+                "--paper-dir",
+                str(tmp / "missing-paper-dir"),
+                "--run-id",
+                "ctrl-c-docker-e2e",
+                "--output-dir",
+                str(out_dir),
+                "--runs",
+                "1",
+                "--timeout",
+                "60",
+                "--max-records",
+                "1",
+                "--max-output-bytes",
+                str(max_output_bytes),
+                "--import-results",
+            ]
+
+            proc = None
+            docker_pid = None
+            container_pid = None
+            wrapper_pgid = None
+            stdout_text = ""
+            stderr_text = ""
+            try:
+                proc = subprocess.Popen(
+                    command,
+                    cwd=str(ROOT),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    start_new_session=True,
+                )
+                deadline = time.monotonic() + 20
+                while time.monotonic() < deadline:
+                    if docker_ready.exists():
+                        docker_pid = int(docker_pid_file.read_text(encoding="utf-8"))
+                        container_pid = int(container_pid_file.read_text(encoding="utf-8"))
+                        wrapper_pgid = os.getpgid(docker_pid)
+                        break
+                    if proc.poll() is not None:
+                        stdout_text, stderr_text = proc.communicate()
+                        self.fail(
+                            "plan runner exited before fake Docker became ready: "
+                            f"returncode={proc.returncode}\n"
+                            f"stdout={stdout_text}\nstderr={stderr_text}"
+                        )
+                    time.sleep(0.05)
+                self.assertIsNotNone(
+                    docker_pid,
+                    "fake Docker client did not become ready before the E2E deadline",
+                )
+                self.assertIsNotNone(
+                    container_pid,
+                    "independent fake container did not become ready before the E2E deadline",
+                )
+                self.assertIsNotNone(
+                    wrapper_pgid,
+                    "Docker wrapper process group was unavailable before interruption",
+                )
+
+                os.killpg(proc.pid, signal.SIGINT)
+                cleanup_started = state / "cleanup-started"
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline and not cleanup_started.exists():
+                    if proc.poll() is not None:
+                        stdout_text, stderr_text = proc.communicate()
+                        self.fail(
+                            "plan runner exited before Docker cleanup started: "
+                            f"returncode={proc.returncode}\n"
+                            f"stdout={stdout_text}\nstderr={stderr_text}"
+                        )
+                    time.sleep(0.01)
+                self.assertTrue(
+                    cleanup_started.exists(),
+                    "Docker cleanup did not start before the repeated-SIGINT deadline",
+                )
+                assert wrapper_pgid is not None
+                os.killpg(wrapper_pgid, signal.SIGINT)
+                stdout_text, stderr_text = proc.communicate(timeout=30)
+                self.assertIn(proc.returncode, (-signal.SIGINT, 130), stderr_text)
+
+                assert docker_pid is not None
+                assert container_pid is not None
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    docker_absent = False
+                    container_absent = False
+                    try:
+                        os.kill(docker_pid, 0)
+                    except ProcessLookupError:
+                        docker_absent = True
+                    try:
+                        os.killpg(container_pid, 0)
+                    except ProcessLookupError:
+                        container_absent = True
+                    if docker_absent and container_absent:
+                        break
+                    time.sleep(0.05)
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(docker_pid, 0)
+                with self.assertRaises(ProcessLookupError):
+                    os.kill(container_pid, 0)
+                with self.assertRaises(ProcessLookupError):
+                    os.killpg(container_pid, 0)
+
+                commands = [
+                    json.loads(line)
+                    for line in commands_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+                cleanup_commands = [
+                    item
+                    for item in commands
+                    if len(item) >= 2 and item[0] == "container"
+                ]
+                self.assertEqual(
+                    [item[1] for item in cleanup_commands],
+                    ["kill", "rm", "inspect"],
+                    commands,
+                )
+                self.assertNotIn("stop", [item[1] for item in cleanup_commands])
+                container_id = "d" * 64
+                cleanup_references = [item[-1] for item in cleanup_commands]
+                self.assertEqual(cleanup_references, [container_id] * 3)
+                for reference in cleanup_references:
+                    self.assertRegex(reference, r"^[0-9a-f]{64}$")
+                self.assertFalse((state / "unexpected-stop").exists())
+                self.assertEqual(
+                    (state / "kill.invoked").read_text(encoding="utf-8"),
+                    container_id,
+                )
+                self.assertEqual(
+                    (state / "removed").read_text(encoding="utf-8"),
+                    container_id,
+                )
+
+                interruption, retained_logs, _summary = (
+                    self.assert_interrupted_plan_artifacts(
+                        out_dir=out_dir,
+                        max_output_bytes=max_output_bytes,
+                        marker="PATHOLOGY_MARKER",
+                    )
+                )
+                docker_diagnostics = []
+                for line in retained_logs.splitlines():
+                    try:
+                        value = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if (
+                        isinstance(value, dict)
+                        and value.get("source")
+                        == "paper-collections-docker-driver-interruption"
+                    ):
+                        docker_diagnostics.append(value)
+                self.assertTrue(docker_diagnostics, retained_logs)
+                self.assertTrue(
+                    docker_diagnostics[-1]["cleanup"]["cleanup_confirmed_absent"],
+                    docker_diagnostics[-1],
+                )
+                child_interruption = interruption.get("child_interruption")
+                self.assertIsInstance(child_interruption, dict, interruption)
+                assert isinstance(child_interruption, dict)
+                self.assertEqual(
+                    child_interruption["source"],
+                    "paper-collections-docker-driver-interruption",
+                )
+                self.assertTrue(
+                    child_interruption["cleanup"]["cleanup_confirmed_absent"],
+                    child_interruption,
+                )
+                self.assertGreaterEqual(
+                    int(child_interruption.get("deferred_sigint_count") or 0),
+                    1,
+                    child_interruption,
+                )
+            finally:
+                if proc is not None and proc.poll() is None:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        proc.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        pass
+                if docker_pid is None and docker_pid_file.exists():
+                    docker_pid = int(docker_pid_file.read_text(encoding="utf-8"))
+                if docker_pid is not None:
+                    try:
+                        os.kill(docker_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                if container_pid is None and container_pid_file.exists():
+                    container_pid = int(container_pid_file.read_text(encoding="utf-8"))
+                if container_pid is not None:
+                    try:
+                        os.killpg(container_pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
     def base_workload(self, script: pathlib.Path, **overrides: object) -> dict:
         workload = {
             "dataset": "default_performance",
@@ -9368,6 +12961,975 @@ class PaperPerformancePlanRunnerResourceTests(unittest.TestCase):
             default_max_output_bytes=512,
             run_id="plan-runner-resource-test",
         )
+
+    @staticmethod
+    def source_fingerprint(digest: str) -> dict:
+        return {
+            "schema_version": evaluate.REPOSITORY_SOURCE_FINGERPRINT_SCHEMA_VERSION,
+            "algorithm": "sha256",
+            "source_digest": digest,
+        }
+
+    def test_plan_runner_binds_stable_repository_source(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            script = tmp / "child.py"
+            script.write_text(
+                "import json\n"
+                "print(json.dumps({'seconds': 0.125, "
+                "'benchmark_owned_json': True, 'claim_grade': True}))\n",
+                encoding="utf-8",
+            )
+            stable = self.source_fingerprint("a" * 64)
+
+            with mock.patch.object(
+                evaluate,
+                "repository_source_fingerprint",
+                side_effect=[stable, stable],
+            ):
+                record = self.run_workload(tmp, script)
+
+        self.assertTrue(record["success"], record)
+        self.assertTrue(record["claim_grade"], record)
+        self.assertTrue(record["source_stable_during_sample"], record)
+        self.assertEqual(record["evidence_source_fingerprint"], stable)
+        self.assertNotIn("evidence_source_binding_blockers", record)
+
+    def test_plan_runner_keeps_measurement_but_blocks_claim_on_source_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            script = tmp / "child.py"
+            script.write_text(
+                "import json\n"
+                "print(json.dumps({'seconds': 0.125, "
+                "'benchmark_owned_json': True, 'claim_grade': True}))\n",
+                encoding="utf-8",
+            )
+            started = self.source_fingerprint("a" * 64)
+            finished = self.source_fingerprint("b" * 64)
+
+            with mock.patch.object(
+                evaluate,
+                "repository_source_fingerprint",
+                side_effect=[started, finished],
+            ):
+                record = self.run_workload(tmp, script)
+
+        self.assertTrue(record["success"], record)
+        self.assertEqual(record["seconds"], 0.125)
+        self.assertFalse(record["claim_grade"], record)
+        self.assertFalse(record["source_stable_during_sample"], record)
+        self.assertNotIn("evidence_source_fingerprint", record)
+        self.assertIn(
+            "repository source changed while evidence was being collected",
+            " ".join(record["evidence_source_binding_blockers"]),
+        )
+        self.assertIn(
+            "repository source changed while evidence was being collected",
+            " ".join(record["claim_grade_blockers"]),
+        )
+
+    def test_samples_audit_requires_one_current_source_fingerprint(self) -> None:
+        current = self.source_fingerprint("c" * 64)
+        other = self.source_fingerprint("d" * 64)
+        required_cell = {
+            "dataset": "default_performance",
+            "benchmark": "Collections",
+            "allocator": "unialloc",
+        }
+        base_sample = {
+            **required_cell,
+            "success": True,
+            "seconds": 0.125,
+        }
+
+        for label, samples in (
+            ("missing", [dict(base_sample)]),
+            (
+                "stale",
+                [{**base_sample, "evidence_source_fingerprint": other}],
+            ),
+            (
+                "mixed",
+                [
+                    {**base_sample, "evidence_source_fingerprint": current},
+                    {**base_sample, "evidence_source_fingerprint": other},
+                ],
+            ),
+        ):
+            with self.subTest(label=label), mock.patch.object(
+                evaluate,
+                "required_performance_sample_cells",
+                return_value=([required_cell], []),
+            ), mock.patch.object(
+                evaluate,
+                "audit_paper_performance_sample_record",
+                side_effect=lambda sample, index, path: {
+                    "index": index,
+                    **required_cell,
+                    "run_index": index,
+                    "issues": [],
+                },
+            ), mock.patch.object(
+                evaluate,
+                "sample_is_claim_grade_usable",
+                return_value=True,
+            ), mock.patch.object(
+                evaluate,
+                "repository_source_fingerprint",
+                return_value=current,
+            ):
+                audit = evaluate.build_paper_performance_samples_audit(
+                    cfg={},
+                    paper_dir=pathlib.Path("."),
+                    samples_path=pathlib.Path("samples.jsonl"),
+                    samples=samples,
+                    dataset_names=["default_performance"],
+                    required_runs=len(samples),
+                )
+
+            self.assertFalse(audit["summary"]["ready_for_claim_grade_import"], audit)
+            self.assertFalse(audit["summary"]["source_binding_ready"], audit)
+            self.assertGreater(audit["summary"]["source_binding_blocker_count"], 0)
+            self.assertNotIn("evidence_source_fingerprint", audit)
+
+    def test_samples_audit_accepts_one_current_source_fingerprint(self) -> None:
+        current = self.source_fingerprint("e" * 64)
+        required_cell = {
+            "dataset": "default_performance",
+            "benchmark": "Collections",
+            "allocator": "unialloc",
+        }
+        samples = [
+            {
+                **required_cell,
+                "success": True,
+                "seconds": 0.125,
+                "evidence_source_fingerprint": current,
+            }
+        ]
+        with mock.patch.object(
+            evaluate,
+            "required_performance_sample_cells",
+            return_value=([required_cell], []),
+        ), mock.patch.object(
+            evaluate,
+            "audit_paper_performance_sample_record",
+            return_value={
+                "index": 1,
+                **required_cell,
+                "run_index": 1,
+                "issues": [],
+            },
+        ), mock.patch.object(
+            evaluate,
+            "sample_is_claim_grade_usable",
+            return_value=True,
+        ), mock.patch.object(
+            evaluate,
+            "repository_source_fingerprint",
+            return_value=current,
+        ):
+            audit = evaluate.build_paper_performance_samples_audit(
+                cfg={},
+                paper_dir=pathlib.Path("."),
+                samples_path=pathlib.Path("samples.jsonl"),
+                samples=samples,
+                dataset_names=["default_performance"],
+                required_runs=1,
+            )
+
+        self.assertTrue(audit["summary"]["ready_for_claim_grade_import"], audit)
+        self.assertTrue(audit["source_binding_ready"], audit)
+        self.assertTrue(audit["summary"]["source_binding_ready"], audit)
+        self.assertEqual(audit["summary"]["source_bound_record_count"], 1)
+        self.assertEqual(audit["evidence_source_fingerprint"], current)
+        self.assertEqual(audit["evidence_source_binding_blockers"], [])
+
+    def test_performance_sample_contract_requires_repository_source_binding(self) -> None:
+        contract = evaluate.paper_performance_sample_contract()
+
+        self.assertIn(
+            "evidence_source_fingerprint",
+            contract["required_provenance"],
+        )
+        self.assertIn(
+            "repository source fingerprint",
+            contract["claim_grade_rule"],
+        )
+        self.assertEqual(
+            contract["example_jsonl_record"]["evidence_source_fingerprint"][
+                "schema_version"
+            ],
+            evaluate.REPOSITORY_SOURCE_FINGERPRINT_SCHEMA_VERSION,
+        )
+
+    def test_import_publication_gate_downgrades_on_late_source_drift(self) -> None:
+        recorded = self.source_fingerprint("f" * 64)
+        current = self.source_fingerprint("0" * 64)
+        manifest = {
+            "claim_grade": True,
+            "complete_for_claim": True,
+            "source_binding_ready": True,
+            "evidence_source_binding_blockers": [],
+            "evidence_source_fingerprint": recorded,
+            "datasets": {
+                "default_performance": {
+                    "claim_grade": True,
+                    "complete_for_claim": True,
+                    "claim_grade_blockers": [],
+                }
+            },
+        }
+
+        blockers = evaluate.apply_paper_performance_import_publication_source_gate(
+            manifest,
+            current=current,
+        )
+
+        self.assertFalse(manifest["source_binding_ready"], manifest)
+        self.assertFalse(manifest["claim_grade"], manifest)
+        self.assertFalse(manifest["complete_for_claim"], manifest)
+        dataset = manifest["datasets"]["default_performance"]
+        self.assertFalse(dataset["claim_grade"], dataset)
+        self.assertFalse(dataset["complete_for_claim"], dataset)
+        self.assertIn("does not match the current working tree", " ".join(blockers))
+        self.assertIn(
+            "does not match the current working tree",
+            " ".join(dataset["claim_grade_blockers"]),
+        )
+
+    def test_resume_success_requires_current_repository_source_binding(self) -> None:
+        current = self.source_fingerprint("1" * 64)
+        stale = self.source_fingerprint("2" * 64)
+        base = {
+            "dataset": "default_performance",
+            "benchmark": "Collections",
+            "allocator": "unialloc",
+            "run_index": 1,
+            "success": True,
+            "seconds": 0.125,
+        }
+
+        self.assertTrue(
+            evaluate.sample_is_resumable_success(
+                {**base, "evidence_source_fingerprint": current},
+                current=current,
+            )
+        )
+        for label, record in (
+            ("missing", base),
+            (
+                "stale",
+                {**base, "evidence_source_fingerprint": stale},
+            ),
+            (
+                "blocked",
+                {
+                    **base,
+                    "evidence_source_fingerprint": current,
+                    "evidence_source_binding_blockers": [
+                        "repository source changed while evidence was collected"
+                    ],
+                },
+            ),
+        ):
+            with self.subTest(label=label):
+                self.assertFalse(
+                    evaluate.sample_is_resumable_success(
+                        record,
+                        current=current,
+                    )
+                )
+
+    def test_claim_grade_resume_rejects_nonclaim_fallback_and_missing_provenance(self) -> None:
+        current = self.source_fingerprint("5" * 64)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            evidence_path = tmp / "raw-evidence.json"
+            evidence_path.write_text('{"seconds":0.125}\n', encoding="utf-8")
+            samples_path = tmp / "paper-performance.samples.jsonl"
+            valid = {
+                "dataset": "default_performance",
+                "benchmark": "Collections",
+                "allocator": "unialloc",
+                "run_index": 1,
+                "success": True,
+                "seconds": 0.125,
+                "claim_grade": True,
+                "benchmark_owned_json": True,
+                "command": ["benchmark", "--json"],
+                "host": {"system": "unit-test"},
+                "evidence": [
+                    {
+                        "path": str(evidence_path),
+                        "sha256": evaluate.file_sha256(evidence_path),
+                    }
+                ],
+                "evidence_source_fingerprint": current,
+            }
+
+            self.assertTrue(
+                evaluate.sample_is_resumable_success(
+                    valid,
+                    current=current,
+                    samples_path=samples_path,
+                    require_claim_grade=True,
+                )
+            )
+            # Legacy diagnostic/dev resumes remain metadata-light by design.
+            self.assertTrue(
+                evaluate.sample_is_resumable_success(
+                    {**valid, "claim_grade": False, "command": []},
+                    current=current,
+                )
+            )
+            for label, record in (
+                ("nonclaim", {**valid, "claim_grade": False}),
+                (
+                    "fallback",
+                    {
+                        **valid,
+                        "metric_metadata": {
+                            "child_record": {
+                                "claim_grade_blockers": [
+                                    "allocator fallback is not paper-equivalent"
+                                ],
+                                "allocator_semantics": {
+                                    "paper_allocator_equivalent": False
+                                },
+                            }
+                        },
+                    },
+                ),
+                ("missing-command", {**valid, "command": []}),
+            ):
+                with self.subTest(label=label):
+                    self.assertFalse(
+                        evaluate.sample_is_resumable_success(
+                            record,
+                            current=current,
+                            samples_path=samples_path,
+                            require_claim_grade=True,
+                        )
+                    )
+
+    def test_claim_grade_resume_loader_keeps_only_claim_usable_records(self) -> None:
+        current = self.source_fingerprint("6" * 64)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            evidence_path = tmp / "raw-evidence.json"
+            evidence_path.write_text('{"seconds":0.125}\n', encoding="utf-8")
+            samples_path = tmp / "paper-performance.samples.jsonl"
+            base = {
+                "dataset": "default_performance",
+                "benchmark": "Collections",
+                "allocator": "unialloc",
+                "success": True,
+                "seconds": 0.125,
+                "claim_grade": True,
+                "benchmark_owned_json": True,
+                "command": ["benchmark", "--json"],
+                "host": {"system": "unit-test"},
+                "evidence": [
+                    {
+                        "path": str(evidence_path),
+                        "sha256": evaluate.file_sha256(evidence_path),
+                    }
+                ],
+                "evidence_source_fingerprint": current,
+            }
+            records = [
+                {**base, "run_index": 1},
+                {**base, "run_index": 2, "claim_grade": False},
+                {
+                    **base,
+                    "run_index": 3,
+                    "claim_grade_blockers": [
+                        "allocator fallback is not paper-equivalent"
+                    ],
+                },
+                {**base, "run_index": 4, "command": []},
+            ]
+            samples_path.write_text(
+                "".join(json.dumps(record) + "\n" for record in records),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(
+                evaluate,
+                "repository_source_fingerprint",
+                return_value=current,
+            ) as fingerprint:
+                resumable, summary = evaluate.load_resumable_paper_plan_samples(
+                    samples_path,
+                    require_claim_grade=True,
+                )
+
+            self.assertEqual(fingerprint.call_count, 1)
+            self.assertEqual(len(resumable), 1, resumable)
+            self.assertEqual(summary["resume_successful_record_count"], 1)
+            self.assertEqual(summary["resume_claim_grade_ineligible_count"], 3)
+            joined = " ".join(summary["resume_claim_grade_blockers"])
+            self.assertIn("claim_grade=false", joined)
+            self.assertIn("allocator fallback", joined)
+            self.assertIn("command/invocation provenance", joined)
+            persisted = [
+                json.loads(line)
+                for line in samples_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual([record["run_index"] for record in persisted], [1])
+
+    def test_resume_loader_hashes_current_source_once_and_replaces_unbound_records(self) -> None:
+        current = self.source_fingerprint("3" * 64)
+        stale = self.source_fingerprint("4" * 64)
+        base = {
+            "dataset": "default_performance",
+            "benchmark": "Collections",
+            "allocator": "unialloc",
+            "success": True,
+            "seconds": 0.125,
+        }
+        records = [
+            {
+                **base,
+                "run_index": 1,
+                "evidence_source_fingerprint": current,
+            },
+            {**base, "run_index": 2},
+            {
+                **base,
+                "run_index": 3,
+                "evidence_source_fingerprint": stale,
+            },
+            {
+                **base,
+                "run_index": 4,
+                "evidence_source_fingerprint": current,
+                "evidence_source_binding_blockers": ["unstable sample source"],
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            samples_path = pathlib.Path(td) / "paper-performance.samples.jsonl"
+            samples_path.write_text(
+                "".join(json.dumps(record) + "\n" for record in records),
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                evaluate,
+                "repository_source_fingerprint",
+                return_value=current,
+            ) as fingerprint:
+                resumable, summary = evaluate.load_resumable_paper_plan_samples(
+                    samples_path
+                )
+
+            self.assertEqual(fingerprint.call_count, 1)
+            self.assertEqual(len(resumable), 1, resumable)
+            self.assertEqual(summary["resume_successful_record_count"], 1)
+            self.assertEqual(summary["resume_source_binding_ineligible_count"], 3)
+            persisted = [
+                json.loads(line)
+                for line in samples_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(len(persisted), 1, persisted)
+            self.assertEqual(persisted[0]["run_index"], 1)
+
+    def test_claim_grade_keep_going_quarantines_failed_cell_for_later_interleaved_runs(self) -> None:
+        current = self.source_fingerprint("7" * 64)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            out_dir = tmp / "out"
+            evidence_path = tmp / "raw-evidence.json"
+            evidence_path.write_text('{"seconds":0.125}\n', encoding="utf-8")
+            evidence = [
+                {
+                    "path": str(evidence_path),
+                    "sha256": evaluate.file_sha256(evidence_path),
+                }
+            ]
+            plan_path = tmp / "plan.json"
+            plan_path.write_text(
+                json.dumps(
+                    {
+                        "runs": 3,
+                        "workloads": [
+                            {
+                                "dataset": "default_performance",
+                                "benchmark": benchmark,
+                                "allocator": "unialloc",
+                                "command": ["benchmark", benchmark],
+                                "claim_grade": True,
+                            }
+                            for benchmark in ("A", "B")
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            calls: list[tuple[str, int]] = []
+
+            def fake_run_one(
+                *,
+                workload: dict,
+                workload_index: int,
+                run_index: int,
+                out_dir: pathlib.Path,
+                default_timeout: int,
+                default_max_output_bytes: int,
+                run_id: str,
+            ) -> dict:
+                del workload_index, out_dir, default_timeout, default_max_output_bytes, run_id
+                benchmark = str(workload["benchmark"])
+                calls.append((benchmark, run_index))
+                record = {
+                    "label": f"{benchmark}-run{run_index}",
+                    "dataset": "default_performance",
+                    "benchmark": benchmark,
+                    "allocator": "unialloc",
+                    "run_index": run_index,
+                    "success": True,
+                    "seconds": 0.125,
+                    "claim_grade": True,
+                    "benchmark_owned_json": True,
+                    "command": ["benchmark", benchmark],
+                    "host": {"system": "unit-test"},
+                    "evidence": evidence,
+                    "source_stable_during_sample": True,
+                    "evidence_source_fingerprint": current,
+                }
+                if benchmark == "A" and run_index == 2:
+                    record["claim_grade"] = False
+                    record["claim_grade_blockers"] = [
+                        "allocator fallback is not paper-equivalent"
+                    ]
+                return record
+
+            args = types.SimpleNamespace(
+                plan=str(plan_path),
+                paper_dir=str(tmp),
+                run_id="unit-quarantine",
+                output_dir=str(out_dir),
+                runs=None,
+                timeout=None,
+                max_output_bytes=None,
+                dataset=None,
+                benchmark=None,
+                allocator=None,
+                workload_index=None,
+                run_index=None,
+                plan_fragment_id=None,
+                split_cargo_bench_target=None,
+                warmup=None,
+                keep_going=True,
+                max_records=0,
+                interleave_runs=True,
+                resume_successful=False,
+                claim_grade=True,
+                preflight_dry_run_probe=False,
+                preflight_dry_run_probe_limit=0,
+                preflight_dry_run_probe_timeout=30,
+                import_results=False,
+            )
+            preflight = {
+                "summary": {
+                    "ready_for_claim_grade_import": True,
+                    "dry_run_probe_count": 0,
+                    "dry_run_probe_failure_count": 0,
+                }
+            }
+            cfg = {
+                "methodology": {"runs_per_benchmark": 3},
+                "paper_dir_default": str(tmp),
+            }
+
+            with mock.patch.object(evaluate, "load_config", return_value=cfg), \
+                mock.patch.object(
+                    evaluate,
+                    "write_plan_preflight_audit",
+                    return_value=(preflight, tmp / "preflight.json"),
+                ), \
+                mock.patch.object(
+                    evaluate,
+                    "run_paper_performance_plan_one",
+                    side_effect=fake_run_one,
+                ), \
+                mock.patch.object(
+                    evaluate,
+                    "repository_source_fingerprint",
+                    return_value=current,
+                ), \
+                contextlib.redirect_stdout(io.StringIO()):
+                rc = evaluate.run_paper_performance_plan(args)
+
+            self.assertEqual(rc, 1)
+            self.assertEqual(
+                calls,
+                [("A", 1), ("B", 1), ("A", 2), ("B", 2), ("B", 3)],
+            )
+            summary = json.loads(
+                (out_dir / "paper-performance-plan-run-summary.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(summary["claim_grade_ineligible_record_count"], 1)
+            self.assertEqual(summary["quarantined_cell_count"], 1)
+            self.assertEqual(summary["quarantined_work_item_count"], 1)
+            self.assertEqual(
+                summary["quarantined_cells"],
+                [
+                    {
+                        "dataset": "default_performance",
+                        "benchmark": "A",
+                        "allocator": "unialloc",
+                    }
+                ],
+            )
+            self.assertIn(
+                "allocator fallback",
+                " ".join(
+                    summary["claim_grade_ineligible_records"][0][
+                        "claim_grade_blockers"
+                    ]
+                ),
+            )
+            persisted = [
+                json.loads(line)
+                for line in (
+                    out_dir / "paper-performance.samples.jsonl"
+                ).read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(len(persisted), 5)
+            self.assertNotIn(
+                ("A", 3),
+                [
+                    (str(record["benchmark"]), int(record["run_index"]))
+                    for record in persisted
+                ],
+            )
+
+    def test_collections_wrappers_receive_outer_timeout_grace(self) -> None:
+        for wrapper, expected_timeout in (
+            ("evaluation/scripts/paper_workload_driver.py", 150),
+            ("evaluation/scripts/paper_collections_docker_driver.py", 330),
+        ):
+            with self.subTest(wrapper=wrapper):
+                timeout, record = evaluate.paper_plan_subprocess_timeout(
+                    ["python3", wrapper, "--timeout", "30"],
+                    workload_timeout=30,
+                )
+                self.assertEqual(timeout, expected_timeout)
+                self.assertIsNotNone(record)
+                self.assertEqual(record["wrapper"], pathlib.Path(wrapper).name)
+                self.assertEqual(record["inner_timeout_seconds"], 30)
+                self.assertEqual(record["outer_timeout_seconds"], expected_timeout)
+                expected_interrupt_grace = (
+                    evaluate.DOCKER_INTERRUPT_WRAPPER_CLEANUP_GRACE_SECONDS
+                    if wrapper.endswith("paper_collections_docker_driver.py")
+                    else evaluate.INTERRUPT_WRAPPER_CLEANUP_GRACE_SECONDS
+                )
+                self.assertEqual(
+                    evaluate.paper_plan_interrupt_grace_seconds(
+                        ["python3", wrapper, "--timeout", "30"]
+                    ),
+                    expected_interrupt_grace,
+                )
+                if wrapper.endswith("paper_collections_docker_driver.py"):
+                    self.assertEqual(record["wrapper_timeout_seconds"], 30)
+                    self.assertEqual(record["docker_run_timeout_seconds"], 150)
+
+    def test_filtered_collections_outer_timeout_accounts_for_list_build_and_benchmark(self) -> None:
+        timeout, record = evaluate.paper_plan_subprocess_timeout(
+            [
+                "python3",
+                "evaluation/scripts/paper_workload_driver.py",
+                "--timeout",
+                "30",
+                "--build-timeout",
+                "60",
+                "--bench-filter",
+                "vec::bench_with_capacity_1000",
+            ],
+            workload_timeout=30,
+        )
+        self.assertEqual(timeout, 270)
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record["benchmark_timeout_seconds"], 30)
+        self.assertEqual(record["build_timeout_seconds"], 60)
+        self.assertEqual(record["benchmark_list_timeout_seconds"], 60)
+        self.assertEqual(record["inner_phase_budget_seconds"], 150)
+        self.assertEqual(record["report_grace_seconds"], 120)
+
+        legacy_timeout, legacy_record = evaluate.paper_plan_subprocess_timeout(
+            [
+                "python3",
+                "evaluation/scripts/paper_workload_driver.py",
+                "--timeout",
+                "30",
+                "--bench-filter",
+                "vec::bench_with_capacity_1000",
+            ],
+            workload_timeout=30,
+        )
+        self.assertEqual(legacy_timeout, 180)
+        self.assertIsNotNone(legacy_record)
+        assert legacy_record is not None
+        self.assertEqual(legacy_record["benchmark_list_timeout_seconds"], 30)
+        self.assertNotIn("build_timeout_seconds", legacy_record)
+
+    def test_docker_collections_outer_timeout_parses_explicit_inner_deadline(self) -> None:
+        timeout, record = evaluate.paper_plan_subprocess_timeout(
+            [
+                "python3",
+                "evaluation/scripts/paper_collections_docker_driver.py",
+                "--timeout",
+                "30",
+                "--inner-timeout",
+                "60",
+            ],
+            workload_timeout=30,
+        )
+        self.assertEqual(timeout, 360)
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record["inner_timeout_seconds"], 60)
+        self.assertEqual(record["wrapper_timeout_seconds"], 30)
+        self.assertEqual(record["docker_run_timeout_seconds"], 180)
+
+    def test_legacy_collections_commands_are_normalized_to_workload_timeout(self) -> None:
+        local = evaluate.collections_driver_command_with_timeout(
+            [
+                "python3",
+                "evaluation/scripts/paper_workload_driver.py",
+                "--build-timeout",
+                "11",
+            ],
+            timeout=7,
+        )
+        docker = evaluate.collections_driver_command_with_timeout(
+            ["python3", "evaluation/scripts/paper_collections_docker_driver.py"],
+            timeout=7,
+        )
+        self.assertEqual(evaluate.command_option_value(local, "--timeout"), "7")
+        self.assertEqual(evaluate.command_option_value(local, "--build-timeout"), "11")
+        self.assertEqual(evaluate.command_option_value(docker, "--inner-timeout"), "7")
+        self.assertEqual(evaluate.command_option_value(docker, "--timeout"), "127")
+        outer, record = evaluate.paper_plan_subprocess_timeout(
+            docker,
+            workload_timeout=7,
+        )
+        self.assertEqual(outer, 404)
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record["docker_run_timeout_seconds"], 127)
+
+    def test_collections_timeout_normalization_ignores_remainder_commands(self) -> None:
+        command = [
+            "python3",
+            "outer.py",
+            "--",
+            "python3",
+            "evaluation/scripts/paper_workload_driver.py",
+            "--timeout",
+            "3",
+        ]
+
+        self.assertEqual(
+            evaluate.collections_driver_command_with_timeout(command, timeout=7),
+            command,
+        )
+        self.assertEqual(
+            evaluate.paper_plan_subprocess_timeout(
+                command,
+                workload_timeout=7,
+            ),
+            (7, None),
+        )
+
+    def test_shell_form_collections_commands_are_rejected_before_execution(self) -> None:
+        shell_commands = (
+            "python3 evaluation/scripts/paper_workload_driver.py --dataset default_performance",
+            "python3 evaluation/scripts/paper_workload_driver.py>out.txt",
+            "python3 evaluation/scripts/paper_workload_driver.py;true",
+            "(python3 evaluation/scripts/paper_workload_driver.py)",
+            "sh -c 'python3 evaluation/scripts/paper_workload_driver.py --dataset default_performance'",
+            "printf unrelated",
+        )
+        for command in shell_commands:
+            with self.subTest(command=command):
+                workload = {
+                    "dataset": "default_performance",
+                    "benchmark": "Collections",
+                    "allocator": "unialloc",
+                    "command": command,
+                    "shell": True,
+                }
+
+                audited = evaluate.audit_plan_workload(workload, 1, 1)
+                self.assertIn(
+                    "shell-form Collections driver commands are unsupported; "
+                    "use an argv command so benchmark deadlines can be enforced",
+                    audited["issues"],
+                )
+                with tempfile.TemporaryDirectory() as td:
+                    with self.assertRaisesRegex(ValueError, "shell-form Collections"):
+                        evaluate.run_paper_performance_plan_one(
+                            workload=workload,
+                            workload_index=1,
+                            run_index=1,
+                            out_dir=pathlib.Path(td) / "out",
+                            default_timeout=7,
+                            default_max_output_bytes=512,
+                            run_id="shell-form-collections-rejected",
+                        )
+
+    def test_legacy_collections_driver_without_timeout_still_receives_outer_grace(self) -> None:
+        timeout, record = evaluate.paper_plan_subprocess_timeout(
+            ["python3", "evaluation/scripts/paper_workload_driver.py"],
+            workload_timeout=1800,
+        )
+        self.assertEqual(timeout, 1920)
+        self.assertIsNotNone(record)
+        self.assertEqual(record["inner_timeout_seconds"], 1800)
+
+    def test_collections_driver_inner_timeout_is_preserved_as_structured_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            cargo = tmp / "slow-cargo"
+            cargo.write_text("#!/bin/sh\nsleep 2\n", encoding="utf-8")
+            cargo.chmod(0o755)
+            driver = ROOT / "evaluation" / "scripts" / "paper_workload_driver.py"
+            workload = {
+                "dataset": "default_performance",
+                "benchmark": "Collections",
+                "allocator": "unialloc",
+                "command": [
+                    sys.executable,
+                    str(driver),
+                    "--dataset",
+                    "default_performance",
+                    "--benchmark",
+                    "Collections",
+                    "--allocator",
+                    "unialloc",
+                    "--rust-toolchain",
+                    "nightly-2022-07-01",
+                    "--cargo",
+                    str(cargo),
+                ],
+                "timeout": 1,
+                "measurement": "stdout_json",
+                "time_field": "seconds",
+            }
+            record = evaluate.run_paper_performance_plan_one(
+                workload=workload,
+                workload_index=1,
+                run_index=1,
+                out_dir=tmp / "out",
+                default_timeout=1,
+                default_max_output_bytes=4096,
+                run_id="collections-inner-timeout-test",
+            )
+
+            self.assertFalse(record["success"], record)
+            self.assertEqual(record["exit_code"], 124)
+            self.assertEqual(record["driver_error_code"], 124)
+            self.assertEqual(
+                record["driver_error_kind"],
+                "cargo bench timed out",
+            )
+            self.assertFalse(record["process_group_terminated"])
+            self.assertEqual(record["outer_timeout"]["outer_timeout_seconds"], 121)
+            self.assertEqual(evaluate.command_option_value(record["command"], "--timeout"), "1")
+            self.assertIn(
+                "cargo bench timed out",
+                pathlib.Path(record["stdout"]).read_text(encoding="utf-8")
+                + pathlib.Path(record["stderr"]).read_text(encoding="utf-8"),
+            )
+
+    def test_plan_runner_split_budget_reaches_real_driver_end_to_end(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            marker = tmp / "build-complete"
+            cargo = tmp / "fake-cargo.py"
+            cargo.write_text(
+                "\n".join(
+                    [
+                        "#!/usr/bin/env python3",
+                        "import os, pathlib, sys, time",
+                        "args = sys.argv[1:]",
+                        "marker = pathlib.Path(os.environ['UNIALLOC_FAKE_BUILD_MARKER'])",
+                        "if '--list' in args:",
+                        "    print('vec::bench_with_capacity_1000: benchmark')",
+                        "elif '--no-run' in args:",
+                        "    time.sleep(1.25)",
+                        "    marker.write_text('built', encoding='utf-8')",
+                        "else:",
+                        "    if not marker.exists():",
+                        "        raise SystemExit('benchmark ran before build completed')",
+                        "    time.sleep(0.05)",
+                        "    print('test vec::bench_with_capacity_1000 ... bench: 10 ns/iter (+/- 1)')",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            cargo.chmod(0o755)
+            command = evaluate.paper_collections_driver_command(
+                {
+                    "dataset": "default_performance",
+                    "benchmark": "Collections",
+                    "allocator": "unialloc",
+                },
+                bench_filter="vec::bench_with_capacity_1000",
+                timeout=9,
+                build_timeout=3,
+            )
+            command.extend(
+                [
+                    "--rust-toolchain",
+                    "system",
+                    "--cargo",
+                    str(cargo),
+                ]
+            )
+            workload = {
+                "dataset": "default_performance",
+                "benchmark": "Collections",
+                "allocator": "unialloc",
+                "command": command,
+                "cwd": str(ROOT),
+                "env": {"UNIALLOC_FAKE_BUILD_MARKER": str(marker)},
+                "timeout": 1,
+                "measurement": "stdout_json",
+                "time_field": "seconds",
+            }
+            with mock.patch.object(evaluate, "COLLECTIONS_TIMEOUT_REPORT_GRACE_SECONDS", 0):
+                record = evaluate.run_paper_performance_plan_one(
+                    workload=workload,
+                    workload_index=1,
+                    run_index=1,
+                    out_dir=tmp / "out",
+                    default_timeout=1,
+                    default_max_output_bytes=32768,
+                    run_id="collections-split-budget-e2e",
+                )
+
+            self.assertTrue(record["success"], record)
+            self.assertEqual(evaluate.command_option_value(record["command"], "--timeout"), "1")
+            self.assertEqual(evaluate.command_option_value(record["command"], "--build-timeout"), "3")
+            self.assertEqual(record["outer_timeout"]["outer_timeout_seconds"], 7)
+            self.assertEqual(record["benchmark_names"], ["vec::bench_with_capacity_1000"])
+            self.assertFalse(record["claim_grade"], record)
+            metric = record["metric_metadata"]
+            self.assertEqual(metric["benchmark_timeout_seconds"], 1)
+            self.assertEqual(metric["build"]["status"], "passed")
+            self.assertGreater(metric["build"]["elapsed_seconds"], 1.0)
 
     def test_plan_runner_keeps_claim_grade_benchmark_owned_json_when_output_is_bounded(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -9513,6 +14075,7 @@ class PaperPerformancePlanRunnerResourceTests(unittest.TestCase):
             self.assertIsNotNone(record["process_group_pid"])
             self.assertTrue(record["process_group_terminated"])
             self.assertLessEqual(pathlib.Path(record["stdout"]).stat().st_size, 128)
+
 
 if __name__ == "__main__":
     unittest.main()

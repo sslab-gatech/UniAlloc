@@ -53,6 +53,18 @@ RESULTS = EVAL / "results"
 REPORTS = EVAL / "reports"
 DEFAULT_PAPER_REPO = Path(os.environ.get("UNIALLOC_RUST_ALLOC_PAPER", ROOT.parent / "rust-alloc-paper"))
 DEFAULT_MAX_PLAN_OUTPUT_BYTES = 16 * 1024 * 1024
+DEFAULT_MAX_PROBE_OUTPUT_BYTES = 64 * 1024
+DEFAULT_STD_BENCH_DEV_OUTPUT_BYTES = 64 * 1024
+STD_BENCH_CANONICAL_NAME_SHA256 = (
+    "241ae2507e28f9004e29f186a9d77c6f9de48a82c2d9feb86d7031cb1d31d786"
+)
+STD_BENCH_DEV_SENTINELS = (
+    "aaa_semantic_auto_metadata_enable",
+    "zzz_semantic_auto_metadata_report",
+)
+COLLECTIONS_TIMEOUT_REPORT_GRACE_SECONDS = 120
+INTERRUPT_WRAPPER_CLEANUP_GRACE_SECONDS = 5.0
+DOCKER_INTERRUPT_WRAPPER_CLEANUP_GRACE_SECONDS = 8.0
 RPOLARS_CLAIM_MATRIX_SAMPLE_AUDIT = (
     RESULTS
     / "paper_performance_rpolars_combined_libtest_csv_groupby_collect_take_sort_plus_six_allocators_system_fallback_fixture_smoke_samples_audit.json"
@@ -106,7 +118,8 @@ def rpolars_default_claim_matrix_sample_audit_path() -> Path:
 
 BENCH_LINE = re.compile(
     r"^test (?P<name>\S+)\s+\.\.\. bench:\s+"
-    r"(?P<ns>[0-9,]+)\s+ns/iter(?:\s+\(\+/-\s+(?P<dev>[0-9,]+)\))?"
+    r"(?P<ns>[0-9][0-9,]*(?:\.[0-9]+)?)\s+ns/iter"
+    r"(?:\s+\(\+/-\s+(?P<dev>[0-9][0-9,]*(?:\.[0-9]+)?)\))?"
 )
 BENCH_FAILED_LINE = re.compile(r"^test (?P<name>\S+)\s+\.\.\. FAILED$")
 
@@ -522,6 +535,161 @@ def evidence_source_bound_payload_if_stable(
     return payload
 
 
+def finalize_runtime_claim_audit_source_binding(
+    audit: Dict[str, Any],
+    *,
+    started: Dict[str, Any],
+    finished: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Bind a runtime claim audit and fail its claim fields closed on source drift."""
+
+    payload = evidence_source_bound_payload_if_stable(
+        audit,
+        started=started,
+        finished=finished,
+    )
+    binding_blockers = repository_source_binding_blockers(payload, current=finished)
+    binding_blockers.extend(string_list_value(payload.get("evidence_source_binding_blockers")))
+    binding_blockers = unique_strings(binding_blockers)
+    if binding_blockers:
+        summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+        summary = copy.deepcopy(summary)
+        for key in (
+            "runtime_claim_ready",
+            "ready_for_claim_grade_import",
+            "claim_grade",
+            "complete_for_claim",
+        ):
+            summary[key] = False
+        summary["blockers"] = unique_strings(
+            [*string_list_value(summary.get("blockers")), *binding_blockers]
+        )
+        payload["summary"] = summary
+        payload["evidence_source_binding_blockers"] = binding_blockers
+    return payload
+
+
+def downgrade_runtime_claim_payload(
+    data: Dict[str, Any],
+    *,
+    blockers: Iterable[Any],
+) -> Dict[str, Any]:
+    """Return a diagnostic-only copy of claim evidence after a late gate fails."""
+
+    payload = copy.deepcopy(data)
+    downgrade_blockers = unique_strings(
+        str(blocker) for blocker in blockers if str(blocker).strip()
+    )
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    summary = copy.deepcopy(summary)
+    for key in (
+        "runtime_claim_ready",
+        "ready_for_claim_grade_import",
+        "claim_grade",
+        "complete_for_claim",
+    ):
+        summary[key] = False
+    summary["blockers"] = unique_strings(
+        [*string_list_value(summary.get("blockers")), *downgrade_blockers]
+    )
+    payload["summary"] = summary
+    payload["publication_blockers"] = unique_strings(
+        [*string_list_value(payload.get("publication_blockers")), *downgrade_blockers]
+    )
+    return payload
+
+
+def runtime_claim_publication_status(
+    audit: Any,
+    *,
+    audit_path: Optional[Path] = None,
+    expected_source_fingerprint: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Revalidate mutable claim dependencies immediately before RESULTS writes."""
+
+    publication_source_fingerprint = repository_source_fingerprint()
+    blockers: List[str] = []
+    if isinstance(expected_source_fingerprint, dict):
+        expected_digest = str(expected_source_fingerprint.get("source_digest") or "")
+        publication_digest = str(
+            publication_source_fingerprint.get("source_digest") or ""
+        )
+        if not expected_digest or expected_digest != publication_digest:
+            blockers.append(
+                "repository source changed before runtime evidence publication: "
+                f"expected={expected_digest or '<missing>'}, "
+                f"publication={publication_digest or '<missing>'}"
+            )
+    source_binding_blockers = repository_source_binding_blockers(
+        audit,
+        current=publication_source_fingerprint,
+    )
+    blockers.extend(
+        f"runtime publication source binding: {blocker}"
+        for blocker in source_binding_blockers
+    )
+    runtime_integrity_blockers: List[str] = []
+    if isinstance(audit, dict) and audit_path is not None:
+        runtime_integrity_blockers = mir_semantic_scope_runtime_artifact_integrity_blockers(
+            audit,
+            audit_path=audit_path,
+        )
+        blockers.extend(
+            f"runtime publication artifact integrity: {blocker}"
+            for blocker in runtime_integrity_blockers
+        )
+    embedded_bundle_status = rustc_driver_mir_probe_embedded_bundle_status(audit)
+    blockers.extend(
+        f"runtime publication MIR probe companion: {blocker}"
+        for blocker in embedded_bundle_status.get("blockers", [])
+    )
+    blockers = unique_strings(blockers)
+    return {
+        "ready": not blockers,
+        "publication_source_fingerprint": publication_source_fingerprint,
+        "source_binding_blockers": unique_strings(source_binding_blockers),
+        "runtime_artifact_integrity_blockers": unique_strings(
+            runtime_integrity_blockers
+        ),
+        "embedded_mir_probe_bundle": embedded_bundle_status,
+        "blockers": blockers,
+    }
+
+
+def publish_runtime_claim_audit_if_current(
+    audit: Dict[str, Any],
+    *,
+    audit_path: Path,
+    results_audit_path: Path,
+    expected_source_fingerprint: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Recheck at the canonical write boundary and publish only the exact pass."""
+
+    publication_status = runtime_claim_publication_status(
+        audit,
+        audit_path=audit_path,
+        expected_source_fingerprint=expected_source_fingerprint,
+    )
+    if publication_status.get("ready") is True:
+        write_json(results_audit_path, audit)
+        return {
+            "published": True,
+            "audit": audit,
+            "publication_status": publication_status,
+        }
+    downgraded = downgrade_runtime_claim_payload(
+        audit,
+        blockers=publication_status.get("blockers", []),
+    )
+    downgraded["publication_status"] = publication_status
+    write_json(audit_path, downgraded)
+    return {
+        "published": False,
+        "audit": downgraded,
+        "publication_status": publication_status,
+    }
+
+
 def shared_evidence_source_fingerprint(
     records: Iterable[Any],
 ) -> Optional[Dict[str, Any]]:
@@ -548,6 +716,108 @@ def shared_evidence_source_fingerprint(
     ):
         return None
     return copy.deepcopy(fingerprints[0])
+
+
+def paper_performance_source_binding_status(
+    records: Iterable[Any],
+    *,
+    current: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Summarize whether performance records share one current source digest."""
+
+    record_list = list(records)
+    source_bound_record_count = sum(
+        1
+        for record in record_list
+        if isinstance(record, dict)
+        and isinstance(record.get("evidence_source_fingerprint"), dict)
+    )
+    blockers = unique_strings(
+        blocker
+        for record in record_list
+        if isinstance(record, dict)
+        for blocker in string_list_value(
+            record.get("evidence_source_binding_blockers")
+        )
+    )
+    shared = shared_evidence_source_fingerprint(record_list)
+    if not record_list:
+        blockers = unique_strings(
+            [*blockers, "performance records are empty and cannot bind source evidence"]
+        )
+    elif shared is None:
+        blockers = unique_strings(
+            [
+                *blockers,
+                "performance records do not share one stable repository source fingerprint",
+            ]
+        )
+    else:
+        blockers = unique_strings(
+            [
+                *blockers,
+                *repository_source_binding_blockers(
+                    {"evidence_source_fingerprint": shared},
+                    current=current or repository_source_fingerprint(),
+                ),
+            ]
+        )
+    status: Dict[str, Any] = {
+        "source_binding_ready": not blockers,
+        "source_bound_record_count": source_bound_record_count,
+        "source_binding_blocker_count": len(blockers),
+        "evidence_source_binding_blockers": blockers,
+    }
+    if not blockers and shared is not None:
+        status["evidence_source_fingerprint"] = shared
+    return status
+
+
+def apply_paper_performance_import_publication_source_gate(
+    manifest: Dict[str, Any],
+    *,
+    current: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    """Revalidate source binding at the manifest publication boundary."""
+
+    blockers = unique_strings(
+        [
+            *string_list_value(
+                manifest.get("evidence_source_binding_blockers")
+            ),
+            *repository_source_binding_blockers(
+                manifest,
+                current=current or repository_source_fingerprint(),
+            ),
+        ]
+    )
+    manifest["source_binding_ready"] = not blockers
+    manifest["evidence_source_binding_blockers"] = blockers
+    if not blockers:
+        return []
+
+    manifest["claim_grade"] = False
+    manifest["complete_for_claim"] = False
+    dataset_blockers = [
+        f"performance import publication source binding: {blocker}"
+        for blocker in blockers
+    ]
+    datasets = manifest.get("datasets")
+    if isinstance(datasets, dict):
+        for dataset in datasets.values():
+            if not isinstance(dataset, dict):
+                continue
+            dataset["claim_grade"] = False
+            dataset["complete_for_claim"] = False
+            dataset["claim_grade_blockers"] = unique_strings(
+                [
+                    *claim_grade_blocker_values(
+                        dataset.get("claim_grade_blockers")
+                    ),
+                    *dataset_blockers,
+                ]
+            )
+    return blockers
 
 
 def repository_source_binding_blockers(
@@ -677,14 +947,21 @@ def parse_dat(path: Path) -> Dict[str, Any]:
 
 
 def dataset_from_rows(path: str, columns: List[str], rows: List[Dict[str, Any]], **extra: Any) -> Dict[str, Any]:
-    all_values = [v for r in rows for v in r["values"].values()]
+    all_values = [
+        row.get("values", {}).get(column, float("nan"))
+        for row in rows
+        for column in columns
+    ]
+    finite_values = [float(value) for value in all_values if math.isfinite(float(value))]
     gm = geomean(all_values)
     am = arithmean(all_values)
     data = {
         "path": path,
         "columns": columns,
         "rows": rows,
-        "count": len(all_values),
+        "count": len(finite_values),
+        "finite_value_count": len(finite_values),
+        "total_slot_count": len(all_values),
         "geomean": gm,
         "arithmetic_mean": am,
         "geomean_delta_percent_vs_unialloc": None if gm is None else (gm - 1.0) * 100.0,
@@ -1766,9 +2043,21 @@ def usable_sample_geomean(samples: List[Dict[str, Any]], warmup: int) -> Optiona
     return geomean(usable)
 
 
+def is_unfolded_roxipng_plan_fragment(sample: Dict[str, Any]) -> bool:
+    benchmark = str(sample.get("benchmark") or sample.get("workload") or sample.get("row") or "").strip()
+    if benchmark != "R-Oxipng*":
+        return False
+    return any(
+        str(candidate.get("plan_fragment_id") or "").strip()
+        for candidate in sample_metadata_candidates(sample)
+    )
+
+
 def build_sample_groups(samples: List[Dict[str, Any]]) -> Dict[Tuple[str, str, str], List[Dict[str, Any]]]:
     groups: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
     for sample in samples:
+        if is_unfolded_roxipng_plan_fragment(sample):
+            continue
         if not sample_succeeded(sample):
             continue
         dataset = str(sample.get("dataset") or sample.get("dataset_name") or "").strip()
@@ -2269,6 +2558,14 @@ def build_paper_performance_samples_audit(
     template_record_count = 0
     for index, sample in enumerate(samples, start=1):
         audited = audit_paper_performance_sample_record(sample, index, samples_path)
+        unfolded_roxipng_fragment = is_unfolded_roxipng_plan_fragment(sample)
+        if unfolded_roxipng_fragment:
+            audited["issues"] = unique_strings(
+                [
+                    *audited.get("issues", []),
+                    "unfolded R-Oxipng plan fragment requires specialized surface folding before generic import",
+                ]
+            )
         audited_samples.append(audited)
         if audited.get("issues"):
             invalid_samples.append(audited)
@@ -2278,6 +2575,8 @@ def build_paper_performance_samples_audit(
             nonfinite_timing_count += 1
         if sample.get("template_only") is True:
             template_record_count += 1
+        if unfolded_roxipng_fragment:
+            continue
         key = sample_cell_key(sample)
         if key is None:
             continue
@@ -2337,13 +2636,15 @@ def build_paper_performance_samples_audit(
         for key, count in sorted(raw_counts.items())
         if key not in required_keys
     ]
+    source_binding = paper_performance_source_binding_status(samples)
     ready = (
         not target_errors
         and not missing_usable_cells
         and not insufficient_usable_cells
         and not invalid_samples
+        and source_binding["source_binding_ready"]
     )
-    return {
+    audit = {
         "schema_version": 1,
         "generated_at": now_iso(),
         "source": "paper-performance-samples-audit",
@@ -2352,6 +2653,13 @@ def build_paper_performance_samples_audit(
         "dataset_names": dataset_names,
         "required_runs_per_cell": required_runs,
         "sample_contract": paper_performance_sample_contract(),
+        "source_binding_ready": source_binding["source_binding_ready"],
+        "source_bound_record_count": source_binding[
+            "source_bound_record_count"
+        ],
+        "source_binding_blocker_count": source_binding[
+            "source_binding_blocker_count"
+        ],
         "summary": {
             "ready_for_claim_grade_import": ready,
             "dataset_count": len(dataset_names),
@@ -2368,7 +2676,17 @@ def build_paper_performance_samples_audit(
             "template_record_count": template_record_count,
             "extra_cell_count": len(extra_cells),
             "target_error_count": len(target_errors),
+            "source_binding_ready": source_binding["source_binding_ready"],
+            "source_bound_record_count": source_binding[
+                "source_bound_record_count"
+            ],
+            "source_binding_blocker_count": source_binding[
+                "source_binding_blocker_count"
+            ],
         },
+        "evidence_source_binding_blockers": source_binding[
+            "evidence_source_binding_blockers"
+        ],
         "datasets": datasets,
         "target_errors": target_errors,
         "invalid_samples": invalid_samples,
@@ -2378,6 +2696,11 @@ def build_paper_performance_samples_audit(
         "extra_cells": extra_cells,
         "audited_samples": audited_samples,
     }
+    if "evidence_source_fingerprint" in source_binding:
+        audit["evidence_source_fingerprint"] = source_binding[
+            "evidence_source_fingerprint"
+        ]
+    return audit
 
 
 def audit_paper_performance_samples(args: argparse.Namespace) -> int:
@@ -3186,6 +3509,13 @@ def import_paper_performance_samples(args: argparse.Namespace) -> int:
     preflight_audit_path = out_dir / "paper-performance-samples-preflight-audit.json"
     write_json(preflight_audit_path, preflight_audit)
     preflight_ready = bool(preflight_audit.get("summary", {}).get("ready_for_claim_grade_import"))
+    source_binding_ready = bool(
+        preflight_audit.get("summary", {}).get("source_binding_ready")
+    )
+    source_binding_blockers = string_list_value(
+        preflight_audit.get("evidence_source_binding_blockers")
+    )
+    source_fingerprint = preflight_audit.get("evidence_source_fingerprint")
     if args.claim_grade and not preflight_ready:
         summary = {
             "schema_version": 1,
@@ -3200,9 +3530,15 @@ def import_paper_performance_samples(args: argparse.Namespace) -> int:
             "sample_preflight_audit": str(preflight_audit_path),
             "sample_preflight_ready_for_claim_grade": False,
             "sample_preflight_summary": preflight_audit.get("summary", {}),
+            "source_binding_ready": source_binding_ready,
+            "evidence_source_binding_blockers": source_binding_blockers,
             "skipped": True,
             "skip_reason": "claim-grade sample preflight failed",
         }
+        if isinstance(source_fingerprint, dict):
+            summary["evidence_source_fingerprint"] = copy.deepcopy(
+                source_fingerprint
+            )
         write_json(out_dir / "sample-import-summary.json", summary)
         if not getattr(args, "quiet", False):
             print(json.dumps(summary, indent=2, sort_keys=True))
@@ -3214,8 +3550,8 @@ def import_paper_performance_samples(args: argparse.Namespace) -> int:
         "source": "paper-performance-samples",
         "samples": str(samples_path),
         "paper_dir": str(paper_dir),
-        "claim_grade": bool(args.claim_grade),
-        "complete_for_claim": bool(args.claim_grade),
+        "claim_grade": False,
+        "complete_for_claim": False,
         "methodology": cfg.get("methodology", {}),
         "warmup_runs_discarded": warmup,
         "required_runs_per_cell": required_runs,
@@ -3224,8 +3560,14 @@ def import_paper_performance_samples(args: argparse.Namespace) -> int:
         "sample_preflight_audit": str(preflight_audit_path),
         "sample_preflight_ready_for_claim_grade": preflight_ready,
         "sample_preflight_summary": preflight_audit.get("summary", {}),
+        "source_binding_ready": source_binding_ready,
+        "evidence_source_binding_blockers": source_binding_blockers,
         "datasets": {},
     }
+    if isinstance(source_fingerprint, dict):
+        manifest["evidence_source_fingerprint"] = copy.deepcopy(
+            source_fingerprint
+        )
     written: Dict[str, str] = {}
     diagnostics: Dict[str, Any] = {}
     exit_code = 0
@@ -3263,6 +3605,7 @@ def import_paper_performance_samples(args: argparse.Namespace) -> int:
                 "missing allocator samples: " + ", ".join(diag.get("missing_cells", [])) if diag.get("missing_cells") else None,
                 "insufficient repeated samples: " + ", ".join(diag.get("insufficient_samples", [])) if diag.get("insufficient_samples") else None,
                 "sample-level claim-grade blockers: " + "; ".join(diag.get("sample_claim_grade_blockers", [])) if diag.get("sample_claim_grade_blockers") else None,
+                "sample source binding: " + "; ".join(source_binding_blockers) if source_binding_blockers else None,
             ]
         )
         dataset_claim_grade = bool(args.claim_grade) and preflight_ready and not blockers
@@ -3278,6 +3621,29 @@ def import_paper_performance_samples(args: argparse.Namespace) -> int:
         }
         if args.claim_grade and not dataset_claim_grade:
             exit_code = 1
+    publication_source_blockers = (
+        apply_paper_performance_import_publication_source_gate(manifest)
+    )
+    source_binding_ready = bool(manifest.get("source_binding_ready"))
+    source_binding_blockers = string_list_value(
+        manifest.get("evidence_source_binding_blockers")
+    )
+    if args.claim_grade and publication_source_blockers:
+        exit_code = 1
+    manifest_claim_grade = bool(
+        args.claim_grade
+        and preflight_ready
+        and source_binding_ready
+        and exit_code == 0
+        and manifest["datasets"]
+        and len(manifest["datasets"]) == len(selected_datasets)
+        and all(
+            isinstance(dataset, dict) and dataset.get("claim_grade") is True
+            for dataset in manifest["datasets"].values()
+        )
+    )
+    manifest["claim_grade"] = manifest_claim_grade
+    manifest["complete_for_claim"] = manifest_claim_grade
     manifest_path = out_dir / "dataset-manifest.json"
     write_json(manifest_path, manifest)
     summary = {
@@ -3293,23 +3659,53 @@ def import_paper_performance_samples(args: argparse.Namespace) -> int:
         "sample_preflight_audit": str(preflight_audit_path),
         "sample_preflight_ready_for_claim_grade": preflight_ready,
         "sample_preflight_summary": preflight_audit.get("summary", {}),
+        "source_binding_ready": source_binding_ready,
+        "evidence_source_binding_blockers": source_binding_blockers,
     }
-    if args.import_results:
-        import_status = import_current_datasets(
-            argparse.Namespace(
-                data_dir=str(out_dir),
-                manifest=str(manifest_path),
-                dataset=args.dataset,
-                quiet=True,
-            )
+    if isinstance(source_fingerprint, dict):
+        summary["evidence_source_fingerprint"] = copy.deepcopy(
+            source_fingerprint
         )
-        summary["import_results"] = {
-            "requested": True,
-            "status": import_status,
-            "summary_path": str(RESULTS / "current_datasets_summary.json"),
-        }
-        if import_status != 0:
-            exit_code = import_status
+    if args.import_results:
+        if args.claim_grade and publication_source_blockers:
+            summary["import_results"] = {
+                "requested": True,
+                "attempted": False,
+                "status": None,
+                "skip_reason": "claim-grade publication source binding failed",
+            }
+        else:
+            import_status = import_current_datasets(
+                argparse.Namespace(
+                    data_dir=str(out_dir),
+                    manifest=str(manifest_path),
+                    dataset=args.dataset,
+                    quiet=True,
+                    require_source_binding=bool(args.claim_grade),
+                )
+            )
+            summary["import_results"] = {
+                "requested": True,
+                "attempted": True,
+                "status": import_status,
+                "summary_path": str(RESULTS / "current_datasets_summary.json"),
+            }
+            if import_status != 0:
+                exit_code = import_status
+                imported_summary_path = RESULTS / "current_datasets_summary.json"
+                if imported_summary_path.exists():
+                    imported_summary = read_json(imported_summary_path)
+                    imported_source_blockers = string_list_value(
+                        imported_summary.get("evidence_source_binding_blockers")
+                    )
+                    if imported_source_blockers:
+                        summary["source_binding_ready"] = False
+                        summary["evidence_source_binding_blockers"] = unique_strings(
+                            [
+                                *summary["evidence_source_binding_blockers"],
+                                *imported_source_blockers,
+                            ]
+                        )
     else:
         summary["import_results"] = {"requested": False}
     write_json(out_dir / "sample-import-summary.json", summary)
@@ -3355,6 +3751,23 @@ def normalize_plan_command(workload: Dict[str, Any]) -> Tuple[Any, bool, List[st
             rendered = " ".join(shlex.quote(str(part)) for part in command)
         else:
             rendered = str(command)
+        benchmark = str(
+            workload.get("benchmark")
+            or workload.get("workload")
+            or workload.get("row")
+            or ""
+        ).strip().lower()
+        driver_kind = str(workload.get("driver_kind") or "").strip().lower()
+        if (
+            benchmark == "collections"
+            or "collections" in driver_kind
+            or "paper_workload_driver.py" in rendered
+            or "paper_collections_docker_driver.py" in rendered
+        ):
+            raise ValueError(
+                "shell-form Collections driver commands are unsupported; "
+                "use an argv command so benchmark deadlines can be enforced"
+            )
         return rendered, True, [rendered]
     if isinstance(command, list):
         argv = [str(part) for part in command]
@@ -3375,6 +3788,47 @@ def command_option_value(command: List[str], option: str) -> Optional[str]:
     return None
 
 
+def command_prefix_before_remainder(command: List[str]) -> List[str]:
+    try:
+        separator_index = command.index("--")
+    except ValueError:
+        separator_index = len(command)
+    return list(command[:separator_index])
+
+
+def collections_driver_command_with_timeout(
+    command: List[str],
+    *,
+    timeout: int,
+) -> List[str]:
+    """Make recognized Collections wrapper deadlines explicit and consistent."""
+
+    inner_timeout = max(1, int(timeout))
+    normalized = list(command)
+    wrapper_names = {
+        Path(str(token)).name
+        for token in command_prefix_before_remainder(normalized)
+    }
+    if "paper_collections_docker_driver.py" in wrapper_names:
+        normalized = replace_command_option_before_remainder(
+            normalized,
+            "--inner-timeout",
+            str(inner_timeout),
+        )
+        return replace_command_option_before_remainder(
+            normalized,
+            "--timeout",
+            str(inner_timeout + COLLECTIONS_TIMEOUT_REPORT_GRACE_SECONDS),
+        )
+    if "paper_workload_driver.py" in wrapper_names:
+        return replace_command_option_before_remainder(
+            normalized,
+            "--timeout",
+            str(inner_timeout),
+        )
+    return normalized
+
+
 def paper_plan_subprocess_timeout(
     command: List[str],
     *,
@@ -3389,11 +3843,103 @@ def paper_plan_subprocess_timeout(
     target evidence.
     """
 
-    if not any(Path(str(token)).name == "paper_external_cargo_bench_json.py" for token in command):
+    wrapper_command = command_prefix_before_remainder(command)
+    wrapper = next(
+        (
+            Path(str(token)).name
+            for token in wrapper_command
+            if Path(str(token)).name
+            in {
+                "paper_workload_driver.py",
+                "paper_collections_docker_driver.py",
+                "paper_external_cargo_bench_json.py",
+            }
+        ),
+        None,
+    )
+    if wrapper in {"paper_workload_driver.py", "paper_collections_docker_driver.py"}:
+        wrapper_timeout_raw = command_option_value(wrapper_command, "--timeout")
+        try:
+            wrapper_timeout = int(wrapper_timeout_raw) if wrapper_timeout_raw else workload_timeout
+        except ValueError:
+            wrapper_timeout = workload_timeout
+        if wrapper == "paper_collections_docker_driver.py":
+            inner_timeout_raw = command_option_value(wrapper_command, "--inner-timeout")
+            try:
+                inner_timeout = int(inner_timeout_raw) if inner_timeout_raw else wrapper_timeout
+            except ValueError:
+                inner_timeout = wrapper_timeout
+            docker_run_timeout = max(
+                wrapper_timeout,
+                inner_timeout + COLLECTIONS_TIMEOUT_REPORT_GRACE_SECONDS,
+            )
+            outer_timeout = max(
+                workload_timeout,
+                min(wrapper_timeout, 30)
+                + wrapper_timeout
+                + docker_run_timeout
+                + COLLECTIONS_TIMEOUT_REPORT_GRACE_SECONDS,
+            )
+            reason = (
+                "Docker Collections wrapper needs outer grace for Docker availability, "
+                "container readiness, and inner benchmark timeout reporting"
+            )
+        else:
+            inner_timeout = wrapper_timeout
+            docker_run_timeout = None
+            build_timeout_raw = command_option_value(wrapper_command, "--build-timeout")
+            try:
+                build_timeout = (
+                    max(1, int(build_timeout_raw))
+                    if build_timeout_raw is not None
+                    else None
+                )
+            except ValueError:
+                build_timeout = None
+            has_bench_filter = command_option_value(wrapper_command, "--bench-filter") is not None
+            benchmark_list_timeout = (
+                min(build_timeout if build_timeout is not None else inner_timeout, 300)
+                if has_bench_filter
+                else None
+            )
+            inner_phase_budget = (
+                inner_timeout
+                + (build_timeout or 0)
+                + (benchmark_list_timeout or 0)
+            )
+            outer_timeout = max(
+                workload_timeout,
+                inner_phase_budget + COLLECTIONS_TIMEOUT_REPORT_GRACE_SECONDS,
+            )
+            reason = (
+                "Collections wrapper outer timeout covers benchmark listing, explicit build, "
+                "benchmark runtime, and structured timeout/failure reporting"
+            )
+        record = {
+            "source": "paper-performance-plan-outer-timeout",
+            "reason": reason,
+            "wrapper": wrapper,
+            "inner_timeout_seconds": inner_timeout,
+            "workload_timeout_seconds": workload_timeout,
+            "outer_timeout_seconds": outer_timeout,
+        }
+        if wrapper == "paper_collections_docker_driver.py":
+            record["wrapper_timeout_seconds"] = wrapper_timeout
+            record["docker_run_timeout_seconds"] = docker_run_timeout
+        else:
+            record["benchmark_timeout_seconds"] = inner_timeout
+            record["inner_phase_budget_seconds"] = inner_phase_budget
+            record["report_grace_seconds"] = COLLECTIONS_TIMEOUT_REPORT_GRACE_SECONDS
+            if build_timeout is not None:
+                record["build_timeout_seconds"] = build_timeout
+            if benchmark_list_timeout is not None:
+                record["benchmark_list_timeout_seconds"] = benchmark_list_timeout
+        return outer_timeout, record
+    if wrapper != "paper_external_cargo_bench_json.py":
         return workload_timeout, None
-    targets_value = command_option_value(command, "--cargo-bench-targets") or ""
+    targets_value = command_option_value(wrapper_command, "--cargo-bench-targets") or ""
     target_count = len([part for part in targets_value.split(",") if part.strip()]) or 1
-    inner_timeout_raw = command_option_value(command, "--timeout")
+    inner_timeout_raw = command_option_value(wrapper_command, "--timeout")
     try:
         inner_timeout = int(inner_timeout_raw) if inner_timeout_raw else workload_timeout
     except ValueError:
@@ -3658,26 +4204,93 @@ def select_plan_sample_seconds(
     return wall_seconds, "wall_seconds", None, None
 
 
-def terminate_process_group(proc: subprocess.Popen[Any], *, grace_seconds: float = 2.0) -> bool:
-    """Terminate a workload subprocess and any children it spawned."""
-    if proc.poll() is not None:
-        return False
+def process_group_exists(process_group_id: int) -> bool:
+    """Return whether a POSIX process group still has at least one member."""
+
     try:
-        if os.name == "posix":
-            os.killpg(proc.pid, signal.SIGTERM)
-        else:  # pragma: no cover - non-posix fallback for Windows runners.
-            proc.terminate()
+        os.killpg(process_group_id, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def wait_for_process_group_exit(
+    proc: subprocess.Popen[Any],
+    process_group_id: int,
+    timeout_seconds: float,
+) -> bool:
+    """Reap the leader while waiting for every member of its group to exit."""
+
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
+    while True:
+        proc.poll()
+        if not process_group_exists(process_group_id):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+
+
+def terminate_process_group(
+    proc: subprocess.Popen[Any],
+    *,
+    grace_seconds: float = 2.0,
+    initial_signal: int = signal.SIGTERM,
+    initial_grace_seconds: Optional[float] = None,
+) -> bool:
+    """Terminate a workload process group and confirm that the whole group exited.
+
+    Checking only the group leader is insufficient: a leader can exit promptly
+    while a benchmark descendant keeps running and holds the capture pipes open.
+    Ctrl-C callers may start with SIGINT so a cooperating wrapper can clean any
+    nested process group before TERM/KILL fallback is used.
+    """
+
+    if os.name != "posix":  # pragma: no cover - non-posix fallback for Windows runners.
+        if proc.poll() is not None:
+            return False
+        # SIGINT is not a portable Popen signal on Windows unless a console
+        # process group was created explicitly.  This runner does not create
+        # one, so terminate directly rather than replacing KeyboardInterrupt
+        # with ValueError and skipping cleanup/evidence persistence.
+        proc.terminate()
         try:
             proc.wait(timeout=grace_seconds)
         except subprocess.TimeoutExpired:
-            if os.name == "posix":
-                os.killpg(proc.pid, signal.SIGKILL)
-            else:  # pragma: no cover - non-posix fallback for Windows runners.
-                proc.kill()
+            proc.kill()
             proc.wait(timeout=grace_seconds)
         return True
-    except ProcessLookupError:
-        return False
+
+    process_group_id = proc.pid
+    signalled = False
+    signals = [initial_signal]
+    if initial_signal != signal.SIGTERM:
+        signals.append(signal.SIGTERM)
+    signals.append(signal.SIGKILL)
+
+    for signal_index, group_signal in enumerate(signals):
+        try:
+            os.killpg(process_group_id, group_signal)
+            signalled = True
+        except ProcessLookupError:
+            proc.poll()
+            return signalled
+        except PermissionError:
+            return False
+        signal_grace_seconds = (
+            initial_grace_seconds
+            if signal_index == 0 and initial_grace_seconds is not None
+            else grace_seconds
+        )
+        if wait_for_process_group_exit(
+            proc, process_group_id, signal_grace_seconds
+        ):
+            return signalled
+
+    proc.poll()
+    return signalled and not process_group_exists(process_group_id)
 
 
 def positive_int_value(value: Any, default: int) -> int:
@@ -3734,6 +4347,55 @@ class BoundedPipeCapture:
         return bytes(self._tail)
 
 
+def bounded_plan_command_result(
+    *,
+    proc: subprocess.Popen[Any],
+    stdout_capture: BoundedPipeCapture,
+    stderr_capture: BoundedPipeCapture,
+    exit_code: int,
+    error: Optional[str],
+    process_group_terminated: bool,
+    started_at: str,
+    interrupted: bool = False,
+) -> Dict[str, Any]:
+    """Build the common bounded command result after capture threads drain."""
+
+    if interrupted:
+        status = "interrupted"
+    elif exit_code == 0:
+        status = "completed"
+    elif exit_code == 124:
+        status = "timed_out"
+    else:
+        status = "failed"
+    return {
+        "exit_code": exit_code,
+        "error": error,
+        "interrupted": interrupted,
+        "status": status,
+        "interrupt_signal": "SIGINT" if interrupted else None,
+        "stdout_tail": stdout_capture.bytes(),
+        "stderr_tail": stderr_capture.bytes(),
+        "stdout_bytes": stdout_capture.total_bytes,
+        "stderr_bytes": stderr_capture.total_bytes,
+        "stdout_retained_bytes": stdout_capture.retained_bytes,
+        "stderr_retained_bytes": stderr_capture.retained_bytes,
+        "stdout_truncated": stdout_capture.truncated,
+        "stderr_truncated": stderr_capture.truncated,
+        "capture_complete": (
+            not stdout_capture.thread.is_alive() and not stderr_capture.thread.is_alive()
+        ),
+        "process_group_pid": proc.pid,
+        "process_group_terminated": process_group_terminated,
+        "process_group_absent_after_cleanup": (
+            os.name != "posix" or not process_group_exists(proc.pid)
+        ),
+        "child_returncode_after_cleanup": proc.poll(),
+        "started_at": started_at,
+        "ended_at": now_iso(),
+    }
+
+
 def run_plan_command_bounded(
     command: Any,
     *,
@@ -3742,6 +4404,7 @@ def run_plan_command_bounded(
     shell: bool,
     timeout_seconds: int,
     max_output_bytes: int,
+    interrupt_grace_seconds: float = INTERRUPT_WRAPPER_CLEANUP_GRACE_SECONDS,
 ) -> Dict[str, Any]:
     """Run a plan command without allowing stdout/stderr to grow unbounded."""
 
@@ -3760,6 +4423,9 @@ def run_plan_command_bounded(
         return {
             "exit_code": 127,
             "error": str(exc),
+            "interrupted": False,
+            "status": "failed",
+            "interrupt_signal": None,
             "stdout_tail": b"",
             "stderr_tail": b"",
             "stdout_bytes": 0,
@@ -3770,6 +4436,9 @@ def run_plan_command_bounded(
             "stderr_truncated": False,
             "process_group_pid": None,
             "process_group_terminated": False,
+            "process_group_absent_after_cleanup": True,
+            "child_returncode_after_cleanup": None,
+            "capture_complete": True,
             "started_at": started_at,
             "ended_at": now_iso(),
         }
@@ -3787,28 +4456,71 @@ def run_plan_command_bounded(
         exit_code = 124
         error = f"timeout after {timeout_seconds}s: {exc}"
         process_group_terminated = terminate_process_group(proc)
-    except KeyboardInterrupt:
-        terminate_process_group(proc)
+    except KeyboardInterrupt as exc:
+        exit_code = 130
+        error = "interrupted by user (SIGINT)"
+        process_group_terminated = terminate_process_group(
+            proc,
+            initial_signal=signal.SIGINT,
+            initial_grace_seconds=interrupt_grace_seconds,
+        )
+        stdout_capture.join()
+        stderr_capture.join()
+        result = bounded_plan_command_result(
+            proc=proc,
+            stdout_capture=stdout_capture,
+            stderr_capture=stderr_capture,
+            exit_code=exit_code,
+            error=error,
+            process_group_terminated=process_group_terminated,
+            started_at=started_at,
+            interrupted=True,
+        )
+        setattr(exc, "_unialloc_bounded_child_result", result)
         raise
     finally:
         stdout_capture.join()
         stderr_capture.join()
-    return {
-        "exit_code": exit_code,
-        "error": error,
-        "stdout_tail": stdout_capture.bytes(),
-        "stderr_tail": stderr_capture.bytes(),
-        "stdout_bytes": stdout_capture.total_bytes,
-        "stderr_bytes": stderr_capture.total_bytes,
-        "stdout_retained_bytes": stdout_capture.retained_bytes,
-        "stderr_retained_bytes": stderr_capture.retained_bytes,
-        "stdout_truncated": stdout_capture.truncated,
-        "stderr_truncated": stderr_capture.truncated,
-        "process_group_pid": proc.pid,
-        "process_group_terminated": process_group_terminated,
-        "started_at": started_at,
-        "ended_at": now_iso(),
+    return bounded_plan_command_result(
+        proc=proc,
+        stdout_capture=stdout_capture,
+        stderr_capture=stderr_capture,
+        exit_code=exit_code,
+        error=error,
+        process_group_terminated=process_group_terminated,
+        started_at=started_at,
+    )
+
+
+def paper_plan_interrupt_grace_seconds(command: Sequence[Any]) -> float:
+    """Give the Docker wrapper a short bounded window to remove its container."""
+
+    if any(
+        str(part).endswith("paper_collections_docker_driver.py")
+        for part in command
+    ):
+        return DOCKER_INTERRUPT_WRAPPER_CLEANUP_GRACE_SECONDS
+    return INTERRUPT_WRAPPER_CLEANUP_GRACE_SECONDS
+
+
+def bounded_child_interruption_record(
+    child_result: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    """Extract a wrapper's final structured Ctrl-C diagnostic from bounded tails."""
+
+    accepted_sources = {
+        "paper-workload-driver-interruption",
+        "paper-collections-docker-driver-interruption",
+        "paper-external-workload-adapter-interruption",
+        "paper-external-cargo-bench-json-interruption",
     }
+    for stream in ("stderr_tail", "stdout_tail"):
+        parsed = parse_last_json_object_from_text(
+            subprocess_text(child_result.get(stream))
+        )
+        if isinstance(parsed, dict) and parsed.get("source") in accepted_sources:
+            return parsed
+    return None
 
 
 def apply_plan_output_claim_grade_blockers(
@@ -3822,6 +4534,36 @@ def apply_plan_output_claim_grade_blockers(
     record["claim_grade_blockers"] = unique_strings(
         [*claim_grade_blocker_values(record.get("claim_grade_blockers")), *values]
     )
+
+
+def finalize_paper_performance_sample_source_binding(
+    record: Dict[str, Any],
+    *,
+    started: Dict[str, Any],
+    finished: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    finished_fingerprint = finished or repository_source_fingerprint()
+    payload = evidence_source_bound_payload_if_stable(
+        record,
+        started=started,
+        finished=finished_fingerprint,
+    )
+    binding_blockers = string_list_value(
+        payload.get("evidence_source_binding_blockers")
+    )
+    if not binding_blockers:
+        binding_blockers = repository_source_binding_blockers(
+            payload,
+            current=finished_fingerprint,
+        )
+    binding_blockers = unique_strings(binding_blockers)
+    payload["source_stable_during_sample"] = not binding_blockers
+    if binding_blockers:
+        payload["evidence_source_binding_blockers"] = binding_blockers
+        apply_plan_output_claim_grade_blockers(payload, binding_blockers)
+    else:
+        payload.pop("evidence_source_binding_blockers", None)
+    return payload
 
 
 def run_paper_performance_plan_one(
@@ -3856,7 +4598,14 @@ def run_paper_performance_plan_one(
                 runtime_workload,
                 extra_fields=runtime_template_fields,
             )
+    workload_timeout = int(runtime_workload.get("timeout") or default_timeout)
     command, shell, command_for_record = normalize_plan_command(runtime_workload)
+    if not shell:
+        command_for_record = collections_driver_command_with_timeout(
+            command_for_record,
+            timeout=workload_timeout,
+        )
+        command = command_for_record
     cwd = resolve_plan_cwd(runtime_workload.get("cwd"))
     label = f"{workload_index:03d}-{plan_workload_label(workload, workload_index)}-run{run_index}"
     log_dir = out_dir / "logs"
@@ -3867,7 +4616,6 @@ def run_paper_performance_plan_one(
     env.setdefault("GLIBC_TUNABLES", "glibc.pthread.rseq=0")
     for key, value in (runtime_workload.get("env") or {}).items():
         env[str(key)] = str(value)
-    workload_timeout = int(runtime_workload.get("timeout") or default_timeout)
     timeout, outer_timeout_record = paper_plan_subprocess_timeout(
         command_for_record,
         workload_timeout=workload_timeout,
@@ -3876,6 +4624,10 @@ def run_paper_performance_plan_one(
         runtime_workload.get("max_output_bytes") or runtime_workload.get("max_log_bytes"),
         default_max_output_bytes,
     )
+    interrupt_grace_seconds = paper_plan_interrupt_grace_seconds(
+        command_for_record
+    )
+    started_source_fingerprint = repository_source_fingerprint()
     started = now_iso()
     start = time.perf_counter()
     try:
@@ -3886,8 +4638,122 @@ def run_paper_performance_plan_one(
             shell=shell,
             timeout_seconds=timeout,
             max_output_bytes=max_output_bytes,
+            interrupt_grace_seconds=interrupt_grace_seconds,
         )
-    except KeyboardInterrupt:
+    except KeyboardInterrupt as exc:
+        child_result = getattr(exc, "_unialloc_bounded_child_result", None)
+        if isinstance(child_result, dict):
+            child_interruption = bounded_child_interruption_record(child_result)
+            wall = time.perf_counter() - start
+            workload_label = plan_workload_label(workload, workload_index)
+            sidecar_path = log_dir / f"{label}.interruption.json"
+            interruption_path = out_dir / "paper-performance-plan-interruption.json"
+            interruptions_path = out_dir / "paper-performance.interruptions.jsonl"
+            interruption_record: Dict[str, Any] = {
+                "schema_version": 1,
+                "source": "paper-performance-plan-interruption",
+                "status": "interrupted",
+                "success": False,
+                "interrupted": True,
+                "diagnostic_only": True,
+                "claim_grade": False,
+                "claim_grade_blockers": [
+                    "workload interrupted before complete measurement"
+                ],
+                "measurement_eligible": False,
+                "import_eligible": False,
+                "sample_persisted": False,
+                "import_attempted": False,
+                "seconds": None,
+                "measurement_source": None,
+                "run_id": run_id,
+                "label": label,
+                "workload_index": workload_index,
+                "workload_label": workload_label,
+                "dataset": dataset,
+                "benchmark": benchmark,
+                "allocator": allocator,
+                "allocator_input": allocator_input,
+                "run_index": run_index,
+                "command": command_for_record,
+                "shell": shell,
+                "cwd": str(cwd),
+                "host": host_metadata(),
+                "bench_filter": (
+                    runtime_workload.get("bench_filter")
+                    or command_option_value(command_for_record, "--bench-filter")
+                ),
+                "timeout_seconds": timeout,
+                "workload_timeout_seconds": workload_timeout,
+                "interrupt_cleanup_grace_seconds": interrupt_grace_seconds,
+                "max_output_bytes": max_output_bytes,
+                "started_at": child_result.get("started_at") or started,
+                "ended_at": child_result.get("ended_at") or now_iso(),
+                "wall_seconds": wall,
+                "exit_code": 130,
+                "error": child_result.get("error")
+                or "interrupted by user (SIGINT)",
+                "interrupt_signal": child_result.get("interrupt_signal") or "SIGINT",
+                "child_returncode_after_cleanup": child_result.get(
+                    "child_returncode_after_cleanup"
+                ),
+                "process_group_pid": child_result.get("process_group_pid"),
+                "process_group_terminated": bool(
+                    child_result.get("process_group_terminated")
+                ),
+                "process_group_absent_after_cleanup": bool(
+                    child_result.get("process_group_absent_after_cleanup")
+                ),
+                "capture_complete": bool(child_result.get("capture_complete")),
+                "stdout": str(stdout),
+                "stderr": str(stderr),
+                "stdout_bytes": child_result.get("stdout_bytes"),
+                "stderr_bytes": child_result.get("stderr_bytes"),
+                "stdout_retained_bytes": child_result.get("stdout_retained_bytes"),
+                "stderr_retained_bytes": child_result.get("stderr_retained_bytes"),
+                "stdout_truncated": child_result.get("stdout_truncated"),
+                "stderr_truncated": child_result.get("stderr_truncated"),
+                "interruption_sidecar": str(sidecar_path),
+                "interruption_artifact": str(interruption_path),
+                "interruptions_log": str(interruptions_path),
+                "persistence_complete": False,
+            }
+            if child_interruption is not None:
+                interruption_record["child_interruption"] = child_interruption
+            setattr(exc, "_unialloc_interruption_record", interruption_record)
+            try:
+                stdout.write_bytes(child_result.get("stdout_tail", b""))
+                stderr.write_bytes(child_result.get("stderr_tail", b""))
+                interruption_record["evidence"] = [
+                    {
+                        "kind": "stdout",
+                        "path": str(stdout),
+                        "sha256": file_sha256(stdout),
+                    },
+                    {
+                        "kind": "stderr",
+                        "path": str(stderr),
+                        "sha256": file_sha256(stderr),
+                    },
+                ]
+                interruption_record["persistence_complete"] = True
+                write_json(sidecar_path, interruption_record)
+                write_json(interruption_path, interruption_record)
+                append_jsonl(interruptions_path, interruption_record)
+            except Exception as persistence_exc:  # best effort; preserve SIGINT
+                interruption_record["persistence_complete"] = False
+                interruption_record["persistence_error"] = str(persistence_exc)
+                for diagnostic_path in (sidecar_path, interruption_path):
+                    try:
+                        write_json(diagnostic_path, interruption_record)
+                    except Exception:
+                        pass
+                setattr(
+                    exc,
+                    "_unialloc_interruption_persistence_error",
+                    str(persistence_exc),
+                )
+            setattr(exc, "_unialloc_interruption_record", interruption_record)
         raise
     except Exception as exc:  # pragma: no cover - diagnostic safety net
         child_result = {
@@ -4083,7 +4949,10 @@ def run_paper_performance_plan_one(
         external_source_blockers = source_contract_claim_grade_blockers(external_metadata)
         if external_source_blockers:
             apply_plan_output_claim_grade_blockers(record, external_source_blockers)
-    return record
+    return finalize_paper_performance_sample_source_binding(
+        record,
+        started=started_source_fingerprint,
+    )
 
 
 def plan_dataset_names_for_audit(
@@ -4160,11 +5029,50 @@ def plan_sample_resume_key(record: Dict[str, Any], run_index: Optional[int] = No
     return key[0], key[1], key[2], resolved_run_index
 
 
-def sample_is_resumable_success(record: Dict[str, Any]) -> bool:
-    return sample_succeeded(record) and sample_time_value(record) is not None
+def resumable_sample_source_binding_blockers(
+    record: Dict[str, Any],
+    *,
+    current: Dict[str, Any],
+) -> List[str]:
+    """Return source-binding reasons that require a successful sample rerun."""
+
+    return unique_strings(
+        [
+            *string_list_value(record.get("evidence_source_binding_blockers")),
+            *repository_source_binding_blockers(record, current=current),
+        ]
+    )
 
 
-def load_resumable_paper_plan_samples(samples_path: Path) -> Tuple[Dict[Tuple[Any, ...], Dict[str, Any]], Dict[str, Any]]:
+def sample_is_resumable_success(
+    record: Dict[str, Any],
+    *,
+    current: Optional[Dict[str, Any]] = None,
+    samples_path: Optional[Path] = None,
+    require_claim_grade: bool = False,
+) -> bool:
+    if not sample_succeeded(record) or sample_time_value(record) is None:
+        return False
+    current_source = current or repository_source_fingerprint()
+    if resumable_sample_source_binding_blockers(
+        record,
+        current=current_source,
+    ):
+        return False
+    if not require_claim_grade:
+        return True
+    if samples_path is None:
+        # Claim-grade provenance includes verified raw evidence paths and hashes,
+        # so a metadata-only call cannot safely approve a resumable record.
+        return False
+    return sample_is_claim_grade_usable(record, samples_path)
+
+
+def load_resumable_paper_plan_samples(
+    samples_path: Path,
+    *,
+    require_claim_grade: bool = False,
+) -> Tuple[Dict[Tuple[Any, ...], Dict[str, Any]], Dict[str, Any]]:
     summary: Dict[str, Any] = {
         "resume_source": str(samples_path),
         "resume_source_exists": samples_path.exists(),
@@ -4173,10 +5081,15 @@ def load_resumable_paper_plan_samples(samples_path: Path) -> Tuple[Dict[Tuple[An
         "resume_successful_record_count": 0,
         "resume_duplicate_successful_record_count": 0,
         "resume_ineligible_record_count": 0,
+        "resume_source_binding_ineligible_count": 0,
+        "resume_source_binding_blockers": [],
+        "resume_claim_grade_ineligible_count": 0,
+        "resume_claim_grade_blockers": [],
         "resume_unmatched_successful_record_count": 0,
     }
     if not samples_path.exists():
         return {}, summary
+    current_source = repository_source_fingerprint()
     archive_path = samples_path.with_name(
         f"{samples_path.stem}.resume-source-{_dt.datetime.now(_dt.timezone.utc).strftime('%Y%m%d-%H%M%S')}{samples_path.suffix}"
     )
@@ -4187,8 +5100,49 @@ def load_resumable_paper_plan_samples(samples_path: Path) -> Tuple[Dict[Tuple[An
     resumable: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
     for record in records:
         resume_key = plan_sample_resume_key(record)
-        if resume_key is None or not sample_is_resumable_success(record):
+        basic_success = sample_succeeded(record) and sample_time_value(record) is not None
+        source_binding_blockers = (
+            resumable_sample_source_binding_blockers(
+                record,
+                current=current_source,
+            )
+            if basic_success
+            else []
+        )
+        resumable_success = sample_is_resumable_success(
+            record,
+            current=current_source,
+            samples_path=samples_path,
+            require_claim_grade=require_claim_grade,
+        )
+        claim_grade_blockers = (
+            sample_claim_grade_blockers(record, samples_path)
+            if (
+                require_claim_grade
+                and basic_success
+                and not source_binding_blockers
+                and not resumable_success
+            )
+            else []
+        )
+        if resume_key is None or not resumable_success:
             summary["resume_ineligible_record_count"] += 1
+            if source_binding_blockers:
+                summary["resume_source_binding_ineligible_count"] += 1
+                summary["resume_source_binding_blockers"] = unique_strings(
+                    [
+                        *summary["resume_source_binding_blockers"],
+                        *source_binding_blockers,
+                    ]
+                )
+            if claim_grade_blockers:
+                summary["resume_claim_grade_ineligible_count"] += 1
+                summary["resume_claim_grade_blockers"] = unique_strings(
+                    [
+                        *summary["resume_claim_grade_blockers"],
+                        *claim_grade_blockers,
+                    ]
+                )
             continue
         if resume_key in resumable:
             summary["resume_duplicate_successful_record_count"] += 1
@@ -4281,6 +5235,55 @@ def paper_plan_run_filter_summary(args: argparse.Namespace) -> Dict[str, Any]:
         "split_cargo_bench_targets": sorted(normalize_fragment_run_filter_values(getattr(args, "split_cargo_bench_target", None))),
     }
 
+
+def paper_plan_claim_grade_record_blockers(
+    record: Dict[str, Any],
+    samples_path: Path,
+) -> List[str]:
+    """Explain why a just-collected plan record cannot remain in a formal cell."""
+
+    recorded_source = record.get("evidence_source_fingerprint")
+    source_binding_blockers = resumable_sample_source_binding_blockers(
+        record,
+        current=recorded_source if isinstance(recorded_source, dict) else {},
+    )
+    if sample_is_claim_grade_usable(record, samples_path) and not source_binding_blockers:
+        return []
+    blockers: List[str] = []
+    if not sample_succeeded(record):
+        blockers.append("sample execution did not succeed")
+    if sample_time_value(record) is None:
+        blockers.append("sample lacks a finite timing measurement")
+    blockers.extend(sample_claim_grade_blockers(record, samples_path))
+    blockers.extend(source_binding_blockers)
+    return unique_strings(blockers)
+
+
+def paper_plan_claim_grade_ineligible_record(
+    record: Dict[str, Any],
+    blockers: Iterable[Any],
+) -> Dict[str, Any]:
+    """Keep runner summaries compact while preserving the failed cell/run reason."""
+
+    return {
+        "label": record.get("label"),
+        "dataset": record.get("dataset") or record.get("dataset_name"),
+        "benchmark": record.get("benchmark") or record.get("workload") or record.get("row"),
+        "allocator": normalize_sample_allocator(record.get("allocator") or record.get("feature")),
+        "run_index": sample_run_index(record, 0),
+        "success": sample_succeeded(record),
+        "claim_grade_blockers": unique_strings(blockers),
+    }
+
+
+def paper_plan_cell_key_summary(key: Tuple[str, str, str]) -> Dict[str, str]:
+    return {
+        "dataset": key[0],
+        "benchmark": key[1],
+        "allocator": key[2],
+    }
+
+
 def run_paper_performance_plan(args: argparse.Namespace) -> int:
     cfg = load_config()
     plan_path = Path(args.plan).expanduser()
@@ -4300,7 +5303,10 @@ def run_paper_performance_plan(args: argparse.Namespace) -> int:
     resume_summary: Dict[str, Any] = {"resume_enabled": bool(args.resume_successful)}
     if args.resume_successful:
         try:
-            resume_records, resume_summary = load_resumable_paper_plan_samples(samples_path)
+            resume_records, resume_summary = load_resumable_paper_plan_samples(
+                samples_path,
+                require_claim_grade=bool(args.claim_grade),
+            )
         except (OSError, ValueError) as exc:
             print(f"could not load resumable samples from {samples_path}: {exc}", file=sys.stderr)
             return 2
@@ -4391,6 +5397,11 @@ def run_paper_performance_plan(args: argparse.Namespace) -> int:
             "run_filters": run_filter_summary,
             "failed_record_count": 0,
             "failed_records": [],
+            "claim_grade_ineligible_record_count": 0,
+            "claim_grade_ineligible_records": [],
+            "quarantined_cell_count": 0,
+            "quarantined_cells": [],
+            "quarantined_work_item_count": 0,
             "default_runs": default_runs,
             "required_runs_per_cell_for_claim_grade": required_runs,
             "default_timeout_seconds": default_timeout,
@@ -4412,6 +5423,9 @@ def run_paper_performance_plan(args: argparse.Namespace) -> int:
         return 1
     records: List[Dict[str, Any]] = []
     resumed_records: List[Dict[str, Any]] = []
+    claim_grade_ineligible_records: List[Dict[str, Any]] = []
+    quarantined_cell_keys: Set[Tuple[str, str, str]] = set()
+    quarantined_work_item_count = 0
     executed_record_count = 0
     max_records = int(getattr(args, "max_records", 0) or 0)
     execution_limit_reached = False
@@ -4485,6 +5499,10 @@ def run_paper_performance_plan(args: argparse.Namespace) -> int:
             records.append(resumed_record)
             resumed_records.append(resumed_record)
             continue
+        planned_cell_key = sample_cell_key(raw_workload)
+        if args.claim_grade and planned_cell_key in quarantined_cell_keys:
+            quarantined_work_item_count += 1
+            continue
         if max_records > 0 and executed_record_count >= max_records:
             execution_limit_reached = True
             break
@@ -4498,6 +5516,89 @@ def run_paper_performance_plan(args: argparse.Namespace) -> int:
                 default_max_output_bytes=default_max_output_bytes,
                 run_id=run_id,
             )
+        except KeyboardInterrupt as exc:
+            interruption_record = getattr(
+                exc, "_unialloc_interruption_record", None
+            )
+            interruption_path = out_dir / "paper-performance-plan-interruption.json"
+            summary_path = out_dir / "paper-performance-plan-run-summary.json"
+            failed_records = [
+                item for item in records if not sample_succeeded(item)
+            ]
+            summary = {
+                "schema_version": 1,
+                "generated_at": now_iso(),
+                "run_id": run_id,
+                "source": "paper-performance-plan",
+                "status": "interrupted",
+                "interrupted": True,
+                "exit_code": 130,
+                "plan": str(plan_path.resolve()),
+                "samples": str(samples_path),
+                "host": host_metadata(),
+                "workload_count": len(workloads),
+                "record_count": len(records),
+                "executed_record_count": executed_record_count,
+                "interrupted_record_count": (
+                    1 if isinstance(interruption_record, dict) else 0
+                ),
+                "sample_persisted": False,
+                "resumed_record_count": len(resumed_records),
+                "selected_work_item_count": len(work_items),
+                "run_filters": run_filter_summary,
+                "max_new_records": max_records,
+                "execution_limit_reached": False,
+                "execution_order": (
+                    "interleaved_runs"
+                    if bool(getattr(args, "interleave_runs", False))
+                    else "workload_major"
+                ),
+                "failed_record_count": len(failed_records),
+                "failed_records": failed_records,
+                "claim_grade_ineligible_record_count": len(
+                    claim_grade_ineligible_records
+                ),
+                "claim_grade_ineligible_records": claim_grade_ineligible_records,
+                "quarantined_cell_count": len(quarantined_cell_keys),
+                "quarantined_cells": [
+                    paper_plan_cell_key_summary(key)
+                    for key in sorted(quarantined_cell_keys)
+                ],
+                "quarantined_work_item_count": quarantined_work_item_count,
+                "default_runs": default_runs,
+                "required_runs_per_cell_for_claim_grade": required_runs,
+                "default_timeout_seconds": default_timeout,
+                "default_max_output_bytes": default_max_output_bytes,
+                "keep_going": bool(args.keep_going),
+                "resume_successful": bool(args.resume_successful),
+                "resume_summary": resume_summary,
+                "plan_preflight_audit": str(preflight_audit_path),
+                "plan_preflight_ready_for_claim_grade": preflight_ready,
+                "plan_preflight_blockers": preflight_blockers,
+                "interruption_artifact": str(interruption_path),
+                "interruption_record": (
+                    interruption_record
+                    if isinstance(interruption_record, dict)
+                    else None
+                ),
+                "import_attempted": False,
+                "import_results": {
+                    "requested": bool(args.import_results),
+                    "attempted": False,
+                    "skipped_reason": "plan interrupted before import",
+                },
+            }
+            try:
+                if isinstance(interruption_record, dict):
+                    write_json(interruption_path, interruption_record)
+                write_json(summary_path, summary)
+            except Exception as persistence_exc:  # preserve original SIGINT
+                setattr(
+                    exc,
+                    "_unialloc_interruption_persistence_error",
+                    str(persistence_exc),
+                )
+            raise
         except Exception as exc:
             dataset = str(raw_workload.get("dataset") or raw_workload.get("dataset_name") or "").strip()
             benchmark = str(raw_workload.get("benchmark") or raw_workload.get("workload") or raw_workload.get("row") or "").strip()
@@ -4522,6 +5623,22 @@ def run_paper_performance_plan(args: argparse.Namespace) -> int:
         records.append(record)
         executed_record_count += 1
         append_jsonl(samples_path, record)
+        if args.claim_grade:
+            claim_grade_blockers = paper_plan_claim_grade_record_blockers(
+                record,
+                samples_path,
+            )
+            if claim_grade_blockers:
+                exit_status = 1
+                claim_grade_ineligible_records.append(
+                    paper_plan_claim_grade_ineligible_record(
+                        record,
+                        claim_grade_blockers,
+                    )
+                )
+                record_cell_key = sample_cell_key(record) or planned_cell_key
+                if record_cell_key is not None:
+                    quarantined_cell_keys.add(record_cell_key)
         if not sample_succeeded(record):
             exit_status = 1
             if not args.keep_going:
@@ -4529,6 +5646,7 @@ def run_paper_performance_plan(args: argparse.Namespace) -> int:
         if exit_status and not args.keep_going:
             break
     failed_records = [record for record in records if not sample_succeeded(record)]
+    source_binding = paper_performance_source_binding_status(records)
     summary_path = out_dir / "paper-performance-plan-run-summary.json"
     summary = {
         "schema_version": 1,
@@ -4549,6 +5667,16 @@ def run_paper_performance_plan(args: argparse.Namespace) -> int:
         "execution_order": "interleaved_runs" if bool(getattr(args, "interleave_runs", False)) else "workload_major",
         "failed_record_count": len(failed_records),
         "failed_records": failed_records,
+        "claim_grade_ineligible_record_count": len(
+            claim_grade_ineligible_records
+        ),
+        "claim_grade_ineligible_records": claim_grade_ineligible_records,
+        "quarantined_cell_count": len(quarantined_cell_keys),
+        "quarantined_cells": [
+            paper_plan_cell_key_summary(key)
+            for key in sorted(quarantined_cell_keys)
+        ],
+        "quarantined_work_item_count": quarantined_work_item_count,
         "default_runs": default_runs,
         "required_runs_per_cell_for_claim_grade": required_runs,
         "default_timeout_seconds": default_timeout,
@@ -4562,7 +5690,21 @@ def run_paper_performance_plan(args: argparse.Namespace) -> int:
         "plan_preflight_dry_run_probe_enabled": preflight_dry_run_probe,
         "plan_preflight_dry_run_probe_count": int(preflight_audit.get("summary", {}).get("dry_run_probe_count") or 0),
         "plan_preflight_dry_run_probe_failure_count": int(preflight_audit.get("summary", {}).get("dry_run_probe_failure_count") or 0),
+        "source_binding_ready": source_binding["source_binding_ready"],
+        "source_bound_record_count": source_binding["source_bound_record_count"],
+        "source_binding_blocker_count": source_binding[
+            "source_binding_blocker_count"
+        ],
+        "evidence_source_binding_blockers": source_binding[
+            "evidence_source_binding_blockers"
+        ],
     }
+    if "evidence_source_fingerprint" in source_binding:
+        summary["evidence_source_fingerprint"] = source_binding[
+            "evidence_source_fingerprint"
+        ]
+    if args.claim_grade and not source_binding["source_binding_ready"]:
+        exit_status = 1
     write_json(summary_path, summary)
     import_status = None
     if args.import_results:
@@ -7418,7 +8560,13 @@ def wrapper_manifest_workload_options(
 def paper_performance_sample_contract() -> Dict[str, Any]:
     return {
         "required_fields": ["dataset", "benchmark", "allocator", "run_index", "seconds"],
-        "required_provenance": ["command", "host_or_target", "raw_evidence_path_or_uri", "raw_evidence_sha256"],
+        "required_provenance": [
+            "command",
+            "host_or_target",
+            "raw_evidence_path_or_uri",
+            "raw_evidence_sha256",
+            "evidence_source_fingerprint",
+        ],
         "timing_fields": [
             "seconds",
             "wall_seconds",
@@ -7432,6 +8580,7 @@ def paper_performance_sample_contract() -> Dict[str, Any]:
         "claim_grade_rule": (
             "every successful sample must carry command provenance, host/target provenance, "
             "verified raw evidence paths or URIs, sha256 digests for the raw evidence, "
+            "one current repository source fingerprint shared by the imported sample set, "
             "benchmark-owned JSON timing, and paper-exact source provenance for external workloads"
         ),
         "example_jsonl_record": {
@@ -7442,6 +8591,11 @@ def paper_performance_sample_contract() -> Dict[str, Any]:
             "seconds": 10.91,
             "command": ["./run-paper-workload", "--benchmark", "RJS-Compiler", "--allocator", "jemalloc"],
             "host": {"system": "Linux", "machine": "x86_64"},
+            "evidence_source_fingerprint": {
+                "schema_version": REPOSITORY_SOURCE_FINGERPRINT_SCHEMA_VERSION,
+                "algorithm": "sha256",
+                "source_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            },
             "evidence": [
                 {
                     "path": "logs/default_performance-RJS-Compiler-jemalloc-run1.stdout.txt",
@@ -7566,6 +8720,8 @@ def paper_collections_driver_command(
     compiler_site_id_mode: str = "cyclic-replay",
     compiler_site_replay_limit: Optional[int] = None,
     compiler_site_recovery_scope: str = "thread-local",
+    timeout: Optional[int] = None,
+    build_timeout: Optional[int] = None,
 ) -> List[str]:
     command = [
         "python3",
@@ -7577,6 +8733,10 @@ def paper_collections_driver_command(
         "--allocator",
         str(cell.get("allocator") or ""),
     ]
+    if timeout is not None:
+        command.extend(["--timeout", str(int(timeout))])
+    if build_timeout is not None:
+        command.extend(["--build-timeout", str(int(build_timeout))])
     variant = str(cell.get("variant_feature") or "")
     if variant:
         command.extend(["--variant-feature", variant])
@@ -7622,6 +8782,7 @@ def paper_collections_docker_driver_command(
     allow_host_allocator_mismatch: bool = False,
     scudo_mode: Optional[str] = None,
     scudo_runtime_library: Optional[str] = None,
+    timeout: Optional[int] = None,
 ) -> List[str]:
     command = [
         "python3",
@@ -7633,6 +8794,16 @@ def paper_collections_docker_driver_command(
         "--allocator",
         str(cell.get("allocator") or ""),
     ]
+    if timeout is not None:
+        inner_timeout = max(1, int(timeout))
+        command.extend(
+            [
+                "--inner-timeout",
+                str(inner_timeout),
+                "--timeout",
+                str(inner_timeout + COLLECTIONS_TIMEOUT_REPORT_GRACE_SECONDS),
+            ]
+        )
     variant = str(cell.get("variant_feature") or "")
     if variant:
         command.extend(["--variant-feature", variant])
@@ -8817,6 +9988,7 @@ def paper_workload_wrapper_manifest_rule(
             platform_name=docker_collections_platform,
             scudo_mode=docker_collections_scudo_mode,
             scudo_runtime_library=docker_collections_scudo_runtime_library,
+            timeout=int(contract.get("timeout") or 1800),
         )
         template_note = (
             "This rule delegates a host/toolchain-blocked Collections cell to "
@@ -9860,6 +11032,51 @@ def command_with_flag(command: List[str], flag: str) -> List[str]:
     return [*command, flag]
 
 
+def collections_driver_dry_run_execution(
+    command: List[str],
+    *,
+    cwd: Path,
+    env: Dict[str, str],
+    timeout: int,
+) -> Dict[str, Any]:
+    """Run a Collections preflight without racing its structured diagnostics."""
+
+    probe_timeout = max(1, int(timeout))
+    bounded_command = collections_driver_command_with_timeout(
+        command,
+        timeout=probe_timeout,
+    )
+    outer_timeout, outer_timeout_record = paper_plan_subprocess_timeout(
+        bounded_command,
+        workload_timeout=probe_timeout,
+    )
+    child = run_plan_command_bounded(
+        bounded_command,
+        cwd=cwd,
+        env=env,
+        shell=False,
+        timeout_seconds=outer_timeout,
+        max_output_bytes=DEFAULT_MAX_PROBE_OUTPUT_BYTES,
+    )
+    return {
+        "command": bounded_command,
+        "returncode": int(child.get("exit_code") or 0),
+        "stdout": subprocess_text(child.get("stdout_tail")),
+        "stderr": subprocess_text(child.get("stderr_tail")),
+        "error": child.get("error"),
+        "process_group_pid": child.get("process_group_pid"),
+        "process_group_terminated": bool(child.get("process_group_terminated")),
+        "stdout_bytes": child.get("stdout_bytes"),
+        "stderr_bytes": child.get("stderr_bytes"),
+        "stdout_retained_bytes": child.get("stdout_retained_bytes"),
+        "stderr_retained_bytes": child.get("stderr_retained_bytes"),
+        "stdout_truncated": bool(child.get("stdout_truncated")),
+        "stderr_truncated": bool(child.get("stderr_truncated")),
+        "outer_timeout": outer_timeout_record,
+        "outer_timeout_seconds": outer_timeout,
+    }
+
+
 def local_collections_driver_dry_run_probe(
     command_for_record: List[str],
     workload: Dict[str, Any],
@@ -9875,32 +11092,24 @@ def local_collections_driver_dry_run_probe(
     env.setdefault("GLIBC_TUNABLES", "glibc.pthread.rseq=0")
     for key, value in (workload.get("env") or {}).items():
         env[str(key)] = str(value)
-    try:
-        proc = subprocess.run(
-            command,
-            cwd=str(cwd),
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        return {
-            "ok": False,
-            "returncode": 124,
-            "issue": f"local Collections driver dry-run timed out after {timeout}s: {exc}",
-            "command": command,
-            "cwd": str(cwd),
-            "stdout": short_probe_text(exc.stdout or ""),
-            "stderr": short_probe_text(exc.stderr or ""),
-        }
-    record = parse_last_json_object_from_text(proc.stdout) or parse_last_json_object_from_text(proc.stderr)
+    execution = collections_driver_dry_run_execution(
+        command,
+        cwd=cwd,
+        env=env,
+        timeout=timeout,
+    )
+    command = execution["command"]
+    stdout = str(execution.get("stdout") or "")
+    stderr = str(execution.get("stderr") or "")
+    returncode = int(execution.get("returncode") or 0)
+    record = parse_last_json_object_from_text(stdout) or parse_last_json_object_from_text(stderr)
     issues: List[str] = []
-    if proc.returncode != 0:
+    if execution.get("error"):
+        issues.append(f"local Collections driver dry-run {execution['error']}")
+    if returncode != 0:
         record_error = record.get("error") if isinstance(record, dict) else None
         suffix = f": {record_error}" if record_error else ""
-        issues.append(f"local Collections driver dry-run exited {proc.returncode}{suffix}")
+        issues.append(f"local Collections driver dry-run exited {returncode}{suffix}")
     if not isinstance(record, dict):
         issues.append("local Collections driver dry-run did not emit a JSON object")
     else:
@@ -9924,13 +11133,22 @@ def local_collections_driver_dry_run_probe(
     issue = "; ".join(unique_strings(issues)) if issues else None
     return {
         "ok": issue is None,
-        "returncode": proc.returncode,
+        "returncode": returncode,
         "issue": issue,
         "command": command,
         "cwd": str(cwd),
-        "stdout": short_probe_text(proc.stdout),
-        "stderr": short_probe_text(proc.stderr),
+        "stdout": short_probe_text(stdout),
+        "stderr": short_probe_text(stderr),
         "record": record,
+        "process_group_pid": execution.get("process_group_pid"),
+        "process_group_terminated": execution.get("process_group_terminated"),
+        "stdout_bytes": execution.get("stdout_bytes"),
+        "stderr_bytes": execution.get("stderr_bytes"),
+        "stdout_retained_bytes": execution.get("stdout_retained_bytes"),
+        "stderr_retained_bytes": execution.get("stderr_retained_bytes"),
+        "stdout_truncated": execution.get("stdout_truncated"),
+        "stderr_truncated": execution.get("stderr_truncated"),
+        "outer_timeout": execution.get("outer_timeout"),
     }
 
 
@@ -10022,32 +11240,24 @@ def docker_collections_driver_dry_run_probe(
     env.setdefault("GLIBC_TUNABLES", "glibc.pthread.rseq=0")
     for key, value in (workload.get("env") or {}).items():
         env[str(key)] = str(value)
-    try:
-        proc = subprocess.run(
-            command,
-            cwd=str(cwd),
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        return {
-            "ok": False,
-            "returncode": 124,
-            "issue": f"Docker Collections driver dry-run timed out after {timeout}s: {exc}",
-            "command": command,
-            "cwd": str(cwd),
-            "stdout": short_probe_text(exc.stdout or ""),
-            "stderr": short_probe_text(exc.stderr or ""),
-        }
-    record = parse_last_json_object_from_text(proc.stdout) or parse_last_json_object_from_text(proc.stderr)
+    execution = collections_driver_dry_run_execution(
+        command,
+        cwd=cwd,
+        env=env,
+        timeout=timeout,
+    )
+    command = execution["command"]
+    stdout = str(execution.get("stdout") or "")
+    stderr = str(execution.get("stderr") or "")
+    returncode = int(execution.get("returncode") or 0)
+    record = parse_last_json_object_from_text(stdout) or parse_last_json_object_from_text(stderr)
     issues: List[str] = []
-    if proc.returncode != 0:
+    if execution.get("error"):
+        issues.append(f"Docker Collections driver dry-run {execution['error']}")
+    if returncode != 0:
         record_error = record.get("error") if isinstance(record, dict) else None
         suffix = f": {record_error}" if record_error else ""
-        issues.append(f"Docker Collections driver dry-run exited {proc.returncode}{suffix}")
+        issues.append(f"Docker Collections driver dry-run exited {returncode}{suffix}")
     if not isinstance(record, dict):
         issues.append("Docker Collections driver dry-run did not emit a JSON object")
     else:
@@ -10069,13 +11279,22 @@ def docker_collections_driver_dry_run_probe(
     issue = "; ".join(unique_strings(issues)) if issues else None
     return {
         "ok": issue is None,
-        "returncode": proc.returncode,
+        "returncode": returncode,
         "issue": issue,
         "command": command,
         "cwd": str(cwd),
-        "stdout": short_probe_text(proc.stdout),
-        "stderr": short_probe_text(proc.stderr),
+        "stdout": short_probe_text(stdout),
+        "stderr": short_probe_text(stderr),
         "record": record,
+        "process_group_pid": execution.get("process_group_pid"),
+        "process_group_terminated": execution.get("process_group_terminated"),
+        "stdout_bytes": execution.get("stdout_bytes"),
+        "stderr_bytes": execution.get("stderr_bytes"),
+        "stdout_retained_bytes": execution.get("stdout_retained_bytes"),
+        "stderr_retained_bytes": execution.get("stderr_retained_bytes"),
+        "stdout_truncated": execution.get("stdout_truncated"),
+        "stderr_truncated": execution.get("stderr_truncated"),
+        "outer_timeout": execution.get("outer_timeout"),
     }
 
 
@@ -13073,9 +14292,19 @@ def replace_command_option_before_remainder(command: List[str], option: str, val
         separator_index = len(out)
     prefix = out[:separator_index]
     suffix = out[separator_index:]
-    while option in prefix:
-        idx = prefix.index(option)
-        del prefix[idx : min(idx + 2, len(prefix))]
+    cleaned_prefix: List[str] = []
+    index = 0
+    while index < len(prefix):
+        token = prefix[index]
+        if token == option:
+            index += 2
+            continue
+        if token.startswith(f"{option}="):
+            index += 1
+            continue
+        cleaned_prefix.append(token)
+        index += 1
+    prefix = cleaned_prefix
     prefix.extend([option, value])
     return [*prefix, *suffix]
 
@@ -15864,9 +17093,10 @@ def roxipng_sample_fragment_keys(sample: Dict[str, Any]) -> List[str]:
         return unique_strings(f"{target}|{leaf}" for target in targets for leaf in leafs)
     if targets:
         return [f"{target}|*" for target in targets]
-    plan_fragment = str(sample.get("plan_fragment_id") or "").strip()
-    if plan_fragment:
-        return [plan_fragment]
+    for candidate in sample_metadata_candidates(sample):
+        plan_fragment = str(candidate.get("plan_fragment_id") or "").strip()
+        if plan_fragment:
+            return [plan_fragment]
     return []
 
 
@@ -16550,6 +17780,7 @@ def roxipng_claim_gap_run_commands(plan_path: Path) -> Dict[str, List[str]]:
         str(plan_path),
         "--interleave-runs",
         "--resume-successful",
+        "--claim-grade",
     ]
     return {
         "one_record_probe": [*base, "--max-records", "1", "--max-output-bytes", "1048576"],
@@ -23851,6 +25082,7 @@ def build_paper_performance_plan_skeleton(
     docker_collections_scudo_mode: Optional[str] = None,
     docker_collections_scudo_runtime_library: Optional[str] = None,
     driver_bench_filter: Optional[str] = None,
+    driver_build_timeout: Optional[int] = None,
     driver_extra_features: Optional[List[str]] = None,
     compiler_site_replay_type_mapping: Optional[str] = None,
     compiler_site_id_mode: str = "cyclic-replay",
@@ -23915,6 +25147,8 @@ def build_paper_performance_plan_skeleton(
                 compiler_site_id_mode=compiler_site_id_mode,
                 compiler_site_replay_limit=compiler_site_replay_limit,
                 compiler_site_recovery_scope=compiler_site_recovery_scope,
+                timeout=workload_timeout,
+                build_timeout=driver_build_timeout,
             )
             driver_kind = "local-collections-driver"
             local_env = local_collections_dependency_env(cell)
@@ -23941,6 +25175,8 @@ def build_paper_performance_plan_skeleton(
                     compiler_site_id_mode=compiler_site_id_mode,
                     compiler_site_replay_limit=compiler_site_replay_limit,
                     compiler_site_recovery_scope=compiler_site_recovery_scope,
+                    timeout=workload_timeout,
+                    build_timeout=driver_build_timeout,
                 )
                 driver_kind = "local-collections-driver"
                 local_env = local_collections_dependency_env(cell)
@@ -23961,6 +25197,7 @@ def build_paper_performance_plan_skeleton(
                     allow_host_allocator_mismatch=allow_host_allocator_mismatch,
                     scudo_mode=docker_collections_scudo_mode,
                     scudo_runtime_library=docker_collections_scudo_runtime_library,
+                    timeout=workload_timeout,
                 )
                 driver_kind = "docker-collections-driver"
                 workload_capability = {
@@ -24250,6 +25487,7 @@ def generate_paper_performance_plan(args: argparse.Namespace) -> int:
         docker_collections_scudo_mode=args.docker_collections_scudo_mode,
         docker_collections_scudo_runtime_library=args.docker_collections_scudo_runtime_library,
         driver_bench_filter=args.driver_bench_filter,
+        driver_build_timeout=args.driver_build_timeout,
         driver_extra_features=args.driver_extra_feature,
         compiler_site_replay_type_mapping=args.collections_compiler_site_replay_type_mapping,
         compiler_site_id_mode=args.collections_compiler_site_id_mode,
@@ -24930,6 +26168,7 @@ def paper_performance_gap_run_commands(plan_path: Path) -> Dict[str, List[str]]:
         str(plan_path),
         "--interleave-runs",
         "--resume-successful",
+        "--claim-grade",
         "--preflight-dry-run-probe",
     ]
     smoke = [*base, "--max-records", "1", "--preflight-dry-run-probe-limit", "1"]
@@ -25263,6 +26502,7 @@ def import_paper(args: argparse.Namespace) -> int:
         "missing": missing,
         "notes": [
             "Paper datasets are reference targets, not current repository evidence.",
+            "Dataset count and finite_value_count report finite values; total_slot_count reports the declared row-by-column grid.",
             cfg["methodology"]["normalization"],
         ],
     }
@@ -25456,17 +26696,21 @@ def parse_bench_stdout(path: Path) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     if not path.exists() or not path.is_file():
         return results
+    def parse_ns_value(raw: str) -> Any:
+        value = raw.replace(",", "")
+        return float(value) if "." in value else int(value)
+
     for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
         match = BENCH_LINE.match(raw.strip())
         if not match:
             continue
-        ns_per_iter = int(match.group("ns").replace(",", ""))
+        ns_per_iter = parse_ns_value(match.group("ns"))
         dev_raw = match.group("dev")
         results.append(
             {
                 "benchmark": match.group("name"),
                 "ns_per_iter": ns_per_iter,
-                "deviation_ns": int(dev_raw.replace(",", "")) if dev_raw else None,
+                "deviation_ns": parse_ns_value(dev_raw) if dev_raw else None,
             }
         )
     return results
@@ -25688,6 +26932,87 @@ def find_matching_rust_brace(text: str, open_idx: int) -> int:
             continue
 
     raise ValueError("matching closing brace not found")
+
+
+def mask_rust_comments_and_literals(text: str) -> str:
+    """Blank Rust comments and literals while preserving offsets and newlines."""
+
+    masked = list(text)
+
+    def blank(start: int, end: int) -> None:
+        for idx in range(start, min(end, len(masked))):
+            if masked[idx] not in {"\n", "\r"}:
+                masked[idx] = " "
+
+    char_literal = re.compile(
+        r"'(?:"
+        r"\\(?:[nrt0\\'\"]|x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]{1,6}\})"
+        r"|[^\\'\r\n]"
+        r")'"
+    )
+    i = 0
+    while i < len(text):
+        if text.startswith("//", i):
+            end = text.find("\n", i + 2)
+            if end < 0:
+                end = len(text)
+            blank(i, end)
+            i = end
+            continue
+
+        if text.startswith("/*", i):
+            depth = 1
+            end = i + 2
+            while end < len(text) and depth:
+                if text.startswith("/*", end):
+                    depth += 1
+                    end += 2
+                elif text.startswith("*/", end):
+                    depth -= 1
+                    end += 2
+                else:
+                    end += 1
+            blank(i, end)
+            i = end
+            continue
+
+        raw_match = re.match(r"(?:br|r)(?P<hashes>#{0,255})\"", text[i:])
+        if raw_match is not None:
+            terminator = '"' + raw_match.group("hashes")
+            content_start = i + raw_match.end()
+            terminator_start = text.find(terminator, content_start)
+            end = (
+                len(text)
+                if terminator_start < 0
+                else terminator_start + len(terminator)
+            )
+            blank(i, end)
+            i = end
+            continue
+
+        if text[i] == '"':
+            end = i + 1
+            while end < len(text):
+                if text[end] == "\\":
+                    end += 2
+                    continue
+                end += 1
+                if text[end - 1] == '"':
+                    break
+            blank(i, end)
+            i = end
+            continue
+
+        if text[i] == "'":
+            literal_match = char_literal.match(text, i)
+            if literal_match is not None:
+                blank(i, literal_match.end())
+                i = literal_match.end()
+                continue
+
+        i += 1
+
+    return "".join(masked)
 
 
 BENCH_FN_RE = re.compile(
@@ -26266,9 +27591,9 @@ def compiler_proto_root_source(module_dir_name: str, type_id_basis: str, *, exac
     )
     source = (
         """#![cfg(not(target_os = "android"))]
-#![feature(btree_drain_filter)]
-#![feature(map_first_last)]
-#![feature(repr_simd)]
+#![cfg_attr(not(unialloc_btree_extract_if_range), feature(btree_drain_filter))]
+#![cfg_attr(not(unialloc_has_stable_map_first_last), feature(map_first_last))]
+#![feature(portable_simd)]
 #![feature(slice_partition_dedup)]
 #![feature(test)]
 
@@ -29717,9 +31042,23 @@ def import_current_datasets(args: argparse.Namespace) -> int:
         return 2
     manifest, manifest_path = load_dataset_manifest(data_dir, getattr(args, "manifest", None))
     manifest_datasets = (manifest or {}).get("datasets", {})
+    initial_source_fingerprint = repository_source_fingerprint()
     manifest_source_binding_blockers = repository_source_binding_blockers(
         manifest or {},
-        current=repository_source_fingerprint(),
+        current=initial_source_fingerprint,
+    )
+    manifest_requires_source_binding = bool(
+        getattr(args, "require_source_binding", False)
+        or (manifest or {}).get("claim_grade") is True
+        or (manifest or {}).get("complete_for_claim") is True
+        or any(
+            isinstance(entry, dict)
+            and (
+                entry.get("claim_grade") is True
+                or entry.get("complete_for_claim") is True
+            )
+            for entry in manifest_datasets.values()
+        )
     )
     selected_datasets = set(getattr(args, "dataset", None) or [])
     datasets: Dict[str, Any] = {}
@@ -29857,6 +31196,40 @@ def import_current_datasets(args: argparse.Namespace) -> int:
             datasets[name] = current_ds
         else:
             missing.append(str(candidates[-1]))
+    publication_source_fingerprint = repository_source_fingerprint()
+    manifest_source_binding_blockers = unique_strings(
+        [
+            *manifest_source_binding_blockers,
+            *repository_source_binding_blockers(
+                manifest or {},
+                current=publication_source_fingerprint,
+            ),
+        ]
+    )
+    if manifest_source_binding_blockers:
+        source_binding_blockers = [
+            f"dataset manifest evidence source binding: {blocker}"
+            for blocker in manifest_source_binding_blockers
+        ]
+        for current_ds in datasets.values():
+            if not isinstance(current_ds, dict):
+                continue
+            current_ds["claim_grade"] = False
+            scope = (
+                current_ds.get("scope")
+                if isinstance(current_ds.get("scope"), dict)
+                else {}
+            )
+            scope["complete_for_claim"] = False
+            scope["evidence_source_binding_ready"] = False
+            scope["claim_grade_blockers"] = unique_strings(
+                [
+                    *string_list_value(scope.get("claim_grade_blockers")),
+                    *source_binding_blockers,
+                ]
+            )
+            current_ds["scope"] = scope
+
     summary = {
         "schema_version": 1,
         "generated_at": now_iso(),
@@ -29865,9 +31238,13 @@ def import_current_datasets(args: argparse.Namespace) -> int:
         "manifest": str(manifest_path) if manifest_path else None,
         "datasets": datasets,
         "missing": missing,
+        "source_binding_ready": not manifest_source_binding_blockers,
+        "source_binding_required": manifest_requires_source_binding,
+        "evidence_source_binding_blockers": manifest_source_binding_blockers,
         "notes": [
             "Current datasets are repository evidence only when raw provenance is recorded and verified.",
             "Paper-shaped row/column coverage is necessary but not sufficient for claim-grade import; the manifest must also mark the dataset complete_for_claim/claim_grade.",
+            "Dataset count and finite_value_count report finite values; total_slot_count reports the declared row-by-column grid.",
         ],
     }
     manifest_source_fingerprint = (
@@ -29884,7 +31261,9 @@ def import_current_datasets(args: argparse.Namespace) -> int:
     write_markdown_report(REPORTS / "current_datasets_summary.md", summary, source="current-datasets")
     if not getattr(args, "quiet", False):
         print(str(out))
-    return 0 if not missing else 1
+    return 0 if not missing and not (
+        manifest_requires_source_binding and manifest_source_binding_blockers
+    ) else 1
 
 
 def dataset_covers_reference(current_ds: Dict[str, Any], reference_ds: Optional[Dict[str, Any]]) -> bool:
@@ -31467,9 +32846,10 @@ def rustc_driver_target_rewrite_artifact_blockers(
         candidate
         for candidate in candidates
         if isinstance(candidate, dict)
-        and str(candidate.get("rewrite_status") or "").startswith("actual_semantic_scope")
+        and candidate.get("rewrite_status")
+        in RUSTC_DRIVER_SEMANTIC_SCOPE_APPLIED_REWRITE_STATUSES
         and candidate.get("replacement_symbol")
-        in {"__unialloc_semantic_scope_enter_exit", "__unialloc_semantic_scope_push_hints"}
+        in RUSTC_DRIVER_SEMANTIC_SCOPE_REPLACEMENT_SYMBOLS
     ]
     if not applied:
         blockers.append(f"{label} rewrite-map contains no actual applied semantic-scope candidates")
@@ -31560,14 +32940,10 @@ def rustc_driver_probe_rewrite_artifact_blockers(
             candidate
             for candidate in source_candidates
             if isinstance(candidate, dict)
-            and str(candidate.get("rewrite_status") or "").startswith("actual_semantic_scope")
+            and candidate.get("rewrite_status")
+            in RUSTC_DRIVER_SEMANTIC_SCOPE_APPLIED_REWRITE_STATUSES
             and candidate.get("replacement_symbol")
-            in {
-                "__unialloc_semantic_scope_enter_exit",
-                "__unialloc_semantic_scope_push",
-                "__unialloc_semantic_scope_push_local",
-                "__unialloc_semantic_scope_push_hints",
-            }
+            in RUSTC_DRIVER_SEMANTIC_SCOPE_REPLACEMENT_SYMBOLS
         ]
         if not applied:
             blockers.append(f"{label} rewrite-map contains no actual semantic-scope candidates")
@@ -31582,8 +32958,13 @@ def rustc_driver_probe_rewrite_artifact_blockers(
             candidate
             for candidate in source_candidates
             if isinstance(candidate, dict)
-            and str(candidate.get("rewrite_status") or "").startswith("actual_semantic_scope")
-            and candidate.get("replacement_symbol") == "__unialloc_semantic_scope_push_hints"
+            and candidate.get("rewrite_status")
+            in RUSTC_DRIVER_SEMANTIC_SCOPE_APPLIED_REWRITE_STATUSES
+            and candidate.get("replacement_symbol")
+            in {
+                "__unialloc_semantic_scope_push_hints",
+                "__unialloc_semantic_scope_push_hints_local",
+            }
             and candidate.get("cross_thread_recovery_hint") is True
             and candidate.get("placement_hint_basis") == "auto_cross_thread_escape"
         ]
@@ -31771,7 +33152,19 @@ def compiler_coverage_claim_grade_status(
             )
             for blocker in runtime_companion.get("blockers", []):
                 blockers.append(f"compiler runtime companion blocker: {blocker}")
-        mir_probe_companions = rustc_driver_mir_probe_companion_status()
+        bound_bundle = (
+            runtime_companion.get("bound_mir_probe_companion_bundle")
+            if isinstance(runtime_companion, dict)
+            and isinstance(
+                runtime_companion.get("bound_mir_probe_companion_bundle"), dict
+            )
+            else {}
+        )
+        mir_probe_companions = (
+            bound_bundle.get("current")
+            if isinstance(bound_bundle.get("current"), dict)
+            else rustc_driver_mir_probe_companion_status()
+        )
         for blocker in mir_probe_companions.get("blockers", []):
             blockers.append(f"compiler MIR probe companion blocker: {blocker}")
     return {
@@ -31903,19 +33296,40 @@ def rustc_driver_mir_semantic_scope_runtime_companion_status(
         summary,
         label="MIR semantic-scope runtime",
     )
-    if direct_mode_status["blockers"]:
-        direct_probe_companion = rustc_driver_direct_allocator_mir_probe_companion_status(
-            read_json_if_exists(RESULTS / "rustc_driver_direct_allocator_mir_probe_audit.json")
+    direct_request_blockers = unique_strings(
+        blocker
+        for blocker in direct_mode_status["blockers"]
+        if "mode was not requested" in blocker
+    )
+    direct_validation_blockers = unique_strings(
+        blocker
+        for blocker in direct_mode_status["blockers"]
+        if "validation is not satisfied" in blocker
+    )
+    blockers.extend(direct_request_blockers)
+    embedded_bundle_status = rustc_driver_mir_probe_embedded_bundle_status(audit)
+    embedded_bundle_ready = embedded_bundle_status.get("ready") is True
+    if not embedded_bundle_ready:
+        blockers.extend(
+            f"bound MIR probe companion blocker: {blocker}"
+            for blocker in embedded_bundle_status.get("blockers", [])
         )
-        if direct_probe_companion.get("ready") is True:
+    if direct_validation_blockers:
+        direct_probe_companion = embedded_bundle_status.get("direct_allocator_probe", {})
+        if (
+            not direct_request_blockers
+            and embedded_bundle_ready
+            and direct_probe_companion.get("ready") is True
+        ):
             direct_mode_status["satisfied_by_direct_allocator_probe_companion"] = True
             direct_mode_status["direct_allocator_probe_companion_summary"] = (
                 direct_probe_companion.get("summary", {})
                 if isinstance(direct_probe_companion.get("summary"), dict)
                 else {}
             )
+            direct_mode_status["bound_mir_probe_companion_bundle"] = embedded_bundle_status
         else:
-            blockers.extend(direct_mode_status["blockers"])
+            blockers.extend(direct_validation_blockers)
     if optional_int(summary.get("lowered_module_typed_allocation_site_event_count")) in (None, 0):
         blockers.append("MIR semantic-scope runtime reports no lowered-module typed allocation events")
     if summary.get("lowered_module_compiler_basis_present") is not True:
@@ -31949,6 +33363,7 @@ def rustc_driver_mir_semantic_scope_runtime_companion_status(
         "summary": summary,
         "target_rewrite": runtime_target_rewrite,
         "direct_claim_mode": direct_mode_status,
+        "bound_mir_probe_companion_bundle": embedded_bundle_status,
         "blockers": unique_strings(blockers),
     }
 
@@ -33230,22 +34645,84 @@ def rustc_driver_mir_probe_companion_status(
     semantic_scope_probe_audit: Optional[Dict[str, Any]] = None,
     direct_allocator_probe_audit: Optional[Dict[str, Any]] = None,
     cross_thread_hint_probe_audit: Optional[Dict[str, Any]] = None,
+    required_source_fingerprint: Optional[Dict[str, Any]] = None,
+    required_rust_toolchain: Optional[str] = None,
 ) -> Dict[str, Any]:
-    semantic_scope = rustc_driver_mir_semantic_scope_probe_companion_status(
-        semantic_scope_probe_audit
-        if semantic_scope_probe_audit is not None
-        else read_json_if_exists(RESULTS / "rustc_driver_mir_semantic_scope_probe_audit.json")
-    )
-    direct_allocator = rustc_driver_direct_allocator_mir_probe_companion_status(
-        direct_allocator_probe_audit
-        if direct_allocator_probe_audit is not None
-        else read_json_if_exists(RESULTS / "rustc_driver_direct_allocator_mir_probe_audit.json")
-    )
-    cross_thread_hint = rustc_driver_mir_cross_thread_hint_probe_companion_status(
-        cross_thread_hint_probe_audit
-        if cross_thread_hint_probe_audit is not None
-        else read_json_if_exists(RESULTS / "rustc_driver_mir_cross_thread_hint_probe_audit.json")
-    )
+    probe_inputs = {
+        "semantic_scope_probe": (
+            RESULTS / "rustc_driver_mir_semantic_scope_probe_audit.json",
+            semantic_scope_probe_audit,
+            rustc_driver_mir_semantic_scope_probe_companion_status,
+        ),
+        "direct_allocator_probe": (
+            RESULTS / "rustc_driver_direct_allocator_mir_probe_audit.json",
+            direct_allocator_probe_audit,
+            rustc_driver_direct_allocator_mir_probe_companion_status,
+        ),
+        "cross_thread_hint_probe": (
+            RESULTS / "rustc_driver_mir_cross_thread_hint_probe_audit.json",
+            cross_thread_hint_probe_audit,
+            rustc_driver_mir_cross_thread_hint_probe_companion_status,
+        ),
+    }
+    raw_audits: Dict[str, Optional[Dict[str, Any]]] = {}
+    content_statuses: Dict[str, Dict[str, Any]] = {}
+    identities: Dict[str, Dict[str, Any]] = {}
+    binding_blockers: Dict[str, List[str]] = {}
+    normalized_required_toolchain = str(required_rust_toolchain or "").strip().lstrip("+")
+    for name, (path, supplied_audit, status_fn) in probe_inputs.items():
+        raw = supplied_audit if supplied_audit is not None else read_json_if_exists(path)
+        raw_audits[name] = raw if isinstance(raw, dict) else None
+        content_statuses[name] = status_fn(raw_audits[name])
+        toolchain = raw.get("toolchain") if isinstance(raw, dict) else {}
+        if not isinstance(toolchain, dict):
+            toolchain = {}
+        recorded_toolchain = str(toolchain.get("rust_toolchain") or "").strip()
+        identity = {
+            "path": str(path),
+            "sha256": file_sha256(path) if path.exists() and path.is_file() else None,
+            "run_id": raw.get("run_id") if isinstance(raw, dict) else None,
+            "generated_at": raw.get("generated_at") if isinstance(raw, dict) else None,
+            "evidence_source_fingerprint": copy.deepcopy(
+                raw.get("evidence_source_fingerprint") if isinstance(raw, dict) else None
+            ),
+            "rust_toolchain": recorded_toolchain or None,
+            "host_triple": toolchain.get("host_triple"),
+        }
+        identities[name] = identity
+        probe_blockers: List[str] = []
+        if not str(identity.get("run_id") or "").strip():
+            probe_blockers.append("evidence identity is missing nonempty run_id")
+        if not str(identity.get("generated_at") or "").strip():
+            probe_blockers.append("evidence identity is missing nonempty generated_at")
+        if required_source_fingerprint is not None:
+            probe_blockers.extend(
+                repository_source_binding_blockers(
+                    raw,
+                    current=required_source_fingerprint,
+                )
+            )
+        if normalized_required_toolchain:
+            normalized_recorded_toolchain = recorded_toolchain.lstrip("+")
+            if normalized_recorded_toolchain != normalized_required_toolchain:
+                probe_blockers.append(
+                    "rust toolchain does not match the runtime audit: "
+                    f"recorded={normalized_recorded_toolchain or '<missing>'}, "
+                    f"required={normalized_required_toolchain}"
+                )
+        binding_blockers[name] = unique_strings(probe_blockers)
+
+    semantic_scope = content_statuses["semantic_scope_probe"]
+    direct_allocator = content_statuses["direct_allocator_probe"]
+    cross_thread_hint = content_statuses["cross_thread_hint_probe"]
+    for name, status in content_statuses.items():
+        status["evidence_identity"] = copy.deepcopy(identities[name])
+        status["binding_blockers"] = binding_blockers[name]
+        if binding_blockers[name]:
+            status["ready"] = False
+            status["blockers"] = unique_strings(
+                [*status.get("blockers", []), *binding_blockers[name]]
+            )
     blockers = [
         f"semantic-scope probe: {blocker}" for blocker in semantic_scope.get("blockers", [])
     ] + [
@@ -33262,6 +34739,65 @@ def rustc_driver_mir_probe_companion_status(
         "semantic_scope_probe": semantic_scope,
         "direct_allocator_probe": direct_allocator,
         "cross_thread_hint_probe": cross_thread_hint,
+        "evidence_identities": identities,
+        "required_source_fingerprint": copy.deepcopy(required_source_fingerprint),
+        "required_rust_toolchain": normalized_required_toolchain or None,
+        "blockers": unique_strings(blockers),
+    }
+
+
+def rustc_driver_runtime_rust_toolchain(audit: Any) -> Optional[str]:
+    if not isinstance(audit, dict):
+        return None
+    toolchain = audit.get("toolchain") if isinstance(audit.get("toolchain"), dict) else {}
+    direct = str(toolchain.get("rust_toolchain") or "").strip().lstrip("+")
+    if direct:
+        return direct
+    aggregate_toolchains = toolchain.get("aggregate_source_toolchains")
+    normalized = unique_strings(
+        str(item.get("rust_toolchain") or "").strip().lstrip("+")
+        for item in aggregate_toolchains or []
+        if isinstance(item, dict) and item.get("rust_toolchain")
+    )
+    return normalized[0] if len(normalized) == 1 else None
+
+
+def rustc_driver_mir_probe_embedded_bundle_status(
+    runtime_audit: Any,
+) -> Dict[str, Any]:
+    """Verify the runtime audit's immutable companion snapshot against current files."""
+
+    if not isinstance(runtime_audit, dict):
+        return {"ready": False, "blockers": ["runtime audit is not a JSON object"]}
+    embedded = runtime_audit.get("mir_probe_companions")
+    if not isinstance(embedded, dict):
+        return {
+            "ready": False,
+            "blockers": ["runtime audit is missing embedded MIR probe companion identities/status"],
+        }
+    source_fingerprint = runtime_audit.get("evidence_source_fingerprint")
+    required_source = source_fingerprint if isinstance(source_fingerprint, dict) else None
+    required_toolchain = rustc_driver_runtime_rust_toolchain(runtime_audit)
+    current = rustc_driver_mir_probe_companion_status(
+        required_source_fingerprint=required_source,
+        required_rust_toolchain=required_toolchain,
+    )
+    blockers = list(current.get("blockers", []))
+    if required_source is None:
+        blockers.append("runtime audit is missing evidence_source_fingerprint for MIR probe binding")
+    if not required_toolchain:
+        blockers.append("runtime audit does not identify one Rust toolchain for MIR probe binding")
+    if embedded.get("ready") is not True:
+        blockers.append("runtime audit embedded MIR probe bundle was not ready at collection time")
+    if embedded.get("evidence_identities") != current.get("evidence_identities"):
+        blockers.append(
+            "runtime audit embedded MIR probe identities/hashes do not match current referenced files"
+        )
+    return {
+        "ready": not blockers,
+        "embedded": embedded,
+        "current": current,
+        "direct_allocator_probe": current.get("direct_allocator_probe", {}),
         "blockers": unique_strings(blockers),
     }
 
@@ -33493,6 +35029,25 @@ TYPE_MAPPING_PROVENANCE_KEYS = [
     "provenance",
 ]
 
+TYPE_MAPPING_PROVENANCE_MARKER_KEYS = [
+    *TYPE_MAPPING_PROVENANCE_KEYS,
+    "source",
+    "source_kind",
+    "generator",
+    "generated_by",
+    "producer",
+    "instrumentation_mode",
+    "event_source",
+    "type_id_basis",
+    "basis",
+]
+
+TYPE_MAPPING_PROVENANCE_MARKER_CONTAINERS = [
+    "metadata",
+    "compiler",
+    "provenance",
+]
+
 TYPE_MAPPING_COLLECTION_KEYS = [
     "type_mappings",
     "type_mapping",
@@ -33699,6 +35254,8 @@ def exact_dynamic_std_bench_surface_status(
     skip: Any = None,
     only_with_sentinels: Any = None,
     derived_skip_count: int = 0,
+    canonical_benchmarks: Optional[Iterable[Any]] = None,
+    canonical_source: Any = None,
 ) -> Dict[str, Any]:
     """Compare an exact-dynamic generated std_bench run against the canonical surface.
 
@@ -33706,10 +35263,83 @@ def exact_dynamic_std_bench_surface_status(
     the dynamic-attribution audit a precise distinction between a filtered slice
     and an unfiltered full-surface *candidate* that still needs production
     compiler-pass/no-source-change provenance before C002 import.
+
+    Callers that just performed ``cargo bench -- --list`` may bind that fresh
+    inventory explicitly.  Explicit inventories never fall back to unrelated
+    prior raw summaries and fail closed unless both names and source are present.
     """
 
-    reference = latest_complete_std_bench_surface()
-    expected = normalize_benchmark_names(reference.get("benchmarks") or [])
+    explicit_canonical_inventory = bool(
+        canonical_benchmarks is not None or canonical_source is not None
+    )
+    explicit_canonical_blockers: List[str] = []
+    canonical_inventory_benchmarks: List[str] = []
+    canonical_inventory_status: Dict[str, Any] = {}
+    if explicit_canonical_inventory:
+        try:
+            raw_canonical_inventory = (
+                [canonical_benchmarks]
+                if isinstance(canonical_benchmarks, str)
+                else list(canonical_benchmarks or [])
+            )
+        except TypeError:
+            raw_canonical_inventory = []
+            explicit_canonical_blockers.append(
+                "explicit canonical std_bench benchmark inventory is not iterable"
+            )
+        canonical_inventory_benchmarks = [
+            value.strip()
+            for value in raw_canonical_inventory
+            if isinstance(value, str)
+            and value.strip()
+            and not is_synthetic_std_bench_helper(value.strip())
+        ]
+        canonical_source_label = (
+            canonical_source.strip() if isinstance(canonical_source, str) else ""
+        )
+        if canonical_benchmarks is None:
+            explicit_canonical_blockers.append(
+                "explicit canonical std_bench benchmark inventory is missing"
+            )
+        elif not canonical_inventory_benchmarks:
+            explicit_canonical_blockers.append(
+                "explicit canonical std_bench benchmark inventory is empty after normalization"
+            )
+        if not canonical_source_label:
+            explicit_canonical_blockers.append(
+                "explicit canonical std_bench benchmark inventory is missing a source label"
+            )
+        try:
+            expected = canonical_std_bench_names()
+            canonical_inventory_status = std_bench_dev_surface_status(
+                canonical_inventory_benchmarks,
+                canonical=expected,
+            )
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            expected = []
+            explicit_canonical_blockers.append(
+                f"locked canonical std_bench identity is unavailable: {exc}"
+            )
+        else:
+            explicit_canonical_blockers.extend(
+                "explicit std_bench --list inventory: " + blocker
+                for blocker in string_list_value(canonical_inventory_status.get("blockers"))
+            )
+        reference = {
+            "status": "present" if not explicit_canonical_blockers else "invalid",
+            "benchmarks": expected,
+            "source_summary": None,
+            "source": canonical_source_label or None,
+            "source_kind": "explicit-canonical-benchmark-inventory",
+            "run_id": None,
+            "bench_count": len(expected),
+            "blockers": explicit_canonical_blockers,
+        }
+    else:
+        reference = latest_complete_std_bench_surface()
+        expected = normalize_benchmark_names(reference.get("benchmarks") or [])
+        canonical_inventory_benchmarks = list(expected)
+        canonical_source_label = str(reference.get("source_summary") or "").strip()
     observed = normalize_benchmark_names(observed_benchmarks)
     try:
         derived_skips = int(derived_skip_count or 0)
@@ -33731,7 +35361,7 @@ def exact_dynamic_std_bench_surface_status(
         and reference.get("status") == "present"
         and not filter_options_present
         and not missing
-        and len(observed_set) >= len(expected_set)
+        and not unexpected
     )
     blockers: List[str] = []
     if reference.get("status") != "present" or not expected:
@@ -33740,6 +35370,11 @@ def exact_dynamic_std_bench_surface_status(
         blockers.append("run used libtest filters, skips, or sentinel-only selection")
     if missing:
         blockers.append("run is missing canonical std_bench benchmarks: " + ", ".join(missing[:8]))
+    if unexpected:
+        blockers.append(
+            "run reports non-canonical std_bench benchmarks: "
+            + ", ".join(unexpected[:8])
+        )
     if not observed:
         blockers.append("run reported no non-synthetic benchmark names")
     return {
@@ -33747,7 +35382,24 @@ def exact_dynamic_std_bench_surface_status(
         "full_surface_candidate": full_surface_candidate,
         "canonical_surface_status": reference.get("status"),
         "canonical_surface_summary": reference.get("source_summary"),
+        "canonical_surface_source": canonical_source_label or None,
+        "canonical_surface_source_kind": reference.get("source_kind")
+        or "evaluation-raw-std-bench-auto-summary",
         "canonical_surface_run_id": reference.get("run_id"),
+        "canonical_inventory_benchmarks": canonical_inventory_benchmarks,
+        "canonical_inventory_benchmark_count": len(canonical_inventory_benchmarks),
+        "canonical_inventory_name_sha256": canonical_inventory_status.get(
+            "benchmark_name_sha256"
+        ),
+        "canonical_inventory_locked_identity_validated": (
+            canonical_inventory_status.get("ready") is True
+        ),
+        "canonical_locked_benchmark_count": canonical_inventory_status.get(
+            "canonical_benchmark_count"
+        ),
+        "canonical_locked_name_sha256": canonical_inventory_status.get(
+            "canonical_name_sha256"
+        ),
         "expected_benchmarks": expected,
         "observed_benchmarks": observed,
         "expected_benchmark_count": len(expected),
@@ -33958,6 +35610,7 @@ def std_bench_runtime_libtest_args(
     selected_benches: Iterable[Any],
     *,
     libtest_mode: str,
+    libtest_fail_fast: bool = False,
 ) -> List[str]:
     """Return libtest args for the selected real std_bench runtime mode."""
 
@@ -33968,6 +35621,10 @@ def std_bench_runtime_libtest_args(
         # single worker preserves sorted execution order: enable -> targets ->
         # report, while still exercising real bench bodies.
         args.append("--test-threads=1")
+        if libtest_fail_fast:
+            # The current repository nightly supports this unstable libtest
+            # option.  The paper-era nightly does not, so callers must opt in.
+            args.extend(["-Z", "unstable-options", "--fail-fast"])
     args.extend(libtest_exact_filter_args(selected_benches))
     return args
 
@@ -34081,6 +35738,798 @@ def load_std_bench_recommended_batch_requests(
                 raise ValueError(f"{path}: recommended batch {record_index} has no benchmark list")
             benches.extend(split_std_bench_benchmark_request_values(batch_values))
     return unique_strings(benches)
+
+
+def canonical_std_bench_names(
+    manifest_path: Optional[Path] = None,
+) -> List[str]:
+    """Return the exact ordered std_bench identity used by claim audits."""
+
+    path = manifest_path or EVAL / "config" / "compiler_coverage_manifest.template.json"
+    manifest = read_json(path)
+    suite = manifest.get("benchmark_suite") if isinstance(manifest, dict) else None
+    names = suite.get("expected_benchmarks") if isinstance(suite, dict) else None
+    if not isinstance(names, list) or not names:
+        raise ValueError(f"{path} does not contain benchmark_suite.expected_benchmarks")
+    normalized = [str(name).strip() for name in names if str(name).strip()]
+    if len(normalized) != len(names) or len(set(normalized)) != len(normalized):
+        raise ValueError(f"{path} contains blank or duplicate canonical benchmark names")
+    return normalized
+
+
+def load_std_bench_dev_profile(
+    path: Path,
+    *,
+    preset: Optional[str] = None,
+    batch_index: int = 0,
+) -> Dict[str, Any]:
+    """Load one non-claim development preset or one pathology batch.
+
+    A catalog may centralize the invariant test-once/fail-fast contract while
+    keeping short E2E, family-smoke, and pathology selections distinct.  Flat
+    profiles remain accepted for focused local use.  Neither shape can upgrade
+    development execution to claim evidence.
+    """
+
+    resolved = Path(path).expanduser()
+    data = read_json(resolved)
+    if not isinstance(data, dict):
+        raise ValueError(f"{resolved} is not a JSON object")
+    if data.get("claim_grade") is not False:
+        raise ValueError(f"{resolved} must declare claim_grade=false for the dev loop")
+
+    catalog_name: Optional[str] = None
+    selected_preset: Optional[str] = None
+    catalog = data.get("profiles")
+    if catalog is not None:
+        if not isinstance(catalog, dict) or not catalog:
+            raise ValueError(f"{resolved} profiles must be a non-empty object")
+        requested_preset = str(preset or data.get("default_profile") or "").strip()
+        if not requested_preset:
+            raise ValueError(f"{resolved} does not declare a default_profile")
+        candidate = catalog.get(requested_preset)
+        if not isinstance(candidate, dict):
+            raise ValueError(
+                f"{resolved} has no development preset {requested_preset!r}; "
+                f"available={sorted(catalog)}"
+            )
+        defaults = data.get("defaults") or {}
+        if not isinstance(defaults, dict):
+            raise ValueError(f"{resolved} defaults must be an object")
+        if "claim_grade" in defaults or "claim_grade" in candidate:
+            raise ValueError(
+                f"{resolved} presets inherit the catalog claim_grade=false contract"
+            )
+        catalog_name = str(data.get("name") or resolved.stem)
+        selected_preset = requested_preset
+        data = {**defaults, **candidate, "claim_grade": False}
+    elif preset:
+        raise ValueError(f"{resolved} is a flat profile and does not accept --preset")
+
+    try:
+        selected_batch_index = int(batch_index)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid batch index: {batch_index!r}") from exc
+    if selected_batch_index < 0:
+        raise ValueError("--batch-index must be non-negative")
+
+    raw_benchmarks = data.get("benchmarks")
+    selected_batch: Optional[Dict[str, Any]] = None
+    if isinstance(raw_benchmarks, list):
+        if selected_batch_index != 0:
+            raise ValueError(
+                f"{resolved} is a direct benchmark profile; --batch-index must be 0"
+            )
+    else:
+        batches = data.get("recommended_shards")
+        if not isinstance(batches, list):
+            batches = data.get("recommended_commands")
+        if not isinstance(batches, list) or not batches:
+            raise ValueError(f"{resolved} has neither benchmarks nor recommended batches")
+        if selected_batch_index >= len(batches):
+            raise ValueError(
+                f"{resolved} has {len(batches)} batches; index {selected_batch_index} is out of range"
+            )
+        candidate = batches[selected_batch_index]
+        if not isinstance(candidate, dict):
+            raise ValueError(f"{resolved}: batch {selected_batch_index} is not an object")
+        selected_batch = candidate
+        raw_benchmarks = next(
+            (
+                candidate.get(key)
+                for key in ("benchmarks", "missing_benchmarks", "selected_target_benches")
+                if isinstance(candidate.get(key), list)
+            ),
+            None,
+        )
+    if not isinstance(raw_benchmarks, list):
+        raise ValueError(f"{resolved} selected no benchmark list")
+    benchmarks = split_std_bench_benchmark_request_values(raw_benchmarks)
+    if not benchmarks:
+        raise ValueError(f"{resolved} selected an empty benchmark list")
+    libtest_mode = normalize_std_bench_libtest_mode(
+        data.get("recommended_libtest_mode") or "test-once"
+    )
+    if libtest_mode != "test-once":
+        raise ValueError(f"{resolved} must recommend test-once, not calibrated bench mode")
+    timeout_seconds = positive_int_value(
+        data.get("recommended_timeout_seconds"),
+        30,
+    )
+    return {
+        "schema_version": 1,
+        "path": str(resolved),
+        "catalog_name": catalog_name,
+        "preset": selected_preset,
+        "name": selected_preset or str(data.get("name") or resolved.stem),
+        "purpose": str(data.get("purpose") or ""),
+        "claim_grade": False,
+        "benchmarks": benchmarks,
+        "timeout_seconds": timeout_seconds,
+        "libtest_mode": libtest_mode,
+        "libtest_fail_fast": bool(data.get("recommended_libtest_fail_fast", True)),
+        "stop_policy": str(data.get("stop_policy") or "Stop on the first failure."),
+        "batch_index": selected_batch_index,
+        "batch_reason": (
+            str(selected_batch.get("reason") or "")
+            if isinstance(selected_batch, dict)
+            else None
+        ),
+    }
+
+
+def std_bench_dev_build_command(
+    cargo: str,
+    toolchain: str,
+    features: Iterable[Any],
+) -> List[str]:
+    """Build the real test-once std_bench binary without executing a leaf."""
+
+    normalized_features = unique_strings(
+        str(feature).strip() for feature in features if str(feature).strip()
+    )
+    cmd = toolchain_command(
+        cargo,
+        rust_toolchain_arg(str(toolchain or "").strip()),
+        ["test", "-p", "unialloc", "--bench", "std_bench"],
+    )
+    if normalized_features:
+        cmd.extend(["--features", ",".join(normalized_features)])
+    cmd.extend(["--no-run", "--message-format=json-render-diagnostics"])
+    return cmd
+
+
+def parse_std_bench_cargo_executable(
+    output: Any,
+    *,
+    capture_complete: bool = True,
+    stdout_truncated: bool = False,
+) -> Dict[str, Any]:
+    """Extract Cargo's unique std_bench executable from JSON build output."""
+
+    if not capture_complete or stdout_truncated:
+        raise ValueError(
+            "Cargo build artifact parsing requires complete, untruncated stdout"
+        )
+    package_root = (ROOT / "unialloc").resolve()
+    expected_manifest = package_root / "Cargo.toml"
+    expected_src = package_root / "benches" / "lib.rs"
+    expected_package_prefix = f"path+{package_root.as_uri()}#"
+    artifacts: Dict[str, Dict[str, Any]] = {}
+    for raw in subprocess_text(output).splitlines():
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict) or payload.get("reason") != "compiler-artifact":
+            continue
+        target = payload.get("target")
+        if not isinstance(target, dict) or target.get("name") != "std_bench":
+            continue
+        kinds = target.get("kind")
+        if kinds != ["bench"] or target.get("test") is not True:
+            continue
+        profile = payload.get("profile")
+        if not isinstance(profile, dict) or profile.get("test") is not True:
+            continue
+        if not str(payload.get("package_id") or "").startswith(
+            expected_package_prefix
+        ):
+            continue
+        try:
+            manifest_path = Path(str(payload.get("manifest_path") or "")).resolve()
+            src_path = Path(str(target.get("src_path") or "")).resolve()
+        except (OSError, RuntimeError):
+            continue
+        if manifest_path != expected_manifest or src_path != expected_src:
+            continue
+        executable = str(payload.get("executable") or "").strip()
+        if executable:
+            artifacts[executable] = payload
+    if len(artifacts) != 1:
+        raise ValueError(
+            "Cargo build must report exactly one std_bench executable; "
+            f"observed={sorted(artifacts)}"
+        )
+    executable, artifact = next(iter(artifacts.items()))
+    return {
+        "executable": executable,
+        "fresh": bool(artifact.get("fresh")),
+        "artifact": artifact,
+    }
+
+
+def std_bench_dev_surface_status(
+    listed_benchmarks: Iterable[Any],
+    *,
+    canonical: Optional[Iterable[Any]] = None,
+    required_sentinels: Iterable[Any] = (),
+) -> Dict[str, Any]:
+    """Fail closed unless a built binary exposes the canonical 430-name surface."""
+
+    listed = [str(name).strip() for name in listed_benchmarks if str(name).strip()]
+    canonical_names = (
+        [str(name).strip() for name in canonical if str(name).strip()]
+        if canonical is not None
+        else canonical_std_bench_names()
+    )
+    sentinels = [name for name in listed if is_std_bench_dev_sentinel(name)]
+    expected_sentinels = unique_strings(
+        str(name).strip() for name in required_sentinels if str(name).strip()
+    )
+    missing_required_sentinels = sorted(
+        set(expected_sentinels) - set(sentinels)
+    )
+    unexpected_sentinels = sorted(set(sentinels) - set(expected_sentinels))
+    duplicate_sentinels = sorted(
+        name for name in set(sentinels) if sentinels.count(name) > 1
+    )
+    benchmark_names = [name for name in listed if not is_std_bench_dev_sentinel(name)]
+    digest = hashlib.sha256(("\n".join(benchmark_names) + "\n").encode("utf-8")).hexdigest()
+    canonical_digest = hashlib.sha256(
+        ("\n".join(canonical_names) + "\n").encode("utf-8")
+    ).hexdigest()
+    blockers: List[str] = []
+    if len(listed) != len(set(listed)):
+        blockers.append("built std_bench --list output contains duplicate names")
+    if missing_required_sentinels:
+        blockers.append(
+            "built std_bench surface is missing required development sentinels: "
+            + ", ".join(missing_required_sentinels)
+        )
+    if unexpected_sentinels:
+        blockers.append(
+            "built std_bench surface contains unexpected development sentinels: "
+            + ", ".join(unexpected_sentinels)
+        )
+    if duplicate_sentinels:
+        blockers.append(
+            "built std_bench surface contains duplicate development sentinels: "
+            + ", ".join(duplicate_sentinels)
+        )
+    if benchmark_names != canonical_names:
+        blockers.append("built std_bench surface does not match canonical 430-name identity")
+    if digest != STD_BENCH_CANONICAL_NAME_SHA256:
+        blockers.append(
+            "built std_bench name hash differs from the locked canonical hash: "
+            f"observed={digest} expected={STD_BENCH_CANONICAL_NAME_SHA256}"
+        )
+    if canonical_digest != STD_BENCH_CANONICAL_NAME_SHA256:
+        blockers.append(
+            "canonical manifest name hash differs from the locked 430-name hash: "
+            f"observed={canonical_digest} expected={STD_BENCH_CANONICAL_NAME_SHA256}"
+        )
+    canonical_set = set(canonical_names)
+    benchmark_set = set(benchmark_names)
+    first_mismatch = next(
+        (
+            {
+                "index": index,
+                "observed": benchmark_names[index] if index < len(benchmark_names) else None,
+                "expected": canonical_names[index] if index < len(canonical_names) else None,
+            }
+            for index in range(max(len(benchmark_names), len(canonical_names)))
+            if (
+                benchmark_names[index] if index < len(benchmark_names) else None
+            )
+            != (canonical_names[index] if index < len(canonical_names) else None)
+        ),
+        None,
+    )
+    return {
+        "ready": not blockers,
+        "benchmark_count": len(benchmark_names),
+        "unique_benchmark_count": len(benchmark_set),
+        "sentinel_benchmarks": sentinels,
+        "missing_required_sentinels": missing_required_sentinels,
+        "unexpected_sentinels": unexpected_sentinels,
+        "duplicate_sentinels": duplicate_sentinels,
+        "benchmark_name_sha256": digest,
+        "canonical_benchmark_count": len(canonical_names),
+        "canonical_name_sha256": canonical_digest,
+        "missing_benchmarks": sorted(canonical_set - benchmark_set),
+        "extra_benchmarks": sorted(benchmark_set - canonical_set),
+        "first_order_mismatch": first_mismatch,
+        "blockers": blockers,
+    }
+
+
+def is_std_bench_dev_sentinel(name: Any) -> bool:
+    normalized = str(name or "")
+    return normalized.startswith("aaa_semantic_auto_metadata_") or normalized.startswith(
+        "zzz_semantic_auto_metadata_"
+    )
+
+
+def std_bench_dev_case_command(
+    executable: Path,
+    benchmark: str,
+    *,
+    sentinels: Iterable[Any] = (),
+    fail_fast: bool = True,
+) -> List[str]:
+    """Run one leaf in a fresh process while reusing the same built binary."""
+
+    selected = unique_strings(
+        [
+            *(str(name).strip() for name in sentinels if str(name).strip()),
+            str(benchmark).strip(),
+        ]
+    )
+    return [
+        str(executable),
+        *std_bench_runtime_libtest_args(
+            selected,
+            libtest_mode="test-once",
+            libtest_fail_fast=fail_fast,
+        ),
+    ]
+
+
+def std_bench_dev_child_evidence(
+    out_dir: Path,
+    label: str,
+    result: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Persist only bounded stdout/stderr tails from one dev-loop child."""
+
+    safe_label = slugify_label(label, "child")
+    stdout_path = out_dir / f"{safe_label}.stdout.tail.txt"
+    stderr_path = out_dir / f"{safe_label}.stderr.tail.txt"
+    stdout_path.write_text(subprocess_text(result.get("stdout_tail")), encoding="utf-8")
+    stderr_path.write_text(subprocess_text(result.get("stderr_tail")), encoding="utf-8")
+    return {
+        "stdout": str(stdout_path),
+        "stderr": str(stderr_path),
+        "stdout_sha256": file_sha256(stdout_path),
+        "stderr_sha256": file_sha256(stderr_path),
+        "stdout_bytes": int(result.get("stdout_bytes") or 0),
+        "stderr_bytes": int(result.get("stderr_bytes") or 0),
+        "stdout_retained_bytes": int(result.get("stdout_retained_bytes") or 0),
+        "stderr_retained_bytes": int(result.get("stderr_retained_bytes") or 0),
+        "stdout_truncated": bool(result.get("stdout_truncated")),
+        "stderr_truncated": bool(result.get("stderr_truncated")),
+        "capture_complete": result.get("capture_complete") is True,
+    }
+
+
+def std_bench_dev_observed_results(output: Any) -> Dict[str, List[str]]:
+    """Parse test-once leaf status lines from bounded libtest output."""
+
+    passed: List[str] = []
+    failed: List[str] = []
+    pattern = re.compile(r"^test (?P<name>\S+)\s+\.\.\.\s+(?P<status>ok|FAILED)$")
+    for raw in subprocess_text(output).splitlines():
+        match = pattern.match(raw.strip())
+        if not match:
+            continue
+        target = passed if match.group("status") == "ok" else failed
+        target.append(match.group("name"))
+    return {"passed": unique_strings(passed), "failed": unique_strings(failed)}
+
+
+def std_bench_dev_child_record(
+    *,
+    label: str,
+    command: List[str],
+    result: Dict[str, Any],
+    wall_seconds: float,
+    evidence: Dict[str, Any],
+    benchmark: Optional[str] = None,
+) -> Dict[str, Any]:
+    exit_code = int(result.get("exit_code") or 0)
+    interrupted = bool(result.get("interrupted"))
+    if interrupted:
+        status = "interrupted"
+    elif exit_code == 0:
+        status = "passed"
+    elif exit_code == 124:
+        status = "timed_out"
+    else:
+        status = "failed"
+    observed = std_bench_dev_observed_results(result.get("stdout_tail"))
+    return {
+        "label": label,
+        "benchmark": benchmark,
+        "command": command,
+        "status": status,
+        "exit_code": exit_code,
+        "timed_out": exit_code == 124,
+        "interrupted": interrupted,
+        "error": result.get("error"),
+        "started_at": result.get("started_at"),
+        "ended_at": result.get("ended_at"),
+        "wall_seconds": wall_seconds,
+        "observed_passed_benchmarks": observed["passed"],
+        "observed_failed_benchmarks": observed["failed"],
+        "process_group_pid": result.get("process_group_pid"),
+        "process_group_terminated": bool(result.get("process_group_terminated")),
+        "process_group_absent_after_cleanup": (
+            result.get("process_group_absent_after_cleanup") is True
+        ),
+        "child_returncode_after_cleanup": result.get("child_returncode_after_cleanup"),
+        "evidence": evidence,
+    }
+
+
+def run_std_bench_dev_loop(args: argparse.Namespace) -> int:
+    """Build std_bench once, then run exact leaves with per-case stop boundaries."""
+
+    run_id = args.run_id or _dt.datetime.now().strftime("std-bench-dev-loop-%Y%m%d-%H%M%S")
+    out_dir = Path(args.output_dir).expanduser() if args.output_dir else RAW / run_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = out_dir / "std-bench-dev-loop-summary.json"
+    started_source = repository_source_fingerprint()
+
+    explicit_benchmarks = split_std_bench_benchmark_request_values(
+        getattr(args, "benchmarks", None) or []
+    )
+    profile_path = Path(
+        getattr(args, "profile", None)
+        or EVAL / "config" / "std_bench_dev_profiles.json"
+    )
+    try:
+        if explicit_benchmarks:
+            profile = {
+                "schema_version": 1,
+                "path": None,
+                "catalog_name": None,
+                "preset": None,
+                "name": "explicit-cli-benchmarks",
+                "purpose": "Focused exact std_bench development rerun.",
+                "claim_grade": False,
+                "benchmarks": explicit_benchmarks,
+                "timeout_seconds": 30,
+                "libtest_mode": "test-once",
+                "libtest_fail_fast": True,
+                "stop_policy": "Stop on the first failure or timeout.",
+                "batch_index": None,
+                "batch_reason": None,
+            }
+        else:
+            profile = load_std_bench_dev_profile(
+                profile_path,
+                preset=getattr(args, "preset", None),
+                batch_index=getattr(args, "batch_index", 0),
+            )
+        canonical = canonical_std_bench_names()
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        print(f"invalid std_bench dev profile: {exc}", file=sys.stderr)
+        return 2
+
+    benchmarks = list(profile["benchmarks"])
+    canonical_set = set(canonical)
+    unknown = [benchmark for benchmark in benchmarks if benchmark not in canonical_set]
+    if unknown:
+        print(
+            "std_bench dev profile contains unknown canonical benchmarks: "
+            + ", ".join(unknown),
+            file=sys.stderr,
+        )
+        return 2
+
+    features_csv = normalize_feature_csv(
+        getattr(args, "features", None) or "bench_ourself,stats",
+        ["bench_ourself"],
+    )
+    features = unique_strings(feature for feature in features_csv.split(",") if feature)
+    toolchain = str(getattr(args, "toolchain", None) or rust_toolchain()).strip()
+    cargo = str(getattr(args, "cargo", None) or shutil.which("cargo") or "cargo")
+    build_timeout = positive_int_value(getattr(args, "build_timeout", None), 180)
+    case_timeout = positive_int_value(
+        getattr(args, "case_timeout", None),
+        int(profile["timeout_seconds"]),
+    )
+    max_output_bytes = positive_int_value(
+        getattr(args, "max_output_bytes", None),
+        DEFAULT_STD_BENCH_DEV_OUTPUT_BYTES,
+    )
+    fail_fast = bool(profile.get("libtest_fail_fast", True)) and not bool(
+        getattr(args, "no_fail_fast", False)
+    )
+    env = os.environ.copy()
+    env.setdefault("GLIBC_TUNABLES", "glibc.pthread.rseq=0")
+
+    summary: Dict[str, Any] = {
+        "schema_version": 1,
+        "source": "std-bench-dev-loop",
+        "run_id": run_id,
+        "output_dir": str(out_dir),
+        "status": "running",
+        "success": False,
+        "claim_grade": False,
+        "complete_for_claim": False,
+        "calibrated": False,
+        "claim_grade_blockers": [
+            "development test-once execution is diagnostic-only",
+            "per-leaf direct execution is not calibrated paper timing",
+            "the final 430-case claim checkpoint was not run",
+        ],
+        "execution_contract": {
+            "build_once_per_batch": True,
+            "run_one_leaf_per_process": True,
+            "stop_on_first_failure_timeout_or_interrupt": True,
+            "cargo_managed_incremental_reuse": True,
+            "custom_executable_cache": False,
+            "writes_results": False,
+        },
+        "profile": profile,
+        "selected_benchmarks": benchmarks,
+        "selected_benchmark_count": len(benchmarks),
+        "features": features,
+        "rust_toolchain": toolchain,
+        "build_timeout_seconds": build_timeout,
+        "case_timeout_seconds": case_timeout,
+        "max_output_bytes_per_stream": max_output_bytes,
+        "build_invocation_count": 0,
+        "build": None,
+        "surface": None,
+        "case_records": [],
+        "started_at": now_iso(),
+        "ended_at": None,
+    }
+
+    def persist(*, finished_source: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        summary["ended_at"] = now_iso()
+        bound = evidence_source_bound_payload_if_stable(
+            summary,
+            started=started_source,
+            finished=finished_source or repository_source_fingerprint(),
+        )
+        write_json(summary_path, bound)
+        return bound
+
+    def run_child(
+        label: str,
+        command: List[str],
+        timeout_seconds: int,
+        *,
+        benchmark: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            result = run_plan_command_bounded(
+                command,
+                cwd=ROOT,
+                env=env,
+                shell=False,
+                timeout_seconds=timeout_seconds,
+                max_output_bytes=max_output_bytes,
+            )
+        except KeyboardInterrupt as exc:
+            result = getattr(exc, "_unialloc_bounded_child_result", None)
+            if not isinstance(result, dict):
+                raise
+            evidence = std_bench_dev_child_evidence(out_dir, label, result)
+            record = std_bench_dev_child_record(
+                label=label,
+                command=command,
+                result=result,
+                wall_seconds=time.perf_counter() - started,
+                evidence=evidence,
+                benchmark=benchmark,
+            )
+            setattr(exc, "_unialloc_std_bench_dev_record", record)
+            raise
+        evidence = std_bench_dev_child_evidence(out_dir, label, result)
+        return std_bench_dev_child_record(
+            label=label,
+            command=command,
+            result=result,
+            wall_seconds=time.perf_counter() - started,
+            evidence=evidence,
+            benchmark=benchmark,
+        )
+
+    build_command = std_bench_dev_build_command(cargo, toolchain, features)
+    summary["build_invocation_count"] = 1
+    try:
+        build_record = run_child("build-std-bench", build_command, build_timeout)
+    except KeyboardInterrupt as exc:
+        summary["build"] = getattr(exc, "_unialloc_std_bench_dev_record", None)
+        summary["status"] = "interrupted-during-build"
+        bound = persist()
+        print(json.dumps(bound, sort_keys=True), file=sys.stderr, flush=True)
+        raise
+    summary["build"] = build_record
+    if build_record["status"] != "passed":
+        summary["status"] = f"build-{build_record['status']}"
+        bound = persist()
+        print(json.dumps(bound, sort_keys=True))
+        return int(build_record["exit_code"] or 1)
+
+    try:
+        cargo_artifact = parse_std_bench_cargo_executable(
+            Path(str(build_record["evidence"]["stdout"])).read_text(
+                encoding="utf-8", errors="replace"
+            ),
+            capture_complete=bool(build_record["evidence"].get("capture_complete")),
+            stdout_truncated=bool(build_record["evidence"].get("stdout_truncated")),
+        )
+    except (OSError, ValueError) as exc:
+        summary["status"] = "build-artifact-invalid"
+        summary["build_artifact_error"] = str(exc)
+        bound = persist()
+        print(json.dumps(bound, sort_keys=True))
+        return 1
+    executable = Path(str(cargo_artifact["executable"])).expanduser()
+    if not executable.is_absolute():
+        executable = (ROOT / executable).resolve()
+    if not executable.is_file() or not os.access(executable, os.X_OK):
+        summary["status"] = "build-artifact-missing"
+        summary["build_artifact_error"] = f"not an executable file: {executable}"
+        bound = persist()
+        print(json.dumps(bound, sort_keys=True))
+        return 1
+    summary["cargo_artifact"] = {
+        "executable": str(executable),
+        "executable_sha256": file_sha256(executable),
+        "fresh": cargo_artifact["fresh"],
+        "target": cargo_artifact["artifact"].get("target"),
+        "profile": cargo_artifact["artifact"].get("profile"),
+    }
+
+    post_build_source = repository_source_fingerprint()
+    if str(post_build_source.get("source_digest") or "") != str(
+        started_source.get("source_digest") or ""
+    ):
+        summary["status"] = "source-changed-during-build"
+        bound = persist(finished_source=post_build_source)
+        print(json.dumps(bound, sort_keys=True))
+        return 1
+
+    surface_command = [str(executable), "--list"]
+    try:
+        surface_record = run_child(
+            "list-std-bench-surface",
+            surface_command,
+            min(max(case_timeout, 1), 30),
+        )
+    except KeyboardInterrupt as exc:
+        summary["surface"] = getattr(exc, "_unialloc_std_bench_dev_record", None)
+        summary["status"] = "interrupted-during-surface-list"
+        bound = persist()
+        print(json.dumps(bound, sort_keys=True), file=sys.stderr, flush=True)
+        raise
+    if surface_record["status"] != "passed":
+        summary["surface"] = surface_record
+        summary["status"] = f"surface-{surface_record['status']}"
+        bound = persist()
+        print(json.dumps(bound, sort_keys=True))
+        return int(surface_record["exit_code"] or 1)
+    listed = parse_bench_list(
+        Path(str(surface_record["evidence"]["stdout"])).read_text(
+            encoding="utf-8", errors="replace"
+        )
+    )
+    required_sentinels = (
+        STD_BENCH_DEV_SENTINELS if "stats" in features else ()
+    )
+    surface_status = std_bench_dev_surface_status(
+        listed,
+        canonical=canonical,
+        required_sentinels=required_sentinels,
+    )
+    summary["surface"] = {**surface_record, **surface_status}
+    if not surface_status["ready"]:
+        summary["status"] = "surface-identity-rejected"
+        bound = persist()
+        print(json.dumps(bound, sort_keys=True))
+        return 1
+
+    sentinels = list(required_sentinels)
+    final_exit_code = 0
+    try:
+        for case_index, benchmark in enumerate(benchmarks):
+            label = f"case-{case_index:03d}-{slugify_label(benchmark, 'benchmark')}"
+            command = std_bench_dev_case_command(
+                executable,
+                benchmark,
+                sentinels=sentinels,
+                fail_fast=fail_fast,
+            )
+            try:
+                record = run_child(
+                    label,
+                    command,
+                    case_timeout,
+                    benchmark=benchmark,
+                )
+            except KeyboardInterrupt as exc:
+                record = getattr(exc, "_unialloc_std_bench_dev_record", None)
+                if isinstance(record, dict):
+                    summary["case_records"].append(record)
+                for remaining in benchmarks[case_index + 1 :]:
+                    summary["case_records"].append(
+                        {
+                            "benchmark": remaining,
+                            "status": "unattempted",
+                            "reason": "stopped after interrupted benchmark",
+                        }
+                    )
+                summary["status"] = "interrupted-during-case"
+                bound = persist()
+                print(json.dumps(bound, sort_keys=True), file=sys.stderr, flush=True)
+                raise
+            observed_passed = set(record["observed_passed_benchmarks"])
+            stdout_truncated = bool(record.get("evidence", {}).get("stdout_truncated"))
+            if (
+                record["status"] == "passed"
+                and benchmark not in observed_passed
+                and not stdout_truncated
+            ):
+                record["status"] = "failed"
+                record["exit_code"] = 1
+                record["error"] = (
+                    "direct test-once process exited zero without reporting the requested leaf"
+                )
+            elif record["status"] == "passed" and benchmark not in observed_passed:
+                record["requested_leaf_observation"] = (
+                    "not retained because the bounded stdout tail was truncated; "
+                    "the exact command and zero child exit remain diagnostic evidence"
+                )
+            summary["case_records"].append(record)
+            if record["status"] != "passed":
+                final_exit_code = int(record.get("exit_code") or 1)
+                for remaining in benchmarks[case_index + 1 :]:
+                    summary["case_records"].append(
+                        {
+                            "benchmark": remaining,
+                            "status": "unattempted",
+                            "reason": (
+                                f"stopped after {benchmark} ended with {record['status']}"
+                            ),
+                        }
+                    )
+                summary["status"] = f"case-{record['status']}"
+                break
+    except KeyboardInterrupt:
+        raise
+
+    finished_source = repository_source_fingerprint()
+    source_stable = str(finished_source.get("source_digest") or "") == str(
+        started_source.get("source_digest") or ""
+    )
+    if final_exit_code == 0 and not source_stable:
+        final_exit_code = 1
+        summary["status"] = "source-changed-during-cases"
+    elif final_exit_code == 0:
+        summary["status"] = "completed"
+        summary["success"] = True
+    summary["passed_case_count"] = sum(
+        1 for record in summary["case_records"] if record.get("status") == "passed"
+    )
+    summary["failed_case_count"] = sum(
+        1
+        for record in summary["case_records"]
+        if record.get("status") in {"failed", "timed_out", "interrupted"}
+    )
+    summary["unattempted_case_count"] = sum(
+        1 for record in summary["case_records"] if record.get("status") == "unattempted"
+    )
+    bound = persist(finished_source=finished_source)
+    print(json.dumps(bound, sort_keys=True))
+    return final_exit_code
 
 
 def std_bench_adaptive_batches(
@@ -34262,6 +36711,11 @@ def compiler_coverage_benchmark_surface_audit(
                 "benchmark surface is missing expected benchmarks: "
                 + ", ".join(missing_expected[:8])
             )
+        if present_unexpected:
+            blockers.append(
+                "benchmark surface contains unexpected benchmarks: "
+                + ", ".join(present_unexpected[:8])
+            )
     parse_errors = [str(item.get("parse_error")) for item in run_summaries if item.get("parse_error")]
     if parse_errors:
         blockers.append(f"benchmark_run_summary evidence has parse errors: {parse_errors[0]}")
@@ -34382,6 +36836,29 @@ def compiler_mapping_marker(text: str) -> Optional[str]:
     return None
 
 
+def compiler_mapping_provenance_marker(data: Any) -> Optional[str]:
+    """Inspect only mapping producer/provenance metadata for prototype markers."""
+
+    if not isinstance(data, dict):
+        return None
+    values: List[Any] = []
+
+    def collect(container: Dict[str, Any]) -> None:
+        for key in TYPE_MAPPING_PROVENANCE_MARKER_KEYS:
+            value = container.get(key)
+            if value_is_present(value):
+                values.append(value)
+
+    collect(data)
+    for container_name in TYPE_MAPPING_PROVENANCE_MARKER_CONTAINERS:
+        nested = data.get(container_name)
+        if isinstance(nested, dict):
+            collect(nested)
+    if not values:
+        return None
+    return compiler_mapping_marker(json.dumps(values, sort_keys=True, default=str))
+
+
 def audit_compiler_type_mapping_evidence(
     manifest: Dict[str, Any],
     records: List[Dict[str, Any]],
@@ -34439,7 +36916,7 @@ def audit_compiler_type_mapping_evidence(
             artifact["parse_error"] = str(exc)
             parse_errors.append(str(exc))
             continue
-        artifact_marker = compiler_mapping_marker(json.dumps(data, sort_keys=True, default=str))
+        artifact_marker = compiler_mapping_provenance_marker(data)
         if artifact_marker:
             provenance_markers.append(artifact_marker)
         rows = mapping_rows_from_json(data)
@@ -34453,7 +36930,7 @@ def audit_compiler_type_mapping_evidence(
             location, _ = find_mapping_field(row, TYPE_MAPPING_LOCATION_KEYS)
             provenance, _ = find_mapping_field(row, TYPE_MAPPING_PROVENANCE_KEYS)
             provenance = provenance or coverage_manifest_value(manifest, "compiler_pass")
-            row_marker = compiler_mapping_marker(json.dumps(row, sort_keys=True, default=str))
+            row_marker = compiler_mapping_provenance_marker(row)
             if row_marker:
                 provenance_markers.append(row_marker)
             if "source_inferred" in row or "source_inferred_rust_type" in row or "source_inferred_scope" in row:
@@ -35138,6 +37615,25 @@ def run_logged_subprocess(
                     stdout_text = coerce_text(final_exc.stdout if final_exc.stdout is not None else exc.stdout)
                     stderr_text = coerce_text(final_exc.stderr if final_exc.stderr is not None else exc.stderr)
                     error = f"{error}; timed-out subprocess tree did not exit after SIGKILL"
+        except KeyboardInterrupt:
+            # Development probes are intentionally interrupted once a
+            # pathological case is identified.  Give the command group SIGINT
+            # first so cooperating wrappers can clean nested sessions, then
+            # use the shared TERM/KILL fallback and retain the partial logs.
+            terminate_process_group(
+                proc,
+                initial_signal=signal.SIGINT,
+                initial_grace_seconds=INTERRUPT_WRAPPER_CLEANUP_GRACE_SECONDS,
+            )
+            try:
+                stdout_text, stderr_text = proc.communicate(timeout=3)
+            except subprocess.TimeoutExpired as exc:
+                terminate_process_group(proc, grace_seconds=0.1)
+                stdout_text = coerce_text(exc.stdout)
+                stderr_text = coerce_text(exc.stderr)
+            stdout_path.write_text(coerce_text(stdout_text), encoding="utf-8")
+            stderr_path.write_text(coerce_text(stderr_text), encoding="utf-8")
+            raise
         returncode = proc.returncode
         stdout_text = coerce_text(stdout_text)
         stderr_text = coerce_text(stderr_text)
@@ -36117,6 +38613,18 @@ RUSTC_DRIVER_SEMANTIC_SCOPE_RESOLVED_STATUSES = {
     "resolved_unialloc_semantic_scope_push_local_pop",
     "resolved_unialloc_semantic_scope_push_hints_pop",
     "resolved_unialloc_semantic_scope_push_hints_local_pop",
+}
+
+RUSTC_DRIVER_SEMANTIC_SCOPE_APPLIED_REWRITE_STATUSES = {
+    "actual_semantic_scope_enter_exit_rewrite_applied",
+    "actual_semantic_scope_drop_rewrite_applied",
+}
+
+RUSTC_DRIVER_SEMANTIC_SCOPE_REPLACEMENT_SYMBOLS = {
+    "__unialloc_semantic_scope_push",
+    "__unialloc_semantic_scope_push_local",
+    "__unialloc_semantic_scope_push_hints",
+    "__unialloc_semantic_scope_push_hints_local",
 }
 
 
@@ -38905,6 +41413,7 @@ def collect_rustc_driver_mir_semantic_scope_probe(args: argparse.Namespace) -> i
         "stderr": run_result.get("stderr"),
         "runtime_event": runtime_event,
         "semantic_metadata_validation": semantic_metadata_validation,
+        "multi_owner_cross_thread_recovery_pairing": multi_owner_recovery_pairing,
         "no_wrapper_control": no_wrapper_result,
         "no_wrapper_control_validated": no_wrapper_control_validated,
         "cargo_target_cleanup": probe.get("cargo_target_cleanup"),
@@ -39500,7 +42009,6 @@ def collect_rustc_driver_mir_cross_thread_hint_probe(args: argparse.Namespace) -
         "stderr": run_result.get("stderr"),
         "runtime_event": runtime_event,
         "semantic_metadata_validation": semantic_metadata_validation,
-        "multi_owner_cross_thread_recovery_pairing": multi_owner_recovery_pairing,
         "no_wrapper_control": no_wrapper_result,
         "no_wrapper_control_validated": no_wrapper_control_validated,
         "cargo_target_cleanup": probe.get("cargo_target_cleanup"),
@@ -40865,6 +43373,7 @@ def mir_semantic_scope_std_bench_runtime_command(
     features: str,
     selected_benches: Iterable[Any],
     libtest_mode: str,
+    libtest_fail_fast: bool = False,
 ) -> List[str]:
     """Build the real std_bench command used by MIR semantic-scope probes."""
 
@@ -40887,6 +43396,7 @@ def mir_semantic_scope_std_bench_runtime_command(
         std_bench_runtime_libtest_args(
             selected_benches,
             libtest_mode=libtest_mode,
+            libtest_fail_fast=libtest_fail_fast,
         )
     )
     return cmd
@@ -40935,6 +43445,7 @@ def run_mir_semantic_scope_std_bench_runtime(
     features: str,
     selected_benches: Iterable[Any],
     libtest_mode: str,
+    libtest_fail_fast: bool = False,
     timeout: int,
     pass_bin: Path,
     rewrites_dir: Path,
@@ -40953,6 +43464,7 @@ def run_mir_semantic_scope_std_bench_runtime(
         features=features,
         selected_benches=selected_benches,
         libtest_mode=libtest_mode,
+        libtest_fail_fast=libtest_fail_fast,
     )
     return run_logged_subprocess(
         out_dir,
@@ -41089,10 +43601,13 @@ def rustc_driver_mir_semantic_scope_runtime_claim_gate(
     direct_allocator_rewrite_validated: bool,
     direct_local_size_align_with_semantic_drop_requested: bool,
     direct_size_align_local_pairing_validated: bool,
-    mir_probe_companions: Dict[str, Any],
+    mir_probe_companions: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
     """Conservative import gate for real rustc_driver MIR runtime C002 evidence."""
 
+    mir_probe_companions = (
+        mir_probe_companions if isinstance(mir_probe_companions, dict) else {}
+    )
     compiler_pass_status = rustc_driver_optimized_mir_provider_override_compiler_pass_status(
         target_rewrite,
         label="target rewrite",
@@ -41135,6 +43650,34 @@ def rustc_driver_mir_semantic_scope_runtime_claim_gate(
     mir_probe_companions_ready = mir_probe_companions.get("ready") is True
     mir_probe_companion_blockers = unique_strings(
         str(blocker) for blocker in mir_probe_companions.get("blockers", [])
+    )
+    direct_allocator_probe_companion = (
+        mir_probe_companions.get("direct_allocator_probe")
+        if isinstance(mir_probe_companions.get("direct_allocator_probe"), dict)
+        else {}
+    )
+    direct_allocator_probe_companion_ready = (
+        direct_allocator_probe_companion.get("ready") is True
+    )
+    direct_claim_companion_fallback_ready = bool(
+        mir_probe_companions_ready and direct_allocator_probe_companion_ready
+    )
+    direct_allocator_rewrite_evidence_ready = bool(
+        direct_allocator_rewrite_validated or direct_claim_companion_fallback_ready
+    )
+    direct_size_align_local_pairing_evidence_ready = bool(
+        direct_size_align_local_pairing_validated or direct_claim_companion_fallback_ready
+    )
+    direct_claim_evidence_ready = bool(
+        direct_allocator_rewrite_evidence_ready
+        and direct_size_align_local_pairing_evidence_ready
+    )
+    direct_claim_companion_fallback_used = bool(
+        direct_claim_companion_fallback_ready
+        and not (
+            direct_allocator_rewrite_validated
+            and direct_size_align_local_pairing_validated
+        )
     )
     runtime_claim_blockers = unique_strings(
         [
@@ -41183,8 +43726,10 @@ def rustc_driver_mir_semantic_scope_runtime_claim_gate(
                 else []
             ),
             *(
-                ["direct allocator rewrite validation is not satisfied"]
-                if not direct_allocator_rewrite_validated
+                [
+                    "direct allocator rewrite validation is not satisfied by target-local evidence or a ready direct allocator probe companion"
+                ]
+                if not direct_allocator_rewrite_evidence_ready
                 else []
             ),
             *(
@@ -41193,12 +43738,17 @@ def rustc_driver_mir_semantic_scope_runtime_claim_gate(
                 else []
             ),
             *(
-                ["direct size/align local ABI pairing validation is not satisfied"]
-                if not direct_size_align_local_pairing_validated
+                [
+                    "direct size/align local ABI pairing validation is not satisfied by target-local evidence or a ready direct allocator probe companion"
+                ]
+                if not direct_size_align_local_pairing_evidence_ready
                 else []
             ),
             *(
-                [f"MIR probe companion blocker: {blocker}" for blocker in mir_probe_companion_blockers]
+                (
+                    [f"MIR probe companion blocker: {blocker}" for blocker in mir_probe_companion_blockers]
+                    or ["MIR probe companions are not ready"]
+                )
                 if not mir_probe_companions_ready
                 else []
             ),
@@ -41211,9 +43761,8 @@ def rustc_driver_mir_semantic_scope_runtime_claim_gate(
         and target_rewrite_provider_override_evidence_validated
         and not missing_runtime_pairs_from_mapping
         and direct_allocator_rewrite_requested
-        and direct_allocator_rewrite_validated
         and direct_local_size_align_with_semantic_drop_requested
-        and direct_size_align_local_pairing_validated
+        and direct_claim_evidence_ready
         and mir_probe_companions_ready
     )
     return {
@@ -41221,6 +43770,12 @@ def rustc_driver_mir_semantic_scope_runtime_claim_gate(
         "ready_for_claim_grade_import": runtime_claim_ready,
         "mir_probe_companions_ready": mir_probe_companions_ready,
         "mir_probe_companion_blockers": mir_probe_companion_blockers,
+        "direct_allocator_probe_companion_ready": direct_allocator_probe_companion_ready,
+        "direct_claim_companion_fallback_ready": direct_claim_companion_fallback_ready,
+        "direct_claim_companion_fallback_used": direct_claim_companion_fallback_used,
+        "direct_allocator_rewrite_evidence_ready": direct_allocator_rewrite_evidence_ready,
+        "direct_size_align_local_pairing_evidence_ready": direct_size_align_local_pairing_evidence_ready,
+        "direct_claim_evidence_ready": direct_claim_evidence_ready,
         "target_rewrite_provider_override_evidence_validated": target_rewrite_provider_override_evidence_validated,
         "target_rewrite_compiler_pass_present": target_rewrite_compiler_pass_present,
         "target_rewrite_compiler_pass_kind_ok": target_rewrite_compiler_pass_kind_ok,
@@ -41264,6 +43819,10 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_runtime_smoke(args: argpar
         libtest_mode = normalize_std_bench_libtest_mode(getattr(args, "libtest_mode", "bench"))
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
+        return 2
+    libtest_fail_fast = bool(getattr(args, "libtest_fail_fast", False))
+    if libtest_fail_fast and libtest_mode != "test-once":
+        print("--libtest-fail-fast requires --libtest-mode test-once", file=sys.stderr)
         return 2
     runtime_label = (
         "cargo-test-once-mir-semantic-scope-std-bench-runtime-smoke"
@@ -41476,6 +44035,7 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_runtime_smoke(args: argpar
                     features=features,
                     selected_benches=selected_benches,
                     libtest_mode=libtest_mode,
+                    libtest_fail_fast=libtest_fail_fast,
                     timeout=args.timeout,
                     pass_bin=pass_bin,
                     rewrites_dir=rewrites_dir,
@@ -41532,6 +44092,8 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_runtime_smoke(args: argpar
         skip=derived_skips,
         only_with_sentinels=not selected_target_benches,
         derived_skip_count=len(derived_skips),
+        canonical_benchmarks=bench_list,
+        canonical_source="same-run cargo bench --bench std_bench -- --list inventory",
     )
 
     rewrites = collect_rustc_driver_mir_rewrite_dry_run_maps(rewrites_dir)
@@ -41917,14 +44479,16 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_runtime_smoke(args: argpar
         and lowered_module_compiler_basis_present
         and "rustc-driver-mir-semantic-scope" in lowered_module_stream_modes
         and not missing_runtime_pairs_from_mapping
-        and direct_allocator_rewrite_validated
-        and direct_size_align_local_pairing_validated
     )
     runtime_full_surface_candidate_validated = bool(
         runtime_smoke_validated and runtime_surface.get("full_surface_candidate") is True
     )
     runtime_surface_blockers = string_list_value(runtime_surface.get("blockers"))
-    mir_probe_companions = rustc_driver_mir_probe_companion_status()
+    finished_source_fingerprint = repository_source_fingerprint()
+    mir_probe_companions = rustc_driver_mir_probe_companion_status(
+        required_source_fingerprint=finished_source_fingerprint,
+        required_rust_toolchain=args.toolchain,
+    )
     runtime_claim_gate = rustc_driver_mir_semantic_scope_runtime_claim_gate(
         runtime_smoke_validated=runtime_smoke_validated,
         runtime_full_surface_candidate_validated=runtime_full_surface_candidate_validated,
@@ -41944,6 +44508,24 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_runtime_smoke(args: argpar
     mir_probe_companions_ready = bool(runtime_claim_gate["mir_probe_companions_ready"])
     mir_probe_companion_blockers = string_list_value(
         runtime_claim_gate.get("mir_probe_companion_blockers")
+    )
+    direct_allocator_probe_companion_ready = bool(
+        runtime_claim_gate["direct_allocator_probe_companion_ready"]
+    )
+    direct_claim_companion_fallback_ready = bool(
+        runtime_claim_gate["direct_claim_companion_fallback_ready"]
+    )
+    direct_claim_companion_fallback_used = bool(
+        runtime_claim_gate["direct_claim_companion_fallback_used"]
+    )
+    direct_allocator_rewrite_evidence_ready = bool(
+        runtime_claim_gate["direct_allocator_rewrite_evidence_ready"]
+    )
+    direct_size_align_local_pairing_evidence_ready = bool(
+        runtime_claim_gate["direct_size_align_local_pairing_evidence_ready"]
+    )
+    direct_claim_evidence_ready = bool(
+        runtime_claim_gate["direct_claim_evidence_ready"]
     )
     runtime_claim_blockers = string_list_value(runtime_claim_gate.get("blockers"))
     target_rewrite_provider_override_evidence_validated = bool(
@@ -42015,6 +44597,7 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_runtime_smoke(args: argpar
         "runtime_bench_results": bench_results,
         "rewrites": rewrites,
         "libtest_mode": libtest_mode,
+        "libtest_fail_fast": libtest_fail_fast,
         "coverage_runner": libtest_mode == "test-once",
         "target_rewrite": target_rewrite,
         "selected_benches": selected_benches,
@@ -42026,6 +44609,7 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_runtime_smoke(args: argpar
         "runtime_surface": runtime_surface,
         "runtime_events": events,
         "runtime_coverage_stats": event_stats,
+        "mir_probe_companions": mir_probe_companions,
         "summary": {
             "build_returncode": build_result.get("returncode"),
             "clean_returncode": clean_result.get("returncode"),
@@ -42037,6 +44621,7 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_runtime_smoke(args: argpar
             "rewrite_dependency_audit_removed_bytes": rewrite_audit_prune.get("removed_bytes"),
             "runtime_bench_result_count": len(bench_results),
             "libtest_mode": libtest_mode,
+            "libtest_fail_fast": libtest_fail_fast,
             "coverage_runner": libtest_mode == "test-once",
             "runtime_smoke_validated": runtime_smoke_validated,
             "runtime_full_surface_candidate_validated": runtime_full_surface_candidate_validated,
@@ -42044,6 +44629,14 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_runtime_smoke(args: argpar
             "ready_for_claim_grade_import": runtime_claim_ready,
             "mir_probe_companions_ready": mir_probe_companions_ready,
             "mir_probe_companion_blockers": mir_probe_companion_blockers,
+            "direct_allocator_probe_companion_ready": direct_allocator_probe_companion_ready,
+            "direct_claim_companion_fallback_ready": direct_claim_companion_fallback_ready,
+            "direct_claim_companion_fallback_used": direct_claim_companion_fallback_used,
+            "direct_allocator_rewrite_evidence_ready": direct_allocator_rewrite_evidence_ready,
+            "direct_size_align_local_pairing_evidence_ready": (
+                direct_size_align_local_pairing_evidence_ready
+            ),
+            "direct_claim_evidence_ready": direct_claim_evidence_ready,
             "runtime_surface_status": runtime_surface.get("status"),
             "runtime_surface_full_surface_candidate": runtime_surface.get("full_surface_candidate"),
             "canonical_expected_benchmark_count": runtime_surface.get("expected_benchmark_count"),
@@ -42187,16 +44780,49 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_runtime_smoke(args: argpar
             "libtest/benchmark harness fallback allocator traffic is reported and not hidden.",
         ],
     }
-    audit = evidence_source_bound_payload_if_stable(
+    audit = finalize_runtime_claim_audit_source_binding(
         audit,
         started=started_source_fingerprint,
+        finished=finished_source_fingerprint,
     )
     audit_path = out_dir / "rustc-driver-mir-semantic-scope-std-bench-runtime-smoke-audit.json"
     write_json(audit_path, audit)
-    update_results = bool(not args.no_update_results and runtime_claim_ready)
-    if update_results:
-        write_json(RESULTS / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json", audit)
+    publication_status = runtime_claim_publication_status(
+        audit,
+        audit_path=audit_path,
+        expected_source_fingerprint=finished_source_fingerprint,
+    )
+    audit["publication_status"] = publication_status
+    if publication_status.get("ready") is not True:
+        audit = downgrade_runtime_claim_payload(
+            audit,
+            blockers=publication_status.get("blockers", []),
+        )
+    write_json(audit_path, audit)
+    final_summary = audit.get("summary", {})
+    update_results_candidate = bool(
+        not args.no_update_results
+        and publication_status.get("ready") is True
+        and final_summary.get("runtime_claim_ready") is True
+        and final_summary.get("ready_for_claim_grade_import") is True
+        and not repository_source_binding_blockers(
+            audit,
+            current=finished_source_fingerprint,
+        )
+    )
     results_audit_path = RESULTS / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json"
+    update_results = False
+    if update_results_candidate:
+        boundary_publication = publish_runtime_claim_audit_if_current(
+            audit,
+            audit_path=audit_path,
+            results_audit_path=results_audit_path,
+            expected_source_fingerprint=finished_source_fingerprint,
+        )
+        audit = boundary_publication["audit"]
+        publication_status = boundary_publication["publication_status"]
+        update_results = boundary_publication["published"] is True
+        final_summary = audit.get("summary", {})
     print(
         json.dumps(
             {
@@ -42207,7 +44833,7 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_runtime_smoke(args: argpar
                 else (
                     "--no-update-results requested"
                     if args.no_update_results
-                    else "; ".join(runtime_claim_blockers)
+                    else "; ".join(string_list_value(final_summary.get("blockers")))
                     or "runtime evidence is not claim-ready"
                 ),
                 "summary": audit["summary"],
@@ -42767,6 +45393,8 @@ def collect_rustc_driver_mir_semantic_scope_std_bench_paper_performance_smoke(ar
         skip=derived_skips,
         only_with_sentinels=not selected_target_benches,
         derived_skip_count=len(derived_skips),
+        canonical_benchmarks=bench_list,
+        canonical_source="same-run cargo bench --bench std_bench -- --list inventory",
     )
     required_timing_benches = set(selected_target_benches)
     observed_timing_benches = {str(row.get("benchmark")) for row in timing_target_bench_results}
@@ -44755,6 +47383,11 @@ def aggregate_rustc_driver_mir_semantic_scope_runtime_audits(
         "stdout": str(events_path),
         "stderr": None,
     }
+    aggregate_rust_toolchains = unique_strings(
+        str(toolchain.get("rust_toolchain") or "").strip().lstrip("+")
+        for toolchain in toolchains
+        if isinstance(toolchain, dict) and toolchain.get("rust_toolchain")
+    )
     audit = {
         "schema_version": 1,
         "generated_at": now_iso(),
@@ -44772,6 +47405,11 @@ def aggregate_rustc_driver_mir_semantic_scope_runtime_audits(
         },
         "toolchain": {
             "aggregate_source_toolchains": [toolchain for toolchain in toolchains if toolchain],
+            "rust_toolchain": (
+                aggregate_rust_toolchains[0]
+                if len(aggregate_rust_toolchains) == 1
+                else None
+            ),
             "host_triple": rustc_host_triple(),
             "host": host_metadata(),
         },
@@ -44875,12 +47513,41 @@ def aggregate_rustc_driver_mir_semantic_scope_runtime_audits(
         "limitations": [
             "This aggregate is assembled from real rustc_driver runtime shards; it is not a performance matrix.",
             "It is claim-eligible only when the union covers every canonical std_bench benchmark and package import is explicitly requested as claim-grade.",
+            "Aggregate claim readiness remains target-local-direct-only; MIR probe companions never replace direct validation in source shards.",
         ],
     }
     if shared_source_fingerprint is not None and aggregate_source_stable:
         audit["evidence_source_fingerprint"] = copy.deepcopy(
             shared_source_fingerprint
         )
+    aggregate_probe_companions = rustc_driver_mir_probe_companion_status(
+        required_source_fingerprint=(
+            shared_source_fingerprint
+            if shared_source_fingerprint is not None and aggregate_source_stable
+            else None
+        ),
+        required_rust_toolchain=rustc_driver_runtime_rust_toolchain(audit),
+    )
+    audit["mir_probe_companions"] = aggregate_probe_companions
+    aggregate_direct_evidence_ready = bool(
+        direct_allocator_rewrite_requested
+        and direct_allocator_rewrite_validated
+        and direct_local_size_align_with_semantic_drop
+        and direct_size_align_local_pairing_validated
+    )
+    aggregate_claim_ready = bool(
+        runtime_full_surface_candidate_validated
+        and aggregate_direct_evidence_ready
+        and aggregate_probe_companions.get("ready") is True
+        and isinstance(audit.get("evidence_source_fingerprint"), dict)
+        and rustc_driver_runtime_rust_toolchain(audit)
+    )
+    audit["summary"]["direct_claim_evidence_ready"] = aggregate_direct_evidence_ready
+    audit["summary"]["mir_probe_companions_ready"] = (
+        aggregate_probe_companions.get("ready") is True
+    )
+    audit["summary"]["runtime_claim_ready"] = aggregate_claim_ready
+    audit["summary"]["ready_for_claim_grade_import"] = aggregate_claim_ready
     return audit
 
 
@@ -44945,8 +47612,16 @@ def rustc_driver_mir_semantic_scope_runtime_aggregate_claim_update_gate(
             f"aggregate runtime companion/source blocker: {blocker}"
             for blocker in runtime_companion_blockers
         )
+    embedded_bundle_ready = True
     if mir_probe_companions is None:
-        mir_probe_companions = rustc_driver_mir_probe_companion_status()
+        embedded_bundle_status = rustc_driver_mir_probe_embedded_bundle_status(aggregate)
+        embedded_bundle_ready = embedded_bundle_status.get("ready") is True
+        mir_probe_companions = embedded_bundle_status.get("current", {})
+        if not embedded_bundle_ready:
+            blockers.extend(
+                f"bound MIR probe companion blocker: {blocker}"
+                for blocker in embedded_bundle_status.get("blockers", [])
+            )
     companion_blockers = unique_strings(
         str(blocker) for blocker in mir_probe_companions.get("blockers", [])
     )
@@ -44964,6 +47639,7 @@ def rustc_driver_mir_semantic_scope_runtime_aggregate_claim_update_gate(
         and runtime_companion_ready
         and not string_list_value(summary.get("blockers"))
         and companions_ready
+        and embedded_bundle_ready
     )
     return {
         "ready": ready,
@@ -45010,21 +47686,58 @@ def merge_rustc_driver_mir_semantic_scope_std_bench_runtime_shards(args: argpars
     )
     audit_path = out_dir / "rustc-driver-mir-semantic-scope-std-bench-runtime-aggregate-audit.json"
     write_json(audit_path, aggregate)
+    aggregate_publication_status = runtime_claim_publication_status(
+        aggregate,
+        audit_path=audit_path,
+        expected_source_fingerprint=(
+            aggregate.get("evidence_source_fingerprint")
+            if isinstance(aggregate.get("evidence_source_fingerprint"), dict)
+            else None
+        ),
+    )
+    aggregate["publication_status"] = aggregate_publication_status
+    if aggregate_publication_status.get("ready") is not True:
+        aggregate = downgrade_runtime_claim_payload(
+            aggregate,
+            blockers=aggregate_publication_status.get("blockers", []),
+        )
+    write_json(audit_path, aggregate)
     update_gate = rustc_driver_mir_semantic_scope_runtime_aggregate_claim_update_gate(aggregate)
     results_audit_path = RESULTS / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json"
     skipped_update_reason = None
     if getattr(args, "no_update_results", False):
         skipped_update_reason = "--no-update-results requested"
     elif update_gate["ready"]:
-        write_json(results_audit_path, aggregate)
+        boundary_publication = publish_runtime_claim_audit_if_current(
+            aggregate,
+            audit_path=audit_path,
+            results_audit_path=results_audit_path,
+            expected_source_fingerprint=(
+                aggregate.get("evidence_source_fingerprint")
+                if isinstance(aggregate.get("evidence_source_fingerprint"), dict)
+                else None
+            ),
+        )
+        aggregate = boundary_publication["audit"]
+        aggregate_publication_status = boundary_publication["publication_status"]
+        if boundary_publication["published"] is not True:
+            update_gate = rustc_driver_mir_semantic_scope_runtime_aggregate_claim_update_gate(
+                aggregate
+            )
+            skipped_update_reason = "aggregate changed before canonical publication: " + "; ".join(
+                aggregate_publication_status.get("blockers", [])[:6]
+            )
     else:
         skipped_update_reason = "aggregate is not claim-ready: " + "; ".join(update_gate["blockers"][:6])
     print(
         json.dumps(
             {
                 "audit": str(audit_path),
-                "results_audit": str(results_audit_path) if update_gate["ready"] and not getattr(args, "no_update_results", False) else None,
+                "results_audit": str(results_audit_path)
+                if skipped_update_reason is None
+                else None,
                 "results_update_skipped_reason": skipped_update_reason,
+                "publication_status": aggregate_publication_status,
                 "claim_update_gate": update_gate,
                 "summary": aggregate["summary"],
                 "source_audit_count": len(aggregate.get("source_audits", [])),
@@ -48436,6 +51149,20 @@ def package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(args: arg
         )
     )
     summary = runtime_audit.get("summary", {}) if isinstance(runtime_audit.get("summary"), dict) else {}
+    runtime_companion_status = rustc_driver_mir_semantic_scope_runtime_companion_status(
+        runtime_audit
+    )
+    embedded_probe_bundle_status = rustc_driver_mir_probe_embedded_bundle_status(
+        runtime_audit
+    )
+    direct_mode_status = rustc_driver_mir_semantic_scope_direct_claim_mode_status(
+        summary,
+        label="packaged MIR semantic-scope runtime",
+    )
+    direct_claim_evidence_ready = bool(
+        summary.get("direct_claim_evidence_ready") is True
+        or direct_mode_status.get("valid") is True
+    )
     artifacts = runtime_audit.get("artifacts") if isinstance(runtime_audit.get("artifacts"), dict) else {}
     try:
         events_path = resolve_local_artifact_path(artifacts.get("runtime_events"), base=runtime_audit_path.parent)
@@ -48483,24 +51210,105 @@ def package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(args: arg
         if isinstance(summary.get("event_type_id_bases"), list) and summary.get("event_type_id_bases")
         else COMPILER_EXACT_DYNAMIC_TYPE_ID_BASIS
     )
-    std_bench_surface = latest_complete_std_bench_surface()
-    expected_benchmarks = normalize_benchmark_names(std_bench_surface.get("benchmarks") or [])
     observed_benchmarks = normalize_benchmark_names(runtime_audit.get("selected_target_benches") or [])
-    runtime_surface = (
+    embedded_runtime_surface = (
         runtime_audit.get("runtime_surface")
         if isinstance(runtime_audit.get("runtime_surface"), dict)
-        else exact_dynamic_std_bench_surface_status(
-            observed_benchmarks,
-            skip=[f"derived-skip-{idx}" for idx in range(int(summary.get("derived_skip_count") or 0))],
-            derived_skip_count=int(summary.get("derived_skip_count") or 0),
+        else {}
+    )
+    embedded_canonical_inventory = embedded_runtime_surface.get(
+        "canonical_inventory_benchmarks"
+    )
+    embedded_canonical_source = embedded_runtime_surface.get(
+        "canonical_surface_source"
+    )
+    derived_skip_count = int(summary.get("derived_skip_count") or 0)
+    runtime_surface = exact_dynamic_std_bench_surface_status(
+        observed_benchmarks,
+        bench_filter=embedded_runtime_surface.get("bench_filter"),
+        skip=runtime_audit.get("derived_skips") or embedded_runtime_surface.get("skip") or [],
+        only_with_sentinels=not observed_benchmarks,
+        derived_skip_count=derived_skip_count,
+        canonical_benchmarks=(
+            embedded_canonical_inventory
+            if isinstance(embedded_canonical_inventory, list)
+            else None
+        ),
+        canonical_source=(
+            embedded_canonical_source
+            if isinstance(embedded_canonical_source, str)
+            else ""
+        ),
+    )
+    runtime_surface_provenance_blockers = unique_strings(
+        [
+            *(
+                ["runtime audit is missing its validated runtime_surface"]
+                if not embedded_runtime_surface
+                else []
+            ),
+            *(
+                [
+                    "runtime audit canonical surface was not sourced from an explicit same-run benchmark inventory"
+                ]
+                if embedded_runtime_surface.get("canonical_surface_source_kind")
+                != "explicit-canonical-benchmark-inventory"
+                else []
+            ),
+            *(
+                ["runtime audit canonical inventory did not validate against the locked repository identity"]
+                if embedded_runtime_surface.get(
+                    "canonical_inventory_locked_identity_validated"
+                )
+                is not True
+                else []
+            ),
+            *(
+                ["runtime audit canonical surface status is not full-surface-candidate"]
+                if embedded_runtime_surface.get("status") != "full-surface-candidate"
+                or embedded_runtime_surface.get("full_surface_candidate") is not True
+                else []
+            ),
+            *(
+                ["runtime audit canonical expected benchmark list differs from the locked repository identity"]
+                if normalize_benchmark_names(
+                    embedded_runtime_surface.get("expected_benchmarks") or []
+                )
+                != runtime_surface.get("expected_benchmarks")
+                else []
+            ),
+            *(
+                ["runtime audit canonical expected benchmark count is inconsistent"]
+                if embedded_runtime_surface.get("expected_benchmark_count")
+                != runtime_surface.get("expected_benchmark_count")
+                else []
+            ),
+            *(
+                ["runtime audit canonical inventory hash is inconsistent"]
+                if embedded_runtime_surface.get("canonical_inventory_name_sha256")
+                != runtime_surface.get("canonical_inventory_name_sha256")
+                else []
+            ),
+            *string_list_value(embedded_runtime_surface.get("blockers")),
+        ]
+    )
+    if runtime_surface_provenance_blockers:
+        runtime_surface["status"] = "slice-or-incomplete"
+        runtime_surface["full_surface_candidate"] = False
+        runtime_surface["canonical_surface_status"] = "invalid"
+        runtime_surface["blockers"] = unique_strings(
+            [
+                *string_list_value(runtime_surface.get("blockers")),
+                *runtime_surface_provenance_blockers,
+            ]
         )
+    expected_benchmarks = normalize_benchmark_names(
+        runtime_surface.get("expected_benchmarks") or []
     )
     runtime_full_surface_candidate_validated = bool(
         summary.get("runtime_full_surface_candidate_validated") is True
-        or (
-            summary.get("runtime_smoke_validated") is True
-            and runtime_surface.get("full_surface_candidate") is True
-        )
+        and runtime_surface.get("full_surface_candidate") is True
+        and not runtime_surface_provenance_blockers
     )
     selection_mode = (
         summary.get("selection_mode")
@@ -48523,6 +51331,39 @@ def package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(args: arg
     claim_grade_requested = bool(getattr(args, "claim_grade", False))
     claim_grade_blockers = unique_strings(
         [
+            *(
+                ["runtime audit summary.runtime_claim_ready is not true"]
+                if summary.get("runtime_claim_ready") is not True
+                else []
+            ),
+            *(
+                ["runtime audit summary.ready_for_claim_grade_import is not true"]
+                if summary.get("ready_for_claim_grade_import") is not True
+                else []
+            ),
+            *(
+                ["runtime audit did not request direct allocator rewrite mode"]
+                if summary.get("direct_allocator_rewrite_requested") is not True
+                else []
+            ),
+            *(
+                ["runtime audit did not request direct local size/align semantic-drop mode"]
+                if summary.get("direct_local_size_align_with_semantic_drop") is not True
+                else []
+            ),
+            *(
+                ["runtime audit direct claim evidence is not ready"]
+                if not direct_claim_evidence_ready
+                else []
+            ),
+            *(
+                f"runtime companion: {blocker}"
+                for blocker in runtime_companion_status.get("blockers", [])
+            ),
+            *(
+                f"bound MIR probe bundle: {blocker}"
+                for blocker in embedded_probe_bundle_status.get("blockers", [])
+            ),
             *(
                 ["runtime artifact is not a validated full std_bench surface"]
                 if not runtime_full_surface_candidate_validated
@@ -48706,12 +51547,26 @@ def package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(args: arg
             "coverage_surface_complete": runtime_full_surface_candidate_validated,
             "expected_benchmarks": expected_benchmarks,
             "expected_benchmark_source": {
-                "source_summary": std_bench_surface.get("source_summary"),
-                "run_id": std_bench_surface.get("run_id"),
-                "status": std_bench_surface.get("status"),
-                "bench_count": std_bench_surface.get("bench_count"),
-                "excluded_synthetic_prefixes": std_bench_surface.get("excluded_synthetic_prefixes"),
-                "blockers": std_bench_surface.get("blockers", []),
+                "source": runtime_surface.get("canonical_surface_source"),
+                "source_kind": runtime_surface.get("canonical_surface_source_kind"),
+                "status": runtime_surface.get("canonical_surface_status"),
+                "bench_count": runtime_surface.get("expected_benchmark_count"),
+                "inventory_bench_count": runtime_surface.get(
+                    "canonical_inventory_benchmark_count"
+                ),
+                "inventory_name_sha256": runtime_surface.get(
+                    "canonical_inventory_name_sha256"
+                ),
+                "locked_bench_count": runtime_surface.get(
+                    "canonical_locked_benchmark_count"
+                ),
+                "locked_name_sha256": runtime_surface.get(
+                    "canonical_locked_name_sha256"
+                ),
+                "locked_identity_validated": runtime_surface.get(
+                    "canonical_inventory_locked_identity_validated"
+                ),
+                "blockers": runtime_surface.get("blockers", []),
             },
             "observed_benchmarks": observed_benchmarks,
             "observed_benchmark_source": {
@@ -48826,6 +51681,7 @@ def package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(args: arg
                 and not missing_event_pairs
                 and not runtime_source_binding_blockers
                 and not runtime_artifact_integrity_blockers
+                and (not claim_grade_requested or not claim_grade_blockers)
                 and compiler_audit.get("summary", {}).get("type_mapping_status") == "pass"
                 and compiler_audit.get("summary", {}).get("event_type_mapping_correlation_status") == "pass"
             ),
@@ -48877,6 +51733,15 @@ def package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(args: arg
             "claim_grade": claim_grade_enabled,
             "complete_for_claim": claim_grade_enabled,
             "claim_grade_blocker_count": len(claim_grade_blockers),
+            "runtime_claim_ready": summary.get("runtime_claim_ready") is True,
+            "runtime_ready_for_claim_grade_import": (
+                summary.get("ready_for_claim_grade_import") is True
+            ),
+            "runtime_direct_claim_evidence_ready": direct_claim_evidence_ready,
+            "runtime_companion_ready": runtime_companion_status.get("ready") is True,
+            "bound_mir_probe_bundle_ready": (
+                embedded_probe_bundle_status.get("ready") is True
+            ),
         },
         "blockers": unique_strings(
             [
@@ -48909,66 +51774,217 @@ def package_rustc_driver_mir_semantic_scope_std_bench_runtime_manifest(args: arg
         import_audit["evidence_source_fingerprint"] = copy.deepcopy(
             runtime_source_fingerprint
         )
-    publication_source_fingerprint = repository_source_fingerprint()
-    publication_blockers: List[str] = []
-    started_digest = str(started_source_fingerprint.get("source_digest") or "")
-    publication_digest = str(publication_source_fingerprint.get("source_digest") or "")
-    if not started_digest or started_digest != publication_digest:
-        publication_blockers.append(
-            "repository source changed before runtime evidence publication: "
-            f"started={started_digest or '<missing>'}, "
-            f"publication={publication_digest or '<missing>'}"
+
+    def downgrade_packaged_publication(publication_blockers: List[str]) -> None:
+        nonlocal claim_grade_enabled, compiler_audit
+
+        claim_grade_enabled = False
+        run_summary["claim_grade"] = False
+        run_summary["complete_for_claim"] = False
+        run_summary["claim_grade_blockers"] = unique_strings(
+            [*string_list_value(run_summary.get("claim_grade_blockers")), *publication_blockers]
         )
-    publication_runtime_integrity_blockers = (
-        mir_semantic_scope_runtime_artifact_integrity_blockers(
-            runtime_audit,
-            audit_path=runtime_audit_path,
+        write_json(run_summary_path, run_summary)
+
+        pass_log.write_text(
+            "\n".join(
+                [
+                    "label: rustc-driver-mir-semantic-scope-std-bench-runtime",
+                    f"claim_grade_requested: {claim_grade_requested}",
+                    "claim_grade: False",
+                    "complete_for_claim: False",
+                    *[f"claim_grade_blocker: {blocker}" for blocker in publication_blockers],
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
         )
-    )
-    publication_blockers.extend(
-        f"runtime artifact changed before publication: {blocker}"
-        for blocker in publication_runtime_integrity_blockers
-    )
-    publication_ready = not publication_blockers
-    import_audit["publication_repository_source_fingerprint"] = (
-        publication_source_fingerprint
-    )
-    import_audit["summary"]["publication_ready"] = publication_ready
-    import_audit["summary"]["publication_source_stable"] = not any(
-        blocker.startswith("repository source changed")
-        for blocker in publication_blockers
-    )
-    import_audit["summary"]["publication_runtime_artifacts_stable"] = not bool(
-        publication_runtime_integrity_blockers
-    )
-    if not publication_ready:
+
+        manifest["source"] = (
+            "rustc-driver-mir-semantic-scope-std-bench-runtime-preflight-manifest"
+        )
+        manifest["claim_grade"] = False
+        manifest["complete_for_claim"] = False
+        manifest["claim_grade_blockers"] = unique_strings(
+            [*string_list_value(manifest.get("claim_grade_blockers")), *publication_blockers]
+        )
+        benchmark_suite = (
+            manifest.get("benchmark_suite")
+            if isinstance(manifest.get("benchmark_suite"), dict)
+            else {}
+        )
+        benchmark_suite["complete_for_claim"] = False
+        benchmark_suite["paper_equivalent"] = False
+        observed_source = (
+            benchmark_suite.get("observed_benchmark_source")
+            if isinstance(benchmark_suite.get("observed_benchmark_source"), dict)
+            else {}
+        )
+        observed_source["kind"] = MIR_SEMANTIC_SCOPE_SELECTED_RUNTIME_KIND
+        observed_source["claim_grade"] = False
+        observed_source["complete_for_claim"] = False
+        benchmark_suite["observed_benchmark_source"] = observed_source
+        manifest["benchmark_suite"] = benchmark_suite
+        manifest["notes"] = unique_strings(
+            [
+                "This manifest was downgraded to diagnostic-only evidence because publication-time integrity gates failed.",
+                *(
+                    note
+                    for note in string_list_value(manifest.get("notes"))
+                    if not note.startswith("This manifest is claim-grade")
+                ),
+            ]
+        )
+        for evidence in manifest.get("evidence", []):
+            if not isinstance(evidence, dict):
+                continue
+            if evidence.get("kind") == "compiler_pass_log":
+                evidence["sha256"] = file_sha256(pass_log)
+            elif evidence.get("kind") == "benchmark_run_summary":
+                evidence["sha256"] = file_sha256(run_summary_path)
+        write_json(manifest_path, manifest)
+        compiler_audit = build_compiler_coverage_audit(manifest_path)
+        if isinstance(runtime_source_fingerprint, dict):
+            compiler_audit = evidence_source_bound_payload(
+                compiler_audit,
+                fingerprint=runtime_source_fingerprint,
+            )
+        write_json(compiler_audit_path, compiler_audit)
+        import_audit["compiler_coverage_audit"] = compiler_audit
         import_audit["summary"][
             "mir_semantic_scope_runtime_import_preflight_validated"
         ] = False
+        import_audit["summary"]["compiler_audit_ready_for_claim_grade_import"] = (
+            compiler_audit.get("summary", {}).get("ready_for_claim_grade_import")
+        )
+        import_audit["summary"]["compiler_audit_blocker_count"] = (
+            compiler_audit.get("summary", {}).get("blocker_count")
+        )
         import_audit["summary"]["claim_grade"] = False
         import_audit["summary"]["complete_for_claim"] = False
+        import_audit["summary"]["claim_grade_blocker_count"] = len(
+            unique_strings(
+                [*string_list_value(claim_grade_blockers), *publication_blockers]
+            )
+        )
         import_audit["blockers"] = unique_strings(
             [*import_audit.get("blockers", []), *publication_blockers]
         )
+
+    def record_packaged_publication_status(
+        status: Dict[str, Any],
+    ) -> Tuple[bool, List[str]]:
+        status_blockers = unique_strings(status.get("blockers", []))
+        status_ready = status.get("ready") is True
+        import_audit["publication_repository_source_fingerprint"] = status[
+            "publication_source_fingerprint"
+        ]
+        import_audit["publication_status"] = status
+        import_audit["summary"]["publication_ready"] = status_ready
+        import_audit["summary"]["publication_source_stable"] = not any(
+            blocker.startswith("repository source changed")
+            for blocker in status_blockers
+        )
+        import_audit["summary"]["publication_runtime_artifacts_stable"] = not bool(
+            status["runtime_artifact_integrity_blockers"]
+        )
+        import_audit["summary"]["publication_mir_probe_bundle_stable"] = (
+            status.get("embedded_mir_probe_bundle", {}).get("ready") is True
+        )
+        return status_ready, status_blockers
+
+    publication_status = runtime_claim_publication_status(
+        runtime_audit,
+        audit_path=runtime_audit_path,
+        expected_source_fingerprint=started_source_fingerprint,
+    )
+    publication_ready, publication_blockers = record_packaged_publication_status(
+        publication_status
+    )
+    if not publication_ready:
+        downgrade_packaged_publication(publication_blockers)
     import_audit_path = out_dir / "rustc-driver-mir-semantic-scope-std-bench-runtime-import-audit.json"
     write_json(import_audit_path, import_audit)
     if not args.no_update_results:
-        write_json(RESULTS / "rustc_driver_mir_semantic_scope_std_bench_runtime_import_audit.json", import_audit)
+        runtime_results_path = (
+            RESULTS
+            / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json"
+        )
+        compiler_results_path = RESULTS / "compiler_coverage_evidence_audit.json"
+        canonical_claim_snapshots = {
+            path: (path.exists(), path.read_bytes() if path.exists() else b"")
+            for path in (runtime_results_path, compiler_results_path)
+        }
+        touched_canonical_claim_paths: List[Path] = []
+
+        def rollback_canonical_claim_results() -> None:
+            for path in reversed(touched_canonical_claim_paths):
+                existed, prior_bytes = canonical_claim_snapshots[path]
+                if existed:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(prior_bytes)
+                else:
+                    path.unlink(missing_ok=True)
+            import_audit["summary"]["canonical_claim_results_rolled_back"] = bool(
+                touched_canonical_claim_paths
+            )
+
         if (
             publication_ready
             and getattr(args, "update_runtime_result", False)
             and (not claim_grade_requested or claim_grade_enabled)
         ):
-            write_json(
-                RESULTS / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json",
+            runtime_boundary_status = runtime_claim_publication_status(
                 runtime_audit,
+                audit_path=runtime_audit_path,
+                expected_source_fingerprint=started_source_fingerprint,
             )
+            if runtime_boundary_status.get("ready") is True:
+                write_json(
+                    runtime_results_path,
+                    runtime_audit,
+                )
+                touched_canonical_claim_paths.append(runtime_results_path)
+                publication_ready, publication_blockers = (
+                    record_packaged_publication_status(runtime_boundary_status)
+                )
+            else:
+                publication_ready, publication_blockers = (
+                    record_packaged_publication_status(runtime_boundary_status)
+                )
+                rollback_canonical_claim_results()
+                downgrade_packaged_publication(publication_blockers)
+                write_json(import_audit_path, import_audit)
         if (
             publication_ready
             and args.update_compiler_coverage_result
             and (not claim_grade_requested or claim_grade_enabled)
         ):
-            write_json(RESULTS / "compiler_coverage_evidence_audit.json", compiler_audit)
+            compiler_boundary_status = runtime_claim_publication_status(
+                runtime_audit,
+                audit_path=runtime_audit_path,
+                expected_source_fingerprint=started_source_fingerprint,
+            )
+            if compiler_boundary_status.get("ready") is True:
+                write_json(
+                    compiler_results_path,
+                    compiler_audit,
+                )
+                touched_canonical_claim_paths.append(compiler_results_path)
+                publication_ready, publication_blockers = (
+                    record_packaged_publication_status(compiler_boundary_status)
+                )
+            else:
+                publication_ready, publication_blockers = (
+                    record_packaged_publication_status(compiler_boundary_status)
+                )
+                rollback_canonical_claim_results()
+                downgrade_packaged_publication(publication_blockers)
+                write_json(import_audit_path, import_audit)
+        write_json(
+            RESULTS / "rustc_driver_mir_semantic_scope_std_bench_runtime_import_audit.json",
+            import_audit,
+        )
     print(
         json.dumps(
             {
@@ -53188,8 +56204,184 @@ def lazy_iterator_black_box_findings_for_code(code: str) -> List[Dict[str, str]]
     return findings
 
 
+def clone_from_destination_length_findings_for_code(code: str) -> List[Dict[str, Any]]:
+    """Flag clone_from benches that ignore their declared destination length."""
+
+    findings: List[Dict[str, Any]] = []
+    function_pattern = re.compile(r"\bfn\s+do_bench_clone_from\b")
+    destination_pattern = re.compile(
+        r"\blet\s+dst(?:\s*:\s*[^=;\n]+)?\s*=\s*"
+        r"FromIterator::from_iter\(\s*0\s*\.\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*;"
+    )
+    for function_match in function_pattern.finditer(code):
+        open_idx = code.find("{", function_match.end())
+        if open_idx < 0:
+            continue
+        depth = 0
+        close_idx: Optional[int] = None
+        for idx in range(open_idx, len(code)):
+            if code[idx] == "{":
+                depth += 1
+            elif code[idx] == "}":
+                depth -= 1
+                if depth == 0:
+                    close_idx = idx
+                    break
+        if close_idx is None:
+            continue
+        body = code[open_idx + 1 : close_idx]
+        destination_match = destination_pattern.search(body)
+        if destination_match is None:
+            findings.append(
+                {
+                    "pattern": "clone_from_destination_initializer_missing",
+                    "offset": function_match.start(),
+                    "expected_length": "dst_len",
+                }
+            )
+            continue
+        observed_length = destination_match.group(1)
+        if observed_length != "dst_len":
+            findings.append(
+                {
+                    "pattern": "clone_from_destination_length_ignored",
+                    "offset": open_idx + 1 + destination_match.start(),
+                    "expected_length": "dst_len",
+                    "observed_length": observed_length,
+                }
+            )
+    return findings
+
+
+def bench_in_place_recycle_adapter_findings_for_code(
+    code: str,
+    *,
+    require_function: bool = False,
+) -> List[Dict[str, Any]]:
+    """Require the canonical fused iterator chain for the recycle benchmark."""
+
+    findings: List[Dict[str, Any]] = []
+    masked_code = mask_rust_comments_and_literals(code)
+    function_pattern = re.compile(r"\bfn\s+bench_in_place_recycle\b")
+    expected_adapters = ["into_iter", "enumerate", "map", "fuse", "peekable", "collect"]
+    function_matches = list(function_pattern.finditer(masked_code))
+    if not function_matches:
+        if require_function:
+            findings.append(
+                {
+                    "pattern": "bench_in_place_recycle_function_missing",
+                    "offset": 0,
+                    "expected_adapters": expected_adapters,
+                }
+            )
+        return findings
+    if len(function_matches) != 1:
+        findings.append(
+            {
+                "pattern": "bench_in_place_recycle_function_duplicate",
+                "offset": function_matches[1].start(),
+                "function_count": len(function_matches),
+                "expected_adapters": expected_adapters,
+            }
+        )
+        return findings
+
+    function_match = function_matches[0]
+    open_idx = masked_code.find("{", function_match.end())
+    if open_idx < 0:
+        findings.append(
+            {
+                "pattern": "bench_in_place_recycle_function_body_missing",
+                "offset": function_match.start(),
+                "expected_adapters": expected_adapters,
+            }
+        )
+        return findings
+    depth = 0
+    close_idx: Optional[int] = None
+    for idx in range(open_idx, len(masked_code)):
+        if masked_code[idx] == "{":
+            depth += 1
+        elif masked_code[idx] == "}":
+            depth -= 1
+            if depth == 0:
+                close_idx = idx
+                break
+    if close_idx is None:
+        findings.append(
+            {
+                "pattern": "bench_in_place_recycle_function_body_unbalanced",
+                "offset": open_idx,
+                "expected_adapters": expected_adapters,
+            }
+        )
+        return findings
+
+    body = masked_code[open_idx + 1 : close_idx]
+    chain_pattern = re.compile(r"\btmp\s*\.\s*into_iter\s*\(")
+    chain_matches = list(chain_pattern.finditer(body))
+    if not chain_matches:
+        findings.append(
+            {
+                "pattern": "bench_in_place_recycle_adapter_chain_missing",
+                "offset": function_match.start(),
+                "expected_adapters": expected_adapters,
+            }
+        )
+        return findings
+    if len(chain_matches) != 1:
+        findings.append(
+            {
+                "pattern": "bench_in_place_recycle_adapter_chain_duplicate",
+                "offset": open_idx + 1 + chain_matches[1].start(),
+                "chain_count": len(chain_matches),
+                "expected_adapters": expected_adapters,
+            }
+        )
+        return findings
+
+    chain_start = chain_matches[0].start()
+    observed_adapters: List[str] = []
+    nesting: List[str] = []
+    matching_delimiter = {")": "(", "]": "[", "}": "{"}
+    i = chain_start
+    while i < len(body):
+        ch = body[i]
+        if not nesting and ch == ".":
+            method_match = re.match(
+                r"\.\s*([A-Za-z_][A-Za-z0-9_]*)",
+                body[i:],
+            )
+            if method_match is not None:
+                observed_adapters.append(method_match.group(1))
+                i += method_match.end()
+                continue
+        if ch in "([{":
+            nesting.append(ch)
+        elif ch in ")]}":
+            if not nesting:
+                break
+            if nesting[-1] != matching_delimiter[ch]:
+                break
+            nesting.pop()
+        elif not nesting and ch in ",;":
+            break
+        i += 1
+
+    if observed_adapters != expected_adapters:
+        findings.append(
+            {
+                "pattern": "bench_in_place_recycle_adapter_chain_drift",
+                "offset": open_idx + 1 + chain_start,
+                "expected_adapters": expected_adapters,
+                "observed_adapters": observed_adapters,
+            }
+        )
+    return findings
+
+
 def audit_std_bench_source_correctness(args: argparse.Namespace) -> int:
-    """Statically guard std_bench against lazy iterator no-op benchmark patterns."""
+    """Statically guard std_bench against known benchmark semantic no-ops."""
 
     run_id = args.run_id or _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir = Path(args.output_dir).expanduser() if args.output_dir else RAW / run_id
@@ -53255,6 +56447,35 @@ def audit_std_bench_source_correctness(args: argparse.Namespace) -> int:
                         "text": "generated compiler bench must include a fast assertion test for typed allocation rows",
                     }
                 )
+        for clone_from_finding in clone_from_destination_length_findings_for_code(source_text):
+            offset = int(clone_from_finding.get("offset") or 0)
+            line_no = source_text.count("\n", 0, offset) + 1
+            finding = {
+                "path": str(rel),
+                "line": line_no,
+                "pattern": clone_from_finding["pattern"],
+                "text": lines[line_no - 1].strip() if 0 < line_no <= len(lines) else "",
+            }
+            for key in ("expected_length", "observed_length"):
+                if key in clone_from_finding:
+                    finding[key] = clone_from_finding[key]
+            findings.append(finding)
+        for recycle_finding in bench_in_place_recycle_adapter_findings_for_code(
+            source_text,
+            require_function=rel == Path("unialloc/benches/vec.rs"),
+        ):
+            offset = int(recycle_finding.get("offset") or 0)
+            line_no = source_text.count("\n", 0, offset) + 1
+            finding = {
+                "path": str(rel),
+                "line": line_no,
+                "pattern": recycle_finding["pattern"],
+                "text": lines[line_no - 1].strip() if 0 < line_no <= len(lines) else "",
+            }
+            for key in ("expected_adapters", "observed_adapters"):
+                if key in recycle_finding:
+                    finding[key] = recycle_finding[key]
+            findings.append(finding)
         for line_no, line in enumerate(lines, start=1):
             code = line.split("//", 1)[0]
             for lazy_finding in lazy_iterator_black_box_findings_for_code(code):
@@ -53283,6 +56504,16 @@ def audit_std_bench_source_correctness(args: argparse.Namespace) -> int:
         for finding in findings
         if str(finding.get("pattern", "")).startswith("generated_compiler_bench_")
     )
+    clone_from_destination_length_finding_count = sum(
+        1
+        for finding in findings
+        if str(finding.get("pattern", "")).startswith("clone_from_destination_")
+    )
+    bench_in_place_recycle_adapter_finding_count = sum(
+        1
+        for finding in findings
+        if str(finding.get("pattern", "")).startswith("bench_in_place_recycle_")
+    )
 
     audit = {
         "schema_version": 1,
@@ -53295,6 +56526,8 @@ def audit_std_bench_source_correctness(args: argparse.Namespace) -> int:
             "status": "pass" if not findings else "fail",
             "finding_count": len(findings),
             "lazy_iterator_black_box_count": lazy_iterator_finding_count,
+            "clone_from_destination_length_finding_count": clone_from_destination_length_finding_count,
+            "bench_in_place_recycle_adapter_finding_count": bench_in_place_recycle_adapter_finding_count,
             "generated_compiler_bench_checked_count": len(generated_compiler_bench_sources),
             "generated_compiler_bench_placeholder_count": generated_compiler_bench_finding_count,
             "checked_source_count": len(list(benches_dir.rglob("*.rs"))),
@@ -53324,6 +56557,42 @@ def audit_std_bench_source_correctness(args: argparse.Namespace) -> int:
             {
                 "id": "generated_compiler_bench_missing_assertion_test",
                 "description": "registered generated compiler benches must include fast assertion tests that validate typed allocation rows",
+            },
+            {
+                "id": "clone_from_destination_length_ignored",
+                "description": "clone_from destination setup must use dst_len so grow, shrink, and equal-length cases remain distinct",
+            },
+            {
+                "id": "clone_from_destination_initializer_missing",
+                "description": "clone_from benchmarks must keep an auditable destination-length initializer",
+            },
+            {
+                "id": "bench_in_place_recycle_adapter_chain_drift",
+                "description": "bench_in_place_recycle must use the same fused peekable iterator collect chain across benchmark targets",
+            },
+            {
+                "id": "bench_in_place_recycle_adapter_chain_missing",
+                "description": "bench_in_place_recycle must retain an auditable fused peekable iterator collect chain",
+            },
+            {
+                "id": "bench_in_place_recycle_adapter_chain_duplicate",
+                "description": "bench_in_place_recycle must contain exactly one auditable fused-iterator collect chain",
+            },
+            {
+                "id": "bench_in_place_recycle_function_missing",
+                "description": "the canonical vec benchmark source must retain bench_in_place_recycle",
+            },
+            {
+                "id": "bench_in_place_recycle_function_duplicate",
+                "description": "each checked benchmark source must define bench_in_place_recycle at most once",
+            },
+            {
+                "id": "bench_in_place_recycle_function_body_missing",
+                "description": "bench_in_place_recycle must retain an auditable function body",
+            },
+            {
+                "id": "bench_in_place_recycle_function_body_unbalanced",
+                "description": "bench_in_place_recycle must retain a balanced auditable function body",
             },
         ],
     }
@@ -58519,6 +61788,8 @@ def latest_reusable_raw_platform_matrix_entry(
         )
         if not isinstance(entry, dict) or not isinstance(platform_audit, dict):
             continue
+        if repository_source_binding_blockers(entry, current=current_fingerprint):
+            continue
         fresh_audit = audit_platform_entry(
             platform_name,
             entry,
@@ -60122,6 +63393,37 @@ def collect_platform_smoke(args: argparse.Namespace) -> int:
             }
             rec["passed"] = bool(rec.get("passed")) and runtime_passed
             if runtime_passed:
+                # The base metadata describes the cross-check-only path.  Once
+                # the Windows workload has actually executed and passed, keep
+                # every emitted artifact on the validated runtime scope rather
+                # than leaking the earlier smoke-only label into the C007 gate.
+                target_metadata.pop("smoke_scope", None)
+                target_metadata.update(
+                    {
+                        "runtime_scope": (
+                            "validated Windows platform_allocator_workload execution "
+                            "for C007 retargeting evidence"
+                        ),
+                        "runtime_workload": "platform_allocator_workload",
+                        "runtime_source_check_passed": bool(
+                            rec.get("runtime_workload", {}).get("source_check_passed")
+                        ),
+                        "runtime_runner": windows_runner,
+                        "runtime_runner_selection": windows_runner_selection,
+                        "runtime_executable": str(windows_exe) if windows_exe else None,
+                        "runtime_evidence_source": runtime_evidence_source,
+                        "runtime_import_logs": [
+                            str(path) for path in windows_runtime_import_paths
+                        ],
+                        "runtime_samples": windows_runtime_requested_sample_count,
+                        "runtime_threads": args.windows_runtime_threads,
+                        "runtime_iters": args.windows_runtime_iters,
+                        "runtime_max_len": args.windows_runtime_max_len,
+                        "retargeting_claim_scope": (
+                            "C007 Windows platform build/run evidence only"
+                        ),
+                    }
+                )
                 durations = [
                     int(event["duration_ns"])
                     for event in windows_runtime_events
@@ -62597,11 +65899,18 @@ def write_markdown_report(path: Path, summary: Dict[str, Any], source: str) -> N
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [f"# UniAlloc {source} evaluation summary", "", f"Generated: `{summary.get('generated_at')}`", ""]
     if summary.get("datasets"):
-        lines.append("| dataset | count | geomean | delta vs UniAlloc | speedup vs baselines |")
+        lines.append("| dataset | finite / total slots | geomean | delta vs UniAlloc | speedup vs baselines |")
         lines.append("|---|---:|---:|---:|---:|")
         for name, ds in summary.get("datasets", {}).items():
+            finite_count = ds.get("finite_value_count", ds.get("count"))
+            total_slot_count = ds.get("total_slot_count")
+            slot_count = (
+                f"{finite_count} / {total_slot_count}"
+                if total_slot_count is not None
+                else str(finite_count)
+            )
             lines.append(
-                f"| {name} | {ds.get('count')} | {fmt(ds.get('geomean'))} | {fmt(ds.get('geomean_delta_percent_vs_unialloc'))}% | {fmt(ds.get('speedup_percent_vs_baselines'))}% |"
+                f"| {name} | {slot_count} | {fmt(ds.get('geomean'))} | {fmt(ds.get('geomean_delta_percent_vs_unialloc'))}% | {fmt(ds.get('speedup_percent_vs_baselines'))}% |"
             )
     else:
         lines.append("| feature | runs | successful post-warmup | geomean wall seconds |")
@@ -62881,6 +66190,8 @@ def fresh_current_dataset_integrity_status(
         "columns",
         "rows",
         "count",
+        "finite_value_count",
+        "total_slot_count",
         "geomean",
         "arithmetic_mean",
         "geomean_delta_percent_vs_unialloc",
@@ -64367,6 +67678,8 @@ def evaluate_claim(claim: Dict[str, Any], summary: Dict[str, Any], source: str) 
         result["observed"] = {
             "geomean": ds.get("geomean"),
             "count": ds.get("count"),
+            "finite_value_count": ds.get("finite_value_count"),
+            "total_slot_count": ds.get("total_slot_count"),
             "scope": ds.get("scope"),
         }
         result["status"] = "missing"
@@ -64569,6 +67882,8 @@ def compact_claim_observed(result: Dict[str, Any]) -> Any:
         return {
             "geomean": observed.get("geomean"),
             "count": observed.get("count"),
+            "finite_value_count": observed.get("finite_value_count"),
+            "total_slot_count": observed.get("total_slot_count"),
             "path": scope.get("source") or scope.get("path"),
             "claim_grade": scope.get("manifest_claim_grade"),
             "complete_for_claim": scope.get("complete_for_claim"),
@@ -64688,6 +68003,8 @@ def dataset_worklist_summary(dataset: Optional[str]) -> Dict[str, Any]:
         "complete_for_claim": scope.get("complete_for_claim"),
         "geomean": ds.get("geomean"),
         "count": ds.get("count"),
+        "finite_value_count": ds.get("finite_value_count"),
+        "total_slot_count": ds.get("total_slot_count"),
         "current_rows": scope.get("current_rows"),
         "reference_rows": scope.get("reference_rows"),
         "current_columns": scope.get("current_columns"),
@@ -65380,9 +68697,19 @@ def overclaim_missing_requirements(category: str, detail: Dict[str, Any]) -> Lis
                 "missing evaluation/results/std_bench_source_correctness_audit.json from audit-std-bench-source-correctness"
             )
         elif source_correctness_summary.get("status") != "pass":
-            count = int(source_correctness_summary.get("lazy_iterator_black_box_count") or 0)
+            count = int(source_correctness_summary.get("finding_count") or 0)
+            lazy_count = int(source_correctness_summary.get("lazy_iterator_black_box_count") or 0)
+            clone_from_count = int(
+                source_correctness_summary.get("clone_from_destination_length_finding_count") or 0
+            )
+            recycle_adapter_count = int(
+                source_correctness_summary.get("bench_in_place_recycle_adapter_finding_count") or 0
+            )
             missing.append(
-                f"std_bench source correctness audit found {count} lazy iterator black_box benchmark pattern(s)"
+                "std_bench source correctness audit found "
+                f"{count} invalid benchmark source pattern(s) "
+                f"({lazy_count} lazy iterator black_box, {clone_from_count} clone_from destination length, "
+                f"{recycle_adapter_count} bench_in_place_recycle adapter chain)"
             )
             for finding in detail.get("std_bench_source_correctness_findings", [])[:4]:
                 if isinstance(finding, dict):
@@ -66312,8 +69639,13 @@ def append_paper_performance_markdown_diagnostics(lines: List[str], item: Dict[s
         lines.append(
             "  - std_bench source correctness: "
             f"`{source_correctness_summary.get('status')}` "
-            f"lazy iterator black_box findings "
+            f"findings `{source_correctness_summary.get('finding_count')}`, "
+            f"lazy iterator black_box "
             f"`{source_correctness_summary.get('lazy_iterator_black_box_count')}`, "
+            f"clone_from destination length "
+            f"`{source_correctness_summary.get('clone_from_destination_length_finding_count')}`, "
+            f"bench_in_place_recycle adapter chain "
+            f"`{source_correctness_summary.get('bench_in_place_recycle_adapter_finding_count')}`, "
             f"checked sources `{source_correctness_summary.get('checked_source_count')}`."
         )
     if isinstance(samples_dataset, dict) and samples_dataset:
@@ -67054,7 +70386,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--preflight-dry-run-probe-timeout",
         type=int,
         default=30,
-        help="Per-workload timeout in seconds for preflight dry-run probes",
+        help=(
+            "Inner-stage timeout in seconds for preflight dry-run probes; supported Collections "
+            "wrappers add bounded diagnostic grace, so total wall time may exceed this value"
+        ),
     )
     p.add_argument("--import-results", action="store_true", help="Import generated samples into results/current_datasets_summary.json")
     p.set_defaults(func=run_paper_performance_plan)
@@ -67289,6 +70624,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument(
         "--driver-bench-filter",
         help="Optional libtest filter passed to the local Collections driver; filtered plans are smoke-only",
+    )
+    p.add_argument(
+        "--driver-build-timeout",
+        type=int,
+        help=(
+            "Optional build/list timeout forwarded to local Collections drivers; "
+            "benchmark runtime remains controlled by --timeout"
+        ),
     )
     p.add_argument(
         "--allow-unfiltered-local-collections",
@@ -68490,7 +71833,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--dry-run-probe-timeout",
         type=int,
         default=30,
-        help="Per-cell timeout in seconds for delegated external-wrapper dry-run probes",
+        help=(
+            "Inner-stage timeout in seconds for delegated external-wrapper dry-run probes; "
+            "Collections wrappers add bounded diagnostic grace"
+        ),
     )
     p.set_defaults(func=audit_paper_workload_wrapper_manifest)
 
@@ -68526,7 +71872,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--dry-run-probe-timeout",
         type=int,
         default=30,
-        help="Per-workload timeout in seconds for delegated external-plan dry-run probes",
+        help=(
+            "Inner-stage timeout in seconds for delegated external-plan dry-run probes; "
+            "Collections wrappers add bounded diagnostic grace"
+        ),
     )
     p.add_argument("--write-missing-template", help="Write a fill-in JSON plan template for missing or under-run cells")
     p.set_defaults(func=audit_paper_performance_plan)
@@ -69941,6 +73290,82 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.set_defaults(func=collect_rustc_driver_mir_cross_thread_hint_probe)
 
     p = sub.add_parser(
+        "run-std-bench-dev-loop",
+        help=(
+            "build the real std_bench test binary once, verify its canonical 430-name surface, "
+            "then run selected exact leaves in separate bounded processes; always non-claim"
+        ),
+    )
+    p.add_argument("--run-id")
+    p.add_argument("--output-dir", help="Output directory; default is evaluation/raw/<run-id>")
+    p.add_argument(
+        "--profile",
+        help=(
+            "Non-claim JSON profile or preset catalog. Default: "
+            "evaluation/config/std_bench_dev_profiles.json."
+        ),
+    )
+    p.add_argument(
+        "--preset",
+        help=(
+            "Named catalog preset. The checked-in catalog defaults to quick-e2e; "
+            "use family-smoke for broader coverage or pathology with --batch-index."
+        ),
+    )
+    p.add_argument(
+        "--batch-index",
+        type=int,
+        default=0,
+        help="Recommended singleton batch index for a pathology preset; default: 0",
+    )
+    p.add_argument(
+        "--benchmark",
+        dest="benchmarks",
+        action="append",
+        default=[],
+        help=(
+            "Exact canonical std_bench name; may repeat or contain comma-separated names. "
+            "When present, overrides --profile for focused failure + control reruns."
+        ),
+    )
+    p.add_argument(
+        "--features",
+        default="bench_ourself,stats",
+        help="Cargo feature CSV for the shared dev binary; default: bench_ourself,stats",
+    )
+    p.add_argument(
+        "--toolchain",
+        help="Rustup toolchain; default reads UNIALLOC_RUST_TOOLCHAIN or rust-toolchain",
+    )
+    p.add_argument("--cargo", help="Cargo executable; default resolves from PATH")
+    p.add_argument(
+        "--build-timeout",
+        type=int,
+        default=180,
+        help="Bounded timeout for the single Cargo --no-run build; default: 180",
+    )
+    p.add_argument(
+        "--case-timeout",
+        type=int,
+        help="Per-leaf timeout; default comes from the selected profile",
+    )
+    p.add_argument(
+        "--max-output-bytes",
+        type=int,
+        default=DEFAULT_STD_BENCH_DEV_OUTPUT_BYTES,
+        help=(
+            "Maximum retained stdout/stderr tail bytes per child; default: "
+            f"{DEFAULT_STD_BENCH_DEV_OUTPUT_BYTES}"
+        ),
+    )
+    p.add_argument(
+        "--no-fail-fast",
+        action="store_true",
+        help="Omit unstable libtest --fail-fast; one leaf still runs per child process",
+    )
+    p.set_defaults(func=run_std_bench_dev_loop)
+
+    p = sub.add_parser(
         "collect-rustc-driver-mir-semantic-scope-std-bench-runtime-smoke",
         help=(
             "compile and run selected original std_bench benchmarks through the rustc_driver optimized_mir "
@@ -69965,6 +73390,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             "Runtime executor for selected std_bench functions. 'bench' preserves cargo bench performance "
             "calibration; 'test-once' runs the same #[bench] functions once via cargo test --bench with "
             "--test-threads=1 for fast coverage evidence, not performance timing."
+        ),
+    )
+    p.add_argument(
+        "--libtest-fail-fast",
+        action="store_true",
+        help=(
+            "With --libtest-mode test-once, pass -Z unstable-options --fail-fast to libtest. "
+            "Use with the current repository nightly; nightly-2022-07-01 does not support this option."
         ),
     )
     p.add_argument(

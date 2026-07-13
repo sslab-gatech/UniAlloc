@@ -466,6 +466,7 @@ fn bench_in_place_recycle(b: &mut Bencher) {
                 .enumerate()
                 .map(|(idx, e)| idx.wrapping_add(e))
                 .fuse()
+                .peekable()
                 .collect::<Vec<usize>>(),
         );
     });

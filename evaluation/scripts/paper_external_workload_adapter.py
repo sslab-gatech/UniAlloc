@@ -89,6 +89,107 @@ def emit(record: Dict[str, Any]) -> None:
     print(json.dumps(record, sort_keys=True))
 
 
+def forward_interrupted_child_output(result: Dict[str, Any]) -> None:
+    """Forward bounded child output before emitting our Ctrl-C diagnostic."""
+
+    stdout = str(result.get("stdout") or "")
+    stderr = str(result.get("stderr") or "")
+    if stdout:
+        sys.stdout.write(stdout)
+        if not stdout.endswith("\n"):
+            sys.stdout.write("\n")
+        sys.stdout.flush()
+    if stderr:
+        sys.stderr.write(stderr)
+        if not stderr.endswith("\n"):
+            sys.stderr.write("\n")
+        sys.stderr.flush()
+
+
+def adapter_child_interruption_record(
+    args: argparse.Namespace,
+    config_path: Path,
+    argv_rendered: List[str],
+    cwd_path: Path,
+    child_result: Dict[str, Any],
+    *,
+    config: Dict[str, Any],
+    selector_contract: Dict[str, Any],
+    timing_contract: Dict[str, Any],
+    source_contract: Dict[str, Any],
+    checkout_pin: Dict[str, Any],
+    external_rustup_toolchain: Dict[str, Any],
+    timeout_seconds: int,
+    max_output_bytes: int,
+) -> Dict[str, Any]:
+    child_record = last_json_object(str(child_result.get("stdout") or ""))
+    record: Dict[str, Any] = {
+        "schema_version": 1,
+        "source": "paper-external-workload-adapter-interruption",
+        "status": "interrupted",
+        "success": False,
+        "runnable": True,
+        "interrupted": True,
+        "diagnostic_only": True,
+        "claim_grade": False,
+        "claim_grade_blockers": unique_strings([
+            *adapter_claim_grade_blockers(
+                config=config,
+                selector_contract=selector_contract,
+                timing_contract=timing_contract,
+                source_contract=source_contract,
+                workload_failed=True,
+            ),
+            "adapter child command interrupted before complete measurement",
+            *child_claim_grade_blockers(child_record),
+        ]),
+        "measurement_eligible": False,
+        "import_eligible": False,
+        "sample_persisted": False,
+        "seconds": None,
+        "adapter_configured": True,
+        "config": str(config_path),
+        "command": argv_rendered,
+        "cwd": str(cwd_path),
+        "dataset": args.dataset,
+        "benchmark": args.benchmark,
+        "allocator": args.allocator,
+        "variant_feature": args.variant_feature,
+        "run_index": args.run_index,
+        "selector_contract": selector_contract,
+        "timing_contract": timing_contract,
+        "source_contract": source_contract,
+        "checkout_pin_validation": checkout_pin,
+        "external_rustup_toolchain": external_rustup_toolchain,
+        "timeout_seconds": timeout_seconds,
+        "max_output_bytes": max_output_bytes,
+        "exit_code": 130,
+        "child_returncode_after_cleanup": child_result.get("child_returncode_after_cleanup"),
+        "child_json_found": child_record is not None,
+        "child_interruption": child_record
+        if isinstance(child_record, dict) and str(child_record.get("source") or "").endswith("-interruption")
+        else None,
+        "interrupt_signal": child_result.get("interrupt_signal") or "SIGINT",
+        "process_group_pid": child_result.get("process_group_pid"),
+        "process_group_terminated": bool(child_result.get("process_group_terminated")),
+        "process_group_absent_after_cleanup": bool(child_result.get("process_group_absent_after_cleanup")),
+        "child_stdout_bytes": child_result.get("stdout_bytes"),
+        "child_stderr_bytes": child_result.get("stderr_bytes"),
+        "child_stdout_retained_bytes": child_result.get("stdout_retained_bytes"),
+        "child_stderr_retained_bytes": child_result.get("stderr_retained_bytes"),
+        "child_stdout_truncated": child_result.get("stdout_truncated"),
+        "child_stderr_truncated": child_result.get("stderr_truncated"),
+        "timed_out": False,
+        "host": host_metadata(),
+        "started_at": child_result.get("started_at"),
+        "ended_at": child_result.get("ended_at") or now_iso(),
+        "generated_at": now_iso(),
+    }
+    if record["child_interruption"] is None:
+        record.pop("child_interruption", None)
+    return record
+
+
 def render_json_literal_value(value: Any, fields: Dict[str, str]) -> Any:
     """Render placeholders inside JSON literal command arguments safely.
 
@@ -1132,13 +1233,36 @@ def main(default_config_dir: Optional[Path] = None, argv: Optional[List[str]] = 
         env.update({str(key): str(value) for key, value in rendered_env.items()})
     if external_rustup_toolchain["rustup_toolchain_injected"] and external_rustup_toolchain["effective_rustup_toolchain"]:
         env["RUSTUP_TOOLCHAIN"] = str(external_rustup_toolchain["effective_rustup_toolchain"])
-    child_result = run_child_bounded(
-        argv_rendered,
-        cwd=cwd_path,
-        env=env,
-        timeout_seconds=timeout_seconds,
-        max_output_bytes=max_output_bytes,
-    )
+    try:
+        child_result = run_child_bounded(
+            argv_rendered,
+            cwd=cwd_path,
+            env=env,
+            timeout_seconds=timeout_seconds,
+            max_output_bytes=max_output_bytes,
+        )
+    except KeyboardInterrupt as exc:
+        interrupted_result = getattr(exc, "_unialloc_bounded_child_result", None)
+        if isinstance(interrupted_result, dict):
+            forward_interrupted_child_output(interrupted_result)
+            interruption_record = adapter_child_interruption_record(
+                args,
+                config_path,
+                argv_rendered,
+                cwd_path,
+                interrupted_result,
+                config=config,
+                selector_contract=selector_contract,
+                timing_contract=timing_contract,
+                source_contract=source_contract,
+                checkout_pin=checkout_pin,
+                external_rustup_toolchain=external_rustup_toolchain,
+                timeout_seconds=timeout_seconds,
+                max_output_bytes=max_output_bytes,
+            )
+            emit(interruption_record)
+            setattr(exc, "_unialloc_interruption_record", interruption_record)
+        raise
     child_result["timeout_seconds"] = timeout_seconds
     if child_result.get("stdout_truncated"):
         sys.stdout.write(f"[paper adapter retained last {child_result['stdout_retained_bytes']} of {child_result['stdout_bytes']} child stdout bytes]\n")

@@ -65,6 +65,70 @@ def emit(record: Dict[str, Any]) -> None:
     print(json.dumps(record, sort_keys=True))
 
 
+def forward_interrupted_child_output(result: Dict[str, Any]) -> None:
+    """Forward bounded child output before emitting our Ctrl-C diagnostic."""
+
+    stdout = str(result.get("stdout") or "")
+    stderr = str(result.get("stderr") or "")
+    if stdout:
+        sys.stdout.write(stdout)
+        if not stdout.endswith("\n"):
+            sys.stdout.write("\n")
+        sys.stdout.flush()
+    if stderr:
+        sys.stderr.write(stderr)
+        if not stderr.endswith("\n"):
+            sys.stderr.write("\n")
+        sys.stderr.flush()
+
+
+def cargo_child_interruption_record(
+    args: argparse.Namespace,
+    command: List[str],
+    result: Dict[str, Any],
+) -> Dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "source": "paper-external-cargo-bench-json-interruption",
+        "status": "interrupted",
+        "success": False,
+        "interrupted": True,
+        "diagnostic_only": True,
+        "claim_grade": False,
+        "claim_grade_blockers": [
+            "child cargo bench command interrupted before complete measurement"
+        ],
+        "measurement_eligible": False,
+        "import_eligible": False,
+        "sample_persisted": False,
+        "seconds": None,
+        "dataset": getattr(args, "dataset", None),
+        "benchmark": getattr(args, "benchmark", None),
+        "allocator": getattr(args, "allocator", None),
+        "variant_feature": getattr(args, "variant_feature", None),
+        "run_index": getattr(args, "run_index", None),
+        "command": command,
+        "exit_code": 130,
+        "child_returncode_after_cleanup": result.get("child_returncode_after_cleanup"),
+        "interrupt_signal": result.get("interrupt_signal") or "SIGINT",
+        "process_group_pid": result.get("process_group_pid"),
+        "process_group_terminated": bool(result.get("process_group_terminated")),
+        "process_group_absent_after_cleanup": bool(result.get("process_group_absent_after_cleanup")),
+        "timed_out": False,
+        "timeout_seconds": getattr(args, "timeout", None),
+        "max_output_bytes": result.get("max_output_bytes"),
+        "stdout_bytes": result.get("stdout_bytes"),
+        "stderr_bytes": result.get("stderr_bytes"),
+        "stdout_retained_bytes": result.get("stdout_retained_bytes"),
+        "stderr_retained_bytes": result.get("stderr_retained_bytes"),
+        "stdout_truncated": result.get("stdout_truncated"),
+        "stderr_truncated": result.get("stderr_truncated"),
+        "started_at": result.get("started_at"),
+        "ended_at": result.get("ended_at") or now_iso(),
+        "generated_at": now_iso(),
+    }
+
+
 def finite_number(value: Any) -> Optional[float]:
     try:
         number = float(value)
@@ -2848,13 +2912,26 @@ def run(args: argparse.Namespace) -> int:
         started_at = time.time()
         criterion_dir = Path(args.criterion_dir)
         before_criterion = criterion_estimate_mtimes(criterion_dir)
-        child_result = run_child_command(
-            target_command,
-            env,
-            args.timeout,
-            max_output_bytes,
-            cwd=real_workload_dir,
-        )
+        try:
+            child_result = run_child_command(
+                target_command,
+                env,
+                args.timeout,
+                max_output_bytes,
+                cwd=real_workload_dir,
+            )
+        except KeyboardInterrupt as exc:
+            interrupted_result = getattr(exc, "_unialloc_bounded_child_result", None)
+            if isinstance(interrupted_result, dict):
+                forward_interrupted_child_output(interrupted_result)
+                interruption_record = cargo_child_interruption_record(
+                    args,
+                    target_command,
+                    interrupted_result,
+                )
+                emit(interruption_record)
+                setattr(exc, "_unialloc_interruption_record", interruption_record)
+            raise
         stdout_retained = child_result.pop("_stdout_retained_bytes", b"")
         stderr_retained = child_result.pop("_stderr_retained_bytes", b"")
         child_returncode = int(child_result.get("returncode") or 0)

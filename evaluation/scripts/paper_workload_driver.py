@@ -18,6 +18,7 @@ import math
 import os
 import platform
 import re
+import signal
 import shutil
 import subprocess
 import sys
@@ -102,6 +103,8 @@ SCUDO_RUNTIME_LIBRARY_GLOBS = (
 )
 
 BENCH_LIST_CACHE_SCHEMA = 1
+INTERRUPTED_OUTPUT_TAIL_BYTES = 64 * 1024
+INTERRUPTED_CARGO_TERM_GRACE_SECONDS = 0.5
 RUST_TOOLCHAIN_ENV = "UNIALLOC_RUST_TOOLCHAIN"
 REPO_TOOLCHAIN_ALIASES = {"", "repo", "pinned", "rust-toolchain", "rust_toolchain", "default"}
 SYSTEM_TOOLCHAIN_ALIASES = {"none", "system", "host", "path"}
@@ -156,6 +159,191 @@ def subprocess_text(value: Any) -> str:
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return ""
+
+
+def bounded_text_tail(value: Any, max_bytes: int) -> Tuple[str, int, bool]:
+    """Return a UTF-8-safe bounded tail plus its original byte count."""
+
+    raw = subprocess_text(value).encode("utf-8", errors="replace")
+    limit = max(1, int(max_bytes))
+    retained = raw[-limit:]
+    return retained.decode("utf-8", errors="ignore"), len(raw), len(raw) > len(retained)
+
+
+def relay_interrupted_benchmark_output(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Relay only bounded Cargo tails so an outer supervisor can persist them."""
+
+    stdout_tail, stdout_bytes, stdout_truncated = bounded_text_tail(
+        result.get("stdout"), INTERRUPTED_OUTPUT_TAIL_BYTES
+    )
+    stderr_tail, stderr_bytes, stderr_truncated = bounded_text_tail(
+        result.get("stderr"), INTERRUPTED_OUTPUT_TAIL_BYTES
+    )
+    if stdout_tail:
+        sys.stdout.write(stdout_tail)
+        if not stdout_tail.endswith("\n"):
+            sys.stdout.write("\n")
+        sys.stdout.flush()
+    if stderr_tail:
+        sys.stderr.write(stderr_tail)
+        if not stderr_tail.endswith("\n"):
+            sys.stderr.write("\n")
+        sys.stderr.flush()
+    return {
+        "stdout_bytes": stdout_bytes,
+        "stderr_bytes": stderr_bytes,
+        "stdout_retained_bytes": len(stdout_tail.encode("utf-8", errors="replace")),
+        "stderr_retained_bytes": len(stderr_tail.encode("utf-8", errors="replace")),
+        "stdout_truncated": stdout_truncated,
+        "stderr_truncated": stderr_truncated,
+        "max_relay_bytes_per_stream": INTERRUPTED_OUTPUT_TAIL_BYTES,
+    }
+
+
+def process_group_exists(process_group_id: int) -> bool:
+    if os.name != "posix":
+        return False
+    try:
+        os.killpg(process_group_id, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return False
+
+
+def terminate_process_group(
+    proc: subprocess.Popen[Any],
+    *,
+    grace_seconds: float = 2.0,
+) -> bool:
+    """Terminate Cargo and every benchmark process in its isolated group."""
+
+    if os.name != "posix":  # pragma: no cover - Windows runner fallback.
+        if proc.poll() is not None:
+            return False
+        proc.terminate()
+        try:
+            proc.wait(timeout=grace_seconds)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=grace_seconds)
+        return True
+
+    process_group_id = proc.pid
+    try:
+        os.killpg(process_group_id, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        return False
+    deadline = time.monotonic() + grace_seconds
+    while process_group_exists(process_group_id) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    if process_group_exists(process_group_id):
+        try:
+            os.killpg(process_group_id, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+    if proc.poll() is None:
+        try:
+            proc.wait(timeout=grace_seconds)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=grace_seconds)
+    return True
+
+
+def run_benchmark_command(
+    command: List[str],
+    *,
+    cwd: Path,
+    env: Dict[str, str],
+    timeout_seconds: int,
+) -> Dict[str, Any]:
+    """Run Cargo in an isolated process group and retain timeout diagnostics."""
+
+    started = time.perf_counter()
+    proc = subprocess.Popen(
+        command,
+        cwd=str(cwd),
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=(os.name == "posix"),
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout_seconds)
+        return {
+            "exit_code": int(proc.returncode or 0),
+            "stdout": stdout or "",
+            "stderr": stderr or "",
+            "timed_out": False,
+            "elapsed_seconds": time.perf_counter() - started,
+            "process_group_pid": proc.pid,
+            "process_group_terminated": False,
+            "process_group_absent_after_cleanup": (
+                os.name != "posix" or not process_group_exists(proc.pid)
+            ),
+            "child_returncode_after_cleanup": proc.poll(),
+        }
+    except subprocess.TimeoutExpired:
+        process_group_terminated = terminate_process_group(proc)
+        try:
+            stdout, stderr = proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:  # pragma: no cover - defensive fallback.
+            terminate_process_group(proc, grace_seconds=0.1)
+            stdout, stderr = proc.communicate()
+        return {
+            "exit_code": 124,
+            "stdout": stdout or "",
+            "stderr": stderr or "",
+            "timed_out": True,
+            "elapsed_seconds": time.perf_counter() - started,
+            "process_group_pid": proc.pid,
+            "process_group_terminated": process_group_terminated,
+            "process_group_absent_after_cleanup": (
+                os.name != "posix" or not process_group_exists(proc.pid)
+            ),
+            "child_returncode_after_cleanup": proc.poll(),
+        }
+    except KeyboardInterrupt as exc:
+        # The outer plan runner gives this wrapper a bounded SIGINT window.
+        # Escalate a TERM-resistant Cargo promptly so the wrapper can finish
+        # cleanup before that outer window expires.
+        process_group_terminated = terminate_process_group(
+            proc, grace_seconds=INTERRUPTED_CARGO_TERM_GRACE_SECONDS
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:  # pragma: no cover - defensive fallback.
+            terminate_process_group(proc, grace_seconds=0.1)
+            stdout, stderr = proc.communicate()
+        result = {
+            "exit_code": 130,
+            "stdout": stdout or "",
+            "stderr": stderr or "",
+            "timed_out": False,
+            "interrupted": True,
+            "status": "interrupted",
+            "interrupt_signal": "SIGINT",
+            "process_group_pid": proc.pid,
+            "process_group_terminated": process_group_terminated,
+            "process_group_absent_after_cleanup": (
+                os.name != "posix" or not process_group_exists(proc.pid)
+            ),
+            "child_returncode_after_cleanup": proc.poll(),
+        }
+        setattr(exc, "_unialloc_bounded_child_result", result)
+        raise
+
+
+class BenchListCommandError(RuntimeError):
+    """Structured failure from the filtered std_bench discovery phase."""
+
+    def __init__(self, message: str, *, code: int, record: Dict[str, Any]) -> None:
+        super().__init__(message)
+        self.code = code
+        self.record = record
 
 
 def bench_failure_details(stdout_text: str) -> Dict[str, Any]:
@@ -641,6 +829,69 @@ def toolchain_claim_grade_blockers(provenance: Dict[str, Any]) -> List[str]:
     return []
 
 
+def paper_toolchain_workspace_probe(
+    args: argparse.Namespace,
+    features: List[str],
+) -> Dict[str, Any]:
+    """Verify that the paper Cargo can resolve the requested locked feature graph.
+
+    Dry-run plan audits can otherwise reuse a cached bench list and report a
+    command as ready even when Cargo 1.64 cannot parse the workspace lockfile.
+    `cargo tree` is intentionally resolution-only: it is fast enough for plan
+    probes while still exercising the exact Cargo frontend and locked graph.
+    """
+
+    provenance = rust_toolchain_provenance(args)
+    cargo = args.cargo or shutil.which("cargo") or "cargo"
+    cmd = [
+        cargo,
+        *rust_toolchain_arg(provenance.get("effective_toolchain")),
+        "tree",
+        "-p",
+        "unialloc",
+        "--features",
+        ",".join(features),
+        "--locked",
+        "--offline",
+    ]
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(ROOT),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=min(max(int(getattr(args, "timeout", 60)), 1), 120),
+        )
+        return {
+            "command": cmd,
+            "ok": proc.returncode == 0,
+            "exit_code": proc.returncode,
+            "rust_toolchain_provenance": provenance,
+            "stdout_tail": proc.stdout[-2000:],
+            "stderr_tail": proc.stderr[-4000:],
+        }
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "command": cmd,
+            "ok": False,
+            "exit_code": None,
+            "timed_out": True,
+            "rust_toolchain_provenance": provenance,
+            "stdout_tail": subprocess_text(exc.stdout)[-2000:],
+            "stderr_tail": subprocess_text(exc.stderr)[-4000:],
+        }
+    except OSError as exc:
+        return {
+            "command": cmd,
+            "ok": False,
+            "exit_code": None,
+            "rust_toolchain_provenance": provenance,
+            "stdout_tail": "",
+            "stderr_tail": str(exc),
+        }
+
+
 def scudo_toolchain_probe(args: Optional[argparse.Namespace] = None) -> Dict[str, Any]:
     rustc = shutil.which("rustc") or "rustc"
     provenance = rust_toolchain_provenance(args)
@@ -977,21 +1228,58 @@ def collect_bench_list(
     cmd.extend(["--", "--list"])
     bench_env = os.environ.copy()
     bench_env.setdefault("GLIBC_TUNABLES", "glibc.pthread.rseq=0")
-    proc = subprocess.run(
-        cmd,
-        cwd=str(ROOT),
-        env=env or bench_env,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=min(max(timeout, 1), 300),
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(
-            "failed to list std_bench benchmarks: "
-            f"exit={proc.returncode}\n{proc.stderr[-2000:]}"
+    timeout_seconds = min(max(timeout, 1), 300)
+    try:
+        result = run_benchmark_command(
+            cmd,
+            cwd=ROOT,
+            env=env or bench_env,
+            timeout_seconds=timeout_seconds,
         )
-    benches = parse_bench_list(proc.stdout)
+    except OSError as exc:
+        raise BenchListCommandError(
+            "failed to start std_bench benchmark listing",
+            code=2,
+            record={
+                "status": "failed-to-start",
+                "command": cmd,
+                "timeout_seconds": timeout_seconds,
+                "exit_code": None,
+                "timed_out": False,
+                "stdout_tail": "",
+                "stderr_tail": str(exc)[-4000:],
+                "process_group_pid": None,
+                "process_group_terminated": False,
+                "process_group_absent_after_cleanup": True,
+                "child_returncode_after_cleanup": None,
+            },
+        ) from exc
+    status = (
+        "timed-out"
+        if result.get("timed_out") is True
+        else "passed"
+        if int(result.get("exit_code") or 0) == 0
+        else "failed"
+    )
+    record = bounded_command_record(
+        result,
+        command=cmd,
+        timeout_seconds=timeout_seconds,
+        status=status,
+    )
+    if result.get("timed_out") is True:
+        raise BenchListCommandError(
+            "std_bench benchmark listing timed out",
+            code=124,
+            record=record,
+        )
+    if int(result.get("exit_code") or 0) != 0:
+        raise BenchListCommandError(
+            "failed to list std_bench benchmarks",
+            code=int(result.get("exit_code") or 1),
+            record=record,
+        )
+    benches = parse_bench_list(str(result.get("stdout") or ""))
     write_cached_bench_list(fingerprint, benches)
     return benches
 
@@ -1033,7 +1321,14 @@ def semantic_harness_selection(
     cargo = args.cargo or shutil.which("cargo") or "cargo"
     if args.bench_filter:
         toolchain = str(rust_toolchain_provenance(args).get("effective_toolchain") or "")
-        bench_list = collect_bench_list(cargo, features, args.timeout, cargo_subprocess_env(args), toolchain)
+        list_timeout = getattr(args, "build_timeout", None) or args.timeout
+        bench_list = collect_bench_list(
+            cargo,
+            features,
+            list_timeout,
+            cargo_subprocess_env(args),
+            toolchain,
+        )
         selected_targets = [
             bench
             for bench in bench_list
@@ -1115,6 +1410,56 @@ def build_cargo_command(
             libtest_args.extend(["--skip", str(skip)])
         cmd.extend(["--", *libtest_args])
     return cmd
+
+
+def build_cargo_prebuild_command(
+    args: argparse.Namespace,
+    features: List[str],
+) -> List[str]:
+    """Build std_bench without running it, using the timing command inputs."""
+
+    cargo = args.cargo or shutil.which("cargo") or "cargo"
+    toolchain = str(rust_toolchain_provenance(args).get("effective_toolchain") or "")
+    cmd = [
+        cargo,
+        *rust_toolchain_arg(toolchain),
+        "bench",
+        "-p",
+        "unialloc",
+        "--bench",
+        "std_bench",
+        "--no-run",
+    ]
+    if features:
+        cmd.extend(["--features", ",".join(features)])
+    return cmd
+
+
+def bounded_command_record(
+    result: Dict[str, Any],
+    *,
+    command: List[str],
+    timeout_seconds: int,
+    status: str,
+) -> Dict[str, Any]:
+    """Keep phase evidence useful without embedding unbounded Cargo output."""
+
+    return {
+        "status": status,
+        "command": command,
+        "timeout_seconds": timeout_seconds,
+        "elapsed_seconds": result.get("elapsed_seconds"),
+        "exit_code": result.get("exit_code"),
+        "timed_out": result.get("timed_out"),
+        "stdout_tail": str(result.get("stdout") or "")[-4000:],
+        "stderr_tail": str(result.get("stderr") or "")[-4000:],
+        "process_group_pid": result.get("process_group_pid"),
+        "process_group_terminated": result.get("process_group_terminated"),
+        "process_group_absent_after_cleanup": result.get(
+            "process_group_absent_after_cleanup"
+        ),
+        "child_returncode_after_cleanup": result.get("child_returncode_after_cleanup"),
+    }
 
 
 def resolve_features(args: argparse.Namespace) -> Optional[List[str]]:
@@ -1219,6 +1564,14 @@ def semantic_policy_claim_grade_status(
 
 
 def validate_args(args: argparse.Namespace) -> Optional[int]:
+    build_timeout = getattr(args, "build_timeout", None)
+    if args.timeout <= 0 or (build_timeout is not None and build_timeout <= 0):
+        return emit_error(
+            "benchmark and build timeouts must be positive",
+            code=2,
+            timeout_seconds=args.timeout,
+            build_timeout_seconds=build_timeout,
+        )
     if args.benchmark != "Collections":
         return emit_error(
             "unsupported paper row; only the in-tree Collections row is runnable by this driver",
@@ -1311,8 +1664,30 @@ def run(args: argparse.Namespace) -> int:
     toolchain_provenance = rust_toolchain_provenance(args)
     toolchain_blockers = toolchain_claim_grade_blockers(toolchain_provenance)
     compiler_site_replay = compiler_site_replay_config(args)
+    workspace_probe = None
+    if args.dry_run and toolchain_provenance.get("paper_exact_toolchain"):
+        workspace_probe = paper_toolchain_workspace_probe(args, features)
+        if workspace_probe.get("ok") is not True:
+            return emit_error(
+                "paper toolchain could not resolve the locked UniAlloc workspace graph",
+                code=2,
+                dataset=args.dataset,
+                allocator=args.allocator,
+                paper_toolchain_workspace_probe=workspace_probe,
+            )
     try:
         semantic_selection = semantic_harness_selection(args, features)
+    except BenchListCommandError as exc:
+        return emit_error(
+            "failed to validate std_bench filter/harness selection",
+            code=exc.code,
+            phase="benchmark-list",
+            dataset=args.dataset,
+            allocator=args.allocator,
+            bench_filter=args.bench_filter,
+            benchmark_list=exc.record,
+            error=str(exc),
+        )
     except (RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
         return emit_error(
             "failed to validate std_bench filter/harness selection",
@@ -1323,6 +1698,12 @@ def run(args: argparse.Namespace) -> int:
             error=str(exc),
         )
     cmd = build_cargo_command(args, features, semantic_selection)
+    build_timeout = getattr(args, "build_timeout", None)
+    build_cmd = (
+        build_cargo_prebuild_command(args, features)
+        if build_timeout is not None
+        else None
+    )
     env = cargo_subprocess_env(args)
     metadata = {
         "ok": True,
@@ -1334,6 +1715,7 @@ def run(args: argparse.Namespace) -> int:
         "features": features,
         "rust_toolchain": toolchain_provenance.get("effective_toolchain"),
         "rust_toolchain_provenance": toolchain_provenance,
+        "paper_toolchain_workspace_probe": workspace_probe,
         "source_accepted_newer_toolchain": toolchain_provenance.get("source_accepted_newer_toolchain"),
         "source_accepted_non_repo_toolchain": toolchain_provenance.get("source_accepted_non_repo_toolchain"),
         "command": cmd,
@@ -1372,6 +1754,14 @@ def run(args: argparse.Namespace) -> int:
         },
         "subprocess_env_delta": env_delta_for_record(env),
     }
+    if build_cmd is not None:
+        metadata.update(
+            {
+                "build_command": build_cmd,
+                "build_timeout_seconds": build_timeout,
+                "benchmark_timeout_seconds": args.timeout,
+            }
+        )
     if args.allocator == "tcmalloc":
         metadata["tcmalloc_library_probe"] = tcmalloc_library_probe(args)
     if args.allocator == "scudo":
@@ -1395,41 +1785,145 @@ def run(args: argparse.Namespace) -> int:
             )
         )
         return 0
+    total_start = time.perf_counter()
+    if build_cmd is not None and build_timeout is not None:
+        try:
+            build_proc = run_benchmark_command(
+                build_cmd,
+                cwd=ROOT,
+                env=env,
+                timeout_seconds=build_timeout,
+            )
+        except KeyboardInterrupt as exc:
+            interrupted_result = getattr(exc, "_unialloc_bounded_child_result", None)
+            if isinstance(interrupted_result, dict):
+                relay = relay_interrupted_benchmark_output(interrupted_result)
+                diagnostic = {
+                    "ok": False,
+                    "source": "paper-workload-driver-interruption",
+                    "error": "cargo bench build interrupted",
+                    "code": 130,
+                    "phase": "build",
+                    "interrupted": True,
+                    "interrupt_signal": "SIGINT",
+                    "dataset": args.dataset,
+                    "benchmark": args.benchmark,
+                    "allocator": args.allocator,
+                    "bench_filter": args.bench_filter,
+                    "process_group_pid": interrupted_result.get("process_group_pid"),
+                    "process_group_terminated": interrupted_result.get(
+                        "process_group_terminated"
+                    ),
+                    "process_group_absent_after_cleanup": interrupted_result.get(
+                        "process_group_absent_after_cleanup"
+                    ),
+                    **relay,
+                }
+                print(json.dumps(diagnostic, sort_keys=True), file=sys.stderr, flush=True)
+            raise
+        build_status = (
+            "timed-out"
+            if build_proc.get("timed_out") is True
+            else "passed"
+            if int(build_proc.get("exit_code") or 0) == 0
+            else "failed"
+        )
+        build_record = bounded_command_record(
+            build_proc,
+            command=build_cmd,
+            timeout_seconds=build_timeout,
+            status=build_status,
+        )
+        if build_proc.get("timed_out") is True:
+            return emit_error(
+                "cargo bench build timed out",
+                code=124,
+                phase="build",
+                dataset=args.dataset,
+                allocator=args.allocator,
+                bench_filter=args.bench_filter,
+                build=build_record,
+            )
+        if int(build_proc.get("exit_code") or 0) != 0:
+            return emit_error(
+                "cargo bench build failed",
+                code=int(build_proc.get("exit_code") or 1),
+                phase="build",
+                dataset=args.dataset,
+                allocator=args.allocator,
+                bench_filter=args.bench_filter,
+                build=build_record,
+            )
+        metadata["build"] = build_record
     start = time.perf_counter()
     try:
-        proc = subprocess.run(
+        proc = run_benchmark_command(
             cmd,
-            cwd=str(ROOT),
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=args.timeout,
+            cwd=ROOT,
             env=env,
+            timeout_seconds=args.timeout,
         )
-    except subprocess.TimeoutExpired as exc:
-        stdout_text = subprocess_text(exc.stdout)
-        stderr_text = subprocess_text(exc.stderr)
+    except KeyboardInterrupt as exc:
+        interrupted_result = getattr(exc, "_unialloc_bounded_child_result", None)
+        if isinstance(interrupted_result, dict):
+            relay = relay_interrupted_benchmark_output(interrupted_result)
+            diagnostic = {
+                "ok": False,
+                "source": "paper-workload-driver-interruption",
+                "error": "cargo bench interrupted",
+                "code": 130,
+                "interrupted": True,
+                "interrupt_signal": "SIGINT",
+                "dataset": args.dataset,
+                "benchmark": args.benchmark,
+                "allocator": args.allocator,
+                "bench_filter": args.bench_filter,
+                "process_group_pid": interrupted_result.get("process_group_pid"),
+                "process_group_terminated": interrupted_result.get(
+                    "process_group_terminated"
+                ),
+                "process_group_absent_after_cleanup": interrupted_result.get(
+                    "process_group_absent_after_cleanup"
+                ),
+                **relay,
+            }
+            print(json.dumps(diagnostic, sort_keys=True), file=sys.stderr, flush=True)
+        raise
+    if proc.get("timed_out") is True:
+        stdout_text = str(proc.get("stdout") or "")
+        stderr_text = str(proc.get("stderr") or "")
         return emit_error(
             "cargo bench timed out",
             code=124,
+            phase="benchmark",
             timeout_seconds=args.timeout,
+            benchmark_timeout_seconds=args.timeout,
+            elapsed_seconds=proc.get("elapsed_seconds"),
+            command=cmd,
+            stdout_tail=stdout_text[-4000:],
+            stderr_tail=stderr_text[-4000:],
+            process_group_pid=proc.get("process_group_pid"),
+            process_group_terminated=proc.get("process_group_terminated"),
+            process_group_absent_after_cleanup=proc.get(
+                "process_group_absent_after_cleanup"
+            ),
+            child_returncode_after_cleanup=proc.get("child_returncode_after_cleanup"),
+            **bench_failure_details(stdout_text),
+        )
+    elapsed = time.perf_counter() - start
+    stdout_text = str(proc.get("stdout") or "")
+    stderr_text = str(proc.get("stderr") or "")
+    if int(proc.get("exit_code") or 0) != 0:
+        return emit_error(
+            "cargo bench failed",
+            code=int(proc.get("exit_code") or 1),
             command=cmd,
             stdout_tail=stdout_text[-4000:],
             stderr_tail=stderr_text[-4000:],
             **bench_failure_details(stdout_text),
         )
-    elapsed = time.perf_counter() - start
-    if proc.returncode != 0:
-        return emit_error(
-            "cargo bench failed",
-            code=proc.returncode or 1,
-            command=cmd,
-            stdout_tail=proc.stdout[-4000:],
-            stderr_tail=proc.stderr[-4000:],
-            **bench_failure_details(proc.stdout),
-        )
-    parsed_rows = parse_bench_rows(proc.stdout)
-    semantic_events = parse_semantic_events(proc.stdout)
+    parsed_rows = parse_bench_rows(stdout_text)
+    semantic_events = parse_semantic_events(stdout_text)
     selected = select_timing_rows(parsed_rows, args)
     rows = selected["timing_rows"]
     excluded_harness_rows = selected["excluded_harness_rows"]
@@ -1438,8 +1932,8 @@ def run(args: argparse.Namespace) -> int:
             "no libtest bench timing rows were parsed",
             code=1,
             command=cmd,
-            stdout_tail=proc.stdout[-4000:],
-            stderr_tail=proc.stderr[-4000:],
+            stdout_tail=stdout_text[-4000:],
+            stderr_tail=stderr_text[-4000:],
             parsed_bench_rows=0,
             benchmarks_before_failure=[],
             last_bench_rows=[],
@@ -1449,8 +1943,8 @@ def run(args: argparse.Namespace) -> int:
             "no non-harness timing rows remained after semantic/filter selection",
             code=1,
             command=cmd,
-            stdout_tail=proc.stdout[-4000:],
-            stderr_tail=proc.stderr[-4000:],
+            stdout_tail=stdout_text[-4000:],
+            stderr_tail=stderr_text[-4000:],
             parsed_bench_rows=len(parsed_rows),
             benchmarks_before_failure=[row["benchmark"] for row in parsed_rows],
             excluded_harness_benchmarks=[row["benchmark"] for row in excluded_harness_rows],
@@ -1496,6 +1990,11 @@ def run(args: argparse.Namespace) -> int:
                 "semantic_event_count": len(semantic_events),
                 "semantic_events": semantic_events,
                 "wall_seconds": elapsed,
+                **(
+                    {"total_wall_seconds": time.perf_counter() - total_start}
+                    if build_cmd is not None
+                    else {}
+                ),
             },
             sort_keys=True,
         )
@@ -1512,6 +2011,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--bench-filter", help="Optional libtest filter; subset runs are not claim-grade")
     parser.add_argument("--extra-feature", action="append", help="Extra cargo feature for smoke/debug runs")
     parser.add_argument("--timeout", type=int, default=1800)
+    parser.add_argument(
+        "--build-timeout",
+        type=int,
+        help=(
+            "Optional separate timeout for filtered benchmark listing and an explicit "
+            "cargo bench --no-run build. When omitted, --timeout keeps its legacy "
+            "single-command behavior."
+        ),
+    )
     parser.add_argument("--cargo", help="Cargo executable; default resolves from PATH")
     parser.add_argument(
         "--rust-toolchain",

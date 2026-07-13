@@ -118,6 +118,42 @@ python3 evaluation/scripts/evaluate.py collect-std-bench-auto-coverage \
 
 That run completed all 432 parsed `std_bench` timing rows and reported 100% layout-auto typed object/byte coverage, but still remains `claim_grade=false` because layout-derived IDs are not paper-equivalent compiler type IDs.
 
+### Fast std_bench development loop
+
+Do not use the calibrated 430-case Collections timing row as an edit-loop test. `run-std-bench-dev-loop` builds the real `std_bench` test target once through Cargo, checks that the resulting binary still exposes the exact canonical 430-name surface, and then reuses that binary for one bounded process per selected leaf. The consolidated `evaluation/config/std_bench_dev_profiles.json` catalog is explicitly non-claim-grade and defaults to the three-leaf `quick-e2e` preset. Prefer this short real E2E check during implementation; stop on the first failure and rerun only that exact case plus one nearby control before broadening to `family-smoke`.
+
+Known high-cost sentinels remain separate singleton batches inside the same catalog; select `--preset pathology --batch-index N`. A timeout or clearly pathological slowdown is sufficient diagnostic evidence for the development iteration: the summary retains the benchmark name, elapsed time, bounded log tails, and process-group cleanup result, then stops. Pathology probes have a five-second observation budget instead of waiting for completion; `quick-e2e` uses 12 seconds per leaf and `family-smoke` uses 20. The one Cargo build has its own budget. No preset replaces the final 430-name claim checkpoint.
+
+For `run-paper-performance-plan`, pressing Ctrl-C now preserves that diagnostic boundary without converting the interrupted workload into a timing sample. The runner writes bounded per-workload stdout/stderr logs, `paper-performance-plan-interruption.json`, `paper-performance.interruptions.jsonl`, and an interrupted run summary, then re-raises the original interrupt. When the workload uses `paper_collections_docker_driver.py`, the wrapper also uses the recorded container CID to run a bounded `kill` / `rm -f` / `inspect` cleanup and nests the absence proof in the interruption artifact. Interrupted records are diagnostic-only, non-claim-grade, and never imported.
+
+```bash
+# Default: build once, then run three real E2E leaves in separate fail-fast processes.
+python3 evaluation/scripts/evaluate.py \
+  run-std-bench-dev-loop \
+  --run-id std-bench-quick-e2e
+
+# Broaden only after quick-e2e passes: all 10 cross-family leaves.
+python3 evaluation/scripts/evaluate.py \
+  run-std-bench-dev-loop \
+  --run-id std-bench-family-smoke \
+  --preset family-smoke
+
+# One isolated high-cost probe; timeout/interrupt evidence is enough to stop.
+python3 evaluation/scripts/evaluate.py \
+  run-std-bench-dev-loop \
+  --run-id std-bench-pathology-probe-0 \
+  --preset pathology \
+  --batch-index 0
+
+# After a failure, rerun only the leaf and one nearby control with the same binary build.
+python3 evaluation/scripts/evaluate.py \
+  run-std-bench-dev-loop \
+  --benchmark slice::random_inserts \
+  --benchmark vec::bench_with_capacity_1000
+```
+
+This path deliberately does not build the rustc-driver MIR pass, purge Cargo artifacts, calibrate benchmark timing, or write `evaluation/results`. Use `collect-rustc-driver-mir-semantic-scope-std-bench-runtime-smoke` only when the compiler-rewrite/runtime integration itself changed; use the full calibrated plan only at the final claim checkpoint.
+
 For compiler/runtime integration, UniAlloc exports C ABI hooks named `__unialloc_alloc_with_metadata`, `__unialloc_dealloc_with_metadata`, `__unialloc_realloc_with_metadata`, `__unialloc_semantic_stats_snapshot`, and `__unialloc_semantic_stats_reset`. Size-negotiated consumers should prefer `__unialloc_semantic_stats_snapshot_size`, `__unialloc_semantic_stats_snapshot_abi_version`, and `__unialloc_semantic_stats_snapshot_checked` before copying `SemanticStatsSnapshot`, because the stats snapshot may grow as the evidence contract gains counters. It also exports `__unialloc_semantic_scope_enter` / `__unialloc_semantic_scope_exit` so instrumentation can make ordinary global allocation calls inherit semantic metadata. Runtime-only evaluation harnesses can enable layout-derived fallback metadata through `__unialloc_semantic_auto_metadata_enable` / `__unialloc_semantic_auto_metadata_disable`, but that mode is only an unmodified-benchmark upper-bound/prototype. Rust-side helpers include `semantic_type_id<T>()`, `semantic_layout_id(size, align)`, `AllocationMetadata::for_rust_type<T>()`, `with_rust_type_metadata_at<T>()`, and `semantic_auto_metadata_enable(...)`. A claim-grade coverage run should reset counters, have an instrumentation pass call these hooks from standard Rust allocation sites across the full benchmark suite, snapshot the counters/events, and then import the emitted/current coverage evidence.
 
 Coverage imports default to `claim_grade=false`, including `collect-coverage`, `collect-abi-coverage`, `collect-scoped-std-coverage`, `collect-semantic-std-bench-coverage`, and `collect-std-bench-auto-coverage`. Use `audit-compiler-coverage-evidence` and then `import-compiler-coverage` for a full paper-equivalent compiler-instrumented run; otherwise `claim-check --source current` will report the observed percentage but keep the coverage overclaim gate as `missing`. The generic `import-coverage` command remains available for smoke/manual artifacts, but C002 worklist items now expect the audited compiler manifest path.
