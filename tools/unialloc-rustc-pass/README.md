@@ -794,3 +794,37 @@ exact reuse, and zero fallback/raw, recovery-mismatch, or corrupt-slot events.
 This is bounded functional evidence, not universal `String`, external-app, or
 performance evidence. Oxipng was not rerun; the accepted `19ffb71` artifact
 remains stale and cannot be rebound.
+
+### Current Oxipng one-shot and exact `Vec<u8>::from(String)`
+
+The source-bound Oxipng v4.0.3 one-shot at
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-d50795f-20260713-one-shot/`
+was built and run successfully with source `d50795f892bd38ca3e7fd083da7d6eacafd0db06`;
+its summary SHA-256 is
+`e8958683d1957c40f76e4400b25c506b16d70489e9aa2526b1bb5674411d3635`.
+The pass reports 6 direct rewrites, 236 semantic scopes, 320 Drops, and 12/12
+ownership-transfer candidates/applied. Runtime reports typed allocation/
+deallocation `856/846`, 808 cache hits, fallback allocation/deallocation
+`214/174`, and a passing injected type-isolation oracle. The same summary also
+records 592 unresolved candidates, one recovery-corrected mismatch, and
+`whole_program_compiler_coverage=false`; these counts are functional/diagnostic,
+not timing, universal coverage, whole-app exact pairing, or performance claims.
+Later commits do not rebind the artifact.
+
+Commit `003704a` extends the existing exact String-to-bytes ownership proof to
+the exact core `From::from` monomorphization whose concrete types are
+`[Vec<u8, Global>, String]`. Run the current and pinned actual-wrapper probes:
+
+```sh
+python3 tools/unialloc-rustc-pass/test_mir_vec_from_string_rebind.py
+UNIALLOC_RUSTC_TOOLCHAIN=nightly-2022-07-01 \
+  python3 tools/unialloc-rustc-pass/test_mir_vec_from_string_rebind.py
+```
+
+Both report candidate/applied `1/1` and runtime attempted/applied/rejected
+`1/1/0`, preserve pointer/payload/capacity, reject wrong-String reuse, allow
+exact-Vec reuse, and keep fallback/raw/mismatch/corrupt counters at zero.
+Reference, generic, and custom-allocator forms remain fail closed. The dynamic
+fixture does not claim explicit `From<&str>` or custom-allocator coverage.
+Commit `1827e4f` independently makes a mismatched recovery `Layout` in the local
+compiler realloc ABI fail before mutation while preserving exact retry.

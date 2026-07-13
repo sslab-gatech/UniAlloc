@@ -1651,3 +1651,32 @@ the accepted `19ffb71` artifact remains stale and cannot be rebound.
   raw/fallback/mismatch/corrupt; `Box<[String]>` stays audit-only. This is bounded
   functional evidence, not universal-app, paper-percentage, or performance
   evidence; Oxipng `19ffb71` remains stale and is not rebound.
+
+## Current-source external app and ownership/realloc closure (`d50795f`–`003704a`)
+
+The one-shot Oxipng v4.0.3 run under `nightly-2022-07-01` is preserved at
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-d50795f-20260713-one-shot/`
+(summary SHA-256 `e8958683d1957c40f76e4400b25c506b16d70489e9aa2526b1bb5674411d3635`).
+At source `d50795f892bd38ca3e7fd083da7d6eacafd0db06`, its build and functional PNG
+run pass with 6 direct rewrites, 236 semantic scopes, 320 Drops, and 12/12
+ownership-transfer candidates/applied. Runtime evidence reports 856/846 typed
+allocations/deallocations, 808 cache hits, 214/174 fallback
+allocations/deallocations, and a passing injected wrong-type/exact-type address
+oracle. It also reports 592 unresolved compiler candidates, one
+recovery-corrected mismatch, and `whole_program_compiler_coverage=false`.
+Therefore it is bounded, source-bound external-application functionality and
+isolation evidence, not universal coverage, exact whole-app pairing, timing, or
+publication-grade performance evidence. Later commits do not rebind it.
+
+Commit `1827e4f` closes a separate local compiler realloc bug: a live recovery
+record with a different old `Layout` now fails closed before allocator, cache,
+statistics, fallback, or recovery mutation; an exact retry succeeds and the
+pointer is released exactly once. Hosted and `fixed_heap` focused regressions
+pass, and the integrated pre-commit suite passes 680 UniAlloc plus 430 std-bench
+tests. Commit `003704a` adds exact `Vec<u8>::from(String)` ownership rebinding.
+Current and `nightly-2022-07-01` actual-wrapper probes both report one
+candidate/applied transfer and runtime attempted/applied/rejected `1/1/0`, with
+pointer/payload/capacity preserved, wrong-String non-reuse, exact-Vec reuse, and
+zero fallback/raw/mismatch/corrupt events. Reference, generic, and custom-
+allocator shapes remain fail closed; the dynamic fixture does not establish
+explicit `From<&str>` or custom-allocator execution coverage.

@@ -619,6 +619,26 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 | Historical G001 freeze/partial records | `/Users/hqzhao/Downloads/UniAlloc-G001-freeze-235549b2/evaluation/raw/source-freeze-required-bound-plan-235549b2-20260711a/final-verification.json`；20 accepted records remain historical/diagnostic only |
 | Active implementation goal/status | `.omx/ultragoal/goals.json`、`.omx/ultragoal/ledger.jsonl`、live `git rev-parse HEAD` |
 
+### 答辩前四天的 current-source evidence boundary
+
+- **真实 Rust 应用：** Oxipng one-shot artifact
+  `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-d50795f-20260713-one-shot/`
+  绑定 `d50795f892bd38ca3e7fd083da7d6eacafd0db06`，summary SHA-256
+  `e8958683d1957c40f76e4400b25c506b16d70489e9aa2526b1bb5674411d3635`。
+  build/run PASS；6 direct rewrites、236 scopes、320 Drops、12/12 transfers；
+  runtime typed alloc/dealloc `856/846`、cache hits `808`，injected isolation
+  oracle PASS。必须同时展示 `592` unresolved、one recovery-corrected mismatch
+  与 `whole_program_compiler_coverage=false`；这是功能/隔离证据，不是 benchmark。
+- **realloc 安全：** `1827e4f` 对 local compiler realloc 的 recovery-layout
+  mismatch 在任何 mutation 前 fail closed；exact retry 成功。hosted/fixed
+  focused PASS，集成 hook 为 UniAlloc `680/680`、std-bench `430/430`。
+- **ownership transfer：** `003704a` 使 exact `Vec<u8>::from(String)` 在 current
+  与 pinned toolchain 均 actual-rewrite PASS，static/runtime `1/1`、`1/1/0`，
+  wrong String 不复用而 exact Vec 复用。不要宣称 explicit `From<&str>` 或
+  custom allocator 已有动态覆盖。
+- 以上 Oxipng 数字只绑定 `d50795f`；后续提交不得 rebinding。没有 timing、
+  论文百分比、universal coverage 或 whole-app exact-pairing claim。
+
 ---
 
 **最终选择：** 把主 deck 做成“conventional Rust semantic gap → trusted optional compiler channel → bounded representative policy → retargetable boundary → evidence judgment”的单条论证。这样 slide 更容易制作，因为每页只服务一个假设；问答也更轻松，因为所有回答都能回到 H1/H2/H3、compatibility/TCB contract、evidence tier 和明确 boundary。
