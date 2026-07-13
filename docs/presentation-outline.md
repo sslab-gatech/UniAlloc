@@ -826,3 +826,35 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 ---
 
 **最终选择：** 把主 deck 做成“conventional Rust semantic gap → trusted optional compiler channel → bounded representative policy → retargetable boundary → evidence judgment”的单条论证。这样 slide 更容易制作，因为每页只服务一个假设；问答也更轻松，因为所有回答都能回到 H1/H2/H3、compatibility/TCB contract、evidence tier 和明确 boundary。
+
+## `ce52203` current-source presentation checkpoint
+
+- **retained-cache fail-stop：** `e9d56f1` 用真实 retained typed entry 验证 raw
+  dealloc/realloc 在 mutation 前 fail-stop，而 exact typed pop 仍精确取回并只做一次
+  terminal release；这是 bounded retained-cache ownership evidence，不是 universal
+  UAF/double-free detector。
+- **actual rewrite 的两个 owner 边界：** `c55883e` 的普通 `Result::clone` `Err`
+  路径保持 Producer/Consumer 隔离并由 normal Drop 完成 typed cleanup `3/3`；
+  `cf1e685` 的跨线程 `Vec -> IntoIter` 保持 pointer/payload、wrong-Vec non-reuse
+  与 exact-IntoIter reuse，static rewrite `1/1`、runtime transfer `2/2/0`。对应 final
+  summaries 的 SHA-256 分别为 `000423fca7ca07b2c03d020d85f59766b4e546ce70d0de0b14b71c7ec301b844`
+  和 `0a9c868c8274485a4fc4597d04897b3a39f6e5cb49254fb57a18da7b0bac6269`；
+  它们按各自 manifest source-bound，后者 placement 是 manual，不声称 automatic
+  escape inference。
+- **cleanup-funclet P0 closure：** pinned baseline 真实复现
+  `funclet ... has 2 parents`；`ce52203` 后 current+pinned HashMap/Vec 与 nested
+  unwind PASS，current cleanup call 保持 `Terminate(InCleanup)`，callback-capable
+  HashMap 路径 audit-only。失败的 `bc150b3` artifact 继续 append-only 保存，只在
+  current execution 上被成功证据 supersede。
+- **最新真实 Rust 应用：** `oxipng-final-ce52203-20260713-success` 是 pinned、
+  instrumented Oxipng v4.0.3 one-shot；summary SHA-256 为
+  `aee2957266eddfb88eee21fb6b689e45402bd7b230ec84fae6e55ef196fce39c`。
+  build/run `0/0`、output hash match；direct/scope/Drop `6/256/320`、static transfer
+  `12/12`、runtime transfer `3/1/2`。必须同页显示 unresolved semantic/Drop
+  `570/2`、multi-owner `117` 和 `whole_program_compiler_coverage=false`。
+- **runtime oracle 与措辞边界：** typed `860/850`、fallback `210/170`、raw
+  `183/144/26`、cache hit/insert/bypass `808/841/61`、recovery `830/1`；wrong-type
+  non-reuse、exact reuse、corrupt/dropped `0/0`。PathBuf mismatch 状态是
+  `recovery_corrected_non_exact`。这是 instrumented/pinned functional evidence，
+  不是 unmodified/universal application、performance 或 paper percentage claim；
+  `430/430` 也只是 finite compiler inventory，不是 whole-program coverage。

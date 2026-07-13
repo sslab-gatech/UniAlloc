@@ -2084,3 +2084,64 @@ the ThreadCache change. It did not confirm the intended direction, so commit
 `f5c4fa4` reverts the optimization exactly and no additional timing run was
 performed. These two one-shot values are diagnostic-only and support no stable
 percentage or paper claim.
+
+## Current-source presentation checkpoint at `ce52203`
+
+The `ce52203` tree includes three additional bounded type-isolation security
+closures. Commit `e9d56f1` retains a real typed allocation in the type cache,
+then proves in isolated hosted and fixed-heap child processes that raw
+deallocation and reallocation fail-stop before mutating it; the exact typed pop
+still recovers the same pointer for one terminal release. Commit `c55883e`
+executes ordinary `Result<u8, Vec<ProducerPayload>>::clone` on the `Err` variant
+under the actual wrapper. The applied scope preserves the Producer identity,
+rejects same-layout Consumer reuse, and normal Drop records exactly three typed
+deallocations and cache insertions with all fallback, raw, mismatch, corrupt,
+and dropped counters at zero. Its preserved summary is
+`result-err-clone-final-bc150b3-20260713/summary.json` (SHA-256
+`000423fca7ca07b2c03d020d85f59766b4e546ce70d0de0b14b71c7ec301b844`).
+
+Commit `cf1e685` adds the complementary cross-thread `Vec<u8> -> IntoIter<u8>`
+owner-transfer regression. One static candidate is actually rewritten; runtime
+transfer attempted/applied/rejected is `2/2/0`, the buffer pointer and payload
+survive the main-to-worker move, a wrong `Vec` identity cannot reuse it, and the
+exact `IntoIter` identity does. The final preserved summary is
+`cross-thread-vec-into-iter-final-bc150b3-20260713/summary.json` (SHA-256
+`0a9c868c8274485a4fc4597d04897b3a39f6e5cb49254fb57a18da7b0bac6269`).
+Placement in this fixture is manually forced, so it does not establish automatic
+escape inference. These two `bc150b3` artifacts remain bound to their recorded
+source manifests rather than being silently rebound to `ce52203`.
+
+The real-application gate then exposed a separate pinned-toolchain compiler-pass
+bug: the `bc150b3` baseline reproduced rustc's
+`funclet ... has 2 parents` ICE because legacy cleanup blocks were given a
+second outward-unwind parent. Commit `ce52203` preserves the cleanup-funclet
+topology. Current and pinned HashMap/Vec plus nested-unwind fixtures pass;
+current cleanup calls retain `Terminate(InCleanup)`. Callback-capable
+`HashMap::{reserve,try_reserve,shrink_*}` remains audit-only rather than
+inheriting an incorrect outer identity. The failed `bc150b3` Oxipng artifact is
+still append-only historical evidence and is superseded only for current
+execution, not deleted or reinterpreted.
+
+The superseding one-shot is
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-final-ce52203-20260713-success/`;
+its `oxipng-realapp-repro-summary.json` SHA-256 is
+`aee2957266eddfb88eee21fb6b689e45402bd7b230ec84fae6e55ef196fce39c`.
+Pinned Oxipng v4.0.3 builds and runs with return codes `0/0`, and the output PNG
+hash matches. The target-crate audit records direct/scope/Drop rewrites
+`6/256/320`, static ownership transfer `12/12`, and runtime transfer
+attempted/applied/rejected `3/1/2`. It also preserves unresolved semantic/Drop
+counts `570/2` and `117` multi-owner Drop rows; consequently
+`whole_program_compiler_coverage=false`.
+
+Runtime typed alloc/dealloc is `860/850`, fallback alloc/dealloc `210/170`, raw
+alloc/dealloc/realloc `183/144/26`, cache hit/insert/bypass `808/841/61`, and
+recovery match/mismatch `830/1`. The injected oracle observes wrong-type
+non-reuse and exact-type reuse with corrupt/dropped `0/0`. The one PathBuf
+mismatch is safely allocation-record corrected, so the whole-run status remains
+`recovery_corrected_non_exact`, not exact pairing.
+
+This is a pinned, instrumented real-application functional check, not an
+unmodified universal application result, whole-program proof, benchmark, or
+performance claim. The compiler `430/430` gate is a finite regression inventory,
+not whole-program coverage. No timing, paper percentage, or publication-grade
+performance conclusion is made from this checkpoint.
