@@ -692,6 +692,48 @@ This is functional/diagnostic evidence for an instrumented pinned application,
 not timing, performance, universal coverage, natural-application isolation, or
 whole-program exact-pairing evidence.
 
+### Current-source fail-closed provenance and cache-integrity boundary
+
+The current code-bearing checkpoint `3ccd464` is newer than the accepted
+`19ffb71` Oxipng artifact. Commit `9a02767` keeps arbitrary local, platform,
+and dependency factories audit-only when a supported-looking return type is
+the only provenance. Exact
+`Box::new` and `String::with_capacity` are rewritten only after alloc/std
+DefId/path and destination/argument checks; custom same-name and allocator-
+specific forms remain fail closed.  The current and pinned-toolchain opaque
+dependency probes report zero caller-attributed typed allocations for direct
+and `Result` factories, while the exact `Vec::with_capacity` control still
+pairs its typed allocation and Drop.
+The `ab98075` end-to-end type-isolation security validator now checks those
+audit-only rows explicitly: its current-toolchain run validates 86 unresolved
+rows (including 8 `producer_box` and 4 `consumer_box` opaque-factory callsites)
+while retaining 12/12 exact inner typed allocation/deallocation events,
+wrong-type non-reuse, exact-type reuse, and zero mismatch/corrupt-slot events.
+
+That revision also makes the nested-unwind probe an exact receiver proof: an
+outer `Vec::extend` scope remains at depth `1` after a caught inner
+`Vec::extend_from_slice` panic and returns to depth `0` only after the outer
+call, with the outer allocation/Drop identity paired.  The direct-local hidden
+replacement regression intentionally leaves a cross-crate replacement pointer
+raw when no allocation recovery record exists; the pass/runtime must not
+fabricate typed attribution from a later surrounding scope.
+
+Commit `3ccd464` separately authenticates every occupied metadata-segregated
+cache entry before identity matching, reuse, accounting, or full-bucket
+eviction projection.  The keyed structural authenticator covers the lookup
+key, full callsite-agnostic identity, policy, pointer, layout, optional
+PAC/software-auth state, and metadata.  Forced inline/materialized identity-key
+collisions miss, and discriminator/auth downgrade, null/non-null pointer,
+size/alignment, and full-bucket candidate tampering fail stop in hosted and
+`fixed_heap` regressions.  This is bounded compiler/runtime safety evidence,
+not universal factory coverage or arbitrary-memory-corruption protection.
+
+The accepted Oxipng one-shot remains source-bound to
+`19ffb710752466a140067034650190dfdad60328`; it is stale relative to current
+development source and is not rebound to either hardening commit. Consequently
+there is no current-source external-application count, performance result, or
+publication-grade claim here.
+
 ### Exact `HashSet::with_capacity` outer-table regression
 
 `test_mir_hashset_with_capacity_outer_owner.py` drives an ordinary Cargo

@@ -1528,6 +1528,62 @@ application.  It is not a benchmark, performance result, universal compiler
 coverage result, natural-application isolation proof, or whole-program exact
 pairing claim.
 
+## Current-source compiler and segregated-cache hardening after `19ffb71`
+
+Commits `9a02767` and `3ccd464` are current-source functional/safety evidence
+collected after the accepted Oxipng checkpoint.  They deliberately are not
+rebound to the `19ffb71` application run.
+
+`9a02767` makes constructor provenance fail closed: an arbitrary local,
+platform, or dependency factory that merely returns `Vec`, `String`,
+`Result<T, E>`, or another supported-looking destination remains audit-only
+unless the pass has an exact constructor or callee-body allocation proof.  The
+bounded exact exceptions added in this revision are `Box::new` and
+`String::with_capacity`; both require the expected alloc/std DefId/path and
+exact destination/argument shape, so custom same-name helpers and allocator-
+specific variants are not widened into rewrites.  Current and
+`nightly-2022-07-01` dependency-factory probes observe zero caller-attributed
+typed allocations for opaque direct/`Result` factories while the exact
+`Vec::with_capacity` control still pairs one typed allocation/deallocation.
+Commit `ab98075` updates the existing end-to-end type-isolation security probe
+to validate this boundary row by row instead of requiring zero unresolved
+factories.  On the current toolchain it accepts 86 audited fail-closed rows
+(including 8 `producer_box` and 4 `consumer_box` callsites), while the exact
+inner `Box::new` scopes still produce 12/12 typed allocation/deallocation
+events, distinct compiler identities, wrong-type non-reuse, exact-type reuse,
+and zero recovery mismatch or corrupt cache slots.
+
+The same revision strengthens lifecycle evidence.  Its nested-unwind probe
+keeps an exact outer `Vec<PostUnwindPayload>::extend` receiver scope active
+while an inner `Vec<PanicOnClone>::extend_from_slice` unwinds and is caught:
+the inner cleanup restores semantic depth to `1`, the outer return restores it
+to `0`, and the outer allocation/Drop identity pairs.  The direct-local hidden
+replacement regression also encodes the anti-reattribution boundary: a
+cross-crate replacement pointer without an allocation recovery record remains
+raw at its later non-local Drop instead of inheriting the surrounding semantic
+scope.
+
+`3ccd464` closes the metadata-segregated cache's exact-identity collision and
+entry-tamper gaps without increasing the entry footprint.  Each occupied entry
+now carries an unconditional keyed structural authenticator over the lookup
+key, full callsite-agnostic allocator-visible identity, policy key, pointer,
+layout, optional PAC/software-auth state, and metadata.  Inline and
+materialized forced-key collisions are misses unless the exact identity
+matches; protection/auth downgrade, discriminator, pointer (including null),
+size, and alignment tampering fail stop.  Full-bucket replacement and retained-
+byte/capacity projection authenticate the eviction candidate before reading
+its size or selecting it.  Hosted and `fixed_heap` collision, structural-
+tamper, full-bucket projection, metadata-segregated, and footprint regressions
+pass.  This is bounded internal cache-integrity evidence, not a universal
+memory-corruption, compiler-identity-uniqueness, or UAF guarantee.
+
+The Oxipng artifact remains bound only to
+`19ffb710752466a140067034650190dfdad60328` and is therefore stale relative to
+the current development source, whose latest code-bearing checkpoint is
+`3ccd464f06f07c478f48698091c168352e0f81d9`.  No current-source external-
+application count, performance result, or publication-grade claim is made from
+these two hardening commits.
+
 ## Exact HashSet allocation identity and composed split-realloc safety
 
 Commit `39c827b` closes an actual compiler false negative for ordinary
