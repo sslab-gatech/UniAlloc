@@ -503,10 +503,12 @@ identity, and same-layout Box storage to reject a Vec identity and accept the
 exact Box identity.  Fallback, raw-without-metadata, recovery-mismatch,
 corruption, and dropped-stat counters must remain zero.
 
-- **Current closure (`c477339`, `6640305`, `95d3d8a`, `cfd887e`).** Redox/Linux
-  tests type-check with portable `mincore`, but Redox runtime still needs an
-  external linker/runner; cross-thread wrong-layout deallocation preserves its
-  record until exact retry. The current generated app proves exact `Box<[u8]>`,
+- **Current closure (`c477339`, `6640305`, `95d3d8a`, `cfd887e`, `6b0747e`).**
+  Redox/Linux tests type-check with portable `mincore`, but Redox runtime still
+  needs an external linker/runner; cross-thread wrong-layout deallocation and
+  reallocation preserve their record until exact retry. Reallocation rejects
+  before zero-size, active, auto, quarantine, stats, or raw dispatch while
+  Missing fallback remains. The current generated app proves exact `Box<[u8]>`,
   Box/Vec wrong-type non-reuse, exact Box reuse, and zero raw/fallback/mismatch/
   corrupt while `Box<[String]>` stays audit-only. This is bounded functional
   evidence, not universal-app, paper-percentage, or performance evidence; Oxipng

@@ -1639,11 +1639,14 @@ corrupt-slot events. This is bounded functional evidence, not universal
 `String`, external-application, or performance evidence. Oxipng was not rerun;
 the accepted `19ffb71` artifact remains stale and cannot be rebound.
 
-- **Current-source closure (`c477339`, `6640305`, `95d3d8a`, `cfd887e`).**
+- **Current-source closure (`c477339`, `6640305`, `95d3d8a`, `cfd887e`, `6b0747e`).**
   Redox/Linux tests type-check with target-gated, Linux/Darwin-portable `mincore`;
   Redox runtime still needs an external linker/runner. Cross-thread wrong-layout
-  `GlobalAlloc` deallocation fails before raw/cache mutation and exact retry
-  consumes the record. The current generated actual-wrapper app passes exact
+  `GlobalAlloc` deallocation and reallocation fail before raw/cache mutation and
+  exact retry consumes the record. Reallocation checks once before zero-size,
+  active-scope, auto-metadata, quarantine, statistics, and raw dispatch; the
+  regression covers each former bypass while preserving Missing-record fallback
+  semantics. The current generated actual-wrapper app passes exact
   `Box<[u8]>` provenance, Box/Vec wrong-type non-reuse, exact Box reuse, and zero
   raw/fallback/mismatch/corrupt; `Box<[String]>` stays audit-only. This is bounded
   functional evidence, not universal-app, paper-percentage, or performance
