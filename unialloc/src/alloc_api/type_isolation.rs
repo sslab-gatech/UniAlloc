@@ -7946,6 +7946,48 @@ unsafe fn push_plain_semantic_type_cache_eligible(
     }
 }
 
+/// Complete a cache insertion rejection without exposing the allocation
+/// between its process-visible retained owner and the sole backend release.
+/// A delayed-free flush already owns the pointer in the quarantine domain, so
+/// it only retires the temporary type-cache registration and lets its caller
+/// release under that existing owner. Ordinary cache bypasses retain their new
+/// type-cache registration through the raw release.
+#[inline]
+unsafe fn finish_rejected_type_cache_insert(
+    alloc: &RustAllocator,
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+    ownership: PendingGlobalTypeCacheOwnership,
+    terminal_ownership: TerminalRetainedOwnership,
+) -> bool {
+    match terminal_ownership {
+        TerminalRetainedOwnership::DelayedFree => {
+            if !global_delayed_free_contains_ptr(ptr) {
+                panic!("cache rejection lost delayed-free ownership");
+            }
+            drop(ownership);
+            false
+        }
+        TerminalRetainedOwnership::TypeCache => {
+            ownership.commit();
+            if metadata.requests(FLAG_FORCE_INITIALIZE) {
+                core::ptr::write_bytes(ptr, 0, layout.size());
+            }
+            let _ = terminal_release_retained_raw(
+                alloc,
+                ptr,
+                layout,
+                TerminalRetainedOwnership::TypeCache,
+            );
+            // A backend refusal intentionally leaves type-cache ownership
+            // published. Treat it as handled so no caller attempts a second,
+            // unowned raw release.
+            true
+        }
+    }
+}
+
 unsafe fn cache_compiler_type_metadata_free(
     alloc: &RustAllocator,
     ptr: *mut u8,
@@ -7980,7 +8022,14 @@ unsafe fn cache_compiler_type_metadata_free(
                     }
                     true
                 }
-                Err(()) => false,
+                Err(()) => finish_rejected_type_cache_insert(
+                    alloc,
+                    ptr,
+                    layout,
+                    metadata,
+                    ownership,
+                    TerminalRetainedOwnership::TypeCache,
+                ),
             }
         }
         SemanticTypeCacheClass::Plain => {
@@ -7988,17 +8037,25 @@ unsafe fn cache_compiler_type_metadata_free(
                 ownership.commit();
                 true
             } else {
-                false
+                finish_rejected_type_cache_insert(
+                    alloc,
+                    ptr,
+                    layout,
+                    metadata,
+                    ownership,
+                    TerminalRetainedOwnership::TypeCache,
+                )
             }
         }
     }
 }
 
-unsafe fn cache_semantic_free(
+unsafe fn cache_semantic_free_with_rejected_insert_owner(
     alloc: &RustAllocator,
     ptr: *mut u8,
     layout: Layout,
     metadata: AllocationMetadata,
+    terminal_ownership: TerminalRetainedOwnership,
 ) -> bool {
     if ptr.is_null() {
         record_stats_type_cache_bypass(metadata);
@@ -8028,7 +8085,14 @@ unsafe fn cache_semantic_free(
                     }
                     true
                 }
-                Err(()) => false,
+                Err(()) => finish_rejected_type_cache_insert(
+                    alloc,
+                    ptr,
+                    layout,
+                    metadata,
+                    ownership,
+                    terminal_ownership,
+                ),
             }
         }
         SemanticTypeCacheClass::Plain => {
@@ -8036,10 +8100,33 @@ unsafe fn cache_semantic_free(
                 ownership.commit();
                 true
             } else {
-                false
+                finish_rejected_type_cache_insert(
+                    alloc,
+                    ptr,
+                    layout,
+                    metadata,
+                    ownership,
+                    terminal_ownership,
+                )
             }
         }
     }
+}
+
+#[inline]
+unsafe fn cache_semantic_free(
+    alloc: &RustAllocator,
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> bool {
+    cache_semantic_free_with_rejected_insert_owner(
+        alloc,
+        ptr,
+        layout,
+        metadata,
+        TerminalRetainedOwnership::TypeCache,
+    )
 }
 
 #[inline]
@@ -9244,6 +9331,10 @@ impl Drop for PendingGlobalTypeCacheOwnership {
     fn drop(&mut self) {
         if !self.committed {
             let _ = unregister_global_type_cache_ownership(self.ptr);
+            #[cfg(test)]
+            // The rejection regression arms this boundary to prove that any
+            // rollback followed by raw release would expose an ownership gap.
+            pause_before_terminal_raw_release_for_test(&TEST_TYPE_CACHE_TERMINAL_RELEASE_PHASE);
         }
     }
 }
@@ -9857,7 +9948,13 @@ unsafe fn release_delayed_slot(alloc: &RustAllocator, slot: DelayedFreeSlot) {
     let metadata = slot
         .metadata
         .with_flags(slot.metadata.flags & !FLAG_DELAYED_FREE);
-    if cache_semantic_free(alloc, slot.ptr, layout, metadata) {
+    if cache_semantic_free_with_rejected_insert_owner(
+        alloc,
+        slot.ptr,
+        layout,
+        metadata,
+        TerminalRetainedOwnership::DelayedFree,
+    ) {
         // Publish process-visible type-cache ownership before retiring the
         // quarantine record.  The overlap closes the cross-thread window where
         // the pointer would otherwise be visible in neither ownership domain.
@@ -24473,6 +24570,122 @@ mod tests {
         assert_terminal_release_keeps_process_ownership_until_raw_free(
             TerminalRetainedOwnership::TypeCache,
         );
+    }
+
+    #[test]
+    fn type_cache_rejected_insert_keeps_process_ownership_until_raw_free() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0x7A11_BA55)
+            .with_module(0xC0DE_BA55)
+            .with_callsite(0xA110_BA55)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let (retained_tx, retained_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (released_tx, released_rx) = std::sync::mpsc::channel();
+        let owner = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert!(!ptr.is_null());
+            unsafe {
+                // Keep the TLS caches empty while making both the inline and
+                // linked plain-cache aggregate checks reject this insertion.
+                set_plain_type_cache_retained_bytes(MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES, true);
+            }
+            retained_tx.send(ptr as usize).unwrap();
+            release_rx.recv().unwrap();
+            unsafe {
+                alloc.dealloc_with_metadata(ptr, layout, metadata);
+                set_plain_type_cache_retained_bytes(0, false);
+            }
+            released_tx.send(()).unwrap();
+        });
+
+        let ptr = retained_rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("owner should publish cache-rejected pointer") as *mut u8;
+        let phase = &TEST_TYPE_CACHE_TERMINAL_RELEASE_PHASE;
+        let phase_guard = TerminalReleasePhaseGuard::arm(phase);
+        release_tx.send(()).unwrap();
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while phase.load(Ordering::Acquire) != 2 {
+            if std::time::Instant::now() >= deadline {
+                phase_guard.release_owner();
+                let _ = released_rx
+                    .recv_timeout(std::time::Duration::from_secs(10))
+                    .unwrap_or_else(|_| std::process::abort());
+                owner.join().expect("timed-out cache-rejection owner");
+                phase_guard.reset();
+                panic!("cache rejection did not reach the ownership boundary");
+            }
+            thread::yield_now();
+        }
+
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            reject_global_delayed_free_owned_pointer(ptr);
+        }))
+        .is_err();
+        phase_guard.release_owner();
+        released_rx
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .expect("owner should complete cache-rejection raw release");
+        owner.join().expect("cache-rejection owner");
+        phase_guard.reset();
+
+        assert!(
+            rejected,
+            "a rejected type-cache insertion must remain process-owned until the sole raw release completes"
+        );
+        assert!(!global_type_cache_contains_ptr(ptr));
+    }
+
+    #[test]
+    fn delayed_flush_cache_rejection_preserves_delayed_owner() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xD17A_BA55)
+            .with_module(0xC0DE_DA55)
+            .with_callsite(0xA110_DA55)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE);
+        let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+
+        unsafe {
+            alloc.dealloc_with_metadata(ptr, layout, metadata);
+            assert!(global_delayed_free_contains_ptr(ptr));
+            assert!(!global_type_cache_contains_ptr(ptr));
+
+            set_plain_type_cache_retained_bytes(MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES, true);
+            release_delayed_free_for_test(&alloc);
+            set_plain_type_cache_retained_bytes(0, false);
+        }
+
+        assert!(!global_delayed_free_contains_ptr(ptr));
+        assert!(!global_type_cache_contains_ptr(ptr));
     }
 
     #[test]
