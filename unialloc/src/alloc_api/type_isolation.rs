@@ -1550,7 +1550,7 @@ static mut INLINE_TYPE_CACHE_ENTRY: InlineTypeCacheEntry = InlineTypeCacheEntry:
 #[derive(Clone, Copy)]
 struct SegregatedTypeCacheEntry {
     cache_key: u64,
-    type_id: u64,
+    structural_auth: u64,
     policy_key: u32,
     ptr: *mut u8,
     size: usize,
@@ -1563,7 +1563,7 @@ impl SegregatedTypeCacheEntry {
     const fn empty() -> Self {
         Self {
             cache_key: UNKNOWN_SEMANTIC_ID,
-            type_id: UNKNOWN_SEMANTIC_ID,
+            structural_auth: 0,
             policy_key: 0,
             ptr: core::ptr::null_mut(),
             size: 0,
@@ -1573,17 +1573,99 @@ impl SegregatedTypeCacheEntry {
         }
     }
 
+    #[inline]
+    fn new(
+        cache_key: u64,
+        policy_key: u32,
+        ptr: *mut u8,
+        layout: Layout,
+        metadata: AllocationMetadata,
+    ) -> Self {
+        let type_id = metadata.type_id;
+        let auth = metadata_record_auth(ptr, layout, metadata);
+        Self {
+            cache_key,
+            structural_auth: derive_segregated_type_cache_structural_auth(
+                cache_key, type_id, policy_key, ptr, layout, auth, metadata,
+            ),
+            policy_key,
+            ptr,
+            size: layout.size(),
+            align: layout.align(),
+            auth,
+            metadata,
+        }
+    }
+
     fn is_empty(self) -> bool {
-        self.ptr.is_null()
+        if !self.ptr.is_null() {
+            return false;
+        }
+        if self.cache_key != UNKNOWN_SEMANTIC_ID
+            || self.structural_auth != 0
+            || self.policy_key != 0
+            || self.size != 0
+            || self.align != EMPTY_LAYOUT_ALIGN
+            || self.auth != 0
+            || self.metadata != AllocationMetadata::unknown()
+        {
+            panic!("metadata integrity check failed");
+        }
+        true
     }
 
     #[inline]
-    fn matches_cached_key(self, layout: Layout, cache_key: u64, policy_key: u32) -> bool {
-        self.cache_key == cache_key
-            && self.size == layout.size()
-            && self.align == layout.align()
-            && !self.ptr.is_null()
-            && self.policy_key == policy_key
+    fn validate_structural_integrity(self) {
+        if self.is_empty() {
+            return;
+        }
+
+        let stored_layout = checked_side_table_layout(self.size, self.align, "segregated metadata");
+        if self.policy_key != segregated_type_cache_policy_key(self.metadata)
+            || self.structural_auth
+                != derive_segregated_type_cache_structural_auth(
+                    self.cache_key,
+                    self.metadata.type_id,
+                    self.policy_key,
+                    self.ptr,
+                    stored_layout,
+                    self.auth,
+                    self.metadata,
+                )
+        {
+            panic!("metadata integrity check failed");
+        }
+    }
+
+    #[inline]
+    fn matches_cached_key(
+        self,
+        layout: Layout,
+        identity: TypeCacheIdentity,
+        cache_key: u64,
+        policy_key: u32,
+    ) -> bool {
+        if self.is_empty() {
+            return false;
+        }
+        // Authenticate every occupied candidate before any discriminator is
+        // allowed to turn it into a hit or miss.  Otherwise a corrupted key,
+        // layout, policy, or identity could make a protected entry invisible.
+        self.validate_structural_integrity();
+
+        // The hash is only a lookup accelerator.  Exact reuse also binds the
+        // allocator-visible identity; TypeCacheIdentity intentionally omits
+        // callsite so allocation and Drop sites for one owner can still pair.
+        if self.cache_key != cache_key
+            || self.size != layout.size()
+            || self.align != layout.align()
+            || self.ptr.is_null()
+            || self.policy_key != policy_key
+        {
+            return false;
+        }
+
+        TypeCacheIdentity::from_metadata(self.metadata) == identity
     }
 
     #[inline]
@@ -1632,9 +1714,7 @@ impl SegregatedTypeCacheBucket {
         let mut idx = 0usize;
         while idx < self.count {
             let entry = self.entries[idx];
-            if Layout::from_size_align(entry.size, entry.align).is_err() {
-                return None;
-            }
+            entry.validate_structural_integrity();
             total = total.saturating_add(entry.retained_bytes());
             idx += 1;
         }
@@ -1642,7 +1722,11 @@ impl SegregatedTypeCacheBucket {
     }
 
     fn can_accept_object_size(&self, incoming_size: usize) -> bool {
-        if self.is_corrupt() {
+        if self.is_structurally_corrupt() {
+            return false;
+        }
+        self.validate_active_entry_integrity();
+        if self.has_corrupt_accounting() {
             return false;
         }
         debug_assert_eq!(
@@ -1665,6 +1749,7 @@ impl SegregatedTypeCacheBucket {
     fn pop(
         &mut self,
         layout: Layout,
+        identity: TypeCacheIdentity,
         cache_key: u64,
         policy_key: u32,
     ) -> Option<SegregatedTypeCacheEntry> {
@@ -1676,7 +1761,7 @@ impl SegregatedTypeCacheBucket {
         while idx > 0 {
             idx -= 1;
             let entry = self.entries[idx];
-            if entry.matches_cached_key(layout, cache_key, policy_key) {
+            if entry.matches_cached_key(layout, identity, cache_key, policy_key) {
                 let last_idx = self.count - 1;
                 self.entries[idx] = self.entries[last_idx];
                 self.entries[last_idx] = SegregatedTypeCacheEntry::empty();
@@ -1698,6 +1783,7 @@ impl SegregatedTypeCacheBucket {
 
     fn push(&mut self, entry: SegregatedTypeCacheEntry) -> Option<SegregatedTypeCacheEntry> {
         self.clear_if_corrupt();
+        self.validate_active_entry_integrity();
 
         if self.count < SEGREGATED_TYPE_CACHE_DEPTH {
             self.entries[self.count] = entry;
@@ -1717,7 +1803,22 @@ impl SegregatedTypeCacheBucket {
         Some(evicted)
     }
 
-    fn matching_entry_count(&self, layout: Layout, cache_key: u64, policy_key: u32) -> usize {
+    #[inline]
+    fn validate_active_entry_integrity(&self) {
+        let mut idx = 0usize;
+        while idx < core::cmp::min(self.count, SEGREGATED_TYPE_CACHE_DEPTH) {
+            self.entries[idx].validate_structural_integrity();
+            idx += 1;
+        }
+    }
+
+    fn matching_entry_count(
+        &self,
+        layout: Layout,
+        identity: TypeCacheIdentity,
+        cache_key: u64,
+        policy_key: u32,
+    ) -> usize {
         if self.is_corrupt() {
             return 0;
         }
@@ -1725,7 +1826,7 @@ impl SegregatedTypeCacheBucket {
         let mut count = 0;
         let mut idx = 0;
         while idx < self.count {
-            if self.entries[idx].matches_cached_key(layout, cache_key, policy_key) {
+            if self.entries[idx].matches_cached_key(layout, identity, cache_key, policy_key) {
                 count += 1;
             }
             idx += 1;
@@ -2134,12 +2235,13 @@ unsafe fn pop_segregated_type_cache_bucket(
     bucket: &mut SegregatedTypeCacheBucket,
     cache_domain: u8,
     layout: Layout,
+    identity: TypeCacheIdentity,
     cache_key: u64,
     policy_key: u32,
 ) -> Option<SegregatedTypeCacheEntry> {
     let was_occupied = bucket.count != 0;
     let was_corrupt = bucket.is_corrupt();
-    let popped = bucket.pop(layout, cache_key, policy_key);
+    let popped = bucket.pop(layout, identity, cache_key, policy_key);
     note_segregated_type_cache_bucket_occupancy_change(
         cache_domain,
         was_occupied,
@@ -6375,7 +6477,11 @@ fn segregated_type_cache_projected_aggregate_retained_bytes(
     bucket: SegregatedTypeCacheBucket,
     incoming_size: usize,
 ) -> Option<usize> {
-    if bucket.is_corrupt() {
+    if bucket.is_structurally_corrupt() {
+        return None;
+    }
+    bucket.validate_active_entry_integrity();
+    if bucket.has_corrupt_accounting() {
         return None;
     }
 
@@ -6981,6 +7087,7 @@ unsafe fn push_type_cache_eligible_with_key(
 unsafe fn pop_segregated_type_cache_from(
     cache: &mut [SegregatedTypeCacheBucket; TYPE_CACHE_SLOTS],
     layout: Layout,
+    identity: TypeCacheIdentity,
     cache_key: u64,
     policy_key: u32,
     cache_domain: u8,
@@ -6994,9 +7101,14 @@ unsafe fn pop_segregated_type_cache_from(
         let bucket = &mut cache[idx];
         if clear_segregated_type_cache_bucket_if_corrupt(bucket, cache_domain) {
             clear_segregated_type_cache_hot_bucket(layout, cache_key, policy_key, cache_domain);
-        } else if let Some(entry) =
-            pop_segregated_type_cache_bucket(bucket, cache_domain, layout, cache_key, policy_key)
-        {
+        } else if let Some(entry) = pop_segregated_type_cache_bucket(
+            bucket,
+            cache_domain,
+            layout,
+            identity,
+            cache_key,
+            policy_key,
+        ) {
             return Some(entry);
         }
     }
@@ -7012,9 +7124,14 @@ unsafe fn pop_segregated_type_cache_from(
         let bucket = &mut cache[idx];
         if clear_segregated_type_cache_bucket_if_corrupt(bucket, cache_domain) {
             clear_segregated_type_cache_hot_bucket(layout, cache_key, policy_key, cache_domain);
-        } else if let Some(entry) =
-            pop_segregated_type_cache_bucket(bucket, cache_domain, layout, cache_key, policy_key)
-        {
+        } else if let Some(entry) = pop_segregated_type_cache_bucket(
+            bucket,
+            cache_domain,
+            layout,
+            identity,
+            cache_key,
+            policy_key,
+        ) {
             remember_segregated_type_cache_hot_bucket(
                 layout,
                 cache_key,
@@ -7044,12 +7161,13 @@ unsafe fn finish_popped_segregated_type_cache_entry(
 #[inline]
 unsafe fn arm64e_pop_inline_segregated_type_cache_entry(
     layout: Layout,
+    identity: TypeCacheIdentity,
     cache_key: u64,
     policy_key: u32,
 ) -> Option<SegregatedTypeCacheEntry> {
     let mut slot = ARM64E_INLINE_SEGREGATED_TYPE_CACHE_ENTRY.lock();
     let entry = *slot;
-    if entry.matches_cached_key(layout, cache_key, policy_key) {
+    if entry.matches_cached_key(layout, identity, cache_key, policy_key) {
         *slot = SegregatedTypeCacheEntry::empty();
         Some(entry)
     } else {
@@ -7070,16 +7188,7 @@ unsafe fn arm64e_push_inline_segregated_type_cache_entry(
     if !slot.is_empty() {
         return false;
     }
-    *slot = SegregatedTypeCacheEntry {
-        cache_key,
-        type_id: metadata.type_id,
-        policy_key,
-        ptr,
-        size: layout.size(),
-        align: layout.align(),
-        auth: metadata_record_auth(ptr, layout, metadata),
-        metadata,
-    };
+    *slot = SegregatedTypeCacheEntry::new(cache_key, policy_key, ptr, layout, metadata);
     record_stats_type_cache_insert(metadata);
     true
 }
@@ -7087,6 +7196,7 @@ unsafe fn arm64e_push_inline_segregated_type_cache_entry(
 #[inline]
 unsafe fn pop_inline_segregated_type_cache_eligible_with_key(
     layout: Layout,
+    identity: TypeCacheIdentity,
     cache_key: u64,
     policy_key: u32,
     inline_cache_domain: u8,
@@ -7095,7 +7205,7 @@ unsafe fn pop_inline_segregated_type_cache_eligible_with_key(
     while index < inline_segregated_type_cache_capacity(inline_cache_domain) {
         let slot = inline_segregated_type_cache_entry_at(inline_cache_domain, index);
         let entry = *slot;
-        if entry.matches_cached_key(layout, cache_key, policy_key) {
+        if entry.matches_cached_key(layout, identity, cache_key, policy_key) {
             *slot = SegregatedTypeCacheEntry::empty();
             return Some(entry);
         }
@@ -7130,12 +7240,13 @@ unsafe fn pop_segregated_type_cache_eligible_with_key(
     cache_key: u64,
     policy_key: u32,
 ) -> Option<*mut u8> {
+    let identity = TypeCacheIdentity::from_metadata(metadata);
     #[cfg(unialloc_target_arm64e)]
     {
         if inline_segregated_type_cache_pop_eligible(metadata) {
-            if let Some(entry) =
-                arm64e_pop_inline_segregated_type_cache_entry(layout, cache_key, policy_key)
-            {
+            if let Some(entry) = arm64e_pop_inline_segregated_type_cache_entry(
+                layout, identity, cache_key, policy_key,
+            ) {
                 return Some(finish_popped_segregated_type_cache_entry(
                     layout, metadata, entry,
                 ));
@@ -7151,6 +7262,7 @@ unsafe fn pop_segregated_type_cache_eligible_with_key(
             let inline_cache_domain = segregated_type_cache_inline_domain(metadata);
             if let Some(entry) = pop_inline_segregated_type_cache_eligible_with_key(
                 layout,
+                identity,
                 cache_key,
                 policy_key,
                 inline_cache_domain,
@@ -7176,8 +7288,9 @@ unsafe fn pop_segregated_type_cache_bucket_eligible_with_key(
         metadata.requests(FLAG_HUGEPAGE_METADATA) && !HUGEPAGE_SEGREGATED_TYPE_CACHE.is_null();
 
     let (cache, cache_domain) = segregated_type_cache_for_pop(metadata);
+    let identity = TypeCacheIdentity::from_metadata(metadata);
     if let Some(entry) =
-        pop_segregated_type_cache_from(cache, layout, cache_key, policy_key, cache_domain)
+        pop_segregated_type_cache_from(cache, layout, identity, cache_key, policy_key, cache_domain)
     {
         let ptr = finish_popped_segregated_type_cache_entry(layout, metadata, entry);
         #[cfg(not(feature = "fixed_heap"))]
@@ -7197,6 +7310,7 @@ unsafe fn pop_segregated_type_cache_bucket_eligible_with_key(
         if let Some(entry) = pop_segregated_type_cache_from(
             ordinary_segregated_type_cache_mut(),
             layout,
+            identity,
             cache_key,
             policy_key,
             SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
@@ -7219,6 +7333,7 @@ unsafe fn segregated_type_cache_full_bucket_for_replacement(
     cached_retained_bytes: &mut Option<usize>,
     start: usize,
     layout: Layout,
+    identity: TypeCacheIdentity,
     cache_key: u64,
     policy_key: u32,
 ) -> Option<usize> {
@@ -7263,7 +7378,7 @@ unsafe fn segregated_type_cache_full_bucket_for_replacement(
             }
         }
 
-        let matches = cache[idx].matching_entry_count(layout, cache_key, policy_key);
+        let matches = cache[idx].matching_entry_count(layout, identity, cache_key, policy_key);
         if selected.is_none() || matches > selected_matches {
             selected = Some(idx);
             selected_matches = matches;
@@ -7277,6 +7392,7 @@ unsafe fn segregated_type_cache_full_bucket_for_replacement(
 unsafe fn inline_segregated_type_cache_has_matching_bucket_entry(
     cache: &mut [SegregatedTypeCacheBucket; TYPE_CACHE_SLOTS],
     layout: Layout,
+    identity: TypeCacheIdentity,
     cache_key: u64,
     policy_key: u32,
     cache_domain: u8,
@@ -7291,7 +7407,7 @@ unsafe fn inline_segregated_type_cache_has_matching_bucket_entry(
         if clear_segregated_type_cache_bucket_if_corrupt(&mut cache[idx], cache_domain) {
             clear_segregated_type_cache_hot_bucket(layout, cache_key, policy_key, cache_domain);
             observed_corrupt = true;
-        } else if cache[idx].matching_entry_count(layout, cache_key, policy_key) != 0 {
+        } else if cache[idx].matching_entry_count(layout, identity, cache_key, policy_key) != 0 {
             return true;
         }
     }
@@ -7308,7 +7424,7 @@ unsafe fn inline_segregated_type_cache_has_matching_bucket_entry(
         if clear_segregated_type_cache_bucket_if_corrupt(bucket, cache_domain) {
             clear_segregated_type_cache_hot_bucket(layout, cache_key, policy_key, cache_domain);
             observed_corrupt = true;
-        } else if bucket.matching_entry_count(layout, cache_key, policy_key) != 0 {
+        } else if bucket.matching_entry_count(layout, identity, cache_key, policy_key) != 0 {
             remember_segregated_type_cache_hot_bucket(
                 layout,
                 cache_key,
@@ -7331,6 +7447,7 @@ unsafe fn materialize_matching_inline_segregated_type_cache(
     inline_cache_domain: u8,
     bucket_idx: usize,
     layout: Layout,
+    identity: TypeCacheIdentity,
     cache_key: u64,
     policy_key: u32,
 ) {
@@ -7338,7 +7455,7 @@ unsafe fn materialize_matching_inline_segregated_type_cache(
     while index < inline_segregated_type_cache_capacity(inline_cache_domain) {
         let inline_slot = inline_segregated_type_cache_entry_at(inline_cache_domain, index);
         let entry = *inline_slot;
-        if entry.matches_cached_key(layout, cache_key, policy_key) {
+        if entry.matches_cached_key(layout, identity, cache_key, policy_key) {
             if !try_append_segregated_type_cache_bucket(&mut cache[bucket_idx], cache_domain, entry)
             {
                 break;
@@ -7375,6 +7492,7 @@ unsafe fn push_inline_segregated_type_cache_eligible_with_key(
     inline_cache_domain: u8,
     cache: &mut [SegregatedTypeCacheBucket; TYPE_CACHE_SLOTS],
 ) -> bool {
+    let identity = TypeCacheIdentity::from_metadata(metadata);
     let mut inline_slot: *mut SegregatedTypeCacheEntry = core::ptr::null_mut();
     let mut inline_slot_index = 0usize;
     let mut index = 0usize;
@@ -7382,7 +7500,7 @@ unsafe fn push_inline_segregated_type_cache_eligible_with_key(
         let candidate = inline_segregated_type_cache_entry_at(inline_cache_domain, index);
         let entry = *candidate;
         if inline_cache_domain == SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY
-            && entry.matches_cached_key(layout, cache_key, policy_key)
+            && entry.matches_cached_key(layout, identity, cache_key, policy_key)
         {
             // Keep multiple objects from one semantic class in the bucket
             // cache, where the existing bounded depth/eviction policy applies.
@@ -7434,6 +7552,7 @@ unsafe fn push_inline_segregated_type_cache_eligible_with_key(
         if inline_segregated_type_cache_has_matching_bucket_entry(
             cache,
             layout,
+            identity,
             cache_key,
             policy_key,
             cache_domain,
@@ -7450,16 +7569,7 @@ unsafe fn push_inline_segregated_type_cache_eligible_with_key(
         }
     }
 
-    *inline_slot = SegregatedTypeCacheEntry {
-        cache_key,
-        type_id: metadata.type_id,
-        policy_key,
-        ptr,
-        size: layout.size(),
-        align: layout.align(),
-        auth: metadata_record_auth(ptr, layout, metadata),
-        metadata,
-    };
+    *inline_slot = SegregatedTypeCacheEntry::new(cache_key, policy_key, ptr, layout, metadata);
     record_stats_type_cache_insert(metadata);
     true
 }
@@ -7493,6 +7603,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
     cache_key: u64,
     policy_key: u32,
 ) -> Result<Option<SegregatedTypeCacheEntry>, ()> {
+    let identity = TypeCacheIdentity::from_metadata(metadata);
     #[cfg(unialloc_target_arm64e)]
     {
         if inline_segregated_type_cache_eligible_for_classified(metadata)
@@ -7582,7 +7693,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
                 }
             } else {
                 let bucket_matches =
-                    cache[idx].matching_entry_count(layout, cache_key, policy_key) != 0;
+                    cache[idx].matching_entry_count(layout, identity, cache_key, policy_key) != 0;
                 let bucket_can_accept = cache[idx].can_accept_object_size(layout.size());
                 let bucket_has_entry_capacity = cache[idx].count < SEGREGATED_TYPE_CACHE_DEPTH;
                 if bucket_matches && (!bucket_has_entry_capacity || !bucket_can_accept) {
@@ -7643,7 +7754,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
                     }
                 }
                 let bucket_matches =
-                    cache[idx].matching_entry_count(layout, cache_key, policy_key) != 0;
+                    cache[idx].matching_entry_count(layout, identity, cache_key, policy_key) != 0;
                 let bucket_can_accept = cache[idx].can_accept_object_size(layout.size());
                 let bucket_has_entry_capacity = cache[idx].count < SEGREGATED_TYPE_CACHE_DEPTH;
                 if bucket_matches && (!bucket_has_entry_capacity || !bucket_can_accept) {
@@ -7681,6 +7792,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
                 &mut aggregate_retained_bytes,
                 start,
                 layout,
+                identity,
                 cache_key,
                 policy_key,
             ) {
@@ -7711,16 +7823,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
         let evicted = push_segregated_type_cache_bucket(
             bucket,
             cache_domain,
-            SegregatedTypeCacheEntry {
-                cache_key,
-                type_id: metadata.type_id,
-                policy_key,
-                ptr,
-                size: layout.size(),
-                align: layout.align(),
-                auth: metadata_record_auth(ptr, layout, metadata),
-                metadata,
-            },
+            SegregatedTypeCacheEntry::new(cache_key, policy_key, ptr, layout, metadata),
         );
         remember_segregated_type_cache_hot_bucket(
             layout,
@@ -7736,6 +7839,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
                 inline_cache_domain,
                 bucket_idx,
                 layout,
+                identity,
                 cache_key,
                 policy_key,
             );
@@ -7878,6 +7982,7 @@ unsafe fn release_evicted_segregated_type_cache_entry(
     alloc: &RustAllocator,
     slot: SegregatedTypeCacheEntry,
 ) {
+    slot.validate_structural_integrity();
     let evicted_layout = checked_side_table_layout(slot.size, slot.align, "segregated metadata");
     verify_metadata_record_auth(
         slot.ptr,
@@ -7963,6 +8068,27 @@ fn metadata_auth_cookie() -> u64 {
 fn keyed_integrity_hash(domain: &[u8]) -> u64 {
     let hash = fnv1a_mix(FNV1A_OFFSET, domain);
     fnv1a_mix(hash, &metadata_auth_cookie().to_le_bytes())
+}
+
+#[inline]
+fn derive_segregated_type_cache_structural_auth(
+    cache_key: u64,
+    type_id: u64,
+    policy_key: u32,
+    ptr: *mut u8,
+    layout: Layout,
+    auth: u64,
+    metadata: AllocationMetadata,
+) -> u64 {
+    let hash = keyed_integrity_hash(b"semantic-segregated-type-cache-entry-v1");
+    let hash = fnv1a_mix(hash, &cache_key.to_le_bytes());
+    let hash = fnv1a_mix(hash, &type_id.to_le_bytes());
+    let hash = fnv1a_mix(hash, &policy_key.to_le_bytes());
+    let hash = fnv1a_mix(hash, &(ptr as usize).to_le_bytes());
+    let hash = fnv1a_mix(hash, &layout.size().to_le_bytes());
+    let hash = fnv1a_mix(hash, &layout.align().to_le_bytes());
+    let hash = fnv1a_mix(hash, &auth.to_le_bytes());
+    non_zero_hash(mix_semantic_metadata_fields(hash, metadata, true))
 }
 
 #[inline]
@@ -12294,7 +12420,7 @@ mod tests {
         assert_eq!(
             (
                 segregated.cache_key,
-                segregated.type_id,
+                segregated.structural_auth,
                 segregated.policy_key,
                 segregated.size,
                 segregated.align,
@@ -12585,6 +12711,7 @@ mod tests {
         ptr: *mut u8,
     ) -> Option<*mut SegregatedTypeCacheEntry> {
         let cache_key = type_cache_identity_key(metadata);
+        let identity = TypeCacheIdentity::from_metadata(metadata);
         let policy_key = segregated_type_cache_policy_key(metadata);
         let inline_cache_domain = segregated_type_cache_inline_domain(metadata);
         let mut inline_index = 0usize;
@@ -12592,7 +12719,7 @@ mod tests {
             let inline_entry =
                 inline_segregated_type_cache_entry_at(inline_cache_domain, inline_index);
             if (*inline_entry).ptr == ptr
-                && (*inline_entry).matches_cached_key(layout, cache_key, policy_key)
+                && (*inline_entry).matches_cached_key(layout, identity, cache_key, policy_key)
             {
                 return Some(inline_entry);
             }
@@ -12603,7 +12730,7 @@ mod tests {
         let mut idx = 0usize;
         while idx < bucket.count {
             if bucket.entries[idx].ptr == ptr
-                && bucket.entries[idx].matches_cached_key(layout, cache_key, policy_key)
+                && bucket.entries[idx].matches_cached_key(layout, identity, cache_key, policy_key)
             {
                 return Some(&mut bucket.entries[idx] as *mut SegregatedTypeCacheEntry);
             }
@@ -19217,16 +19344,13 @@ mod tests {
             assert!(push_segregated_type_cache_bucket(
                 &mut SEGREGATED_TYPE_CACHE[matching_idx],
                 SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
-                SegregatedTypeCacheEntry {
+                SegregatedTypeCacheEntry::new(
                     cache_key,
-                    type_id: metadata.type_id,
                     policy_key,
-                    ptr: next_ptr as *mut u8,
-                    size: layout.size(),
-                    align: layout.align(),
-                    auth: 0,
+                    next_ptr as *mut u8,
+                    layout,
                     metadata,
-                },
+                ),
             )
             .is_none());
             next_ptr += layout.size();
@@ -19247,16 +19371,13 @@ mod tests {
                     assert!(push_segregated_type_cache_bucket(
                         &mut SEGREGATED_TYPE_CACHE[idx],
                         SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
-                        SegregatedTypeCacheEntry {
-                            cache_key: other_cache_key,
-                            type_id: other_metadata.type_id,
-                            policy_key: other_policy_key,
-                            ptr: next_ptr as *mut u8,
-                            size: layout.size(),
-                            align: layout.align(),
-                            auth: 0,
-                            metadata: other_metadata,
-                        },
+                        SegregatedTypeCacheEntry::new(
+                            other_cache_key,
+                            other_policy_key,
+                            next_ptr as *mut u8,
+                            layout,
+                            other_metadata,
+                        ),
                     )
                     .is_none());
                     next_ptr += layout.size();
@@ -19722,6 +19843,7 @@ mod tests {
             assert!(pop_segregated_type_cache_from(
                 ordinary_segregated_type_cache_mut(),
                 layout,
+                TypeCacheIdentity::from_metadata(metadata),
                 cache_key,
                 policy_key,
                 SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
@@ -19759,16 +19881,13 @@ mod tests {
 
             for idx in 0..SEGREGATED_TYPE_CACHE_DEPTH {
                 let ptr = stale_storage[idx].as_mut_ptr() as *mut u8;
-                SEGREGATED_TYPE_CACHE[start].entries[idx] = SegregatedTypeCacheEntry {
-                    cache_key: other_cache_key,
-                    type_id: other_metadata.type_id,
-                    policy_key: other_policy_key,
+                SEGREGATED_TYPE_CACHE[start].entries[idx] = SegregatedTypeCacheEntry::new(
+                    other_cache_key,
+                    other_policy_key,
                     ptr,
-                    size: layout.size(),
-                    align: layout.align(),
-                    auth: metadata_record_auth(ptr, layout, other_metadata),
-                    metadata: other_metadata,
-                };
+                    layout,
+                    other_metadata,
+                );
             }
             SEGREGATED_TYPE_CACHE[start].count = SEGREGATED_TYPE_CACHE_DEPTH;
             SEGREGATED_TYPE_CACHE[start].retained_bytes =
@@ -19781,16 +19900,13 @@ mod tests {
                 start,
             );
             let inline_ptr = inline_storage.as_mut_ptr() as *mut u8;
-            INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry {
-                cache_key: other_cache_key,
-                type_id: other_metadata.type_id,
-                policy_key: other_policy_key,
-                ptr: inline_ptr,
-                size: layout.size(),
-                align: layout.align(),
-                auth: metadata_record_auth(inline_ptr, layout, other_metadata),
-                metadata: other_metadata,
-            };
+            INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry::new(
+                other_cache_key,
+                other_policy_key,
+                inline_ptr,
+                layout,
+                other_metadata,
+            );
 
             SEGREGATED_TYPE_CACHE_BUCKET_PROBE_STEPS.store(0, Ordering::Relaxed);
             let fresh = fresh_storage.as_mut_ptr() as *mut u8;
@@ -19838,16 +19954,7 @@ mod tests {
                 assert!(push_segregated_type_cache_bucket(
                     &mut SEGREGATED_TYPE_CACHE[matching_idx],
                     SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
-                    SegregatedTypeCacheEntry {
-                        cache_key,
-                        type_id: metadata.type_id,
-                        policy_key,
-                        ptr,
-                        size: layout.size(),
-                        align: layout.align(),
-                        auth: 0,
-                        metadata,
-                    },
+                    SegregatedTypeCacheEntry::new(cache_key, policy_key, ptr, layout, metadata),
                 )
                 .is_none());
             }
@@ -19922,16 +20029,13 @@ mod tests {
             let mut inline_storage = [0usize; TYPE_CACHE_NODE_WORDS * 2];
 
             let capped_ptr = capped_storage.as_mut_ptr() as *mut u8;
-            SEGREGATED_TYPE_CACHE[start].entries[0] = SegregatedTypeCacheEntry {
-                cache_key: other_cache_key,
-                type_id: other_metadata.type_id,
-                policy_key: other_policy_key,
-                ptr: capped_ptr,
-                size: capped_size,
-                align: capped_layout.align(),
-                auth: metadata_record_auth(capped_ptr, capped_layout, other_metadata),
-                metadata: other_metadata,
-            };
+            SEGREGATED_TYPE_CACHE[start].entries[0] = SegregatedTypeCacheEntry::new(
+                other_cache_key,
+                other_policy_key,
+                capped_ptr,
+                capped_layout,
+                other_metadata,
+            );
             SEGREGATED_TYPE_CACHE[start].count = 1;
             SEGREGATED_TYPE_CACHE[start].retained_bytes = capped_size;
             remember_segregated_type_cache_hot_bucket(
@@ -19943,16 +20047,13 @@ mod tests {
             );
 
             let inline_ptr = inline_storage.as_mut_ptr() as *mut u8;
-            INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry {
-                cache_key: other_cache_key,
-                type_id: other_metadata.type_id,
-                policy_key: other_policy_key,
-                ptr: inline_ptr,
-                size: layout.size(),
-                align: layout.align(),
-                auth: metadata_record_auth(inline_ptr, layout, other_metadata),
-                metadata: other_metadata,
-            };
+            INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry::new(
+                other_cache_key,
+                other_policy_key,
+                inline_ptr,
+                layout,
+                other_metadata,
+            );
 
             SEGREGATED_TYPE_CACHE_BUCKET_PROBE_STEPS.store(0, Ordering::Relaxed);
             let fresh = fresh_storage.as_mut_ptr() as *mut u8;
@@ -20013,16 +20114,13 @@ mod tests {
 
             for idx in 0..SEGREGATED_TYPE_CACHE_DEPTH {
                 let ptr = stale_storage[idx].as_mut_ptr() as *mut u8;
-                SEGREGATED_TYPE_CACHE[start].entries[idx] = SegregatedTypeCacheEntry {
-                    cache_key: other_cache_key,
-                    type_id: other_metadata.type_id,
-                    policy_key: other_policy_key,
+                SEGREGATED_TYPE_CACHE[start].entries[idx] = SegregatedTypeCacheEntry::new(
+                    other_cache_key,
+                    other_policy_key,
                     ptr,
-                    size: layout.size(),
-                    align: layout.align(),
-                    auth: metadata_record_auth(ptr, layout, other_metadata),
-                    metadata: other_metadata,
-                };
+                    layout,
+                    other_metadata,
+                );
             }
             SEGREGATED_TYPE_CACHE[start].count = SEGREGATED_TYPE_CACHE_DEPTH;
             SEGREGATED_TYPE_CACHE[start].retained_bytes =
@@ -20039,16 +20137,13 @@ mod tests {
             // path, where a single free used to rescan the entire TLS table for
             // each candidate/final aggregate-budget check.
             let inline_ptr = inline_storage.as_mut_ptr() as *mut u8;
-            INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry {
-                cache_key: other_cache_key,
-                type_id: other_metadata.type_id,
-                policy_key: other_policy_key,
-                ptr: inline_ptr,
-                size: layout.size(),
-                align: layout.align(),
-                auth: metadata_record_auth(inline_ptr, layout, other_metadata),
-                metadata: other_metadata,
-            };
+            INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry::new(
+                other_cache_key,
+                other_policy_key,
+                inline_ptr,
+                layout,
+                other_metadata,
+            );
 
             SEGREGATED_TYPE_CACHE_AGGREGATE_SCANS.store(0, Ordering::Relaxed);
             let fresh = fresh_storage.as_mut_ptr() as *mut u8;
@@ -20219,6 +20314,144 @@ mod tests {
     }
 
     #[test]
+    fn metadata_segregated_inline_rejects_forced_identity_key_collision() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
+            let owner_a = AllocationMetadata::for_type(0x5E6D_2102)
+                .with_module(0xC0DE_A)
+                .with_callsite(0xA110_A)
+                .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED | FLAG_POINTER_AUTH)
+                .with_lifetime_hint(0x11)
+                .with_placement_hint(0x21);
+            let foreign_b = AllocationMetadata::for_type(owner_a.type_id)
+                .with_module(0xC0DE_B)
+                .with_callsite(0xA110_B)
+                .with_flags(owner_a.flags)
+                .with_lifetime_hint(0x12)
+                .with_placement_hint(0x22);
+            let forced_collision_key = 0xC011_1510_5E6D_2102;
+            let policy_key = segregated_type_cache_policy_key(owner_a);
+            assert_eq!(policy_key, segregated_type_cache_policy_key(foreign_b));
+            let ptr = storage.as_mut_ptr() as *mut u8;
+
+            assert!(push_segregated_type_cache_eligible_with_key(
+                ptr,
+                layout,
+                owner_a,
+                forced_collision_key,
+                policy_key,
+            )
+            .expect("inline cache insert")
+            .is_none());
+            assert_eq!(
+                pop_segregated_type_cache_eligible_with_key(
+                    layout,
+                    foreign_b,
+                    forced_collision_key,
+                    policy_key,
+                ),
+                None,
+                "a forced key/policy/layout collision must not bypass the full allocator-visible identity",
+            );
+            assert_eq!(
+                pop_segregated_type_cache_eligible_with_key(
+                    layout,
+                    owner_a,
+                    forced_collision_key,
+                    policy_key,
+                ),
+                Some(ptr),
+                "rejecting the foreign identity must preserve the inline entry for its owner",
+            );
+        }
+    }
+
+    #[test]
+    fn metadata_segregated_bucket_rejects_forced_identity_key_collision() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            let mut storage = [[0usize; TYPE_CACHE_NODE_WORDS]; 2];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage[0]), align_of::<usize>()).unwrap();
+            let owner_a = AllocationMetadata::for_type(0x5E6D_2103)
+                .with_module(0xC0DE_A)
+                .with_callsite(0xA110_A)
+                .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED)
+                .with_lifetime_hint(0x31)
+                .with_placement_hint(0x41);
+            let foreign_b = AllocationMetadata::for_type(owner_a.type_id)
+                .with_module(0xC0DE_B)
+                .with_callsite(0xA110_B)
+                .with_flags(owner_a.flags)
+                .with_lifetime_hint(0x32)
+                .with_placement_hint(0x42);
+            let forced_collision_key = 0xC011_1510_5E6D_2103;
+            let policy_key = segregated_type_cache_policy_key(owner_a);
+            assert_eq!(policy_key, segregated_type_cache_policy_key(foreign_b));
+            let ptr_a = storage[0].as_mut_ptr() as *mut u8;
+            let ptr_b = storage[1].as_mut_ptr() as *mut u8;
+
+            assert!(push_segregated_type_cache_eligible_with_key(
+                ptr_a,
+                layout,
+                owner_a,
+                forced_collision_key,
+                policy_key,
+            )
+            .expect("first inline cache insert")
+            .is_none());
+            assert!(push_segregated_type_cache_eligible_with_key(
+                ptr_b,
+                layout,
+                owner_a,
+                forced_collision_key,
+                policy_key,
+            )
+            .expect("second insert should materialize the owner bucket")
+            .is_none());
+            assert!(
+                ordinary_inline_segregated_type_cache_entry_snapshot_for_test().is_empty(),
+                "the second same-owner insert should materialize the inline entry into the bucket",
+            );
+            assert_eq!(
+                pop_segregated_type_cache_eligible_with_key(
+                    layout,
+                    foreign_b,
+                    forced_collision_key,
+                    policy_key,
+                ),
+                None,
+                "a forced key/policy/layout collision must not consume a materialized foreign entry",
+            );
+
+            let first = pop_segregated_type_cache_eligible_with_key(
+                layout,
+                owner_a,
+                forced_collision_key,
+                policy_key,
+            )
+            .expect("the exact owner must retain its first bucket entry");
+            let second = pop_segregated_type_cache_eligible_with_key(
+                layout,
+                owner_a,
+                forced_collision_key,
+                policy_key,
+            )
+            .expect("the exact owner must retain its second bucket entry");
+            assert_ne!(first, second);
+            assert!([ptr_a, ptr_b].contains(&first));
+            assert!([ptr_a, ptr_b].contains(&second));
+        }
+    }
+
+    #[test]
     fn metadata_segregated_type_cache_clears_corrupt_count_before_pop() {
         let _guard = test_guard();
         unsafe {
@@ -20234,16 +20467,8 @@ mod tests {
             let bucket_idx = segregated_type_cache_slot(metadata, layout);
             let ptr = storage.as_mut_ptr() as *mut u8;
 
-            SEGREGATED_TYPE_CACHE[bucket_idx].entries[0] = SegregatedTypeCacheEntry {
-                cache_key,
-                type_id: metadata.type_id,
-                policy_key,
-                ptr,
-                size: layout.size(),
-                align: layout.align(),
-                auth: metadata_record_auth(ptr, layout, metadata),
-                metadata,
-            };
+            SEGREGATED_TYPE_CACHE[bucket_idx].entries[0] =
+                SegregatedTypeCacheEntry::new(cache_key, policy_key, ptr, layout, metadata);
             SEGREGATED_TYPE_CACHE[bucket_idx].count = SEGREGATED_TYPE_CACHE_DEPTH + 1;
             remember_segregated_type_cache_hot_bucket(
                 layout,
@@ -20282,16 +20507,8 @@ mod tests {
             let bucket_idx = segregated_type_cache_slot(metadata, layout);
             let ptr = storage.as_mut_ptr() as *mut u8;
 
-            SEGREGATED_TYPE_CACHE[bucket_idx].entries[1] = SegregatedTypeCacheEntry {
-                cache_key,
-                type_id: metadata.type_id,
-                policy_key,
-                ptr,
-                size: layout.size(),
-                align: layout.align(),
-                auth: metadata_record_auth(ptr, layout, metadata),
-                metadata,
-            };
+            SEGREGATED_TYPE_CACHE[bucket_idx].entries[1] =
+                SegregatedTypeCacheEntry::new(cache_key, policy_key, ptr, layout, metadata);
             SEGREGATED_TYPE_CACHE[bucket_idx].count = 2;
             remember_segregated_type_cache_hot_bucket(
                 layout,
@@ -20351,7 +20568,7 @@ mod tests {
             let bucket = &SEGREGATED_TYPE_CACHE[bucket_idx];
             assert_eq!(bucket.count, 1);
             assert_eq!(bucket.entries[0].ptr, ptr);
-            assert_eq!(bucket.entries[0].type_id, metadata.type_id);
+            assert_eq!(bucket.entries[0].metadata.type_id, metadata.type_id);
             assert_eq!(pop_segregated_type_cache(layout, metadata), Some(ptr));
         }
     }
@@ -20374,16 +20591,8 @@ mod tests {
             let stale_ptr = stale_storage.as_mut_ptr() as *mut u8;
             let ptr = storage.as_mut_ptr() as *mut u8;
 
-            SEGREGATED_TYPE_CACHE[bucket_idx].entries[1] = SegregatedTypeCacheEntry {
-                cache_key,
-                type_id: metadata.type_id,
-                policy_key,
-                ptr: stale_ptr,
-                size: layout.size(),
-                align: layout.align(),
-                auth: metadata_record_auth(stale_ptr, layout, metadata),
-                metadata,
-            };
+            SEGREGATED_TYPE_CACHE[bucket_idx].entries[1] =
+                SegregatedTypeCacheEntry::new(cache_key, policy_key, stale_ptr, layout, metadata);
             SEGREGATED_TYPE_CACHE[bucket_idx].count = 0;
             assert_eq!(
                 metadata_segregation_side_cache_snapshot().corrupt_buckets,
@@ -20563,7 +20772,7 @@ mod tests {
                 .entries
                 .iter()
                 .take(primary_bucket.count)
-                .all(|entry| entry.type_id == base.type_id));
+                .all(|entry| entry.metadata.type_id == base.type_id));
 
             let matching_bucket_idx = (primary + 1) & (TYPE_CACHE_SLOTS - 1);
             let matching_bucket = &SEGREGATED_TYPE_CACHE[matching_bucket_idx];
@@ -20572,7 +20781,7 @@ mod tests {
                 .entries
                 .iter()
                 .take(matching_bucket.count)
-                .all(|entry| entry.type_id == colliding[1].type_id));
+                .all(|entry| entry.metadata.type_id == colliding[1].type_id));
             assert!(matching_bucket
                 .entries
                 .iter()
@@ -20622,16 +20831,13 @@ mod tests {
             assert!(!extra.is_null());
             let cache_key = type_cache_identity_key(metadata);
             let evicted = SEGREGATED_TYPE_CACHE[slot]
-                .push(SegregatedTypeCacheEntry {
+                .push(SegregatedTypeCacheEntry::new(
                     cache_key,
-                    type_id: metadata.type_id,
-                    policy_key: segregated_type_cache_policy_key(metadata),
-                    ptr: extra,
-                    size: layout.size(),
-                    align: layout.align(),
-                    auth: metadata_record_auth(extra, layout, metadata),
+                    segregated_type_cache_policy_key(metadata),
+                    extra,
+                    layout,
                     metadata,
-                })
+                ))
                 .expect("full side-cache bucket should evict exactly one entry");
 
             let bucket = &SEGREGATED_TYPE_CACHE[slot];
@@ -21446,38 +21652,17 @@ mod tests {
         unsafe {
             let cache_key = type_cache_identity_key(metadata);
             let policy_key = segregated_type_cache_policy_key(metadata);
-            INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry {
-                cache_key: type_cache_identity_key(ordinary_metadata),
-                type_id: ordinary_metadata.type_id,
-                policy_key: segregated_type_cache_policy_key(ordinary_metadata),
-                ptr: ordinary,
-                size: layout.size(),
-                align: layout.align(),
-                auth: metadata_record_auth(ordinary, layout, ordinary_metadata),
-                metadata: ordinary_metadata,
-            };
+            INLINE_SEGREGATED_TYPE_CACHE_ENTRY = SegregatedTypeCacheEntry::new(
+                type_cache_identity_key(ordinary_metadata),
+                segregated_type_cache_policy_key(ordinary_metadata),
+                ordinary,
+                layout,
+                ordinary_metadata,
+            );
             *inline_segregated_type_cache_entry_at(SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE, 0) =
-                SegregatedTypeCacheEntry {
-                    cache_key,
-                    type_id: metadata.type_id,
-                    policy_key,
-                    ptr: first,
-                    size: layout.size(),
-                    align: layout.align(),
-                    auth: metadata_record_auth(first, layout, metadata),
-                    metadata,
-                };
+                SegregatedTypeCacheEntry::new(cache_key, policy_key, first, layout, metadata);
             *inline_segregated_type_cache_entry_at(SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE, 1) =
-                SegregatedTypeCacheEntry {
-                    cache_key,
-                    type_id: metadata.type_id,
-                    policy_key,
-                    ptr: second,
-                    size: layout.size(),
-                    align: layout.align(),
-                    auth: metadata_record_auth(second, layout, metadata),
-                    metadata,
-                };
+                SegregatedTypeCacheEntry::new(cache_key, policy_key, second, layout, metadata);
             set_segregated_type_cache_bucket_retained_bytes(
                 SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
                 MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES.saturating_sub(retained * 3),
@@ -22130,16 +22315,7 @@ mod tests {
             assert!(push_segregated_type_cache_bucket(
                 &mut cache[bucket_idx],
                 SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE,
-                SegregatedTypeCacheEntry {
-                    cache_key,
-                    type_id: metadata.type_id,
-                    policy_key,
-                    ptr,
-                    size: layout.size(),
-                    align: layout.align(),
-                    auth: metadata_record_auth(ptr, layout, metadata),
-                    metadata,
-                },
+                SegregatedTypeCacheEntry::new(cache_key, policy_key, ptr, layout, metadata),
             )
             .is_none());
             assert_eq!(hugepage_segregated_occupied_bucket_count_for_test(), 1);
@@ -22189,16 +22365,13 @@ mod tests {
             let cache_key = type_cache_identity_key(metadata);
             let ordinary_idx = segregated_type_cache_slot_for_key(cache_key, layout);
             assert!(SEGREGATED_TYPE_CACHE[ordinary_idx]
-                .push(SegregatedTypeCacheEntry {
+                .push(SegregatedTypeCacheEntry::new(
                     cache_key,
-                    type_id: metadata.type_id,
-                    policy_key: segregated_type_cache_policy_key(metadata),
+                    segregated_type_cache_policy_key(metadata),
                     ptr,
-                    size: layout.size(),
-                    align: layout.align(),
-                    auth: metadata_record_auth(ptr, layout, metadata),
+                    layout,
                     metadata,
-                })
+                ))
                 .is_none());
 
             assert!(
@@ -24504,7 +24677,7 @@ mod tests {
         let alloc = RustAllocator::new();
         let slot = SegregatedTypeCacheEntry {
             cache_key: 0xC004_F411,
-            type_id: 0xC004_F411,
+            structural_auth: 0,
             policy_key: segregated_type_cache_policy_key(
                 AllocationMetadata::for_type(0xC004_F411)
                     .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED),
@@ -24838,6 +25011,101 @@ mod tests {
                 );
             }
             let _ = alloc.alloc_with_metadata(layout, metadata);
+        }
+    }
+
+    #[test]
+    fn metadata_pointer_auth_rejects_segregated_structural_discriminator_tamper() {
+        #[derive(Clone, Copy, Debug)]
+        enum Tamper {
+            ProtectionDowngrade,
+            CacheKey,
+            TypeId,
+            PolicyKey,
+            Pointer,
+            NullPointer,
+            Size,
+            Align,
+        }
+
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        for materialized in [false, true] {
+            for tamper in [
+                Tamper::ProtectionDowngrade,
+                Tamper::CacheKey,
+                Tamper::TypeId,
+                Tamper::PolicyKey,
+                Tamper::Pointer,
+                Tamper::NullPointer,
+                Tamper::Size,
+                Tamper::Align,
+            ] {
+                unsafe {
+                    clear_type_cache_for_test();
+                    clear_delayed_free_for_test();
+                }
+
+                let mut storage = [[0usize; TYPE_CACHE_NODE_WORDS]; 2];
+                let layout =
+                    Layout::from_size_align(size_of_val(&storage[0]), align_of::<usize>()).unwrap();
+                let metadata = AllocationMetadata::for_type(0xA17C_0010)
+                    .with_module(0xC0DE_A17C)
+                    .with_callsite(0xA110_A17C)
+                    .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED | FLAG_POINTER_AUTH)
+                    .with_lifetime_hint(0x51)
+                    .with_placement_hint(0x61);
+                let cache_key = type_cache_identity_key(metadata);
+                let policy_key = segregated_type_cache_policy_key(metadata);
+                let ptr = storage[0].as_mut_ptr() as *mut u8;
+
+                unsafe {
+                    assert!(push_segregated_type_cache_eligible_with_key(
+                        ptr, layout, metadata, cache_key, policy_key,
+                    )
+                    .expect("first protected entry")
+                    .is_none());
+                    if materialized {
+                        let second = storage[1].as_mut_ptr() as *mut u8;
+                        assert!(push_segregated_type_cache_eligible_with_key(
+                            second, layout, metadata, cache_key, policy_key,
+                        )
+                        .expect("second protected entry materializes the bucket")
+                        .is_none());
+                    }
+
+                    let slot = cached_segregated_type_cache_entry_for_test(layout, metadata, ptr)
+                        .expect("protected entry under test");
+                    match tamper {
+                        Tamper::ProtectionDowngrade => {
+                            (*slot).metadata.flags = FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED;
+                            (*slot).auth = 0;
+                        }
+                        Tamper::CacheKey => (*slot).cache_key ^= 0x1000_0000_0000_0001,
+                        Tamper::TypeId => (*slot).metadata.type_id ^= 1,
+                        Tamper::PolicyKey => (*slot).policy_key ^= FLAG_METADATA_SEGREGATED,
+                        Tamper::Pointer => (*slot).ptr = (*slot).ptr.wrapping_add(layout.align()),
+                        Tamper::NullPointer => (*slot).ptr = core::ptr::null_mut(),
+                        Tamper::Size => (*slot).size += size_of::<usize>(),
+                        Tamper::Align => (*slot).align *= 2,
+                    }
+                }
+
+                let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                    let _ = pop_segregated_type_cache_eligible_with_key(
+                        layout, metadata, cache_key, policy_key,
+                    );
+                }));
+                assert!(
+                    rejected.is_err(),
+                    "{:?} must fail-stop for materialized={}",
+                    tamper,
+                    materialized,
+                );
+            }
         }
     }
 
@@ -29705,6 +29973,7 @@ mod tests {
             let metadata = AllocationMetadata::for_type(0xC003_520A)
                 .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
             let cache_key = type_cache_identity_key(metadata);
+            let identity = TypeCacheIdentity::from_metadata(metadata);
             let policy_key = segregated_type_cache_policy_key(metadata);
             let mut small_storage = [0usize; TYPE_CACHE_NODE_WORDS];
             let mut large_storage = [0usize; TYPE_CACHE_NODE_WORDS * 2];
@@ -29719,32 +29988,18 @@ mod tests {
             let mut bucket = SegregatedTypeCacheBucket::empty();
 
             assert!(bucket
-                .push(SegregatedTypeCacheEntry {
-                    cache_key,
-                    type_id: metadata.type_id,
-                    policy_key,
-                    ptr: small_ptr,
-                    size: small.size(),
-                    align: small.align(),
-                    auth: 0,
-                    metadata,
-                })
+                .push(SegregatedTypeCacheEntry::new(
+                    cache_key, policy_key, small_ptr, small, metadata,
+                ))
                 .is_none());
             assert_eq!(bucket.count, 1);
             assert_eq!(bucket.retained_bytes, small_retained);
             assert_eq!(bucket.retained_bytes(), Some(small_retained));
 
             assert!(bucket
-                .push(SegregatedTypeCacheEntry {
-                    cache_key,
-                    type_id: metadata.type_id,
-                    policy_key,
-                    ptr: large_ptr,
-                    size: large.size(),
-                    align: large.align(),
-                    auth: 0,
-                    metadata,
-                })
+                .push(SegregatedTypeCacheEntry::new(
+                    cache_key, policy_key, large_ptr, large, metadata,
+                ))
                 .is_none());
             assert_eq!(bucket.count, 2);
             assert_eq!(bucket.retained_bytes, small_retained + large_retained);
@@ -29754,7 +30009,7 @@ mod tests {
             );
 
             let popped_large = bucket
-                .pop(large, cache_key, policy_key)
+                .pop(large, identity, cache_key, policy_key)
                 .expect("large entry should be reusable");
             assert_eq!(popped_large.ptr, large_ptr);
             assert_eq!(bucket.count, 1);
@@ -29762,7 +30017,7 @@ mod tests {
             assert_eq!(bucket.retained_bytes(), Some(small_retained));
 
             let popped_small = bucket
-                .pop(small, cache_key, policy_key)
+                .pop(small, identity, cache_key, policy_key)
                 .expect("small entry should be reusable");
             assert_eq!(popped_small.ptr, small_ptr);
             assert_eq!(bucket.count, 0);
@@ -29779,6 +30034,7 @@ mod tests {
             let metadata = AllocationMetadata::for_type(0xC003_5212)
                 .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
             let cache_key = type_cache_identity_key(metadata);
+            let identity = TypeCacheIdentity::from_metadata(metadata);
             let policy_key = segregated_type_cache_policy_key(metadata);
             let mut storage = [0usize; TYPE_CACHE_NODE_WORDS + 4];
             let layout = first_unrounded_type_cache_layout_for_test();
@@ -29795,16 +30051,9 @@ mod tests {
             let mut bucket = SegregatedTypeCacheBucket::empty();
 
             assert!(bucket
-                .push(SegregatedTypeCacheEntry {
-                    cache_key,
-                    type_id: metadata.type_id,
-                    policy_key,
-                    ptr,
-                    size: layout.size(),
-                    align: layout.align(),
-                    auth: 0,
-                    metadata,
-                })
+                .push(SegregatedTypeCacheEntry::new(
+                    cache_key, policy_key, ptr, layout, metadata,
+                ))
                 .is_none());
             assert_eq!(bucket.count, 1);
             assert_eq!(bucket.retained_bytes, retained);
@@ -29812,7 +30061,7 @@ mod tests {
             assert!(bucket.can_accept_object_size(layout.size()));
 
             let popped = bucket
-                .pop(layout, cache_key, policy_key)
+                .pop(layout, identity, cache_key, policy_key)
                 .expect("rounded-accounted entry should still match by exact layout");
             assert_eq!(popped.ptr, ptr);
             assert_eq!(bucket.count, 0);
@@ -29849,16 +30098,13 @@ mod tests {
             for item in storage.iter_mut() {
                 let ptr = item.as_mut_ptr() as *mut u8;
                 assert!(bucket
-                    .push(SegregatedTypeCacheEntry {
-                        cache_key: type_cache_identity_key(metadata),
-                        type_id: metadata.type_id,
-                        policy_key: segregated_type_cache_policy_key(metadata),
+                    .push(SegregatedTypeCacheEntry::new(
+                        type_cache_identity_key(metadata),
+                        segregated_type_cache_policy_key(metadata),
                         ptr,
-                        size: small_layout.size(),
-                        align: small_layout.align(),
-                        auth: 0,
+                        small_layout,
                         metadata,
-                    })
+                    ))
                     .is_none());
             }
 
@@ -29876,16 +30122,13 @@ mod tests {
             );
             let replacement_ptr = replacement.as_mut_ptr() as *mut u8;
             let evicted = bucket
-                .push(SegregatedTypeCacheEntry {
-                    cache_key: type_cache_identity_key(metadata),
-                    type_id: metadata.type_id,
-                    policy_key: segregated_type_cache_policy_key(metadata),
-                    ptr: replacement_ptr,
-                    size: small_layout.size(),
-                    align: small_layout.align(),
-                    auth: 0,
+                .push(SegregatedTypeCacheEntry::new(
+                    type_cache_identity_key(metadata),
+                    segregated_type_cache_policy_key(metadata),
+                    replacement_ptr,
+                    small_layout,
                     metadata,
-                })
+                ))
                 .expect("same-size replacement should evict one entry from the full bucket");
             assert!(!evicted.ptr.is_null());
             assert_eq!(
@@ -29899,6 +30142,76 @@ mod tests {
             assert!(
                 !bucket.can_accept_object_size(large_layout.size()),
                 "a larger replacement would exceed the bucket byte budget"
+            );
+        }
+    }
+
+    #[test]
+    fn metadata_segregated_full_bucket_projection_authenticates_eviction_candidate() {
+        const ENTRY_WORDS: usize = (MAX_SEGREGATED_TYPE_CACHE_BUCKET_BYTES
+            / SEGREGATED_TYPE_CACHE_DEPTH)
+            / core::mem::size_of::<usize>();
+
+        #[derive(Clone, Copy, Debug)]
+        enum Tamper {
+            SizeBeforeReplacement,
+            StructuralAuthBeforeRejection,
+        }
+
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+        }
+
+        for tamper in [
+            Tamper::SizeBeforeReplacement,
+            Tamper::StructuralAuthBeforeRejection,
+        ] {
+            let metadata = AllocationMetadata::for_type(0xC003_5213)
+                .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+            let cache_key = type_cache_identity_key(metadata);
+            let policy_key = segregated_type_cache_policy_key(metadata);
+            let layout =
+                Layout::from_size_align(ENTRY_WORDS * size_of::<usize>(), align_of::<usize>())
+                    .unwrap();
+            let mut storage = [[0usize; ENTRY_WORDS]; SEGREGATED_TYPE_CACHE_DEPTH];
+            let mut bucket = SegregatedTypeCacheBucket::empty();
+
+            for item in storage.iter_mut() {
+                assert!(bucket
+                    .push(SegregatedTypeCacheEntry::new(
+                        cache_key,
+                        policy_key,
+                        item.as_mut_ptr() as *mut u8,
+                        layout,
+                        metadata,
+                    ))
+                    .is_none());
+            }
+            assert_eq!(bucket.count, SEGREGATED_TYPE_CACHE_DEPTH);
+
+            let incoming_size = match tamper {
+                Tamper::SizeBeforeReplacement => {
+                    bucket.entries[bucket.evict_cursor].size += size_of::<usize>();
+                    layout.size()
+                }
+                Tamper::StructuralAuthBeforeRejection => {
+                    bucket.entries[bucket.evict_cursor].structural_auth ^= 1;
+                    MAX_SEGREGATED_TYPE_CACHE_BUCKET_BYTES
+                }
+            };
+
+            let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = segregated_type_cache_projected_aggregate_retained_bytes(
+                    bucket.retained_bytes,
+                    bucket,
+                    incoming_size,
+                );
+            }));
+            assert!(
+                rejected.is_err(),
+                "full-bucket {:?} must authenticate before capacity projection",
+                tamper,
             );
         }
     }
