@@ -685,6 +685,17 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
   全为 `0`。这个 concrete positive control 证明一条 bounded actual-rewrite
   type-separation 路径；**generic positive isolation 仍缺**，需要
   monomorphization-aware type evidence 后才能安全 rewrite。
+- **真实 Cargo 跨线程同布局隔离：** `8e462ad` 扩展 multi-module Cargo
+  actual-`RUSTC_WRAPPER` fixture：main thread 分配 `Vec<Producer>` 后把 owner
+  move 到 worker 并在那里 Drop；compiler 为 Producer/Consumer 产生 distinct
+  nonzero type IDs `11365312940488603059 / 17474015272962783245`，三条 scope
+  都由 `auto_cross_thread_escape` 得到 cross-thread placement，而不是手工 metadata
+  hint。worker 随后分配同 layout `Vec<Consumer>`，不得取得 Producer 地址；再分配
+  `Vec<Producer>`，必须精确取得原地址。fresh current-source 单次验证为 typed
+  alloc/dealloc/cache-hit/cache-insert `2/3/1/3`，fallback/raw、recovery mismatch、
+  corrupt slot、dropped stats 全为 `0`。这是一个 generated multi-module Cargo
+  application 上的 bounded actual-rewrite/thread-transfer/address-oracle evidence，
+  不是任意外部应用 coverage、universal memory-safety proof 或性能结果。
 - **latest claim-bearing-source real app：** `f5c4fa4` 的 pinned Oxipng v4.0.3
   one-shot build/run `0/0` 且 output hash 匹配；artifact summary SHA-256 为
   `448a634ec918fd8a9e9911fd092d0ef842e97074287ca2fe334514c31c78e5c5`。

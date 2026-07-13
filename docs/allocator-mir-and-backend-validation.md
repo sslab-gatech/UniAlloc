@@ -1965,6 +1965,26 @@ current `nightly-2026-06-11` result. The one pinned-nightly attempt stopped on a
 pre-existing explicit `std::mem::drop` audit-shape validator boundary before it
 reached the new Result gate, so it is not pinned compatibility evidence.
 
+## Actual-wrapper cross-thread same-layout isolation
+
+Commit `8e462ad` extends the generated multi-module Cargo application in
+`test_mir_realistic_multimodule_type_isolation.py`. The main thread allocates a
+`Vec<Producer>` and moves the owner into a real worker thread, where it is
+validated and dropped. Producer and same-layout Consumer receive distinct
+nonzero compiler identities (`11365312940488603059` and
+`17474015272962783245`). The escaping Producer allocation and the exact-
+Producer/Consumer probes all carry compiler-derived `auto_cross_thread_escape`
+placement rather than manually supplied allocator metadata.
+
+After the foreign-thread Drop, `Vec<Consumer>` cannot reuse the protected
+Producer address, while the next exact `Vec<Producer>` recovers it. The current-
+source run reports typed allocation/deallocation/cache-hit/cache-insert
+`2/3/1/3`; fallback allocation/deallocation, raw allocation/deallocation/
+reallocation, recovery mismatch, corrupt slots, and dropped type-stat events are
+all zero. This is one bounded actual-wrapper Cargo fixture with a concrete
+thread-transfer address oracle. It is not arbitrary external-application
+coverage, a universal memory-safety proof, or performance evidence.
+
 ## Current-source Oxipng and rejected ThreadCache diagnostic
 
 The latest claim-bearing source one-shot is bound to `f5c4fa4` in
