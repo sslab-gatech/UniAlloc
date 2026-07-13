@@ -27220,6 +27220,276 @@ mod tests {
         assert!(!semantic_runtime_slow_path_enabled());
     }
 
+    #[cfg(all(feature = "stats", feature = "hugepage", feature = "pac"))]
+    #[test]
+    fn cross_thread_split_realloc_preserves_authenticated_old_and_new_identities() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_memory_tags_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let old_metadata = AllocationMetadata::for_type(0xD17A_C7C1)
+            .with_module(0xC0DE_C7C0)
+            .with_callsite(0xA110_C7C1)
+            .with_flags(
+                FLAG_TYPE_ISOLATED
+                    | FLAG_MEMORY_TAGGING
+                    | FLAG_DELAYED_FREE
+                    | FLAG_HUGEPAGE_METADATA
+                    | FLAG_POINTER_AUTH,
+            )
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x7C);
+        let stale_old_metadata = AllocationMetadata::for_type(0xD17A_BADC)
+            .with_module(old_metadata.module_id)
+            .with_callsite(0xD0D0_BADC)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(old_metadata.placement_hint);
+        let new_metadata = AllocationMetadata::for_type(0xD17A_C7D2)
+            .with_module(old_metadata.module_id)
+            .with_callsite(0xA110_C7D2)
+            .with_flags(
+                FLAG_TYPE_ISOLATED
+                    | FLAG_MEMORY_TAGGING
+                    | FLAG_METADATA_SEGREGATED
+                    | FLAG_POINTER_AUTH,
+            )
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x7D);
+        assert!(!semantic_realloc_can_reuse_in_place(
+            layout,
+            layout.size(),
+            old_metadata,
+            new_metadata,
+        ));
+
+        let ptr = unsafe {
+            __unialloc_alloc_with_metadata_hints(
+                layout.size(),
+                layout.align(),
+                old_metadata.type_id,
+                old_metadata.module_id,
+                old_metadata.flags,
+                old_metadata.lifetime_hint,
+                old_metadata.placement_hint,
+                old_metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        unsafe {
+            for offset in 0..layout.size() {
+                ptr.add(offset)
+                    .write((offset as u8).wrapping_mul(37).wrapping_add(11));
+            }
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(old_metadata)
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 1);
+
+        let validation_before = semantic_metadata_validation_snapshot();
+        let ptr_addr = ptr as usize;
+        let worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = ptr_addr as *mut u8;
+            unsafe {
+                clear_delayed_free_for_test();
+            }
+
+            let replacement = unsafe {
+                __unialloc_realloc_with_split_metadata_hints(
+                    ptr,
+                    layout.size(),
+                    layout.align(),
+                    layout.size(),
+                    stale_old_metadata.type_id,
+                    stale_old_metadata.module_id,
+                    stale_old_metadata.flags,
+                    stale_old_metadata.lifetime_hint,
+                    stale_old_metadata.placement_hint,
+                    stale_old_metadata.callsite,
+                    new_metadata.type_id,
+                    new_metadata.module_id,
+                    new_metadata.flags,
+                    new_metadata.lifetime_hint,
+                    new_metadata.placement_hint,
+                    new_metadata.callsite,
+                )
+            };
+            assert!(!replacement.is_null());
+            assert_ne!(replacement, ptr, "type-changing realloc must move storage");
+            for offset in 0..layout.size() {
+                assert_eq!(
+                    unsafe { replacement.add(offset).read() },
+                    (offset as u8).wrapping_mul(37).wrapping_add(11),
+                    "moved realloc must preserve the old payload",
+                );
+            }
+
+            assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+            assert_eq!(
+                lookup_auto_allocation_metadata(replacement, layout),
+                Some(new_metadata)
+            );
+            assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+            assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 1);
+            {
+                let mut old_tags = global_memory_tag_table_for_ptr(ptr).lock();
+                assert!(
+                    find_global_memory_tag_slot(&mut *old_tags, ptr).is_none(),
+                    "the moved-from tag must be consumed exactly once"
+                );
+            }
+            {
+                let mut new_tags = global_memory_tag_table_for_ptr(replacement).lock();
+                let new_tag = unsafe {
+                    *find_global_memory_tag_slot(&mut *new_tags, replacement)
+                        .expect("replacement must publish a global memory-tag record")
+                };
+                assert_eq!(new_tag.metadata, new_metadata);
+                unsafe {
+                    verify_memory_tag_record(new_tag);
+                }
+            }
+
+            let quarantine = delayed_free_snapshot();
+            assert_eq!(quarantine.occupied_slots, 1);
+            assert_delayed_free_snapshot_accounting(quarantine);
+            assert_eq!(
+                GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+                1
+            );
+            let slots = unsafe { delayed_free_slots_snapshot_for_test() };
+            let delayed_idx = slots
+                .iter()
+                .position(|slot| slot.ptr == ptr)
+                .expect("moved-from storage must retain the old quarantine policy");
+            assert_eq!(slots[delayed_idx].metadata, old_metadata);
+            assert_ne!(slots[delayed_idx].auth, 0);
+
+            let cache_before_duplicate = type_isolation_side_cache_snapshot();
+            let stats_before_duplicate = semantic_stats_snapshot();
+            let duplicate = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                alloc.dealloc_with_metadata(ptr, layout, old_metadata);
+            }));
+            assert!(
+                duplicate.is_err(),
+                "moved-from quarantine must reject duplicate free"
+            );
+            assert_eq!(delayed_free_snapshot(), quarantine);
+            assert_eq!(type_isolation_side_cache_snapshot(), cache_before_duplicate);
+            assert_eq!(semantic_stats_snapshot(), stats_before_duplicate);
+
+            let released_old_metadata =
+                old_metadata.with_flags(old_metadata.flags & !FLAG_DELAYED_FREE);
+            #[cfg(not(feature = "fixed_heap"))]
+            let old_ordinary_domain = released_old_metadata
+                .with_flags(released_old_metadata.flags & !FLAG_HUGEPAGE_METADATA);
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, new_metadata) },
+                None,
+                "the new type must not observe the old quarantined storage"
+            );
+            unsafe {
+                let delayed = delayed_free_take_slot(delayed_idx);
+                release_delayed_slot(&alloc, delayed);
+            }
+            assert_eq!(delayed_free_snapshot().occupied_slots, 0);
+            assert_eq!(
+                GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+                0
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, new_metadata) },
+                None,
+                "old quarantine release must not poison the replacement identity"
+            );
+            #[cfg(not(feature = "fixed_heap"))]
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, old_ordinary_domain) },
+                None,
+                "hugepage metadata must not cross into the ordinary cache domain"
+            );
+            let released_old = unsafe {
+                pop_semantic_type_cache(layout, released_old_metadata)
+                    .expect("old authenticated identity must recover moved-from storage")
+            };
+            assert_eq!(released_old, ptr);
+
+            assert!(unsafe {
+                __unialloc_dealloc_with_metadata_hints(
+                    replacement,
+                    layout.size(),
+                    layout.align(),
+                    new_metadata.type_id,
+                    new_metadata.module_id,
+                    new_metadata.flags,
+                    new_metadata.lifetime_hint,
+                    new_metadata.placement_hint,
+                    new_metadata.callsite,
+                )
+            });
+            assert_eq!(lookup_auto_allocation_metadata(replacement, layout), None);
+            assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+            assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 0);
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, new_metadata) },
+                Some(replacement),
+                "replacement storage must remain reusable only by its new identity"
+            );
+
+            let stats_after = semantic_stats_snapshot();
+            assert_eq!(stats_after.metadata_pac_auth_failures, 0);
+            assert_eq!(stats_after.metadata_pac_software_fallback_failures, 0);
+            assert!(
+                stats_after.metadata_pac_auth_verifications
+                    + stats_after.metadata_pac_software_fallback_verifications
+                    > stats_before_duplicate.metadata_pac_auth_verifications
+                        + stats_before_duplicate.metadata_pac_software_fallback_verifications,
+                "quarantine release and both exact cache reuses must authenticate metadata"
+            );
+
+            unsafe {
+                alloc.dealloc_raw(released_old, layout);
+                alloc.dealloc_raw(replacement, layout);
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+            }
+        });
+        worker
+            .join()
+            .expect("cross-thread split-realloc composed security regression");
+
+        let validation_after = semantic_metadata_validation_snapshot();
+        assert_eq!(
+            validation_after.recovery_identity_mismatches,
+            validation_before.recovery_identity_mismatches + 1,
+            "the stale old identity must be audited exactly once"
+        );
+        assert_eq!(
+            validation_after.recovery_identity_matches,
+            validation_before.recovery_identity_matches + 2,
+            "the committed old-side release and replacement deallocation must each match once"
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            0
+        );
+        semantic_stats_recording_disable();
+        assert!(!semantic_runtime_slow_path_enabled());
+    }
+
     #[test]
     fn cross_thread_realloc_keeps_old_delayed_free_identity_separate_from_new_type() {
         let _guard = test_guard();
