@@ -439,7 +439,7 @@ Deep answer: backup slide number
 | Slide | Claim | Evidence tier | Source | Assumption | Does not prove | Backup |
 |---:|---|---|---|---|---|---:|
 | 16 | real compiler-to-runtime path exists | latest external-app source-bound evidence + current bounded probes | `a57d318...` `oxipng-current-a57d318-20260713` acceptance + `8e4d37c` canonical-Vec spoof regression + generated multi-module probe | Oxipng counts bind only to `a57d318`; current exact-wrapper results bind to `8e4d37c`; separate revisions and static/runtime denominators | universal coverage/unmodified-app deployment/stable ABI/whole-app exact pairing/performance | B3--B4/B18 |
-| 21 | ordinary cross-class reuse is separated for distinct trusted identities | current adversarial regression + implementation | `3acbd6d...`, `5eb25f5...`, `1228f71...`, `8bc2809...`, `6700ca1...`, `2e3bc4c...`, `3ccd464...` tests + type-isolation code | covered path, trusted exact identity; bounded internal segregated-entry integrity | universal memory safety/identical or spoofed input metadata/compiler type-ID collision/arbitrary corruption protection | B7--B10 |
+| 21 | ordinary cross-class reuse is separated for distinct trusted identities | current adversarial regression + implementation | `3acbd6d...`, `5eb25f5...`, `1228f71...`, `8bc2809...`, `6700ca1...`, `2e3bc4c...`, `3ccd464...`, `ee9d0c6...` tests + type-isolation code | covered path, trusted exact identity; bounded internal segregated-entry and delayed-owner integrity | universal memory safety/identical or spoofed input metadata/compiler type-ID collision/arbitrary corruption protection | B7--B10 |
 | 24 | paper reported five environments and runtime has retargeting boundaries | historical + current functional probes | paper eval + PAL/fixed heap + platform artifacts; Wine `38b8b59` lifecycle `3/3` and `3c725a9` FLS-failure `1/1` remain separate | tested adapter/path and source-bound run | zero-porting/native Windows universality/current five-platform aggregate closure | B13/B17 |
 | 26--27 | original prototype observed reported ranges | historical | paper eval | original setup | current reproduction | B14--B16 |
 | 28 | paper-performance reproduction was explicitly deferred while functional work continues | current audit snapshot | G001 stop handoff + G002 probes | exact source binding and evidence tier | mechanism is absent or deferred claims failed | B18 |
@@ -580,6 +580,7 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 | GlobalAlloc semantic/fallback routing | `unialloc/src/cache/mod.rs` (`unsafe impl GlobalAlloc for RustAllocator`) |
 | Compiler MIR rewrite | `tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs` |
 | Copied-byte collect canonical-Vec spoof regression | `tools/unialloc-rustc-pass/test_mir_slice_iter_hazard_nonowner.py` (`8e4d37c`; current/pinned actual wrapper; canonical `Vec<u8>` applied, callback-bearing fake `[lib] name="alloc"` destination unresolved/audit-only; exact functional soundness only) |
+| Delayed-free + metadata-segregated rejection safety regression | `unialloc/src/alloc_api/type_isolation.rs` (`ee9d0c6`; forced inline/bucket rejection, terminal-release barrier, owner continuity, duplicate-release guard; hosted/fixed exact `1/1`; bounded test-only evidence) |
 | Vec realloc/isolation actual-rewrite probe | `unialloc/src/bin/rustc_driver_mir_vec_realloc_identity_probe.rs`、`tools/unialloc-rustc-pass/test_mir_vec_realloc_identity_probe.py` |
 | Cross-thread Box-to-Vec actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_cross_thread_box_slice_into_vec_rebind.py` |
 | String-to-Vec actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_string_into_bytes_rebind.py`、`unialloc/tests/string_into_bytes_rebind.rs` |
@@ -927,8 +928,15 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 - **cache rejection owner continuity：** `3044166` 的 deterministic tests 分别证明
   ordinary plain-cache rejection 在 sole raw release 前保留 type-cache owner，以及
   delayed-free plain-cache rejection 只撤销 temporary type-cache registration、持续保留
-  delayed owner。segregated rejection 走同一 completion helper，但尚无独立 forced
-  delayed+segregated race，因此不能把 shared code path 写成已单独执行的 race evidence。
+  delayed owner。`ee9d0c6` 又用两个 synthetic inline keys 与满 aggregate budget
+  确定性强制 delayed-free + metadata-segregated insertion rejection，并在 terminal raw
+  release barrier 上观察 delayed owner count `1`、temporary type-cache owner count `0`、
+  payload 完整且 foreign reclaim fail-stop；完成后两个 registry 均归零，side-cache
+  corruption 为 `0`，两次立即 raw allocation 地址不同且可独立写入，排除 duplicate
+  backend release/free-list alias。owner-thread RAII fixture cleanup 经过独立 review 后
+  `APPROVE`；hosted/fixed exact test 各 `1/1`，default pre-commit suite `699/699` 与
+  finite C002 inventory `430/430` PASS。该证据只闭合这一 forced rejection/terminal-release
+  组合，不是通用 UAF/double-free 或任意 metadata corruption 证明。
 - **latest generated multi-module source-bound check before `8e4d37c`：** `a57d318` 上一次 generated Cargo
   actual-wrapper build/run 为 `validated=true`：4 个 actual scope rows、transfer `1/1`，
   wrong-record / wrong-Blob-Vec non-reuse、exact Vec/Box reuse，以及 cross-thread
