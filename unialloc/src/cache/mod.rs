@@ -582,6 +582,16 @@ impl RustAllocator {
         old_layout: Layout,
         new_layout: Layout,
     ) -> *mut u8 {
+        let old_recovery = checked_recorded_reallocation_old_metadata(ptr, old_layout);
+        if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched) {
+            // `Allocator::{grow,shrink}` reaches this helper when alignment
+            // changes.  A record for the same address under another Layout is
+            // authoritative: allocating/copying first would publish a second
+            // object while leaving the original record live, and releasing the
+            // old pointer under the caller Layout would be unsafe.  Match the
+            // GlobalAlloc realloc boundary and reject before any mutation.
+            return core::ptr::null_mut();
+        }
         reject_global_delayed_free_owned_pointer(ptr);
         let selected_metadata = if let Some(metadata) = active_allocation_metadata() {
             let record_recovery = active_allocation_metadata_requires_recovery_record(metadata);
@@ -594,8 +604,13 @@ impl RustAllocator {
             if let Some(metadata) = auto_metadata {
                 Some((metadata, true, false, None))
             } else if !auto_policy_enabled {
-                recorded_reallocation_old_metadata(ptr, old_layout)
-                    .map(|metadata| (metadata, true, false, Some(metadata)))
+                match old_recovery {
+                    AutoAllocationRecordLookup::Exact(metadata) => {
+                        Some((metadata, true, false, Some(metadata)))
+                    }
+                    AutoAllocationRecordLookup::Missing => None,
+                    AutoAllocationRecordLookup::Mismatched => unreachable!(),
+                }
             } else {
                 None
             }
@@ -2821,6 +2836,77 @@ mod tests {
                 alloc.shrink(ptr, old_layout, new_layout)
             },
         );
+    }
+
+    #[test]
+    fn allocator_alignment_change_rejects_mismatched_recovery_layout_before_move() {
+        let _guard = semantic_test_guard();
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let recorded_layout = Layout::from_size_align(64, 8).unwrap();
+        let caller_old_layout = Layout::from_size_align(32, 8).unwrap();
+        let new_layout = Layout::from_size_align(128, 64).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_DA73)
+            .with_module(0xC0DE_DA73)
+            .with_callsite(0xA110_C073)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let old_ptr = unsafe { alloc.alloc_with_recovery_metadata(recorded_layout, metadata) };
+        assert!(!old_ptr.is_null());
+        unsafe {
+            for offset in 0..recorded_layout.size() {
+                old_ptr.add(offset).write((offset as u8) ^ 0xA5);
+            }
+        }
+        assert_eq!(
+            recorded_reallocation_old_metadata(old_ptr, recorded_layout),
+            Some(metadata)
+        );
+
+        let delayed_before = delayed_free_snapshot();
+        let moved = unsafe {
+            alloc.grow(
+                NonNull::new(old_ptr).unwrap(),
+                caller_old_layout,
+                new_layout,
+            )
+        };
+        let rejected = match moved {
+            Err(AllocError) => true,
+            Ok(block) => {
+                // Keep the fail-first regression leak-free: the buggy path
+                // returns an unrelated raw replacement while preserving the
+                // authoritative old recovery record.
+                unsafe {
+                    alloc.dealloc_raw(block.as_ptr() as *mut u8, new_layout);
+                }
+                false
+            }
+        };
+        let exact_record_after = recorded_reallocation_old_metadata(old_ptr, recorded_layout);
+        let wrong_record_after = recorded_reallocation_old_metadata(old_ptr, caller_old_layout);
+        let payload_preserved = (0..recorded_layout.size())
+            .all(|offset| unsafe { old_ptr.add(offset).read_volatile() } == (offset as u8) ^ 0xA5);
+        let delayed_after = delayed_free_snapshot();
+
+        assert_eq!(
+            take_recorded_reallocation_old_metadata(old_ptr, recorded_layout),
+            Some(metadata),
+            "cleanup requires the authoritative record to remain exact"
+        );
+        unsafe {
+            alloc.dealloc_raw(old_ptr, recorded_layout);
+        }
+
+        assert!(
+            rejected,
+            "alignment-changing Allocator::grow must reject a live same-address/different-layout recovery record before allocating a replacement"
+        );
+        assert_eq!(exact_record_after, Some(metadata));
+        assert_eq!(wrong_record_after, None);
+        assert!(payload_preserved, "mismatched grow changed the old payload");
+        assert_eq!(delayed_after, delayed_before);
     }
 
     fn assert_allocator_alignment_change_splits_recorded_old_and_active_new_metadata(
