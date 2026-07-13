@@ -141,6 +141,24 @@ liveness is checked before layout reconstruction. This keeps inactive tables in
 demand-zero storage instead of embedding initialized records in every binary and
 thread image.
 
+Commit `d87d5e0` introduced these hosted footprint reductions. Independent
+review then exposed a saturation bug: a full matching bucket could spill the
+same semantic identity into a neighboring bucket. Commit `25d316c` makes
+matching entry-depth, per-bucket-byte, and aggregate-byte saturation bypass the
+cache instead, while preserving neighbor probing for distinct colliding
+identities. Hosted and `fixed_heap` type-isolation suites pass, including a
+deterministic 512 KiB aggregate-cap regression that proves rejection does not
+replace or shift any cached owner.
+
+A source-bound 64-thread diagnostic compares baseline `318b66c` with repaired
+current `25d316c` using the same release harness, host, toolchain, and input,
+with three interleaved measured runs per binary and no warmup or retry. Median
+ready/peak/idle/sampled-max RSS moved from 9.578/66.969/71.188/71.922 MiB to
+7.500/64.953/69.141/69.484 MiB. The sampled-max ranges overlap, so this is only
+directional regression evidence, not a publication percentage or universal
+performance result. Raw records and identities are preserved under
+`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/footprint-diagnostic-318b66c-25d316c-20260712/`.
+
 The compiler metadata fast path uses the same cache classification policy as the
 generic semantic path after the compiler ABI has already proved the typed,
 type-isolated, non-layout-derived preconditions.  This avoids duplicated policy

@@ -291,6 +291,15 @@ This proves one compiler-derived `VecDeque` identity-to-reuse lifecycle for two
 same-layout Rust types.  It is not universal container coverage, an exploit
 proof, or performance evidence.
 
+Commit `c02baa6` adds the narrower outer-owner capacity proof for exact
+std-owned `VecDeque::with_capacity` and `reserve_exact`.  Current and pinned
+actual-`RUSTC_WRAPPER` runs report typed allocation/deallocation `4/4`,
+wrong-type non-reuse, exact-type reuse, and zero fallback, raw
+allocation/reallocation/deallocation, recovery-mismatch, or corrupt-slot
+events.  `push_back`, a custom same-name helper, and multi-owner `Drop` remain
+fail closed.  This is diagnostic functional evidence for those exact paths,
+not universal coverage or performance evidence.
+
 ### Actual-rustc multi-crate module isolation
 
 Commit `0704852` closes a compiler/runtime boundary that the allocator already

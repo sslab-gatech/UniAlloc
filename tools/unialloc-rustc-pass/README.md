@@ -649,6 +649,18 @@ recovery, one cache hit, and zero mismatch/corruption, while
 `Vec<String>::resize` remains ambiguous.  This is current-source bounded
 capacity-path evidence, not updated Oxipng coverage or performance evidence.
 
+### Exact `VecDeque` capacity outer-owner regression
+
+Commit `c02baa6` adds an actual-`RUSTC_WRAPPER` regression on both the current
+and pinned toolchains for exact std-owned `VecDeque::with_capacity` and
+`reserve_exact` paths.  The runtime oracle reports typed
+allocation/deallocation `4/4`, blocks wrong-type reuse, permits exact-type
+reuse, and keeps fallback, raw allocation/reallocation/deallocation,
+recovery-mismatch, and corrupt-slot counts at zero.  `push_back`, a custom
+same-name helper, and multi-owner `Drop` remain fail closed.  This is bounded
+diagnostic functional evidence, not universal container/compiler coverage or
+performance evidence.
+
 ### Exact `HashSet::with_capacity` outer-table regression
 
 `test_mir_hashset_with_capacity_outer_owner.py` drives an ordinary Cargo

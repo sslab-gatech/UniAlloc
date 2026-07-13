@@ -228,11 +228,24 @@ two local source gaps without changing that external-evidence boundary.  The
 BlogOS fixture now links a no_std fixed-heap/global-allocator/boot/panic contract,
 and the Rust-for-Linux final crate explicitly force-links UniAlloc while a
 checked-in no_std regression verifies the real bridge's allocator and semantic
-symbols.  Commit `315cfc4` additionally checks five runtime/bridge ABI records'
+symbols.  Commit `a581cb4` additionally makes the BlogOS heap-publication state
+machine host-testable without changing its no_std target implementation.  Its
+five host behavior regressions pass: first publication invokes initialization
+once, same-range publication is idempotent, a different range is rejected,
+failed initialization can be retried, and concurrent callers wait and resolve
+against the winning range.  The same contract runner separately links the
+`x86_64-unknown-none` fixture and verifies its allocator/boot/handler wiring; the
+linked ELF SHA-256 is
+`dcb668f3435a68bc29a16b315310cb0956b4d1603a33052aa761f049c00d994b`.
+These host behavior tests and linked-image checks are behavior/wiring evidence,
+not a BlogOS runtime boot validation.  Commit `315cfc4` additionally checks five
+runtime/bridge ABI records'
 versions, sizes, alignments, and all 75 field offsets at Rust compile time, with
 matching C-header static assertions.  The Rust assertions compile for
 `x86_64-unknown-none`; the C header check uses the local 64-bit host compiler,
-not the actual kernel compiler.  These remain build/link/ABI evidence only:
+not the actual kernel compiler.  The target-side results remain build/link/ABI
+evidence only; the host behavior regressions do not upgrade either fixture to a
+real target-runtime result:
 BlogOS still needs its real
 bootloader/image plus QEMU or hardware, and Rust-for-Linux still needs a kernel
 tree and module runner.  Those missing assets are external validation gaps, not
