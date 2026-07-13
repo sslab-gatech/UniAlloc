@@ -26998,6 +26998,228 @@ mod tests {
         assert!(!semantic_runtime_slow_path_enabled());
     }
 
+    #[cfg(all(feature = "stats", feature = "hugepage", feature = "pac"))]
+    #[test]
+    fn cross_thread_authoritative_policy_composition_quarantines_and_reuses_exact_identity() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_memory_tags_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            0
+        );
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let allocation_metadata = AllocationMetadata::for_type(0xD17A_C7B1)
+            .with_module(0xC0DE_C7B0)
+            .with_callsite(0xA110_C7B1)
+            .with_flags(
+                FLAG_TYPE_ISOLATED
+                    | FLAG_MEMORY_TAGGING
+                    | FLAG_DELAYED_FREE
+                    | FLAG_HUGEPAGE_METADATA
+                    | FLAG_POINTER_AUTH,
+            )
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x7B);
+        let wrong_drop_metadata = AllocationMetadata::for_type(0xD17A_BADB)
+            .with_module(allocation_metadata.module_id)
+            .with_callsite(0xD0D0_BADB)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(allocation_metadata.placement_hint);
+
+        let ptr = unsafe {
+            __unialloc_alloc_with_metadata_hints(
+                layout.size(),
+                layout.align(),
+                allocation_metadata.type_id,
+                allocation_metadata.module_id,
+                allocation_metadata.flags,
+                allocation_metadata.lifetime_hint,
+                allocation_metadata.placement_hint,
+                allocation_metadata.callsite,
+            )
+        };
+        assert!(!ptr.is_null());
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, layout),
+            Some(allocation_metadata)
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 1);
+
+        let stats_before_foreign_dealloc = semantic_stats_snapshot();
+        let ptr_addr = ptr as usize;
+        let worker = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = ptr_addr as *mut u8;
+            unsafe {
+                clear_delayed_free_for_test();
+            }
+
+            let previous = unsafe { set_active_metadata(wrong_drop_metadata) };
+            unsafe {
+                GlobalAlloc::dealloc(&alloc, ptr, layout);
+                restore_active_metadata(previous);
+            }
+
+            assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+            assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+            assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 0);
+            assert_eq!(unsafe { MEMORY_TAG_RECORD_COUNT }, 0);
+            assert_eq!(
+                GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+                1
+            );
+
+            let quarantined_once = delayed_free_snapshot();
+            assert_eq!(quarantined_once.occupied_slots, 1);
+            assert_delayed_free_snapshot_accounting(quarantined_once);
+            let slots = unsafe { delayed_free_slots_snapshot_for_test() };
+            let delayed_idx = slots
+                .iter()
+                .position(|slot| slot.ptr == ptr)
+                .expect("foreign wrong-metadata Drop must quarantine the recovered allocation");
+            assert_eq!(slots[delayed_idx].metadata, allocation_metadata);
+            assert_ne!(
+                slots[delayed_idx].auth, 0,
+                "the quarantined hugepage identity must remain authenticated"
+            );
+
+            let side_cache_before_duplicate = type_isolation_side_cache_snapshot();
+            assert_eq!(
+                unsafe {
+                    cached_segregated_type_cache_entry_for_test(layout, allocation_metadata, ptr)
+                },
+                None,
+                "quarantine must not publish cache reuse before release"
+            );
+            let stats_before_duplicate = semantic_stats_snapshot();
+            let duplicate = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                alloc.dealloc_with_metadata(ptr, layout, allocation_metadata);
+            }));
+            assert!(duplicate.is_err(), "duplicate quarantine must fail-stop");
+            assert_eq!(delayed_free_snapshot(), quarantined_once);
+            assert_eq!(
+                type_isolation_side_cache_snapshot(),
+                side_cache_before_duplicate
+            );
+            assert_eq!(semantic_stats_snapshot(), stats_before_duplicate);
+            assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+            assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 0);
+            assert_eq!(
+                GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+                1
+            );
+
+            let released_metadata =
+                allocation_metadata.with_flags(allocation_metadata.flags & !FLAG_DELAYED_FREE);
+            let wrong_domain_metadata =
+                released_metadata.with_flags(released_metadata.flags & !FLAG_HUGEPAGE_METADATA);
+            unsafe {
+                let delayed = delayed_free_take_slot(delayed_idx);
+                release_delayed_slot(&alloc, delayed);
+            }
+            assert_eq!(delayed_free_snapshot().occupied_slots, 0);
+            assert_eq!(
+                GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+                0
+            );
+            assert!(unsafe {
+                cached_segregated_type_cache_entry_for_test(layout, released_metadata, ptr)
+                    .is_some()
+            });
+            assert_eq!(
+                unsafe {
+                    cached_segregated_type_cache_entry_for_test(layout, wrong_domain_metadata, ptr)
+                },
+                None,
+                "release must not publish the pointer in the ordinary metadata domain"
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, wrong_drop_metadata) },
+                None,
+                "wrong Drop identity must not reuse recovered storage"
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, wrong_domain_metadata) },
+                None,
+                "ordinary-domain metadata must not reuse hugepage-domain storage"
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(layout, released_metadata) },
+                Some(ptr),
+                "quarantine release must preserve the allocation identity and hugepage domain"
+            );
+
+            let stats_after_exact_reuse = semantic_stats_snapshot();
+            let verifications_before = stats_before_foreign_dealloc.metadata_pac_auth_verifications
+                + stats_before_foreign_dealloc.metadata_pac_software_fallback_verifications;
+            let verifications_after = stats_after_exact_reuse.metadata_pac_auth_verifications
+                + stats_after_exact_reuse.metadata_pac_software_fallback_verifications;
+            assert!(
+                verifications_after > verifications_before,
+                "authenticated quarantine release/reuse must verify through PAC or software fallback: {:?}",
+                stats_after_exact_reuse
+            );
+            assert_eq!(stats_after_exact_reuse.metadata_pac_auth_failures, 0);
+            assert_eq!(
+                stats_after_exact_reuse.metadata_pac_software_fallback_failures,
+                0
+            );
+
+            unsafe {
+                alloc.dealloc_raw(ptr, layout);
+            }
+            assert_eq!(type_isolation_side_cache_snapshot().occupied_entries, 0);
+            assert_eq!(
+                unsafe {
+                    cached_segregated_type_cache_entry_for_test(layout, released_metadata, ptr)
+                },
+                None,
+                "exact reuse must consume the final authenticated cache entry"
+            );
+            #[cfg(not(feature = "fixed_heap"))]
+            assert!(unsafe {
+                hugepage_inline_segregated_type_cache_entries_snapshot_for_test()
+                    .iter()
+                    .all(|entry| entry.is_empty())
+            });
+            #[cfg(feature = "fixed_heap")]
+            assert!(unsafe {
+                ordinary_inline_segregated_type_cache_entry_snapshot_for_test().is_empty()
+            });
+        });
+        worker
+            .join()
+            .expect("cross-thread composed policy security regression");
+
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(GLOBAL_MEMORY_TAG_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            0
+        );
+        assert_eq!(
+            semantic_metadata_validation_snapshot().recovery_identity_mismatches,
+            1,
+            "the foreign wrong Drop identity must be audited once"
+        );
+        semantic_stats_recording_disable();
+        assert!(!semantic_runtime_slow_path_enabled());
+    }
+
     #[test]
     fn cross_thread_realloc_keeps_old_delayed_free_identity_separate_from_new_type() {
         let _guard = test_guard();
