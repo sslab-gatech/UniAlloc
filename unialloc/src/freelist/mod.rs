@@ -2403,21 +2403,23 @@ mod tests {
         }
     }
 
-    #[cfg(all(not(feature = "fixed_heap"), unix))]
+    #[cfg(all(
+        not(feature = "fixed_heap"),
+        any(target_os = "linux", target_os = "macos")
+    ))]
     fn os_page_is_mapped_for_test(ptr: *mut u8) -> bool {
-        let mut residency: libc::c_char = 0;
+        let mut residency = 0_u8;
         let mincore_ok = unsafe {
             libc::mincore(
-                // Linux libc exposes `mincore` with a mutable address pointer
-                // while Darwin accepts a const pointer.  The kernel never
-                // writes through the address; `*mut` here is only the portable
-                // libc ABI shape.
+                // Linux and Darwin disagree on the signedness of the residency
+                // byte. Let the final pointer cast infer the target libc ABI;
+                // the kernel still writes the same one-byte bit vector.
                 ptr as *mut libc::c_void,
                 PAGE_SIZE,
-                &mut residency as *mut libc::c_char,
+                (&mut residency as *mut u8).cast(),
             ) == 0
         };
-        mincore_ok && (residency as u8 & 1) != 0
+        mincore_ok && (residency & 1) != 0
     }
 
     #[cfg(all(not(feature = "fixed_heap"), target_os = "linux"))]
@@ -2557,6 +2559,7 @@ mod tests {
         unsafe { core::ptr::write_volatile(ptr, 0x5A) };
         freelist.free(ptr, run_size);
 
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         assert!(
             os_page_is_mapped_for_test(ptr),
             "at-cap hosted free run should remain mapped for freelist reuse"
