@@ -24594,6 +24594,45 @@ mod tests {
         assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
     }
 
+    #[test]
+    fn lifecycle_retires_released_history_before_capacity_without_reuse() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+        }
+        let iterations =
+            GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT * GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS * 2;
+        for index in 0..iterations {
+            let ptr = ((index + 1).wrapping_mul(0x1000) | 0x18) as *mut u8;
+            let observation = global_address_lifecycle_observation(ptr);
+            let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+                [global_retained_ownership_arbitration_shard(ptr)]
+            .lock();
+            let ownership = register_global_type_cache_ownership_from_snapshot(ptr, observation)
+                .expect("Released history must not exhaust reclaim admission");
+            drop(arbitration);
+            ownership.commit();
+
+            let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+                [global_retained_ownership_arbitration_shard(ptr)]
+            .lock();
+            transition_global_address_lifecycle(
+                ptr,
+                GlobalAddressLifecycleSnapshot::TypeRetained,
+                None,
+                ADDRESS_LIFECYCLE_RELEASED,
+                true,
+            )
+            .expect("test terminal transition should publish Released");
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+            drop(arbitration);
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
     #[cfg(not(feature = "fixed_heap"))]
     #[test]
     fn released_tombstone_rejects_until_actual_backend_reuse() {
