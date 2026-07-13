@@ -7309,6 +7309,13 @@ unsafe fn inline_segregated_type_cache_has_matching_bucket_entry(
             clear_segregated_type_cache_hot_bucket(layout, cache_key, policy_key, cache_domain);
             observed_corrupt = true;
         } else if bucket.matching_entry_count(layout, cache_key, policy_key) != 0 {
+            remember_segregated_type_cache_hot_bucket(
+                layout,
+                cache_key,
+                policy_key,
+                cache_domain,
+                idx,
+            );
             return true;
         }
         offset += 1;
@@ -19801,6 +19808,90 @@ mod tests {
                 pop_segregated_type_cache(layout, metadata),
                 Some(fresh),
                 "fresh entry must remain reusable from the bucket selected after the skipped hot slot"
+            );
+        }
+    }
+
+    #[test]
+    fn metadata_segregated_push_refreshes_stale_hot_hint_before_matching_bucket_bypass() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        unsafe {
+            let layout =
+                Layout::from_size_align(4 * size_of::<usize>(), align_of::<usize>()).unwrap();
+            let metadata = AllocationMetadata::for_type(0x5E6D_0044)
+                .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+            let cache_key = type_cache_identity_key(metadata);
+            let policy_key = segregated_type_cache_policy_key(metadata);
+            let start = segregated_type_cache_slot_for_key(cache_key, layout);
+            let matching_idx = (start + 2) & (TYPE_CACHE_SLOTS - 1);
+
+            for entry_idx in 0..SEGREGATED_TYPE_CACHE_DEPTH {
+                let ptr = (0x6100_0000usize + entry_idx * layout.size()) as *mut u8;
+                assert!(push_segregated_type_cache_bucket(
+                    &mut SEGREGATED_TYPE_CACHE[matching_idx],
+                    SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                    SegregatedTypeCacheEntry {
+                        cache_key,
+                        type_id: metadata.type_id,
+                        policy_key,
+                        ptr,
+                        size: layout.size(),
+                        align: layout.align(),
+                        auth: 0,
+                        metadata,
+                    },
+                )
+                .is_none());
+            }
+            let matching_before = SEGREGATED_TYPE_CACHE[matching_idx]
+                .entries
+                .map(|entry| entry.ptr);
+            remember_segregated_type_cache_hot_bucket(
+                layout,
+                cache_key,
+                policy_key,
+                SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                start,
+            );
+            assert_eq!(SEGREGATED_TYPE_CACHE[start].count, 0);
+            assert_eq!(
+                SEGREGATED_TYPE_CACHE[matching_idx].count,
+                SEGREGATED_TYPE_CACHE_DEPTH
+            );
+
+            assert!(matches!(
+                push_segregated_type_cache_eligible_with_key(
+                    0x6200_0000usize as *mut u8,
+                    layout,
+                    metadata,
+                    cache_key,
+                    policy_key,
+                ),
+                Err(())
+            ));
+            assert_eq!(
+                SEGREGATED_TYPE_CACHE[start].count, 0,
+                "a stale empty hot bucket must not split a semantic identity across buckets"
+            );
+            assert_eq!(
+                SEGREGATED_TYPE_CACHE[matching_idx]
+                    .entries
+                    .map(|entry| entry.ptr),
+                matching_before,
+                "matching full-bucket ownership must remain unchanged on bypass"
+            );
+            assert_eq!(
+                segregated_type_cache_hot_bucket_snapshot_for_test().bucket_idx,
+                matching_idx,
+                "the matching-bucket preflight should repair the stale hot hint"
             );
         }
     }
