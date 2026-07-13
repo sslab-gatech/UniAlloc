@@ -954,14 +954,14 @@ mod tests {
 
         unsafe fn os_page_is_mapped(page_addr: usize) -> bool {
             debug_assert_eq!(page_addr % PAGE_SIZE, 0);
-            let mut residency = 0 as libc::c_char;
+            let mut residency = 0_u8;
             libc::mincore(
-                // Match Linux's mutable-pointer libc ABI while remaining
-                // compatible with Darwin's const-pointer signature.  `mincore`
-                // observes residency only; it does not mutate this page.
+                // Linux and Darwin disagree on the signedness of the residency
+                // byte. Let the final pointer cast infer the target libc ABI;
+                // the kernel still writes the same one-byte bit vector.
                 page_addr as *mut libc::c_void,
                 PAGE_SIZE,
-                &mut residency as *mut libc::c_char,
+                (&mut residency as *mut u8).cast(),
             ) == 0
         }
 
