@@ -7577,23 +7577,29 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
                 let bucket_matches =
                     cache[idx].matching_entry_count(layout, cache_key, policy_key) != 0;
                 let bucket_can_accept = cache[idx].can_accept_object_size(layout.size());
-                if bucket_matches && !bucket_can_accept {
+                let bucket_has_entry_capacity = cache[idx].count < SEGREGATED_TYPE_CACHE_DEPTH;
+                if bucket_matches && (!bucket_has_entry_capacity || !bucket_can_accept) {
                     record_stats_type_cache_bypass(metadata);
                     return Err(());
                 }
-                if cache[idx].count < SEGREGATED_TYPE_CACHE_DEPTH
-                    && bucket_can_accept
-                    && segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
-                        &*cache,
-                        cache_domain,
-                        inline_cache_domain,
-                        &mut aggregate_retained_bytes,
-                        idx,
-                        layout.size(),
-                    )
-                {
-                    bucket_idx = idx;
-                    found_available_bucket = true;
+                if bucket_has_entry_capacity && bucket_can_accept {
+                    let aggregate_can_accept =
+                        segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
+                            &*cache,
+                            cache_domain,
+                            inline_cache_domain,
+                            &mut aggregate_retained_bytes,
+                            idx,
+                            layout.size(),
+                        );
+                    if bucket_matches && !aggregate_can_accept {
+                        record_stats_type_cache_bypass(metadata);
+                        return Err(());
+                    }
+                    if aggregate_can_accept {
+                        bucket_idx = idx;
+                        found_available_bucket = true;
+                    }
                 }
             }
         }
@@ -7632,24 +7638,30 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
                 let bucket_matches =
                     cache[idx].matching_entry_count(layout, cache_key, policy_key) != 0;
                 let bucket_can_accept = cache[idx].can_accept_object_size(layout.size());
-                if bucket_matches && !bucket_can_accept {
+                let bucket_has_entry_capacity = cache[idx].count < SEGREGATED_TYPE_CACHE_DEPTH;
+                if bucket_matches && (!bucket_has_entry_capacity || !bucket_can_accept) {
                     record_stats_type_cache_bypass(metadata);
                     return Err(());
                 }
-                if cache[idx].count < SEGREGATED_TYPE_CACHE_DEPTH
-                    && bucket_can_accept
-                    && segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
-                        &*cache,
-                        cache_domain,
-                        inline_cache_domain,
-                        &mut aggregate_retained_bytes,
-                        idx,
-                        layout.size(),
-                    )
-                {
-                    bucket_idx = idx;
-                    found_available_bucket = true;
-                    break;
+                if bucket_has_entry_capacity && bucket_can_accept {
+                    let aggregate_can_accept =
+                        segregated_type_cache_can_accept_aggregate_with_cached_retained_bytes(
+                            &*cache,
+                            cache_domain,
+                            inline_cache_domain,
+                            &mut aggregate_retained_bytes,
+                            idx,
+                            layout.size(),
+                        );
+                    if bucket_matches && !aggregate_can_accept {
+                        record_stats_type_cache_bypass(metadata);
+                        return Err(());
+                    }
+                    if aggregate_can_accept {
+                        bucket_idx = idx;
+                        found_available_bucket = true;
+                        break;
+                    }
                 }
                 offset += 1;
             }
@@ -19153,6 +19165,166 @@ mod tests {
                     alloc.dealloc_raw(ptr, layout);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn metadata_segregated_matching_bucket_aggregate_cap_bypasses_without_replacement() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        unsafe {
+            let layout = Layout::from_size_align(
+                MAX_SEGREGATED_TYPE_CACHE_BUCKET_BYTES / 4,
+                align_of::<usize>(),
+            )
+            .unwrap();
+            let retained = type_cache_retained_bytes_for_layout(layout);
+            assert_eq!(
+                MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES % retained,
+                0,
+                "the deterministic fixture must fill the aggregate budget exactly"
+            );
+            let total_entries = MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES / retained;
+            let entries_per_other_bucket = MAX_SEGREGATED_TYPE_CACHE_BUCKET_BYTES / retained;
+            assert!(entries_per_other_bucket <= SEGREGATED_TYPE_CACHE_DEPTH);
+
+            let metadata = AllocationMetadata::for_type(0xC003_5411)
+                .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+            let cache_key = type_cache_identity_key(metadata);
+            let policy_key = segregated_type_cache_policy_key(metadata);
+            let matching_idx = segregated_type_cache_slot_for_key(cache_key, layout);
+            let mut next_ptr = 0x5100_0000usize;
+
+            set_segregated_type_cache_bucket_retained_bytes(
+                SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                0,
+                true,
+            );
+            assert!(push_segregated_type_cache_bucket(
+                &mut SEGREGATED_TYPE_CACHE[matching_idx],
+                SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                SegregatedTypeCacheEntry {
+                    cache_key,
+                    type_id: metadata.type_id,
+                    policy_key,
+                    ptr: next_ptr as *mut u8,
+                    size: layout.size(),
+                    align: layout.align(),
+                    auth: 0,
+                    metadata,
+                },
+            )
+            .is_none());
+            next_ptr += layout.size();
+
+            let mut remaining = total_entries - 1;
+            let mut bucket_offset = SEGREGATED_TYPE_CACHE_PROBE_LIMIT + 4;
+            let mut other_type = 0xC003_5500u64;
+            while remaining != 0 {
+                let idx = (matching_idx + bucket_offset) & (TYPE_CACHE_SLOTS - 1);
+                assert_ne!(idx, matching_idx);
+                assert_eq!(SEGREGATED_TYPE_CACHE[idx].count, 0);
+                let other_metadata = AllocationMetadata::for_type(other_type)
+                    .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+                let other_cache_key = type_cache_identity_key(other_metadata);
+                let other_policy_key = segregated_type_cache_policy_key(other_metadata);
+                let bucket_entries = core::cmp::min(remaining, entries_per_other_bucket);
+                for _ in 0..bucket_entries {
+                    assert!(push_segregated_type_cache_bucket(
+                        &mut SEGREGATED_TYPE_CACHE[idx],
+                        SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                        SegregatedTypeCacheEntry {
+                            cache_key: other_cache_key,
+                            type_id: other_metadata.type_id,
+                            policy_key: other_policy_key,
+                            ptr: next_ptr as *mut u8,
+                            size: layout.size(),
+                            align: layout.align(),
+                            auth: 0,
+                            metadata: other_metadata,
+                        },
+                    )
+                    .is_none());
+                    next_ptr += layout.size();
+                }
+                remaining -= bucket_entries;
+                bucket_offset += 1;
+                other_type = other_type.wrapping_add(1);
+            }
+
+            assert_eq!(
+                segregated_type_cache_bucket_retained_bytes(SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY),
+                MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES
+            );
+            assert_eq!(SEGREGATED_TYPE_CACHE[matching_idx].count, 1);
+            assert!(SEGREGATED_TYPE_CACHE[matching_idx].count < SEGREGATED_TYPE_CACHE_DEPTH);
+            assert!(SEGREGATED_TYPE_CACHE[matching_idx].can_accept_object_size(layout.size()));
+            remember_segregated_type_cache_hot_bucket(
+                layout,
+                cache_key,
+                policy_key,
+                SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY,
+                matching_idx,
+            );
+
+            let before_entries = core::array::from_fn::<_, TYPE_CACHE_SLOTS, _>(|idx| {
+                SEGREGATED_TYPE_CACHE[idx].entries.map(|entry| entry.ptr)
+            });
+            let before_counts = core::array::from_fn::<_, TYPE_CACHE_SLOTS, _>(|idx| {
+                SEGREGATED_TYPE_CACHE[idx].count
+            });
+            let before_cursors = core::array::from_fn::<_, TYPE_CACHE_SLOTS, _>(|idx| {
+                SEGREGATED_TYPE_CACHE[idx].evict_cursor
+            });
+            let before_retained = core::array::from_fn::<_, TYPE_CACHE_SLOTS, _>(|idx| {
+                SEGREGATED_TYPE_CACHE[idx].retained_bytes
+            });
+
+            assert!(matches!(
+                push_segregated_type_cache_eligible_with_key(
+                    next_ptr as *mut u8,
+                    layout,
+                    metadata,
+                    cache_key,
+                    policy_key,
+                ),
+                Err(())
+            ));
+
+            let after_entries = core::array::from_fn::<_, TYPE_CACHE_SLOTS, _>(|idx| {
+                SEGREGATED_TYPE_CACHE[idx].entries.map(|entry| entry.ptr)
+            });
+            assert_eq!(after_entries, before_entries);
+            assert_eq!(
+                core::array::from_fn::<_, TYPE_CACHE_SLOTS, _>(
+                    |idx| SEGREGATED_TYPE_CACHE[idx].count
+                ),
+                before_counts
+            );
+            assert_eq!(
+                core::array::from_fn::<_, TYPE_CACHE_SLOTS, _>(
+                    |idx| SEGREGATED_TYPE_CACHE[idx].evict_cursor
+                ),
+                before_cursors
+            );
+            assert_eq!(
+                core::array::from_fn::<_, TYPE_CACHE_SLOTS, _>(
+                    |idx| SEGREGATED_TYPE_CACHE[idx].retained_bytes
+                ),
+                before_retained
+            );
+            assert_eq!(
+                segregated_type_cache_bucket_retained_bytes(SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY),
+                MAX_SEGREGATED_TYPE_CACHE_RETAINED_BYTES,
+                "aggregate-cap rejection must not replace or shift any cached owner"
+            );
         }
     }
 
