@@ -108,7 +108,7 @@ Georgia Tech 对 qualifier 的公开描述强调研究准备度、研究深度�
 
 | # | 建议英文标题 | 这一页只完成什么 | 图 | 时间/追问 |
 |---:|---|---|---|---|
-| 10 | **The security scope trusts compiler/runtime metadata and separates only covered cross-class reuse.** | 明确 attacker、TCB 和 non-goals：trusted metadata；spoofed IDs、hash collision、same-type、fallback、metadata corruption 均是边界 | TCB 边界 + “Protects / Does not protect” | 1:30；先于委员会指出限制 |
+| 10 | **The security scope trusts compiler/runtime metadata and separates only covered cross-class reuse.** | 明确 attacker、TCB 和 non-goals：trusted metadata；内部 cache lookup-key collision 会做 exact identity check，但 spoofed/identical metadata、compiler type-ID collision、same-type、fallback、metadata corruption 仍是边界 | TCB 边界 + “Protects / Does not protect” | 1:30；先于委员会指出限制 |
 | 11 | **UniAlloc separates semantic input, allocation policy, and platform mechanism.** | 给出全系统 mental model | 把 `fig/overview.pdf` 重画为三条横向 lane，并 progressive reveal | 2:00；原图只放 backup |
 | 12 | **Optional metadata preserves supported source-level execution, not universal ABI compatibility.** | 解释 `AllocationMetadata`、semantic API、`GlobalAlloc` fallback，并预告四维 compatibility contract | 两条路径 + source/toolchain/FFI/ABI 四行表 | 1:30；准备 ABI/compatibility |
 | 13 | **Compiler extraction removes source annotations from common Rust allocation paths.** | 展示 `T` 如何通过 optimized MIR rewrite 进入 metadata ABI | `Box<T>` → MIR → metadata ABI → allocator，4 个节点 | 2:00；准备 rustc fragility |
@@ -118,11 +118,10 @@ Georgia Tech 对 qualifier 的公开描述强调研究准备度、研究深度�
 
 关键实现依据：
 
-- `unialloc/src/alloc_api/type_isolation.rs:203-303`：metadata fields/flags 与 unknown 状态。
-- `unialloc/src/alloc_api/type_isolation.rs:8196-8248`：semantic alloc/dealloc/realloc API。
-- `unialloc/src/cache/mod.rs:536-595`：semantic path 与普通 `GlobalAlloc` fallback。
-- `tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs:4227-4299`：metadata ABI rewrite。
-- `tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs:4595-4689`：scope push/original call/pop 与 unwind cleanup。
+- `unialloc/src/alloc_api/type_isolation.rs` 的 `AllocationMetadata`：metadata fields/flags 与 unknown 状态。
+- 同文件的 `SemanticAlloc` trait、`impl SemanticAlloc for RustAllocator` 与 `__unialloc_semantic_scope_push*`/`__unialloc_semantic_scope_pop`：semantic alloc/dealloc/realloc API 与 scope ABI。
+- `unialloc/src/cache/mod.rs` 的 `unsafe impl GlobalAlloc for RustAllocator`：semantic path 与普通 `GlobalAlloc` fallback。
+- `tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs` 的 `record_or_rewrite_semantic_scope_candidates`、`push_semantic_scope_pop_block` 与 `record_or_rewrite_semantic_ownership_transfers`：metadata ABI、scope push/original call/pop、ownership transfer 与 unwind cleanup。行号只在 deck freeze 前刷新一次，symbol 是长期入口。
 - `docs/allocator-mir-and-backend-validation.md:38-84,170-300`：real rustc-driver 与 bounded functionality probes；不要把这些叫 performance evidence。
 - `94b2523d...` source-bound presentation snapshot（source digest `56a912ef...`）：direct path 观察到 36 个 actual rewrites、typed runtime `84/84`；semantic-scope path 观察到 116 个 rewrites、28 个 drop rewrites、typed runtime `161/161`；cross-thread path 观察到 4 个 hints、3 个 recovery matches、0 mismatch。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-current-head-94b2523d8823-20260712T060330Z/`。开发 HEAD 已继续前进，因此它是精确绑定的 recent functionality evidence，不应再称 live-HEAD universal coverage 或 performance evidence。
 - `4715d46...` clean-HEAD compiler-driven type-isolation probe：普通 `Box<T>` 源码没有手工 metadata/allocator ABI；real rustc-driver 实际应用 21 个 semantic-scope 与 4 个 Drop rewrite（该 probe 没有 supported direct allocator-call replacement candidate），为两个 same-layout Rust types 产生 distinct compiler-derived IDs。Hosted 与 `fixed_heap` 各单次 PASS：wrong-type reuse 被阻止、producer identity 4/4 完整取回自己的地址，target-type drop/deallocation scope 为 `0/0`，因此该生命周期必须使用 allocation-side recovery；corrupt slots 与 recovery mismatch 均为 0。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/current-source-typeiso-oxipng-4715d46-20260712a/`。它支持 bounded compiler-derived identity → runtime isolation path，不支持 universal UAF prevention、same-key/collision/spoofing/fallback coverage 或 performance claim。
@@ -178,6 +177,18 @@ Georgia Tech 对 qualifier 的公开描述强调研究准备度、研究深度�
 
 Slide 14 用 `5eb25f5`、`32c3c5b`、`ed188ca...2b33401`、`0704852` 与 `f007c7b` 说明“ordinary Rust source → actual MIR type/module/placement identity → allocation/transfer/Drop pairing → bounded reuse effect”；不要把候选行或代码存在当 actual rewrite。Slide 15/16 必须把四种证据分开：**static compiler rows**（candidate/applied/fail-closed）、**runtime transfer/allocation events**（各自窗口和 denominator）、**bounded isolation oracle**（明确执行的 adversarial lifecycle）和 **whole-run recovery corrections**（requested identity 与 allocation-time record 的非精确配对）。四个 denominator/时间窗口不得互换；Slide 16 以 `41205d3` bundle 作为最新 source-bound real-app actual rewrite、applied transfer gate 与 bounded oracle，且必须同时展示 whole-run mismatch `1` / `recovery_corrected_non_exact`；`46d5aaa...`、`a51960d...`、`38b8b59...`、`576df61...9bb9f8d...`、`427583b` 与 `af342f7` 均保留为各自 revision 的历史证据，不得跨 revision 转移、相减或归因 correction。地址级 effect 只能引用明确标记的 injected oracle 或独立 adversarial lifecycle regression，不能从自然 Oxipng counter 推导；whole-run correction 也不能被 oracle 的零 delta 隐藏。
 
+Slide 16/B18 只使用下面这一张 denominator/status 表，不把不同 revision 或窗口相加：
+
+| Evidence surface | Exact result | Status / boundary |
+|---|---:|---|
+| Oxipng static direct / scope / Drop | `6 / 369 / 320` | current-source bundle at `41205d3`; target-crate audited rows |
+| Oxipng static ownership transfer | `12 / 12` candidate/applied | same bundle; static rewrite gate only |
+| Oxipng runtime typed / fallback allocations | `873 / 197` of `1070` | recording-window events; diagnostic, not object coverage |
+| Oxipng runtime ownership transfer | `3 / 1 / 2` attempted/applied/rejected | dynamic execution observed; separate denominator |
+| Oxipng whole-run recovery mismatch | `1` | `recovery_corrected_non_exact`; prevents whole-app exact-pairing claim |
+| C002 compiler functional coverage | `430 / 430`, `99.851437%` | G001 read-only freeze digest `235549b2...`; historical/freeze-bound PASS, not live G002 rebinding |
+| Current performance percentage | `N/A` | full reproduction deferred; reduced runs are diagnostic only |
+
 #### Slide 12 必须定义的 compatibility contract
 
 | 维度 | 可以主张 | 不可以主张 |
@@ -191,7 +202,7 @@ Slide 14 用 `5eb25f5`、`32c3c5b`、`ed188ca...2b33401`、`0704852` 与 `f007c7
 
 | # | 建议英文标题 | 这一页只完成什么 | 图 | 时间/追问 |
 |---:|---|---|---|---|
-| 17 | **Distinct trusted allocator-visible identity keys separate ordinary cross-class reuse.** | 回到 Slide 3：只对 covered requests、distinct trusted keys 与 ordinary reuse path 做有限主张 | before/after slot 图；把 trust/coverage 写在图上 | 1:45；明确 same-key/collision/spoofing 仍可能 |
+| 17 | **Distinct trusted allocator-visible identities separate ordinary cross-class reuse.** | 回到 Slide 3：只对 covered requests、distinct trusted exact identities 与 ordinary reuse path 做有限主张 | before/after slot 图；把 trust/coverage 写在图上 | 1:45；内部 lookup-key collision 已 exact-check；identical/spoofed metadata 与 compiler type-ID collision 仍开放 |
 | 18 | **Type isolation and quarantine defend different exploitation steps.** | 与 Scudo/quarantine 做机制层对比，而不是泛化性能胜负 | 横轴 time、纵轴 identity 的 2×2 | 1:15；可叠加，不必二选一 |
 | 19 | **The runtime uses a hashed semantic identity whose trust and stability are part of the contract.** | 展示 64-bit allocator-visible key 结合 type/module/policy/lifetime/placement；解释 callsite 不参与 reuse key | identity-key 拼图 + collision/spoofing boundary | 1:30；准备 type-ID collision/stability |
 | 20 | **Per-type caching trades reuse separation for retention and fragmentation.** | 主动讨论 memory cost、empty slab、bounded TLS cache 和 workload sensitivity | 标注 `CONCEPTUAL` 的机制图，或真实 historical per-workload RSS 点；不要画伪定量曲线 | 1:45；避免“没有 memory overhead” |
@@ -222,7 +233,7 @@ Slide 14 用 `5eb25f5`、`32c3c5b`、`ed188ca...2b33401`、`0704852` 与 `f007c7
 - `4937f4f...` hot-path optimization：`auto_metadata_allocations_exhausted()` 先检查 sticky exhaustion atomic，只在 consuming stream 已 exhausted 时读取 `AUTO_METADATA_CONFIG`，从 layout-derived/cyclic auto-metadata 的常见 alloc/dealloc gate 删除一次 `RwLock` read；独立审查确认 generation reset 与 revalidation 语义不变，targeted type-isolation tests `194/194` PASS。严格只做一组 pre 与一组 post 的同 leaf diagnostic：`13.0/30.97 ns`（off/on）到 `12.92/29.09 ns`；variant 明确是 `layout-derived-size-align`、`compiler_site stream=none`、`semantic_policy.ready=false`。因此只把 `-1.88 ns` 视为保留该优化的方向性信号，不报告稳定百分比、统计结论、compiler-attributed cost 或论文结果。
 - `1228f71...` plain-cache accounting/cap repair：首次 cold growth 在 reset/untrusted 后扫描 64 slots 建立 retained-byte aggregate，健康 push/pop 后 O(1) 更新；corruption/accounting repair 将 aggregate 标为 untrusted，下一次 growth 只做一次 bounded rebuild。Inline 与 cold slots 现在共同受 512 KiB cap，空 inline slot 也不能绕过 aggregate headroom。Regression 覆盖 exact cap、push/pop、inline/cold replacement、drain 与 corruption rebuild。单次同条件 micro diagnostic（24 distinct identities、同 64-byte layout、单线程、2.4M typed operations）为 `72.338 -> 54.808 ns/op`（`-24.233%`），两边均为 1.2M hit、1.2M insert、0 bypass；这只有方向性，**没有 median/range**，不得作为 general-app、paper、publication-grade 或稳定百分比 claim。Slide 20 可讲 O(1) accounting 与 512 KiB bound；性能数字只放 speaker note/backup 并带此边界。
 
-Slide 10/17 的精确 threat model：attacker 可以触发 temporal bug 和 heap grooming；TCB 信任 compiler/runtime 产生或受信 semantic caller 提供的 metadata，并假设 allocator metadata 未被伪造。对 covered requests，若 allocator-visible keys distinct 且不碰撞，ordinary cross-class reuse 被分开。**Same-key reuse、64-bit hash collision、spoofed/manual IDs、metadata corruption、unknown/fallback/custom-allocator path 均不在该有限保证内。**
+Slide 10/17 的精确 threat model：attacker 可以触发 temporal bug 和 heap grooming；TCB 信任 compiler/runtime 产生或受信 semantic caller 提供的 metadata，并假设 allocator metadata 未被伪造。对 covered requests，若 allocator-visible identities distinct，ordinary cross-class reuse 被分开；plain inline/linked cache 即使发生内部 64-bit lookup-key collision，也要求 exact callsite-agnostic identity 匹配。**完全相同或伪造的 metadata、compiler type-ID collision、same-type reuse、metadata corruption、unknown/fallback/custom-allocator path 仍不在该有限保证内。**
 
 ### E. H3: Retargetability is an architectural boundary — 31:00--36:00（Slides 22--24）
 
@@ -403,8 +414,8 @@ Deep answer: backup slide number
 
 | Slide | Claim | Evidence tier | Source | Assumption | Does not prove | Backup |
 |---:|---|---|---|---|---|---:|
-| 16 | real compiler-to-runtime path exists | source-bound functional evidence | `a51960d...` bundle + `5eb25f5...`/`32c3c5b...` actual-rustc probes | tested toolchain/instrumented path | universal coverage/unmodified-app deployment/stable ABI | B3--B4 |
-| 21 | ordinary cross-class reuse is separated for distinct trusted keys | current adversarial regression + implementation | `3acbd6d...`, `5eb25f5...`, `1228f71...` tests + type-isolation code | covered path, trusted non-colliding key | universal memory safety/same-key/collision/spoofing protection | B7--B10 |
+| 16 | real compiler-to-runtime path exists | source-bound functional evidence | latest `41205d3...` Oxipng bundle + `f007c7b...` realistic multi-module + bounded actual-rustc probes | tested toolchain/instrumented path; separate static/runtime denominators | universal coverage/unmodified-app deployment/stable ABI/whole-app exact pairing | B3--B4/B18 |
+| 21 | ordinary cross-class reuse is separated for distinct trusted identities | current adversarial regression + implementation | `3acbd6d...`, `5eb25f5...`, `1228f71...`, `8bc2809...`, `6700ca1...` tests + type-isolation code | covered path, trusted exact identity | universal memory safety/identical or spoofed metadata/compiler type-ID collision protection | B7--B10 |
 | 24 | paper reported five environments and runtime has retargeting boundaries | historical + current functional probes | paper eval + PAL/fixed heap + platform artifacts | tested adapter/path | zero-porting/current five-platform aggregate closure | B13/B17 |
 | 26--27 | original prototype observed reported ranges | historical | paper eval | original setup | current reproduction | B14--B16 |
 | 28 | paper-performance reproduction was explicitly deferred while functional work continues | current audit snapshot | G001 stop handoff + G002 probes | exact source binding and evidence tier | mechanism is absent or deferred claims failed | B18 |
@@ -446,7 +457,7 @@ Deep answer: backup slide number
 | **15. 72.17% 的 denominator 是什么？是当前数字吗？** | 原论文表述为标准 Rust `alloc` benchmark 中“72.17% of objects”；它不是当前 source-bound 已闭合数字。 | 若 raw evidence 未定义 event/object denominator，不自行改名；给原方法、fallback 与 current audit。B14/B18 |
 | **16. 为什么现在会看到 99.851437% coverage？** | `430/430` 是 G001 freeze-bound functional coverage evidence，不是性能。G002 的旧 `576df61...9bb9f8d...` one-shot 保留其精确 denominator；新的 `38b8b59...` current-source one-shot 单独报告静态 ownership transfer `6/6` 与动态 `1/1/0`，不能把它们换算或并入旧百分比。 | 先看 source digest、denominator、actual-rewrite/dynamic-execution evidence 和 evidence tier；不要跨 revision rebinding，也不要写成 performance claim。B18 |
 | **17. Evaluation 是否公平？** | 需要相同 workload、baseline、配置、重复运行、明确 normalization、raw provenance 和 source binding 才能比较。 | 原论文旧 toolchain/hardware、simulation，以及没有单独 uncertainty/significance analysis 的限制必须主动说明。B14--B16 |
-| **18. Security benefit 真正测量了吗？** | 当前已有同 layout、跨线程 recovery、不同 trusted `type_id` 的 adversarial reuse regression，证明 covered cache path 的 cross-type address reuse 被阻断；但还不是系统性 exploit-success study。 | Same-type、fallback、spoofing/collision 与真实 exploit corpus 尚未覆盖；下一步测 reuse-success rate 与 attacker capabilities。B19 |
+| **18. Security benefit 真正测量了吗？** | 当前已有同 layout、跨线程 recovery、不同 trusted `type_id` 的 adversarial reuse regression，证明 covered cache path 的 cross-type address reuse 被阻断；plain cache 另有强制 lookup-key collision regression，但还不是系统性 exploit-success study。 | Same-type、fallback、identical/spoofed metadata、compiler type-ID collision 与真实 exploit corpus 尚未覆盖；下一步测 reuse-success rate 与 attacker capabilities。B19 |
 | **19. 当前源码支持五个平台吗？** | G002 已有 macOS functional PASS、Windows FLS Wine 10 runtime `3/3` PASS、current-source Redox build/codegen/ABI PASS、Rust-for-Linux 与 BlogOS current-source no_std final-link contracts PASS、历史 artifact-hash-bound Redox target runtime evidence（未捕获 source revision），以及 current fixed/hosted smoke；当前 Redox runtime、Rust-for-Linux kernel load/run 和 BlogOS boot validation 仍依赖外部 runner/assets。 | 使用 `0bd84c1` 引入的 runner，`38b8b59` fresh Windows cross-build 在 Wine 10 上闭合 A-current/B-delete、A-null/B-populated 与 current-owner exit 三个 bounded lifecycle；早期 Wine 8 缺 DLL 只是 runner blocker。local link contract 与 Wine 证据都不等于 native/current-HEAD 五平台实机闭合。B17/B18 |
 | **20. 最重要的 dissertation 下一步是什么？** | 找出在 partial coverage、FFI 与 adversarial metadata 下仍有用的最小 stable identity contract。 | Source-bound matrix、exploit corpus 与跨平台实验是检验该问题的基础设施；随后扩展 cross-language/policy automation。B19 |
 
@@ -542,7 +553,7 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 | Original evaluation method/results | `../rust-alloc-paper/eval.tex:63-91,168-210,233-303,314-344,380-455` |
 | Runtime/platform selection | `unialloc/src/lib.rs:89,129-150` |
 | Semantic metadata/API | `unialloc/src/alloc_api/type_isolation.rs` (`AllocationMetadata`, semantic alloc/dealloc/realloc) |
-| GlobalAlloc semantic/fallback routing | `unialloc/src/cache/mod.rs:536-695` |
+| GlobalAlloc semantic/fallback routing | `unialloc/src/cache/mod.rs` (`unsafe impl GlobalAlloc for RustAllocator`) |
 | Compiler MIR rewrite | `tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs` |
 | Vec realloc/isolation actual-rewrite probe | `unialloc/src/bin/rustc_driver_mir_vec_realloc_identity_probe.rs`、`tools/unialloc-rustc-pass/test_mir_vec_realloc_identity_probe.py` |
 | Cross-thread Box-to-Vec actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_cross_thread_box_slice_into_vec_rebind.py` |
