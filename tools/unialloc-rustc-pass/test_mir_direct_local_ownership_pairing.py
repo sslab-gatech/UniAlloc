@@ -268,11 +268,11 @@ def validate(audit: dict[str, object], stdout: str) -> None:
     )
     assert hidden_runtime["checksum"] != 0
     assert hidden_runtime["typed_allocations"] == 1, hidden_runtime
-    assert hidden_runtime["typed_deallocations"] == 2, hidden_runtime
+    assert hidden_runtime["typed_deallocations"] == 1, hidden_runtime
     assert hidden_runtime["fallback_allocations"] == 1, hidden_runtime
-    assert hidden_runtime["fallback_deallocations"] == 0, hidden_runtime
-    assert hidden_runtime["raw_dealloc_no_metadata"] == 0, (
-        "the raw SizeAlign allocation must retain recovery metadata across the hidden owner replacement",
+    assert hidden_runtime["fallback_deallocations"] == 1, hidden_runtime
+    assert hidden_runtime["raw_dealloc_no_metadata"] == 1, (
+        "the cross-crate replacement pointer has no recovery record, so its later non-local Drop must remain raw rather than fabricating typed attribution",
         hidden_runtime,
     )
 

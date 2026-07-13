@@ -241,42 +241,34 @@ def validate_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
         for row in inner_rows
     ), "inner Vec scope has no compiler-inserted unwind pop"
 
-    box_rows = applied_rows(audit, "Box<PostUnwindPayload")
+    vec_rows = applied_rows(audit, "Vec<PostUnwindPayload")
     outer_rows = [
         row
-        for row in box_rows
-        if "outer_box_after_caught_panic" in str(row.get("callee") or "")
-        and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
-    ]
-    allocation_rows = [
-        row
-        for row in box_rows
-        if "outer_box_after_caught_panic" in str(row.get("mir_function") or "")
-        and "::new" in str(row.get("callee") or "")
+        for row in vec_rows
+        if "::extend" in str(row.get("callee") or "")
+        and "main" in str(row.get("mir_function") or "")
         and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
     ]
     drop_rows = [
         row
-        for row in box_rows
+        for row in vec_rows
         if row.get("lowering_kind") == "semantic_scope_drop_rewrite"
     ]
-    assert outer_rows, "outer Box-returning call did not receive a semantic scope"
-    assert allocation_rows, "post-unwind Box::new did not receive a semantic scope"
-    assert drop_rows, "post-unwind Box Drop did not receive a semantic scope"
+    assert outer_rows, "outer Vec::extend receiver did not receive a semantic scope"
+    assert drop_rows, "post-unwind Vec Drop did not receive a semantic scope"
 
-    box_type_id = unique_type_id(outer_rows + allocation_rows + drop_rows, "post-unwind Box")
-    for row in inner_rows + outer_rows + allocation_rows + drop_rows:
+    vec_type_id = unique_type_id(outer_rows + drop_rows, "post-unwind Vec")
+    for row in inner_rows + outer_rows + drop_rows:
         assert int(row.get("flags") or 0) & TYPE_ISOLATED
     return {
         "inner_unwind_rows": len(inner_rows),
-        "outer_scope_rows": len(outer_rows),
-        "post_unwind_allocation_rows": len(allocation_rows),
+        "outer_vec_scope_rows": len(outer_rows),
         "post_unwind_drop_rows": len(drop_rows),
-        "post_unwind_box_type_id": box_type_id,
+        "post_unwind_vec_type_id": vec_type_id,
     }
 
 
-def validate_runtime(runtime: Dict[str, Any], box_type_id: int) -> Dict[str, Any]:
+def validate_runtime(runtime: Dict[str, Any], vec_type_id: int) -> Dict[str, Any]:
     assert runtime.get("panic_observed") is True
     for prefix in ("initial", "post_unwind", "final"):
         assert int(runtime.get(f"{prefix}_main_depth") or 0) == 0
@@ -297,18 +289,19 @@ def validate_runtime(runtime: Dict[str, Any], box_type_id: int) -> Dict[str, Any
 
     type_rows = runtime.get("type_rows") or []
     assert isinstance(type_rows, list)
-    aggregate = aggregate_runtime_type(type_rows, box_type_id)
+    aggregate = aggregate_runtime_type(type_rows, vec_type_id)
     assert aggregate["allocations"] == 1
-    assert aggregate["allocated_bytes"] == 64
+    assert aggregate["allocated_bytes"] >= 64
+    assert aggregate["allocated_bytes"] % 64 == 0
     assert aggregate["deallocations"] == 1
     assert aggregate["policy_flags_seen"] & TYPE_ISOLATED
-    return {"post_unwind_box_runtime": aggregate}
+    return {"post_unwind_vec_runtime": aggregate}
 
 
 def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     audit_evidence = validate_audit(audit)
     runtime_evidence = validate_runtime(
-        runtime, int(audit_evidence["post_unwind_box_type_id"])
+        runtime, int(audit_evidence["post_unwind_vec_type_id"])
     )
     return {"audit": audit_evidence, "runtime": runtime_evidence}
 
@@ -458,8 +451,8 @@ def main() -> int:
         "runtime": runtime,
         "boundaries": [
             "Functional nested-unwind regression only; no timing or paper-performance claim.",
-            "The Rust source uses ordinary Vec, Box, catch_unwind, and Drop behavior with no manual metadata allocator ABI calls.",
-            "This adds the previously missing invariant that an inner compiler scope unwind restores a still-active outer compiler scope before a subsequent allocation/drop pair.",
+            "The Rust source uses ordinary Vec, Iterator, catch_unwind, and Drop behavior with no manual metadata allocator ABI calls.",
+            "This adds the previously missing invariant that an inner compiler scope unwind restores a still-active exact Vec receiver scope before that receiver's subsequent allocation/drop pair.",
             "The isolated probe overrides the workspace dev panic strategy to unwind; normal project profiles remain unchanged.",
             "One hosted and one fixed-heap process cover this bounded lifecycle, not arbitrary panics, payloads, or allocator clients.",
         ],

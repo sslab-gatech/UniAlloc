@@ -19,6 +19,7 @@ FALLIBLE_FACTORY_CALLEE = "ok_only_vec_factory"
 CONFLICTING_FACTORY_CALLEE = "conflicting_fallible_vec_factory"
 APPLIED_STATUS = "actual_semantic_scope_enter_exit_rewrite_applied"
 AMBIGUOUS_STATUS = "semantic_scope_rewrite_skipped_ambiguous_heap_object_type"
+UNRESOLVED_STATUS = "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
 
 
 def run(
@@ -225,10 +226,33 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     )
     assert len(factory_rows) == 1, factory_rows
     factory = factory_rows[0]
-    assert factory.get("lowering_kind") == "semantic_scope_enter_exit_rewrite", factory
-    assert factory.get("rewrite_status") == APPLIED_STATUS, factory
-    assert "Vec<u8" in str(factory.get("semantic_object_type") or ""), factory
+    assert factory.get("lowering_kind") == (
+        "semantic_scope_unsolved_heap_object_candidate"
+    ), factory
+    assert factory.get("rewrite_status") == UNRESOLVED_STATUS, factory
+    assert factory.get("replacement_resolution_status") == (
+        "rustc_middle_heap_object_type_not_solved"
+    ), factory
+    assert factory.get("metadata_pairing_contract") == (
+        "audit_only_unresolved_heap_object_type"
+    ), factory
+    assert factory.get("semantic_scope_unwind_pop_inserted") is False, factory
     assert "Result<" in str(factory.get("destination_type") or ""), factory
+
+    internal_factory_allocations = call_rows(
+        audit, function_name=FALLIBLE_FACTORY_CALLEE, callee_marker="with_capacity"
+    )
+    assert len(internal_factory_allocations) == 1, internal_factory_allocations
+    internal_factory_allocation = internal_factory_allocations[0]
+    assert internal_factory_allocation.get("lowering_kind") == (
+        "semantic_scope_enter_exit_rewrite"
+    ), internal_factory_allocation
+    assert internal_factory_allocation.get("rewrite_status") == APPLIED_STATUS, (
+        internal_factory_allocation
+    )
+    assert "Vec<u8" in str(
+        internal_factory_allocation.get("semantic_object_type") or ""
+    ), internal_factory_allocation
 
     conflicting_factory_rows = call_rows(
         audit, function_name="main", callee_marker=CONFLICTING_FACTORY_CALLEE
@@ -268,10 +292,19 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
             "semantic_object_type": reserve.get("semantic_object_type"),
             "rewrite_status": reserve.get("rewrite_status"),
         },
-        "fallible_factory_positive_control": {
+        "fallible_factory_return_fail_closed": {
             "destination_type": factory.get("destination_type"),
-            "semantic_object_type": factory.get("semantic_object_type"),
             "rewrite_status": factory.get("rewrite_status"),
+            "replacement_resolution_status": factory.get(
+                "replacement_resolution_status"
+            ),
+        },
+        "fallible_factory_internal_exact_allocation": {
+            "callee": internal_factory_allocation.get("callee"),
+            "semantic_object_type": internal_factory_allocation.get(
+                "semantic_object_type"
+            ),
+            "rewrite_status": internal_factory_allocation.get("rewrite_status"),
         },
         "fallible_factory_conflicting_error_owner": {
             "destination_type": conflicting_factory.get("destination_type"),

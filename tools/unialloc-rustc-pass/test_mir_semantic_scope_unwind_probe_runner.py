@@ -53,7 +53,7 @@ def applied_row(
 
 
 def valid_audit() -> dict:
-    box_type = "std::boxed::Box<PostUnwindPayload, std::alloc::Global>"
+    vec_type = "std::vec::Vec<PostUnwindPayload, std::alloc::Global>"
     return {
         "summary": {
             "provider_override_installed": True,
@@ -70,18 +70,12 @@ def valid_audit() -> dict:
                 unwind_pop=True,
             ),
             applied_row(
-                object_type=box_type,
-                callee="probe::outer_box_after_caught_panic",
+                object_type=vec_type,
+                callee="Vec::<PostUnwindPayload>::extend::<NestedUnwindOnce>",
                 type_id=22,
             ),
             applied_row(
-                object_type=box_type,
-                callee="Box::<PostUnwindPayload>::new",
-                type_id=22,
-                mir_function="probe::outer_box_after_caught_panic",
-            ),
-            applied_row(
-                object_type=box_type,
+                object_type=vec_type,
                 callee="",
                 type_id=22,
                 drop=True,
@@ -137,9 +131,9 @@ def valid_runtime() -> dict:
 class MirSemanticScopeUnwindRunnerTests(unittest.TestCase):
     def test_validate_accepts_nested_restore_and_post_unwind_pairing(self) -> None:
         evidence = runner.validate(valid_audit(), valid_runtime())
-        self.assertEqual(evidence["audit"]["post_unwind_box_type_id"], 22)
+        self.assertEqual(evidence["audit"]["post_unwind_vec_type_id"], 22)
         self.assertEqual(
-            evidence["runtime"]["post_unwind_box_runtime"]["deallocations"], 1
+            evidence["runtime"]["post_unwind_vec_runtime"]["deallocations"], 1
         )
 
     def test_validate_requires_inner_unwind_pop(self) -> None:

@@ -39,62 +39,75 @@ impl Clone for PanicOnClone {
 #[repr(C)]
 struct PostUnwindPayload([u64; 8]);
 
+struct NestedUnwindOnce<'a> {
+    seed: &'a [PanicOnClone],
+    panic_observed: &'a mut bool,
+    restored_outer_depth: &'a mut SemanticScopeDepthSnapshot,
+    yielded: bool,
+}
+
 #[inline(never)]
 fn trigger_panicking_vec_extend(seed: &[PanicOnClone]) {
     let mut values = Vec::with_capacity(seed.len());
     values.extend_from_slice(seed);
-    std::hint::black_box(values);
 }
 
-#[inline(never)]
-fn outer_box_after_caught_panic(
-    seed: &[PanicOnClone],
-    panic_observed: &mut bool,
-    restored_outer_depth: &mut SemanticScopeDepthSnapshot,
-) -> Box<PostUnwindPayload> {
-    *panic_observed = catch_unwind(AssertUnwindSafe(|| {
-        trigger_panicking_vec_extend(seed);
-    }))
-    .is_err();
-    assert!(
-        *panic_observed,
-        "Vec::extend_from_slice should panic while cloning"
-    );
+impl Iterator for NestedUnwindOnce<'_> {
+    type Item = PostUnwindPayload;
 
-    // This function is itself called through a compiler-inserted Box scope.
-    // The inner Vec scope must unwind-pop back to that still-active outer scope,
-    // rather than leaking the Vec identity or clearing the outer identity.
-    *restored_outer_depth = semantic_scope_depth_snapshot();
-    assert_eq!(
-        restored_outer_depth.main_depth, 1,
-        "{:?}",
-        restored_outer_depth
-    );
-    assert_eq!(
-        restored_outer_depth.overflow_depth, 0,
-        "{:?}",
-        restored_outer_depth
-    );
-    assert_eq!(
-        restored_outer_depth.represented_depth, 1,
-        "{:?}",
-        restored_outer_depth
-    );
+    #[inline(never)]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.yielded {
+            return None;
+        }
+        self.yielded = true;
 
-    // Counter reset deliberately leaves the TLS scope stack untouched. The
-    // following ordinary Box allocation must therefore pair with its Drop even
-    // after the nested unwind/restore sequence.
-    semantic_stats_reset();
-    Box::new(PostUnwindPayload([
-        0xC002_0000_0000_0001,
-        0xC002_0000_0000_0002,
-        0xC002_0000_0000_0003,
-        0xC002_0000_0000_0004,
-        0xC002_0000_0000_0005,
-        0xC002_0000_0000_0006,
-        0xC002_0000_0000_0007,
-        0xC002_0000_0000_0008,
-    ]))
+        *self.panic_observed = catch_unwind(AssertUnwindSafe(|| {
+            trigger_panicking_vec_extend(self.seed);
+        }))
+        .is_err();
+        assert!(
+            *self.panic_observed,
+            "Vec::extend_from_slice should panic while cloning"
+        );
+
+        // Vec::extend drives Iterator::next while its exact compiler-inserted
+        // receiver scope is active. The inner Vec scope must unwind-pop back to
+        // that outer scope rather than leaking the inner identity or clearing
+        // the receiver identity.
+        *self.restored_outer_depth = semantic_scope_depth_snapshot();
+        assert_eq!(
+            self.restored_outer_depth.main_depth, 1,
+            "{:?}",
+            self.restored_outer_depth
+        );
+        assert_eq!(
+            self.restored_outer_depth.overflow_depth, 0,
+            "{:?}",
+            self.restored_outer_depth
+        );
+        assert_eq!(
+            self.restored_outer_depth.represented_depth, 1,
+            "{:?}",
+            self.restored_outer_depth
+        );
+
+        // Counter reset deliberately leaves the TLS scope stack untouched. The
+        // yielded element makes the still-active outer Vec receiver allocate;
+        // that allocation must later pair with the Vec Drop after the nested
+        // unwind/restore sequence.
+        semantic_stats_reset();
+        Some(PostUnwindPayload([
+            0xC002_0000_0000_0001,
+            0xC002_0000_0000_0002,
+            0xC002_0000_0000_0003,
+            0xC002_0000_0000_0004,
+            0xC002_0000_0000_0005,
+            0xC002_0000_0000_0006,
+            0xC002_0000_0000_0007,
+            0xC002_0000_0000_0008,
+        ]))
+    }
 }
 
 fn depth_is_zero(snapshot: SemanticScopeDepthSnapshot) -> bool {
@@ -159,7 +172,7 @@ fn main() {
     #[cfg(feature = "fixed_heap")]
     fixed_heap_probe_global::ensure_initialized_for_probe();
 
-    // The source deliberately uses ordinary Vec/Box APIs. The companion
+    // The source deliberately uses ordinary Vec APIs. The companion
     // rustc_driver runner is solely responsible for inserting semantic scopes.
     semantic_auto_metadata_disable();
     let initial_depth = semantic_scope_depth_snapshot();
@@ -177,16 +190,23 @@ fn main() {
     ];
     let mut panic_observed = false;
     let mut restored_outer_depth = initial_depth;
-    let value = outer_box_after_caught_panic(&seed, &mut panic_observed, &mut restored_outer_depth);
+    let mut value = Vec::new();
+    value.extend(NestedUnwindOnce {
+        seed: &seed,
+        panic_observed: &mut panic_observed,
+        restored_outer_depth: &mut restored_outer_depth,
+        yielded: false,
+    });
     let post_unwind_depth = semantic_scope_depth_snapshot();
     assert!(
         depth_is_zero(post_unwind_depth),
         "outer compiler-inserted semantic scope did not pop after returning: {:?}",
         post_unwind_depth
     );
+    assert_eq!(value.len(), 1);
 
-    let post_unwind_address = (&*value as *const PostUnwindPayload) as usize;
-    let checksum = value
+    let post_unwind_address = (&value[0] as *const PostUnwindPayload) as usize;
+    let checksum = value[0]
         .0
         .iter()
         .fold(0u64, |acc, item| acc.rotate_left(7) ^ item);

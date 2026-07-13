@@ -23,6 +23,8 @@ RECEIVER_CALLEE = "extend"
 AMBIGUOUS_STATUS = "semantic_scope_rewrite_skipped_ambiguous_heap_object_type"
 AMBIGUOUS_RESOLUTION = "rustc_middle_multiple_heap_object_types_not_lowered"
 APPLIED_STATUS = "actual_semantic_scope_enter_exit_rewrite_applied"
+UNRESOLVED_STATUS = "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+UNRESOLVED_RESOLUTION = "rustc_middle_heap_object_type_not_solved"
 APPLIED_OR_PLANNED_SCOPE_STATUSES = {
     APPLIED_STATUS,
     "semantic_scope_enter_exit_rewrite_planned",
@@ -333,13 +335,24 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         same_owner_rows,
     )
     same_owner = same_owner_rows[0]
-    assert same_owner.get("lowering_kind") == "semantic_scope_enter_exit_rewrite", (
+    assert same_owner.get("lowering_kind") == "semantic_scope_unsolved_heap_object_candidate", (
         same_owner
     )
-    assert same_owner.get("rewrite_status") == APPLIED_STATUS, same_owner
-    assert "Vec<u8" in str(same_owner.get("semantic_object_type") or ""), same_owner
+    assert same_owner.get("rewrite_status") == UNRESOLVED_STATUS, same_owner
+    assert same_owner.get("replacement_resolution_status") == UNRESOLVED_RESOLUTION, (
+        same_owner
+    )
+    assert same_owner.get("metadata_pairing_contract") == (
+        "audit_only_unresolved_heap_object_type"
+    ), same_owner
+    assert same_owner.get("semantic_scope_unwind_pop_inserted") is False, same_owner
     assert "Vec<u8" in str(same_owner.get("destination_type") or ""), same_owner
     assert "Vec<u8" in json.dumps(same_owner.get("argument_types") or []), same_owner
+    assert not [
+        row
+        for row in same_owner_rows
+        if row.get("rewrite_status") in APPLIED_OR_PLANNED_SCOPE_STATUSES
+    ], same_owner_rows
 
     conflicting_receiver_rows = function_call_rows(
         audit, CONFLICTING_RECEIVER_FUNCTION, RECEIVER_CALLEE
@@ -406,10 +419,14 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
             "replacement_preview": conflicting.get("replacement_preview"),
             "metadata_pairing_contract": conflicting.get("metadata_pairing_contract"),
         },
-        "same_owner_positive_control": {
+        "same_owner_dependency_factory_fail_closed": {
             "callee": same_owner.get("callee"),
-            "semantic_object_type": same_owner.get("semantic_object_type"),
+            "destination_type": same_owner.get("destination_type"),
+            "argument_types": same_owner.get("argument_types"),
             "rewrite_status": same_owner.get("rewrite_status"),
+            "replacement_resolution_status": same_owner.get(
+                "replacement_resolution_status"
+            ),
             "metadata_pairing_contract": same_owner.get("metadata_pairing_contract"),
         },
         "conflicting_receiver_consumed_owner": {
