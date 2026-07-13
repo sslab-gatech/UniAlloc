@@ -1,11 +1,14 @@
 #[cfg(feature = "quarantine")]
 use crate::alloc_api::type_isolation::FLAG_DELAYED_FREE;
 use crate::alloc_api::type_isolation::{
-    active_allocation_metadata, active_allocation_metadata_requires_recovery_record,
-    auto_allocation_metadata, checked_recorded_reallocation_old_metadata,
-    deallocation_metadata_after_recovery_record, recorded_reallocation_old_metadata,
-    reject_global_delayed_free_owned_pointer, select_auto_allocation_metadata,
-    semantic_allocation_slow_path_enabled,
+    accept_raw_allocation_return, active_allocation_metadata,
+    active_allocation_metadata_requires_recovery_record, auto_allocation_metadata,
+    begin_global_raw_reclaim, begin_global_tracked_reclaim,
+    checked_recorded_reallocation_old_metadata, deallocation_metadata_after_recovery_record,
+    finish_global_raw_reclaim_in_place, recorded_reallocation_old_metadata,
+    reject_known_retained_or_released_pointer, release_global_raw_reclaim,
+    release_global_reclaim_with_metadata, rollback_global_raw_reclaim,
+    select_auto_allocation_metadata, semantic_allocation_slow_path_enabled,
     semantic_fallback_attribution_record_raw_alloc_no_metadata,
     semantic_fallback_attribution_record_raw_dealloc_no_metadata,
     semantic_fallback_attribution_record_raw_realloc_moved_dealloc_no_metadata,
@@ -322,18 +325,30 @@ unsafe fn realloc_with_auto_metadata(
                     alloc_metadata,
                 );
             }
+            let admission = begin_global_tracked_reclaim(ptr);
             let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
             if !new_ptr.is_null() {
                 copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-                alloc.dealloc_with_peeked_recovery_metadata(ptr, layout, dealloc_metadata);
+                release_global_reclaim_with_metadata(
+                    alloc,
+                    ptr,
+                    layout,
+                    Some((dealloc_metadata, true)),
+                    admission,
+                );
+            } else {
+                rollback_global_raw_reclaim(admission);
             }
             new_ptr
         }
         AutoAllocationRecordLookup::Missing => {
+            let admission = begin_global_tracked_reclaim(ptr);
             let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
             if !new_ptr.is_null() {
                 copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-                alloc.dealloc_raw(ptr, layout);
+                release_global_reclaim_with_metadata(alloc, ptr, layout, None, admission);
+            } else {
+                rollback_global_raw_reclaim(admission);
             }
             new_ptr
         }
@@ -367,14 +382,24 @@ unsafe fn realloc_with_active_metadata(
                     alloc_metadata,
                 );
             }
+            let admission = begin_global_tracked_reclaim(ptr);
             let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
             if !new_ptr.is_null() {
                 copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-                alloc.dealloc_with_peeked_recovery_metadata(ptr, layout, dealloc_metadata);
+                release_global_reclaim_with_metadata(
+                    alloc,
+                    ptr,
+                    layout,
+                    Some((dealloc_metadata, true)),
+                    admission,
+                );
+            } else {
+                rollback_global_raw_reclaim(admission);
             }
             new_ptr
         }
         AutoAllocationRecordLookup::Missing => {
+            let admission = begin_global_tracked_reclaim(ptr);
             let new_ptr = alloc.alloc_with_metadata(new_layout, alloc_metadata);
             if !new_ptr.is_null() {
                 copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
@@ -382,7 +407,9 @@ unsafe fn realloc_with_active_metadata(
                     SEMANTIC_STATS.record_dealloc(AllocationMetadata::unknown());
                     semantic_fallback_attribution_record_raw_realloc_moved_dealloc_no_metadata();
                 }
-                alloc.dealloc_raw(ptr, layout);
+                release_global_reclaim_with_metadata(alloc, ptr, layout, None, admission);
+            } else {
+                rollback_global_raw_reclaim(admission);
             }
             new_ptr
         }
@@ -408,10 +435,6 @@ unsafe fn realloc_with_active_local_metadata(
                 dealloc_metadata,
                 alloc_metadata,
             ) {
-                // A local transition deliberately carries no new recovery record,
-                // even when an outer conservative ABI scope is recording.  Commit
-                // removal of the old key only after the in-place transition has
-                // succeeded.
                 let new_ptr = without_auto_allocation_recovery_recording(|| {
                     alloc.realloc_with_split_metadata(
                         ptr,
@@ -434,12 +457,21 @@ unsafe fn realloc_with_active_local_metadata(
                 FAIL_NEXT_ACTIVE_LOCAL_REALLOC_ALLOCATION_FOR_TEST = false;
                 return core::ptr::null_mut();
             }
+            let admission = begin_global_tracked_reclaim(ptr);
             let new_ptr = without_auto_allocation_recovery_recording(|| {
                 alloc.alloc_with_metadata(new_layout, alloc_metadata)
             });
             if !new_ptr.is_null() {
                 copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-                dealloc_reallocated_old_ptr(alloc, ptr, layout, || Some(dealloc_metadata));
+                release_global_reclaim_with_metadata(
+                    alloc,
+                    ptr,
+                    layout,
+                    Some((dealloc_metadata, true)),
+                    admission,
+                );
+            } else {
+                rollback_global_raw_reclaim(admission);
             }
             new_ptr
         }
@@ -466,31 +498,32 @@ impl RustAllocator {
         if !nonzero_layout_alignment_supported(layout) {
             return core::ptr::null_mut();
         }
-        if layout_uses_over_page_alignment(layout) {
-            return alloc_over_page_aligned_raw(layout);
-        }
+        let ptr = if layout_uses_over_page_alignment(layout) {
+            alloc_over_page_aligned_raw(layout)
+        } else {
+            #[cfg(feature = "fixed_heap")]
+            {
+                if !ensure_fixed_heap_runtime_ready() {
+                    return core::ptr::null_mut();
+                }
+                with_fixed_tcache_mut(|alloc| match alloc.allocate(layout) {
+                    Ok(r) => r.as_ptr(),
+                    Err(_) => core::ptr::null_mut(),
+                })
+                .unwrap_or(core::ptr::null_mut())
+            }
 
-        #[cfg(feature = "fixed_heap")]
-        if !ensure_fixed_heap_runtime_ready() {
-            return core::ptr::null_mut();
-        }
-
-        #[cfg(not(feature = "fixed_heap"))]
-        {
-            let alloc = &mut (*GlobalTcache);
-            return match alloc.allocate(layout) {
-                Ok(r) => r.as_ptr(),
-                Err(_) => core::ptr::null_mut(),
-            };
-        }
-        #[cfg(feature = "fixed_heap")]
-        {
-            return with_fixed_tcache_mut(|alloc| match alloc.allocate(layout) {
-                Ok(r) => r.as_ptr(),
-                Err(_) => core::ptr::null_mut(),
-            })
-            .unwrap_or(core::ptr::null_mut());
-        }
+            #[cfg(not(feature = "fixed_heap"))]
+            {
+                let alloc = &mut (*GlobalTcache);
+                match alloc.allocate(layout) {
+                    Ok(r) => r.as_ptr(),
+                    Err(_) => core::ptr::null_mut(),
+                }
+            }
+        };
+        accept_raw_allocation_return(ptr);
+        ptr
     }
 
     #[inline]
@@ -498,8 +531,8 @@ impl RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
-        reject_global_delayed_free_owned_pointer(ptr);
-        let _ = self.dealloc_raw_backend(ptr, layout);
+        let admission = begin_global_raw_reclaim(ptr);
+        let _ = release_global_raw_reclaim(self, ptr, layout, admission);
     }
 
     /// Release a pointer while its process-visible retained-ownership record is
@@ -551,8 +584,6 @@ impl RustAllocator {
         if ptr.is_null() && layout.size() != 0 {
             return core::ptr::null_mut();
         }
-        reject_global_delayed_free_owned_pointer(ptr);
-
         #[cfg(feature = "fixed_heap")]
         if !ensure_fixed_heap_runtime_ready() {
             return core::ptr::null_mut();
@@ -568,15 +599,18 @@ impl RustAllocator {
         if layout.size() == 0 {
             return self.alloc_raw(new_layout);
         }
+        let admission = begin_global_raw_reclaim(ptr);
         if new_size == 0 {
-            self.dealloc_raw(ptr, layout);
+            let _ = release_global_raw_reclaim(self, ptr, layout, admission);
             return dangling_ptr_for_layout(new_layout);
         }
         if layout_uses_over_page_alignment(layout) || layout_uses_over_page_alignment(new_layout) {
             let new_ptr = self.alloc_raw(new_layout);
             if !new_ptr.is_null() {
                 copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-                self.dealloc_raw(ptr, layout);
+                let _ = release_global_raw_reclaim(self, ptr, layout, admission);
+            } else {
+                rollback_global_raw_reclaim(admission);
             }
             return new_ptr;
         }
@@ -584,12 +618,15 @@ impl RustAllocator {
         let new_idx = get_size_class(new_size).index();
 
         if old_idx == new_idx {
+            finish_global_raw_reclaim_in_place(admission);
             ptr
         } else {
             let new_ptr = self.alloc_raw(new_layout);
             if !new_ptr.is_null() {
                 ptr::copy_nonoverlapping(ptr, new_ptr, core::cmp::min(layout.size(), new_size));
-                self.dealloc_raw(ptr, layout);
+                let _ = release_global_raw_reclaim(self, ptr, layout, admission);
+            } else {
+                rollback_global_raw_reclaim(admission);
             }
             new_ptr
         }
@@ -612,7 +649,7 @@ impl RustAllocator {
             // GlobalAlloc realloc boundary and reject before any mutation.
             return core::ptr::null_mut();
         }
-        reject_global_delayed_free_owned_pointer(ptr);
+        let admission = begin_global_tracked_reclaim(ptr);
         let selected_metadata = if let Some(metadata) = active_allocation_metadata() {
             let record_recovery = active_allocation_metadata_requires_recovery_record(metadata);
             Some((metadata, record_recovery, !record_recovery, Some(metadata)))
@@ -653,10 +690,24 @@ impl RustAllocator {
                 self.alloc_with_metadata(new_layout, new_metadata)
             };
             if new_ptr.is_null() {
+                rollback_global_raw_reclaim(admission);
                 return new_ptr;
             }
             copy_reallocated_prefix(ptr, new_ptr, old_layout.size(), new_layout.size());
-            dealloc_reallocated_old_ptr(self, ptr, old_layout, || old_fallback_metadata);
+            let release_metadata = match old_recovery {
+                AutoAllocationRecordLookup::Exact(metadata) => Some((metadata, true)),
+                AutoAllocationRecordLookup::Missing => {
+                    old_fallback_metadata.map(|metadata| (metadata, false))
+                }
+                AutoAllocationRecordLookup::Mismatched => unreachable!(),
+            };
+            release_global_reclaim_with_metadata(
+                self,
+                ptr,
+                old_layout,
+                release_metadata,
+                admission,
+            );
             return new_ptr;
         }
 
@@ -677,7 +728,9 @@ impl RustAllocator {
         };
         if !new_ptr.is_null() {
             copy_reallocated_prefix(ptr, new_ptr, old_layout.size(), new_layout.size());
-            self.dealloc(ptr, old_layout);
+            release_global_reclaim_with_metadata(self, ptr, old_layout, None, admission);
+        } else {
+            rollback_global_raw_reclaim(admission);
         }
         new_ptr
     }
@@ -777,7 +830,7 @@ unsafe impl GlobalAlloc for RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
-        reject_global_delayed_free_owned_pointer(ptr);
+        reject_known_retained_or_released_pointer(ptr);
         if !cfg!(feature = "quarantine") && !semantic_runtime_slow_path_enabled() {
             return self.dealloc_raw(ptr, layout);
         }
@@ -831,7 +884,7 @@ unsafe impl GlobalAlloc for RustAllocator {
             // mutate allocator state or return a misleading dangling pointer.
             return core::ptr::null_mut();
         }
-        reject_global_delayed_free_owned_pointer(ptr);
+        reject_known_retained_or_released_pointer(ptr);
         if !cfg!(feature = "quarantine") && !semantic_runtime_slow_path_enabled() {
             return self.realloc_raw(ptr, layout, new_size);
         }
@@ -952,7 +1005,13 @@ unsafe impl GlobalAlloc for RustAllocator {
                         )
                     });
                 }
-                let new_ptr = self.alloc_raw(new_layout);
+                let new_ptr = self.realloc_with_split_metadata(
+                    ptr,
+                    layout,
+                    new_size,
+                    dealloc_metadata,
+                    AllocationMetadata::unknown(),
+                );
                 if !new_ptr.is_null() {
                     if semantic_stats_recording_enabled() {
                         SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), new_size);
@@ -960,8 +1019,6 @@ unsafe impl GlobalAlloc for RustAllocator {
                             new_size,
                         );
                     }
-                    copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
-                    dealloc_reallocated_old_ptr(self, ptr, layout, || Some(dealloc_metadata));
                 }
                 return new_ptr;
             }

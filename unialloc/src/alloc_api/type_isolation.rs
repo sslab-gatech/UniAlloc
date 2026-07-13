@@ -80,7 +80,22 @@ const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 64;
 #[cfg(feature = "fixed_heap")]
 const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 32;
 const GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_MASK: usize = GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT - 1;
-const GLOBAL_TYPE_CACHE_OWNERSHIP_TOMBSTONE: usize = usize::MAX;
+const ADDRESS_LIFECYCLE_EMPTY: u8 = 0;
+const ADDRESS_LIFECYCLE_PROBE_TOMBSTONE: u8 = 1;
+const ADDRESS_LIFECYCLE_TYPE_RETAINED: u8 = 2;
+const ADDRESS_LIFECYCLE_DELAYED_RETAINED: u8 = 3;
+const ADDRESS_LIFECYCLE_RELEASED: u8 = 4;
+/// Shared ordering for acquisitions that may publish a pointer in either
+/// retained-ownership domain.
+///
+/// The two registries keep independent storage and lookup locks, but competing
+/// delayed-free and type-cache acquisitions for the same pointer must have one
+/// portable linearization point. Eight pointer-sharded locks keep most
+/// unrelated acquisitions independent without relying on cross-atomic
+/// observation; hash collisions intentionally share one lock.
+const GLOBAL_RETAINED_OWNERSHIP_ARBITRATION_SHARD_COUNT: usize = 8;
+const GLOBAL_RETAINED_OWNERSHIP_ARBITRATION_SHARD_MASK: usize =
+    GLOBAL_RETAINED_OWNERSHIP_ARBITRATION_SHARD_COUNT - 1;
 /// Maximum allocator-rounded bytes retained by one thread's delayed-free quarantine ring.
 ///
 /// Delayed free is a reuse-hardening policy, but retaining 32 large objects can
@@ -2448,12 +2463,16 @@ impl GlobalDelayedFreeOwnershipTable {
 
 struct GlobalTypeCacheOwnershipTable {
     ptrs: [usize; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+    states: [u8; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+    epochs: [u64; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
 }
 
 impl GlobalTypeCacheOwnershipTable {
     const fn empty() -> Self {
         Self {
             ptrs: [0; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+            states: [ADDRESS_LIFECYCLE_EMPTY; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+            epochs: [1; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
         }
     }
 }
@@ -2601,6 +2620,15 @@ static TEST_DELAYED_TO_TYPE_RECLAIM_PHASE: AtomicUsize = AtomicUsize::new(0);
 static TEST_DELAYED_TERMINAL_RELEASE_PHASE: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_TYPE_CACHE_TERMINAL_RELEASE_PHASE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_CROSS_DOMAIN_DEALLOC_PHASE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_CROSS_DOMAIN_DEALLOC_WAITERS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_STALE_RECLAIM_PHASE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+#[thread_local]
+static mut TEST_PAUSE_NEXT_RECLAIM_AFTER_SNAPSHOT: bool = false;
 
 static GLOBAL_TYPE_CACHE_OWNERSHIP: [Mutex<GlobalTypeCacheOwnershipTable>;
     GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT] = [
@@ -2614,6 +2642,18 @@ static GLOBAL_TYPE_CACHE_OWNERSHIP: [Mutex<GlobalTypeCacheOwnershipTable>;
     Mutex::new(GlobalTypeCacheOwnershipTable::empty()),
 ];
 static GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+static GLOBAL_RETAINED_OWNERSHIP_ARBITRATION: [Mutex<()>;
+    GLOBAL_RETAINED_OWNERSHIP_ARBITRATION_SHARD_COUNT] = [
+    Mutex::new(()),
+    Mutex::new(()),
+    Mutex::new(()),
+    Mutex::new(()),
+    Mutex::new(()),
+    Mutex::new(()),
+    Mutex::new(()),
+    Mutex::new(()),
+];
 
 #[thread_local]
 static mut MEMORY_TAGS: [TaggedAllocation; MEMORY_TAG_FAST_SLOTS] =
@@ -7966,7 +8006,7 @@ unsafe fn finish_rejected_type_cache_insert(
             if !global_delayed_free_contains_ptr(ptr) {
                 panic!("cache rejection lost delayed-free ownership");
             }
-            drop(ownership);
+            ownership.rollback_unmodified();
             false
         }
         TerminalRetainedOwnership::TypeCache => {
@@ -7988,28 +8028,60 @@ unsafe fn finish_rejected_type_cache_insert(
     }
 }
 
+/// Complete a bounded-registry miss while the pointer's cross-domain
+/// arbitration lock is still held. A delayed-free handoff already has durable
+/// source ownership and can safely fall back to that owner. An ordinary free
+/// has no such owner, so capacity exhaustion is fail-stop: releasing under the
+/// lock would still let an already-waiting stale reclaimer run afterward.
+#[inline]
+unsafe fn finish_full_type_cache_ownership(
+    alloc: &RustAllocator,
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+    terminal_ownership: TerminalRetainedOwnership,
+    _arbitration: spin::MutexGuard<'static, ()>,
+) -> bool {
+    record_stats_type_cache_bypass(metadata);
+    match terminal_ownership {
+        TerminalRetainedOwnership::DelayedFree => false,
+        TerminalRetainedOwnership::TypeCache => {
+            let _ = (alloc, ptr, layout);
+            // There is no durable owner to keep a queued stale reclaimer from
+            // running after this lock is released. Leak and fail-stop rather
+            // than performing an untracked backend release.
+            panic!("retained ownership registry capacity exhausted")
+        }
+    }
+}
+
 unsafe fn cache_compiler_type_metadata_free(
     alloc: &RustAllocator,
     ptr: *mut u8,
     layout: Layout,
     metadata: AllocationMetadata,
+    ownership: PendingGlobalTypeCacheOwnership,
 ) -> bool {
     if ptr.is_null() {
         record_stats_type_cache_bypass(metadata);
+        drop(ownership);
         return false;
     }
     let cache_class = match compiler_type_metadata_cache_class(layout, metadata) {
         Some(cache_class) => cache_class,
         None => {
             record_stats_type_cache_bypass(metadata);
-            return false;
-        }
-    };
-    let ownership = match begin_global_type_cache_ownership(ptr) {
-        Some(ownership) => ownership,
-        None => {
-            record_stats_type_cache_bypass(metadata);
-            return false;
+            ownership.commit();
+            if metadata.requests(FLAG_FORCE_INITIALIZE) {
+                core::ptr::write_bytes(ptr, 0, layout.size());
+            }
+            let _ = terminal_release_retained_raw(
+                alloc,
+                ptr,
+                layout,
+                TerminalRetainedOwnership::TypeCache,
+            );
+            return true;
         }
     };
     match cache_class {
@@ -8056,23 +8128,53 @@ unsafe fn cache_semantic_free_with_rejected_insert_owner(
     layout: Layout,
     metadata: AllocationMetadata,
     terminal_ownership: TerminalRetainedOwnership,
+    preacquired_ownership: Option<PendingGlobalTypeCacheOwnership>,
 ) -> bool {
     if ptr.is_null() {
         record_stats_type_cache_bypass(metadata);
+        drop(preacquired_ownership);
         return false;
     }
     let cache_class = match semantic_type_cache_class(layout, metadata) {
         Some(cache_class) => cache_class,
         None => {
             record_stats_type_cache_bypass(metadata);
+            if let Some(ownership) = preacquired_ownership {
+                ownership.commit();
+                if metadata.requests(FLAG_FORCE_INITIALIZE) {
+                    core::ptr::write_bytes(ptr, 0, layout.size());
+                }
+                let _ = terminal_release_retained_raw(
+                    alloc,
+                    ptr,
+                    layout,
+                    TerminalRetainedOwnership::TypeCache,
+                );
+                return true;
+            }
             return false;
         }
     };
-    let ownership = match begin_global_type_cache_ownership(ptr) {
-        Some(ownership) => ownership,
-        None => {
-            record_stats_type_cache_bypass(metadata);
-            return false;
+    let pending_ownership = match preacquired_ownership {
+        Some(ownership) => GlobalTypeCacheOwnershipAcquisition::Owned(ownership),
+        None => match terminal_ownership {
+            TerminalRetainedOwnership::DelayedFree => {
+                begin_global_type_cache_ownership_for_delayed_handoff(ptr)
+            }
+            TerminalRetainedOwnership::TypeCache => begin_global_type_cache_ownership(ptr),
+        },
+    };
+    let ownership = match pending_ownership {
+        GlobalTypeCacheOwnershipAcquisition::Owned(ownership) => ownership,
+        GlobalTypeCacheOwnershipAcquisition::Full(arbitration) => {
+            return finish_full_type_cache_ownership(
+                alloc,
+                ptr,
+                layout,
+                metadata,
+                terminal_ownership,
+                arbitration,
+            );
         }
     };
     match cache_class {
@@ -8126,6 +8228,25 @@ unsafe fn cache_semantic_free(
         layout,
         metadata,
         TerminalRetainedOwnership::TypeCache,
+        None,
+    )
+}
+
+#[inline]
+unsafe fn cache_semantic_free_with_ownership(
+    alloc: &RustAllocator,
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+    ownership: PendingGlobalTypeCacheOwnership,
+) -> bool {
+    cache_semantic_free_with_rejected_insert_owner(
+        alloc,
+        ptr,
+        layout,
+        metadata,
+        TerminalRetainedOwnership::TypeCache,
+        Some(ownership),
     )
 }
 
@@ -9307,36 +9428,142 @@ enum GlobalTypeCacheOwnershipRegistration {
     Full,
 }
 
-struct PendingGlobalTypeCacheOwnership {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GlobalAddressLifecycleSnapshot {
+    Absent,
+    TypeRetained,
+    DelayedRetained,
+    Released,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct GlobalAddressLifecycleObservation {
+    snapshot: GlobalAddressLifecycleSnapshot,
+    epoch: u64,
+}
+
+pub(crate) struct PendingGlobalTypeCacheOwnership {
     ptr: *mut u8,
-    committed: bool,
+    prior: GlobalAddressLifecycleSnapshot,
+    finished: bool,
+}
+
+enum GlobalTypeCacheOwnershipAcquisition {
+    Owned(PendingGlobalTypeCacheOwnership),
+    /// The bounded type-cache registry could not reserve a slot. Keep the
+    /// shared arbitration lock alive so an existing delayed owner can choose
+    /// its safe terminal fallback, while an unowned caller fails closed.
+    Full(spin::MutexGuard<'static, ()>),
 }
 
 impl PendingGlobalTypeCacheOwnership {
     #[inline]
-    fn new(ptr: *mut u8) -> Self {
+    fn new(ptr: *mut u8, prior: GlobalAddressLifecycleSnapshot) -> Self {
         Self {
             ptr,
-            committed: false,
+            prior,
+            finished: false,
         }
     }
 
     #[inline]
     fn commit(mut self) {
-        self.committed = true;
+        self.finished = true;
+    }
+
+    /// Roll back only while the caller can prove that it has not read from,
+    /// written to, copied from, cached, or released the old allocation.
+    #[inline]
+    fn rollback_unmodified(mut self) {
+        let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+            [global_retained_ownership_arbitration_shard(self.ptr)]
+        .lock();
+        let current = global_address_lifecycle_snapshot(self.ptr);
+        if current != GlobalAddressLifecycleSnapshot::TypeRetained {
+            drop(arbitration);
+            panic!("type-retained ownership changed before rollback");
+        }
+        restore_global_address_lifecycle(self.ptr, self.prior);
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+        self.finished = true;
+        drop(arbitration);
+    }
+
+    #[inline]
+    fn finish_live_reuse(mut self) {
+        let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+            [global_retained_ownership_arbitration_shard(self.ptr)]
+        .lock();
+        transition_global_address_lifecycle(
+            self.ptr,
+            GlobalAddressLifecycleSnapshot::TypeRetained,
+            None,
+            ADDRESS_LIFECYCLE_PROBE_TOMBSTONE,
+            true,
+        )
+        .unwrap_or_else(|_| panic!("type-retained ownership changed before live reuse"));
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+        self.finished = true;
+        drop(arbitration);
+    }
+
+    #[inline]
+    fn try_into_delayed(
+        mut self,
+    ) -> Result<PendingGlobalDelayedFreeOwnership, PendingGlobalTypeCacheOwnership> {
+        let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+            [global_retained_ownership_arbitration_shard(self.ptr)]
+        .lock();
+        if global_address_lifecycle_snapshot(self.ptr)
+            != GlobalAddressLifecycleSnapshot::TypeRetained
+        {
+            drop(arbitration);
+            panic!("type-retained ownership changed before delayed conversion");
+        }
+        match register_global_delayed_free_slot(self.ptr) {
+            GlobalDelayedFreeRegistration::Inserted => {}
+            GlobalDelayedFreeRegistration::Full => {
+                drop(arbitration);
+                return Err(self);
+            }
+            GlobalDelayedFreeRegistration::Duplicate => {
+                drop(arbitration);
+                panic!("delayed registry already contains type-retained pointer");
+            }
+        }
+        transition_global_address_lifecycle(
+            self.ptr,
+            GlobalAddressLifecycleSnapshot::TypeRetained,
+            None,
+            ADDRESS_LIFECYCLE_DELAYED_RETAINED,
+            false,
+        )
+        .unwrap_or_else(|_| panic!("type-retained ownership changed during delayed conversion"));
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+        let delayed = PendingGlobalDelayedFreeOwnership::new_from_transition(self.ptr, self.prior);
+        self.finished = true;
+        drop(arbitration);
+        Ok(delayed)
     }
 }
 
 impl Drop for PendingGlobalTypeCacheOwnership {
     fn drop(&mut self) {
-        if !self.committed {
-            let _ = unregister_global_type_cache_ownership(self.ptr);
-            #[cfg(test)]
-            // The rejection regression arms this boundary to prove that any
-            // rollback followed by raw release would expose an ownership gap.
-            pause_before_terminal_raw_release_for_test(&TEST_TYPE_CACHE_TERMINAL_RELEASE_PHASE);
+        if !self.finished {
+            // Conservative fail-stop: an unwind or forgotten completion must
+            // leave durable T ownership published.  Automatically restoring
+            // Live/Absent here would recreate a reclaim window after an
+            // unknown amount of old-storage mutation.
         }
     }
+}
+
+#[inline]
+fn global_retained_ownership_arbitration_shard(ptr: *mut u8) -> usize {
+    let mut value = (ptr as usize) >> 3;
+    value ^= value >> 17;
+    value ^= value >> 31;
+    value.wrapping_mul(0x9e37_79b1usize) & GLOBAL_RETAINED_OWNERSHIP_ARBITRATION_SHARD_MASK
 }
 
 #[inline]
@@ -9356,96 +9583,330 @@ fn global_type_cache_ownership_shard_and_slot(ptr: *mut u8) -> (usize, usize) {
     )
 }
 
-fn global_type_cache_contains_ptr(ptr: *mut u8) -> bool {
-    if ptr.is_null() || GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire) == 0 {
-        return false;
+#[inline]
+fn address_lifecycle_state_snapshot(state: u8) -> GlobalAddressLifecycleSnapshot {
+    match state {
+        ADDRESS_LIFECYCLE_TYPE_RETAINED => GlobalAddressLifecycleSnapshot::TypeRetained,
+        ADDRESS_LIFECYCLE_DELAYED_RETAINED => GlobalAddressLifecycleSnapshot::DelayedRetained,
+        ADDRESS_LIFECYCLE_RELEASED => GlobalAddressLifecycleSnapshot::Released,
+        ADDRESS_LIFECYCLE_EMPTY | ADDRESS_LIFECYCLE_PROBE_TOMBSTONE => {
+            GlobalAddressLifecycleSnapshot::Absent
+        }
+        _ => panic!("address lifecycle state corrupt"),
+    }
+}
+
+fn global_address_lifecycle_observation(ptr: *mut u8) -> GlobalAddressLifecycleObservation {
+    if ptr.is_null() {
+        return GlobalAddressLifecycleObservation {
+            snapshot: GlobalAddressLifecycleSnapshot::Absent,
+            epoch: 0,
+        };
     }
     let ptr_key = ptr as usize;
     let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
     let table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
+    let epoch = table.epochs[start];
     let mut offset = 0usize;
     while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
-        let candidate =
-            table.ptrs[(start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1)];
-        if candidate == ptr_key {
-            return true;
+        let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
+        let state = table.states[idx];
+        if state == ADDRESS_LIFECYCLE_EMPTY {
+            return GlobalAddressLifecycleObservation {
+                snapshot: GlobalAddressLifecycleSnapshot::Absent,
+                epoch,
+            };
         }
-        if candidate == 0 {
-            return false;
+        if state != ADDRESS_LIFECYCLE_PROBE_TOMBSTONE && table.ptrs[idx] == ptr_key {
+            return GlobalAddressLifecycleObservation {
+                snapshot: address_lifecycle_state_snapshot(state),
+                epoch,
+            };
         }
         offset += 1;
     }
-    false
+    GlobalAddressLifecycleObservation {
+        snapshot: GlobalAddressLifecycleSnapshot::Absent,
+        epoch,
+    }
+}
+
+#[inline]
+fn global_address_lifecycle_snapshot(ptr: *mut u8) -> GlobalAddressLifecycleSnapshot {
+    global_address_lifecycle_observation(ptr).snapshot
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AddressLifecycleTransitionError {
+    Conflict,
+    Full,
+}
+
+#[inline]
+fn next_address_epoch(epoch: u64) -> u64 {
+    epoch
+        .checked_add(1)
+        .unwrap_or_else(|| panic!("address lifecycle epoch exhausted"))
+}
+
+/// Change one lifecycle entry while the caller holds its address-arbitration
+/// lock. Pointer bits never encode table state; the explicit state array keeps
+/// every `usize` address representable.
+fn transition_global_address_lifecycle(
+    ptr: *mut u8,
+    expected: GlobalAddressLifecycleSnapshot,
+    expected_epoch: Option<u64>,
+    target_state: u8,
+    bump_epoch: bool,
+) -> Result<(), AddressLifecycleTransitionError> {
+    if ptr.is_null() {
+        return Err(AddressLifecycleTransitionError::Conflict);
+    }
+    let ptr_key = ptr as usize;
+    let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
+    let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
+    if let Some(expected_epoch) = expected_epoch {
+        if table.epochs[start] != expected_epoch {
+            return Err(AddressLifecycleTransitionError::Conflict);
+        }
+    }
+    let mut first_probe_tombstone = None;
+    let mut empty = None;
+    let mut found = None;
+    let mut offset = 0usize;
+    while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
+        let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
+        match table.states[idx] {
+            ADDRESS_LIFECYCLE_EMPTY => {
+                empty = Some(idx);
+                break;
+            }
+            ADDRESS_LIFECYCLE_PROBE_TOMBSTONE => {
+                if first_probe_tombstone.is_none() {
+                    first_probe_tombstone = Some(idx);
+                }
+            }
+            _ if table.ptrs[idx] == ptr_key => {
+                found = Some(idx);
+                break;
+            }
+            _ => {}
+        }
+        offset += 1;
+    }
+
+    let idx = match found {
+        Some(idx) => {
+            let current = address_lifecycle_state_snapshot(table.states[idx]);
+            if current != expected {
+                return Err(AddressLifecycleTransitionError::Conflict);
+            }
+            idx
+        }
+        None => {
+            if expected != GlobalAddressLifecycleSnapshot::Absent {
+                return Err(AddressLifecycleTransitionError::Conflict);
+            }
+            match first_probe_tombstone.or(empty) {
+                Some(idx) => idx,
+                None => return Err(AddressLifecycleTransitionError::Full),
+            }
+        }
+    };
+
+    if target_state == ADDRESS_LIFECYCLE_PROBE_TOMBSTONE {
+        table.ptrs[idx] = 0;
+        table.states[idx] = ADDRESS_LIFECYCLE_PROBE_TOMBSTONE;
+    } else {
+        table.ptrs[idx] = ptr_key;
+        table.states[idx] = target_state;
+    }
+    if bump_epoch {
+        table.epochs[start] = next_address_epoch(table.epochs[start]);
+    }
+    Ok(())
+}
+
+fn restore_global_address_lifecycle(ptr: *mut u8, prior: GlobalAddressLifecycleSnapshot) {
+    let current = global_address_lifecycle_snapshot(ptr);
+    let expected = match current {
+        GlobalAddressLifecycleSnapshot::TypeRetained => {
+            GlobalAddressLifecycleSnapshot::TypeRetained
+        }
+        GlobalAddressLifecycleSnapshot::DelayedRetained => {
+            GlobalAddressLifecycleSnapshot::DelayedRetained
+        }
+        _ => panic!("retained lifecycle missing during rollback"),
+    };
+    if prior == GlobalAddressLifecycleSnapshot::Absent {
+        let ptr_key = ptr as usize;
+        let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
+        let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
+        let mut offset = 0usize;
+        while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
+            let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
+            if table.states[idx] == ADDRESS_LIFECYCLE_EMPTY {
+                break;
+            }
+            if table.states[idx] != ADDRESS_LIFECYCLE_PROBE_TOMBSTONE && table.ptrs[idx] == ptr_key
+            {
+                if address_lifecycle_state_snapshot(table.states[idx]) != expected {
+                    panic!("retained lifecycle changed during rollback");
+                }
+                table.ptrs[idx] = 0;
+                table.states[idx] = ADDRESS_LIFECYCLE_PROBE_TOMBSTONE;
+                return;
+            }
+            offset += 1;
+        }
+        panic!("retained lifecycle disappeared during rollback");
+    }
+    let target_state = match prior {
+        GlobalAddressLifecycleSnapshot::TypeRetained => ADDRESS_LIFECYCLE_TYPE_RETAINED,
+        GlobalAddressLifecycleSnapshot::DelayedRetained => ADDRESS_LIFECYCLE_DELAYED_RETAINED,
+        GlobalAddressLifecycleSnapshot::Released => ADDRESS_LIFECYCLE_RELEASED,
+        GlobalAddressLifecycleSnapshot::Absent => unreachable!(),
+    };
+    transition_global_address_lifecycle(ptr, expected, None, target_state, false)
+        .unwrap_or_else(|_| panic!("retained lifecycle changed during rollback"));
+}
+
+fn global_type_cache_contains_ptr(ptr: *mut u8) -> bool {
+    matches!(
+        global_address_lifecycle_snapshot(ptr),
+        GlobalAddressLifecycleSnapshot::TypeRetained
+    )
+}
+
+fn register_global_type_cache_ownership_from_snapshot(
+    ptr: *mut u8,
+    expected: GlobalAddressLifecycleObservation,
+) -> Result<PendingGlobalTypeCacheOwnership, GlobalTypeCacheOwnershipRegistration> {
+    match transition_global_address_lifecycle(
+        ptr,
+        expected.snapshot,
+        Some(expected.epoch),
+        ADDRESS_LIFECYCLE_TYPE_RETAINED,
+        false,
+    ) {
+        Ok(()) => {
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_add(1, Ordering::Release);
+            Ok(PendingGlobalTypeCacheOwnership::new(ptr, expected.snapshot))
+        }
+        Err(AddressLifecycleTransitionError::Conflict) => {
+            Err(GlobalTypeCacheOwnershipRegistration::Duplicate)
+        }
+        Err(AddressLifecycleTransitionError::Full) => {
+            Err(GlobalTypeCacheOwnershipRegistration::Full)
+        }
+    }
 }
 
 fn register_global_type_cache_ownership(ptr: *mut u8) -> GlobalTypeCacheOwnershipRegistration {
-    if ptr.is_null() {
-        return GlobalTypeCacheOwnershipRegistration::Full;
-    }
-    let ptr_key = ptr as usize;
-    debug_assert_ne!(ptr_key, GLOBAL_TYPE_CACHE_OWNERSHIP_TOMBSTONE);
-    let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
-    let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
-    let mut first_tombstone = None;
-    let mut offset = 0usize;
-    while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
-        let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
-        let candidate = table.ptrs[idx];
-        if candidate == ptr_key {
-            return GlobalTypeCacheOwnershipRegistration::Duplicate;
+    let observation = global_address_lifecycle_observation(ptr);
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    let result = if observation.snapshot == GlobalAddressLifecycleSnapshot::Absent {
+        register_global_type_cache_ownership_from_snapshot(ptr, observation)
+    } else {
+        Err(GlobalTypeCacheOwnershipRegistration::Duplicate)
+    };
+    drop(arbitration);
+    match result {
+        Ok(ownership) => {
+            ownership.commit();
+            GlobalTypeCacheOwnershipRegistration::Inserted
         }
-        if candidate == GLOBAL_TYPE_CACHE_OWNERSHIP_TOMBSTONE && first_tombstone.is_none() {
-            first_tombstone = Some(idx);
-        } else if candidate == 0 {
-            let insert_idx = first_tombstone.unwrap_or(idx);
-            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_add(1, Ordering::Release);
-            table.ptrs[insert_idx] = ptr_key;
-            return GlobalTypeCacheOwnershipRegistration::Inserted;
-        }
-        offset += 1;
+        Err(result) => result,
     }
-    if let Some(idx) = first_tombstone {
-        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_add(1, Ordering::Release);
-        table.ptrs[idx] = ptr_key;
-        return GlobalTypeCacheOwnershipRegistration::Inserted;
-    }
-    GlobalTypeCacheOwnershipRegistration::Full
 }
 
 fn unregister_global_type_cache_ownership(ptr: *mut u8) -> bool {
-    if ptr.is_null() || GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire) == 0 {
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    if global_address_lifecycle_snapshot(ptr) != GlobalAddressLifecycleSnapshot::TypeRetained {
+        drop(arbitration);
         return false;
     }
-    let ptr_key = ptr as usize;
-    let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
-    let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
-    let mut offset = 0usize;
-    while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
-        let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
-        let candidate = table.ptrs[idx];
-        if candidate == ptr_key {
-            table.ptrs[idx] = GLOBAL_TYPE_CACHE_OWNERSHIP_TOMBSTONE;
-            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
-            return true;
-        }
-        if candidate == 0 {
-            return false;
-        }
-        offset += 1;
+    let transitioned = transition_global_address_lifecycle(
+        ptr,
+        GlobalAddressLifecycleSnapshot::TypeRetained,
+        None,
+        ADDRESS_LIFECYCLE_PROBE_TOMBSTONE,
+        true,
+    )
+    .is_ok();
+    if transitioned {
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
     }
-    false
+    drop(arbitration);
+    transitioned
 }
 
-fn begin_global_type_cache_ownership(ptr: *mut u8) -> Option<PendingGlobalTypeCacheOwnership> {
-    match register_global_type_cache_ownership(ptr) {
-        GlobalTypeCacheOwnershipRegistration::Inserted => {
-            Some(PendingGlobalTypeCacheOwnership::new(ptr))
+fn begin_global_type_cache_ownership_under_arbitration(
+    ptr: *mut u8,
+    observation: GlobalAddressLifecycleObservation,
+    arbitration: spin::MutexGuard<'static, ()>,
+) -> GlobalTypeCacheOwnershipAcquisition {
+    match register_global_type_cache_ownership_from_snapshot(ptr, observation) {
+        Ok(ownership) => {
+            drop(arbitration);
+            GlobalTypeCacheOwnershipAcquisition::Owned(ownership)
         }
-        GlobalTypeCacheOwnershipRegistration::Duplicate => {
+        Err(GlobalTypeCacheOwnershipRegistration::Duplicate) => {
             panic!("type-cache pointer already retained")
         }
-        GlobalTypeCacheOwnershipRegistration::Full => None,
+        Err(GlobalTypeCacheOwnershipRegistration::Full) => {
+            GlobalTypeCacheOwnershipAcquisition::Full(arbitration)
+        }
+        Err(GlobalTypeCacheOwnershipRegistration::Inserted) => unreachable!(),
     }
+}
+
+fn begin_global_type_cache_ownership(ptr: *mut u8) -> GlobalTypeCacheOwnershipAcquisition {
+    let observation = global_address_lifecycle_observation(ptr);
+    #[cfg(test)]
+    unsafe {
+        pause_stale_reclaim_after_snapshot_for_test();
+    }
+    #[cfg(test)]
+    pause_before_cross_domain_dealloc_arbitration_for_test();
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    if global_delayed_free_contains_ptr(ptr) {
+        panic!("delayed-free pointer already quarantined");
+    }
+    match observation.snapshot {
+        GlobalAddressLifecycleSnapshot::Absent => {
+            begin_global_type_cache_ownership_under_arbitration(ptr, observation, arbitration)
+        }
+        _ => panic!("type-cache pointer already retained or released"),
+    }
+}
+
+fn begin_global_type_cache_ownership_for_delayed_handoff(
+    ptr: *mut u8,
+) -> GlobalTypeCacheOwnershipAcquisition {
+    let observation = global_address_lifecycle_observation(ptr);
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    if !global_delayed_free_contains_ptr(ptr) {
+        // Only the delayed-free release path may intentionally overlap the two
+        // registries, and it must already own the source domain. Never let the
+        // handoff helper become a generic conflicting-ownership bypass.
+        panic!("delayed-to-type handoff lost delayed-free ownership");
+    }
+    if !matches!(
+        observation.snapshot,
+        GlobalAddressLifecycleSnapshot::DelayedRetained
+    ) {
+        panic!("delayed-to-type handoff lifecycle changed");
+    }
+    begin_global_type_cache_ownership_under_arbitration(ptr, observation, arbitration)
 }
 
 #[inline]
@@ -9461,8 +9922,7 @@ fn reject_global_type_cache_owned_pointer(ptr: *mut u8) {
 fn clear_global_type_cache_ownership_for_test() {
     let mut shard_idx = 0usize;
     while shard_idx < GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT {
-        GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock().ptrs =
-            [0; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS];
+        *GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock() = GlobalTypeCacheOwnershipTable::empty();
         shard_idx += 1;
     }
     GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.store(0, Ordering::Release);
@@ -9477,28 +9937,77 @@ enum GlobalDelayedFreeRegistration {
 
 struct PendingGlobalDelayedFreeOwnership {
     ptr: *mut u8,
-    committed: bool,
+    prior: GlobalAddressLifecycleSnapshot,
+    finished: bool,
+    #[cfg(test)]
+    cleanup_on_drop: bool,
 }
 
 impl PendingGlobalDelayedFreeOwnership {
     #[inline]
-    fn new(ptr: *mut u8) -> Self {
+    fn new_from_transition(ptr: *mut u8, prior: GlobalAddressLifecycleSnapshot) -> Self {
         Self {
             ptr,
-            committed: false,
+            prior,
+            finished: false,
+            #[cfg(test)]
+            cleanup_on_drop: false,
+        }
+    }
+
+    #[cfg(test)]
+    #[inline]
+    fn new(ptr: *mut u8) -> Self {
+        if global_address_lifecycle_snapshot(ptr) != GlobalAddressLifecycleSnapshot::DelayedRetained
+        {
+            panic!("test delayed ownership constructor requires D state");
+        }
+        Self {
+            ptr,
+            prior: GlobalAddressLifecycleSnapshot::Absent,
+            finished: false,
+            cleanup_on_drop: true,
         }
     }
 
     #[inline]
     fn commit(mut self) {
-        self.committed = true;
+        self.finished = true;
+    }
+
+    #[inline]
+    fn rollback_unmodified(mut self) {
+        let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+            [global_retained_ownership_arbitration_shard(self.ptr)]
+        .lock();
+        if global_address_lifecycle_snapshot(self.ptr)
+            != GlobalAddressLifecycleSnapshot::DelayedRetained
+        {
+            drop(arbitration);
+            panic!("delayed-retained ownership changed before rollback");
+        }
+        let removed = unregister_global_delayed_free_slot(self.ptr);
+        if !removed {
+            drop(arbitration);
+            panic!("delayed-retained registry disappeared before rollback");
+        }
+        restore_global_address_lifecycle(self.ptr, self.prior);
+        self.finished = true;
+        drop(arbitration);
     }
 }
 
 impl Drop for PendingGlobalDelayedFreeOwnership {
     fn drop(&mut self) {
-        if !self.committed {
+        #[cfg(test)]
+        if self.cleanup_on_drop && !self.finished {
             let _ = unregister_global_delayed_free_ownership(self.ptr);
+            self.finished = true;
+            return;
+        }
+        if !self.finished {
+            // Match T ownership: unknown unwinds keep D published rather than
+            // silently recreating a stale-reclaim window.
         }
     }
 }
@@ -9564,26 +10073,237 @@ fn pause_before_terminal_raw_release_for_test(phase: &AtomicUsize) {
     }
 }
 
-/// Fail-stop before a caller can read, resize, release, or otherwise reclaim a
-/// pointer whose delayed-free ownership has already been published by another
-/// thread. Raw and trait-level allocator entry points call this in addition to
-/// the metadata-aware deallocation transaction.
-#[inline]
-pub(crate) fn reject_global_delayed_free_owned_pointer(ptr: *mut u8) {
-    // `release_delayed_slot` publishes type-cache ownership before retiring
-    // delayed-free ownership. Inspect those domains in the matching order: a
-    // caller that observes delayed-free retirement is then guaranteed to make
-    // its later type-cache observation after publication. Type-first would let
-    // a caller observe the two opposite sides of the overlap and miss both.
-    if global_delayed_free_contains_ptr(ptr) {
-        panic!("delayed-free pointer already quarantined");
+#[cfg(test)]
+fn pause_before_cross_domain_dealloc_arbitration_for_test() {
+    if TEST_CROSS_DOMAIN_DEALLOC_PHASE.load(Ordering::Acquire) != 1 {
+        return;
     }
-    reject_global_type_cache_owned_pointer(ptr);
+    TEST_CROSS_DOMAIN_DEALLOC_WAITERS.fetch_add(1, Ordering::AcqRel);
+    while TEST_CROSS_DOMAIN_DEALLOC_PHASE.load(Ordering::Acquire) == 1 {
+        core::hint::spin_loop();
+    }
+}
+
+#[cfg(test)]
+unsafe fn pause_stale_reclaim_after_snapshot_for_test() {
+    if !TEST_PAUSE_NEXT_RECLAIM_AFTER_SNAPSHOT {
+        return;
+    }
+    TEST_PAUSE_NEXT_RECLAIM_AFTER_SNAPSHOT = false;
+    TEST_STALE_RECLAIM_PHASE.store(2, Ordering::Release);
+    while TEST_STALE_RECLAIM_PHASE.load(Ordering::Acquire) == 2 {
+        core::hint::spin_loop();
+    }
+}
+
+/// Diagnostic fast rejection for an already-published retained/released state.
+/// This check is not an ownership transaction and must never authorize later
+/// old-storage access; every reclaim path still binds an observation/epoch and
+/// acquires durable T/D admission before copying, mutating, or releasing.
+#[inline]
+pub(crate) fn reject_known_retained_or_released_pointer(ptr: *mut u8) {
+    match global_address_lifecycle_snapshot(ptr) {
+        GlobalAddressLifecycleSnapshot::TypeRetained
+        | GlobalAddressLifecycleSnapshot::DelayedRetained => {
+            panic!("pointer already retained")
+        }
+        GlobalAddressLifecycleSnapshot::Released => {
+            panic!("pointer already released")
+        }
+        GlobalAddressLifecycleSnapshot::Absent => reject_global_type_cache_owned_pointer(ptr),
+    }
     #[cfg(test)]
     reject_missed_delayed_to_type_handoff_for_test();
 }
 
-fn register_global_delayed_free_ownership(ptr: *mut u8) -> GlobalDelayedFreeRegistration {
+/// Validate a pointer returned by the raw backend before it is exposed. Fresh
+/// raw-only addresses remain untracked; backend reuse consumes the exact
+/// released-state entry and advances its observation epoch.
+#[inline]
+pub(crate) fn accept_raw_allocation_return(ptr: *mut u8) {
+    if ptr.is_null() {
+        return;
+    }
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    match global_address_lifecycle_snapshot(ptr) {
+        GlobalAddressLifecycleSnapshot::Absent => {}
+        GlobalAddressLifecycleSnapshot::Released => {
+            transition_global_address_lifecycle(
+                ptr,
+                GlobalAddressLifecycleSnapshot::Released,
+                None,
+                ADDRESS_LIFECYCLE_PROBE_TOMBSTONE,
+                true,
+            )
+            .unwrap_or_else(|_| panic!("released allocation changed before reuse"));
+        }
+        _ => {
+            drop(arbitration);
+            panic!("allocator returned an address with live or retained ownership");
+        }
+    }
+    drop(arbitration);
+}
+
+/// Validate semantic/recovery allocation exposure. Fresh addresses stay absent
+/// to avoid lifetime-wide tracking; legitimate cache/backend reuse retires its
+/// exact retained/released entry and bumps the hash-bucket epoch so a queued
+/// pre-reuse observer cannot bind to the reused allocation.
+#[inline]
+fn publish_semantic_allocation_return(ptr: *mut u8) {
+    if ptr.is_null() {
+        return;
+    }
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    match global_address_lifecycle_snapshot(ptr) {
+        GlobalAddressLifecycleSnapshot::Absent => {}
+        GlobalAddressLifecycleSnapshot::Released => {
+            transition_global_address_lifecycle(
+                ptr,
+                GlobalAddressLifecycleSnapshot::Released,
+                None,
+                ADDRESS_LIFECYCLE_PROBE_TOMBSTONE,
+                true,
+            )
+            .unwrap_or_else(|_| panic!("released semantic allocation changed before reuse"));
+        }
+        _ => {
+            drop(arbitration);
+            panic!("semantic allocator returned a retained address");
+        }
+    }
+    drop(arbitration);
+}
+
+pub(crate) enum GlobalRawReclaimAdmission {
+    /// Raw-only addresses with no semantic lifecycle are outside the bounded
+    /// lifecycle table. This path does not claim universal stale-pointer/UAF
+    /// protection; it only guarantees atomic rejection against addresses that
+    /// have entered semantic/recovery/D/T ownership.
+    Untracked,
+    Tracked(PendingGlobalTypeCacheOwnership),
+}
+
+#[inline]
+pub(crate) fn begin_global_raw_reclaim(ptr: *mut u8) -> GlobalRawReclaimAdmission {
+    let observation = global_address_lifecycle_observation(ptr);
+    #[cfg(test)]
+    unsafe {
+        pause_stale_reclaim_after_snapshot_for_test();
+    }
+    #[cfg(test)]
+    pause_before_cross_domain_dealloc_arbitration_for_test();
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    match observation.snapshot {
+        GlobalAddressLifecycleSnapshot::Absent => {
+            if global_address_lifecycle_observation(ptr) != observation {
+                drop(arbitration);
+                panic!("raw reclaim address lifecycle changed while queued");
+            }
+            drop(arbitration);
+            GlobalRawReclaimAdmission::Untracked
+        }
+        _ => {
+            drop(arbitration);
+            panic!("raw reclaim rejected retained or released address");
+        }
+    }
+}
+
+/// Reallocation paths that may inspect semantic recovery state use a durable T
+/// token even for a legacy/untracked address. This remains bounded to moved
+/// reallocations; ordinary unrelated raw frees do not permanently enter the
+/// lifecycle table.
+#[inline]
+pub(crate) fn begin_global_tracked_reclaim(ptr: *mut u8) -> GlobalRawReclaimAdmission {
+    GlobalRawReclaimAdmission::Tracked(begin_global_semantic_reclaim(ptr))
+}
+
+#[inline]
+fn begin_global_semantic_reclaim(ptr: *mut u8) -> PendingGlobalTypeCacheOwnership {
+    match begin_global_type_cache_ownership(ptr) {
+        GlobalTypeCacheOwnershipAcquisition::Owned(ownership) => ownership,
+        GlobalTypeCacheOwnershipAcquisition::Full(arbitration) => {
+            drop(arbitration);
+            panic!("retained ownership registry capacity exhausted")
+        }
+    }
+}
+
+#[inline]
+pub(crate) fn rollback_global_raw_reclaim(admission: GlobalRawReclaimAdmission) {
+    if let GlobalRawReclaimAdmission::Tracked(ownership) = admission {
+        ownership.rollback_unmodified();
+    }
+}
+
+#[inline]
+pub(crate) fn finish_global_raw_reclaim_in_place(admission: GlobalRawReclaimAdmission) {
+    if let GlobalRawReclaimAdmission::Tracked(ownership) = admission {
+        ownership.finish_live_reuse();
+    }
+}
+
+#[inline]
+pub(crate) unsafe fn release_global_raw_reclaim(
+    alloc: &RustAllocator,
+    ptr: *mut u8,
+    layout: Layout,
+    admission: GlobalRawReclaimAdmission,
+) -> bool {
+    match admission {
+        GlobalRawReclaimAdmission::Untracked => alloc.dealloc_raw_as_retained_owner(ptr, layout),
+        GlobalRawReclaimAdmission::Tracked(ownership) => {
+            ownership.commit();
+            terminal_release_retained_raw(alloc, ptr, layout, TerminalRetainedOwnership::TypeCache)
+        }
+    }
+}
+
+#[inline]
+pub(crate) unsafe fn release_global_reclaim_with_metadata(
+    alloc: &RustAllocator,
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: Option<(AllocationMetadata, bool)>,
+    admission: GlobalRawReclaimAdmission,
+) {
+    match (admission, metadata) {
+        (GlobalRawReclaimAdmission::Tracked(ownership), Some((metadata, consume_recovery))) => {
+            let admission = deallocation_admission_from_type_reclaim(ownership, layout, metadata);
+            alloc.dealloc_with_resolved_metadata_admitted(
+                ptr,
+                layout,
+                metadata,
+                consume_recovery,
+                admission,
+            );
+        }
+        (GlobalRawReclaimAdmission::Tracked(ownership), None) => {
+            ownership.commit();
+            let _ = terminal_release_retained_raw(
+                alloc,
+                ptr,
+                layout,
+                TerminalRetainedOwnership::TypeCache,
+            );
+        }
+        (GlobalRawReclaimAdmission::Untracked, None) => {
+            let _ = alloc.dealloc_raw_as_retained_owner(ptr, layout);
+        }
+        (GlobalRawReclaimAdmission::Untracked, Some(_)) => {
+            panic!("semantic moved realloc reached old storage without durable ownership");
+        }
+    }
+}
+
+fn register_global_delayed_free_slot(ptr: *mut u8) -> GlobalDelayedFreeRegistration {
     if ptr.is_null() {
         return GlobalDelayedFreeRegistration::Full;
     }
@@ -9612,7 +10332,7 @@ fn register_global_delayed_free_ownership(ptr: *mut u8) -> GlobalDelayedFreeRegi
     GlobalDelayedFreeRegistration::Inserted
 }
 
-fn unregister_global_delayed_free_ownership(ptr: *mut u8) -> bool {
+fn unregister_global_delayed_free_slot(ptr: *mut u8) -> bool {
     if ptr.is_null() || GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire) == 0 {
         return false;
     }
@@ -9631,7 +10351,170 @@ fn unregister_global_delayed_free_ownership(ptr: *mut u8) -> bool {
     true
 }
 
-#[derive(Clone, Copy, Debug)]
+fn register_global_delayed_free_ownership_from_snapshot(
+    ptr: *mut u8,
+    expected: GlobalAddressLifecycleObservation,
+) -> Result<PendingGlobalDelayedFreeOwnership, GlobalDelayedFreeRegistration> {
+    match register_global_delayed_free_slot(ptr) {
+        GlobalDelayedFreeRegistration::Inserted => {}
+        result => return Err(result),
+    }
+    match transition_global_address_lifecycle(
+        ptr,
+        expected.snapshot,
+        Some(expected.epoch),
+        ADDRESS_LIFECYCLE_DELAYED_RETAINED,
+        false,
+    ) {
+        Ok(()) => Ok(PendingGlobalDelayedFreeOwnership::new_from_transition(
+            ptr,
+            expected.snapshot,
+        )),
+        Err(AddressLifecycleTransitionError::Conflict) => {
+            let _ = unregister_global_delayed_free_slot(ptr);
+            Err(GlobalDelayedFreeRegistration::Duplicate)
+        }
+        Err(AddressLifecycleTransitionError::Full) => {
+            let _ = unregister_global_delayed_free_slot(ptr);
+            Err(GlobalDelayedFreeRegistration::Full)
+        }
+    }
+}
+
+fn register_global_delayed_free_ownership(ptr: *mut u8) -> GlobalDelayedFreeRegistration {
+    let observation = global_address_lifecycle_observation(ptr);
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    let result = if observation.snapshot == GlobalAddressLifecycleSnapshot::Absent {
+        register_global_delayed_free_ownership_from_snapshot(ptr, observation)
+    } else {
+        Err(GlobalDelayedFreeRegistration::Duplicate)
+    };
+    drop(arbitration);
+    match result {
+        Ok(ownership) => {
+            ownership.commit();
+            GlobalDelayedFreeRegistration::Inserted
+        }
+        Err(result) => result,
+    }
+}
+
+fn unregister_global_delayed_free_ownership(ptr: *mut u8) -> bool {
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    let removed = unregister_global_delayed_free_slot(ptr);
+    if removed {
+        if global_address_lifecycle_snapshot(ptr) == GlobalAddressLifecycleSnapshot::DelayedRetained
+        {
+            transition_global_address_lifecycle(
+                ptr,
+                GlobalAddressLifecycleSnapshot::DelayedRetained,
+                None,
+                ADDRESS_LIFECYCLE_PROBE_TOMBSTONE,
+                true,
+            )
+            .unwrap_or_else(|_| panic!("delayed lifecycle changed during unregister"));
+        }
+    }
+    drop(arbitration);
+    removed
+}
+
+enum GlobalDeallocationAdmission {
+    DelayedFree(PendingGlobalDelayedFreeOwnership),
+    TypeCache(PendingGlobalTypeCacheOwnership),
+}
+
+impl GlobalDeallocationAdmission {
+    #[inline]
+    fn commit_for_terminal_release(self) -> TerminalRetainedOwnership {
+        match self {
+            Self::DelayedFree(ownership) => {
+                ownership.commit();
+                TerminalRetainedOwnership::DelayedFree
+            }
+            Self::TypeCache(ownership) => {
+                ownership.commit();
+                TerminalRetainedOwnership::TypeCache
+            }
+        }
+    }
+}
+
+#[inline]
+fn deallocation_admission_from_type_reclaim(
+    ownership: PendingGlobalTypeCacheOwnership,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> GlobalDeallocationAdmission {
+    let quarantine_eligible = metadata.requests(FLAG_DELAYED_FREE)
+        && delayed_free_retained_bytes_for_layout(layout) <= MAX_DELAYED_FREE_RETAINED_BYTES;
+    if quarantine_eligible {
+        match ownership.try_into_delayed() {
+            Ok(ownership) => GlobalDeallocationAdmission::DelayedFree(ownership),
+            Err(ownership) => GlobalDeallocationAdmission::TypeCache(ownership),
+        }
+    } else {
+        GlobalDeallocationAdmission::TypeCache(ownership)
+    }
+}
+
+/// Admit one metadata-aware deallocation before it can consume recovery state,
+/// validate/mutate tags, update statistics, touch a cache, or release storage.
+/// Every admitted pointer leaves the arbitration lock with a durable D or T
+/// registry entry. If the requested D registry is full, the same lock attempts
+/// T ownership; if T is also full, the deallocation fails closed without a
+/// backend release.
+fn begin_global_deallocation_admission(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> GlobalDeallocationAdmission {
+    let observation = global_address_lifecycle_observation(ptr);
+    #[cfg(test)]
+    unsafe {
+        pause_stale_reclaim_after_snapshot_for_test();
+    }
+    #[cfg(test)]
+    pause_before_cross_domain_dealloc_arbitration_for_test();
+    let _arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    if observation.snapshot != GlobalAddressLifecycleSnapshot::Absent {
+        panic!("pointer already retained or released");
+    }
+
+    let quarantine_eligible = metadata.requests(FLAG_DELAYED_FREE)
+        && delayed_free_retained_bytes_for_layout(layout) <= MAX_DELAYED_FREE_RETAINED_BYTES;
+    if quarantine_eligible {
+        match register_global_delayed_free_ownership_from_snapshot(ptr, observation) {
+            Ok(ownership) => {
+                return GlobalDeallocationAdmission::DelayedFree(ownership);
+            }
+            Err(GlobalDelayedFreeRegistration::Duplicate) => {
+                panic!("delayed-free pointer already quarantined")
+            }
+            Err(GlobalDelayedFreeRegistration::Full) => {}
+            Err(GlobalDelayedFreeRegistration::Inserted) => unreachable!(),
+        }
+    }
+
+    match register_global_type_cache_ownership_from_snapshot(ptr, observation) {
+        Ok(ownership) => GlobalDeallocationAdmission::TypeCache(ownership),
+        Err(GlobalTypeCacheOwnershipRegistration::Duplicate) => {
+            panic!("type-cache pointer already retained")
+        }
+        Err(GlobalTypeCacheOwnershipRegistration::Full) => {
+            panic!("retained ownership registry capacity exhausted")
+        }
+        Err(GlobalTypeCacheOwnershipRegistration::Inserted) => unreachable!(),
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TerminalRetainedOwnership {
     DelayedFree,
     TypeCache,
@@ -9640,25 +10523,18 @@ enum TerminalRetainedOwnership {
 impl TerminalRetainedOwnership {
     #[inline]
     fn contains(self, ptr: *mut u8) -> bool {
-        match self {
-            Self::DelayedFree => global_delayed_free_contains_ptr(ptr),
-            Self::TypeCache => global_type_cache_contains_ptr(ptr),
+        match (self, global_address_lifecycle_snapshot(ptr)) {
+            (Self::DelayedFree, GlobalAddressLifecycleSnapshot::DelayedRetained)
+            | (Self::TypeCache, GlobalAddressLifecycleSnapshot::TypeRetained) => true,
+            _ => false,
         }
     }
 
     #[inline]
-    fn conflicting_domain_contains(self, ptr: *mut u8) -> bool {
+    fn expected_snapshot(self) -> GlobalAddressLifecycleSnapshot {
         match self {
-            Self::DelayedFree => global_type_cache_contains_ptr(ptr),
-            Self::TypeCache => global_delayed_free_contains_ptr(ptr),
-        }
-    }
-
-    #[inline]
-    fn unregister(self, ptr: *mut u8) -> bool {
-        match self {
-            Self::DelayedFree => unregister_global_delayed_free_ownership(ptr),
-            Self::TypeCache => unregister_global_type_cache_ownership(ptr),
+            Self::DelayedFree => GlobalAddressLifecycleSnapshot::DelayedRetained,
+            Self::TypeCache => GlobalAddressLifecycleSnapshot::TypeRetained,
         }
     }
 
@@ -9683,24 +10559,92 @@ unsafe fn terminal_release_retained_raw(
     layout: Layout,
     ownership: TerminalRetainedOwnership,
 ) -> bool {
-    if !ownership.contains(ptr) {
-        // Preserve the existing immediate-release fallback for entries that
-        // could not reserve a bounded process-visible ownership slot.
-        alloc.dealloc_raw(ptr, layout);
-        return true;
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    if global_address_lifecycle_snapshot(ptr) != ownership.expected_snapshot() {
+        drop(arbitration);
+        panic!("terminal retained ownership missing or changed");
     }
-    if ownership.conflicting_domain_contains(ptr) {
-        panic!("retained pointer published in conflicting ownership domains");
+    if ownership == TerminalRetainedOwnership::DelayedFree && !global_delayed_free_contains_ptr(ptr)
+    {
+        drop(arbitration);
+        panic!("terminal delayed-free registry missing");
     }
     #[cfg(test)]
     pause_before_terminal_raw_release_for_test(ownership.test_phase());
     if !alloc.dealloc_raw_as_retained_owner(ptr, layout) {
         // Keep the record published if the backend could not run. Losing the
         // memory is safer than exposing a pointer that still has a sole owner.
+        drop(arbitration);
         return false;
     }
-    let removed = ownership.unregister(ptr);
-    debug_assert!(removed, "terminal retained ownership disappeared early");
+    transition_global_address_lifecycle(
+        ptr,
+        ownership.expected_snapshot(),
+        None,
+        ADDRESS_LIFECYCLE_RELEASED,
+        true,
+    )
+    .unwrap_or_else(|_| panic!("terminal retained ownership disappeared early"));
+    match ownership {
+        TerminalRetainedOwnership::DelayedFree => {
+            let removed = unregister_global_delayed_free_slot(ptr);
+            debug_assert!(removed, "terminal delayed-free registry disappeared early");
+        }
+        TerminalRetainedOwnership::TypeCache => {
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+        }
+    }
+    drop(arbitration);
+    true
+}
+
+/// Guard-page allocations bypass the ordinary allocator backend. Keep the
+/// same address arbiter held across `munmap` and Released publication so a
+/// concurrent `mmap` return or stale reclaim cannot observe a post-unmap
+/// absent window.
+#[inline]
+unsafe fn terminal_release_retained_guarded(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+    ownership: TerminalRetainedOwnership,
+) -> bool {
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    if global_address_lifecycle_snapshot(ptr) != ownership.expected_snapshot() {
+        drop(arbitration);
+        panic!("terminal guarded ownership missing or changed");
+    }
+    if ownership == TerminalRetainedOwnership::DelayedFree && !global_delayed_free_contains_ptr(ptr)
+    {
+        drop(arbitration);
+        panic!("terminal guarded delayed-free registry missing");
+    }
+    if !dealloc_guarded(ptr, layout, metadata) {
+        drop(arbitration);
+        return false;
+    }
+    transition_global_address_lifecycle(
+        ptr,
+        ownership.expected_snapshot(),
+        None,
+        ADDRESS_LIFECYCLE_RELEASED,
+        true,
+    )
+    .unwrap_or_else(|_| panic!("terminal guarded ownership disappeared early"));
+    match ownership {
+        TerminalRetainedOwnership::DelayedFree => {
+            let removed = unregister_global_delayed_free_slot(ptr);
+            debug_assert!(removed, "terminal guarded D registry disappeared early");
+        }
+        TerminalRetainedOwnership::TypeCache => {
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+        }
+    }
+    drop(arbitration);
     true
 }
 
@@ -9709,26 +10653,16 @@ fn begin_global_delayed_free_ownership(
     layout: Layout,
     metadata: AllocationMetadata,
 ) -> Option<PendingGlobalDelayedFreeOwnership> {
-    let quarantine_eligible = metadata.requests(FLAG_DELAYED_FREE)
-        && delayed_free_retained_bytes_for_layout(layout) <= MAX_DELAYED_FREE_RETAINED_BYTES;
-    if quarantine_eligible {
-        return match register_global_delayed_free_ownership(ptr) {
-            GlobalDelayedFreeRegistration::Inserted => {
-                Some(PendingGlobalDelayedFreeOwnership::new(ptr))
-            }
-            GlobalDelayedFreeRegistration::Duplicate => {
-                panic!("delayed-free pointer already quarantined")
-            }
-            // The registry is deliberately bounded. Never create hidden TLS
-            // ownership when its shard is full; the caller must use immediate
-            // non-delayed release instead.
-            GlobalDelayedFreeRegistration::Full => None,
-        };
+    match begin_global_deallocation_admission(ptr, layout, metadata) {
+        GlobalDeallocationAdmission::DelayedFree(ownership) => Some(ownership),
+        GlobalDeallocationAdmission::TypeCache(ownership) => {
+            // Test/internal callers of this legacy helper only request the D
+            // token. Production keeps the typed T fallback returned by the
+            // admission transaction.
+            ownership.rollback_unmodified();
+            None
+        }
     }
-    if global_delayed_free_contains_ptr(ptr) {
-        panic!("delayed-free pointer already quarantined");
-    }
-    None
 }
 
 unsafe fn enqueue_delayed_free_with_ownership(
@@ -9804,6 +10738,7 @@ unsafe fn enqueue_delayed_free_with_ownership(
 /// deallocation transaction. Production deallocation acquires ownership before
 /// any validation or allocator mutation and calls
 /// `enqueue_delayed_free_with_ownership` directly.
+#[cfg(test)]
 unsafe fn enqueue_delayed_free(
     alloc: &RustAllocator,
     ptr: *mut u8,
@@ -9813,12 +10748,9 @@ unsafe fn enqueue_delayed_free(
     if ptr.is_null() {
         return None;
     }
-    let ownership = match register_global_delayed_free_ownership(ptr) {
-        GlobalDelayedFreeRegistration::Inserted => PendingGlobalDelayedFreeOwnership::new(ptr),
-        GlobalDelayedFreeRegistration::Duplicate => {
-            panic!("delayed-free pointer already quarantined")
-        }
-        GlobalDelayedFreeRegistration::Full => {
+    let ownership = match begin_global_delayed_free_ownership(ptr, layout, metadata) {
+        Some(ownership) => ownership,
+        None => {
             record_stats_delayed_free_flush();
             return Some(DelayedFreeSlot {
                 ptr,
@@ -9945,7 +10877,12 @@ unsafe fn delayed_free_largest_occupied_index() -> Option<usize> {
     }
 }
 
-unsafe fn release_delayed_slot(alloc: &RustAllocator, slot: DelayedFreeSlot) {
+unsafe fn release_delayed_slot_with_source(
+    alloc: &RustAllocator,
+    slot: DelayedFreeSlot,
+    terminal_ownership: TerminalRetainedOwnership,
+    preacquired_ownership: Option<PendingGlobalTypeCacheOwnership>,
+) {
     if slot.is_empty() {
         return;
     }
@@ -9959,22 +10896,41 @@ unsafe fn release_delayed_slot(alloc: &RustAllocator, slot: DelayedFreeSlot) {
         slot.ptr,
         layout,
         metadata,
-        TerminalRetainedOwnership::DelayedFree,
+        terminal_ownership,
+        preacquired_ownership,
     ) {
-        // Publish process-visible type-cache ownership before retiring the
-        // quarantine record.  The overlap closes the cross-thread window where
-        // the pointer would otherwise be visible in neither ownership domain.
-        let _ = unregister_global_delayed_free_ownership(slot.ptr);
+        if terminal_ownership == TerminalRetainedOwnership::DelayedFree {
+            // Publish process-visible type-cache ownership before retiring the
+            // quarantine record. The overlap closes the cross-thread window
+            // where the pointer would otherwise be visible in neither domain.
+            let _ = unregister_global_delayed_free_ownership(slot.ptr);
+        }
         return;
     }
     if metadata.requests(FLAG_FORCE_INITIALIZE) {
         core::ptr::write_bytes(slot.ptr, 0, layout.size());
     }
-    let _ = terminal_release_retained_raw(
+    let _ = terminal_release_retained_raw(alloc, slot.ptr, layout, terminal_ownership);
+}
+
+#[inline]
+unsafe fn release_delayed_slot(alloc: &RustAllocator, slot: DelayedFreeSlot) {
+    release_delayed_slot_with_source(alloc, slot, TerminalRetainedOwnership::DelayedFree, None);
+}
+
+#[inline]
+unsafe fn release_type_owned_delayed_slot(
+    alloc: &RustAllocator,
+    slot: DelayedFreeSlot,
+    ownership: PendingGlobalTypeCacheOwnership,
+) {
+    // A delayed-free registry miss was admitted directly into the T domain.
+    // Preserve that typed token through cache insertion or terminal release.
+    release_delayed_slot_with_source(
         alloc,
-        slot.ptr,
-        layout,
-        TerminalRetainedOwnership::DelayedFree,
+        slot,
+        TerminalRetainedOwnership::TypeCache,
+        Some(ownership),
     );
 }
 
@@ -10370,41 +11326,7 @@ pub unsafe trait SemanticAlloc {
         new_size: usize,
         old_metadata: AllocationMetadata,
         new_metadata: AllocationMetadata,
-    ) -> *mut u8 {
-        let new_layout = match Layout::from_size_align(new_size, old_layout.align()) {
-            Ok(layout) => layout,
-            Err(_) => return core::ptr::null_mut(),
-        };
-        if !semantic_realloc_old_pointer_supported(ptr, old_layout) {
-            return core::ptr::null_mut();
-        }
-        if !ptr.is_null()
-            && old_layout.size() != 0
-            && matches!(
-                lookup_auto_allocation_record(ptr, old_layout, false),
-                AutoAllocationRecordLookup::Mismatched
-            )
-        {
-            return core::ptr::null_mut();
-        }
-        reject_global_delayed_free_owned_pointer(ptr);
-        if new_size == 0 {
-            if !ptr.is_null() && old_layout.size() != 0 {
-                self.dealloc_with_metadata(ptr, old_layout, old_metadata);
-            }
-            return semantic_zero_size_ptr(new_layout);
-        }
-        let new_ptr = self.alloc_with_metadata(new_layout, new_metadata);
-        if !new_ptr.is_null() && !ptr.is_null() {
-            core::ptr::copy_nonoverlapping(
-                ptr,
-                new_ptr,
-                core::cmp::min(old_layout.size(), new_size),
-            );
-            self.dealloc_with_metadata(ptr, old_layout, old_metadata);
-        }
-        new_ptr
-    }
+    ) -> *mut u8;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -10456,6 +11378,7 @@ impl RustAllocator {
         if ptr.is_null() {
             return ptr;
         }
+        publish_semantic_allocation_return(ptr);
         if record_recovery && !self.record_fast_recovery_or_global(ptr, layout, metadata) {
             self.dealloc_raw(ptr, layout);
             return core::ptr::null_mut();
@@ -10471,6 +11394,7 @@ impl RustAllocator {
         layout: Layout,
         metadata: AllocationMetadata,
         recover_allocation_record: bool,
+        ownership: PendingGlobalTypeCacheOwnership,
     ) {
         if ptr.is_null() || layout.size() == 0 {
             return;
@@ -10486,10 +11410,10 @@ impl RustAllocator {
             metadata
         };
         record_stats_dealloc_layout(cache_metadata, layout);
-        if cache_compiler_type_metadata_free(self, ptr, layout, cache_metadata) {
+        if cache_compiler_type_metadata_free(self, ptr, layout, cache_metadata, ownership) {
             return;
         }
-        self.dealloc_raw(ptr, layout);
+        panic!("compiler type-cache admission returned without releasing or retaining storage");
     }
 
     #[inline]
@@ -10500,7 +11424,17 @@ impl RustAllocator {
         metadata: AllocationMetadata,
     ) {
         let _ = recover_auto_allocation_record_metadata(ptr, layout, true);
-        if dealloc_guarded(ptr, layout, metadata) {
+        if guard_page_eligible(layout, metadata) {
+            let ownership = begin_global_semantic_reclaim(ptr);
+            ownership.commit();
+            if !terminal_release_retained_guarded(
+                ptr,
+                layout,
+                metadata,
+                TerminalRetainedOwnership::TypeCache,
+            ) {
+                panic!("guarded cleanup could not release mapped storage");
+            }
             return;
         }
         self.dealloc_raw(ptr, layout);
@@ -10513,7 +11447,17 @@ impl RustAllocator {
         layout: Layout,
         metadata: AllocationMetadata,
     ) {
-        if dealloc_guarded(ptr, layout, metadata) {
+        if guard_page_eligible(layout, metadata) {
+            let ownership = begin_global_semantic_reclaim(ptr);
+            ownership.commit();
+            if !terminal_release_retained_guarded(
+                ptr,
+                layout,
+                metadata,
+                TerminalRetainedOwnership::TypeCache,
+            ) {
+                panic!("guarded cleanup could not release mapped storage");
+            }
             return;
         }
         self.dealloc_raw(ptr, layout);
@@ -10538,6 +11482,7 @@ impl RustAllocator {
         if ptr.is_null() {
             return ptr;
         }
+        publish_semantic_allocation_return(ptr);
         if metadata.requests(FLAG_FORCE_INITIALIZE) {
             core::ptr::write_bytes(ptr, 0, layout.size());
         }
@@ -10560,6 +11505,7 @@ impl RustAllocator {
         if ptr.is_null() {
             return ptr;
         }
+        publish_semantic_allocation_return(ptr);
         if metadata.requests(FLAG_FORCE_INITIALIZE) {
             core::ptr::write_bytes(ptr, 0, layout.size());
         }
@@ -10753,12 +11699,28 @@ impl RustAllocator {
         metadata: AllocationMetadata,
         consume_recovery_record: bool,
     ) {
-        // Both delayed-free and type-cache ownership are process-visible even
-        // though their payload stores are TLS. Use the common delayed-first
-        // guard before recovery-record consumption, statistics, cache mutation,
-        // or raw release can publish the same address under a second owner.
-        reject_global_delayed_free_owned_pointer(ptr);
+        // Admit the pointer into exactly one process-visible retained domain
+        // before recovery-record consumption, tag validation/mutation,
+        // statistics, cache mutation, or backend release.
+        let admission = begin_global_deallocation_admission(ptr, layout, metadata);
+        self.dealloc_with_resolved_metadata_admitted(
+            ptr,
+            layout,
+            metadata,
+            consume_recovery_record,
+            admission,
+        );
+    }
 
+    #[inline]
+    unsafe fn dealloc_with_resolved_metadata_admitted(
+        &self,
+        ptr: *mut u8,
+        layout: Layout,
+        metadata: AllocationMetadata,
+        consume_recovery_record: bool,
+        admission: GlobalDeallocationAdmission,
+    ) {
         // Local TLS state remains a defensive authority if a stale/corrupt
         // test or older caller produced an entry without the process-visible
         // registry. Check it before trying to acquire ownership for this
@@ -10772,25 +11734,37 @@ impl RustAllocator {
             panic!("delayed-free pointer already quarantined");
         }
 
-        // Acquire process-visible ownership before memory-tag validation,
-        // recovery-record consumption, statistics, cache mutation, or raw
-        // release. This is the linearization point against a foreign-thread
-        // duplicate that omits FLAG_DELAYED_FREE. The pending guard rolls the
-        // registration back if any later validation panics before the TLS ring
-        // publishes the slot.
-        let mut pending_quarantine = begin_global_delayed_free_ownership(ptr, layout, metadata);
         if layout_derived_raw_only_fast_path(metadata) {
             if consume_recovery_record {
                 let _ = recover_auto_allocation_record_metadata(ptr, layout, true);
             }
-            self.dealloc_raw(ptr, layout);
+            let ownership = match admission {
+                GlobalDeallocationAdmission::TypeCache(ownership) => ownership,
+                GlobalDeallocationAdmission::DelayedFree(_) => {
+                    panic!("raw-only metadata admitted to delayed-free domain")
+                }
+            };
+            ownership.commit();
+            let _ = terminal_release_retained_raw(
+                self,
+                ptr,
+                layout,
+                TerminalRetainedOwnership::TypeCache,
+            );
             return;
         }
         if compiler_type_isolated_recovery_fast_path(metadata) {
             if consume_recovery_record {
                 let _ = recover_auto_allocation_record_metadata(ptr, layout, true);
             }
-            return self.dealloc_with_compiler_type_metadata_fast(ptr, layout, metadata, false);
+            let ownership = match admission {
+                GlobalDeallocationAdmission::TypeCache(ownership) => ownership,
+                GlobalDeallocationAdmission::DelayedFree(_) => {
+                    panic!("compiler metadata admitted to delayed-free domain")
+                }
+            };
+            return self
+                .dealloc_with_compiler_type_metadata_fast(ptr, layout, metadata, false, ownership);
         }
         clear_memory_tagged_allocation(ptr, layout, metadata);
         if consume_recovery_record {
@@ -10801,41 +11775,51 @@ impl RustAllocator {
             let _ = recover_auto_allocation_record_metadata(ptr, layout, true);
         }
         record_stats_dealloc_layout(metadata, layout);
-        if dealloc_guarded(ptr, layout, metadata) {
-            return;
-        }
-        if metadata.requests(FLAG_DELAYED_FREE) {
-            if let Some(ownership) = pending_quarantine.take() {
-                if let Some(slot) =
-                    enqueue_delayed_free_with_ownership(self, ptr, layout, metadata, ownership)
-                {
-                    release_delayed_slot(self, slot);
-                }
-            } else {
-                // Oversized objects and registry-pressure fallbacks must not be
-                // hidden in TLS. Validate the same authenticated metadata, then
-                // release under the ordinary non-delayed policy.
-                record_stats_delayed_free_flush();
-                release_delayed_slot(
-                    self,
-                    DelayedFreeSlot {
-                        ptr,
-                        size: layout.size(),
-                        align: layout.align(),
-                        auth: metadata_record_auth(ptr, layout, metadata),
-                        metadata,
-                    },
-                );
+        if guard_page_eligible(layout, metadata) {
+            let terminal_ownership = admission.commit_for_terminal_release();
+            if !terminal_release_retained_guarded(ptr, layout, metadata, terminal_ownership) {
+                panic!("guarded deallocation could not release mapped storage");
             }
             return;
         }
-        if cache_semantic_free(self, ptr, layout, metadata) {
+        if metadata.requests(FLAG_DELAYED_FREE) {
+            match admission {
+                GlobalDeallocationAdmission::DelayedFree(ownership) => {
+                    if let Some(slot) =
+                        enqueue_delayed_free_with_ownership(self, ptr, layout, metadata, ownership)
+                    {
+                        release_delayed_slot(self, slot);
+                    }
+                }
+                GlobalDeallocationAdmission::TypeCache(ownership) => {
+                    // Oversized objects and D-registry pressure are admitted
+                    // into T under the same arbitration transaction.
+                    record_stats_delayed_free_flush();
+                    release_type_owned_delayed_slot(
+                        self,
+                        DelayedFreeSlot {
+                            ptr,
+                            size: layout.size(),
+                            align: layout.align(),
+                            auth: metadata_record_auth(ptr, layout, metadata),
+                            metadata,
+                        },
+                        ownership,
+                    );
+                }
+            }
             return;
         }
-        if !ptr.is_null() && metadata.requests(FLAG_FORCE_INITIALIZE) {
-            core::ptr::write_bytes(ptr, 0, layout.size());
+        let ownership = match admission {
+            GlobalDeallocationAdmission::TypeCache(ownership) => ownership,
+            GlobalDeallocationAdmission::DelayedFree(_) => {
+                panic!("ordinary metadata admitted to delayed-free domain")
+            }
+        };
+        if cache_semantic_free_with_ownership(self, ptr, layout, metadata, ownership) {
+            return;
         }
-        self.dealloc_raw(ptr, layout);
+        panic!("semantic deallocation admission returned without releasing or retaining storage");
     }
 
     /// Complete a deallocation after the caller has non-destructively read the
@@ -10912,15 +11896,48 @@ unsafe impl SemanticAlloc for RustAllocator {
             // realloc. The exact record remains available for a correct retry.
             return core::ptr::null_mut();
         }
-        reject_global_delayed_free_owned_pointer(ptr);
+        let (dealloc_metadata, consume_recovery_record) = match old_recovery {
+            AutoAllocationRecordLookup::Exact(recorded_metadata) => (
+                deallocation_metadata_after_recovery_record(old_metadata, recorded_metadata),
+                true,
+            ),
+            AutoAllocationRecordLookup::Missing => (old_metadata, false),
+            AutoAllocationRecordLookup::Mismatched => unreachable!(),
+        };
+        if !ptr.is_null() && old_layout.size() != 0 {
+            // Authentication reads only the side-table record, not allocation
+            // storage.  Keep it before reclaim admission so an authentication
+            // failure cannot conservatively strand a type-retained entry.
+            verify_memory_tagged_reallocation_source(ptr, old_layout, dealloc_metadata);
+        }
+        let mut ownership = if !ptr.is_null() && old_layout.size() != 0 {
+            Some(begin_global_semantic_reclaim(ptr))
+        } else {
+            None
+        };
         if new_size == 0 {
-            if !ptr.is_null() && old_layout.size() != 0 {
-                self.dealloc_with_metadata(ptr, old_layout, old_metadata);
+            if let Some(ownership) = ownership.take() {
+                self.dealloc_with_resolved_metadata_admitted(
+                    ptr,
+                    old_layout,
+                    dealloc_metadata,
+                    consume_recovery_record,
+                    deallocation_admission_from_type_reclaim(
+                        ownership,
+                        old_layout,
+                        dealloc_metadata,
+                    ),
+                );
             }
             return semantic_zero_size_ptr(new_layout);
         }
         if !ptr.is_null()
-            && semantic_realloc_can_reuse_in_place(old_layout, new_size, old_metadata, new_metadata)
+            && semantic_realloc_can_reuse_in_place(
+                old_layout,
+                new_size,
+                dealloc_metadata,
+                new_metadata,
+            )
         {
             if auto_allocation_recovery_recording_enabled()
                 && !replace_auto_allocation_record_for_reallocation(
@@ -10930,30 +11947,25 @@ unsafe impl SemanticAlloc for RustAllocator {
                     new_metadata,
                 )
             {
+                ownership
+                    .take()
+                    .expect("nonzero in-place realloc must own old storage")
+                    .rollback_unmodified();
                 return core::ptr::null_mut();
             }
             record_stats_alloc_layout(new_metadata, new_layout);
-            if old_metadata != new_metadata {
-                record_stats_dealloc_layout(old_metadata, old_layout);
+            if dealloc_metadata != new_metadata {
+                record_stats_dealloc_layout(dealloc_metadata, old_layout);
             }
             if new_size > old_layout.size() && new_metadata.requests(FLAG_FORCE_INITIALIZE) {
                 core::ptr::write_bytes(ptr.add(old_layout.size()), 0, new_size - old_layout.size());
             }
+            ownership
+                .take()
+                .expect("nonzero in-place realloc must own old storage")
+                .finish_live_reuse();
             return ptr;
         }
-
-        if !ptr.is_null() && old_layout.size() != 0 {
-            // Mirror the metadata choice made by `dealloc_with_metadata_inner`
-            // without recording recovery match/mismatch counters twice.  The
-            // exact allocation record is authoritative whenever it exists.
-            let dealloc_metadata = match old_recovery {
-                AutoAllocationRecordLookup::Exact(recorded_metadata) => recorded_metadata,
-                AutoAllocationRecordLookup::Missing => old_metadata,
-                AutoAllocationRecordLookup::Mismatched => unreachable!(),
-            };
-            verify_memory_tagged_reallocation_source(ptr, old_layout, dealloc_metadata);
-        }
-
         let new_ptr = self.alloc_with_metadata(new_layout, new_metadata);
         if !new_ptr.is_null() && !ptr.is_null() {
             core::ptr::copy_nonoverlapping(
@@ -10961,7 +11973,21 @@ unsafe impl SemanticAlloc for RustAllocator {
                 new_ptr,
                 core::cmp::min(old_layout.size(), new_size),
             );
-            self.dealloc_with_metadata(ptr, old_layout, old_metadata);
+            self.dealloc_with_resolved_metadata_admitted(
+                ptr,
+                old_layout,
+                dealloc_metadata,
+                consume_recovery_record,
+                deallocation_admission_from_type_reclaim(
+                    ownership
+                        .take()
+                        .expect("nonzero moved realloc must own old storage"),
+                    old_layout,
+                    dealloc_metadata,
+                ),
+            );
+        } else if let Some(ownership) = ownership.take() {
+            ownership.rollback_unmodified();
         }
         new_ptr
     }
@@ -11595,12 +12621,23 @@ unsafe fn realloc_layout_with_ffi_metadata(
     let allocator = RustAllocator::new();
     let (old_metadata, new_metadata, recovery_record_found) =
         match lookup_auto_allocation_record(ptr, old_layout, false) {
-            AutoAllocationRecordLookup::Exact(recorded_metadata) => (
-                recorded_metadata,
-                recovery_delegated_metadata_after_record(metadata, recorded_metadata)
-                    .unwrap_or(metadata),
-                true,
-            ),
+            AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+                let delegated =
+                    recovery_delegated_metadata_after_record(metadata, recorded_metadata);
+                (
+                    if delegated.is_some() {
+                        // Preserve delegation provenance through the allocator
+                        // boundary. The exact recovery lookup there resolves
+                        // the old identity without recording a false exact-
+                        // compiler-identity match.
+                        metadata
+                    } else {
+                        recorded_metadata
+                    },
+                    delegated.unwrap_or(metadata),
+                    true,
+                )
+            }
             AutoAllocationRecordLookup::Missing => (metadata, metadata, false),
             AutoAllocationRecordLookup::Mismatched => return core::ptr::null_mut(),
         };
@@ -23497,6 +24534,418 @@ mod tests {
         );
     }
 
+    fn lifecycle_occupied_entries_for_test() -> usize {
+        let mut occupied = 0usize;
+        for shard in GLOBAL_TYPE_CACHE_OWNERSHIP.iter() {
+            let table = shard.lock();
+            occupied += table
+                .states
+                .iter()
+                .filter(|state| {
+                    **state != ADDRESS_LIFECYCLE_EMPTY
+                        && **state != ADDRESS_LIFECYCLE_PROBE_TOMBSTONE
+                })
+                .count();
+        }
+        occupied
+    }
+
+    #[test]
+    fn lifecycle_epochs_retire_more_than_table_capacity_distinct_reuses() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+        }
+        let iterations =
+            GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT * GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS * 2;
+        for index in 0..iterations {
+            let ptr = ((index + 1).wrapping_mul(0x1000) | 0x8) as *mut u8;
+            let observation = global_address_lifecycle_observation(ptr);
+            let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+                [global_retained_ownership_arbitration_shard(ptr)]
+            .lock();
+            let ownership = register_global_type_cache_ownership_from_snapshot(ptr, observation)
+                .expect("distinct test address should enter T");
+            drop(arbitration);
+            ownership.commit();
+
+            let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+                [global_retained_ownership_arbitration_shard(ptr)]
+            .lock();
+            transition_global_address_lifecycle(
+                ptr,
+                GlobalAddressLifecycleSnapshot::TypeRetained,
+                None,
+                ADDRESS_LIFECYCLE_RELEASED,
+                true,
+            )
+            .expect("test terminal transition should publish Released");
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+            drop(arbitration);
+
+            accept_raw_allocation_return(ptr);
+            assert_eq!(
+                global_address_lifecycle_snapshot(ptr),
+                GlobalAddressLifecycleSnapshot::Absent,
+                "legitimate reuse must retire the exact Released entry"
+            );
+        }
+        assert_eq!(lifecycle_occupied_entries_for_test(), 0);
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn released_tombstone_rejects_until_actual_backend_reuse() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(24, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::unknown();
+        let ptr = unsafe { alloc.alloc_raw(layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            alloc.dealloc_with_recovered_metadata(ptr, layout, metadata);
+        }
+        assert!(matches!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::Released
+        ));
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                alloc.dealloc_raw(ptr, layout);
+            }))
+            .is_err(),
+            "Released must reject a stale reclaim before allocator reuse"
+        );
+
+        let reused = unsafe { alloc.alloc_raw(layout) };
+        assert_eq!(
+            reused, ptr,
+            "thread cache should exercise exact backend reuse"
+        );
+        assert_eq!(
+            global_address_lifecycle_snapshot(reused),
+            GlobalAddressLifecycleSnapshot::Absent,
+            "legitimate backend reuse consumes Released and advances its bucket epoch"
+        );
+        unsafe {
+            alloc.dealloc_raw(reused, layout);
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn queued_metadata_reclaim_rejects_after_terminal_metadata_release() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(
+            MAX_TYPE_CACHE_OBJECT_SIZE + align_of::<usize>(),
+            align_of::<usize>(),
+        )
+        .unwrap();
+        let metadata = AllocationMetadata::for_type(0x7E12_1A11)
+            .with_module(0xC0DE_1A11)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = unsafe { alloc.alloc_with_no_recovery_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+        let ptr_addr = ptr as usize;
+        let waiter = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            unsafe {
+                TEST_PAUSE_NEXT_RECLAIM_AFTER_SNAPSHOT = true;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                alloc.dealloc_with_recovered_metadata(ptr_addr as *mut u8, layout, metadata);
+            }))
+            .is_err()
+        });
+        while TEST_STALE_RECLAIM_PHASE.load(Ordering::Acquire) != 2 {
+            thread::yield_now();
+        }
+        unsafe {
+            alloc.dealloc_with_recovered_metadata(ptr, layout, metadata);
+        }
+        assert!(matches!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::Released
+        ));
+        TEST_STALE_RECLAIM_PHASE.store(3, Ordering::Release);
+        assert!(waiter.join().expect("metadata reclaim waiter"));
+
+        let reused = unsafe { alloc.alloc_raw(layout) };
+        assert_eq!(reused, ptr);
+        unsafe {
+            alloc.dealloc_raw(reused, layout);
+        }
+        TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn queued_raw_realloc_rejects_after_semantic_release_and_reuse() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(24, align_of::<usize>()).unwrap();
+        let ptr = unsafe { alloc.alloc_raw(layout) };
+        assert!(!ptr.is_null());
+        let ptr_addr = ptr as usize;
+        let waiter = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            unsafe {
+                TEST_PAUSE_NEXT_RECLAIM_AFTER_SNAPSHOT = true;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                alloc.realloc_raw(ptr_addr as *mut u8, layout, 48)
+            }))
+            .is_err()
+        });
+        while TEST_STALE_RECLAIM_PHASE.load(Ordering::Acquire) != 2 {
+            thread::yield_now();
+        }
+        unsafe {
+            alloc.dealloc_with_recovered_metadata(ptr, layout, AllocationMetadata::unknown());
+        }
+        let reused = unsafe { alloc.alloc_raw(layout) };
+        assert_eq!(reused, ptr);
+        TEST_STALE_RECLAIM_PHASE.store(3, Ordering::Release);
+        assert!(waiter.join().expect("raw realloc waiter"));
+        unsafe {
+            alloc.dealloc_raw(reused, layout);
+        }
+        TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn queued_alignment_changing_grow_rejects_after_release_and_reuse() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(24, align_of::<usize>()).unwrap();
+        let new_layout = Layout::from_size_align(48, align_of::<usize>() * 2).unwrap();
+        let ptr = unsafe { alloc.alloc_raw(old_layout) };
+        assert!(!ptr.is_null());
+        let ptr_addr = ptr as usize;
+        let waiter = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            unsafe {
+                TEST_PAUSE_NEXT_RECLAIM_AFTER_SNAPSHOT = true;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                core::alloc::Allocator::grow(
+                    &alloc,
+                    NonNull::new_unchecked(ptr_addr as *mut u8),
+                    old_layout,
+                    new_layout,
+                )
+            }))
+            .is_err()
+        });
+        while TEST_STALE_RECLAIM_PHASE.load(Ordering::Acquire) != 2 {
+            thread::yield_now();
+        }
+        unsafe {
+            alloc.dealloc_with_recovered_metadata(ptr, old_layout, AllocationMetadata::unknown());
+        }
+        let reused = unsafe { alloc.alloc_raw(old_layout) };
+        assert_eq!(reused, ptr);
+        TEST_STALE_RECLAIM_PHASE.store(3, Ordering::Release);
+        assert!(waiter.join().expect("alignment-changing grow waiter"));
+        unsafe {
+            alloc.dealloc_raw(reused, old_layout);
+        }
+        TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
+    }
+
+    #[test]
+    fn concurrent_delayed_and_type_cache_ownership_never_publish_same_pointer() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let delayed_metadata = AllocationMetadata::for_type(0xD17A_D0C3)
+            .with_module(0xC0DE_D0C3)
+            .with_callsite(0xA110_D0C3)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE);
+        let type_cache_metadata = delayed_metadata
+            .with_callsite(0xA110_D0C4)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_FORCE_INITIALIZE);
+        assert!(type_cache_eligible(layout, type_cache_metadata));
+
+        let ptr = unsafe { alloc.alloc_raw(layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.write_bytes(0xA7, layout.size());
+        }
+        let ptr_addr = ptr as usize;
+        let missing_delayed_source = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = begin_global_type_cache_ownership_for_delayed_handoff(ptr_addr as *mut u8);
+        }));
+        assert!(
+            missing_delayed_source.is_err(),
+            "the handoff-only helper must reject a pointer without delayed ownership"
+        );
+        assert!(!global_type_cache_contains_ptr(ptr_addr as *mut u8));
+
+        TEST_CROSS_DOMAIN_DEALLOC_WAITERS.store(0, Ordering::Release);
+        assert_eq!(
+            TEST_CROSS_DOMAIN_DEALLOC_PHASE.compare_exchange(
+                0,
+                1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ),
+            Ok(0),
+            "cross-domain deallocation phase must start idle"
+        );
+        let start = std::sync::Arc::new(std::sync::Barrier::new(3));
+        let (outcome_tx, outcome_rx) = std::sync::mpsc::channel();
+        let (delayed_release_tx, delayed_release_rx) = std::sync::mpsc::channel();
+        let (type_release_tx, type_release_rx) = std::sync::mpsc::channel();
+
+        let delayed_start = start.clone();
+        let delayed_tx = outcome_tx.clone();
+        let delayed = thread::spawn(move || {
+            delayed_start.wait();
+            let returned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                RustAllocator::new().dealloc_with_recovered_metadata(
+                    ptr_addr as *mut u8,
+                    layout,
+                    delayed_metadata,
+                );
+            }))
+            .is_ok();
+            let _ = delayed_tx.send(("delayed", returned));
+            let _ = delayed_release_rx.recv_timeout(std::time::Duration::from_secs(30));
+            unsafe {
+                // Detach the winning TLS record without releasing the shared
+                // allocation; the parent performs exactly one raw free after
+                // both workers have terminated, even on a regression where
+                // both domains were incorrectly published.
+                clear_delayed_free_for_test();
+            }
+        });
+
+        let type_start = start.clone();
+        let type_tx = outcome_tx.clone();
+        let type_cache = thread::spawn(move || {
+            type_start.wait();
+            let returned = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                RustAllocator::new().dealloc_with_recovered_metadata(
+                    ptr_addr as *mut u8,
+                    layout,
+                    type_cache_metadata,
+                );
+            }))
+            .is_ok();
+            let _ = type_tx.send(("type-cache", returned));
+            let _ = type_release_rx.recv_timeout(std::time::Duration::from_secs(30));
+            unsafe {
+                clear_type_cache_for_test();
+            }
+        });
+        drop(outcome_tx);
+
+        start.wait();
+        let phase_deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while TEST_CROSS_DOMAIN_DEALLOC_WAITERS.load(Ordering::Acquire) != 2
+            && std::time::Instant::now() < phase_deadline
+        {
+            thread::yield_now();
+        }
+        let phase_synchronized = TEST_CROSS_DOMAIN_DEALLOC_WAITERS.load(Ordering::Acquire) == 2;
+        TEST_CROSS_DOMAIN_DEALLOC_PHASE.store(2, Ordering::Release);
+
+        let first = outcome_rx.recv_timeout(std::time::Duration::from_secs(10));
+        let second = outcome_rx.recv_timeout(std::time::Duration::from_secs(10));
+        let outcomes = [first.ok(), second.ok()];
+        let delayed_returned = outcomes
+            .iter()
+            .flatten()
+            .find_map(|(domain, returned)| (*domain == "delayed").then_some(*returned));
+        let type_cache_returned = outcomes
+            .iter()
+            .flatten()
+            .find_map(|(domain, returned)| (*domain == "type-cache").then_some(*returned));
+        let delayed_published = global_delayed_free_contains_ptr(ptr);
+        let type_cache_published = global_type_cache_contains_ptr(ptr);
+
+        // Always unblock and join both workers before making assertions. Each
+        // worker also has a bounded receive as a last-resort cleanup guarantee.
+        let _ = delayed_release_tx.send(());
+        let _ = type_release_tx.send(());
+        let delayed_joined = delayed.join();
+        let type_cache_joined = type_cache.join();
+        TEST_CROSS_DOMAIN_DEALLOC_PHASE.store(0, Ordering::Release);
+        TEST_CROSS_DOMAIN_DEALLOC_WAITERS.store(0, Ordering::Release);
+
+        // A regression may have published both domains. Retire any surviving
+        // test records, then free the real allocation exactly once.
+        let _ = unregister_global_delayed_free_ownership(ptr);
+        let _ = unregister_global_type_cache_ownership(ptr);
+        unsafe {
+            alloc.dealloc_raw(ptr, layout);
+        }
+
+        assert!(
+            phase_synchronized,
+            "both real deallocations must reach the deterministic race phase"
+        );
+        assert!(
+            delayed_joined.is_ok(),
+            "delayed deallocation worker panicked outside its catch boundary"
+        );
+        assert!(
+            type_cache_joined.is_ok(),
+            "type-cache deallocation worker panicked outside its catch boundary"
+        );
+        let delayed_returned = delayed_returned.expect("delayed deallocation outcome");
+        let type_cache_returned = type_cache_returned.expect("type-cache deallocation outcome");
+        assert!(
+            delayed_returned ^ type_cache_returned,
+            "exactly one concurrent real deallocation may complete ownership publication"
+        );
+        assert!(
+            delayed_published ^ type_cache_published,
+            "the same real allocation must be visible in exactly one retained ownership registry"
+        );
+        assert_eq!(delayed_returned, delayed_published);
+        assert_eq!(type_cache_returned, type_cache_published);
+        assert!(!global_delayed_free_contains_ptr(ptr));
+        assert!(!global_type_cache_contains_ptr(ptr));
+    }
+
     #[test]
     fn type_cache_owned_pointer_rejects_raw_reclaim_without_mutation() {
         let _guard = test_guard();
@@ -24018,6 +25467,9 @@ mod tests {
         assert!(!compiler_type_isolated_recovery_fast_path(metadata));
         let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
         assert!(!ptr.is_null());
+        unsafe {
+            ptr.write_bytes(0xA5, layout.size());
+        }
 
         let target = global_type_cache_ownership_shard_and_slot(ptr);
         let mut colliders = Vec::with_capacity(GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT);
@@ -24025,10 +25477,7 @@ mod tests {
         while colliders.len() < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
             let candidate = address as *mut u8;
             address = address.checked_add(8).unwrap();
-            if candidate != ptr
-                && candidate as usize != GLOBAL_TYPE_CACHE_OWNERSHIP_TOMBSTONE
-                && global_type_cache_ownership_shard_and_slot(candidate) == target
-            {
+            if candidate != ptr && global_type_cache_ownership_shard_and_slot(candidate) == target {
                 colliders.push(candidate);
             }
         }
@@ -24050,14 +25499,18 @@ mod tests {
         );
 
         semantic_stats_reset();
-        unsafe {
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
             alloc.dealloc_with_metadata(ptr, layout, metadata);
-        }
+        }));
+        assert!(
+            rejected.is_err(),
+            "T-registry saturation must fail-stop before backend release"
+        );
         let stats = semantic_stats_snapshot();
-        assert_eq!(stats.typed_deallocations, 1);
+        assert_eq!(stats.typed_deallocations, 0);
         assert_eq!(stats.typed_cache_inserts, 0);
         assert_eq!(stats.typed_cache_hits, 0);
-        assert_eq!(stats.typed_cache_bypasses, 1);
+        assert_eq!(stats.typed_cache_bypasses, 0);
         assert!(!global_type_cache_contains_ptr(ptr));
         assert_eq!(
             GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
@@ -24067,11 +25520,17 @@ mod tests {
         for &candidate in &colliders {
             assert!(global_type_cache_contains_ptr(candidate));
         }
+        for offset in 0..layout.size() {
+            assert_eq!(unsafe { ptr.add(offset).read() }, 0xA5);
+        }
 
         for candidate in colliders {
             assert!(unregister_global_type_cache_ownership(candidate));
         }
         assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        unsafe {
+            alloc.dealloc_raw(ptr, layout);
+        }
         semantic_stats_recording_disable();
     }
 
@@ -24542,7 +26001,7 @@ mod tests {
         }
 
         let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            reject_global_delayed_free_owned_pointer(ptr);
+            reject_known_retained_or_released_pointer(ptr);
         }))
         .is_err();
         phase_guard.release_owner();
@@ -24640,7 +26099,7 @@ mod tests {
         }
 
         let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            reject_global_delayed_free_owned_pointer(ptr);
+            reject_known_retained_or_released_pointer(ptr);
         }))
         .is_err();
         phase_guard.release_owner();
@@ -24858,7 +26317,7 @@ mod tests {
             assert_eq!(unsafe { ptr.add(offset).read() }, 0xA9);
         }
         let duplicate_rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            reject_global_delayed_free_owned_pointer(ptr);
+            reject_known_retained_or_released_pointer(ptr);
         }))
         .is_err();
         assert!(
@@ -25316,7 +26775,96 @@ mod tests {
     }
 
     #[test]
-    fn pending_delayed_free_ownership_rolls_back_during_unwind() {
+    fn delayed_and_type_cache_registry_pressure_fails_stop_without_release() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xD17A_D0C5)
+            .with_module(0xC0DE_D0C5)
+            .with_callsite(0xA110_D0C5)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE);
+        let ptr = unsafe { alloc.alloc_raw(layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.write_bytes(0xC5, layout.size());
+        }
+
+        let delayed_target = global_delayed_free_ownership_shard(ptr);
+        let mut delayed_owners: [Option<PendingGlobalDelayedFreeOwnership>;
+            GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_SLOTS] = core::array::from_fn(|_| None);
+        let mut address = 8usize;
+        let mut delayed_inserted = 0usize;
+        while delayed_inserted < delayed_owners.len() {
+            let candidate = address as *mut u8;
+            address = address.wrapping_add(8);
+            if candidate == ptr || global_delayed_free_ownership_shard(candidate) != delayed_target
+            {
+                continue;
+            }
+            if register_global_delayed_free_ownership(candidate)
+                == GlobalDelayedFreeRegistration::Inserted
+            {
+                delayed_owners[delayed_inserted] =
+                    Some(PendingGlobalDelayedFreeOwnership::new(candidate));
+                delayed_inserted += 1;
+            }
+        }
+
+        let type_target = global_type_cache_ownership_shard_and_slot(ptr);
+        let mut type_owners = Vec::with_capacity(GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT);
+        let mut type_full = false;
+        address = 8;
+        while type_owners.len() < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT && !type_full {
+            let candidate = address as *mut u8;
+            address = address.wrapping_add(8);
+            if candidate != ptr
+                && global_type_cache_ownership_shard_and_slot(candidate) == type_target
+            {
+                match register_global_type_cache_ownership(candidate) {
+                    GlobalTypeCacheOwnershipRegistration::Inserted => type_owners.push(candidate),
+                    GlobalTypeCacheOwnershipRegistration::Full => type_full = true,
+                    GlobalTypeCacheOwnershipRegistration::Duplicate => {}
+                }
+            }
+        }
+        assert!(
+            type_full || type_owners.len() == GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT,
+            "the unified lifecycle probe window must be saturated"
+        );
+
+        let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            alloc.dealloc_with_recovered_metadata(ptr, layout, metadata);
+        }));
+        assert!(
+            rejected.is_err(),
+            "simultaneous D/T registry saturation must fail-stop"
+        );
+        assert!(!global_delayed_free_contains_ptr(ptr));
+        assert!(!global_type_cache_contains_ptr(ptr));
+        for offset in 0..layout.size() {
+            assert_eq!(unsafe { ptr.add(offset).read() }, 0xC5);
+        }
+
+        for candidate in type_owners {
+            assert!(unregister_global_type_cache_ownership(candidate));
+        }
+        drop(delayed_owners);
+        unsafe {
+            alloc.dealloc_raw(ptr, layout);
+        }
+    }
+
+    #[test]
+    fn pending_delayed_free_ownership_remains_published_during_unwind() {
         let _guard = test_guard();
         let layout =
             Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
@@ -25337,9 +26885,10 @@ mod tests {
         }));
         assert!(unwound.is_err());
         assert!(
-            !global_delayed_free_contains_ptr(fake_ptr),
-            "pending ownership must unregister during panic unwinding"
+            global_delayed_free_contains_ptr(fake_ptr),
+            "unknown unwind must conservatively retain pending ownership"
         );
+        assert!(unregister_global_delayed_free_ownership(fake_ptr));
         assert_eq!(
             GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire),
             baseline_registrations
