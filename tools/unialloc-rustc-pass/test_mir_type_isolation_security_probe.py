@@ -755,20 +755,39 @@ def validate_allocation_side_recovery_requirement(
     target_counts: Dict[str, int] = {}
     for marker in ("ProducerPayload", "ConsumerPayload"):
         rows = target_drop_or_deallocation_rows(audit, marker)
-        assert not rows, (
-            f"{marker} unexpectedly has target drop/deallocation scope evidence; "
-            "allocation-side recovery is no longer the proven mechanism"
-        )
+        for row in rows:
+            assert row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite", row
+            assert row.get("rewrite_status") == (
+                "actual_semantic_scope_enter_exit_rewrite_applied"
+            ), row
+            assert row.get("metadata_pairing_contract") in {
+                "semantic_scope_active_metadata",
+                "semantic_scope_drop_active_metadata",
+            }, row
+            assert int(row.get("type_id") or 0) != 0, row
+            assert int(row.get("module_id") or 0) != 0, row
+            assert int(row.get("flags") or 0) & TYPE_ISOLATED, row
+            assert int(row.get("placement_hint") or 0) & CROSS_THREAD_RECOVERY, row
         target_counts[marker] = len(rows)
     matches = int(runtime.get("recovery_identity_matches") or 0)
     mismatches = int(runtime.get("recovery_identity_mismatches") or 0)
-    assert matches == 0, (
-        "an active requested deallocation identity matched recovery; "
-        "allocation-side recovery was not required"
-    )
     assert mismatches == 0, "requested and recorded recovery identities disagreed"
+    target_scope_count = sum(target_counts.values())
+    if target_scope_count == 0:
+        assert matches == 0, (
+            "runtime reported exact requested-identity recovery without any "
+            "target drop/deallocation scope"
+        )
+        mechanism = "allocation_side_recovery"
+    else:
+        assert matches == target_scope_count, (
+            "every applied target drop/deallocation scope must produce one exact "
+            "requested-identity recovery match"
+        )
+        mechanism = "exact_requested_identity"
     return {
-        "allocation_side_recovery_required": True,
+        "pairing_mechanism": mechanism,
+        "allocation_side_recovery_required": target_scope_count == 0,
         "producer_target_drop_or_deallocation_scope_rows": target_counts["ProducerPayload"],
         "consumer_target_drop_or_deallocation_scope_rows": target_counts["ConsumerPayload"],
         "recovery_identity_matches": matches,
@@ -975,9 +994,10 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         assert row.get("placement_hint_basis") == "manual_cross_thread_recovery_hint", row
     # These exact Box::new scopes live inside opaque wrapper functions. The
     # wrapper calls are deliberately fail-closed above, so the thread escape is
-    # not an interprocedural proof for their bodies. The runner's uniform manual
-    # placement bit makes allocation-side recovery explicit without pretending
-    # the pass proved that missing connection.
+    # not an interprocedural proof for their bodies. Depending on rustc MIR
+    # exposure, deallocation either has an exact requested identity or requires
+    # the allocation-side record. The validator records which bounded mechanism
+    # was exercised without pretending the pass proved the missing connection.
     recovery_requirement = validate_allocation_side_recovery_requirement(audit, runtime)
     generic_drop_recovery = validate_generic_drop_recovery_requirement(audit, runtime)
 
@@ -1210,7 +1230,7 @@ def main() -> int:
             "Address values vary by process; the deterministic assertions are set disjointness and complete unique producer reuse.",
             "The source contains no manual semantic metadata or allocation ABI calls; identities come from actual rustc_driver semantic-scope rewriting.",
             "The runner supplies the TYPE_ISOLATED policy and cross-thread-recovery placement bit uniformly so the compared cache keys differ only by compiler-derived type identity.",
-            "The target-type audit contains no ProducerPayload or ConsumerPayload drop/deallocation scope, and runtime reports no requested recovery identity match; allocation-side records are therefore required for the observed typed reuse.",
+            "The target lifecycle must use one of two audited pairing mechanisms: exact applied target drop/deallocation scopes with one runtime recovery match per scope, or no target scope and zero matches with allocation-side recovery. Both require zero identity mismatches; the selected mechanism and counts are recorded in validation.",
             "The generic_drop helper must never receive an applied/planned semantic scope. If optimized_mir exposes its generic body, the audit requires exactly one audit-only generic Drop<T> skip; current rustc may instead codegen the monomorphized instance without exposing a helper row to this provider, which is reported as an evidence boundary rather than a manufactured skip. In both cases exact four-object runtime deltas require typed deallocation and cache insertion without fallback.",
             "Commit-bound evidence requires a clean HEAD, a repository-external output directory, and identical scoped source/toolchain bindings before and after the run.",
             "This covers two same-layout Rust types and one worker lifecycle, not universal UAF prevention or unmodified-toolchain deployment.",
