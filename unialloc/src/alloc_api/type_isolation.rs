@@ -23098,6 +23098,259 @@ mod tests {
     }
 
     #[test]
+    fn type_cache_owned_pointer_rejects_raw_reclaim_without_mutation() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        for (action, sentinel) in [("dealloc", 0xA5), ("realloc", 0x5A)] {
+            let ptr = unsafe { alloc.alloc_raw(layout) };
+            assert!(!ptr.is_null());
+            unsafe {
+                ptr.write_bytes(sentinel, layout.size());
+            }
+            assert_eq!(
+                register_global_type_cache_ownership(ptr),
+                GlobalTypeCacheOwnershipRegistration::Inserted
+            );
+            let registered = GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire);
+
+            let rejection = match action {
+                "dealloc" => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                    alloc.dealloc_raw(ptr, layout);
+                })),
+                "realloc" => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                    let _ = alloc.realloc_raw(ptr, layout, layout.size() * 2);
+                })),
+                _ => unreachable!(),
+            };
+            match rejection {
+                Ok(()) => panic!(
+                    "raw {} returned after reclaiming its independently owned test pointer",
+                    action
+                ),
+                Err(payload) => {
+                    let expected =
+                        payload.downcast_ref::<&str>().is_some_and(|message| {
+                            *message == "type-cache pointer already retained"
+                        }) || payload.downcast_ref::<std::string::String>().is_some_and(
+                            |message| message == "type-cache pointer already retained",
+                        );
+                    assert!(
+                        expected,
+                        "raw {} panicked for an unexpected reason before storage verification",
+                        action
+                    );
+                }
+            }
+
+            assert!(global_type_cache_contains_ptr(ptr));
+
+            assert_eq!(
+                GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+                registered,
+                "rejected raw entry point must not mutate ownership"
+            );
+            for offset in 0..layout.size() {
+                assert_eq!(unsafe { ptr.add(offset).read() }, sentinel);
+            }
+
+            assert!(unregister_global_type_cache_ownership(ptr));
+            assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+            unsafe {
+                alloc.dealloc_raw(ptr, layout);
+            }
+        }
+    }
+
+    #[test]
+    fn type_cache_owned_pointer_globalalloc_entrypoints_fail_stop() {
+        const CHILD_ENV: &str = "UNIALLOC_TYPE_CACHE_GLOBALALLOC_DEATH";
+        const TEST_NAME: &str = concat!(
+            "alloc_api::type_isolation::tests::",
+            "type_cache_owned_pointer_globalalloc_entrypoints_fail_stop"
+        );
+
+        if let Some(action) = std::env::var_os(CHILD_ENV) {
+            const EXPECTED_ABORT_MARKER: &[u8] =
+                b"UNIALLOC_TYPE_CACHE_GUARD_ABORT:type-cache pointer already retained\n";
+            const UNEXPECTED_ABORT_MARKER: &[u8] = b"UNIALLOC_UNEXPECTED_GLOBALALLOC_PANIC\n";
+            std::panic::set_hook(Box::new(|info| {
+                let expected = info
+                    .payload()
+                    .downcast_ref::<&str>()
+                    .is_some_and(|message| *message == "type-cache pointer already retained")
+                    || info
+                        .payload()
+                        .downcast_ref::<std::string::String>()
+                        .is_some_and(|message| message == "type-cache pointer already retained");
+                let marker = if expected {
+                    EXPECTED_ABORT_MARKER
+                } else {
+                    UNEXPECTED_ABORT_MARKER
+                };
+                let _ = std::io::Write::write_all(&mut std::io::stderr(), marker);
+                std::process::abort();
+            }));
+            let _guard = test_guard();
+            unsafe {
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+            }
+            let alloc = RustAllocator::new();
+            let layout =
+                Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+            let ptr = unsafe { alloc.alloc_raw(layout) };
+            assert!(!ptr.is_null());
+            unsafe {
+                ptr.write_bytes(0x5A, layout.size());
+            }
+            assert_eq!(
+                register_global_type_cache_ownership(ptr),
+                GlobalTypeCacheOwnershipRegistration::Inserted
+            );
+
+            match action.to_str().expect("ASCII child action") {
+                "dealloc" => unsafe {
+                    <RustAllocator as GlobalAlloc>::dealloc(&alloc, ptr, layout)
+                },
+                "realloc" => unsafe {
+                    let _ = <RustAllocator as GlobalAlloc>::realloc(
+                        &alloc,
+                        ptr,
+                        layout,
+                        layout.size() * 2,
+                    );
+                },
+                other => panic!("unknown GlobalAlloc death-test action: {}", other),
+            }
+            let _ = std::io::Write::write_all(
+                &mut std::io::stderr(),
+                b"UNIALLOC_GLOBALALLOC_GUARD_RETURNED\n",
+            );
+            std::process::abort();
+        }
+
+        for action in ["dealloc", "realloc"] {
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("current type-isolation test executable"),
+            )
+            .args(["--exact", TEST_NAME, "--nocapture"])
+            .env(CHILD_ENV, action)
+            .env("RUST_BACKTRACE", "0")
+            .output()
+            .expect("spawn isolated GlobalAlloc cache-ownership death test");
+            assert!(
+                !output.status.success(),
+                "GlobalAlloc {} child unexpectedly succeeded",
+                action
+            );
+            let stderr = std::string::String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains(
+                    "UNIALLOC_TYPE_CACHE_GUARD_ABORT:type-cache pointer already retained"
+                ),
+                "GlobalAlloc {} child failed for the wrong reason: {}",
+                action,
+                stderr
+            );
+            assert!(
+                !stderr.contains("UNIALLOC_GLOBALALLOC_GUARD_RETURNED")
+                    && !stderr.contains("UNIALLOC_UNEXPECTED_GLOBALALLOC_PANIC"),
+                "GlobalAlloc {} bypassed the ownership guard: {}",
+                action,
+                stderr
+            );
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn type_cache_registry_pressure_bypasses_real_semantic_free() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xD0B1_EF04)
+            .with_module(0xC0DE_D0B4)
+            .with_callsite(0xA110_D0B4)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_FORCE_INITIALIZE);
+        assert!(type_cache_eligible(layout, metadata));
+        assert!(!compiler_type_isolated_recovery_fast_path(metadata));
+        let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+
+        let target = global_type_cache_ownership_shard_and_slot(ptr);
+        let mut colliders = Vec::with_capacity(GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT);
+        let mut address = 8usize;
+        while colliders.len() < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
+            let candidate = address as *mut u8;
+            address = address.checked_add(8).unwrap();
+            if candidate != ptr
+                && candidate as usize != GLOBAL_TYPE_CACHE_OWNERSHIP_TOMBSTONE
+                && global_type_cache_ownership_shard_and_slot(candidate) == target
+            {
+                colliders.push(candidate);
+            }
+        }
+        for &candidate in &colliders {
+            assert_eq!(
+                register_global_type_cache_ownership(candidate),
+                GlobalTypeCacheOwnershipRegistration::Inserted
+            );
+        }
+        let saturated_count = GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire);
+        assert_eq!(saturated_count, GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT);
+        assert_eq!(
+            register_global_type_cache_ownership(ptr),
+            GlobalTypeCacheOwnershipRegistration::Full
+        );
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            saturated_count
+        );
+
+        semantic_stats_reset();
+        unsafe {
+            alloc.dealloc_with_metadata(ptr, layout, metadata);
+        }
+        let stats = semantic_stats_snapshot();
+        assert_eq!(stats.typed_deallocations, 1);
+        assert_eq!(stats.typed_cache_inserts, 0);
+        assert_eq!(stats.typed_cache_hits, 0);
+        assert_eq!(stats.typed_cache_bypasses, 1);
+        assert!(!global_type_cache_contains_ptr(ptr));
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            saturated_count,
+            "real semantic-free bypass must not disturb synthetic owners"
+        );
+        for &candidate in &colliders {
+            assert!(global_type_cache_contains_ptr(candidate));
+        }
+
+        for candidate in colliders {
+            assert!(unregister_global_type_cache_ownership(candidate));
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        semantic_stats_recording_disable();
+    }
+
+    #[test]
     fn typed_duplicate_free_metadata_segregated_local_does_not_publish_cache_aliases() {
         let _guard = test_guard();
         let _cleanup = SemanticStateCleanup;
