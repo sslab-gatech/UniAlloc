@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -297,6 +298,13 @@ def applied_type_rows(audit: Dict[str, Any], marker: str) -> List[Dict[str, Any]
     ]
 
 
+def callee_mentions_exact_function(callee: Any, function_name: str) -> bool:
+    return re.search(
+        rf"(?<![A-Za-z0-9_]){re.escape(function_name)}(?![A-Za-z0-9_])",
+        str(callee or ""),
+    ) is not None
+
+
 def validate_fail_closed_factory_provenance(audit: Dict[str, Any]) -> Dict[str, Any]:
     summary = audit.get("summary") or {}
     rows = [
@@ -338,7 +346,7 @@ def validate_fail_closed_factory_provenance(audit: Dict[str, Any]) -> Dict[str, 
         matching = [
             row
             for row in rows
-            if f"::{function_name}" in str(row.get("callee") or "")
+            if callee_mentions_exact_function(row.get("callee"), function_name)
             and destination_marker in str(row.get("destination_type") or "")
         ]
         assert matching, (
