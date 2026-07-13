@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove custom non-generic ADT destinations expose concrete heap owners."""
+"""Fail closed on custom ADT returns without exact allocation provenance."""
 
 from __future__ import annotations
 
@@ -14,7 +14,9 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 PASS_SOURCE = ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
 PROBE_NAME = "non_generic_adt_destination_owner_probe"
-FACTORY_FUNCTION = "make_buffer"
+ALLOCATING_FACTORY_FUNCTION = "allocate_buffer"
+UNRELATED_PASSTHROUGH_FUNCTION = "return_existing_with_unrelated_allocation"
+PURE_PASSTHROUGH_FUNCTION = "return_existing_without_allocation"
 AMBIGUOUS_FUNCTION = "make_ambiguous"
 RAW_FUNCTION = "make_raw_marker"
 BORROWED_FUNCTION = "make_borrowed"
@@ -97,10 +99,27 @@ struct Phantom {
 }
 
 #[inline(never)]
-fn make_buffer(capacity: usize) -> Buffer {
+fn allocate_buffer(capacity: usize) -> Buffer {
     Buffer {
         bytes: Vec::with_capacity(capacity),
     }
+}
+
+#[inline(never)]
+fn return_existing_with_unrelated_allocation(
+    existing: Buffer,
+    capacity: usize,
+) -> Buffer {
+    let mut unrelated = String::with_capacity(capacity);
+    unrelated.push('x');
+    drop(unrelated);
+    existing
+}
+
+#[inline(never)]
+fn return_existing_without_allocation(existing: Buffer, capacity: usize) -> Buffer {
+    let _ = capacity;
+    existing
 }
 
 #[inline(never)]
@@ -136,9 +155,34 @@ fn opaque_false() -> bool {
 }
 
 fn main() {
+    // Seed both passthrough inputs before the measured interval. Their Vec
+    // storage is existing ownership, not an allocation performed by either
+    // helper call below.
+    let unrelated_existing = Buffer {
+        bytes: Vec::with_capacity(64),
+    };
+    let pure_existing = Buffer {
+        bytes: Vec::with_capacity(64),
+    };
     semantic_stats_reset();
 
-    let value = make_buffer(64);
+    let before_unrelated = semantic_metadata_validation_snapshot();
+    let unrelated = return_existing_with_unrelated_allocation(unrelated_existing, 32);
+    let after_unrelated = semantic_metadata_validation_snapshot();
+    let unrelated_mismatch_delta = after_unrelated
+        .recovery_identity_mismatches
+        .saturating_sub(before_unrelated.recovery_identity_mismatches);
+    std::mem::forget(unrelated);
+
+    let before_pure = semantic_metadata_validation_snapshot();
+    let pure = return_existing_without_allocation(pure_existing, 32);
+    let after_pure = semantic_metadata_validation_snapshot();
+    let pure_mismatch_delta = after_pure
+        .recovery_identity_mismatches
+        .saturating_sub(before_pure.recovery_identity_mismatches);
+    std::mem::forget(pure);
+
+    let value = allocate_buffer(64);
     assert_eq!(value.bytes.capacity(), 64);
     let after_allocation = semantic_stats_snapshot();
     drop(value);
@@ -167,6 +211,8 @@ fn main() {
             "{{",
             "\"source\":\"non_generic_adt_destination_owner_probe\",",
             "\"allocation_type_id\":{},",
+            "\"unrelated_passthrough_mismatch_delta\":{},",
+            "\"pure_passthrough_mismatch_delta\":{},",
             "\"typed_allocations\":{},",
             "\"typed_deallocations\":{},",
             "\"fallback_allocations\":{},",
@@ -177,6 +223,8 @@ fn main() {
             "}}"
         ),
         after_allocation.last_type_id,
+        unrelated_mismatch_delta,
+        pure_mismatch_delta,
         after_drop.typed_allocations,
         after_drop.typed_deallocations,
         after_drop.fallback_allocations,
@@ -220,16 +268,60 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     rows = audit.get("rewrite_candidates")
     assert isinstance(rows, list), rows
 
-    factory_rows = callee_rows(rows, "main", FACTORY_FUNCTION)
+    runtime = next(
+        json.loads(line)
+        for line in stdout.splitlines()
+        if line.startswith("{") and PROBE_NAME in line
+    )
+    # Keep these assertions before the audit assertions so the pre-fix
+    # regression reports the concrete runtime safety violation, not merely the
+    # over-broad audit classification.
+    assert int(runtime["unrelated_passthrough_mismatch_delta"]) == 0, runtime
+    assert int(runtime["pure_passthrough_mismatch_delta"]) == 0, runtime
+
+    factory_rows = callee_rows(rows, "main", ALLOCATING_FACTORY_FUNCTION)
     assert len(factory_rows) == 1, factory_rows
     factory = factory_rows[0]
-    assert factory.get("lowering_kind") == "semantic_scope_enter_exit_rewrite", factory
-    assert factory.get("rewrite_status") == APPLIED_STATUS, factory
-    assert factory.get("metadata_pairing_contract") == "semantic_scope_active_metadata", factory
-    semantic_type = str(factory.get("semantic_object_type") or "")
-    assert semantic_type.startswith("std::vec::Vec<u8"), factory
+    assert factory.get("lowering_kind") == "semantic_scope_unsolved_heap_object_candidate", factory
+    assert factory.get("rewrite_status") == (
+        "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+    ), factory
+    assert factory.get("metadata_pairing_contract") == (
+        "audit_only_unresolved_heap_object_type"
+    ), factory
     assert "Buffer" in str(factory.get("destination_type") or ""), factory
-    assert int(factory.get("type_id") or 0) != 0, factory
+
+    internal_allocation_rows = callee_rows(
+        rows, ALLOCATING_FACTORY_FUNCTION, "with_capacity"
+    )
+    assert len(internal_allocation_rows) == 1, internal_allocation_rows
+    internal_allocation = internal_allocation_rows[0]
+    assert internal_allocation.get("lowering_kind") == (
+        "semantic_scope_enter_exit_rewrite"
+    ), internal_allocation
+    assert internal_allocation.get("rewrite_status") == APPLIED_STATUS, internal_allocation
+    semantic_type = str(internal_allocation.get("semantic_object_type") or "")
+    assert semantic_type.startswith("std::vec::Vec<u8"), internal_allocation
+    assert int(internal_allocation.get("type_id") or 0) != 0, internal_allocation
+
+    passthrough_rows: dict[str, dict[str, object]] = {}
+    for function_name in (
+        UNRELATED_PASSTHROUGH_FUNCTION,
+        PURE_PASSTHROUGH_FUNCTION,
+    ):
+        matching = callee_rows(rows, "main", function_name)
+        assert len(matching) == 1, (function_name, matching)
+        row = matching[0]
+        assert row.get("lowering_kind") == (
+            "semantic_scope_unsolved_heap_object_candidate"
+        ), row
+        assert row.get("rewrite_status") == (
+            "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+        ), row
+        assert row.get("metadata_pairing_contract") == (
+            "audit_only_unresolved_heap_object_type"
+        ), row
+        passthrough_rows[function_name] = row
 
     drop_rows = [
         row
@@ -244,7 +336,7 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     for row in drop_rows:
         assert row.get("rewrite_status") == "actual_semantic_scope_drop_rewrite_applied", row
         assert row.get("semantic_object_type") == semantic_type, row
-        assert int(row.get("type_id") or 0) == int(factory["type_id"]), row
+        assert int(row.get("type_id") or 0) == int(internal_allocation["type_id"]), row
 
     ambiguous_rows = callee_rows(rows, "main", AMBIGUOUS_FUNCTION)
     assert len(ambiguous_rows) == 1, ambiguous_rows
@@ -284,22 +376,22 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
             str(row.get("rewrite_status")) for row in excluded_rows
         ]
 
-    runtime = next(
-        json.loads(line)
-        for line in stdout.splitlines()
-        if line.startswith("{") and PROBE_NAME in line
-    )
-    assert int(runtime["allocation_type_id"]) == int(factory["type_id"]), runtime
-    assert int(runtime["typed_allocations"]) >= 1, runtime
-    assert int(runtime["typed_deallocations"]) >= 1, runtime
+    assert int(runtime["allocation_type_id"]) == int(internal_allocation["type_id"]), runtime
+    # Only exact internal constructors are typed: String::with_capacity inside
+    # the unrelated passthrough carries String identity, while
+    # Vec::with_capacity / Buffer Drop carry the backing Vec identity.  The
+    # custom aggregate call itself stays audit-only and cannot misattribute the
+    # transient String allocation to the returned Buffer's Vec identity.
+    assert int(runtime["typed_allocations"]) == 2, runtime
+    assert int(runtime["typed_deallocations"]) == 2, runtime
     for field in (
         "fallback_allocations",
         "fallback_deallocations",
         "raw_alloc_no_metadata",
         "raw_dealloc_no_metadata",
-        "recovery_identity_mismatches",
     ):
         assert int(runtime[field]) == 0, (field, runtime)
+    assert int(runtime["recovery_identity_mismatches"]) == 0, runtime
 
     return {
         "factory": {
@@ -311,6 +403,27 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
                 "type_id",
                 "rewrite_status",
             )
+        },
+        "internal_allocation": {
+            key: internal_allocation.get(key)
+            for key in (
+                "callee",
+                "semantic_object_type",
+                "type_id",
+                "rewrite_status",
+            )
+        },
+        "passthroughs": {
+            function_name: {
+                key: row.get(key)
+                for key in (
+                    "callee",
+                    "destination_type",
+                    "rewrite_status",
+                    "metadata_pairing_contract",
+                )
+            }
+            for function_name, row in passthrough_rows.items()
         },
         "drop": {
             "count": len(drop_rows),
@@ -411,7 +524,8 @@ def main() -> int:
                 "validated": True,
                 "evidence": evidence,
                 "boundaries": [
-                    "The positive case is a concrete non-generic custom ADT with exactly one supported owned field; borrowed and PhantomData fields do not manufacture ownership.",
+                    "Custom aggregate return calls are discovered but remain audit-only without an exact constructor matcher or sound callee-body allocation proof; the positive Buffer allocation is typed by its exact internal Vec::with_capacity and paired Buffer Drop rewrites instead.",
+                    "Returning an existing Buffer, with either an unrelated transient String allocation or no allocation, must not activate a Vec semantic scope and records zero recovery mismatches.",
                     "Multiple supported owners and structurally unresolved raw-pointer fields remain audit-only and fail closed.",
                     "This is actual target-crate MIR rewrite and runtime metadata evidence, not arbitrary-application coverage or performance evidence.",
                 ],
