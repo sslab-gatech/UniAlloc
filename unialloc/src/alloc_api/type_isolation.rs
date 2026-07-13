@@ -63,6 +63,24 @@ const GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_COUNT: usize = 8;
 const GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_SLOTS: usize = 32;
 const GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_MASK: usize =
     GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_COUNT - 1;
+/// Process-visible ownership records for objects retained in semantic type caches.
+///
+/// Cache payloads remain thread-local, but ownership must be process-visible so
+/// a duplicate free on another thread cannot publish the same address into a
+/// second TLS cache.  The registry is bounded and allocation-free: when a probe
+/// window is full, the incoming object bypasses the semantic cache and returns
+/// to the raw allocator instead of creating untracked ownership.
+const GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT: usize = 8;
+#[cfg(not(feature = "fixed_heap"))]
+const GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS: usize = 1024;
+#[cfg(feature = "fixed_heap")]
+const GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS: usize = 128;
+#[cfg(not(feature = "fixed_heap"))]
+const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 64;
+#[cfg(feature = "fixed_heap")]
+const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 32;
+const GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_MASK: usize = GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT - 1;
+const GLOBAL_TYPE_CACHE_OWNERSHIP_TOMBSTONE: usize = usize::MAX;
 /// Maximum allocator-rounded bytes retained by one thread's delayed-free quarantine ring.
 ///
 /// Delayed free is a reuse-hardening policy, but retaining 32 large objects can
@@ -2428,6 +2446,18 @@ impl GlobalDelayedFreeOwnershipTable {
     }
 }
 
+struct GlobalTypeCacheOwnershipTable {
+    ptrs: [usize; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+}
+
+impl GlobalTypeCacheOwnershipTable {
+    const fn empty() -> Self {
+        Self {
+            ptrs: [0; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+        }
+    }
+}
+
 impl DelayedFreeSlot {
     const fn empty() -> Self {
         Self {
@@ -2565,6 +2595,19 @@ static GLOBAL_DELAYED_FREE_OWNERSHIP: [Mutex<GlobalDelayedFreeOwnershipTable>;
     Mutex::new(GlobalDelayedFreeOwnershipTable::empty()),
 ];
 static GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+static GLOBAL_TYPE_CACHE_OWNERSHIP: [Mutex<GlobalTypeCacheOwnershipTable>;
+    GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT] = [
+    Mutex::new(GlobalTypeCacheOwnershipTable::empty()),
+    Mutex::new(GlobalTypeCacheOwnershipTable::empty()),
+    Mutex::new(GlobalTypeCacheOwnershipTable::empty()),
+    Mutex::new(GlobalTypeCacheOwnershipTable::empty()),
+    Mutex::new(GlobalTypeCacheOwnershipTable::empty()),
+    Mutex::new(GlobalTypeCacheOwnershipTable::empty()),
+    Mutex::new(GlobalTypeCacheOwnershipTable::empty()),
+    Mutex::new(GlobalTypeCacheOwnershipTable::empty()),
+];
+static GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[thread_local]
 static mut MEMORY_TAGS: [TaggedAllocation; MEMORY_TAG_FAST_SLOTS] =
@@ -6864,6 +6907,7 @@ unsafe fn pop_inline_type_cache_eligible_with_key(
     let entry = INLINE_TYPE_CACHE_ENTRY;
     if entry.matches_cached_key(layout, metadata, cache_key) {
         INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
+        let _ = unregister_global_type_cache_ownership(entry.ptr);
         record_stats_type_cache_hit(metadata);
         Some(entry.ptr)
     } else {
@@ -6974,6 +7018,7 @@ unsafe fn pop_type_cache_eligible_with_key(
                 // later push could splice back into the hot path.
                 clear_type_cache_slot(slot, slot_key);
             }
+            let _ = unregister_global_type_cache_ownership(current);
             record_stats_type_cache_hit(metadata);
             return Some(current);
         }
@@ -7141,6 +7186,7 @@ unsafe fn finish_popped_segregated_type_cache_entry(
     entry: SegregatedTypeCacheEntry,
 ) -> *mut u8 {
     verify_metadata_record_auth(entry.ptr, layout, metadata, entry.metadata, entry.auth);
+    let _ = unregister_global_type_cache_ownership(entry.ptr);
     record_stats_type_cache_hit(metadata);
     entry.ptr
 }
@@ -7904,10 +7950,25 @@ unsafe fn cache_compiler_type_metadata_free(
         record_stats_type_cache_bypass(metadata);
         return false;
     }
-    match compiler_type_metadata_cache_class(layout, metadata) {
-        Some(SemanticTypeCacheClass::Segregated) => {
+    let cache_class = match compiler_type_metadata_cache_class(layout, metadata) {
+        Some(cache_class) => cache_class,
+        None => {
+            record_stats_type_cache_bypass(metadata);
+            return false;
+        }
+    };
+    let ownership = match begin_global_type_cache_ownership(ptr) {
+        Some(ownership) => ownership,
+        None => {
+            record_stats_type_cache_bypass(metadata);
+            return false;
+        }
+    };
+    match cache_class {
+        SemanticTypeCacheClass::Segregated => {
             match push_segregated_type_cache_eligible(ptr, layout, metadata) {
                 Ok(evicted) => {
+                    ownership.commit();
                     if let Some(slot) = evicted {
                         release_evicted_segregated_type_cache_entry(alloc, slot);
                     }
@@ -7916,12 +7977,13 @@ unsafe fn cache_compiler_type_metadata_free(
                 Err(()) => false,
             }
         }
-        Some(SemanticTypeCacheClass::Plain) => {
-            push_plain_semantic_type_cache_eligible(ptr, layout, metadata)
-        }
-        None => {
-            record_stats_type_cache_bypass(metadata);
-            false
+        SemanticTypeCacheClass::Plain => {
+            if push_plain_semantic_type_cache_eligible(ptr, layout, metadata) {
+                ownership.commit();
+                true
+            } else {
+                false
+            }
         }
     }
 }
@@ -7936,10 +7998,25 @@ unsafe fn cache_semantic_free(
         record_stats_type_cache_bypass(metadata);
         return false;
     }
-    match semantic_type_cache_class(layout, metadata) {
-        Some(SemanticTypeCacheClass::Segregated) => {
+    let cache_class = match semantic_type_cache_class(layout, metadata) {
+        Some(cache_class) => cache_class,
+        None => {
+            record_stats_type_cache_bypass(metadata);
+            return false;
+        }
+    };
+    let ownership = match begin_global_type_cache_ownership(ptr) {
+        Some(ownership) => ownership,
+        None => {
+            record_stats_type_cache_bypass(metadata);
+            return false;
+        }
+    };
+    match cache_class {
+        SemanticTypeCacheClass::Segregated => {
             match push_segregated_type_cache_eligible(ptr, layout, metadata) {
                 Ok(evicted) => {
+                    ownership.commit();
                     if let Some(slot) = evicted {
                         release_evicted_segregated_type_cache_entry(alloc, slot);
                     }
@@ -7948,12 +8025,13 @@ unsafe fn cache_semantic_free(
                 Err(()) => false,
             }
         }
-        Some(SemanticTypeCacheClass::Plain) => {
-            push_plain_semantic_type_cache_eligible(ptr, layout, metadata)
-        }
-        None => {
-            record_stats_type_cache_bypass(metadata);
-            false
+        SemanticTypeCacheClass::Plain => {
+            if push_plain_semantic_type_cache_eligible(ptr, layout, metadata) {
+                ownership.commit();
+                true
+            } else {
+                false
+            }
         }
     }
 }
@@ -7982,6 +8060,7 @@ unsafe fn release_evicted_segregated_type_cache_entry(
     if slot.metadata.requests(FLAG_FORCE_INITIALIZE) {
         core::ptr::write_bytes(slot.ptr, 0, evicted_layout.size());
     }
+    let _ = unregister_global_type_cache_ownership(slot.ptr);
     alloc.dealloc_raw(slot.ptr, evicted_layout);
 }
 
@@ -9125,6 +9204,168 @@ unsafe fn dealloc_guarded(ptr: *mut u8, layout: Layout, metadata: AllocationMeta
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GlobalTypeCacheOwnershipRegistration {
+    Inserted,
+    Duplicate,
+    Full,
+}
+
+struct PendingGlobalTypeCacheOwnership {
+    ptr: *mut u8,
+    committed: bool,
+}
+
+impl PendingGlobalTypeCacheOwnership {
+    #[inline]
+    fn new(ptr: *mut u8) -> Self {
+        Self {
+            ptr,
+            committed: false,
+        }
+    }
+
+    #[inline]
+    fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for PendingGlobalTypeCacheOwnership {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = unregister_global_type_cache_ownership(self.ptr);
+        }
+    }
+}
+
+#[inline]
+fn global_type_cache_ownership_hash(ptr: *mut u8) -> usize {
+    let mut value = (ptr as usize) >> 3;
+    value ^= value >> 17;
+    value ^= value >> 31;
+    value.wrapping_mul(0x9e37_79b1usize)
+}
+
+#[inline]
+fn global_type_cache_ownership_shard_and_slot(ptr: *mut u8) -> (usize, usize) {
+    let hash = global_type_cache_ownership_hash(ptr);
+    (
+        hash & GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_MASK,
+        (hash >> 3) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1),
+    )
+}
+
+fn global_type_cache_contains_ptr(ptr: *mut u8) -> bool {
+    if ptr.is_null() || GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire) == 0 {
+        return false;
+    }
+    let ptr_key = ptr as usize;
+    let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
+    let table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
+    let mut offset = 0usize;
+    while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
+        let candidate =
+            table.ptrs[(start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1)];
+        if candidate == ptr_key {
+            return true;
+        }
+        if candidate == 0 {
+            return false;
+        }
+        offset += 1;
+    }
+    false
+}
+
+fn register_global_type_cache_ownership(ptr: *mut u8) -> GlobalTypeCacheOwnershipRegistration {
+    if ptr.is_null() {
+        return GlobalTypeCacheOwnershipRegistration::Full;
+    }
+    let ptr_key = ptr as usize;
+    debug_assert_ne!(ptr_key, GLOBAL_TYPE_CACHE_OWNERSHIP_TOMBSTONE);
+    let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
+    let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
+    let mut first_tombstone = None;
+    let mut offset = 0usize;
+    while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
+        let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
+        let candidate = table.ptrs[idx];
+        if candidate == ptr_key {
+            return GlobalTypeCacheOwnershipRegistration::Duplicate;
+        }
+        if candidate == GLOBAL_TYPE_CACHE_OWNERSHIP_TOMBSTONE && first_tombstone.is_none() {
+            first_tombstone = Some(idx);
+        } else if candidate == 0 {
+            let insert_idx = first_tombstone.unwrap_or(idx);
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_add(1, Ordering::Release);
+            table.ptrs[insert_idx] = ptr_key;
+            return GlobalTypeCacheOwnershipRegistration::Inserted;
+        }
+        offset += 1;
+    }
+    if let Some(idx) = first_tombstone {
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_add(1, Ordering::Release);
+        table.ptrs[idx] = ptr_key;
+        return GlobalTypeCacheOwnershipRegistration::Inserted;
+    }
+    GlobalTypeCacheOwnershipRegistration::Full
+}
+
+fn unregister_global_type_cache_ownership(ptr: *mut u8) -> bool {
+    if ptr.is_null() || GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire) == 0 {
+        return false;
+    }
+    let ptr_key = ptr as usize;
+    let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
+    let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
+    let mut offset = 0usize;
+    while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
+        let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
+        let candidate = table.ptrs[idx];
+        if candidate == ptr_key {
+            table.ptrs[idx] = GLOBAL_TYPE_CACHE_OWNERSHIP_TOMBSTONE;
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+            return true;
+        }
+        if candidate == 0 {
+            return false;
+        }
+        offset += 1;
+    }
+    false
+}
+
+fn begin_global_type_cache_ownership(ptr: *mut u8) -> Option<PendingGlobalTypeCacheOwnership> {
+    match register_global_type_cache_ownership(ptr) {
+        GlobalTypeCacheOwnershipRegistration::Inserted => {
+            Some(PendingGlobalTypeCacheOwnership::new(ptr))
+        }
+        GlobalTypeCacheOwnershipRegistration::Duplicate => {
+            panic!("type-cache pointer already retained")
+        }
+        GlobalTypeCacheOwnershipRegistration::Full => None,
+    }
+}
+
+#[inline]
+fn reject_global_type_cache_owned_pointer(ptr: *mut u8) {
+    if global_type_cache_contains_ptr(ptr) {
+        panic!("type-cache pointer already retained");
+    }
+}
+
+#[cfg(test)]
+fn clear_global_type_cache_ownership_for_test() {
+    let mut shard_idx = 0usize;
+    while shard_idx < GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT {
+        GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock().ptrs =
+            [0; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS];
+        shard_idx += 1;
+    }
+    GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.store(0, Ordering::Release);
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum GlobalDelayedFreeRegistration {
     Inserted,
     Duplicate,
@@ -9184,6 +9425,7 @@ fn global_delayed_free_contains_ptr(ptr: *mut u8) -> bool {
 /// the metadata-aware deallocation transaction.
 #[inline]
 pub(crate) fn reject_global_delayed_free_owned_pointer(ptr: *mut u8) {
+    reject_global_type_cache_owned_pointer(ptr);
     if global_delayed_free_contains_ptr(ptr) {
         panic!("delayed-free pointer already quarantined");
     }
@@ -9484,13 +9726,17 @@ unsafe fn release_delayed_slot(alloc: &RustAllocator, slot: DelayedFreeSlot) {
     }
     let layout = checked_side_table_layout(slot.size, slot.align, "delayed free");
     verify_metadata_record_auth(slot.ptr, layout, slot.metadata, slot.metadata, slot.auth);
-    let _ = unregister_global_delayed_free_ownership(slot.ptr);
     let metadata = slot
         .metadata
         .with_flags(slot.metadata.flags & !FLAG_DELAYED_FREE);
     if cache_semantic_free(alloc, slot.ptr, layout, metadata) {
+        // Publish process-visible type-cache ownership before retiring the
+        // quarantine record.  The overlap closes the cross-thread window where
+        // the pointer would otherwise be visible in neither ownership domain.
+        let _ = unregister_global_delayed_free_ownership(slot.ptr);
         return;
     }
+    let _ = unregister_global_delayed_free_ownership(slot.ptr);
     if metadata.requests(FLAG_FORCE_INITIALIZE) {
         core::ptr::write_bytes(slot.ptr, 0, layout.size());
     }
@@ -9566,6 +9812,7 @@ pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAl
     INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
     if !inline.is_empty() {
         if let Ok(layout) = Layout::from_size_align(inline.size, inline.align) {
+            let _ = unregister_global_type_cache_ownership(inline.ptr);
             alloc.dealloc_raw(inline.ptr, layout);
             released = released.saturating_add(1);
         }
@@ -9587,6 +9834,7 @@ pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAl
             let align = node.add(2).read();
             match Layout::from_size_align(size, align) {
                 Ok(layout) => {
+                    let _ = unregister_global_type_cache_ownership(current);
                     alloc.dealloc_raw(current, layout);
                     released = released.saturating_add(1);
                 }
@@ -9787,6 +10035,7 @@ unsafe fn drain_segregated_entry_at_thread_exit(
     if entry.metadata.requests(FLAG_FORCE_INITIALIZE) {
         core::ptr::write_bytes(entry.ptr, 0, layout.size());
     }
+    let _ = unregister_global_type_cache_ownership(entry.ptr);
     alloc.dealloc_raw(entry.ptr, layout);
     true
 }
@@ -10251,6 +10500,12 @@ impl RustAllocator {
         metadata: AllocationMetadata,
         consume_recovery_record: bool,
     ) {
+        // Type-cache ownership is process-visible even though the payload cache
+        // itself is TLS. Reject a duplicate before recovery-record consumption,
+        // statistics, cache mutation, or raw release can publish the same address
+        // under a second owner.
+        reject_global_type_cache_owned_pointer(ptr);
+
         // Local TLS state remains a defensive authority if a stale/corrupt
         // test or older caller produced an entry without the process-visible
         // registry. Check it before trying to acquire ownership for this
@@ -12592,6 +12847,7 @@ mod tests {
         clear_auto_layout_metadata_hot_slot();
         clear_hugepage_segregated_type_cache_for_test();
         clear_memory_tags_for_test();
+        clear_global_type_cache_ownership_for_test();
         clear_auto_allocation_records();
     }
 
@@ -14951,6 +15207,7 @@ mod tests {
                         entry.align,
                         "test segregated metadata",
                     );
+                    let _ = unregister_global_type_cache_ownership(entry.ptr);
                     alloc.dealloc_raw(entry.ptr, layout);
                 }
                 bucket.entries[entry_idx] = SegregatedTypeCacheEntry::empty();
