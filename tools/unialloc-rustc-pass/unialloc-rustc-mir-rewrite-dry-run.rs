@@ -2516,6 +2516,59 @@ fn exact_alloc_vec_def_path(path: &str) -> bool {
     )
 }
 
+fn exact_alloc_vecdeque_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "alloc::collections::vec_deque::VecDeque" | "std::collections::VecDeque"
+    )
+}
+
+fn exact_alloc_vecdeque_method_def_path(path: &str, method: &str) -> bool {
+    let normalized = strip_rustc_crate_disambiguators(path);
+    if [
+        "alloc::collections::vec_deque::VecDeque::<T, A>::",
+        "std::collections::VecDeque::<T, A>::",
+        "alloc::collections::vec_deque::VecDeque::<T>::",
+        "std::collections::VecDeque::<T>::",
+    ]
+    .iter()
+    .any(|prefix| normalized.strip_prefix(prefix) == Some(method))
+    {
+        return true;
+    }
+
+    let impl_index = match normalized
+        .strip_prefix("alloc::collections::vec_deque::{impl#")
+        .and_then(|rest| rest.strip_suffix(&format!("}}::{method}")))
+    {
+        Some(index) => index,
+        None => return false,
+    };
+    !impl_index.is_empty() && impl_index.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn exact_alloc_vecdeque_method_def_id(tcx: TyCtxt<'_>, def_id: DefId, method: &str) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "alloc"
+        && exact_alloc_vecdeque_method_def_path(&tcx.def_path_str(def_id), method)
+}
+
+fn exact_alloc_vecdeque_with_capacity_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    exact_alloc_vecdeque_method_def_id(tcx, def_id, "with_capacity")
+}
+
+fn exact_alloc_vecdeque_capacity_only_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    [
+        "reserve",
+        "reserve_exact",
+        "try_reserve",
+        "try_reserve_exact",
+        "shrink_to",
+        "shrink_to_fit",
+    ]
+    .iter()
+    .any(|method| exact_alloc_vecdeque_method_def_id(tcx, def_id, method))
+}
+
 fn exact_alloc_vec_with_capacity_def_path(path: &str) -> bool {
     let normalized = strip_rustc_crate_disambiguators(path);
     if matches!(
@@ -3518,6 +3571,81 @@ fn direct_outer_vec_destination_owner<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> 
     }
 }
 
+fn direct_outer_vecdeque_owner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    mut owner_ty: Ty<'tcx>,
+) -> Option<(String, DefId)> {
+    while let ty::Ref(_, inner, _) = owner_ty.kind() {
+        owner_ty = *inner;
+    }
+    if clone_result_has_unresolved_params(owner_ty) {
+        return None;
+    }
+
+    let (owner_def, owner_args) = match owner_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, owner_def.did(), exact_alloc_vecdeque_def_path)
+        || !matches!(owner_args.len(), 1 | 2)
+    {
+        return None;
+    }
+
+    // Current VecDeque carries an explicit allocator parameter while the
+    // pinned legacy surface does not. Exact public capacity APIs use Global;
+    // allocator-specific variants must not inherit this direct-owner proof.
+    if owner_args.len() == 2 {
+        let allocator_ty = generic_arg_type(owner_args.get(1)?)?;
+        let allocator_def = match allocator_ty.kind() {
+            ty::Adt(def, args) if args.is_empty() => def,
+            _ => return None,
+        };
+        if !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path)
+            || allocator_def.did().krate != owner_def.did().krate
+        {
+            return None;
+        }
+    }
+
+    Some((format!("{:?}", owner_ty), owner_def.did()))
+}
+
+fn direct_outer_vecdeque_with_capacity_destination_owner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<String> {
+    if !exact_alloc_vecdeque_with_capacity_def_id(tcx, callee_def_id)
+        || argument_tys.len() != 1
+        || !matches!(argument_tys[0].kind(), ty::Uint(ty::UintTy::Usize))
+    {
+        return None;
+    }
+    let (owner, owner_def_id) = direct_outer_vecdeque_owner(tcx, destination_ty)?;
+    (owner_def_id.krate == callee_def_id.krate).then_some(owner)
+}
+
+fn direct_outer_vecdeque_capacity_receiver_owner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<String> {
+    if !exact_alloc_vecdeque_capacity_only_def_id(tcx, callee_def_id)
+        || !matches!(argument_tys.len(), 1 | 2)
+        || argument_tys
+            .get(1..)
+            .unwrap_or_default()
+            .iter()
+            .any(|argument_ty| !matches!(argument_ty.kind(), ty::Uint(ty::UintTy::Usize)))
+    {
+        return None;
+    }
+    let (owner, owner_def_id) = direct_outer_vecdeque_owner(tcx, *argument_tys.first()?)?;
+    (owner_def_id.krate == callee_def_id.krate).then_some(owner)
+}
+
 fn direct_outer_arc_new_destination_owner<'tcx>(
     tcx: TyCtxt<'tcx>,
     callee_def_id: DefId,
@@ -3736,6 +3864,25 @@ fn non_plain_semantic_scope_heap_class<'tcx>(
     callee: &str,
 ) -> SemanticScopeHeapClass {
     if let Some(owner) = callee_def_id.and_then(|def_id| {
+        direct_outer_vecdeque_with_capacity_destination_owner(
+            tcx,
+            def_id,
+            destination_ty,
+            argument_tys,
+        )
+    }) {
+        // Exact VecDeque::with_capacity allocates only the direct ring buffer.
+        // No element exists yet, so nested supported owners inside T cannot be
+        // identities for this allocation.
+        SemanticScopeHeapClass::Single(owner)
+    } else if let Some(owner) = callee_def_id
+        .and_then(|def_id| direct_outer_vecdeque_capacity_receiver_owner(tcx, def_id, argument_tys))
+    {
+        // reserve*/shrink* capacity methods can only replace or release the
+        // direct VecDeque ring buffer. Element-affecting methods and Drop keep
+        // the full owner-graph fail-closed rule below.
+        SemanticScopeHeapClass::Single(owner)
+    } else if let Some(owner) = callee_def_id.and_then(|def_id| {
         direct_outer_arc_new_destination_owner(tcx, def_id, destination_ty, argument_tys)
     }) {
         // Arc::new creates one ref-counted allocation for the direct Arc<T>
@@ -4291,6 +4438,37 @@ mod tests {
         assert!(exact_alloc_vec_def_path("alloc[d734]::vec::Vec"));
         assert!(exact_alloc_vec_def_path("std::vec::Vec"));
         assert!(!exact_alloc_vec_def_path("my_crate::std::vec::Vec"));
+        assert!(exact_alloc_vecdeque_def_path(
+            "alloc[d734]::collections::vec_deque::VecDeque"
+        ));
+        assert!(exact_alloc_vecdeque_def_path("std::collections::VecDeque"));
+        assert!(!exact_alloc_vecdeque_def_path(
+            "my_crate::std::collections::VecDeque"
+        ));
+        assert!(exact_alloc_vecdeque_method_def_path(
+            "alloc[d734]::collections::vec_deque::{impl#4}::with_capacity",
+            "with_capacity"
+        ));
+        assert!(exact_alloc_vecdeque_method_def_path(
+            "alloc::collections::vec_deque::{impl#5}::reserve_exact",
+            "reserve_exact"
+        ));
+        assert!(exact_alloc_vecdeque_method_def_path(
+            "std::collections::VecDeque::<T, A>::reserve_exact",
+            "reserve_exact"
+        ));
+        assert!(!exact_alloc_vecdeque_method_def_path(
+            "alloc::collections::vec_deque::{impl#4}::with_capacity_in",
+            "with_capacity"
+        ));
+        assert!(!exact_alloc_vecdeque_method_def_path(
+            "alloc::collections::vec_deque::{impl#5}::push_back",
+            "reserve_exact"
+        ));
+        assert!(!exact_alloc_vecdeque_method_def_path(
+            "my_crate::alloc::collections::vec_deque::{impl#5}::reserve_exact",
+            "reserve_exact"
+        ));
         assert!(exact_alloc_arc_def_path("alloc[d734]::sync::Arc"));
         assert!(exact_alloc_arc_def_path("std::sync::Arc"));
         assert!(!exact_alloc_arc_def_path("my_crate::std::sync::Arc"));
