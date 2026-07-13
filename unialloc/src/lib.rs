@@ -4,10 +4,7 @@
 #![allow(clippy::uninit_assumed_init)]
 #![feature(allocator_api)]
 #![feature(thread_local)]
-#![cfg_attr(
-    not(unialloc_has_stable_alloc_c_string),
-    feature(alloc_c_string)
-)]
+#![cfg_attr(not(unialloc_has_stable_alloc_c_string), feature(alloc_c_string))]
 #![cfg_attr(not(unialloc_has_stable_raw_ref_op), feature(raw_ref_op))]
 #![cfg_attr(
     not(unialloc_has_stable_alloc_layout_extra),

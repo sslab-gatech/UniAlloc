@@ -88,11 +88,7 @@ fn hugepage_and_pac_policy_composition_preserves_cache_identity() {
     let after_ordinary_recovery = semantic_stats_snapshot();
     let ordinary_verifications = after_ordinary_recovery.metadata_pac_auth_verifications
         + after_ordinary_recovery.metadata_pac_software_fallback_verifications;
-    assert!(
-        ordinary_verifications > 0,
-        "{:?}",
-        after_ordinary_recovery
-    );
+    assert!(ordinary_verifications > 0, "{:?}", after_ordinary_recovery);
     drop(recovered_ordinary);
 
     let recovered_hugepage = vec_with_metadata(authenticated_hugepage);
