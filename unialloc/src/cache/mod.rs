@@ -2872,32 +2872,43 @@ mod tests {
                 new_layout,
             )
         };
-        let rejected = match moved {
-            Err(AllocError) => true,
+        let (rejected, exact_record_after, wrong_record_after, payload_preserved) = match moved {
+            Err(AllocError) => {
+                let exact_record_after =
+                    recorded_reallocation_old_metadata(old_ptr, recorded_layout);
+                let wrong_record_after =
+                    recorded_reallocation_old_metadata(old_ptr, caller_old_layout);
+                let payload_preserved = (0..recorded_layout.size()).all(|offset| unsafe {
+                    old_ptr.add(offset).read_volatile() == (offset as u8) ^ 0xA5
+                });
+                assert_eq!(
+                    take_recorded_reallocation_old_metadata(old_ptr, recorded_layout),
+                    Some(metadata),
+                    "cleanup requires the authoritative record to remain exact"
+                );
+                unsafe {
+                    alloc.dealloc_raw(old_ptr, recorded_layout);
+                }
+                (
+                    true,
+                    exact_record_after,
+                    wrong_record_after,
+                    payload_preserved,
+                )
+            }
             Ok(block) => {
-                // Keep the fail-first regression leak-free: the buggy path
-                // returns an unrelated raw replacement while preserving the
-                // authoritative old recovery record.
+                // Keep the fail-first regression memory-safe without assuming
+                // whether a regressed move path released `old_ptr` under the
+                // wrong Layout. Remove only its stale record; never dereference
+                // or release the old address after an unexpected success.
                 unsafe {
                     alloc.dealloc_raw(block.as_ptr() as *mut u8, new_layout);
                 }
-                false
+                let _ = take_recorded_reallocation_old_metadata(old_ptr, recorded_layout);
+                (false, None, None, false)
             }
         };
-        let exact_record_after = recorded_reallocation_old_metadata(old_ptr, recorded_layout);
-        let wrong_record_after = recorded_reallocation_old_metadata(old_ptr, caller_old_layout);
-        let payload_preserved = (0..recorded_layout.size())
-            .all(|offset| unsafe { old_ptr.add(offset).read_volatile() } == (offset as u8) ^ 0xA5);
         let delayed_after = delayed_free_snapshot();
-
-        assert_eq!(
-            take_recorded_reallocation_old_metadata(old_ptr, recorded_layout),
-            Some(metadata),
-            "cleanup requires the authoritative record to remain exact"
-        );
-        unsafe {
-            alloc.dealloc_raw(old_ptr, recorded_layout);
-        }
 
         assert!(
             rejected,
