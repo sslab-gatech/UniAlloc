@@ -27467,6 +27467,108 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "stats")]
+    #[test]
+    fn cross_thread_global_dealloc_layout_mismatch_preserves_recovery_identity() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_type_stats_recording_disable();
+
+        let allocation_size = (MIN_TYPE_CACHE_OBJECT_SIZE..crate::size_class::MAX_SIZE)
+            .find(|size| {
+                crate::size_class::get_size_class(*size).index()
+                    == crate::size_class::get_size_class(*size + 1).index()
+            })
+            .expect("test needs a distinct layout in the same allocator size class");
+        let allocation_layout =
+            Layout::from_size_align(allocation_size, align_of::<usize>()).unwrap();
+        let wrong_layout =
+            Layout::from_size_align(allocation_size + 1, allocation_layout.align()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_8043)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_8043)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0x43);
+        let allocator = RustAllocator::new();
+        let ptr = unsafe { allocator.alloc_with_recovery_metadata(allocation_layout, metadata) };
+        assert!(!ptr.is_null());
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, allocation_layout),
+            Some(metadata)
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert!(!current_thread_fast_auto_allocation_records_active());
+
+        let fallback_before = semantic_fallback_attribution_snapshot();
+        let ptr_addr = ptr as usize;
+        thread::spawn(move || {
+            let allocator = RustAllocator::new();
+            let ptr = ptr_addr as *mut u8;
+            assert!(semantic_runtime_slow_path_enabled());
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, allocation_layout),
+                Some(metadata),
+                "foreign thread must observe the process-visible allocation identity"
+            );
+
+            unsafe {
+                GlobalAlloc::dealloc(&allocator, ptr, wrong_layout);
+            }
+            let fallback_after_mismatch = semantic_fallback_attribution_snapshot();
+            assert_eq!(
+                fallback_after_mismatch.raw_dealloc_no_metadata,
+                fallback_before.raw_dealloc_no_metadata,
+                "foreign wrong-layout deallocation must not fall through to the raw backend"
+            );
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, allocation_layout),
+                Some(metadata),
+                "foreign wrong-layout deallocation must preserve the authoritative recovery record"
+            );
+            assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+
+            unsafe {
+                GlobalAlloc::dealloc(&allocator, ptr, allocation_layout);
+            }
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, allocation_layout),
+                None
+            );
+            assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(wrong_layout, metadata) },
+                None,
+                "the wrong layout must not receive foreign-thread storage"
+            );
+            assert_eq!(
+                unsafe { pop_semantic_type_cache(allocation_layout, metadata) },
+                Some(ptr),
+                "an exact foreign-thread retry must publish only under the allocation layout"
+            );
+            unsafe {
+                allocator.dealloc_raw(ptr, allocation_layout);
+                clear_type_cache_for_test();
+                clear_delayed_free_for_test();
+            }
+        })
+        .join()
+        .expect("cross-thread wrong-layout GlobalAlloc regression");
+
+        semantic_stats_recording_disable();
+        assert!(
+            !semantic_runtime_slow_path_enabled(),
+            "the exact retry must consume the final process-visible recovery record"
+        );
+    }
+
     #[test]
     fn cross_thread_mismatched_drop_cannot_strip_delayed_free_or_poison_type_cache() {
         let _guard = test_guard();
