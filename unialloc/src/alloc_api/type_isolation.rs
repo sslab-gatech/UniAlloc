@@ -9510,10 +9510,16 @@ fn global_delayed_free_ownership_shard(ptr: *mut u8) -> usize {
     mixed & GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_MASK
 }
 
+#[inline]
 fn global_delayed_free_contains_ptr(ptr: *mut u8) -> bool {
     if ptr.is_null() || GLOBAL_DELAYED_FREE_OWNERSHIP_COUNT.load(Ordering::Acquire) == 0 {
         return false;
     }
+    global_delayed_free_contains_ptr_slow(ptr)
+}
+
+#[inline(never)]
+fn global_delayed_free_contains_ptr_slow(ptr: *mut u8) -> bool {
     let ptr_key = ptr as usize;
     GLOBAL_DELAYED_FREE_OWNERSHIP[global_delayed_free_ownership_shard(ptr)]
         .lock()
