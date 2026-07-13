@@ -113,6 +113,12 @@ The semantic caches separate objects by compiler- or runtime-supplied type
 identity.  They are bounded by retained bytes as well as entry counts:
 
 - plain type cache slots track retained bytes and reject oversized/cold growth;
+- plain inline and linked entries retain the exact allocator-visible identity
+  fields (type, module, policy flags, lifetime, and placement) instead of
+  trusting the 64-bit lookup key alone.  This prevents a cache-key collision
+  from crossing those boundaries, at a measured 64-bit TLS footprint increase
+  of 1,040 bytes per thread; callsite is intentionally excluded because cache
+  reuse is allocation-site agnostic;
 - metadata-segregated buckets keep per-bucket retained-byte counters;
 - delayed-free quarantine has its own retained-byte budget;
 - hugepage metadata side-cache mappings are released when empty;
