@@ -1403,7 +1403,7 @@ impl MetadataRecordAuthHotSlot {
 #[derive(Clone, Copy)]
 struct InlineTypeCacheEntry {
     cache_key: u64,
-    type_id: u64,
+    metadata: AllocationMetadata,
     ptr: *mut u8,
     size: usize,
     align: usize,
@@ -1413,7 +1413,7 @@ impl InlineTypeCacheEntry {
     const fn empty() -> Self {
         Self {
             cache_key: UNKNOWN_SEMANTIC_ID,
-            type_id: UNKNOWN_SEMANTIC_ID,
+            metadata: AllocationMetadata::unknown(),
             ptr: core::ptr::null_mut(),
             size: 0,
             align: 1,
@@ -1427,12 +1427,18 @@ impl InlineTypeCacheEntry {
 
     #[inline]
     fn matches(self, layout: Layout, metadata: AllocationMetadata) -> bool {
-        self.matches_cached_key(layout, type_cache_identity_key(metadata))
+        self.matches_cached_key(layout, metadata, type_cache_identity_key(metadata))
     }
 
     #[inline]
-    fn matches_cached_key(self, layout: Layout, cache_key: u64) -> bool {
+    fn matches_cached_key(
+        self,
+        layout: Layout,
+        metadata: AllocationMetadata,
+        cache_key: u64,
+    ) -> bool {
         self.cache_key == cache_key
+            && type_cache_identity_metadata_matches(self.metadata, metadata)
             && self.size == layout.size()
             && self.align == layout.align()
             && !self.ptr.is_null()
@@ -6701,7 +6707,7 @@ unsafe fn pop_inline_type_cache_eligible_with_key(
     cache_key: u64,
 ) -> Option<*mut u8> {
     let entry = INLINE_TYPE_CACHE_ENTRY;
-    if entry.matches_cached_key(layout, cache_key) {
+    if entry.matches_cached_key(layout, metadata, cache_key) {
         INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
         record_stats_type_cache_hit(metadata);
         Some(entry.ptr)
@@ -6722,7 +6728,7 @@ unsafe fn push_inline_type_cache_eligible_with_key(
     {
         INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry {
             cache_key,
-            type_id: metadata.type_id,
+            metadata,
             ptr,
             size: layout.size(),
             align: layout.align(),
@@ -24946,7 +24952,7 @@ mod tests {
             assert!(cache_semantic_free(&alloc, ptr, layout, metadata));
             let inline = inline_type_cache_entry_snapshot_for_test();
             assert_eq!(inline.ptr, ptr);
-            assert_eq!(inline.type_id, metadata.type_id);
+            assert_eq!(inline.metadata, metadata);
             assert!(
                 type_cache_snapshot_for_test()
                     .iter()
@@ -25029,6 +25035,42 @@ mod tests {
             assert_eq!(inline_type_cache_entry_snapshot_for_test().ptr, ptr);
             assert_eq!(pop_semantic_type_cache(layout, module_b), None);
             assert_eq!(pop_semantic_type_cache(layout, module_a), Some(ptr));
+        }
+    }
+
+    #[test]
+    fn semantic_type_cache_inline_rejects_forced_identity_key_collision() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
+            let module_a = AllocationMetadata::for_type(0xC003_004A)
+                .with_module(0xC0DE_A)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let module_b = AllocationMetadata::for_type(module_a.type_id)
+                .with_module(0xC0DE_B)
+                .with_flags(module_a.flags);
+            let ptr = storage.as_mut_ptr() as *mut u8;
+            let forced_collision_key = 0xC011_1510_C011_1510;
+
+            assert!(push_inline_type_cache_eligible_with_key(
+                ptr,
+                layout,
+                module_a,
+                forced_collision_key,
+            ));
+            assert_eq!(
+                pop_inline_type_cache_eligible_with_key(layout, module_b, forced_collision_key,),
+                None,
+                "a cache-key collision must not bypass the exact module/context boundary",
+            );
+            assert_eq!(
+                pop_inline_type_cache_eligible_with_key(layout, module_a, forced_collision_key,),
+                Some(ptr),
+                "rejecting the colliding identity must preserve the entry for its exact owner",
+            );
         }
     }
 
@@ -27004,7 +27046,7 @@ mod tests {
             assert_eq!(cached.corrupt_slots, 0);
             let inline = unsafe { inline_type_cache_entry_snapshot_for_test() };
             assert_eq!(inline.ptr, ptr);
-            assert_eq!(inline.type_id, old_metadata.type_id);
+            assert_eq!(inline.metadata, old_metadata);
 
             assert_eq!(
                 unsafe { pop_semantic_type_cache(layout, requested_metadata) },
