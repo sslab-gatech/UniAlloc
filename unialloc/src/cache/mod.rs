@@ -606,6 +606,10 @@ impl RustAllocator {
 
     #[inline]
     unsafe fn dealloc_raw_backend(&self, ptr: *mut u8, layout: Layout) -> bool {
+        #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+        if crate::alloc_api::lifetime_hugepage::try_deallocate(ptr) {
+            return true;
+        }
         if layout_uses_over_page_alignment(layout) {
             dealloc_over_page_aligned_raw(ptr, layout);
             return true;
@@ -687,6 +691,23 @@ impl RustAllocator {
         if new_size == 0 {
             let _ = release_global_raw_reclaim(self, layout, admission);
             return dangling_ptr_for_layout(new_layout);
+        }
+        #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+        if let Some(can_reuse) =
+            crate::alloc_api::lifetime_hugepage::realloc_in_place_supported(ptr, new_layout)
+        {
+            if can_reuse {
+                finish_global_raw_reclaim_in_place(admission);
+                return ptr;
+            }
+            let new_ptr = self.alloc_raw(new_layout);
+            if !new_ptr.is_null() {
+                copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
+                let _ = release_global_raw_reclaim(self, layout, admission);
+            } else {
+                rollback_global_raw_reclaim(admission);
+            }
+            return new_ptr;
         }
         if layout_uses_over_page_alignment(layout) || layout_uses_over_page_alignment(new_layout) {
             let new_ptr = self.alloc_raw(new_layout);

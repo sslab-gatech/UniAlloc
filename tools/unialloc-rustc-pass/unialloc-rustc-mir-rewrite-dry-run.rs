@@ -81,7 +81,7 @@ use std::fmt::Write as FmtWrite;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{self, Command};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 #[cfg(unix)]
 use std::{os::unix::fs::PermissionsExt, os::unix::process::CommandExt};
 
@@ -95,6 +95,11 @@ const TYPE_ID_ALGORITHM: &str =
     "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity, alloc::vec::from_elem::<u8>, String::with_capacity, String::from(&str), <str as ToOwned>::to_owned, <[u8] as ToOwned>::to_owned, Copied<slice::Iter<u8>>::collect::<Vec<u8>>, Box::new, and Box<[u8]>::from(&[u8]) destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer identity because they can change or create only that backing allocation, while generic or non-u8 vec::from_elem, resize/extend/push/clone_from/Drop, and other element-affecting calls retain full owner-graph fail-closed classification; exact std::path::Path::to_path_buf and std::path::Path::join calls select the direct PathBuf identity only after exact std DefId/path and destination checks, and join accepts only immutable borrowed Path, OsStr, or str arguments with callback-free standard AsRef implementations; exact alloc::sync::Arc::new and alloc::rc::Rc::new calls select the direct destination Arc<T> or Rc<T> identity only after DefId/crate/path and destination-payload structural checks, without recursively treating nested owners inside T as owners of the ref-counted allocation; exact std::collections::HashMap::with_capacity and std::collections::HashSet::with_capacity calls likewise select the direct destination table identity only after exact std DefId/path, RandomState, optional Global allocator, and capacity-argument checks, without treating nested K/V/T owners as identities for the table allocation; exact std HashMap reserve/try_reserve/shrink calls remain callback-capable audit-only because rehash may execute user Hash/Eq code with unrelated allocations; constructor/factory scopes without an exact DefId/body allocation proof remain audit-only because a direct Vec/String/Result return type alone is not allocation provenance, regardless of whether the opaque callee is local, platform, or a third-party dependency; Result<T, E>/Option<T> candidates still select only the Ok/Some payload for hazard classification while Result Err owners remain fail-closed hazards; custom or aggregate destinations that merely contain a supported owner remain audit-only without an exact constructor matcher or sound callee-body allocation proof; for these shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut and str Split/SplitInclusive wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec/String/Box capacity/constructor, borrowed Path factory, Arc::new, Rc::new, std HashMap::with_capacity, and std HashSet::with_capacity exceptions; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
+const LIFETIME_PROFILE_FORMAT: &str = "unialloc-lifetime-profile-v1";
+const LIFETIME_PROFILE_BINDING: &str = "exact(callsite,type_id,module_id)";
+const LIFETIME_PROFILE_DIGEST_ALGORITHM: &str = "fnv1a64-raw-bytes";
+const LIFETIME_HINT_EPHEMERAL: u16 = 1;
+const LIFETIME_HINT_LONG_LIVED: u16 = 2;
 
 #[cfg(unialloc_rustc_current)]
 type OptimizedMirDefId = LocalDefId;
@@ -115,6 +120,7 @@ static mut AUTO_CROSS_THREAD_RECOVERY_HINT: bool = false;
 static mut DIRECT_LOCAL_METADATA_ABI: bool = false;
 static mut DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP: bool = false;
 static mut CONTINUE_COMPILATION: bool = false;
+static LIFETIME_PROFILE: OnceLock<LifetimeProfile> = OnceLock::new();
 
 // rustc's private APIs drift quickly.  Keep version-specific syntax at this
 // boundary so the MIR solver/rewrite logic below stays readable and auditable.
@@ -149,12 +155,44 @@ struct Cli {
     semantic_scope_rewrite: bool,
     policy_flags: u32,
     lifetime_hint: u16,
+    lifetime_profile: Option<LifetimeProfile>,
     placement_hint: u16,
     auto_cross_thread_recovery_hint: bool,
     direct_local_metadata_abi: bool,
     direct_local_size_align_with_semantic_drop: bool,
     continue_compilation: bool,
     rustc_args: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct LifetimeProfileKey {
+    callsite: u64,
+    type_id: u64,
+    module_id: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LifetimeProfileEntry {
+    Unique(u16),
+    Invalid,
+    Ambiguous,
+}
+
+#[derive(Clone, Debug)]
+struct LifetimeProfile {
+    path: PathBuf,
+    raw_digest: u64,
+    format_valid: bool,
+    source_entry_line_count: usize,
+    invalid_line_count: usize,
+    duplicate_key_count: usize,
+    entries: BTreeMap<LifetimeProfileKey, LifetimeProfileEntry>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct LifetimeHintSelection {
+    hint: u16,
+    basis: &'static str,
 }
 
 enum ParsedInvocation {
@@ -169,6 +207,7 @@ struct RewriteRecord {
     module_id: u64,
     flags: u32,
     lifetime_hint: u16,
+    lifetime_hint_basis: &'static str,
     placement_hint: u16,
     cross_thread_recovery_hint: bool,
     placement_hint_basis: &'static str,
@@ -481,7 +520,7 @@ struct SemanticDropCandidate<'tcx> {
 struct RewriteDryRunCallbacks;
 
 fn usage() -> &'static str {
-    "Usage:\n  RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs -o /tmp/unialloc-rustc-mir-rewrite-dry-run\n  DYLD_LIBRARY_PATH=$(rustc +$(cat rust-toolchain) --print sysroot)/lib /tmp/unialloc-rustc-mir-rewrite-dry-run \\\n    --unialloc-rewrite-audit-out /tmp/rewrite-audit.json -- --sysroot $(rustc +$(cat rust-toolchain) --print sysroot) --edition=2021 input.rs\n\nOptions:\n  --unialloc-rewrite-audit-out <path>  JSON rewrite audit output. Defaults to env UNIALLOC_REWRITE_AUDIT_OUT or ./unialloc-rustc-mir-rewrite-dry-run.json\n  --unialloc-rewrite-audit-dir <dir>   Wrapper-friendly output directory. Defaults to env UNIALLOC_REWRITE_AUDIT_DIR if set\n  --unialloc-pass-log-out <path>       Optional pass log output. Defaults to env UNIALLOC_PASS_LOG_OUT if set\n  --unialloc-pass-log-dir <dir>        Wrapper-friendly log directory. Defaults to env UNIALLOC_PASS_LOG_DIR if set\n  --unialloc-target-crates <names>     Optional comma-separated Cargo crate allowlist. Defaults to env UNIALLOC_RUSTC_TARGET_CRATES. Hyphens and underscores compare equivalently\n  --unialloc-actual-mir-rewrite        Opt in to replacing supported direct allocator-call terminators. Defaults to env UNIALLOC_ACTUAL_MIR_REWRITE truthiness\n  --unialloc-actual-semantic-scope-rewrite  Opt in to inserting __unialloc_semantic_scope_push/pop around supported semantic allocation calls. Defaults to env UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE truthiness\n  --unialloc-auto-cross-thread-recovery-hint  OR the cross-thread recovery placement bit into solved heap-object scopes when the MIR body contains thread-spawn/escape calls. Defaults to env UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT truthiness\n  --unialloc-direct-local-metadata-abi  Use no-recovery UniAlloc Layout alloc/alloc_zeroed/realloc/dealloc ABI variants only when paired metadata deallocation/reallocation is explicit; unpaired size/align exchange_malloc keeps recovery ABI. Defaults to env UNIALLOC_DIRECT_LOCAL_METADATA_ABI truthiness\n  --unialloc-direct-local-size-align-with-semantic-drop  Enable no-recovery semantic scopes only for destination-proven linear Drop ownership; raw size/align calls without an exact owner link remain recovery-backed. Defaults to env UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP truthiness\n  --unialloc-policy-flags <u32>        Policy flags inserted into UniAlloc metadata. Defaults to env UNIALLOC_LOWERING_POLICY_FLAGS or 0x1 (TYPE_ISOLATED only)\n  --unialloc-lifetime-hint <u16>       Optional metadata lifetime hint. Defaults to env UNIALLOC_LOWERING_LIFETIME_HINT or 0\n  --unialloc-placement-hint <u16>      Optional metadata placement hint. Defaults to env UNIALLOC_LOWERING_PLACEMENT_HINT or 0\n  --unialloc-continue-compilation      Continue after analysis and produce normal rustc outputs. Actual rewrite modes continue by default. Defaults to env UNIALLOC_CONTINUE_COMPILATION truthiness\n  --unialloc-stop-after-analysis       Force analysis-only output even if an actual rewrite flag is set\n  --unialloc-dry-run-only              Force audit-only mode even if actual rewrite env flags are set\n  --unialloc-help                      Print this help\n\nEverything after `--` is passed to rustc_driver as a direct invocation. Without `--`, an executable path or a bare command resolved through PATH/PATHEXT is treated as Cargo's compiler argv0. Executable source files therefore require explicit `--` for direct compilation.\n"
+    "Usage:\n  RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs -o /tmp/unialloc-rustc-mir-rewrite-dry-run\n  DYLD_LIBRARY_PATH=$(rustc +$(cat rust-toolchain) --print sysroot)/lib /tmp/unialloc-rustc-mir-rewrite-dry-run \\\n    --unialloc-rewrite-audit-out /tmp/rewrite-audit.json -- --sysroot $(rustc +$(cat rust-toolchain) --print sysroot) --edition=2021 input.rs\n\nOptions:\n  --unialloc-rewrite-audit-out <path>  JSON rewrite audit output. Defaults to env UNIALLOC_REWRITE_AUDIT_OUT or ./unialloc-rustc-mir-rewrite-dry-run.json\n  --unialloc-rewrite-audit-dir <dir>   Wrapper-friendly output directory. Defaults to env UNIALLOC_REWRITE_AUDIT_DIR if set\n  --unialloc-pass-log-out <path>       Optional pass log output. Defaults to env UNIALLOC_PASS_LOG_OUT if set\n  --unialloc-pass-log-dir <dir>        Wrapper-friendly log directory. Defaults to env UNIALLOC_PASS_LOG_DIR if set\n  --unialloc-target-crates <names>     Optional comma-separated Cargo crate allowlist. Defaults to env UNIALLOC_RUSTC_TARGET_CRATES. Hyphens and underscores compare equivalently\n  --unialloc-actual-mir-rewrite        Opt in to replacing supported direct allocator-call terminators. Defaults to env UNIALLOC_ACTUAL_MIR_REWRITE truthiness\n  --unialloc-actual-semantic-scope-rewrite  Opt in to inserting __unialloc_semantic_scope_push/pop around supported semantic allocation calls. Defaults to env UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE truthiness\n  --unialloc-auto-cross-thread-recovery-hint  OR the cross-thread recovery placement bit into solved heap-object scopes when the MIR body contains thread-spawn/escape calls. Defaults to env UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT truthiness\n  --unialloc-direct-local-metadata-abi  Use no-recovery UniAlloc Layout alloc/alloc_zeroed/realloc/dealloc ABI variants only when paired metadata deallocation/reallocation is explicit; unpaired size/align exchange_malloc keeps recovery ABI. Defaults to env UNIALLOC_DIRECT_LOCAL_METADATA_ABI truthiness\n  --unialloc-direct-local-size-align-with-semantic-drop  Enable no-recovery semantic scopes only for destination-proven linear Drop ownership; raw size/align calls without an exact owner link remain recovery-backed. Defaults to env UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP truthiness\n  --unialloc-policy-flags <u32>        Policy flags inserted into UniAlloc metadata. Defaults to env UNIALLOC_LOWERING_POLICY_FLAGS or 0x1 (TYPE_ISOLATED only)\n  --unialloc-lifetime-hint <u16>       Optional invocation-wide metadata lifetime hint. Defaults to env UNIALLOC_LOWERING_LIFETIME_HINT or 0\n  --unialloc-lifetime-profile <path>   Exact per-site lifetime profile. Defaults to env UNIALLOC_LIFETIME_PROFILE. Profile misses override the invocation-wide hint with Unknown (0)\n  --unialloc-placement-hint <u16>      Optional metadata placement hint. Defaults to env UNIALLOC_LOWERING_PLACEMENT_HINT or 0\n  --unialloc-continue-compilation      Continue after analysis and produce normal rustc outputs. Actual rewrite modes continue by default. Defaults to env UNIALLOC_CONTINUE_COMPILATION truthiness\n  --unialloc-stop-after-analysis       Force analysis-only output even if an actual rewrite flag is set\n  --unialloc-dry-run-only              Force audit-only mode even if actual rewrite env flags are set\n  --unialloc-help                      Print this help\n\nEverything after `--` is passed to rustc_driver as a direct invocation. Without `--`, an executable path or a bare command resolved through PATH/PATHEXT is treated as Cargo's compiler argv0. Executable source files therefore require explicit `--` for direct compilation.\n"
 }
 
 fn env_truthy(name: &str) -> bool {
@@ -530,6 +569,176 @@ fn parse_u16(value: &str) -> Result<u16, String> {
     }
 }
 
+fn parse_u64(value: &str) -> Result<u64, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("empty u64 value".to_string());
+    }
+    if let Some(hex) = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+    {
+        u64::from_str_radix(hex, 16).map_err(|err| format!("invalid hex u64 `{}`: {}", value, err))
+    } else {
+        trimmed
+            .parse::<u64>()
+            .map_err(|err| format!("invalid u64 `{}`: {}", value, err))
+    }
+}
+
+fn parse_profile_lifetime_hint(value: &str) -> Result<u16, String> {
+    match value.trim() {
+        "1" | "ephemeral" => Ok(LIFETIME_HINT_EPHEMERAL),
+        "2" | "long-lived" | "long_lived" => Ok(LIFETIME_HINT_LONG_LIVED),
+        _ => Err(format!(
+            "invalid lifetime class `{}`; expected ephemeral/1 or long-lived/2",
+            value
+        )),
+    }
+}
+
+fn insert_lifetime_profile_entry(
+    entries: &mut BTreeMap<LifetimeProfileKey, LifetimeProfileEntry>,
+    key: LifetimeProfileKey,
+    entry: LifetimeProfileEntry,
+) -> bool {
+    use std::collections::btree_map::Entry;
+    match entries.entry(key) {
+        Entry::Vacant(vacant) => {
+            vacant.insert(entry);
+            false
+        }
+        Entry::Occupied(mut occupied) => {
+            occupied.insert(LifetimeProfileEntry::Ambiguous);
+            true
+        }
+    }
+}
+
+fn parse_lifetime_profile(path: PathBuf, raw: &[u8]) -> LifetimeProfile {
+    let text = String::from_utf8_lossy(raw);
+    let mut profile = LifetimeProfile {
+        path,
+        raw_digest: fnv1a64(raw),
+        format_valid: false,
+        source_entry_line_count: 0,
+        invalid_line_count: 0,
+        duplicate_key_count: 0,
+        entries: BTreeMap::new(),
+    };
+    let mut content_lines = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'));
+    match content_lines.next() {
+        Some(header) if header == LIFETIME_PROFILE_FORMAT => profile.format_valid = true,
+        Some(_) | None => {
+            profile.invalid_line_count = 1;
+            return profile;
+        }
+    }
+
+    for line in content_lines {
+        profile.source_entry_line_count += 1;
+        let fields = line.split_whitespace().collect::<Vec<_>>();
+        if fields.len() != 4 {
+            profile.invalid_line_count += 1;
+            continue;
+        }
+        let callsite = parse_u64(fields[0]);
+        let type_id = parse_u64(fields[1]);
+        let module_id = parse_u64(fields[2]);
+        let hint = parse_profile_lifetime_hint(fields[3]);
+        let key = match (callsite, type_id, module_id) {
+            (Ok(callsite), Ok(type_id), Ok(module_id)) => LifetimeProfileKey {
+                callsite,
+                type_id,
+                module_id,
+            },
+            _ => {
+                profile.invalid_line_count += 1;
+                continue;
+            }
+        };
+        let entry = match hint {
+            Ok(hint) if key.callsite != 0 && key.type_id != 0 && key.module_id != 0 => {
+                LifetimeProfileEntry::Unique(hint)
+            }
+            _ => {
+                profile.invalid_line_count += 1;
+                LifetimeProfileEntry::Invalid
+            }
+        };
+        if insert_lifetime_profile_entry(&mut profile.entries, key, entry) {
+            profile.duplicate_key_count += 1;
+        }
+    }
+    profile
+}
+
+fn load_lifetime_profile(path: PathBuf) -> Result<LifetimeProfile, String> {
+    let raw = fs::read(&path)
+        .map_err(|err| format!("read lifetime profile {}: {}", path.display(), err))?;
+    Ok(parse_lifetime_profile(path, &raw))
+}
+
+fn select_lifetime_hint(
+    profile: Option<&LifetimeProfile>,
+    configured_hint: u16,
+    callsite: u64,
+    type_id: u64,
+    module_id: u64,
+) -> LifetimeHintSelection {
+    let profile = match profile {
+        Some(profile) => profile,
+        None => {
+            return LifetimeHintSelection {
+                hint: configured_hint,
+                basis: if configured_hint == 0 {
+                    "default_unknown"
+                } else {
+                    "manual_global_lifetime_hint"
+                },
+            };
+        }
+    };
+    if !profile.format_valid {
+        return LifetimeHintSelection {
+            hint: 0,
+            basis: "profile_invalid_format",
+        };
+    }
+    let key = LifetimeProfileKey {
+        callsite,
+        type_id,
+        module_id,
+    };
+    match profile.entries.get(&key) {
+        Some(LifetimeProfileEntry::Unique(hint)) => LifetimeHintSelection {
+            hint: *hint,
+            basis: "profile_exact_match",
+        },
+        Some(LifetimeProfileEntry::Invalid) => LifetimeHintSelection {
+            hint: 0,
+            basis: "profile_invalid_entry",
+        },
+        Some(LifetimeProfileEntry::Ambiguous) => LifetimeHintSelection {
+            hint: 0,
+            basis: "profile_ambiguous_entry",
+        },
+        None if profile.entries.keys().any(|key| key.callsite == callsite) => {
+            LifetimeHintSelection {
+                hint: 0,
+                basis: "profile_type_or_module_guard_mismatch",
+            }
+        }
+        None => LifetimeHintSelection {
+            hint: 0,
+            basis: "profile_missing_entry",
+        },
+    }
+}
+
 #[inline]
 fn lowering_policy_flags() -> u32 {
     unsafe { LOWERING_POLICY_FLAGS }
@@ -538,6 +747,21 @@ fn lowering_policy_flags() -> u32 {
 #[inline]
 fn lowering_lifetime_hint() -> u16 {
     unsafe { LOWERING_LIFETIME_HINT }
+}
+
+#[inline]
+fn lowering_lifetime_hint_for_site(
+    callsite: u64,
+    type_id: u64,
+    module_id: u64,
+) -> LifetimeHintSelection {
+    select_lifetime_hint(
+        LIFETIME_PROFILE.get(),
+        lowering_lifetime_hint(),
+        callsite,
+        type_id,
+        module_id,
+    )
 }
 
 #[inline]
@@ -562,7 +786,8 @@ fn direct_local_size_align_with_semantic_drop_requested() -> bool {
 
 #[inline]
 fn lowering_metadata_hints_requested() -> bool {
-    lowering_lifetime_hint() != 0
+    LIFETIME_PROFILE.get().is_some()
+        || lowering_lifetime_hint() != 0
         || lowering_placement_hint() != 0
         || auto_cross_thread_recovery_hint_enabled()
 }
@@ -917,6 +1142,7 @@ fn parse_cli() -> Result<ParsedInvocation, String> {
     let mut semantic_scope_rewrite = env_truthy("UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE");
     let mut policy_flags = None;
     let mut lifetime_hint = None;
+    let mut lifetime_profile_path = env::var_os("UNIALLOC_LIFETIME_PROFILE").map(PathBuf::from);
     let mut placement_hint = None;
     let mut auto_cross_thread_recovery_hint =
         env_truthy("UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT");
@@ -1003,6 +1229,22 @@ fn parse_cli() -> Result<ParsedInvocation, String> {
                 }
                 lifetime_hint = Some(parse_u16(&raw[i])?);
             }
+            "--unialloc-lifetime-profile" => {
+                i += 1;
+                if i >= raw.len() {
+                    return Err("--unialloc-lifetime-profile requires a path".to_string());
+                }
+                lifetime_profile_path = Some(PathBuf::from(&raw[i]));
+            }
+            value if value.starts_with("--unialloc-lifetime-profile=") => {
+                let path = value
+                    .strip_prefix("--unialloc-lifetime-profile=")
+                    .unwrap_or_default();
+                if path.is_empty() {
+                    return Err("--unialloc-lifetime-profile requires a path".to_string());
+                }
+                lifetime_profile_path = Some(PathBuf::from(path));
+            }
             "--unialloc-placement-hint" => {
                 i += 1;
                 if i >= raw.len() {
@@ -1086,6 +1328,9 @@ fn parse_cli() -> Result<ParsedInvocation, String> {
             Err(_) => 0,
         },
     };
+    let lifetime_profile = lifetime_profile_path
+        .map(load_lifetime_profile)
+        .transpose()?;
     let mut rustc_args = original_rustc_args.clone();
     inject_sysroot_if_missing(&mut rustc_args);
     if direct_local_size_align_with_semantic_drop {
@@ -1113,6 +1358,7 @@ fn parse_cli() -> Result<ParsedInvocation, String> {
         semantic_scope_rewrite,
         policy_flags,
         lifetime_hint,
+        lifetime_profile,
         placement_hint,
         auto_cross_thread_recovery_hint,
         direct_local_metadata_abi,
@@ -5373,6 +5619,90 @@ mod tests {
     }
 
     #[test]
+    fn lifetime_profile_parser_selects_only_exact_guarded_sites() {
+        let profile = parse_lifetime_profile(
+            PathBuf::from("profile.txt"),
+            b"# generated from a prior audit\nunialloc-lifetime-profile-v1\n0x11 0x22 0x33 ephemeral\n68 85 102 long-lived\n",
+        );
+        assert!(profile.format_valid);
+        assert_eq!(profile.invalid_line_count, 0);
+        assert_eq!(profile.entries.len(), 2);
+        assert_eq!(
+            select_lifetime_hint(Some(&profile), 9, 0x11, 0x22, 0x33),
+            LifetimeHintSelection {
+                hint: LIFETIME_HINT_EPHEMERAL,
+                basis: "profile_exact_match",
+            }
+        );
+        assert_eq!(
+            select_lifetime_hint(Some(&profile), 9, 68, 85, 102),
+            LifetimeHintSelection {
+                hint: LIFETIME_HINT_LONG_LIVED,
+                basis: "profile_exact_match",
+            }
+        );
+        assert_eq!(
+            select_lifetime_hint(Some(&profile), 9, 0x11, 0x22, 0x34),
+            LifetimeHintSelection {
+                hint: 0,
+                basis: "profile_type_or_module_guard_mismatch",
+            }
+        );
+        assert_eq!(
+            select_lifetime_hint(Some(&profile), 9, 0x99, 0x22, 0x33),
+            LifetimeHintSelection {
+                hint: 0,
+                basis: "profile_missing_entry",
+            }
+        );
+    }
+
+    #[test]
+    fn lifetime_profile_duplicate_and_invalid_entries_fail_closed() {
+        let profile = parse_lifetime_profile(
+            PathBuf::from("profile.txt"),
+            b"unialloc-lifetime-profile-v1\n1 2 3 1\n1 2 3 1\n4 5 6 77\nmalformed\n",
+        );
+        assert!(profile.format_valid);
+        assert_eq!(profile.duplicate_key_count, 1);
+        assert_eq!(profile.invalid_line_count, 2);
+        assert_eq!(
+            select_lifetime_hint(Some(&profile), 2, 1, 2, 3),
+            LifetimeHintSelection {
+                hint: 0,
+                basis: "profile_ambiguous_entry",
+            }
+        );
+        assert_eq!(
+            select_lifetime_hint(Some(&profile), 2, 4, 5, 6),
+            LifetimeHintSelection {
+                hint: 0,
+                basis: "profile_invalid_entry",
+            }
+        );
+
+        let wrong_format = parse_lifetime_profile(
+            PathBuf::from("profile.txt"),
+            b"unialloc-lifetime-profile-v0\n1 2 3 1\n",
+        );
+        assert!(!wrong_format.format_valid);
+        assert_eq!(
+            select_lifetime_hint(Some(&wrong_format), 2, 1, 2, 3),
+            LifetimeHintSelection {
+                hint: 0,
+                basis: "profile_invalid_format",
+            }
+        );
+        assert_eq!(
+            select_lifetime_hint(None, 2, 1, 2, 3),
+            LifetimeHintSelection {
+                hint: 2,
+                basis: "manual_global_lifetime_hint",
+            }
+        );
+    }
+
+    #[test]
     fn semantic_scope_default_recovery_hint_preserves_explicit_hints_and_local_pairs() {
         assert_eq!(
             semantic_scope_placement_hint_from_configured(0, false, "default", false),
@@ -8684,7 +9014,9 @@ fn record_or_rewrite_candidates<'tcx>(
         let allow_size_align_local = !(call_kind == DirectAllocatorCallKind::SizeAlignAlloc
             && direct_local_size_align_with_semantic_drop_requested());
         let configured_policy_flags = lowering_policy_flags();
-        let configured_lifetime_hint = lowering_lifetime_hint();
+        let configured_module_id = lowering_module_id();
+        let lifetime_selection =
+            lowering_lifetime_hint_for_site(callsite, type_id, configured_module_id);
         let candidate_cross_thread_escape = semantic_object_needs_cross_thread_recovery_hint(
             cross_thread_escape,
             &cross_thread_escape_heap_object_types,
@@ -8699,6 +9031,7 @@ fn record_or_rewrite_candidates<'tcx>(
             module_id,
             policy_flags,
             lifetime_hint,
+            lifetime_hint_basis,
             placement_hint,
             cross_thread_recovery_hint,
             placement_hint_basis,
@@ -8707,15 +9040,17 @@ fn record_or_rewrite_candidates<'tcx>(
                 0,
                 0,
                 0,
+                "direct_allocator_recovery_delegated_neutral",
                 0,
                 false,
                 "direct_allocator_recovery_delegated_neutral",
             )
         } else {
             (
-                lowering_module_id(),
+                configured_module_id,
                 configured_policy_flags,
-                configured_lifetime_hint,
+                lifetime_selection.hint,
+                lifetime_selection.basis,
                 configured_placement_hint,
                 configured_cross_thread_recovery_hint,
                 configured_placement_hint_basis,
@@ -8772,6 +9107,7 @@ fn record_or_rewrite_candidates<'tcx>(
                         module_id,
                         flags: policy_flags,
                         lifetime_hint,
+                        lifetime_hint_basis,
                         placement_hint,
                         cross_thread_recovery_hint,
                         placement_hint_basis,
@@ -8889,6 +9225,7 @@ fn record_or_rewrite_candidates<'tcx>(
             module_id,
             flags: policy_flags,
             lifetime_hint,
+            lifetime_hint_basis,
             placement_hint,
             cross_thread_recovery_hint,
             placement_hint_basis,
@@ -9201,6 +9538,7 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
         let callsite = nonzero_fnv1a64_text(&key);
         let (old_type_id, _) = semantic_scope_type_id(&candidate.expected_old_owner_type, &key);
         let (new_type_id, _) = semantic_scope_type_id(&candidate.proof.new_owner_type, &key);
+        let module_id = lowering_module_id();
         let mut rewrite_status = "semantic_ownership_transfer_rewrite_planned";
         let mut replacement_resolution_status = "not_requested_dry_run";
 
@@ -9603,9 +9941,10 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                 callsite
             ),
             type_id: new_type_id,
-            module_id: lowering_module_id(),
+            module_id,
             flags: lowering_policy_flags(),
-            lifetime_hint: lowering_lifetime_hint(),
+            lifetime_hint: 0,
+            lifetime_hint_basis: "preserved_by_ownership_transfer_rebind",
             placement_hint: lowering_placement_hint(),
             cross_thread_recovery_hint: false,
             placement_hint_basis: if lowering_placement_hint() != 0 {
@@ -9831,7 +10170,10 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
         let callsite = nonzero_fnv1a64_text(&key);
         let (type_id, type_id_basis) = semantic_scope_type_id(&semantic_object_type, &key);
         let policy_flags = lowering_policy_flags();
-        let lifetime_hint = lowering_lifetime_hint();
+        let module_id = lowering_module_id();
+        let lifetime_selection = lowering_lifetime_hint_for_site(callsite, type_id, module_id);
+        let lifetime_hint = lifetime_selection.hint;
+        let lifetime_hint_basis = lifetime_selection.basis;
         let candidate_cross_thread_escape = semantic_object_needs_cross_thread_recovery_hint(
             cross_thread_escape,
             &cross_thread_escape_heap_object_types,
@@ -9851,7 +10193,8 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 type_id,
                 module_id: lowering_module_id(),
                 flags: policy_flags,
-                lifetime_hint,
+                lifetime_hint: 0,
+                lifetime_hint_basis: "not_applicable_skipped_candidate",
                 placement_hint,
                 cross_thread_recovery_hint,
                 placement_hint_basis,
@@ -9899,7 +10242,8 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 type_id,
                 module_id: lowering_module_id(),
                 flags: policy_flags,
-                lifetime_hint,
+                lifetime_hint: 0,
+                lifetime_hint_basis: "not_applicable_skipped_candidate",
                 placement_hint,
                 cross_thread_recovery_hint,
                 placement_hint_basis,
@@ -9962,7 +10306,8 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 type_id,
                 module_id: lowering_module_id(),
                 flags: policy_flags,
-                lifetime_hint,
+                lifetime_hint: 0,
+                lifetime_hint_basis: "not_applicable_skipped_candidate",
                 placement_hint,
                 cross_thread_recovery_hint,
                 placement_hint_basis,
@@ -10155,6 +10500,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             module_id: lowering_module_id(),
             flags: policy_flags,
             lifetime_hint,
+            lifetime_hint_basis,
             placement_hint,
             cross_thread_recovery_hint,
             placement_hint_basis,
@@ -10301,7 +10647,10 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
         let callsite = nonzero_fnv1a64_text(&key);
         let (type_id, type_id_basis) = semantic_scope_type_id(&semantic_object_type, &key);
         let policy_flags = lowering_policy_flags();
-        let lifetime_hint = lowering_lifetime_hint();
+        let module_id = lowering_module_id();
+        let lifetime_selection = lowering_lifetime_hint_for_site(callsite, type_id, module_id);
+        let lifetime_hint = lifetime_selection.hint;
+        let lifetime_hint_basis = lifetime_selection.basis;
         if drop_type_has_multiple_heap_owners {
             // An aggregate Drop may release several independent heap owners. A
             // single active metadata scope cannot represent all of them;
@@ -10316,7 +10665,8 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                 type_id,
                 module_id: lowering_module_id(),
                 flags: policy_flags,
-                lifetime_hint,
+                lifetime_hint: 0,
+                lifetime_hint_basis: "not_applicable_skipped_candidate",
                 placement_hint: lowering_placement_hint(),
                 cross_thread_recovery_hint: false,
                 placement_hint_basis: if lowering_placement_hint() != 0 {
@@ -10408,7 +10758,8 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                 type_id,
                 module_id: lowering_module_id(),
                 flags: policy_flags,
-                lifetime_hint,
+                lifetime_hint: 0,
+                lifetime_hint_basis: "not_applicable_skipped_candidate",
                 placement_hint,
                 cross_thread_recovery_hint,
                 placement_hint_basis,
@@ -10565,6 +10916,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             module_id: lowering_module_id(),
             flags: policy_flags,
             lifetime_hint,
+            lifetime_hint_basis,
             placement_hint,
             cross_thread_recovery_hint,
             placement_hint_basis,
@@ -10853,8 +11205,51 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .iter()
         .filter(|record| record.cross_thread_recovery_hint)
         .count();
-    let metadata_hints_requested =
-        cli.lifetime_hint != 0 || cli.placement_hint != 0 || cli.auto_cross_thread_recovery_hint;
+    let lifetime_profile_match_count = records
+        .iter()
+        .filter(|record| record.lifetime_hint_basis == "profile_exact_match")
+        .count();
+    let lifetime_profile_miss_count = records
+        .iter()
+        .filter(|record| {
+            record.lifetime_hint_basis.starts_with("profile_")
+                && record.lifetime_hint_basis != "profile_exact_match"
+        })
+        .count();
+    let lifetime_profile_guard_mismatch_count = records
+        .iter()
+        .filter(|record| record.lifetime_hint_basis == "profile_type_or_module_guard_mismatch")
+        .count();
+    let lifetime_profile_ambiguous_match_count = records
+        .iter()
+        .filter(|record| record.lifetime_hint_basis == "profile_ambiguous_entry")
+        .count();
+    let lifetime_profile_unique_entry_count = cli
+        .lifetime_profile
+        .as_ref()
+        .map(|profile| {
+            profile
+                .entries
+                .values()
+                .filter(|entry| matches!(entry, LifetimeProfileEntry::Unique(_)))
+                .count()
+        })
+        .unwrap_or(0);
+    let lifetime_profile_ambiguous_entry_count = cli
+        .lifetime_profile
+        .as_ref()
+        .map(|profile| {
+            profile
+                .entries
+                .values()
+                .filter(|entry| matches!(entry, LifetimeProfileEntry::Ambiguous))
+                .count()
+        })
+        .unwrap_or(0);
+    let metadata_hints_requested = cli.lifetime_profile.is_some()
+        || cli.lifetime_hint != 0
+        || cli.placement_hint != 0
+        || cli.auto_cross_thread_recovery_hint;
     let local_semantic_scope_applied_count = records
         .iter()
         .filter(|record| {
@@ -11066,6 +11461,98 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(json, "    \"policy_flags\": {},", cli.policy_flags);
     let _ = writeln!(json, "    \"lifetime_hint\": {},", cli.lifetime_hint);
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_enabled\": {},",
+        cli.lifetime_profile.is_some()
+    );
+    match &cli.lifetime_profile {
+        Some(profile) => {
+            let _ = writeln!(
+                json,
+                "    \"lifetime_profile_path\": \"{}\",",
+                json_escape(&profile.path.display().to_string())
+            );
+            let _ = writeln!(
+                json,
+                "    \"lifetime_profile_digest\": \"{:016x}\",",
+                profile.raw_digest
+            );
+            let _ = writeln!(
+                json,
+                "    \"lifetime_profile_format_valid\": {},",
+                profile.format_valid
+            );
+            let _ = writeln!(
+                json,
+                "    \"lifetime_profile_source_entry_line_count\": {},",
+                profile.source_entry_line_count
+            );
+            let _ = writeln!(
+                json,
+                "    \"lifetime_profile_invalid_line_count\": {},",
+                profile.invalid_line_count
+            );
+            let _ = writeln!(
+                json,
+                "    \"lifetime_profile_duplicate_key_count\": {},",
+                profile.duplicate_key_count
+            );
+        }
+        None => {
+            json.push_str("    \"lifetime_profile_path\": null,\n");
+            json.push_str("    \"lifetime_profile_digest\": null,\n");
+            json.push_str("    \"lifetime_profile_format_valid\": false,\n");
+            json.push_str("    \"lifetime_profile_source_entry_line_count\": 0,\n");
+            json.push_str("    \"lifetime_profile_invalid_line_count\": 0,\n");
+            json.push_str("    \"lifetime_profile_duplicate_key_count\": 0,\n");
+        }
+    }
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_format\": \"{}\",",
+        LIFETIME_PROFILE_FORMAT
+    );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_binding\": \"{}\",",
+        LIFETIME_PROFILE_BINDING
+    );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_digest_algorithm\": \"{}\",",
+        LIFETIME_PROFILE_DIGEST_ALGORITHM
+    );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_unique_entry_count\": {},",
+        lifetime_profile_unique_entry_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_ambiguous_entry_count\": {},",
+        lifetime_profile_ambiguous_entry_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_match_count\": {},",
+        lifetime_profile_match_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_miss_count\": {},",
+        lifetime_profile_miss_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_guard_mismatch_count\": {},",
+        lifetime_profile_guard_mismatch_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_ambiguous_match_count\": {},",
+        lifetime_profile_ambiguous_match_count
+    );
     let _ = writeln!(json, "    \"placement_hint\": {},", cli.placement_hint);
     let _ = writeln!(json, "    \"module_id\": {},", lowering_module_id());
     let _ = writeln!(
@@ -11337,6 +11824,26 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         "    \"cross_thread_recovery_hint_count\": {},",
         cross_thread_recovery_hint_count
     );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_match_count\": {},",
+        lifetime_profile_match_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_miss_count\": {},",
+        lifetime_profile_miss_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_guard_mismatch_count\": {},",
+        lifetime_profile_guard_mismatch_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"lifetime_profile_ambiguous_match_count\": {},",
+        lifetime_profile_ambiguous_match_count
+    );
     json.push_str("    \"provider_override_installed\": true,\n");
     json.push_str("    \"body_clone_returned_to_rustc\": true,\n");
     let _ = writeln!(
@@ -11477,6 +11984,11 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         let _ = writeln!(json, "      \"module_id\": {},", record.module_id);
         let _ = writeln!(json, "      \"flags\": {},", record.flags);
         let _ = writeln!(json, "      \"lifetime_hint\": {},", record.lifetime_hint);
+        let _ = writeln!(
+            json,
+            "      \"lifetime_hint_basis\": \"{}\",",
+            record.lifetime_hint_basis
+        );
         let _ = writeln!(json, "      \"placement_hint\": {},", record.placement_hint);
         let _ = writeln!(
             json,
@@ -11790,6 +12302,62 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(text, "policy_flags: {}", cli.policy_flags);
     let _ = writeln!(text, "lifetime_hint: {}", cli.lifetime_hint);
+    let lifetime_profile_match_count = records
+        .iter()
+        .filter(|record| record.lifetime_hint_basis == "profile_exact_match")
+        .count();
+    let lifetime_profile_miss_count = records
+        .iter()
+        .filter(|record| {
+            record.lifetime_hint_basis.starts_with("profile_")
+                && record.lifetime_hint_basis != "profile_exact_match"
+        })
+        .count();
+    let _ = writeln!(
+        text,
+        "lifetime_profile_enabled: {}",
+        cli.lifetime_profile.is_some()
+    );
+    let _ = writeln!(text, "lifetime_profile_format: {}", LIFETIME_PROFILE_FORMAT);
+    let _ = writeln!(
+        text,
+        "lifetime_profile_binding: {}",
+        LIFETIME_PROFILE_BINDING
+    );
+    let _ = writeln!(
+        text,
+        "lifetime_profile_digest_algorithm: {}",
+        LIFETIME_PROFILE_DIGEST_ALGORITHM
+    );
+    if let Some(profile) = &cli.lifetime_profile {
+        let _ = writeln!(text, "lifetime_profile_path: {}", profile.path.display());
+        let _ = writeln!(text, "lifetime_profile_digest: {:016x}", profile.raw_digest);
+        let _ = writeln!(
+            text,
+            "lifetime_profile_format_valid: {}",
+            profile.format_valid
+        );
+        let _ = writeln!(
+            text,
+            "lifetime_profile_invalid_line_count: {}",
+            profile.invalid_line_count
+        );
+        let _ = writeln!(
+            text,
+            "lifetime_profile_duplicate_key_count: {}",
+            profile.duplicate_key_count
+        );
+    }
+    let _ = writeln!(
+        text,
+        "lifetime_profile_match_count: {}",
+        lifetime_profile_match_count
+    );
+    let _ = writeln!(
+        text,
+        "lifetime_profile_miss_count: {}",
+        lifetime_profile_miss_count
+    );
     let _ = writeln!(text, "placement_hint: {}", cli.placement_hint);
     let _ = writeln!(text, "module_id: {}", lowering_module_id());
     let _ = writeln!(text, "module_id_algorithm: {}", MODULE_ID_ALGORITHM);
@@ -11936,6 +12504,12 @@ fn main() {
             process::exit(2);
         }
     };
+    if let Some(profile) = cli.lifetime_profile.clone() {
+        if LIFETIME_PROFILE.set(profile).is_err() {
+            eprintln!("lifetime profile was initialized more than once");
+            process::exit(2);
+        }
+    }
     unsafe {
         RECORDS = Some(Mutex::new(Vec::new()));
         ACTUAL_MIR_REWRITE = cli.actual_rewrite;

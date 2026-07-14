@@ -80,8 +80,8 @@ pub use alloc_api::{
     SemanticFallbackAttributionSnapshot, SemanticMetadataValidationSnapshot,
     SemanticOwnershipTransferSnapshot, SemanticScopeDepthSnapshot, SemanticStatsSnapshot,
     SemanticTypeStatsSnapshot, TypeIsolationSideCacheSnapshot, AUTO_LAYOUT_MODULE_ID,
-    FLAG_HUGEPAGE_METADATA, FLAG_TYPE_ISOLATED, LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LONG_LIVED,
-    SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION,
+    FLAG_DELAYED_FREE, FLAG_HUGEPAGE_METADATA, FLAG_TYPE_ISOLATED, LIFETIME_HINT_EPHEMERAL,
+    LIFETIME_HINT_LONG_LIVED, SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION,
     SEMANTIC_METADATA_VALIDATION_SNAPSHOT_ABI_VERSION, SEMANTIC_STATS_SNAPSHOT_ABI_VERSION,
     SEMANTIC_TYPE_STATS_SNAPSHOT_ABI_VERSION,
 };
@@ -89,6 +89,13 @@ pub use alloc_api::{
 pub use alloc_api::{
     hugepage_metadata_side_cache_backing_snapshot, hugepage_metadata_side_cache_snapshot,
     HugepageMetadataSideCacheSnapshot,
+};
+#[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+pub use alloc_api::{
+    lifetime_hugepage_configure, lifetime_hugepage_phase_flush_current_thread,
+    lifetime_hugepage_policy, lifetime_hugepage_stats_reset, lifetime_hugepage_stats_snapshot,
+    LifetimeHugepagePolicy, LifetimeHugepageStatsSnapshot, LIFETIME_HUGEPAGE_EXTENT_BYTES,
+    LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
 };
 pub use cache::RustAllocator as UniAlloc;
 pub use pal::arch::*;

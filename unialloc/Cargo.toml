@@ -68,6 +68,9 @@ fixed_heap = []
 # separate size-class/page-management path without changing allocator callers.
 separate_sc_backend = []
 hugepage = []
+# Opt-in hosted payload arenas keyed by exact lifetime and size classes.
+# Default builds keep the existing allocator path unchanged.
+lifetime_hugepage = []
 rseq = []
 pthread_dtor = []
 static_dtor = []

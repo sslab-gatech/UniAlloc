@@ -79,6 +79,51 @@ For direct wrapper invocation, the equivalent option is
 The environment variable is the intended Cargo integration because Cargo's
 `RUSTC_WRAPPER` setting names an executable rather than an argument vector.
 
+## Exact per-site lifetime profiles
+
+The MIR rewrite driver accepts `--unialloc-lifetime-profile <path>` or
+`UNIALLOC_LIFETIME_PROFILE=<path>`. The dependency-free text format uses the
+exact `callsite`, `type_id`, and `module_id` values emitted by a prior audit:
+
+```text
+unialloc-lifetime-profile-v1
+# callsite type_id module_id lifetime_class
+0xd082983f56011871 0xefa40a42f3015a14 0xfa02c02b1264f343 ephemeral
+0xd670bc4f00ad57ef 0xefa40a42f3015a14 0xfa02c02b1264f343 long-lived
+```
+
+Decimal identifiers and numeric classes `1` (ephemeral) and `2` (long-lived)
+are also accepted. The profile lookup is exact: a missing site, a type/module
+guard mismatch, an invalid class, an invalid format, or a duplicate key emits
+`lifetime_hint=0` (`Unknown`). When a profile is present, this fail-closed result
+also overrides any invocation-wide `--unialloc-lifetime-hint` value.
+
+Every rewrite row records `lifetime_hint_basis`. The compiler-pass audit records
+profile match/miss counts, invalid/duplicate counts, the exact-key binding, the
+source path, and a `fnv1a64-raw-bytes` digest. The digest is a reproducibility
+fingerprint rather than a cryptographic authenticity claim. The type/module
+guards protect against applying an otherwise identical callsite hash to a stale
+object identity or compilation unit; regenerated MIR/source spans can change a
+callsite and therefore produce a conservative miss. Match/miss counts cover
+metadata-carrying candidates; fail-closed skipped candidates have an explicit
+`not_applicable_skipped_candidate` basis.
+
+Use an audit-only first pass to collect candidate triples, classify selected
+sites externally, then run the actual rewrite with the generated profile. Keep
+allocation and corresponding deallocation/drop sites in the profile when both
+paths carry metadata, because the runtime identity includes `lifetime_hint`.
+Pointer-preserving ownership-transfer rows are marked
+`preserved_by_ownership_transfer_rebind`; their ABI preserves existing metadata
+and therefore does not consume a profile entry.
+
+The focused process-level regression covers fail-closed profile parsing plus a
+dependency-free stub-runtime second pass that executes the rewritten allocation
+and Drop scopes and observes their exact lifetime hint:
+
+```sh
+uv run python -m unittest tools/unialloc-rustc-pass/test_mir_lifetime_profile.py
+```
+
 ## Run through the real Cargo bench target
 
 The evaluation wrapper builds the pass, runs `cargo clean -p unialloc` to avoid a

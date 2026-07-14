@@ -8305,6 +8305,18 @@ unsafe fn cache_compiler_type_metadata_free(
         drop(ownership);
         return false;
     }
+    #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+    if super::lifetime_hugepage::owns(ptr) {
+        ownership.commit();
+        if metadata.requests(FLAG_FORCE_INITIALIZE) {
+            core::ptr::write_bytes(ptr, 0, layout.size());
+        }
+        if !terminal_release_retained_raw(alloc, ptr, layout, TerminalRetainedOwnership::TypeCache)
+        {
+            panic!("lifetime arena refused compiler-metadata terminal release");
+        }
+        return true;
+    }
     let cache_class = match compiler_type_metadata_cache_class(layout, metadata) {
         Some(cache_class) => cache_class,
         None => {
@@ -8372,6 +8384,41 @@ unsafe fn cache_semantic_free_with_rejected_insert_owner(
         record_stats_type_cache_bypass(metadata);
         drop(preacquired_ownership);
         return false;
+    }
+    #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+    if super::lifetime_hugepage::owns(ptr) {
+        let release_ownership = match (preacquired_ownership, terminal_ownership) {
+            (Some(ownership), _) => {
+                ownership.commit();
+                TerminalRetainedOwnership::TypeCache
+            }
+            (None, TerminalRetainedOwnership::DelayedFree) => {
+                TerminalRetainedOwnership::DelayedFree
+            }
+            (None, TerminalRetainedOwnership::TypeCache) => {
+                match begin_global_type_cache_ownership(ptr) {
+                    GlobalTypeCacheOwnershipAcquisition::Owned(ownership) => ownership.commit(),
+                    GlobalTypeCacheOwnershipAcquisition::Full(arbitration) => {
+                        return finish_full_type_cache_ownership(
+                            alloc,
+                            ptr,
+                            layout,
+                            metadata,
+                            terminal_ownership,
+                            arbitration,
+                        );
+                    }
+                }
+                TerminalRetainedOwnership::TypeCache
+            }
+        };
+        if metadata.requests(FLAG_FORCE_INITIALIZE) {
+            core::ptr::write_bytes(ptr, 0, layout.size());
+        }
+        if !terminal_release_retained_raw(alloc, ptr, layout, release_ownership) {
+            panic!("lifetime arena refused retained semantic terminal release");
+        }
+        return true;
     }
     let cache_class = match semantic_type_cache_class(layout, metadata) {
         Some(cache_class) => cache_class,
@@ -12120,6 +12167,31 @@ impl RecoveryRecordPolicy {
 }
 
 impl RustAllocator {
+    #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+    #[inline]
+    unsafe fn try_alloc_lifetime_arena(
+        &self,
+        layout: Layout,
+        metadata: AllocationMetadata,
+    ) -> Option<*mut u8> {
+        if let Some(ptr) = super::lifetime_hugepage::try_allocate(layout, metadata) {
+            accept_raw_allocation_return(ptr);
+            Some(ptr)
+        } else {
+            None
+        }
+    }
+
+    #[cfg(not(all(feature = "lifetime_hugepage", not(feature = "fixed_heap"))))]
+    #[inline]
+    unsafe fn try_alloc_lifetime_arena(
+        &self,
+        _layout: Layout,
+        _metadata: AllocationMetadata,
+    ) -> Option<*mut u8> {
+        None
+    }
+
     #[inline]
     unsafe fn record_fast_recovery_or_global(
         &self,
@@ -12140,7 +12212,9 @@ impl RustAllocator {
         if layout.size() == 0 {
             return semantic_zero_size_ptr(layout);
         }
-        let ptr = if let Some(ptr) = pop_compiler_type_metadata_cache(layout, metadata) {
+        let ptr = if let Some(ptr) = self.try_alloc_lifetime_arena(layout, metadata) {
+            ptr
+        } else if let Some(ptr) = pop_compiler_type_metadata_cache(layout, metadata) {
             publish_semantic_allocation_return(ptr);
             ptr
         } else {
@@ -12387,6 +12461,15 @@ impl RustAllocator {
             );
         }
 
+        if let Some(ptr) = self.try_alloc_lifetime_arena(layout, metadata) {
+            return self.finish_semantic_allocation_with_policy_after_publication(
+                ptr,
+                layout,
+                metadata,
+                recovery_policy,
+            );
+        }
+
         if let Some(ptr) = pop_semantic_type_cache(layout, metadata) {
             return self.finish_semantic_allocation_with_policy(
                 ptr,
@@ -12423,6 +12506,11 @@ impl RustAllocator {
         if guard_page_eligible(layout, metadata) {
             let ptr = alloc_guarded(layout, metadata);
             return self.finish_semantic_allocation_no_recovery(ptr, layout, metadata);
+        }
+
+        if let Some(ptr) = self.try_alloc_lifetime_arena(layout, metadata) {
+            return self
+                .finish_semantic_allocation_no_recovery_after_publication(ptr, layout, metadata);
         }
 
         if let Some(ptr) = pop_semantic_type_cache(layout, metadata) {
@@ -12725,6 +12813,22 @@ impl RustAllocator {
                 panic!("ordinary metadata admitted to delayed-free domain")
             }
         };
+        #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+        if super::lifetime_hugepage::owns(ptr) {
+            ownership.commit();
+            if metadata.requests(FLAG_FORCE_INITIALIZE) {
+                core::ptr::write_bytes(ptr, 0, layout.size());
+            }
+            if !terminal_release_retained_raw(
+                self,
+                ptr,
+                layout,
+                TerminalRetainedOwnership::TypeCache,
+            ) {
+                panic!("lifetime arena refused semantic terminal release");
+            }
+            return;
+        }
         if cache_semantic_free_with_ownership(self, ptr, layout, metadata, ownership) {
             return;
         }
@@ -12877,8 +12981,17 @@ impl RustAllocator {
             );
             return semantic_zero_size_ptr(new_layout);
         }
-        if semantic_realloc_can_reuse_in_place(old_layout, new_size, dealloc_metadata, new_metadata)
-        {
+        let storage_can_reuse_in_place = semantic_realloc_can_reuse_in_place(
+            old_layout,
+            new_size,
+            dealloc_metadata,
+            new_metadata,
+        );
+        #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+        let storage_can_reuse_in_place = storage_can_reuse_in_place
+            && super::lifetime_hugepage::realloc_in_place_supported(ptr, new_layout)
+                .unwrap_or(true);
+        if storage_can_reuse_in_place {
             let recovery_record_committed = match old_recovery {
                 AutoAllocationRecordLookup::Exact(recorded_metadata) => {
                     if auto_allocation_recovery_recording_enabled() {
