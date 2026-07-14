@@ -17,6 +17,7 @@ PROBE_NAME = "direct_local_ownership_probe"
 CROSS_THREAD_RECOVERY = 1 << 15
 DEFAULT_RECOVERY_BASIS = "default_recovery_backed_semantic_scope"
 EXACT_LOCAL_BASIS = "exact_local_no_recovery"
+AUTOMATIC_SHORT_BASIS = "automatic_exact_local_drop_before_phase_boundary"
 
 
 def run(command: list[str], *, cwd: Path, env: dict[str, str], timeout: int = 300) -> str:
@@ -96,9 +97,8 @@ static ALLOCATOR: UniAlloc = UniAlloc;
 #[inline(never)]
 fn mixed_escape_and_local_drop() -> u64 {
     let escaping = Box::new([11_u64; 16]);
-    let local = Box::new([29_u64; 16]);
     let value = escape_consumer::consume_box(escaping);
-    drop(local);
+    let _local = Box::new([29_u64; 16]);
     value
 }
 
@@ -188,7 +188,10 @@ def assert_default_recovery_scope(
 ) -> None:
     assert rows, label
     for row in rows:
-        assert row.get("replacement_symbol") == "__unialloc_semantic_scope_push", (
+        assert row.get("replacement_symbol") in {
+            "__unialloc_semantic_scope_push",
+            "__unialloc_semantic_scope_push_hints",
+        }, (
             label,
             row,
         )
@@ -206,7 +209,10 @@ def assert_default_recovery_scope(
 def assert_exact_local_scope(rows: list[dict[str, object]], label: str) -> None:
     assert rows, label
     for row in rows:
-        assert row.get("replacement_symbol") == "__unialloc_semantic_scope_push_local", (
+        assert row.get("replacement_symbol") in {
+            "__unialloc_semantic_scope_push_local",
+            "__unialloc_semantic_scope_push_hints_local",
+        }, (
             label,
             row,
         )
@@ -218,10 +224,10 @@ def assert_exact_local_scope(rows: list[dict[str, object]], label: str) -> None:
 def validate(audit: dict[str, object], stdout: str) -> None:
     summary = audit.get("summary")
     assert isinstance(summary, dict), summary
-    assert (
-        summary.get("semantic_scope_replacement_resolution_status")
-        == "resolved_unialloc_semantic_scope_push_mixed_local_recovery_pop"
-    ), summary
+    assert summary.get("semantic_scope_replacement_resolution_status") in {
+        "resolved_unialloc_semantic_scope_push_mixed_local_recovery_pop",
+        "resolved_unialloc_semantic_scope_push_hints_mixed_local_recovery_pop",
+    }, summary
     mixed_allocations = [
         row
         for row in applied_rows(
@@ -311,6 +317,32 @@ def validate(audit: dict[str, object], stdout: str) -> None:
         positive_allocations + positive_drops,
         "exact local allocation and matching Drop",
     )
+    assert all(
+        row.get("lifetime_hint") == 1
+        and row.get("lifetime_hint_confidence") == 100
+        and row.get("lifetime_hint_basis") == AUTOMATIC_SHORT_BASIS
+        for row in positive_allocations + positive_drops
+    ), (positive_allocations, positive_drops)
+
+    mixed_short_allocations = [
+        row
+        for row in mixed_allocations
+        if row.get("lifetime_hint_basis") == AUTOMATIC_SHORT_BASIS
+    ]
+    assert len(mixed_short_allocations) == 1, mixed_allocations
+    mixed_short = mixed_short_allocations[0]
+    mixed_short_drops = [
+        row
+        for row in mixed_drops
+        if row.get("semantic_object_type") == mixed_short.get("semantic_object_type")
+        and row.get("destination_place") == mixed_short.get("destination_place")
+    ]
+    assert mixed_short_drops, (mixed_short, mixed_drops)
+    assert all(
+        row.get("lifetime_hint") == 1
+        and row.get("lifetime_hint_basis") == AUTOMATIC_SHORT_BASIS
+        for row in mixed_short_drops
+    ), mixed_short_drops
 
     hidden_runtime = next(
         json.loads(line)
@@ -388,6 +420,7 @@ def main() -> int:
                 "UNIALLOC_DIRECT_LOCAL_METADATA_ABI": "1",
                 "UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP": "1",
                 "UNIALLOC_LOWERING_POLICY_FLAGS": "1",
+                "UNIALLOC_AUTO_LIFETIME_CLASSIFIER": "1",
                 "UNIALLOC_RUSTC_SYSROOT": sysroot,
                 "CARGO_NET_OFFLINE": "true",
                 "CARGO_INCREMENTAL": "0",

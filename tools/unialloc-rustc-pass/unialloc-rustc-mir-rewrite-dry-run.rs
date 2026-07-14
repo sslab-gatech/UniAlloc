@@ -44,7 +44,7 @@ use rustc_hir::def::Res;
 use rustc_interface::interface;
 #[cfg(unialloc_rustc_current)]
 use rustc_middle::mir::interpret::Scalar;
-use rustc_middle::mir::visit::{MutatingUseContext, PlaceContext, Visitor};
+use rustc_middle::mir::visit::{MutatingUseContext, NonMutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
     BasicBlock, BasicBlockData, Body, CastKind, LocalDecl, Location, Operand, Place, Rvalue,
     SourceInfo, StatementKind, Terminator, TerminatorKind,
@@ -103,6 +103,8 @@ const LIFETIME_PROFILE_BINDING: &str = "exact(callsite,type_id,module_id)";
 const LIFETIME_PROFILE_DIGEST_ALGORITHM: &str = "fnv1a64-raw-bytes";
 const LIFETIME_HINT_EPHEMERAL: u16 = 1;
 const LIFETIME_HINT_LONG_LIVED: u16 = 2;
+const AUTOMATIC_LIFETIME_CLASSIFIER_PRECEDENCE: &str =
+    "exact_profile>manual_global>automatic>Unknown";
 
 #[cfg(unialloc_rustc_current)]
 type OptimizedMirDefId = LocalDefId;
@@ -119,6 +121,7 @@ static mut LOWERING_MODULE_ID: u64 = LEGACY_UNIALLOC_LOWERING_MODULE_ID;
 static mut LOWERING_POLICY_FLAGS: u32 = DEFAULT_LOWERING_POLICY_FLAGS;
 static mut LOWERING_LIFETIME_HINT: u16 = 0;
 static mut LOWERING_LIFETIME_CONFIDENCE_THRESHOLD: u8 = 0;
+static mut AUTO_LIFETIME_CLASSIFIER: bool = false;
 static mut LOWERING_PLACEMENT_HINT: u16 = 0;
 static mut AUTO_CROSS_THREAD_RECOVERY_HINT: bool = false;
 static mut DIRECT_LOCAL_METADATA_ABI: bool = false;
@@ -161,6 +164,7 @@ struct Cli {
     lifetime_hint: u16,
     lifetime_confidence_threshold: u8,
     lifetime_profile: Option<LifetimeProfile>,
+    auto_lifetime_classifier: bool,
     placement_hint: u16,
     auto_cross_thread_recovery_hint: bool,
     direct_local_metadata_abi: bool,
@@ -200,6 +204,20 @@ struct LifetimeHintSelection {
     hint: u16,
     confidence: u8,
     basis: &'static str,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AutomaticLifetimeDecision {
+    ExactLocalDropBeforePhaseBoundary,
+    ExactLocalDropAfterPhaseBoundary,
+    EffectfulDropGlueUnknown,
+    AliasOrEscapeUnknown,
+    MissingOrCleanupDropUnknown,
+    NonlinearControlFlowUnknown,
+    InterveningCallMayAdvanceEpochUnknown,
+    CleanupBeforeBoundaryUnknown,
+    AmbiguousOwnerSiteUnknown,
+    UnsupportedSiteUnknown,
 }
 
 enum ParsedInvocation {
@@ -528,7 +546,7 @@ struct SemanticDropCandidate<'tcx> {
 struct RewriteDryRunCallbacks;
 
 fn usage() -> &'static str {
-    "Usage:\n  RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs -o /tmp/unialloc-rustc-mir-rewrite-dry-run\n  DYLD_LIBRARY_PATH=$(rustc +$(cat rust-toolchain) --print sysroot)/lib /tmp/unialloc-rustc-mir-rewrite-dry-run \\\n    --unialloc-rewrite-audit-out /tmp/rewrite-audit.json -- --sysroot $(rustc +$(cat rust-toolchain) --print sysroot) --edition=2021 input.rs\n\nOptions:\n  --unialloc-rewrite-audit-out <path>  JSON rewrite audit output. Defaults to env UNIALLOC_REWRITE_AUDIT_OUT or ./unialloc-rustc-mir-rewrite-dry-run.json\n  --unialloc-rewrite-audit-dir <dir>   Wrapper-friendly output directory. Defaults to env UNIALLOC_REWRITE_AUDIT_DIR if set\n  --unialloc-pass-log-out <path>       Optional pass log output. Defaults to env UNIALLOC_PASS_LOG_OUT if set\n  --unialloc-pass-log-dir <dir>        Wrapper-friendly log directory. Defaults to env UNIALLOC_PASS_LOG_DIR if set\n  --unialloc-target-crates <names>     Optional comma-separated Cargo crate allowlist. Defaults to env UNIALLOC_RUSTC_TARGET_CRATES. Hyphens and underscores compare equivalently\n  --unialloc-actual-mir-rewrite        Opt in to replacing supported direct allocator-call terminators. Defaults to env UNIALLOC_ACTUAL_MIR_REWRITE truthiness\n  --unialloc-actual-semantic-scope-rewrite  Opt in to inserting __unialloc_semantic_scope_push/pop around supported semantic allocation calls. Defaults to env UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE truthiness\n  --unialloc-auto-cross-thread-recovery-hint  OR the cross-thread recovery placement bit into solved heap-object scopes when the MIR body contains thread-spawn/escape calls. Defaults to env UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT truthiness\n  --unialloc-direct-local-metadata-abi  Use no-recovery UniAlloc Layout alloc/alloc_zeroed/realloc/dealloc ABI variants only when paired metadata deallocation/reallocation is explicit; unpaired size/align exchange_malloc keeps recovery ABI. Defaults to env UNIALLOC_DIRECT_LOCAL_METADATA_ABI truthiness\n  --unialloc-direct-local-size-align-with-semantic-drop  Enable no-recovery semantic scopes only for destination-proven linear Drop ownership; raw size/align calls without an exact owner link remain recovery-backed. Defaults to env UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP truthiness\n  --unialloc-policy-flags <u32>        Policy flags inserted into UniAlloc metadata. Defaults to env UNIALLOC_LOWERING_POLICY_FLAGS or 0x1 (TYPE_ISOLATED only)\n  --unialloc-lifetime-hint <u16>       Optional invocation-wide metadata lifetime hint. Defaults to env UNIALLOC_LOWERING_LIFETIME_HINT or 0\n  --unialloc-lifetime-profile <path>   Exact per-site lifetime profile. Defaults to env UNIALLOC_LIFETIME_PROFILE. Profile misses override the invocation-wide hint with Unknown (0)\n  --unialloc-lifetime-confidence-threshold <0..100>  Minimum v2 profile confidence to emit a lifetime hint. Defaults to env UNIALLOC_LIFETIME_CONFIDENCE_THRESHOLD or 0\n  --unialloc-placement-hint <u16>      Optional metadata placement hint. Defaults to env UNIALLOC_LOWERING_PLACEMENT_HINT or 0\n  --unialloc-continue-compilation      Continue after analysis and produce normal rustc outputs. Actual rewrite modes continue by default. Defaults to env UNIALLOC_CONTINUE_COMPILATION truthiness\n  --unialloc-stop-after-analysis       Force analysis-only output even if an actual rewrite flag is set\n  --unialloc-dry-run-only              Force audit-only mode even if actual rewrite env flags are set\n  --unialloc-help                      Print this help\n\nEverything after `--` is passed to rustc_driver as a direct invocation. Without `--`, an executable path or a bare command resolved through PATH/PATHEXT is treated as Cargo's compiler argv0. Executable source files therefore require explicit `--` for direct compilation.\n"
+    "Usage:\n  RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs -o /tmp/unialloc-rustc-mir-rewrite-dry-run\n  DYLD_LIBRARY_PATH=$(rustc +$(cat rust-toolchain) --print sysroot)/lib /tmp/unialloc-rustc-mir-rewrite-dry-run \\\n    --unialloc-rewrite-audit-out /tmp/rewrite-audit.json -- --sysroot $(rustc +$(cat rust-toolchain) --print sysroot) --edition=2021 input.rs\n\nOptions:\n  --unialloc-rewrite-audit-out <path>  JSON rewrite audit output. Defaults to env UNIALLOC_REWRITE_AUDIT_OUT or ./unialloc-rustc-mir-rewrite-dry-run.json\n  --unialloc-rewrite-audit-dir <dir>   Wrapper-friendly output directory. Defaults to env UNIALLOC_REWRITE_AUDIT_DIR if set\n  --unialloc-pass-log-out <path>       Optional pass log output. Defaults to env UNIALLOC_PASS_LOG_OUT if set\n  --unialloc-pass-log-dir <dir>        Wrapper-friendly log directory. Defaults to env UNIALLOC_PASS_LOG_DIR if set\n  --unialloc-target-crates <names>     Optional comma-separated Cargo crate allowlist. Defaults to env UNIALLOC_RUSTC_TARGET_CRATES. Hyphens and underscores compare equivalently\n  --unialloc-actual-mir-rewrite        Opt in to replacing supported direct allocator-call terminators. Defaults to env UNIALLOC_ACTUAL_MIR_REWRITE truthiness\n  --unialloc-actual-semantic-scope-rewrite  Opt in to inserting __unialloc_semantic_scope_push/pop around supported semantic allocation calls. Defaults to env UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE truthiness\n  --unialloc-auto-lifetime-classifier  Classify stable nonescaping linear owners as Ephemeral before, or LongLived across, an exact UniAlloc epoch boundary; read-only uses are allowed and every unproven site stays Unknown. Defaults to env UNIALLOC_AUTO_LIFETIME_CLASSIFIER truthiness\n  --unialloc-auto-cross-thread-recovery-hint  OR the cross-thread recovery placement bit into solved heap-object scopes when the MIR body contains thread-spawn/escape calls. Defaults to env UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT truthiness\n  --unialloc-direct-local-metadata-abi  Use no-recovery UniAlloc Layout alloc/alloc_zeroed/realloc/dealloc ABI variants only when paired metadata deallocation/reallocation is explicit; unpaired size/align exchange_malloc keeps recovery ABI. Defaults to env UNIALLOC_DIRECT_LOCAL_METADATA_ABI truthiness\n  --unialloc-direct-local-size-align-with-semantic-drop  Enable no-recovery semantic scopes only for destination-proven linear Drop ownership; raw size/align calls without an exact owner link remain recovery-backed. Defaults to env UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP truthiness\n  --unialloc-policy-flags <u32>        Policy flags inserted into UniAlloc metadata. Defaults to env UNIALLOC_LOWERING_POLICY_FLAGS or 0x1 (TYPE_ISOLATED only)\n  --unialloc-lifetime-hint <u16>       Optional invocation-wide metadata lifetime hint. Defaults to env UNIALLOC_LOWERING_LIFETIME_HINT or 0\n  --unialloc-lifetime-profile <path>   Exact per-site lifetime profile. Defaults to env UNIALLOC_LIFETIME_PROFILE. Profile misses override manual and automatic inputs with Unknown (0)\n  --unialloc-lifetime-confidence-threshold <0..100>  Minimum v2 profile or automatic-classifier confidence to emit a lifetime hint. Defaults to env UNIALLOC_LIFETIME_CONFIDENCE_THRESHOLD or 0\n  --unialloc-placement-hint <u16>      Optional metadata placement hint. Defaults to env UNIALLOC_LOWERING_PLACEMENT_HINT or 0\n  --unialloc-continue-compilation      Continue after analysis and produce normal rustc outputs. Actual rewrite modes continue by default. Defaults to env UNIALLOC_CONTINUE_COMPILATION truthiness\n  --unialloc-stop-after-analysis       Force analysis-only output even if an actual rewrite flag is set\n  --unialloc-dry-run-only              Force audit-only mode even if actual rewrite env flags are set\n  --unialloc-help                      Print this help\n\nEverything after `--` is passed to rustc_driver as a direct invocation. Without `--`, an executable path or a bare command resolved through PATH/PATHEXT is treated as Cargo's compiler argv0. Executable source files therefore require explicit `--` for direct compilation.\n"
 }
 
 fn env_truthy(name: &str) -> bool {
@@ -813,6 +831,122 @@ fn select_lifetime_hint(
     }
 }
 
+fn select_lifetime_hint_with_automatic_decision(
+    profile: Option<&LifetimeProfile>,
+    configured_hint: u16,
+    confidence_threshold: u8,
+    automatic_classifier_enabled: bool,
+    automatic_decision: Option<AutomaticLifetimeDecision>,
+    callsite: u64,
+    type_id: u64,
+    module_id: u64,
+) -> LifetimeHintSelection {
+    // An explicitly supplied profile remains fail-closed and authoritative:
+    // a profile miss does not silently fall back to a different classifier.
+    // The invocation-wide hint is likewise an explicit operator override.
+    if profile.is_some() || configured_hint != 0 || !automatic_classifier_enabled {
+        return select_lifetime_hint(
+            profile,
+            configured_hint,
+            confidence_threshold,
+            callsite,
+            type_id,
+            module_id,
+        );
+    }
+
+    let selection = match automatic_decision {
+        Some(AutomaticLifetimeDecision::ExactLocalDropBeforePhaseBoundary) => {
+            LifetimeHintSelection {
+                hint: LIFETIME_HINT_EPHEMERAL,
+                confidence: 100,
+                basis: "automatic_exact_local_drop_before_phase_boundary",
+            }
+        }
+        Some(AutomaticLifetimeDecision::ExactLocalDropAfterPhaseBoundary) => {
+            LifetimeHintSelection {
+                hint: LIFETIME_HINT_LONG_LIVED,
+                confidence: 100,
+                basis: "automatic_exact_local_drop_after_phase_boundary",
+            }
+        }
+        Some(AutomaticLifetimeDecision::EffectfulDropGlueUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_effectful_drop_glue_unknown",
+        },
+        Some(AutomaticLifetimeDecision::AliasOrEscapeUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_alias_or_escape_unknown",
+        },
+        Some(AutomaticLifetimeDecision::MissingOrCleanupDropUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_missing_or_cleanup_drop_unknown",
+        },
+        Some(AutomaticLifetimeDecision::NonlinearControlFlowUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_nonlinear_control_flow_unknown",
+        },
+        Some(AutomaticLifetimeDecision::InterveningCallMayAdvanceEpochUnknown) => {
+            LifetimeHintSelection {
+                hint: 0,
+                confidence: 0,
+                basis: "automatic_intervening_call_may_advance_epoch_unknown",
+            }
+        }
+        Some(AutomaticLifetimeDecision::CleanupBeforeBoundaryUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_cleanup_before_boundary_unknown",
+        },
+        Some(AutomaticLifetimeDecision::AmbiguousOwnerSiteUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_ambiguous_owner_site_unknown",
+        },
+        Some(AutomaticLifetimeDecision::UnsupportedSiteUnknown) | None => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_unsupported_site_unknown",
+        },
+    };
+    if selection.hint != 0 && selection.confidence < confidence_threshold {
+        LifetimeHintSelection {
+            hint: 0,
+            confidence: selection.confidence,
+            basis: "automatic_below_confidence_threshold",
+        }
+    } else {
+        selection
+    }
+}
+
+fn automatic_lifetime_ephemeral_basis(basis: &str) -> bool {
+    basis == "automatic_exact_local_drop_before_phase_boundary"
+}
+
+fn automatic_lifetime_long_lived_basis(basis: &str) -> bool {
+    basis == "automatic_exact_local_drop_after_phase_boundary"
+}
+
+fn automatic_lifetime_unknown_basis(basis: &str) -> bool {
+    basis == "automatic_below_confidence_threshold"
+        || (basis.starts_with("automatic_") && basis.ends_with("_unknown"))
+}
+
+fn automatic_lifetime_unsupported_basis(basis: &str) -> bool {
+    basis == "automatic_unsupported_site_unknown"
+}
+
+fn automatic_lifetime_eligible_basis(basis: &str) -> bool {
+    automatic_lifetime_ephemeral_basis(basis)
+        || automatic_lifetime_long_lived_basis(basis)
+        || (automatic_lifetime_unknown_basis(basis) && !automatic_lifetime_unsupported_basis(basis))
+}
+
 #[inline]
 fn lowering_policy_flags() -> u32 {
     unsafe { LOWERING_POLICY_FLAGS }
@@ -833,15 +967,23 @@ fn lowering_lifetime_hint_for_site(
     callsite: u64,
     type_id: u64,
     module_id: u64,
+    automatic_decision: Option<AutomaticLifetimeDecision>,
 ) -> LifetimeHintSelection {
-    select_lifetime_hint(
+    select_lifetime_hint_with_automatic_decision(
         LIFETIME_PROFILE.get(),
         lowering_lifetime_hint(),
         lowering_lifetime_confidence_threshold(),
+        auto_lifetime_classifier_enabled(),
+        automatic_decision,
         callsite,
         type_id,
         module_id,
     )
+}
+
+#[inline]
+fn auto_lifetime_classifier_enabled() -> bool {
+    unsafe { AUTO_LIFETIME_CLASSIFIER }
 }
 
 #[inline]
@@ -865,9 +1007,20 @@ fn direct_local_size_align_with_semantic_drop_requested() -> bool {
 }
 
 #[inline]
+fn local_no_recovery_lifetime_source_safe() -> bool {
+    // A site profile can be intentionally partial. Allocation and Drop rows
+    // have distinct callsite keys, so profile presence cannot prove that both
+    // sides selected the same lifetime identity. Keep direct allocator calls
+    // and semantic scopes on recovery-backed ABIs until profile pairing is
+    // validated explicitly.
+    LIFETIME_PROFILE.get().is_none()
+}
+
+#[inline]
 fn lowering_metadata_hints_requested() -> bool {
     LIFETIME_PROFILE.get().is_some()
         || lowering_lifetime_hint() != 0
+        || auto_lifetime_classifier_enabled()
         || lowering_placement_hint() != 0
         || auto_cross_thread_recovery_hint_enabled()
 }
@@ -1224,6 +1377,7 @@ fn parse_cli() -> Result<ParsedInvocation, String> {
     let mut lifetime_hint = None;
     let mut lifetime_confidence_threshold = None;
     let mut lifetime_profile_path = env::var_os("UNIALLOC_LIFETIME_PROFILE").map(PathBuf::from);
+    let mut auto_lifetime_classifier = env_truthy("UNIALLOC_AUTO_LIFETIME_CLASSIFIER");
     let mut placement_hint = None;
     let mut auto_cross_thread_recovery_hint =
         env_truthy("UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT");
@@ -1342,6 +1496,9 @@ fn parse_cli() -> Result<ParsedInvocation, String> {
                     .unwrap_or_default();
                 lifetime_confidence_threshold =
                     Some(parse_lifetime_confidence_threshold(threshold)?);
+            }
+            "--unialloc-auto-lifetime-classifier" => {
+                auto_lifetime_classifier = true;
             }
             "--unialloc-placement-hint" => {
                 i += 1;
@@ -1465,6 +1622,7 @@ fn parse_cli() -> Result<ParsedInvocation, String> {
         lifetime_hint,
         lifetime_confidence_threshold,
         lifetime_profile,
+        auto_lifetime_classifier,
         placement_hint,
         auto_cross_thread_recovery_hint,
         direct_local_metadata_abi,
@@ -1800,6 +1958,7 @@ fn direct_allocator_replacement_symbol_for_site(
 ) -> &'static str {
     let kind = direct_allocator_layout_abi_kind(kind).unwrap_or(kind);
     let local = direct_local_metadata_abi_requested()
+        && local_no_recovery_lifetime_source_safe()
         && (kind != DirectAllocatorCallKind::SizeAlignAlloc
             || !direct_local_size_align_with_semantic_drop_requested()
             || allow_size_align_local);
@@ -1880,6 +2039,7 @@ fn direct_allocator_resolved_status_for_site(
     let kind = direct_allocator_layout_abi_kind(kind).unwrap_or(kind);
     let local = !force_recovery_backed
         && direct_local_metadata_abi_requested()
+        && local_no_recovery_lifetime_source_safe()
         && (kind != DirectAllocatorCallKind::SizeAlignAlloc
             || !direct_local_size_align_with_semantic_drop_requested()
             || allow_size_align_local);
@@ -1961,6 +2121,7 @@ fn direct_allocator_unresolved_status_for_site(
     let kind = direct_allocator_layout_abi_kind(kind).unwrap_or(kind);
     let local = !force_recovery_backed
         && direct_local_metadata_abi_requested()
+        && local_no_recovery_lifetime_source_safe()
         && (kind != DirectAllocatorCallKind::SizeAlignAlloc
             || !direct_local_size_align_with_semantic_drop_requested()
             || allow_size_align_local);
@@ -5852,6 +6013,96 @@ mod tests {
     }
 
     #[test]
+    fn automatic_lifetime_selection_is_conservative_and_explicit_inputs_win() {
+        let short = select_lifetime_hint_with_automatic_decision(
+            None,
+            0,
+            0,
+            true,
+            Some(AutomaticLifetimeDecision::ExactLocalDropBeforePhaseBoundary),
+            1,
+            2,
+            3,
+        );
+        assert_eq!(short.hint, LIFETIME_HINT_EPHEMERAL);
+        assert_eq!(short.confidence, 100);
+        assert!(automatic_lifetime_ephemeral_basis(short.basis));
+
+        let long = select_lifetime_hint_with_automatic_decision(
+            None,
+            0,
+            100,
+            true,
+            Some(AutomaticLifetimeDecision::ExactLocalDropAfterPhaseBoundary),
+            1,
+            2,
+            3,
+        );
+        assert_eq!(long.hint, LIFETIME_HINT_LONG_LIVED);
+        assert_eq!(long.confidence, 100);
+        assert!(automatic_lifetime_long_lived_basis(long.basis));
+
+        let unknown = select_lifetime_hint_with_automatic_decision(
+            None,
+            0,
+            0,
+            true,
+            Some(AutomaticLifetimeDecision::InterveningCallMayAdvanceEpochUnknown),
+            1,
+            2,
+            3,
+        );
+        assert_eq!(unknown.hint, 0);
+        assert!(automatic_lifetime_unknown_basis(unknown.basis));
+
+        let effectful_drop = select_lifetime_hint_with_automatic_decision(
+            None,
+            0,
+            0,
+            true,
+            Some(AutomaticLifetimeDecision::EffectfulDropGlueUnknown),
+            1,
+            2,
+            3,
+        );
+        assert_eq!(effectful_drop.hint, 0);
+        assert_eq!(
+            effectful_drop.basis,
+            "automatic_effectful_drop_glue_unknown"
+        );
+        assert!(automatic_lifetime_unknown_basis(effectful_drop.basis));
+
+        let manual = select_lifetime_hint_with_automatic_decision(
+            None,
+            LIFETIME_HINT_LONG_LIVED,
+            0,
+            true,
+            Some(AutomaticLifetimeDecision::ExactLocalDropBeforePhaseBoundary),
+            1,
+            2,
+            3,
+        );
+        assert_eq!(manual.hint, LIFETIME_HINT_LONG_LIVED);
+        assert_eq!(manual.basis, "manual_global_lifetime_hint");
+    }
+
+    #[test]
+    fn lifetime_epoch_boundary_path_is_exact() {
+        assert!(exact_unialloc_lifetime_epoch_boundary_def_path(
+            "unialloc[a11c]::alloc_api::lifetime_hugepage::lifetime_hugepage_advance_epoch"
+        ));
+        assert!(exact_unialloc_lifetime_epoch_boundary_def_path(
+            "unialloc::lifetime_hugepage_advance_epoch"
+        ));
+        assert!(!exact_unialloc_lifetime_epoch_boundary_def_path(
+            "app::lifetime_hugepage_advance_epoch"
+        ));
+        assert!(!exact_unialloc_lifetime_epoch_boundary_def_path(
+            "unialloc::lifetime_hugepage_phase_flush_current_thread"
+        ));
+    }
+
+    #[test]
     fn semantic_scope_default_recovery_hint_preserves_explicit_hints_and_local_pairs() {
         assert_eq!(
             semantic_scope_placement_hint_from_configured(0, false, "default", false),
@@ -8699,6 +8950,7 @@ fn const_u16_operand<'tcx>(tcx: TyCtxt<'tcx>, value: u16, span: Span) -> Operand
 struct SemanticLocalOwnershipProof {
     allocation_pairs: BTreeSet<(String, String)>,
     drop_pairs: BTreeSet<(String, String)>,
+    automatic_lifetime_decisions: BTreeMap<(String, String), AutomaticLifetimeDecision>,
     exact_zip_drop_pairs: BTreeSet<(String, String)>,
 }
 
@@ -8842,6 +9094,7 @@ struct SemanticOwnerUseVisitor<'tcx> {
     owner: Place<'tcx>,
     allocation_block: BasicBlock,
     allocation_statement_index: usize,
+    allow_read_only: bool,
     disqualified: bool,
 }
 
@@ -8859,23 +9112,35 @@ impl<'tcx> Visitor<'tcx> for SemanticOwnerUseVisitor<'tcx> {
         let exact_drop =
             exact_owner && matches!(context, PlaceContext::MutatingUse(MutatingUseContext::Drop));
         let bookkeeping_only = matches!(context, PlaceContext::NonUse(_));
+        let read_only_owner_use = self.allow_read_only
+            && exact_owner
+            && matches!(
+                context,
+                PlaceContext::NonMutatingUse(
+                    NonMutatingUseContext::Inspect
+                        | NonMutatingUseContext::SharedBorrow
+                        | NonMutatingUseContext::FakeBorrow
+                        | NonMutatingUseContext::PlaceMention
+                        | NonMutatingUseContext::Projection
+                ) | PlaceContext::MutatingUse(
+                    MutatingUseContext::Retag | MutatingUseContext::Projection
+                )
+            );
 
-        // Local/no-recovery is intentionally a zero-alias proof.  Apart from
-        // the constructor destination, compiler bookkeeping, and an exact
-        // Drop, *every* typed use of the owner local fails closed.  This
-        // includes Ref/Reborrow/RawPtr, moves/copies, call arguments,
-        // projections, overwrites, and deref temporaries.  Rejecting at alias
-        // creation means a later call cannot hide ownership behind another
-        // local, unlike the former MIR debug-string substring heuristic.
-        if !allocation_destination && !exact_drop && !bookkeeping_only {
+        // Shared borrows and read-only inspection preserve the allocation
+        // owner under valid Rust. Moves, copies, mutable/raw borrows, stores,
+        // and projected values can transfer or replace backing storage and
+        // remain disqualifying for exact lifetime attribution.
+        if !allocation_destination && !exact_drop && !bookkeeping_only && !read_only_owner_use {
             self.disqualified = true;
         }
     }
 }
 
-fn candidate_has_zero_alias_owner_uses<'tcx>(
+fn candidate_has_owner_uses<'tcx>(
     body: &Body<'tcx>,
     candidate: &SemanticScopeCandidate<'tcx>,
+    allow_read_only: bool,
 ) -> bool {
     if !candidate.destination.projection.is_empty() {
         return false;
@@ -8885,6 +9150,7 @@ fn candidate_has_zero_alias_owner_uses<'tcx>(
         owner: candidate.destination,
         allocation_block: candidate.bb,
         allocation_statement_index: body[candidate.bb].statements.len(),
+        allow_read_only,
         disqualified: false,
     };
     for (bb, data) in body_basic_blocks!(body).iter_enumerated() {
@@ -8916,6 +9182,20 @@ fn candidate_has_zero_alias_owner_uses<'tcx>(
     true
 }
 
+fn candidate_has_zero_alias_owner_uses<'tcx>(
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> bool {
+    candidate_has_owner_uses(body, candidate, false)
+}
+
+fn candidate_has_stable_nonescaping_owner_uses<'tcx>(
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> bool {
+    candidate_has_owner_uses(body, candidate, true)
+}
+
 fn candidate_has_linear_exact_drop<'tcx>(
     body: &Body<'tcx>,
     candidate: &SemanticScopeCandidate<'tcx>,
@@ -8941,13 +9221,12 @@ fn candidate_has_linear_exact_drop<'tcx>(
             Some(terminator) => terminator,
             None => return false,
         };
-
-        if let TerminatorKind::Drop { place, .. } = &terminator.kind {
-            if *place == candidate.destination {
-                return true;
-            }
+        if matches!(
+            &terminator.kind,
+            TerminatorKind::Drop { place, .. } if *place == candidate.destination
+        ) {
+            return true;
         }
-
         let normal_successors = terminator
             .successors()
             .filter(|successor| !body[*successor].is_cleanup)
@@ -8959,16 +9238,243 @@ fn candidate_has_linear_exact_drop<'tcx>(
     }
 }
 
+fn exact_unialloc_lifetime_epoch_boundary_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "unialloc::lifetime_hugepage_advance_epoch"
+            | "unialloc::alloc_api::lifetime_hugepage_advance_epoch"
+            | "unialloc::alloc_api::lifetime_hugepage::lifetime_hugepage_advance_epoch"
+    )
+}
+
+fn exact_unialloc_lifetime_epoch_boundary_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "unialloc"
+        && exact_unialloc_lifetime_epoch_boundary_def_path(&tcx.def_path_str(def_id))
+}
+
+fn terminator_is_exact_unialloc_lifetime_epoch_boundary<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    terminator: &Terminator<'tcx>,
+) -> bool {
+    let func = match &terminator.kind {
+        TerminatorKind::Call { func, .. } => func,
+        _ => return false,
+    };
+    match func.ty(&body.local_decls, tcx).kind() {
+        ty::FnDef(def_id, _) => exact_unialloc_lifetime_epoch_boundary_def_id(tcx, *def_id),
+        _ => false,
+    }
+}
+
+fn type_drop_glue_may_execute<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
+    // `needs_drop` requires a fully resolved typing environment. Optimized MIR
+    // is normally monomorphized here; unresolved inputs abstain rather than
+    // risking either an ICE or an unsound Ephemeral classification.
+    if clone_result_has_unresolved_params(ty) {
+        return true;
+    }
+    #[cfg(unialloc_rustc_current)]
+    {
+        ty.needs_drop(tcx, ty::TypingEnv::fully_monomorphized())
+    }
+    #[cfg(not(unialloc_rustc_current))]
+    {
+        ty.needs_drop(tcx, ty::ParamEnv::reveal_all())
+    }
+}
+
+fn direct_owner_generic_drop_glue_may_be_effectful<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    owner_ty: Ty<'tcx>,
+) -> bool {
+    let generic_types = match owner_ty.kind() {
+        ty::Adt(_, substs) => substs.types(),
+        // The caller accepts only direct supported owner ADTs. Retain a
+        // conservative result if that contract changes in a future rustc.
+        _ => return true,
+    };
+
+    generic_types
+        .into_iter()
+        .any(|nested_ty| type_drop_glue_may_execute(tcx, nested_ty))
+}
+
+fn lifetime_terminator_is_transparent_control_only<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    terminator: &Terminator<'tcx>,
+) -> bool {
+    match &terminator.kind {
+        // These terminators only choose the next MIR block. SwitchInt and
+        // Assert operands are already evaluated values; an Assert unwind edge
+        // is handled independently by the pre-boundary cleanup-edge gate.
+        TerminatorKind::Goto { .. }
+        | TerminatorKind::SwitchInt { .. }
+        | TerminatorKind::Assert { .. }
+        | TerminatorKind::FalseEdge { .. }
+        | TerminatorKind::FalseUnwind { .. } => true,
+        // Drop is transparent only when rustc proves that no drop glue runs.
+        // A Drop whose glue runs can invoke arbitrary application code.
+        TerminatorKind::Drop { place, .. } => {
+            let drop_ty = place.ty(&body.local_decls, tcx).ty;
+            !type_drop_glue_may_execute(tcx, drop_ty)
+        }
+        // Exact epoch Calls are recognized and consumed as boundaries before
+        // this predicate is queried. Every other Call is opaque. All remaining
+        // current and legacy MIR variants, including InlineAsm and Yield, stay
+        // fail-closed without enumerating version-specific variant names.
+        _ => false,
+    }
+}
+
+fn candidate_linear_lifetime_decision<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> AutomaticLifetimeDecision {
+    let destination_ty = candidate.destination.ty(&body.local_decls, tcx).ty;
+    if !direct_supported_heap_object_destination(tcx, destination_ty)
+        || format!("{:?}", destination_ty) != candidate.semantic_object_type
+    {
+        // Semantic scopes also cover receiver-owned reallocations and
+        // deallocations. Their call destination can be `()`, `Option<T>`, or a
+        // temporary guard/iterator whose Drop says nothing about the receiver
+        // allocation's lifetime. Until the pass records an exact receiver
+        // owner Place, classify only direct destination-owning constructors.
+        return AutomaticLifetimeDecision::UnsupportedSiteUnknown;
+    }
+    if !candidate_has_stable_nonescaping_owner_uses(body, candidate) {
+        return AutomaticLifetimeDecision::AliasOrEscapeUnknown;
+    }
+    let mut bb = match candidate.original_target {
+        Some(bb) => bb,
+        None => return AutomaticLifetimeDecision::MissingOrCleanupDropUnknown,
+    };
+    let mut visited = BTreeSet::new();
+    let mut crossed_phase_boundary = false;
+    let mut saw_hidden_effect = false;
+    let mut saw_pre_boundary_cleanup_edge = false;
+
+    loop {
+        if !visited.insert(bb) {
+            return AutomaticLifetimeDecision::NonlinearControlFlowUnknown;
+        }
+        let data = &body[bb];
+        if data.is_cleanup {
+            return AutomaticLifetimeDecision::MissingOrCleanupDropUnknown;
+        }
+        let terminator = match &data.terminator {
+            Some(terminator) => terminator,
+            None => return AutomaticLifetimeDecision::MissingOrCleanupDropUnknown,
+        };
+
+        if let TerminatorKind::Drop { place, .. } = &terminator.kind {
+            if *place == candidate.destination {
+                return if crossed_phase_boundary {
+                    if saw_pre_boundary_cleanup_edge {
+                        AutomaticLifetimeDecision::CleanupBeforeBoundaryUnknown
+                    } else {
+                        AutomaticLifetimeDecision::ExactLocalDropAfterPhaseBoundary
+                    }
+                } else if direct_owner_generic_drop_glue_may_be_effectful(tcx, destination_ty) {
+                    // Dropping a Box<T>, Vec<T>, Arc<T>, or another supported
+                    // owner can execute T::drop before releasing the backing
+                    // allocation. That user Drop glue can advance the process
+                    // epoch while the owner remains live, so the absence of an
+                    // explicit MIR boundary in this body cannot prove short
+                    // lifetime. A boundary already crossed still proves Long.
+                    AutomaticLifetimeDecision::EffectfulDropGlueUnknown
+                } else if saw_hidden_effect {
+                    // Without interprocedural and terminator-effect summaries,
+                    // an opaque operation can hide the process-wide epoch API.
+                    AutomaticLifetimeDecision::InterveningCallMayAdvanceEpochUnknown
+                } else if saw_pre_boundary_cleanup_edge {
+                    // A cleanup path can drop the owner before the observed
+                    // normal-path boundary. Ephemeral requires every reachable
+                    // pre-boundary path to stay free of such an early exit.
+                    AutomaticLifetimeDecision::CleanupBeforeBoundaryUnknown
+                } else {
+                    AutomaticLifetimeDecision::ExactLocalDropBeforePhaseBoundary
+                };
+            }
+        }
+
+        let exact_phase_boundary =
+            terminator_is_exact_unialloc_lifetime_epoch_boundary(tcx, body, terminator);
+        if !crossed_phase_boundary && !exact_phase_boundary {
+            if !lifetime_terminator_is_transparent_control_only(tcx, body, terminator) {
+                saw_hidden_effect = true;
+            }
+            if terminator
+                .successors()
+                .any(|successor| body[successor].is_cleanup)
+            {
+                saw_pre_boundary_cleanup_edge = true;
+            }
+        }
+        if exact_phase_boundary {
+            crossed_phase_boundary = true;
+        }
+
+        let normal_successors = terminator
+            .successors()
+            .filter(|successor| !body[*successor].is_cleanup)
+            .collect::<Vec<_>>();
+        if normal_successors.len() != 1 {
+            return AutomaticLifetimeDecision::NonlinearControlFlowUnknown;
+        }
+        bb = normal_successors[0];
+    }
+}
+
+fn solved_semantic_drop_pairs<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+) -> BTreeSet<(String, String)> {
+    body_basic_blocks!(body)
+        .iter()
+        .filter_map(|data| {
+            let place = match &data.terminator {
+                Some(Terminator {
+                    kind: TerminatorKind::Drop { place, .. },
+                    ..
+                }) => place,
+                _ => return None,
+            };
+            let place_ty = place.ty(&body.local_decls, tcx).ty;
+            if type_contains_generic_param(tcx, place_ty) {
+                return None;
+            }
+            let scan = heap_object_type_scan_from_ty(tcx, place_ty);
+            if scan.unresolved || scan.owners.len() != 1 {
+                return None;
+            }
+            Some((
+                scan.owners.into_iter().next().unwrap(),
+                format!("{:?}", place),
+            ))
+        })
+        .collect()
+}
+
 fn exact_semantic_local_ownership_proof<'tcx>(
+    tcx: TyCtxt<'tcx>,
     body: &Body<'tcx>,
     candidates: &[SemanticScopeCandidate<'tcx>],
 ) -> SemanticLocalOwnershipProof {
-    if !direct_local_size_align_with_semantic_drop_requested() {
+    if !direct_local_size_align_with_semantic_drop_requested()
+        && !auto_lifetime_classifier_enabled()
+    {
         return SemanticLocalOwnershipProof::default();
     }
 
     let mut candidate_counts: BTreeMap<(String, String), usize> = BTreeMap::new();
-    let mut candidate_pairs: BTreeMap<String, Vec<((String, String), bool)>> = BTreeMap::new();
+    let mut candidate_pairs: BTreeMap<
+        String,
+        Vec<((String, String), AutomaticLifetimeDecision, bool)>,
+    > = BTreeMap::new();
+    let solved_drop_pairs = solved_semantic_drop_pairs(tcx, body);
 
     for candidate in candidates {
         if candidate.semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE {
@@ -8978,27 +9484,49 @@ fn exact_semantic_local_ownership_proof<'tcx>(
             candidate.semantic_object_type.clone(),
             candidate.destination_place.clone(),
         );
+        let local_abi_proven = !candidate.original_is_cleanup
+            && candidate_has_linear_exact_drop(body, candidate)
+            && solved_drop_pairs.contains(&key);
         *candidate_counts.entry(key.clone()).or_insert(0) += 1;
         candidate_pairs
             .entry(candidate.semantic_object_type.clone())
             .or_default()
             .push((
                 key,
-                !candidate.original_is_cleanup && candidate_has_linear_exact_drop(body, candidate),
+                if candidate.original_is_cleanup {
+                    AutomaticLifetimeDecision::MissingOrCleanupDropUnknown
+                } else {
+                    candidate_linear_lifetime_decision(tcx, body, candidate)
+                },
+                local_abi_proven,
             ));
     }
 
     let mut proof = SemanticLocalOwnershipProof::default();
+    for pairs in candidate_pairs.values() {
+        for (pair, decision, _) in pairs {
+            if candidate_counts.get(pair) == Some(&1) {
+                proof
+                    .automatic_lifetime_decisions
+                    .insert(pair.clone(), *decision);
+            } else {
+                proof.automatic_lifetime_decisions.insert(
+                    pair.clone(),
+                    AutomaticLifetimeDecision::AmbiguousOwnerSiteUnknown,
+                );
+            }
+        }
+    }
     for pairs in candidate_pairs.into_values() {
-        if pairs
-            .iter()
-            .any(|(pair, proven)| !proven || candidate_counts.get(pair) != Some(&1))
-        {
+        if pairs.iter().any(|(pair, _, local_abi_proven)| {
+            !local_abi_proven || candidate_counts.get(pair) != Some(&1)
+        }) {
             continue;
         }
-        for (pair, _) in pairs {
+        for (pair, _, local_abi_proven) in pairs {
             proof.allocation_pairs.insert(pair.clone());
-            proof.drop_pairs.insert(pair);
+            proof.drop_pairs.insert(pair.clone());
+            debug_assert!(local_abi_proven);
         }
     }
     proof
@@ -9164,8 +9692,12 @@ fn record_or_rewrite_candidates<'tcx>(
             && direct_local_size_align_with_semantic_drop_requested());
         let configured_policy_flags = lowering_policy_flags();
         let configured_module_id = lowering_module_id();
-        let lifetime_selection =
-            lowering_lifetime_hint_for_site(callsite, type_id, configured_module_id);
+        let lifetime_selection = lowering_lifetime_hint_for_site(
+            callsite,
+            type_id,
+            configured_module_id,
+            Some(AutomaticLifetimeDecision::UnsupportedSiteUnknown),
+        );
         let candidate_cross_thread_escape = semantic_object_needs_cross_thread_recovery_hint(
             cross_thread_escape,
             &cross_thread_escape_heap_object_types,
@@ -9422,7 +9954,7 @@ fn record_or_rewrite_candidates<'tcx>(
         semantic_scope_rewrite,
         semantic_scope_abi,
         semantic_scope_local_abi,
-        &local_ownership.drop_pairs,
+        &local_ownership,
         &local_ownership.exact_zip_drop_pairs,
         records,
     );
@@ -10289,7 +10821,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
     // Authorize the type group only when every allocation destination follows
     // one non-cleanup normal path, is not moved or passed to a call, and reaches
     // its exact destination-matched Drop before any normal exit.
-    let mut local_ownership = exact_semantic_local_ownership_proof(body, &candidate_blocks);
+    let mut local_ownership = exact_semantic_local_ownership_proof(tcx, body, &candidate_blocks);
     local_ownership.exact_zip_drop_pairs = exact_zip_drop_pairs;
 
     for SemanticScopeCandidate {
@@ -10326,10 +10858,6 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
         let (type_id, type_id_basis) = semantic_scope_type_id(&semantic_object_type, &key);
         let policy_flags = lowering_policy_flags();
         let module_id = lowering_module_id();
-        let lifetime_selection = lowering_lifetime_hint_for_site(callsite, type_id, module_id);
-        let lifetime_hint = lifetime_selection.hint;
-        let lifetime_hint_confidence = lifetime_selection.confidence;
-        let lifetime_hint_basis = lifetime_selection.basis;
         let candidate_cross_thread_escape = semantic_object_needs_cross_thread_recovery_hint(
             cross_thread_escape,
             &cross_thread_escape_heap_object_types,
@@ -10519,9 +11047,25 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             });
             continue;
         }
-        let exact_local_pair = local_ownership
+        let proven_local_pair = local_ownership
             .allocation_pairs
             .contains(&(semantic_object_type.clone(), destination_place.clone()));
+        let automatic_lifetime_decision = local_ownership
+            .automatic_lifetime_decisions
+            .get(&(semantic_object_type.clone(), destination_place.clone()))
+            .copied();
+        let lifetime_selection = lowering_lifetime_hint_for_site(
+            callsite,
+            type_id,
+            module_id,
+            automatic_lifetime_decision,
+        );
+        let lifetime_hint = lifetime_selection.hint;
+        let lifetime_hint_confidence = lifetime_selection.confidence;
+        let lifetime_hint_basis = lifetime_selection.basis;
+        let exact_local_pair = direct_local_size_align_with_semantic_drop_requested()
+            && proven_local_pair
+            && local_no_recovery_lifetime_source_safe();
         let selected_semantic_scope_abi = if exact_local_pair {
             semantic_scope_local_abi.or(semantic_scope_abi)
         } else {
@@ -10698,7 +11242,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
     semantic_scope_rewrite: bool,
     semantic_scope_abi: Option<SemanticScopeAbi>,
     semantic_scope_local_abi: Option<SemanticScopeAbi>,
-    local_drop_pairs: &BTreeSet<(String, String)>,
+    local_ownership: &SemanticLocalOwnershipProof,
     exact_zip_drop_pairs: &BTreeSet<(String, String)>,
     records: &mut Vec<RewriteRecord>,
 ) {
@@ -10808,10 +11352,6 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
         let (type_id, type_id_basis) = semantic_scope_type_id(&semantic_object_type, &key);
         let policy_flags = lowering_policy_flags();
         let module_id = lowering_module_id();
-        let lifetime_selection = lowering_lifetime_hint_for_site(callsite, type_id, module_id);
-        let lifetime_hint = lifetime_selection.hint;
-        let lifetime_hint_confidence = lifetime_selection.confidence;
-        let lifetime_hint_basis = lifetime_selection.basis;
         if drop_type_has_multiple_heap_owners {
             // An aggregate Drop may release several independent heap owners. A
             // single active metadata scope cannot represent all of them;
@@ -10954,8 +11494,24 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             continue;
         }
 
-        let exact_local_pair =
-            local_drop_pairs.contains(&(semantic_object_type.clone(), drop_place.clone()));
+        let pair = (semantic_object_type.clone(), drop_place.clone());
+        let proven_local_pair = local_ownership.drop_pairs.contains(&pair);
+        let automatic_lifetime_decision = local_ownership
+            .automatic_lifetime_decisions
+            .get(&pair)
+            .copied();
+        let lifetime_selection = lowering_lifetime_hint_for_site(
+            callsite,
+            type_id,
+            module_id,
+            automatic_lifetime_decision,
+        );
+        let lifetime_hint = lifetime_selection.hint;
+        let lifetime_hint_confidence = lifetime_selection.confidence;
+        let lifetime_hint_basis = lifetime_selection.basis;
+        let exact_local_pair = direct_local_size_align_with_semantic_drop_requested()
+            && proven_local_pair
+            && local_no_recovery_lifetime_source_safe();
         let selected_semantic_scope_abi = if exact_local_pair {
             semantic_scope_local_abi.or(semantic_scope_abi)
         } else {
@@ -11369,6 +11925,75 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .iter()
         .filter(|record| record.cross_thread_recovery_hint)
         .count();
+    let automatic_lifetime_ephemeral_count = records
+        .iter()
+        .filter(|record| automatic_lifetime_ephemeral_basis(record.lifetime_hint_basis))
+        .count();
+    let automatic_lifetime_long_lived_count = records
+        .iter()
+        .filter(|record| automatic_lifetime_long_lived_basis(record.lifetime_hint_basis))
+        .count();
+    let automatic_lifetime_unknown_count = records
+        .iter()
+        .filter(|record| automatic_lifetime_unknown_basis(record.lifetime_hint_basis))
+        .count();
+    let automatic_lifetime_candidate_allocation_site_count = records
+        .iter()
+        .filter(|record| record.lowering_kind == "semantic_scope_enter_exit_rewrite")
+        .count();
+    let automatic_lifetime_eligible_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_lifetime_eligible_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let automatic_lifetime_ephemeral_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_lifetime_ephemeral_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let automatic_lifetime_long_lived_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_lifetime_long_lived_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let automatic_lifetime_unknown_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_lifetime_unknown_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let automatic_lifetime_unsupported_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_lifetime_unsupported_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let automatic_lifetime_abstained_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_lifetime_unknown_basis(record.lifetime_hint_basis)
+                && !automatic_lifetime_unsupported_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let mut automatic_lifetime_unknown_allocation_site_reasons: BTreeMap<&str, usize> =
+        BTreeMap::new();
+    for record in records.iter().filter(|record| {
+        record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+            && automatic_lifetime_unknown_basis(record.lifetime_hint_basis)
+    }) {
+        *automatic_lifetime_unknown_allocation_site_reasons
+            .entry(record.lifetime_hint_basis)
+            .or_insert(0) += 1;
+    }
     let lifetime_profile_match_count = records
         .iter()
         .filter(|record| record.lifetime_hint_basis == "profile_exact_match")
@@ -11417,6 +12042,7 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .unwrap_or(0);
     let metadata_hints_requested = cli.lifetime_profile.is_some()
         || cli.lifetime_hint != 0
+        || cli.auto_lifetime_classifier
         || cli.placement_hint != 0
         || cli.auto_cross_thread_recovery_hint;
     let local_semantic_scope_applied_count = records
@@ -11739,6 +12365,83 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         "    \"lifetime_profile_ambiguous_match_count\": {},",
         lifetime_profile_ambiguous_match_count
     );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_classifier_enabled\": {},",
+        cli.auto_lifetime_classifier
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_classifier_precedence\": \"{}\",",
+        AUTOMATIC_LIFETIME_CLASSIFIER_PRECEDENCE
+    );
+    json.push_str(
+        "    \"automatic_lifetime_phase_boundary\": \"exact DefId unialloc::lifetime_hugepage_advance_epoch on unique normal MIR path\",\n",
+    );
+    json.push_str(
+        "    \"automatic_lifetime_pairing_contract\": \"same per-owner decision for semantic allocation and matching Drop scopes\",\n",
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_ephemeral_count\": {},",
+        automatic_lifetime_ephemeral_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_long_lived_count\": {},",
+        automatic_lifetime_long_lived_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_unknown_count\": {},",
+        automatic_lifetime_unknown_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_candidate_allocation_site_count\": {},",
+        automatic_lifetime_candidate_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_eligible_allocation_site_count\": {},",
+        automatic_lifetime_eligible_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_ephemeral_allocation_site_count\": {},",
+        automatic_lifetime_ephemeral_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_long_lived_allocation_site_count\": {},",
+        automatic_lifetime_long_lived_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_abstained_allocation_site_count\": {},",
+        automatic_lifetime_abstained_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_unsupported_allocation_site_count\": {},",
+        automatic_lifetime_unsupported_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_unknown_allocation_site_count\": {},",
+        automatic_lifetime_unknown_allocation_site_count
+    );
+    json.push_str("    \"automatic_lifetime_unknown_allocation_site_reasons\": {");
+    for (index, (basis, count)) in automatic_lifetime_unknown_allocation_site_reasons
+        .iter()
+        .enumerate()
+    {
+        if index > 0 {
+            json.push_str(", ");
+        }
+        let _ = write!(json, "\"{}\": {}", json_escape(basis), count);
+    }
+    json.push_str("},\n");
     let _ = writeln!(json, "    \"placement_hint\": {},", cli.placement_hint);
     let _ = writeln!(json, "    \"module_id\": {},", lowering_module_id());
     let _ = writeln!(
@@ -12034,6 +12737,46 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         json,
         "    \"lifetime_profile_ambiguous_match_count\": {},",
         lifetime_profile_ambiguous_match_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_classifier_enabled\": {},",
+        cli.auto_lifetime_classifier
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_candidate_allocation_site_count\": {},",
+        automatic_lifetime_candidate_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_eligible_allocation_site_count\": {},",
+        automatic_lifetime_eligible_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_ephemeral_allocation_site_count\": {},",
+        automatic_lifetime_ephemeral_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_long_lived_allocation_site_count\": {},",
+        automatic_lifetime_long_lived_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_abstained_allocation_site_count\": {},",
+        automatic_lifetime_abstained_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_unsupported_allocation_site_count\": {},",
+        automatic_lifetime_unsupported_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_lifetime_unknown_allocation_site_count\": {},",
+        automatic_lifetime_unknown_allocation_site_count
     );
     json.push_str("    \"provider_override_installed\": true,\n");
     json.push_str("    \"body_clone_returned_to_rustc\": true,\n");
@@ -12580,6 +13323,85 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         "lifetime_profile_miss_count: {}",
         lifetime_profile_miss_count
     );
+    let automatic_lifetime_ephemeral_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_lifetime_ephemeral_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let automatic_lifetime_long_lived_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_lifetime_long_lived_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let automatic_lifetime_unknown_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_lifetime_unknown_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let automatic_lifetime_candidate_allocation_site_count = records
+        .iter()
+        .filter(|record| record.lowering_kind == "semantic_scope_enter_exit_rewrite")
+        .count();
+    let automatic_lifetime_eligible_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_lifetime_eligible_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let automatic_lifetime_unsupported_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_lifetime_unsupported_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let _ = writeln!(
+        text,
+        "automatic_lifetime_classifier_enabled: {}",
+        cli.auto_lifetime_classifier
+    );
+    let _ = writeln!(
+        text,
+        "automatic_lifetime_classifier_precedence: {}",
+        AUTOMATIC_LIFETIME_CLASSIFIER_PRECEDENCE
+    );
+    let _ = writeln!(
+        text,
+        "automatic_lifetime_candidate_allocation_site_count: {}",
+        automatic_lifetime_candidate_allocation_site_count
+    );
+    let _ = writeln!(
+        text,
+        "automatic_lifetime_eligible_allocation_site_count: {}",
+        automatic_lifetime_eligible_allocation_site_count
+    );
+    let _ = writeln!(
+        text,
+        "automatic_lifetime_ephemeral_allocation_site_count: {}",
+        automatic_lifetime_ephemeral_allocation_site_count
+    );
+    let _ = writeln!(
+        text,
+        "automatic_lifetime_long_lived_allocation_site_count: {}",
+        automatic_lifetime_long_lived_allocation_site_count
+    );
+    let _ = writeln!(
+        text,
+        "automatic_lifetime_unsupported_allocation_site_count: {}",
+        automatic_lifetime_unsupported_allocation_site_count
+    );
+    let _ = writeln!(
+        text,
+        "automatic_lifetime_unknown_allocation_site_count: {}",
+        automatic_lifetime_unknown_allocation_site_count
+    );
     let _ = writeln!(text, "placement_hint: {}", cli.placement_hint);
     let _ = writeln!(text, "module_id: {}", lowering_module_id());
     let _ = writeln!(text, "module_id_algorithm: {}", MODULE_ID_ALGORITHM);
@@ -12740,6 +13562,7 @@ fn main() {
         LOWERING_POLICY_FLAGS = cli.policy_flags;
         LOWERING_LIFETIME_HINT = cli.lifetime_hint;
         LOWERING_LIFETIME_CONFIDENCE_THRESHOLD = cli.lifetime_confidence_threshold;
+        AUTO_LIFETIME_CLASSIFIER = cli.auto_lifetime_classifier;
         LOWERING_PLACEMENT_HINT = cli.placement_hint;
         AUTO_CROSS_THREAD_RECOVERY_HINT = cli.auto_cross_thread_recovery_hint;
         DIRECT_LOCAL_METADATA_ABI = cli.direct_local_metadata_abi;

@@ -1,0 +1,59 @@
+Automatic lifetime classifier verification
+Date: 2026-07-14
+Branch: exp/automatic-lifetime-classifier-20260714
+Dev baseline at worktree creation: aa5ee466fd5de31d56f43187536193454b530c65
+Toolchain: nightly-2026-06-11
+Host: AMD EPYC 9354 32-Core Processor; Linux 6.8.0-111-generic
+Host THP mode: always [madvise] never
+HugeTLB pool during verification: total 4096, free 4096, reserved 0, surplus 0, page size 2048 KiB
+
+Classifier mechanism and regression verification:
+- rustc standalone pass unit tests: PASS 24/24.
+- automatic classifier process tests: PASS 10/10.
+- exact lifetime profile process tests: PASS 3/3.
+- automatic audit summarizer tests: PASS 5/5.
+- direct-local ownership pairing process probe: PASS.
+- actual MIR lifetime-to-HugeTLB integration test: PASS 1/1.
+- cargo check -p unialloc --features lifetime_hugepage,stats: PASS.
+- lifetime_hugepage allocator integration tests: PASS 12/12.
+- cargo test --workspace --all-targets with the two known host-rseq tests skipped: PASS; 752/752 library tests plus integration, bench, and example targets.
+- cargo clippy -p unialloc --features lifetime_hugepage,stats --lib: PASS with 169 pre-existing warnings.
+- cargo fmt --all -- --check: PASS.
+- Python py_compile for all new/modified Python tools: PASS.
+- git diff --check: PASS.
+- CJK scan of every changed source/document file: PASS with zero matches.
+
+Real-application diagnostic command:
+UNIALLOC_AUTO_LIFETIME_CLASSIFIER=1 uv run python \
+  evaluation/scripts/realworld_type_isolation_matrix.py \
+  --checkout-root /home/hanqing/alloc/UniAlloc/evaluation/external/_checkouts \
+  --apps ripgrep,fd,oxipng \
+  --variants typeiso_coverage \
+  --quick --warmups 0 --repetitions 1 \
+  --toolchain nightly-2026-06-11 \
+  --cpu-list 20 --numa-node 0 --jobs 32 \
+  --raw-dir /tmp/unialloc-auto-classifier-realapp-smoke-final4-20260714
+
+Real-application result:
+- Matrix build/workload/output validation: PASS for ripgrep, fd, and Oxipng.
+- Rustc audit files with classifier enabled: 16/16.
+- Unique semantic allocation candidates: 667.
+- Automatic-eligible direct-owner sites: 386.
+- Unsupported receiver-owned sites: 281.
+- Classified Ephemeral sites: 0.
+- Classified LongLived sites: 0.
+- Abstentions: alias/move/escape 365, nonlinear CFG 17, ambiguous owner 4.
+- Runtime Type Isolation allocation coverage: ripgrep 23.67%, fd 73.01%, Oxipng 93.18%.
+- Existing Type Isolation recovery corrections: ripgrep 0, fd 1, Oxipng 6; this diagnostic is not an exact whole-application identity result.
+- Performance eligibility: false; statistics were enabled, one sample was used, and applications had no epoch instrumentation.
+
+Final safety-review regressions:
+- Effectful payload Drop glue that advances the epoch remains Unknown instead of Ephemeral.
+- An intervening local destructor that can advance the epoch also keeps the still-live owner Unknown.
+- A pre-Drop assertion cleanup edge and opaque inline assembly both prevent an Ephemeral result.
+- A nested `Box<Vec<u8>>` owner cannot select the local/no-recovery ABI when semantic Drop lowering sees multiple heap owners.
+- The presence of any external lifetime profile forces recovery-backed direct `Layout` and semantic allocation/deallocation scopes; an allocation-only profile therefore preserves runtime recovery despite the expected paired-operation hint mismatch.
+- The audit summarizer checks pairing in both directions for automatic, profile, and manual nonzero lifetime hints while keeping profile/manual rows outside the automatic-classifier coverage denominator.
+
+Claim boundary:
+The feature proves opt-in compiler analysis, exact phase-marker recognition, metadata precedence, allocation/Drop hint continuity, actual runtime hint execution, and existing lifetime-THP routing compatibility. The strict classifier produced zero classified sites in unmodified real applications. Receiver-owner Place recovery, ownership-preserving move-chain analysis, interprocedural phase summaries, synchronized application epoch instrumentation, runtime accuracy, and application THP performance remain open.

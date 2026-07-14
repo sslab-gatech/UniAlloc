@@ -81,6 +81,76 @@ The environment variable is the intended Cargo integration because Cargo's
 
 ## Exact per-site lifetime profiles
 
+### Conservative automatic classifier
+
+Enable the one-pass MIR classifier with
+`--unialloc-auto-lifetime-classifier` or
+`UNIALLOC_AUTO_LIFETIME_CLASSIFIER=1`. It operates on an exact semantic owner
+pair `(mir_function, semantic_object_type, destination Place)`. The first
+version admits direct destination-owning constructor/clone scopes. Receiver-
+owned mutation/deallocation scopes carry `automatic_unsupported_site_unknown`
+until the pass records their exact receiver owner Place. It emits:
+
+- `Ephemeral` with confidence `100` when one unprojected owner retains stable
+  ownership, permits only read-only borrows/inspection, and follows one acyclic
+  normal path to its exact Drop before any phase boundary, with no generic
+  payload whose Drop glue may run a user destructor;
+- `LongLived` with confidence `100` when the same proof path contains an exact
+  DefId call to `unialloc::lifetime_hugepage_advance_epoch` before the Drop and
+  no cleanup path can drop the owner before that boundary;
+- `Unknown` for every unsupported, escaping, ambiguous, nonlinear, cyclic,
+  cleanup-ambiguous, or interprocedural case.
+
+An intervening unclassified call, potentially effectful Drop, opaque inline
+assembly, or pre-Drop cleanup edge also produces `Unknown` because the path can
+hide an epoch advance. The first version recognizes only direct calls to the
+exact UniAlloc boundary function;
+synchronized phase barriers are part of the runtime contract. The compiler
+applies one automatic decision to the allocation scope and all matching Drop
+scopes. It retains the existing per-type all-or-nothing
+proof solely for the optional local/no-recovery ABI, so a proven local site can
+still classify under the recovery-backed ABI when a sibling owner of the same
+type escapes. Local ABI authorization additionally requires a matching solved
+single-owner semantic Drop lowering for the exact destination Place. Nested
+multi-owner shapes such as `Box<Vec<u8>>` remain recovery-backed.
+
+Input precedence is
+`exact profile > manual global hint > automatic classifier > Unknown`. A
+present profile remains authoritative and fail-closed: profile misses never
+fall through to automatic inference. Any external profile disables all
+compiler-selected local/no-recovery scopes for the compilation unit, including
+direct `Layout` and semantic rewrites. Recovery records can then repair runtime
+identity when a partial profile gives paired operations different hints.
+`lifetime_hint_basis` preserves each
+automatic abstention reason, and the compiler audit reports site-level
+Ephemeral/LongLived/Unknown counts separately from allocation-plus-Drop metadata
+row counts. Candidate, automatic-eligible, unsupported, and classified site
+counts keep unsupported receiver scopes out of the classifier-success
+denominator while preserving end-to-end coverage.
+
+Run the classifier and actual-pairing regressions with:
+
+```sh
+uv run python -m unittest -v \
+  tools/unialloc-rustc-pass/test_mir_automatic_lifetime_classifier.py
+uv run python tools/unialloc-rustc-pass/test_mir_direct_local_ownership_pairing.py
+```
+
+Aggregate real Cargo audit directories without double-counting Drop rows:
+
+```sh
+uv run python evaluation/scripts/summarize_automatic_lifetime_classifier.py \
+  --audit-root ripgrep=/path/to/ripgrep/audits \
+  --audit-root fd=/path/to/fd/audits \
+  --audit-root oxipng=/path/to/oxipng/audits \
+  --out /tmp/automatic-lifetime-summary.json
+```
+
+The full design and held-out evaluation protocol are documented in
+[`docs/automatic-lifetime-classifier.md`](../../docs/automatic-lifetime-classifier.md).
+
+### External exact profiles
+
 The MIR rewrite driver accepts `--unialloc-lifetime-profile <path>` or
 `UNIALLOC_LIFETIME_PROFILE=<path>`. The dependency-free text format uses the
 exact `callsite`, `type_id`, and `module_id` values emitted by a prior audit:

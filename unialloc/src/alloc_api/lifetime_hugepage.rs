@@ -1674,6 +1674,7 @@ pub fn lifetime_hugepage_stats_snapshot() -> LifetimeHugepageStatsSnapshot {
 /// Advance the process-wide logical phase used by runtime lifetime validation.
 /// The caller is responsible for placing a workload barrier around the phase
 /// boundary. Advancing never frees storage or invalidates live pointers.
+#[inline(never)]
 pub fn lifetime_hugepage_advance_epoch() -> usize {
     let mut state = ARENA.lock();
     if lifetime_hugepage_policy() == LifetimeHugepagePolicy::Disabled {
