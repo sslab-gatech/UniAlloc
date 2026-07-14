@@ -1,0 +1,59 @@
+Lifetime-guided THP evaluation verification
+===========================================
+
+Source commit: 8953cd000c71f781a7bb7337d4c35b189668cc3b
+Dev baseline: 18bfc47b5711591a9573b762840c0fb9fbf8d5b2
+Branch: exp/lifetime-thp-20260714
+Run id: lifetime-thp-final-20260714
+
+Formal matrix
+-------------
+Command:
+PYTHONHASHSEED=0 python3 evaluation/scripts/lifetime_thp_allocator_experiment.py \
+  --run-id lifetime-thp-final-20260714 \
+  --objects 262144 --slot-bytes 4096 --types-per-truth 8 \
+  --long-fraction 0.5 --false-long-rate 0.05 --false-short-rate 0.05 \
+  --confidence-threshold 80 --correct-confidence 90 --error-confidence 60 \
+  --confidence-overlap-rate 0.10 --unknown-rate 0.0 \
+  --ephemeral-waves 3 --warmup-passes 4 --passes 64 --repeats 10 \
+  --numa-node 0 --cpu 15 --seed 20260714 --timeout 900
+
+Result: exit 0; 80/80 fresh-process samples passed.
+Cases: 8 cases x 10 randomized repeats.
+Summary invariants_passed: true.
+Probe passed: 80/80.
+Evidence failures: 0.
+Prediction trace pairing: 10/10 repeats matched.
+smaps_rollup availability and parse: 80/80.
+Allocator byte-epoch accounting closure: 80/80.
+Mapping failures: 0.
+HugeTLB fallbacks: 0.
+THP collapse failures: 0.
+HugeTLB pool before/after: 4096/4096 free pages.
+
+Implementation verification
+---------------------------
+PASS: cargo fmt --all -- --check
+PASS: cargo check -p unialloc --features lifetime_hugepage --examples
+PASS: 4 lifetime THP core unit tests
+PASS: 2 THP PAL unit tests
+PASS: 12/12 lifetime allocator integration tests
+PASS: 31/31 related Python evaluator tests
+PASS: strict live 8-case THP smoke matrix
+FULL LIB: 747 passed; 2 host rseq registration tests failed at linux_rseq.rs:132
+CLIPPY -D warnings: blocked by 169 existing repository-wide lint diagnostics; no diagnostic referenced the changed lifetime allocator or probe files
+
+Evidence semantics
+------------------
+MADV_HUGEPAGE is VMA eligibility, not backing proof.
+Process THP backing is measured with /proc/self/smaps_rollup AnonHugePages.
+/proc/vmstat THP deltas are system-wide corroboration only.
+Formal THP and ordinary-no-THP arms require host THP mode madvise and parseable smaps.
+Eager THP requires at least 95% steady backing across THP VMAs.
+Epoch THP requires at least 95% steady backing across point-in-time collapse-confirmed extents; sparse candidates deliberately skipped by the 50% occupancy policy remain a separate VMA-coverage result.
+Effective resident memory is VmRSS + HugetlbPages, sampled at initial peak, post-first-epoch, every live wave peak, and steady state.
+Allocator lifecycle includes the first synchronous epoch promotion and excludes /proc evidence-read time.
+
+Boundary
+--------
+This is a synthetic, paired allocator microbenchmark with injected classification errors and confidence. It demonstrates mechanism feasibility on one host and one 4 KiB size class. It is not claim-grade application evidence. The host carried unrelated background work; process pinning, randomized case order, paired seeds, and bootstrap intervals bound but do not remove that noise.

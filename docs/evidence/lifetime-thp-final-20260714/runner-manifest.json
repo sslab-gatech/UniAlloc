@@ -1,0 +1,16 @@
+{
+  "commands_are_numa_pinned": true,
+  "raw_samples": "evaluation/raw/lifetime-thp-final-20260714/samples.jsonl",
+  "run_id": "lifetime-thp-final-20260714",
+  "summary": "evaluation/results/lifetime-thp-final-20260714/summary.json",
+  "thp_vmstat_fields": [
+    "thp_fault_alloc",
+    "thp_fault_fallback",
+    "thp_fault_fallback_charge",
+    "thp_collapse_alloc",
+    "thp_collapse_alloc_failed",
+    "thp_split_page",
+    "thp_split_page_failed",
+    "thp_split_pmd"
+  ]
+}

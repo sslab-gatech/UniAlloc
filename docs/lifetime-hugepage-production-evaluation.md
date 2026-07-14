@@ -1,5 +1,10 @@
 # Lifetime-guided HugeTLB payload allocation: integrated design and evaluation
 
+> **THP follow-up.** The deployable anonymous-THP backend, survival-gated
+> `MADV_COLLAPSE` policy, and paired comparison against system default,
+> ordinary `MADV_NOHUGEPAGE`, and explicit HugeTLB are documented in
+> [`lifetime-thp-evaluation.md`](lifetime-thp-evaluation.md).
+
 ## Decision
 
 **GO as a qualifier and paper mechanism point. Production-workload benefit remains a follow-on claim.**

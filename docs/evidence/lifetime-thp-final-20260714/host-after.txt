@@ -1,0 +1,16 @@
+captured_at=2026-07-14T13:29:18-04:00
+source_commit=8953cd000c71f781a7bb7337d4c35b189668cc3b
+Linux swoop 6.8.0-111-generic #111-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 11 23:16:02 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+thp_enabled=always [madvise] never
+thp_defrag=always defer defer+madvise [madvise] never
+thp_2m_enabled=always [inherit] madvise never
+MemTotal:       792263992 kB
+MemAvailable:   751569960 kB
+AnonHugePages:      2048 kB
+HugePages_Total:    4096
+HugePages_Free:     4096
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:         8388608 kB
+ 13:29:18 up 68 days,  3:54,  9 users,  load average: 4.50, 4.78, 5.25
