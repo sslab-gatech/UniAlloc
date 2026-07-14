@@ -16,9 +16,14 @@ use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
 
 const MIN_ARENA_BYTES: usize = 512 * 1024;
 const MAX_ARENA_BYTES: usize = 64 * 1024 * 1024;
+#[cfg(not(feature = "adaptive_bitmap_page_allocator"))]
 const WARM_EMPTY_ARENA_LIMIT: usize = 4;
+#[cfg(feature = "adaptive_bitmap_page_allocator")]
+const WARM_EMPTY_ARENA_LIMIT: usize = 1;
 const WARM_EMPTY_ARENA_MAX_BYTES: usize = 2 * 1024 * 1024;
-const CONTENTION_ARENA_LIMIT: usize = WARM_EMPTY_ARENA_LIMIT;
+// Preserve enough simultaneously active shards for the contended phase even
+// when adaptive routing uses a smaller post-phase warm cache.
+const CONTENTION_ARENA_LIMIT: usize = 4;
 const DISCARD_FREE_RUN_MIN_BYTES: usize = 256 * 1024;
 const OWNER_RADIX_BITS: usize = 9;
 const OWNER_RADIX_SLOTS: usize = 1 << OWNER_RADIX_BITS;
@@ -1921,6 +1926,40 @@ mod tests {
             for ptr in allocations {
                 manager.allocator.deallocate_layout(ptr, layout).unwrap();
             }
+        }
+    }
+
+    #[cfg(feature = "adaptive_bitmap_page_allocator")]
+    #[test]
+    fn adaptive_policy_retires_idle_shards_but_preserves_contention_capacity() {
+        assert_eq!(WARM_EMPTY_ARENA_LIMIT, 1);
+        assert_eq!(CONTENTION_ARENA_LIMIT, 4);
+
+        let manager = TestAllocator::new(WARM_EMPTY_ARENA_LIMIT);
+        let layout = page_layout(8);
+        let mapping_bytes = HostedBitmapPageAllocator::arena_mapping_bytes(layout).unwrap();
+        let mut allocations = Vec::new();
+        unsafe {
+            for _ in 0..CONTENTION_ARENA_LIMIT {
+                allocations.push(
+                    manager
+                        .allocator
+                        .create_arena_and_allocate(mapping_bytes, layout, true)
+                        .unwrap(),
+                );
+            }
+            assert_eq!(
+                manager.allocator.stats().active_arenas,
+                CONTENTION_ARENA_LIMIT
+            );
+
+            for ptr in allocations {
+                manager.allocator.deallocate_layout(ptr, layout).unwrap();
+            }
+            let stats = manager.allocator.stats();
+            assert_eq!(stats.active_arenas, WARM_EMPTY_ARENA_LIMIT);
+            assert_eq!(stats.warm_empty_arenas, WARM_EMPTY_ARENA_LIMIT);
+            assert_eq!(stats.descriptor_count, CONTENTION_ARENA_LIMIT);
         }
     }
 }
