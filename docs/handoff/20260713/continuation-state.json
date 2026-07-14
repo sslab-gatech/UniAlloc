@@ -1,30 +1,457 @@
 {
   "active_goal": "G002-unialloc-functional-correctness-and",
   "branch": "g002-functional-correctness-20260713",
+  "claim_limits": [
+    "universal UAF or double-free prevention",
+    "stale-address detection after an exact generation ages out of the eight-way history bucket",
+    "resistance to forged or compromised semantic metadata",
+    "universal compiler rewrite and lifecycle coverage",
+    "runtime closure on every external platform",
+    "publication-grade performance or paper percentage reproduction",
+    "cross-workload aggregate coverage, source/type/byte coverage, or a paper-72.17-equivalent denominator from the real-world diagnostic"
+  ],
+  "closure": {
+    "alignment_changing_local_tag_preflight": "passed",
+    "exact_generation_aba_surfaces": [
+      "GlobalAlloc::realloc",
+      "SemanticAlloc::realloc_with_split_metadata",
+      "split-metadata FFI realloc"
+    ],
+    "exact_generation_history": {
+      "collision_behavior": "unrelated primary-home colliders retain independent entry epochs and exact history",
+      "expiry": "the ninth distinct key displaces the oldest missing record to epoch-zero raw-only semantics",
+      "known_absent_behavior": "nonzero exact generation enters durable Tracked ownership before raw release",
+      "retention": "recent eight-way exact-address window per secondary history bucket"
+    },
+    "realloc_review_repairs": [
+      "successful in-place realloc consumes the old exact recovery record before ownership release",
+      "unrecorded old storage cannot inherit a recovery-required active or compiler-auto scope",
+      "alignment-changing grow honors compiled quarantine metadata",
+      "durable admission precedes validation counters and fallback observability"
+    ],
+    "reclaim_admission": "pre-lookup observation and pointer remain bound through mutation and release",
+    "released_lifecycle_capacity": "terminal Released entries can retire into bounded exact history without exhausting live admission capacity",
+    "compiler_scope_placement": "ordinary semantic scopes request conservative cross-thread recovery; explicit _local scopes retain local placement",
+    "history_lease": "exact Absent observations pin the selected history entry through admission; eviction skips leased entries; all eight ways leased takes the fail-stop availability path"
+  },
   "commits": {
+    "branch_inventory_base": "364d786fe92f400f3cc36b11bf947af3b48f535c",
     "compiler_zip_provenance": "f8966ca93d320b35141b9bad4c6a6efa5a65c130",
     "diagnostic_evaluation_tooling": "6b73a556a009753e5388161f46a0cc2d1bb7f73e",
+    "released_capacity_fail_first": "9072fb3",
     "type_isolation_lifecycle_wip": "c820338a142e861b90ea4dc17675e63f79a1d121"
   },
   "files": {
-    "docs/handoff/20260713/G002-CONTINUATION.md": "ba9e2f7f5af2256c07e8f8f91fbf4c2ac4649f990c87bcd965c0344ae1048e48",
+    "docs/handoff/20260713/G002-CONTINUATION.md": "150eaf781db3de1d0ac7430922f14b5e6d1c7064d4a97cdcadd39ec483da8a9c",
     "docs/handoff/20260713/g001-stop-user-objective-change.json": "8102bf15ba9314f3d599b16536e418d2aead0cab0b40c710b4d391a79ef95eed",
-    "docs/handoff/20260713/omx-goals-snapshot.json": "c51de3fb17cb6607d0c493e6342038bb00f5cff889118ce322d3204dae6e6c99"
+    "docs/handoff/20260713/omx-goals-snapshot.json": "5a62b83b8bd81730690aaee3192e125c713a036cb1855bcf4bfb463c6ff382e3"
   },
-  "generated_at_utc": "2026-07-13T14:33:13.169415+00:00",
-  "paper_performance_matrix": "deferred_by_explicit_user_scope_change",
+  "generated_at_utc": "2026-07-14T05:21:25Z",
+  "goal_status": "validated_continuation_complete",
+  "paper": {
+    "checkout_present_on_remote": false,
+    "checkout_required_for_g002": false,
+    "evaluator_without_checkout": "passed",
+    "performance_matrix": "deferred_by_explicit_user_scope_change",
+    "current_source_realworld_matrix": "source_bound_diagnostic_only"
+  },
+  "regressions": {
+    "absent_observation_rejects_after_same_pointer_release_and_eviction": "passed",
+    "alignment_grow_preflights_local_tag_without_recovery_record": "passed",
+    "allocation_witness_restores_tracked_reclaim_after_released_eviction": "passed",
+    "exact_ffi_realloc_rejects_reused_generation_after_lookup": "passed",
+    "exact_generation_history_is_bounded_without_poisoning_colliders": "passed",
+    "exact_global_realloc_rejects_reused_generation_after_lookup": "passed",
+    "exact_semantic_realloc_rejects_reused_generation_after_lookup": "passed",
+    "lifecycle_retires_released_history_before_capacity_without_reuse": "passed",
+    "unrelated_released_eviction_does_not_poison_raw_collider": "passed",
+    "unrelated_same_home_release_does_not_invalidate_absent_observation": "passed",
+    "unrelated_same_home_release_does_not_invalidate_live_observation": "passed"
+  },
   "remote": "origin",
-  "schema_version": 1,
+  "remote_runtime": {
+    "environment": "GLIBC_TUNABLES=glibc.pthread.rseq=0",
+    "reason": "disable the remote host glibc rseq registration before allocator rseq tests",
+    "realworld_matrix_environment": "default libc-managed rseq with no GLIBC_TUNABLES override",
+    "production_hot_path_calls_rseq": false
+  },
+  "schema_version": 2,
+  "source_binding": {
+    "base_head": "364d786fe92f400f3cc36b11bf947af3b48f535c",
+    "final_commit_or_diff_digest": "74337e567fb45c3e032fd86db81e0ac25c2876081f51332f1126f215cc434b1d",
+    "state": "validated_parent_to_commit_patch",
+    "final_diff_digest_algorithm": "sha256",
+    "final_diff_digest_representation": "git binary patch from base_head to the closure commit",
+    "final_diff_digest_command_after_commit": "git diff HEAD^ HEAD --binary -- . ':(exclude)docs/handoff/20260713/continuation-state.json' | sha256sum",
+    "final_diff_digest_includes_new_files": true,
+    "final_diff_digest_excluded_paths": [
+      "docs/handoff/20260713/continuation-state.json"
+    ]
+  },
   "superseded_goal": "G001-users-hqzhao-downloads-rust-alloc-pa",
   "validation": {
-    "evaluation_python_unittests": {
-      "failed": 0,
-      "passed": 430
+    "evaluator_doctor": {
+      "paper_checkout_present": false,
+      "ready": true
     },
-    "p0_repository_cargo_hook": {
-      "failed": 11,
-      "passed": 695,
-      "status": "known_wip_failure"
+    "fixed_heap_lib_parallel": {
+      "passed": 602,
+      "failed": 0,
+      "runs": 1,
+      "features": [
+        "fixed_heap",
+        "type_isolation"
+      ],
+      "default_features": false
+    },
+    "fixed_heap_lib_serial": {
+      "passed": 602,
+      "failed": 0,
+      "runs": 1,
+      "features": [
+        "fixed_heap",
+        "type_isolation"
+      ],
+      "default_features": false
+    },
+    "hosted_lib_parallel": {
+      "passed_per_run": 732,
+      "failed_per_run": 0,
+      "runs": 1,
+      "features": [
+        "type_isolation"
+      ]
+    },
+    "hosted_lib_serial": {
+      "passed": 732,
+      "failed": 0,
+      "runs": 1,
+      "features": [
+        "type_isolation"
+      ]
+    },
+    "python_unittest_discovery": {
+      "passed": 610,
+      "failed": 0
+    },
+    "quarantine_lib_parallel": {
+      "passed": 738,
+      "failed": 0,
+      "runs": 1,
+      "features": [
+        "type_isolation",
+        "quarantine"
+      ]
+    },
+    "quarantine_lib_serial": {
+      "passed": 738,
+      "failed": 0,
+      "runs": 1,
+      "features": [
+        "type_isolation",
+        "quarantine"
+      ]
+    },
+    "realistic_multimodule_actual_rustc": {
+      "single_run": true,
+      "validated": true
+    },
+    "semantic_std_parallel_loop": {
+      "failed_runs": 0,
+      "passed_runs": 30
+    },
+    "standard_cargo_test": {
+      "exit_code": 0,
+      "semantic_std_passed": 12,
+      "std_bench_passed": 430,
+      "unialloc_lib_passed": 732
+    },
+    "std_bench_quick_e2e": {
+      "claim_grade": false,
+      "failed": 0,
+      "passed": 3
+    },
+    "workspace_check_all_targets": "passed_with_existing_warnings",
+    "workspace_lib_clippy": "passed_with_existing_warnings",
+    "mir_pass_helper_tests": {
+      "passed": 19,
+      "failed": 0
+    },
+    "mir_pass_python_discovery": {
+      "passed": 80,
+      "failed": 0
+    },
+    "realworld_matrix_harness_tests": {
+      "passed": 27,
+      "failed": 0
+    },
+    "path_factory_actual_rustc_probe": {
+      "validated": true,
+      "typed_allocations": 4,
+      "typed_deallocations": 4,
+      "fallback_allocations": 0,
+      "recovery_identity_mismatches": 0
+    },
+    "dir_entry_path_actual_rustc_probe": {
+      "validated": true,
+      "typed_allocations": 3,
+      "typed_deallocations": 3,
+      "fallback_allocations": 0,
+      "recovery_identity_mismatches": 0
+    },
+    "realworld_matrix_integrity": {
+      "builds_passed": 21,
+      "executions_passed": 182,
+      "failures": 0,
+      "outputs_match_within_each_application": true
+    },
+    "fd_typeiso_reliability": {
+      "passed": 100,
+      "failed": 0,
+      "timeouts": 0,
+      "glibc_rseq_mode": "libc_default",
+      "output_sha256": "3a04c5d131bec5122bbd2749244d8c28f535db83dc6aea22bf1398d776ea9014",
+      "artifact": "evaluation/raw/realworld-nightly-20260713/reliability/fd-typeiso-final-libc-rseq-100.json"
+    },
+    "format_check": "passed",
+    "repository_cjk_scan": {
+      "files_considered": 1147,
+      "text_hits": 0,
+      "office_zip_xml_hits": 0
+    },
+    "transient_exact_map_test": {
+      "initial_workspace_run": "environmental exact-address probe collision",
+      "exact_retry": "passed",
+      "final_workspace_rerun": "passed"
     }
-  }
+  },
+  "continued_objective": "real-world Type Isolation coverage, performance, RSS, and bounded runtime optimization",
+  "realworld_type_isolation_study": {
+    "status": "source_bound_diagnostic_complete",
+    "evidence_class": "measured-source diagnostic; paper reproduction and publication-grade inference remain deferred",
+    "implementation_sha256": "7e98e63ce2fbeccc361ea57bd26773ccdb02664b83d772f0475161c980c55929",
+    "implementation_sha256_scope": "measured artifact bundle",
+    "current_runner_implementation_sha256": "94ede1223c7b348639a7041a40a5b1840a6840cc18b4dbcf7d0f7a6ef8bb2cf4",
+    "post_measurement_runner_change": "binary-cache reuse validation only; allocator and MIR pass sources unchanged",
+    "pass_source_sha256": "ae7dd0da2368c670323287647c94ce5a90069b6f2e4a3d51b298d48cb9a5ac63",
+    "toolchain": "nightly-2026-06-11",
+    "affinity": {
+      "physical_cpu": 6,
+      "numa_node": 0
+    },
+    "rseq": {
+      "mode": "libc_default",
+      "glibc_tunable": null,
+      "production_hot_path_calls_rseq": false,
+      "private_self_registration_test_environment": "GLIBC_TUNABLES=glibc.pthread.rseq=0"
+    },
+    "variants": [
+      "native",
+      "jemalloc",
+      "mimalloc",
+      "unialloc",
+      "typed_plain",
+      "typeiso_perf",
+      "typeiso_coverage"
+    ],
+    "performance_contract": {
+      "primary_ratio": "typeiso_perf / typed_plain",
+      "end_to_end_ratio": "typeiso_perf / native",
+      "statistics_enabled_for_performance_variants": false,
+      "typeiso_coverage_performance_eligible": false,
+      "coverage_definition": "typed allocation events / total allocation events for the exact application revision and input",
+      "coverage_reporting": "per application only; no source-line, Rust-type, byte, universal-program, or paper-72.17 denominator"
+    },
+    "applications": {
+      "ripgrep": {
+        "source_head": "4649aa9700619f94cf9c66876e9549d83420e16c",
+        "input": "full",
+        "warmups": 2,
+        "repetitions": 9,
+        "output_sha256": "7326b304fa0c8daf5059a914dc186a08b0f14d069a744e0f4d94fa5197bc6dbb",
+        "variants": {
+          "native": {
+            "median_wall_seconds": 0.086309096,
+            "median_peak_rss_kib": 5120
+          },
+          "jemalloc": {
+            "median_wall_seconds": 0.086702833,
+            "median_peak_rss_kib": 6144
+          },
+          "mimalloc": {
+            "median_wall_seconds": 0.088868793,
+            "median_peak_rss_kib": 11812
+          },
+          "unialloc": {
+            "median_wall_seconds": 0.090066579,
+            "median_peak_rss_kib": 6144
+          },
+          "typed_plain": {
+            "median_wall_seconds": 0.092411192,
+            "median_peak_rss_kib": 6144
+          },
+          "typeiso_perf": {
+            "median_wall_seconds": 0.092586986,
+            "median_peak_rss_kib": 6144
+          },
+          "typeiso_coverage": {
+            "median_wall_seconds": 0.094015251,
+            "median_peak_rss_kib": 6144,
+            "performance_eligible": false
+          }
+        },
+        "typeiso_ratio_vs_typed_plain": 1.0019023020501672,
+        "typeiso_ratio_vs_native": 1.0727372929499805,
+        "coverage": {
+          "typed_allocations": 2266,
+          "total_allocations": 22725,
+          "basis_points": 997
+        },
+        "artifact": "evaluation/raw/realworld-nightly-20260713/type-isolation-ripgrep-final/results-pinned-final.json",
+        "typeiso_rss_ratio_vs_typed_plain": 1.0,
+        "typeiso_rss_ratio_vs_native": 1.2
+      },
+      "fd": {
+        "source_head": "b19136871310b01500b4f09eadd7387b8476be47",
+        "native_allocator": "jemalloc-0.5.4",
+        "explicit_jemalloc_role": "original-route control",
+        "input": "full",
+        "warmups": 2,
+        "repetitions": 7,
+        "output_sha256": "3a04c5d131bec5122bbd2749244d8c28f535db83dc6aea22bf1398d776ea9014",
+        "variants": {
+          "native": {
+            "median_wall_seconds": 0.13629673,
+            "median_peak_rss_kib": 6144
+          },
+          "jemalloc": {
+            "median_wall_seconds": 0.136304143,
+            "median_peak_rss_kib": 6144
+          },
+          "mimalloc": {
+            "median_wall_seconds": 0.129672706,
+            "median_peak_rss_kib": 18872
+          },
+          "unialloc": {
+            "median_wall_seconds": 0.167541836,
+            "median_peak_rss_kib": 6144
+          },
+          "typed_plain": {
+            "median_wall_seconds": 0.464682945,
+            "median_peak_rss_kib": 6144
+          },
+          "typeiso_perf": {
+            "median_wall_seconds": 0.465833677,
+            "median_peak_rss_kib": 6144
+          },
+          "typeiso_coverage": {
+            "median_wall_seconds": 0.49109135,
+            "median_peak_rss_kib": 6144,
+            "performance_eligible": false
+          }
+        },
+        "typeiso_ratio_vs_typed_plain": 1.0024763809655204,
+        "typeiso_ratio_vs_native": 3.4177905588784117,
+        "coverage": {
+          "typed_allocations": 616262,
+          "total_allocations": 831549,
+          "basis_points": 7411
+        },
+        "artifact": "evaluation/raw/realworld-nightly-20260713/type-isolation-fd-final/results-pinned-final.json",
+        "typeiso_rss_ratio_vs_typed_plain": 1.0,
+        "typeiso_rss_ratio_vs_native": 1.0
+      },
+      "oxipng": {
+        "source_head": "dea23211ae6259007e068c59ab16929798d00d96",
+        "input": "quick",
+        "warmups": 1,
+        "repetitions": 5,
+        "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+        "variants": {
+          "native": {
+            "median_wall_seconds": 1.712608439,
+            "median_peak_rss_kib": 46400
+          },
+          "jemalloc": {
+            "median_wall_seconds": 1.72784158,
+            "median_peak_rss_kib": 49088
+          },
+          "mimalloc": {
+            "median_wall_seconds": 1.634668906,
+            "median_peak_rss_kib": 71180
+          },
+          "unialloc": {
+            "median_wall_seconds": 1.736975509,
+            "median_peak_rss_kib": 44260
+          },
+          "typed_plain": {
+            "median_wall_seconds": 1.76690375,
+            "median_peak_rss_kib": 44508
+          },
+          "typeiso_perf": {
+            "median_wall_seconds": 1.754456338,
+            "median_peak_rss_kib": 44524
+          },
+          "typeiso_coverage": {
+            "median_wall_seconds": 1.754579386,
+            "median_peak_rss_kib": 44640,
+            "performance_eligible": false
+          }
+        },
+        "typeiso_ratio_vs_typed_plain": 0.9929552404877742,
+        "typeiso_ratio_vs_native": 1.0244351820573974,
+        "coverage": {
+          "typed_allocations": 9661,
+          "total_allocations": 10368,
+          "basis_points": 9318
+        },
+        "artifact": "evaluation/raw/realworld-nightly-20260713/type-isolation-oxipng-final/results-pinned-final.json",
+        "typeiso_rss_ratio_vs_typed_plain": 1.0003594859351128,
+        "typeiso_rss_ratio_vs_native": 0.9595689655172414
+      }
+    },
+    "fd_optimization_trajectory": {
+      "scope": "separate source-bound pinned states on fd full input",
+      "typed_plain_pre_seconds": 0.611635718,
+      "typed_plain_final_seconds": 0.464682945,
+      "typed_plain_change_percent": -24.026192172119032,
+      "typeiso_perf_pre_seconds": 0.573481469,
+      "typeiso_perf_final_seconds": 0.465833677,
+      "typeiso_perf_change_percent": -18.77092771414379,
+      "native_change_percent": -0.21837253564215287,
+      "pre_and_final_rss_kib": 6144,
+      "pre_coverage": {
+        "typed_allocations": 616259,
+        "total_allocations": 831530,
+        "basis_points": 7411
+      },
+      "final_coverage": {
+        "typed_allocations": 616262,
+        "total_allocations": 831549,
+        "basis_points": 7411
+      },
+      "claim_limit": "directional result for one source-bound input; no stable cross-workload speedup claim"
+    },
+    "fd_reliability": {
+      "runs": 100,
+      "passed": 100,
+      "failed": 0,
+      "timeouts": 0,
+      "rseq_mode": "libc_default",
+      "glibc_tunable": null,
+      "output_sha256": "3a04c5d131bec5122bbd2749244d8c28f535db83dc6aea22bf1398d776ea9014",
+      "artifact": "evaluation/raw/realworld-nightly-20260713/reliability/fd-typeiso-final-libc-rseq-100.json"
+    }
+  },
+  "runtime_optimizations": [
+    {
+      "name": "hosted home-affinity recovery bookkeeping",
+      "contract": "hosted records stay in pointer-derived home shard and home overflow; sticky legacy state enables exhaustive fallback; fixed_heap retains bounded cross-shard inline behavior; active mask changes only on zero-to-one and one-to-zero live-count transitions"
+    },
+    {
+      "name": "single lifecycle publication for generic raw misses",
+      "contract": "strict raw publication occurs once before after-publication semantic completion; cache hits and guarded mappings retain semantic publication; raw backend alias rejection remains strict"
+    }
+  ],
+  "updated_at_utc": "2026-07-14T05:21:25Z"
 }

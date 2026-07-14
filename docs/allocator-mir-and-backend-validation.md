@@ -112,9 +112,11 @@ Focused validation:
 
 ```sh
 RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) --edition=2021 --test \
+  --cfg unialloc_rustc_current \
   tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs \
   -o /tmp/unialloc-rustc-mir-rewrite-dry-run-tests-20260708a
-DYLD_LIBRARY_PATH="$(rustc +$(cat rust-toolchain) --print sysroot)/lib" \
+SYSROOT="$(rustc +$(cat rust-toolchain) --print sysroot)"
+LD_LIBRARY_PATH="$SYSROOT/lib" DYLD_LIBRARY_PATH="$SYSROOT/lib" \
   /tmp/unialloc-rustc-mir-rewrite-dry-run-tests-20260708a --quiet
 
 python3 evaluation/scripts/evaluate.py collect-rustc-driver-direct-allocator-mir-probe \

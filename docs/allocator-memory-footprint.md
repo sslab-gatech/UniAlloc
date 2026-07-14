@@ -136,11 +136,17 @@ identity.  They are bounded by retained bytes as well as entry counts:
   bucket table.
 - retained semantic-cache pointers also enter the allocation-free,
   process-visible ownership registry added by `a93cf97`: eight shards with
-  1,024 `usize` slots per shard on hosted targets and 128 per shard under
-  `fixed_heap`, with bounded probe limits 64 and 32 respectively. Duplicate
-  publication fail-stops; a full probe window bypasses the semantic cache and
-  returns the allocation through the raw allocator; tombstones preserve lookup
-  and later safe slot reuse.
+  1,024 primary slots per shard on hosted targets and 128 per shard under
+  `fixed_heap`, with bounded probe limits 64 and 32 respectively. Each primary
+  slot has an exact entry epoch. An equal-count exact generation-history tier
+  uses eight-way buckets so unrelated primary-hash colliders cannot invalidate
+  one another. On 64-bit targets the table payload is approximately 273.1 KiB
+  hosted and 34.2 KiB under `fixed_heap`, before lock padding. Duplicate
+  publication fail-stops; a full primary probe window can replace a terminal
+  `Released` entry, while tombstones preserve lookup and later safe slot reuse.
+  The history tier is a recent-generation window: a ninth distinct address in
+  one history bucket displaces the oldest missing record and returns that
+  address to epoch-zero raw-only semantics.
 
 Empty semantic side-table records use an all-zero field representation. Their
 zero alignment is intentionally not a valid `Layout`: pointer/key/active

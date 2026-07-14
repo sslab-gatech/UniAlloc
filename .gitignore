@@ -8,14 +8,16 @@ target
 .rustc_info.json
 .DS_Store
 __handlers__
+__pycache__/
+*.py[cod]
 
 # coverage report
-tarparlin*
+tarpaulin*
 *profraw
 *profdata
 perf.data*
 
-#kernel
+# kernel
 rust-linux
 Module.symvers
 *.cpio.gz

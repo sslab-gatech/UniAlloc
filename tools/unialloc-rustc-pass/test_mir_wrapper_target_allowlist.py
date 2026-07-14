@@ -135,6 +135,10 @@ class MirWrapperTargetAllowlistTest(unittest.TestCase):
             "}\n",
             encoding="utf-8",
         )
+        # Preserve the repository's intentionally pinned, yanked dependencies in
+        # this detached offline workspace. Cargo accepts yanked versions through
+        # an existing lockfile, while fresh offline resolution rejects them.
+        shutil.copy2(ROOT / "Cargo.lock", project / "Cargo.lock")
         (project / "src" / "main.rs").write_text(
             "use fixture_dependency::dependency_value;\n"
             "use unialloc::UniAlloc;\n"

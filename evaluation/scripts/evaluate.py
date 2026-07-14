@@ -70245,7 +70245,6 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     p = sub.add_parser(
         "audit-paper-performance-targets",
-        aliases=["plan-paper-performance"],
         help="write the paper performance row/column target matrix and current runner gap audit",
     )
     p.add_argument("--paper-dir", default=None)

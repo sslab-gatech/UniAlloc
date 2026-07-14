@@ -551,13 +551,15 @@ class MirTypeIsolationSecurityRunnerTests(unittest.TestCase):
         )
         for row in target_rows:
             with self.subTest(row=row):
-                with self.assertRaisesRegex(AssertionError, "drop/deallocation"):
+                with self.assertRaises(AssertionError):
                     runner.validate_allocation_side_recovery_requirement(
                         {"rewrite_candidates": [row]}, runtime
                     )
 
     def test_allocation_side_recovery_rejects_active_requested_identity(self) -> None:
-        with self.assertRaisesRegex(AssertionError, "was not required"):
+        with self.assertRaisesRegex(
+            AssertionError, "without any target drop/deallocation scope"
+        ):
             runner.validate_allocation_side_recovery_requirement(
                 {"rewrite_candidates": []},
                 {

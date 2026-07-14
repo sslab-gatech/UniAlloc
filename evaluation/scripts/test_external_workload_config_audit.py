@@ -1051,6 +1051,20 @@ class ExternalWorkloadNewerSourceCandidateTests(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+        subprocess.run(
+            ["git", "config", "commit.gpgsign", "false"],
+            cwd=repo,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        subprocess.run(
+            ["git", "config", "tag.gpgsign", "false"],
+            cwd=repo,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
 
     def make_tagged_repo(self, tmp: pathlib.Path) -> tuple[pathlib.Path, str, str]:
         repo = tmp / "tagged-repo"

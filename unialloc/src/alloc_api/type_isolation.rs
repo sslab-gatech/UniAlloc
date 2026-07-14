@@ -16,7 +16,10 @@ use alloc::vec::Vec as AllocVec;
 use core::alloc::{Allocator, Layout};
 use core::mem::size_of;
 use core::ptr::NonNull;
-use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, AtomicUsize, Ordering};
+
+#[cfg(test)]
+extern crate std;
 
 use crate::cache::RustAllocator;
 #[cfg(not(feature = "fixed_heap"))]
@@ -85,6 +88,19 @@ const ADDRESS_LIFECYCLE_PROBE_TOMBSTONE: u8 = 1;
 const ADDRESS_LIFECYCLE_TYPE_RETAINED: u8 = 2;
 const ADDRESS_LIFECYCLE_DELAYED_RETAINED: u8 = 3;
 const ADDRESS_LIFECYCLE_RELEASED: u8 = 4;
+const ADDRESS_LIFECYCLE_LIVE: u8 = 5;
+/// Recent exact-address generations retained after lifecycle entries leave the
+/// primary table. Eight-way replacement keeps the raw-only stale-address
+/// window allocation-free and bounded while exact keys prevent unrelated hash
+/// colliders from being rejected as stale. A ninth distinct key in one history
+/// bucket displaces the oldest; a displaced missing address returns to the
+/// raw-only epoch-zero contract.
+const GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS: usize = 8;
+const GLOBAL_ADDRESS_GENERATION_HISTORY_BUCKETS: usize =
+    GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS / GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS;
+const ADDRESS_GENERATION_HISTORY_EMPTY: u8 = 0;
+const ADDRESS_GENERATION_HISTORY_ABSENT: u8 = 1;
+const ADDRESS_GENERATION_HISTORY_RETIRED: u8 = 2;
 /// Shared ordering for acquisitions that may publish a pointer in either
 /// retained-ownership domain.
 ///
@@ -1036,6 +1052,22 @@ pub(crate) struct SemanticTestGuard {
     #[cfg(feature = "fixed_heap")]
     _fixed_heap: spin::MutexGuard<'static, ()>,
     _semantic: spin::MutexGuard<'static, ()>,
+}
+
+#[cfg(test)]
+impl Drop for SemanticTestGuard {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            return;
+        }
+        // Libtest reuses a pool of worker threads. Leaving a TLS cache entry on
+        // an idle worker while another test resets the process lifecycle table
+        // creates test-only orphaned ownership. Drain the current worker before
+        // releasing the shared test lock so later global resets stay coherent.
+        unsafe {
+            let _ = drain_current_thread_semantic_state(&RustAllocator::new());
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2464,7 +2496,12 @@ impl GlobalDelayedFreeOwnershipTable {
 struct GlobalTypeCacheOwnershipTable {
     ptrs: [usize; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
     states: [u8; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
-    epochs: [u64; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+    entry_epochs: [u64; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+    next_epoch: u64,
+    history_ptrs: [usize; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+    history_epochs: [u64; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+    history_states: [u8; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+    history_cursors: [u8; GLOBAL_ADDRESS_GENERATION_HISTORY_BUCKETS],
 }
 
 impl GlobalTypeCacheOwnershipTable {
@@ -2472,7 +2509,13 @@ impl GlobalTypeCacheOwnershipTable {
         Self {
             ptrs: [0; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
             states: [ADDRESS_LIFECYCLE_EMPTY; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
-            epochs: [1; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+            entry_epochs: [0; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+            next_epoch: 1,
+            history_ptrs: [0; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+            history_epochs: [0; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+            history_states: [ADDRESS_GENERATION_HISTORY_EMPTY;
+                GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS],
+            history_cursors: [0; GLOBAL_ADDRESS_GENERATION_HISTORY_BUCKETS],
         }
     }
 }
@@ -2629,6 +2672,11 @@ static TEST_STALE_RECLAIM_PHASE: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 #[thread_local]
 static mut TEST_PAUSE_NEXT_RECLAIM_AFTER_SNAPSHOT: bool = false;
+#[cfg(test)]
+static TEST_REALLOC_RECOVERY_LOOKUP_PHASE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+#[thread_local]
+static mut TEST_PAUSE_NEXT_REALLOC_AFTER_EXACT_RECOVERY_LOOKUP: bool = false;
 
 static GLOBAL_TYPE_CACHE_OWNERSHIP: [Mutex<GlobalTypeCacheOwnershipTable>;
     GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT] = [
@@ -2641,7 +2689,16 @@ static GLOBAL_TYPE_CACHE_OWNERSHIP: [Mutex<GlobalTypeCacheOwnershipTable>;
     Mutex::new(GlobalTypeCacheOwnershipTable::empty()),
     Mutex::new(GlobalTypeCacheOwnershipTable::empty()),
 ];
+static GLOBAL_ADDRESS_GENERATION_HISTORY_PINS: [[AtomicU16;
+    GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS];
+    GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT] =
+    [const { [const { AtomicU16::new(0) }; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS] };
+        GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT];
 static GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_STRICT_ALLOCATION_PUBLICATIONS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_SEMANTIC_ALLOCATION_PUBLICATIONS: AtomicUsize = AtomicUsize::new(0);
 
 static GLOBAL_RETAINED_OWNERSHIP_ARBITRATION: [Mutex<()>;
     GLOBAL_RETAINED_OWNERSHIP_ARBITRATION_SHARD_COUNT] = [
@@ -2906,6 +2963,17 @@ static TEST_IDENTITY_REBIND_RECOVERY_UPDATE_FAIL: AtomicBool = AtomicBool::new(f
 /// When the mask is nonzero, lookup still forces the pointer's home shard into
 /// the probe set so a stale hint cannot hide the authoritative home record.
 static AUTO_ALLOCATION_RECORD_ACTIVE_SHARDS: AtomicUsize = AtomicUsize::new(0);
+/// Sticky hosted compatibility gate for recovery records installed outside
+/// their pointer-derived home shard.
+///
+/// New hosted records stay home-affine and use the existing home overflow list,
+/// which lets insertion and lookup take one shard lock. Older/test state may
+/// still contain an inline record in another shard. Every supported non-home
+/// installer publishes this bit before the record, so later operations retain
+/// the exhaustive update/no-shadow fallback. Production binaries start with an
+/// empty table and therefore remain on the home-affine path.
+#[cfg(not(feature = "fixed_heap"))]
+static AUTO_ALLOCATION_RECORD_LEGACY_NON_HOME_POSSIBLE: AtomicBool = AtomicBool::new(false);
 
 #[thread_local]
 static mut FAST_AUTO_ALLOCATION_RECORDS: [AutoAllocationRecord; FAST_AUTO_ALLOCATION_RECORD_SLOTS] =
@@ -4014,6 +4082,8 @@ fn clear_auto_allocation_records() {
     }
     AUTO_ALLOCATION_RECORD_COUNT.store(0, Ordering::Relaxed);
     AUTO_ALLOCATION_RECORD_ACTIVE_SHARDS.store(0, Ordering::Release);
+    #[cfg(not(feature = "fixed_heap"))]
+    AUTO_ALLOCATION_RECORD_LEGACY_NON_HOME_POSSIBLE.store(false, Ordering::Release);
     unsafe {
         FAST_AUTO_ALLOCATION_RECORD_INLINE = AutoAllocationRecord::empty();
         FAST_AUTO_ALLOCATION_RECORDS =
@@ -4086,24 +4156,16 @@ fn global_auto_allocation_record_hot_slot(
     }
 }
 
-fn refresh_global_auto_allocation_record_shard_active(
-    shard_idx: usize,
-    table: &GlobalAutoAllocationRecordTable,
-) {
-    if table.live_count != 0 {
-        auto_allocation_record_mark_shard_active(shard_idx);
-    } else {
-        auto_allocation_record_clear_shard_active(shard_idx);
-    }
-}
-
 #[inline]
 fn increment_global_auto_allocation_record_shard_live_count(
     shard_idx: usize,
     table: &mut GlobalAutoAllocationRecordTable,
 ) {
+    let was_empty = table.live_count == 0;
     table.live_count = table.live_count.saturating_add(1);
-    auto_allocation_record_mark_shard_active(shard_idx);
+    if was_empty {
+        auto_allocation_record_mark_shard_active(shard_idx);
+    }
 }
 
 #[inline]
@@ -4111,8 +4173,11 @@ fn decrement_global_auto_allocation_record_shard_live_count(
     shard_idx: usize,
     table: &mut GlobalAutoAllocationRecordTable,
 ) {
+    let becomes_empty = table.live_count <= 1;
     table.live_count = table.live_count.saturating_sub(1);
-    refresh_global_auto_allocation_record_shard_active(shard_idx, table);
+    if becomes_empty {
+        auto_allocation_record_clear_shard_active(shard_idx);
+    }
 }
 
 #[cfg(test)]
@@ -4392,6 +4457,13 @@ fn install_global_auto_allocation_inline_record(
     metadata: AllocationMetadata,
 ) -> bool {
     let ptr_key = ptr as usize;
+    #[cfg(not(feature = "fixed_heap"))]
+    if shard_idx != auto_allocation_record_shard(ptr) {
+        // Publish the compatibility gate before the foreign-shard record. A
+        // normal hosted process never reaches this branch; it exists for
+        // defensive legacy/test state handled by the exhaustive fallback.
+        AUTO_ALLOCATION_RECORD_LEGACY_NON_HOME_POSSIBLE.store(true, Ordering::Release);
+    }
     let existing = table.inline[idx];
     if existing.ptr != ptr_key && !existing.is_available() {
         return false;
@@ -4513,7 +4585,7 @@ fn update_global_auto_allocation_record_in_shard(
 }
 
 #[inline]
-unsafe fn record_global_auto_allocation_metadata_eligible(
+unsafe fn record_global_auto_allocation_metadata_eligible_sharded(
     ptr: *mut u8,
     layout: Layout,
     metadata: AllocationMetadata,
@@ -4654,6 +4726,85 @@ unsafe fn record_global_auto_allocation_metadata_eligible(
     false
 }
 
+/// Install or update a hosted recovery record in its pointer-derived home
+/// shard. Hosted overflow pages are already shard-local and unbounded, so
+/// spreading a record into foreign inline capacity only makes every normal
+/// insert and miss scan unrelated locks.
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+unsafe fn record_home_auto_allocation_metadata_eligible(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> bool {
+    let (home_shard_idx, home_start) = auto_allocation_record_shard_and_slot(ptr);
+    let mut first_available = None;
+    let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+
+    if update_global_auto_allocation_record_in_shard(
+        home_shard_idx,
+        &mut *table,
+        home_start,
+        ptr,
+        layout,
+        metadata,
+        true,
+        &mut first_available,
+    ) {
+        return true;
+    }
+
+    if let Some((shard_idx, bucket_idx)) = first_available {
+        debug_assert_eq!(shard_idx, home_shard_idx);
+        if install_global_auto_allocation_inline_record(
+            home_shard_idx,
+            &mut *table,
+            bucket_idx,
+            ptr,
+            layout,
+            metadata,
+        ) {
+            return true;
+        }
+    }
+
+    let mut overflow_slot = first_available_auto_allocation_record_in_overflow(table.overflow);
+    if overflow_slot.is_null() {
+        let page = allocate_auto_allocation_record_page();
+        if !page.is_null() {
+            (*page).next = table.overflow;
+            table.overflow = page;
+            overflow_slot = &mut (*page).entries[0] as *mut AutoAllocationRecord;
+        }
+    }
+    if overflow_slot.is_null() {
+        return false;
+    }
+
+    increment_global_auto_allocation_record_shard_live_count(home_shard_idx, &mut *table);
+    *overflow_slot = auto_allocation_record_for(ptr, layout, metadata);
+    AUTO_ALLOCATION_RECORD_COUNT.fetch_add(1, Ordering::Relaxed);
+    semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+    true
+}
+
+#[inline]
+unsafe fn record_global_auto_allocation_metadata_eligible(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> bool {
+    #[cfg(not(feature = "fixed_heap"))]
+    if !AUTO_ALLOCATION_RECORD_LEGACY_NON_HOME_POSSIBLE.load(Ordering::Acquire) {
+        return record_home_auto_allocation_metadata_eligible(ptr, layout, metadata);
+    }
+
+    // Fixed-heap builds need the complete inline capacity because they have no
+    // mmap overflow. Hosted builds retain this path for observed legacy/test
+    // records that may live outside the pointer-derived home shard.
+    record_global_auto_allocation_metadata_eligible_sharded(ptr, layout, metadata)
+}
+
 #[inline]
 unsafe fn record_global_auto_allocation_metadata(
     ptr: *mut u8,
@@ -4727,7 +4878,12 @@ unsafe fn replace_auto_allocation_record_for_reallocation(
     }
 
     if let Some(old_metadata) = old_metadata {
-        let _ = record_recovery_auto_allocation_metadata(ptr, old_layout, old_metadata);
+        if !record_recovery_auto_allocation_metadata(ptr, old_layout, old_metadata) {
+            // The caller still owns durable T lifecycle admission here. Keep
+            // that fail-stop ownership through unwind rather than returning a
+            // live allocation whose required recovery identity was lost.
+            panic!("failed to restore old recovery identity after realloc record replacement");
+        }
     }
     false
 }
@@ -4761,58 +4917,111 @@ fn remove_global_auto_allocation_inline_record(
     }
 }
 
-fn lookup_global_auto_allocation_record(
+fn lookup_global_auto_allocation_record_in_shard(
     ptr: *mut u8,
     layout: Layout,
     remove: bool,
+    shard_idx: usize,
+    start: usize,
+    search_home_overflow: bool,
 ) -> AutoAllocationRecordLookup {
     let ptr_key = ptr as usize;
-    if ptr.is_null()
-        || ptr_key == AUTO_ALLOCATION_RECORD_TOMBSTONE_PTR
-        || layout.size() == 0
-        || AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed) == 0
-    {
-        return AutoAllocationRecordLookup::Missing;
+    let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+
+    if let Some(idx) = global_auto_allocation_record_hot_slot(&*table, ptr_key) {
+        let record = table.inline[idx];
+        if record.ptr == ptr_key {
+            if record.matches_allocation(ptr, layout) {
+                if remove {
+                    remove_global_auto_allocation_inline_record(
+                        shard_idx,
+                        &mut *table,
+                        idx,
+                        ptr_key,
+                    );
+                }
+                return AutoAllocationRecordLookup::Exact(record.metadata);
+            }
+            return AutoAllocationRecordLookup::Mismatched;
+        }
+        clear_global_auto_allocation_record_hot_slot(&mut *table, ptr_key);
     }
 
-    let (home_shard_idx, home_start) = auto_allocation_record_shard_and_slot(ptr);
-    let active_mask = auto_allocation_record_active_shards();
-    // The active-shard bitset is a lock-skipping hint for normal insert/remove
-    // paths, not a replacement for the pointer hash.  Iterate only advertised
-    // active shards, but always include the pointer's home shard and fall back
-    // to all shards if legacy/test state has a nonzero record count with a zero
-    // mask.  This keeps stale masks from turning a valid home record into a
-    // silent recovery miss.
-    let mut active_offsets =
-        auto_allocation_record_probe_offsets_including_home(active_mask, home_shard_idx);
-    while let Some((shard_idx, shard_offset)) =
-        pop_next_auto_allocation_record_active_shard(home_shard_idx, &mut active_offsets)
-    {
-        let start = if shard_offset == 0 { home_start } else { 0 };
-        let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+    let mut offset = 0;
+    while offset < AUTO_ALLOCATION_RECORD_PROBE_LIMIT {
+        let idx = (start + offset) & (AUTO_ALLOCATION_RECORD_SHARD_SLOTS - 1);
+        let record = table.inline[idx];
+        if record.is_empty() {
+            break;
+        }
+        if record.ptr == ptr_key {
+            if record.matches_allocation(ptr, layout) {
+                if remove {
+                    remove_global_auto_allocation_inline_record(
+                        shard_idx,
+                        &mut *table,
+                        idx,
+                        ptr_key,
+                    );
+                } else {
+                    remember_global_auto_allocation_record_hot_slot(&mut *table, ptr_key, idx);
+                }
+                return AutoAllocationRecordLookup::Exact(record.metadata);
+            }
+            return AutoAllocationRecordLookup::Mismatched;
+        }
+        offset += 1;
+    }
 
-        if let Some(idx) = global_auto_allocation_record_hot_slot(&*table, ptr_key) {
-            let record = table.inline[idx];
-            if record.ptr == ptr_key {
+    #[cfg(not(feature = "fixed_heap"))]
+    {
+        // Hosted overflow records are authoritative only in the pointer's home
+        // shard. The caller passes this explicitly so legacy foreign-shard
+        // fallback never accepts a corrupt non-home overflow entry.
+        if search_home_overflow {
+            if let Some(slot) = find_auto_allocation_record_in_overflow(table.overflow, ptr_key) {
+                let record = unsafe { *slot };
                 if record.matches_allocation(ptr, layout) {
                     if remove {
-                        remove_global_auto_allocation_inline_record(
-                            shard_idx,
-                            &mut *table,
-                            idx,
-                            ptr_key,
-                        );
+                        if atomic_saturating_decrement(&AUTO_ALLOCATION_RECORD_COUNT) == 0 {
+                            #[cfg(test)]
+                            pause_after_last_global_recovery_count_decrement_for_test();
+                            unsafe {
+                                *slot = AutoAllocationRecord::empty();
+                            }
+                            decrement_global_auto_allocation_record_shard_live_count(
+                                shard_idx,
+                                &mut *table,
+                            );
+                            semantic_slow_path_clear(SLOW_PATH_ALLOCATION_RECORDS);
+                        } else {
+                            unsafe {
+                                *slot = AutoAllocationRecord::tombstone();
+                            }
+                            decrement_global_auto_allocation_record_shard_live_count(
+                                shard_idx,
+                                &mut *table,
+                            );
+                        }
+                        unsafe {
+                            release_empty_auto_allocation_record_overflow_pages(
+                                &mut table.overflow,
+                            );
+                        }
                     }
                     return AutoAllocationRecordLookup::Exact(record.metadata);
                 }
                 return AutoAllocationRecordLookup::Mismatched;
             }
-            clear_global_auto_allocation_record_hot_slot(&mut *table, ptr_key);
         }
+    }
 
-        let mut offset = 0;
-        while offset < AUTO_ALLOCATION_RECORD_PROBE_LIMIT {
-            let idx = (start + offset) & (AUTO_ALLOCATION_RECORD_SHARD_SLOTS - 1);
+    #[cfg(feature = "fixed_heap")]
+    {
+        let _ = search_home_overflow;
+        let mut slow_offset = AUTO_ALLOCATION_RECORD_PROBE_LIMIT;
+        while slow_offset < AUTO_ALLOCATION_RECORD_SHARD_SLOTS {
+            let idx = (start + slow_offset) & (AUTO_ALLOCATION_RECORD_SHARD_SLOTS - 1);
             let record = table.inline[idx];
             if record.is_empty() {
                 break;
@@ -4833,86 +5042,71 @@ fn lookup_global_auto_allocation_record(
                 }
                 return AutoAllocationRecordLookup::Mismatched;
             }
-            offset += 1;
+            slow_offset += 1;
         }
+    }
 
+    AutoAllocationRecordLookup::Missing
+}
+
+fn lookup_global_auto_allocation_record(
+    ptr: *mut u8,
+    layout: Layout,
+    remove: bool,
+) -> AutoAllocationRecordLookup {
+    let ptr_key = ptr as usize;
+    if ptr.is_null()
+        || ptr_key == AUTO_ALLOCATION_RECORD_TOMBSTONE_PTR
+        || layout.size() == 0
+        || AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed) == 0
+    {
+        return AutoAllocationRecordLookup::Missing;
+    }
+
+    let (home_shard_idx, home_start) = auto_allocation_record_shard_and_slot(ptr);
+
+    #[cfg(not(feature = "fixed_heap"))]
+    {
+        let home = lookup_global_auto_allocation_record_in_shard(
+            ptr,
+            layout,
+            remove,
+            home_shard_idx,
+            home_start,
+            true,
+        );
+        if !matches!(home, AutoAllocationRecordLookup::Missing) {
+            return home;
+        }
+        if !AUTO_ALLOCATION_RECORD_LEGACY_NON_HOME_POSSIBLE.load(Ordering::Acquire) {
+            return AutoAllocationRecordLookup::Missing;
+        }
+    }
+
+    let active_mask = auto_allocation_record_active_shards();
+    // Fixed-heap records may consume the complete cross-shard inline budget.
+    // Hosted records take this exhaustive path only after a supported non-home
+    // install publishes the sticky compatibility gate.
+    let mut active_offsets =
+        auto_allocation_record_probe_offsets_including_home(active_mask, home_shard_idx);
+    while let Some((shard_idx, shard_offset)) =
+        pop_next_auto_allocation_record_active_shard(home_shard_idx, &mut active_offsets)
+    {
         #[cfg(not(feature = "fixed_heap"))]
-        {
-            // See `update_global_auto_allocation_record_in_shard`: overflow
-            // records are only authoritative in the pointer's home shard.
-            if shard_idx == home_shard_idx {
-                if let Some(slot) = find_auto_allocation_record_in_overflow(table.overflow, ptr_key)
-                {
-                    let record = unsafe { *slot };
-                    if record.matches_allocation(ptr, layout) {
-                        if remove {
-                            if atomic_saturating_decrement(&AUTO_ALLOCATION_RECORD_COUNT) == 0 {
-                                #[cfg(test)]
-                                pause_after_last_global_recovery_count_decrement_for_test();
-                                unsafe {
-                                    *slot = AutoAllocationRecord::empty();
-                                }
-                                // Preserve active bits published by concurrent
-                                // insertions in other shards; this removal owns
-                                // only the home shard's live-count transition.
-                                decrement_global_auto_allocation_record_shard_live_count(
-                                    shard_idx,
-                                    &mut *table,
-                                );
-                                semantic_slow_path_clear(SLOW_PATH_ALLOCATION_RECORDS);
-                            } else {
-                                unsafe {
-                                    *slot = AutoAllocationRecord::tombstone();
-                                }
-                                decrement_global_auto_allocation_record_shard_live_count(
-                                    shard_idx,
-                                    &mut *table,
-                                );
-                            }
-                            unsafe {
-                                release_empty_auto_allocation_record_overflow_pages(
-                                    &mut table.overflow,
-                                );
-                            }
-                        }
-                        return AutoAllocationRecordLookup::Exact(record.metadata);
-                    }
-                    return AutoAllocationRecordLookup::Mismatched;
-                }
-            }
+        if shard_offset == 0 {
+            continue;
         }
-
-        #[cfg(feature = "fixed_heap")]
-        {
-            let mut slow_offset = AUTO_ALLOCATION_RECORD_PROBE_LIMIT;
-            while slow_offset < AUTO_ALLOCATION_RECORD_SHARD_SLOTS {
-                let idx = (start + slow_offset) & (AUTO_ALLOCATION_RECORD_SHARD_SLOTS - 1);
-                let record = table.inline[idx];
-                if record.is_empty() {
-                    break;
-                }
-                if record.ptr == ptr_key {
-                    if record.matches_allocation(ptr, layout) {
-                        if remove {
-                            remove_global_auto_allocation_inline_record(
-                                shard_idx,
-                                &mut *table,
-                                idx,
-                                ptr_key,
-                            );
-                        } else {
-                            remember_global_auto_allocation_record_hot_slot(
-                                &mut *table,
-                                ptr_key,
-                                idx,
-                            );
-                        }
-                        return AutoAllocationRecordLookup::Exact(record.metadata);
-                    }
-                    return AutoAllocationRecordLookup::Mismatched;
-                }
-                slow_offset += 1;
-            }
+        let start = if shard_offset == 0 { home_start } else { 0 };
+        let result = lookup_global_auto_allocation_record_in_shard(
+            ptr,
+            layout,
+            remove,
+            shard_idx,
+            start,
+            shard_offset == 0,
+        );
+        if !matches!(result, AutoAllocationRecordLookup::Missing) {
+            return result;
         }
     }
     AutoAllocationRecordLookup::Missing
@@ -5849,6 +6043,30 @@ fn recovery_delegated_metadata_after_record(
 }
 
 #[inline]
+pub(crate) fn preview_deallocation_metadata_after_recovery_record(
+    requested: AllocationMetadata,
+    recorded: AllocationMetadata,
+) -> AllocationMetadata {
+    if let Some(delegated) = recovery_delegated_metadata_after_record(requested, recorded) {
+        return delegated;
+    }
+    if allocation_metadata_recovery_identity_matches(requested, recorded) {
+        // Preserve caller-provided deallocation/drop-site callsite metadata when
+        // the exact allocation record agrees on the allocator-visible identity.
+        // The cache identity intentionally excludes callsite so allocation and
+        // Drop sites for the same object class can still share reuse state.
+        requested
+    } else {
+        // A recovery record is recorded at allocation completion and is the
+        // authoritative heap-object identity.  If an explicit compiler/runtime
+        // deallocation ABI supplies stale type/module/policy fields, downstream
+        // cache, guard, delayed-free, memory-tag, and stats decisions must use
+        // the recorded allocation identity instead of poisoning the wrong class.
+        recorded
+    }
+}
+
+#[inline]
 pub(crate) fn deallocation_metadata_after_recovery_record(
     requested: AllocationMetadata,
     recorded: AllocationMetadata,
@@ -5861,26 +6079,14 @@ pub(crate) fn deallocation_metadata_after_recovery_record(
     }
     if allocation_metadata_recovery_identity_matches(requested, recorded) {
         SEMANTIC_METADATA_VALIDATION.record_recovery_identity_match();
-        // Preserve caller-provided deallocation/drop-site callsite metadata when
-        // the exact allocation record agrees on the allocator-visible identity.
-        // The cache identity intentionally excludes callsite so allocation and
-        // Drop sites for the same object class can still share reuse state.
-        requested
-    } else {
-        if requested.has_type()
-            && recorded.has_type()
-            && !requested.is_layout_derived()
-            && !recorded.is_layout_derived()
-        {
-            SEMANTIC_METADATA_VALIDATION.record_recovery_identity_mismatch(requested, recorded);
-        }
-        // A recovery record is recorded at allocation completion and is the
-        // authoritative heap-object identity.  If an explicit compiler/runtime
-        // deallocation ABI supplies stale type/module/policy fields, downstream
-        // cache, guard, delayed-free, memory-tag, and stats decisions must use
-        // the recorded allocation identity instead of poisoning the wrong class.
-        recorded
+    } else if requested.has_type()
+        && recorded.has_type()
+        && !requested.is_layout_derived()
+        && !recorded.is_layout_derived()
+    {
+        SEMANTIC_METADATA_VALIDATION.record_recovery_identity_mismatch(requested, recorded);
     }
+    preview_deallocation_metadata_after_recovery_record(requested, recorded)
 }
 
 #[inline]
@@ -9246,7 +9452,7 @@ fn verify_global_memory_tagged_reallocation_source(
     true
 }
 
-unsafe fn verify_memory_tagged_reallocation_source(
+pub(crate) unsafe fn verify_memory_tagged_reallocation_source(
     ptr: *mut u8,
     layout: Layout,
     metadata: AllocationMetadata,
@@ -9431,6 +9637,8 @@ enum GlobalTypeCacheOwnershipRegistration {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum GlobalAddressLifecycleSnapshot {
     Absent,
+    Live,
+    RetiredUnknown,
     TypeRetained,
     DelayedRetained,
     Released,
@@ -9440,6 +9648,43 @@ enum GlobalAddressLifecycleSnapshot {
 struct GlobalAddressLifecycleObservation {
     snapshot: GlobalAddressLifecycleSnapshot,
     epoch: u64,
+}
+
+/// Opaque, pointer-bound lifecycle observation for reclaim paths that must
+/// inspect recovery metadata before publishing durable ownership.
+pub(crate) struct GlobalReclaimObservation {
+    ptr: usize,
+    lifecycle: GlobalAddressLifecycleObservation,
+    _history_lease: Option<GlobalAddressHistoryLease>,
+}
+
+impl GlobalReclaimObservation {
+    #[inline]
+    pub(crate) fn ptr(&self) -> *mut u8 {
+        self.ptr as *mut u8
+    }
+}
+
+struct GlobalAddressHistoryLease {
+    shard_idx: usize,
+    slot_idx: usize,
+    ptr_key: usize,
+}
+
+impl Drop for GlobalAddressHistoryLease {
+    fn drop(&mut self) {
+        #[cfg(test)]
+        {
+            let table = GLOBAL_TYPE_CACHE_OWNERSHIP[self.shard_idx].lock();
+            if table.history_ptrs[self.slot_idx] != self.ptr_key {
+                return;
+            }
+        }
+        let pin = &GLOBAL_ADDRESS_GENERATION_HISTORY_PINS[self.shard_idx][self.slot_idx];
+        let _ = pin.fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+            count.checked_sub(1)
+        });
+    }
 }
 
 pub(crate) struct PendingGlobalTypeCacheOwnership {
@@ -9499,7 +9744,6 @@ impl PendingGlobalTypeCacheOwnership {
             GlobalAddressLifecycleSnapshot::TypeRetained,
             None,
             ADDRESS_LIFECYCLE_PROBE_TOMBSTONE,
-            true,
         )
         .unwrap_or_else(|_| panic!("type-retained ownership changed before live reuse"));
         GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
@@ -9536,7 +9780,6 @@ impl PendingGlobalTypeCacheOwnership {
             GlobalAddressLifecycleSnapshot::TypeRetained,
             None,
             ADDRESS_LIFECYCLE_DELAYED_RETAINED,
-            false,
         )
         .unwrap_or_else(|_| panic!("type-retained ownership changed during delayed conversion"));
         GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
@@ -9586,6 +9829,7 @@ fn global_type_cache_ownership_shard_and_slot(ptr: *mut u8) -> (usize, usize) {
 #[inline]
 fn address_lifecycle_state_snapshot(state: u8) -> GlobalAddressLifecycleSnapshot {
     match state {
+        ADDRESS_LIFECYCLE_LIVE => GlobalAddressLifecycleSnapshot::Live,
         ADDRESS_LIFECYCLE_TYPE_RETAINED => GlobalAddressLifecycleSnapshot::TypeRetained,
         ADDRESS_LIFECYCLE_DELAYED_RETAINED => GlobalAddressLifecycleSnapshot::DelayedRetained,
         ADDRESS_LIFECYCLE_RELEASED => GlobalAddressLifecycleSnapshot::Released,
@@ -9594,6 +9838,129 @@ fn address_lifecycle_state_snapshot(state: u8) -> GlobalAddressLifecycleSnapshot
         }
         _ => panic!("address lifecycle state corrupt"),
     }
+}
+
+#[inline]
+fn global_address_generation_history_bucket(ptr_key: usize) -> usize {
+    let mut value = ptr_key >> 3;
+    value ^= value >> 16;
+    value = value.wrapping_mul(0x7feb_352dusize);
+    value ^= value >> 15;
+    value = value.wrapping_mul(0x846c_a68busize);
+    value ^= value >> 16;
+    value & (GLOBAL_ADDRESS_GENERATION_HISTORY_BUCKETS - 1)
+}
+
+#[inline]
+fn address_generation_history_snapshot(state: u8) -> GlobalAddressLifecycleSnapshot {
+    match state {
+        ADDRESS_GENERATION_HISTORY_ABSENT => GlobalAddressLifecycleSnapshot::Absent,
+        ADDRESS_GENERATION_HISTORY_RETIRED => GlobalAddressLifecycleSnapshot::RetiredUnknown,
+        _ => panic!("address generation history corrupt"),
+    }
+}
+
+fn global_address_generation_history_entry(
+    table: &GlobalTypeCacheOwnershipTable,
+    ptr_key: usize,
+) -> Option<(usize, GlobalAddressLifecycleObservation)> {
+    let bucket = global_address_generation_history_bucket(ptr_key);
+    let start = bucket * GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS;
+    let mut offset = 0usize;
+    while offset < GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS {
+        let idx = start + offset;
+        if table.history_states[idx] != ADDRESS_GENERATION_HISTORY_EMPTY
+            && table.history_ptrs[idx] == ptr_key
+        {
+            return Some((
+                idx,
+                GlobalAddressLifecycleObservation {
+                    snapshot: address_generation_history_snapshot(table.history_states[idx]),
+                    epoch: table.history_epochs[idx],
+                },
+            ));
+        }
+        offset += 1;
+    }
+    None
+}
+
+fn global_address_generation_history_observation(
+    table: &GlobalTypeCacheOwnershipTable,
+    ptr_key: usize,
+) -> Option<GlobalAddressLifecycleObservation> {
+    global_address_generation_history_entry(table, ptr_key).map(|(_, observation)| observation)
+}
+
+#[inline]
+fn next_global_address_epoch(table: &mut GlobalTypeCacheOwnershipTable) -> u64 {
+    let epoch = table.next_epoch;
+    table.next_epoch = next_address_epoch(epoch);
+    epoch
+}
+
+fn record_global_address_generation_history(
+    table: &mut GlobalTypeCacheOwnershipTable,
+    ptr_key: usize,
+    snapshot: GlobalAddressLifecycleSnapshot,
+) -> u64 {
+    let history_state = match snapshot {
+        GlobalAddressLifecycleSnapshot::Absent => ADDRESS_GENERATION_HISTORY_ABSENT,
+        GlobalAddressLifecycleSnapshot::RetiredUnknown => ADDRESS_GENERATION_HISTORY_RETIRED,
+        _ => panic!("only missing lifecycle states belong in generation history"),
+    };
+    let shard_idx = global_type_cache_ownership_shard_and_slot(ptr_key as *mut u8).0;
+    let history_pins = &GLOBAL_ADDRESS_GENERATION_HISTORY_PINS[shard_idx];
+    let bucket = global_address_generation_history_bucket(ptr_key);
+    let start = bucket * GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS;
+    let mut found = None;
+    let mut empty = None;
+    let mut offset = 0usize;
+    while offset < GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS {
+        let idx = start + offset;
+        if table.history_states[idx] == ADDRESS_GENERATION_HISTORY_EMPTY {
+            if empty.is_none() {
+                empty = Some(idx);
+            }
+        } else if table.history_ptrs[idx] == ptr_key {
+            found = Some(idx);
+            break;
+        }
+        offset += 1;
+    }
+    let idx = match found {
+        Some(idx) => idx,
+        None => {
+            let idx = match empty {
+                Some(idx) => idx,
+                None => {
+                    let cursor = usize::from(table.history_cursors[bucket]);
+                    let mut candidate = None;
+                    let mut scanned = 0usize;
+                    while scanned < GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS {
+                        let idx =
+                            start + ((cursor + scanned) % GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS);
+                        if history_pins[idx].load(Ordering::Acquire) == 0 {
+                            candidate = Some(idx);
+                            break;
+                        }
+                        scanned += 1;
+                    }
+                    candidate.unwrap_or_else(|| {
+                        panic!("address generation history observation capacity exhausted")
+                    })
+                }
+            };
+            table.history_cursors[bucket] =
+                ((idx - start + 1) % GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS) as u8;
+            idx
+        }
+    };
+    let epoch = next_global_address_epoch(table);
+    table.history_ptrs[idx] = ptr_key;
+    table.history_epochs[idx] = epoch;
+    table.history_states[idx] = history_state;
+    epoch
 }
 
 fn global_address_lifecycle_observation(ptr: *mut u8) -> GlobalAddressLifecycleObservation {
@@ -9606,29 +9973,27 @@ fn global_address_lifecycle_observation(ptr: *mut u8) -> GlobalAddressLifecycleO
     let ptr_key = ptr as usize;
     let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
     let table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
-    let epoch = table.epochs[start];
     let mut offset = 0usize;
     while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
         let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
         let state = table.states[idx];
         if state == ADDRESS_LIFECYCLE_EMPTY {
-            return GlobalAddressLifecycleObservation {
-                snapshot: GlobalAddressLifecycleSnapshot::Absent,
-                epoch,
-            };
+            break;
         }
         if state != ADDRESS_LIFECYCLE_PROBE_TOMBSTONE && table.ptrs[idx] == ptr_key {
             return GlobalAddressLifecycleObservation {
                 snapshot: address_lifecycle_state_snapshot(state),
-                epoch,
+                epoch: table.entry_epochs[idx],
             };
         }
         offset += 1;
     }
-    GlobalAddressLifecycleObservation {
-        snapshot: GlobalAddressLifecycleSnapshot::Absent,
-        epoch,
-    }
+    global_address_generation_history_observation(&table, ptr_key).unwrap_or(
+        GlobalAddressLifecycleObservation {
+            snapshot: GlobalAddressLifecycleSnapshot::Absent,
+            epoch: 0,
+        },
+    )
 }
 
 #[inline]
@@ -9657,7 +10022,6 @@ fn transition_global_address_lifecycle(
     expected: GlobalAddressLifecycleSnapshot,
     expected_epoch: Option<u64>,
     target_state: u8,
-    bump_epoch: bool,
 ) -> Result<(), AddressLifecycleTransitionError> {
     if ptr.is_null() {
         return Err(AddressLifecycleTransitionError::Conflict);
@@ -9665,12 +10029,8 @@ fn transition_global_address_lifecycle(
     let ptr_key = ptr as usize;
     let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
     let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
-    if let Some(expected_epoch) = expected_epoch {
-        if table.epochs[start] != expected_epoch {
-            return Err(AddressLifecycleTransitionError::Conflict);
-        }
-    }
     let mut first_probe_tombstone = None;
+    let mut first_released_victim = None;
     let mut empty = None;
     let mut found = None;
     let mut offset = 0usize;
@@ -9690,40 +10050,136 @@ fn transition_global_address_lifecycle(
                 found = Some(idx);
                 break;
             }
+            ADDRESS_LIFECYCLE_RELEASED => {
+                if first_released_victim.is_none() {
+                    first_released_victim = Some(idx);
+                }
+            }
             _ => {}
         }
         offset += 1;
     }
 
+    let mut evicted_released = false;
     let idx = match found {
         Some(idx) => {
             let current = address_lifecycle_state_snapshot(table.states[idx]);
-            if current != expected {
+            if current != expected
+                || expected_epoch
+                    .map(|epoch| table.entry_epochs[idx] != epoch)
+                    .unwrap_or(false)
+            {
                 return Err(AddressLifecycleTransitionError::Conflict);
             }
             idx
         }
         None => {
-            if expected != GlobalAddressLifecycleSnapshot::Absent {
+            let missing = global_address_generation_history_observation(&table, ptr_key).unwrap_or(
+                GlobalAddressLifecycleObservation {
+                    snapshot: GlobalAddressLifecycleSnapshot::Absent,
+                    epoch: 0,
+                },
+            );
+            if expected != missing.snapshot
+                || expected_epoch
+                    .map(|epoch| missing.epoch != epoch)
+                    .unwrap_or(false)
+                || (expected == GlobalAddressLifecycleSnapshot::RetiredUnknown
+                    && target_state != ADDRESS_LIFECYCLE_LIVE)
+            {
                 return Err(AddressLifecycleTransitionError::Conflict);
             }
             match first_probe_tombstone.or(empty) {
                 Some(idx) => idx,
+                None if target_state != ADDRESS_LIFECYCLE_PROBE_TOMBSTONE => {
+                    match first_released_victim {
+                        Some(idx) => {
+                            evicted_released = true;
+                            idx
+                        }
+                        None => return Err(AddressLifecycleTransitionError::Full),
+                    }
+                }
                 None => return Err(AddressLifecycleTransitionError::Full),
             }
         }
     };
 
+    if evicted_released {
+        let victim_ptr = table.ptrs[idx] as *mut u8;
+        let (victim_shard_idx, victim_start) =
+            global_type_cache_ownership_shard_and_slot(victim_ptr);
+        debug_assert_eq!(victim_shard_idx, shard_idx);
+        debug_assert_eq!(
+            global_retained_ownership_arbitration_shard(victim_ptr),
+            global_retained_ownership_arbitration_shard(ptr),
+            "released victim must share the held address arbiter"
+        );
+        let _ = victim_start;
+        record_global_address_generation_history(
+            &mut table,
+            victim_ptr as usize,
+            GlobalAddressLifecycleSnapshot::RetiredUnknown,
+        );
+    }
+
     if target_state == ADDRESS_LIFECYCLE_PROBE_TOMBSTONE {
+        record_global_address_generation_history(
+            &mut table,
+            ptr_key,
+            GlobalAddressLifecycleSnapshot::Absent,
+        );
         table.ptrs[idx] = 0;
         table.states[idx] = ADDRESS_LIFECYCLE_PROBE_TOMBSTONE;
+        table.entry_epochs[idx] = 0;
     } else {
+        let epoch = next_global_address_epoch(&mut table);
         table.ptrs[idx] = ptr_key;
         table.states[idx] = target_state;
+        table.entry_epochs[idx] = epoch;
     }
-    if bump_epoch {
-        table.epochs[start] = next_address_epoch(table.epochs[start]);
+    Ok(())
+}
+
+fn advance_missing_global_address_generation(
+    ptr: *mut u8,
+    expected: GlobalAddressLifecycleObservation,
+    target: GlobalAddressLifecycleSnapshot,
+) -> Result<(), AddressLifecycleTransitionError> {
+    if ptr.is_null() {
+        return Err(AddressLifecycleTransitionError::Conflict);
     }
+    if !matches!(
+        target,
+        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::RetiredUnknown
+    ) {
+        return Err(AddressLifecycleTransitionError::Conflict);
+    }
+    let ptr_key = ptr as usize;
+    let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
+    let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
+    let mut offset = 0usize;
+    while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
+        let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
+        let state = table.states[idx];
+        if state == ADDRESS_LIFECYCLE_EMPTY {
+            break;
+        }
+        if state != ADDRESS_LIFECYCLE_PROBE_TOMBSTONE && table.ptrs[idx] == ptr_key {
+            return Err(AddressLifecycleTransitionError::Conflict);
+        }
+        offset += 1;
+    }
+    let current = global_address_generation_history_observation(&table, ptr_key).unwrap_or(
+        GlobalAddressLifecycleObservation {
+            snapshot: GlobalAddressLifecycleSnapshot::Absent,
+            epoch: 0,
+        },
+    );
+    if current != expected {
+        return Err(AddressLifecycleTransitionError::Conflict);
+    }
+    record_global_address_generation_history(&mut table, ptr_key, target);
     Ok(())
 }
 
@@ -9739,35 +10195,21 @@ fn restore_global_address_lifecycle(ptr: *mut u8, prior: GlobalAddressLifecycleS
         _ => panic!("retained lifecycle missing during rollback"),
     };
     if prior == GlobalAddressLifecycleSnapshot::Absent {
-        let ptr_key = ptr as usize;
-        let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
-        let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
-        let mut offset = 0usize;
-        while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
-            let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
-            if table.states[idx] == ADDRESS_LIFECYCLE_EMPTY {
-                break;
-            }
-            if table.states[idx] != ADDRESS_LIFECYCLE_PROBE_TOMBSTONE && table.ptrs[idx] == ptr_key
-            {
-                if address_lifecycle_state_snapshot(table.states[idx]) != expected {
-                    panic!("retained lifecycle changed during rollback");
-                }
-                table.ptrs[idx] = 0;
-                table.states[idx] = ADDRESS_LIFECYCLE_PROBE_TOMBSTONE;
-                return;
-            }
-            offset += 1;
-        }
-        panic!("retained lifecycle disappeared during rollback");
+        transition_global_address_lifecycle(ptr, expected, None, ADDRESS_LIFECYCLE_PROBE_TOMBSTONE)
+            .unwrap_or_else(|_| panic!("retained lifecycle changed during rollback"));
+        return;
     }
     let target_state = match prior {
+        GlobalAddressLifecycleSnapshot::Live => ADDRESS_LIFECYCLE_LIVE,
         GlobalAddressLifecycleSnapshot::TypeRetained => ADDRESS_LIFECYCLE_TYPE_RETAINED,
         GlobalAddressLifecycleSnapshot::DelayedRetained => ADDRESS_LIFECYCLE_DELAYED_RETAINED,
         GlobalAddressLifecycleSnapshot::Released => ADDRESS_LIFECYCLE_RELEASED,
         GlobalAddressLifecycleSnapshot::Absent => unreachable!(),
+        GlobalAddressLifecycleSnapshot::RetiredUnknown => {
+            panic!("retired-unknown lifecycle cannot own reclaim state")
+        }
     };
-    transition_global_address_lifecycle(ptr, expected, None, target_state, false)
+    transition_global_address_lifecycle(ptr, expected, None, target_state)
         .unwrap_or_else(|_| panic!("retained lifecycle changed during rollback"));
 }
 
@@ -9787,7 +10229,6 @@ fn register_global_type_cache_ownership_from_snapshot(
         expected.snapshot,
         Some(expected.epoch),
         ADDRESS_LIFECYCLE_TYPE_RETAINED,
-        false,
     ) {
         Ok(()) => {
             GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_add(1, Ordering::Release);
@@ -9807,7 +10248,10 @@ fn register_global_type_cache_ownership(ptr: *mut u8) -> GlobalTypeCacheOwnershi
     let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
         [global_retained_ownership_arbitration_shard(ptr)]
     .lock();
-    let result = if observation.snapshot == GlobalAddressLifecycleSnapshot::Absent {
+    let result = if matches!(
+        observation.snapshot,
+        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live
+    ) {
         register_global_type_cache_ownership_from_snapshot(ptr, observation)
     } else {
         Err(GlobalTypeCacheOwnershipRegistration::Duplicate)
@@ -9835,7 +10279,6 @@ fn unregister_global_type_cache_ownership(ptr: *mut u8) -> bool {
         GlobalAddressLifecycleSnapshot::TypeRetained,
         None,
         ADDRESS_LIFECYCLE_PROBE_TOMBSTONE,
-        true,
     )
     .is_ok();
     if transitioned {
@@ -9865,12 +10308,10 @@ fn begin_global_type_cache_ownership_under_arbitration(
     }
 }
 
-fn begin_global_type_cache_ownership(ptr: *mut u8) -> GlobalTypeCacheOwnershipAcquisition {
-    let observation = global_address_lifecycle_observation(ptr);
-    #[cfg(test)]
-    unsafe {
-        pause_stale_reclaim_after_snapshot_for_test();
-    }
+fn begin_global_type_cache_ownership_from_observation(
+    ptr: *mut u8,
+    observation: GlobalAddressLifecycleObservation,
+) -> GlobalTypeCacheOwnershipAcquisition {
     #[cfg(test)]
     pause_before_cross_domain_dealloc_arbitration_for_test();
     let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
@@ -9880,11 +10321,20 @@ fn begin_global_type_cache_ownership(ptr: *mut u8) -> GlobalTypeCacheOwnershipAc
         panic!("delayed-free pointer already quarantined");
     }
     match observation.snapshot {
-        GlobalAddressLifecycleSnapshot::Absent => {
+        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live => {
             begin_global_type_cache_ownership_under_arbitration(ptr, observation, arbitration)
         }
         _ => panic!("type-cache pointer already retained or released"),
     }
+}
+
+fn begin_global_type_cache_ownership(ptr: *mut u8) -> GlobalTypeCacheOwnershipAcquisition {
+    let observation = global_address_lifecycle_observation(ptr);
+    #[cfg(test)]
+    unsafe {
+        pause_stale_reclaim_after_snapshot_for_test();
+    }
+    begin_global_type_cache_ownership_from_observation(ptr, observation)
 }
 
 fn begin_global_type_cache_ownership_for_delayed_handoff(
@@ -9920,6 +10370,25 @@ fn reject_global_type_cache_owned_pointer(ptr: *mut u8) {
 
 #[cfg(test)]
 fn clear_global_type_cache_ownership_for_test() {
+    // Replacing the history tables while a reclaim observation owns a slot pin
+    // would detach that lease from its entry and leave the separate atomic pin
+    // count stale. Check every slot before resetting any shard so misuse fails
+    // without partially clearing the lifecycle state.
+    let mut pin_shard_idx = 0usize;
+    while pin_shard_idx < GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT {
+        let mut slot_idx = 0usize;
+        while slot_idx < GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS {
+            assert_eq!(
+                GLOBAL_ADDRESS_GENERATION_HISTORY_PINS[pin_shard_idx][slot_idx]
+                    .load(Ordering::Acquire),
+                0,
+                "test lifecycle reset requires all history observations to be released"
+            );
+            slot_idx += 1;
+        }
+        pin_shard_idx += 1;
+    }
+
     let mut shard_idx = 0usize;
     while shard_idx < GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT {
         *GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock() = GlobalTypeCacheOwnershipTable::empty();
@@ -9970,6 +10439,13 @@ impl PendingGlobalDelayedFreeOwnership {
         }
     }
 
+    #[cfg(test)]
+    #[inline]
+    fn cleanup_on_normal_drop(mut self) -> Self {
+        self.cleanup_on_drop = true;
+        self
+    }
+
     #[inline]
     fn commit(mut self) {
         self.finished = true;
@@ -10000,7 +10476,7 @@ impl PendingGlobalDelayedFreeOwnership {
 impl Drop for PendingGlobalDelayedFreeOwnership {
     fn drop(&mut self) {
         #[cfg(test)]
-        if self.cleanup_on_drop && !self.finished {
+        if self.cleanup_on_drop && !self.finished && !std::thread::panicking() {
             let _ = unregister_global_delayed_free_ownership(self.ptr);
             self.finished = true;
             return;
@@ -10096,124 +10572,231 @@ unsafe fn pause_stale_reclaim_after_snapshot_for_test() {
     }
 }
 
+#[cfg(test)]
+pub(crate) unsafe fn pause_reallocation_after_recovery_lookup_for_test(
+    recovery: AutoAllocationRecordLookup,
+) {
+    if !matches!(recovery, AutoAllocationRecordLookup::Exact(_))
+        || !TEST_PAUSE_NEXT_REALLOC_AFTER_EXACT_RECOVERY_LOOKUP
+    {
+        return;
+    }
+    TEST_PAUSE_NEXT_REALLOC_AFTER_EXACT_RECOVERY_LOOKUP = false;
+    TEST_REALLOC_RECOVERY_LOOKUP_PHASE.store(2, Ordering::Release);
+    while TEST_REALLOC_RECOVERY_LOOKUP_PHASE.load(Ordering::Acquire) == 2 {
+        core::hint::spin_loop();
+    }
+}
+
 /// Diagnostic fast rejection for an already-published retained/released state.
 /// This check is not an ownership transaction and must never authorize later
 /// old-storage access; every reclaim path still binds an observation/epoch and
 /// acquires durable T/D admission before copying, mutating, or releasing.
 #[inline]
-pub(crate) fn reject_known_retained_or_released_pointer(ptr: *mut u8) {
-    match global_address_lifecycle_snapshot(ptr) {
-        GlobalAddressLifecycleSnapshot::TypeRetained
-        | GlobalAddressLifecycleSnapshot::DelayedRetained => {
-            panic!("pointer already retained")
+pub(crate) fn reject_known_retained_or_released_from_observation(
+    observation: &GlobalReclaimObservation,
+) {
+    match observation.lifecycle.snapshot {
+        GlobalAddressLifecycleSnapshot::TypeRetained => {
+            panic!("type-cache pointer already retained")
+        }
+        GlobalAddressLifecycleSnapshot::DelayedRetained => {
+            panic!("delayed-free pointer already quarantined")
         }
         GlobalAddressLifecycleSnapshot::Released => {
             panic!("pointer already released")
         }
-        GlobalAddressLifecycleSnapshot::Absent => reject_global_type_cache_owned_pointer(ptr),
+        GlobalAddressLifecycleSnapshot::RetiredUnknown => {
+            panic!("pointer belongs to evicted released history")
+        }
+        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live => {}
     }
+}
+
+#[inline]
+pub(crate) fn reject_known_retained_or_released_pointer(ptr: *mut u8) {
+    let observation = observe_global_reclaim(ptr);
+    reject_known_retained_or_released_from_observation(&observation);
+    // This pointer-only compatibility path remains as a deterministic test
+    // seam for a delayed-to-type handoff between separate registry probes.
+    // Production reclaim paths reuse their pointer-bound observation and rely
+    // on epoch-checked admission for any later lifecycle change.
+    reject_global_type_cache_owned_pointer(ptr);
     #[cfg(test)]
     reject_missed_delayed_to_type_handoff_for_test();
 }
 
-/// Validate a pointer returned by the raw backend before it is exposed. Fresh
-/// raw-only addresses remain untracked; backend reuse consumes the exact
-/// released-state entry and advances its observation epoch.
+/// Publish an allocation witness while holding the address arbiter. Exact
+/// generation history advances without forcing unrelated colliding addresses
+/// into the bounded lifecycle table.
 #[inline]
-pub(crate) fn accept_raw_allocation_return(ptr: *mut u8) {
+fn publish_authoritative_allocation_return(ptr: *mut u8, accept_existing_live: bool) {
     if ptr.is_null() {
         return;
+    }
+    #[cfg(test)]
+    if accept_existing_live {
+        TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.fetch_add(1, Ordering::Relaxed);
+    } else {
+        TEST_STRICT_ALLOCATION_PUBLICATIONS.fetch_add(1, Ordering::Relaxed);
     }
     let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
         [global_retained_ownership_arbitration_shard(ptr)]
     .lock();
-    match global_address_lifecycle_snapshot(ptr) {
-        GlobalAddressLifecycleSnapshot::Absent => {}
-        GlobalAddressLifecycleSnapshot::Released => {
-            transition_global_address_lifecycle(
+    loop {
+        let observation = global_address_lifecycle_observation(ptr);
+        let transition = match observation.snapshot {
+            GlobalAddressLifecycleSnapshot::Absent if observation.epoch == 0 => break,
+            GlobalAddressLifecycleSnapshot::Absent => advance_missing_global_address_generation(
+                ptr,
+                observation,
+                GlobalAddressLifecycleSnapshot::Absent,
+            ),
+            GlobalAddressLifecycleSnapshot::Live if accept_existing_live => break,
+            GlobalAddressLifecycleSnapshot::RetiredUnknown => {
+                advance_missing_global_address_generation(
+                    ptr,
+                    observation,
+                    GlobalAddressLifecycleSnapshot::Absent,
+                )
+            }
+            GlobalAddressLifecycleSnapshot::Released => transition_global_address_lifecycle(
                 ptr,
                 GlobalAddressLifecycleSnapshot::Released,
-                None,
+                Some(observation.epoch),
                 ADDRESS_LIFECYCLE_PROBE_TOMBSTONE,
-                true,
-            )
-            .unwrap_or_else(|_| panic!("released allocation changed before reuse"));
-        }
-        _ => {
-            drop(arbitration);
-            panic!("allocator returned an address with live or retained ownership");
+            ),
+            _ => {
+                drop(arbitration);
+                panic!("allocator returned an address with live or retained ownership");
+            }
+        };
+        match transition {
+            Ok(()) => break,
+            Err(AddressLifecycleTransitionError::Conflict) => continue,
+            Err(AddressLifecycleTransitionError::Full) => {
+                drop(arbitration);
+                panic!("allocation lifecycle registry capacity exhausted");
+            }
         }
     }
     drop(arbitration);
 }
 
-/// Validate semantic/recovery allocation exposure. Fresh addresses stay absent
-/// to avoid lifetime-wide tracking; legitimate cache/backend reuse retires its
-/// exact retained/released entry and bumps the hash-bucket epoch so a queued
-/// pre-reuse observer cannot bind to the reused allocation.
+/// Validate a pointer returned by the raw backend before it is exposed.
+#[inline]
+pub(crate) fn accept_raw_allocation_return(ptr: *mut u8) {
+    publish_authoritative_allocation_return(ptr, false);
+}
+
+/// Validate semantic/recovery allocation exposure. This may observe a Live
+/// record just published by the nested raw allocation hook.
 #[inline]
 fn publish_semantic_allocation_return(ptr: *mut u8) {
-    if ptr.is_null() {
-        return;
-    }
-    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
-        [global_retained_ownership_arbitration_shard(ptr)]
-    .lock();
-    match global_address_lifecycle_snapshot(ptr) {
-        GlobalAddressLifecycleSnapshot::Absent => {}
-        GlobalAddressLifecycleSnapshot::Released => {
-            transition_global_address_lifecycle(
-                ptr,
-                GlobalAddressLifecycleSnapshot::Released,
-                None,
-                ADDRESS_LIFECYCLE_PROBE_TOMBSTONE,
-                true,
-            )
-            .unwrap_or_else(|_| panic!("released semantic allocation changed before reuse"));
-        }
-        _ => {
-            drop(arbitration);
-            panic!("semantic allocator returned a retained address");
-        }
-    }
-    drop(arbitration);
+    publish_authoritative_allocation_return(ptr, true);
 }
 
 pub(crate) enum GlobalRawReclaimAdmission {
     /// Raw-only addresses with no semantic lifecycle are outside the bounded
     /// lifecycle table. This path does not claim universal stale-pointer/UAF
-    /// protection; it only guarantees atomic rejection against addresses that
-    /// have entered semantic/recovery/D/T ownership.
-    Untracked,
+    /// protection; it guarantees atomic rejection while exact live/retained
+    /// ownership or a recent exact generation record remains published.
+    Untracked(*mut u8),
     Tracked(PendingGlobalTypeCacheOwnership),
 }
 
-#[inline]
-pub(crate) fn begin_global_raw_reclaim(ptr: *mut u8) -> GlobalRawReclaimAdmission {
-    let observation = global_address_lifecycle_observation(ptr);
-    #[cfg(test)]
-    unsafe {
-        pause_stale_reclaim_after_snapshot_for_test();
+impl GlobalRawReclaimAdmission {
+    #[inline]
+    pub(crate) fn ptr(&self) -> *mut u8 {
+        match self {
+            Self::Untracked(ptr) => *ptr,
+            Self::Tracked(ownership) => ownership.ptr,
+        }
     }
+
+    #[inline]
+    fn into_tracked(self) -> PendingGlobalTypeCacheOwnership {
+        match self {
+            Self::Tracked(ownership) => ownership,
+            Self::Untracked(_) => {
+                panic!("semantic reclaim admission must retain tracked ownership")
+            }
+        }
+    }
+}
+
+#[inline]
+fn begin_global_raw_reclaim_from_lifecycle_observation(
+    ptr: *mut u8,
+    observation: GlobalAddressLifecycleObservation,
+) -> GlobalRawReclaimAdmission {
     #[cfg(test)]
     pause_before_cross_domain_dealloc_arbitration_for_test();
     let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
         [global_retained_ownership_arbitration_shard(ptr)]
     .lock();
     match observation.snapshot {
-        GlobalAddressLifecycleSnapshot::Absent => {
+        GlobalAddressLifecycleSnapshot::Absent if observation.epoch == 0 => {
             if global_address_lifecycle_observation(ptr) != observation {
                 drop(arbitration);
                 panic!("raw reclaim address lifecycle changed while queued");
             }
             drop(arbitration);
-            GlobalRawReclaimAdmission::Untracked
+            GlobalRawReclaimAdmission::Untracked(ptr)
         }
-        _ => {
+        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live => {
+            match register_global_type_cache_ownership_from_snapshot(ptr, observation) {
+                Ok(ownership) => {
+                    drop(arbitration);
+                    GlobalRawReclaimAdmission::Tracked(ownership)
+                }
+                Err(GlobalTypeCacheOwnershipRegistration::Duplicate) => {
+                    drop(arbitration);
+                    panic!("raw reclaim tracked generation changed while queued")
+                }
+                Err(GlobalTypeCacheOwnershipRegistration::Full) => {
+                    drop(arbitration);
+                    panic!("retained ownership registry capacity exhausted")
+                }
+                Err(GlobalTypeCacheOwnershipRegistration::Inserted) => unreachable!(),
+            }
+        }
+        GlobalAddressLifecycleSnapshot::TypeRetained => {
             drop(arbitration);
-            panic!("raw reclaim rejected retained or released address");
+            panic!("type-cache pointer already retained")
+        }
+        GlobalAddressLifecycleSnapshot::DelayedRetained => {
+            drop(arbitration);
+            panic!("delayed-free pointer already quarantined")
+        }
+        GlobalAddressLifecycleSnapshot::Released => {
+            drop(arbitration);
+            panic!("pointer already released")
+        }
+        GlobalAddressLifecycleSnapshot::RetiredUnknown => {
+            drop(arbitration);
+            panic!("pointer belongs to evicted released history")
         }
     }
+}
+
+#[inline]
+pub(crate) fn begin_global_raw_reclaim_from_observation(
+    observation: GlobalReclaimObservation,
+) -> GlobalRawReclaimAdmission {
+    #[cfg(test)]
+    unsafe {
+        pause_stale_reclaim_after_snapshot_for_test();
+    }
+    begin_global_raw_reclaim_from_lifecycle_observation(
+        observation.ptr as *mut u8,
+        observation.lifecycle,
+    )
+}
+
+#[inline]
+pub(crate) fn begin_global_raw_reclaim(ptr: *mut u8) -> GlobalRawReclaimAdmission {
+    begin_global_raw_reclaim_from_observation(observe_global_reclaim(ptr))
 }
 
 /// Reallocation paths that may inspect semantic recovery state use a durable T
@@ -10223,6 +10806,95 @@ pub(crate) fn begin_global_raw_reclaim(ptr: *mut u8) -> GlobalRawReclaimAdmissio
 #[inline]
 pub(crate) fn begin_global_tracked_reclaim(ptr: *mut u8) -> GlobalRawReclaimAdmission {
     GlobalRawReclaimAdmission::Tracked(begin_global_semantic_reclaim(ptr))
+}
+
+/// Capture the lifecycle state before consulting recovery or tag side tables.
+/// Admission must consume this token so a release/reuse during validation is
+/// rejected by the original address epoch.
+#[inline]
+pub(crate) fn observe_global_reclaim(ptr: *mut u8) -> GlobalReclaimObservation {
+    if ptr.is_null() {
+        return GlobalReclaimObservation {
+            ptr: 0,
+            lifecycle: GlobalAddressLifecycleObservation {
+                snapshot: GlobalAddressLifecycleSnapshot::Absent,
+                epoch: 0,
+            },
+            _history_lease: None,
+        };
+    }
+    let ptr_key = ptr as usize;
+    let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
+    let table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
+    let mut lifecycle = None;
+    let mut offset = 0usize;
+    while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
+        let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
+        let state = table.states[idx];
+        if state == ADDRESS_LIFECYCLE_EMPTY {
+            break;
+        }
+        if state != ADDRESS_LIFECYCLE_PROBE_TOMBSTONE && table.ptrs[idx] == ptr_key {
+            lifecycle = Some(GlobalAddressLifecycleObservation {
+                snapshot: address_lifecycle_state_snapshot(state),
+                epoch: table.entry_epochs[idx],
+            });
+            break;
+        }
+        offset += 1;
+    }
+    let mut history_lease = None;
+    let lifecycle = lifecycle.unwrap_or_else(|| {
+        match global_address_generation_history_entry(&table, ptr_key) {
+            Some((idx, observation)) => {
+                if observation.snapshot == GlobalAddressLifecycleSnapshot::Absent {
+                    GLOBAL_ADDRESS_GENERATION_HISTORY_PINS[shard_idx][idx]
+                        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+                            count.checked_add(1)
+                        })
+                        .unwrap_or_else(|_| {
+                            panic!("address generation history pin count exhausted")
+                        });
+                    history_lease = Some(GlobalAddressHistoryLease {
+                        shard_idx,
+                        slot_idx: idx,
+                        ptr_key,
+                    });
+                }
+                observation
+            }
+            None => GlobalAddressLifecycleObservation {
+                snapshot: GlobalAddressLifecycleSnapshot::Absent,
+                epoch: 0,
+            },
+        }
+    });
+    drop(table);
+    GlobalReclaimObservation {
+        ptr: ptr_key,
+        lifecycle,
+        _history_lease: history_lease,
+    }
+}
+
+#[inline]
+pub(crate) fn begin_global_tracked_reclaim_from_observation(
+    observation: GlobalReclaimObservation,
+) -> GlobalRawReclaimAdmission {
+    #[cfg(test)]
+    unsafe {
+        pause_stale_reclaim_after_snapshot_for_test();
+    }
+    let ptr = observation.ptr as *mut u8;
+    let ownership =
+        match begin_global_type_cache_ownership_from_observation(ptr, observation.lifecycle) {
+            GlobalTypeCacheOwnershipAcquisition::Owned(ownership) => ownership,
+            GlobalTypeCacheOwnershipAcquisition::Full(arbitration) => {
+                drop(arbitration);
+                panic!("retained ownership registry capacity exhausted")
+            }
+        };
+    GlobalRawReclaimAdmission::Tracked(ownership)
 }
 
 #[inline]
@@ -10253,12 +10925,12 @@ pub(crate) fn finish_global_raw_reclaim_in_place(admission: GlobalRawReclaimAdmi
 #[inline]
 pub(crate) unsafe fn release_global_raw_reclaim(
     alloc: &RustAllocator,
-    ptr: *mut u8,
     layout: Layout,
     admission: GlobalRawReclaimAdmission,
 ) -> bool {
+    let ptr = admission.ptr();
     match admission {
-        GlobalRawReclaimAdmission::Untracked => alloc.dealloc_raw_as_retained_owner(ptr, layout),
+        GlobalRawReclaimAdmission::Untracked(_) => alloc.dealloc_raw_as_retained_owner(ptr, layout),
         GlobalRawReclaimAdmission::Tracked(ownership) => {
             ownership.commit();
             terminal_release_retained_raw(alloc, ptr, layout, TerminalRetainedOwnership::TypeCache)
@@ -10269,11 +10941,11 @@ pub(crate) unsafe fn release_global_raw_reclaim(
 #[inline]
 pub(crate) unsafe fn release_global_reclaim_with_metadata(
     alloc: &RustAllocator,
-    ptr: *mut u8,
     layout: Layout,
     metadata: Option<(AllocationMetadata, bool)>,
     admission: GlobalRawReclaimAdmission,
 ) {
+    let ptr = admission.ptr();
     match (admission, metadata) {
         (GlobalRawReclaimAdmission::Tracked(ownership), Some((metadata, consume_recovery))) => {
             let admission = deallocation_admission_from_type_reclaim(ownership, layout, metadata);
@@ -10294,10 +10966,10 @@ pub(crate) unsafe fn release_global_reclaim_with_metadata(
                 TerminalRetainedOwnership::TypeCache,
             );
         }
-        (GlobalRawReclaimAdmission::Untracked, None) => {
+        (GlobalRawReclaimAdmission::Untracked(_), None) => {
             let _ = alloc.dealloc_raw_as_retained_owner(ptr, layout);
         }
-        (GlobalRawReclaimAdmission::Untracked, Some(_)) => {
+        (GlobalRawReclaimAdmission::Untracked(_), Some(_)) => {
             panic!("semantic moved realloc reached old storage without durable ownership");
         }
     }
@@ -10364,7 +11036,6 @@ fn register_global_delayed_free_ownership_from_snapshot(
         expected.snapshot,
         Some(expected.epoch),
         ADDRESS_LIFECYCLE_DELAYED_RETAINED,
-        false,
     ) {
         Ok(()) => Ok(PendingGlobalDelayedFreeOwnership::new_from_transition(
             ptr,
@@ -10386,7 +11057,10 @@ fn register_global_delayed_free_ownership(ptr: *mut u8) -> GlobalDelayedFreeRegi
     let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
         [global_retained_ownership_arbitration_shard(ptr)]
     .lock();
-    let result = if observation.snapshot == GlobalAddressLifecycleSnapshot::Absent {
+    let result = if matches!(
+        observation.snapshot,
+        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live
+    ) {
         register_global_delayed_free_ownership_from_snapshot(ptr, observation)
     } else {
         Err(GlobalDelayedFreeRegistration::Duplicate)
@@ -10414,7 +11088,6 @@ fn unregister_global_delayed_free_ownership(ptr: *mut u8) -> bool {
                 GlobalAddressLifecycleSnapshot::DelayedRetained,
                 None,
                 ADDRESS_LIFECYCLE_PROBE_TOMBSTONE,
-                true,
             )
             .unwrap_or_else(|_| panic!("delayed lifecycle changed during unregister"));
         }
@@ -10468,23 +11141,29 @@ fn deallocation_admission_from_type_reclaim(
 /// registry entry. If the requested D registry is full, the same lock attempts
 /// T ownership; if T is also full, the deallocation fails closed without a
 /// backend release.
-fn begin_global_deallocation_admission(
+fn begin_global_deallocation_admission_from_lifecycle_observation(
     ptr: *mut u8,
     layout: Layout,
     metadata: AllocationMetadata,
+    observation: GlobalAddressLifecycleObservation,
 ) -> GlobalDeallocationAdmission {
-    let observation = global_address_lifecycle_observation(ptr);
-    #[cfg(test)]
-    unsafe {
-        pause_stale_reclaim_after_snapshot_for_test();
-    }
     #[cfg(test)]
     pause_before_cross_domain_dealloc_arbitration_for_test();
     let _arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
         [global_retained_ownership_arbitration_shard(ptr)]
     .lock();
-    if observation.snapshot != GlobalAddressLifecycleSnapshot::Absent {
-        panic!("pointer already retained or released");
+    match observation.snapshot {
+        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live => {}
+        GlobalAddressLifecycleSnapshot::TypeRetained => {
+            panic!("type-cache pointer already retained")
+        }
+        GlobalAddressLifecycleSnapshot::DelayedRetained => {
+            panic!("delayed-free pointer already quarantined")
+        }
+        GlobalAddressLifecycleSnapshot::Released => panic!("pointer already released"),
+        GlobalAddressLifecycleSnapshot::RetiredUnknown => {
+            panic!("pointer belongs to evicted released history")
+        }
     }
 
     let quarantine_eligible = metadata.requests(FLAG_DELAYED_FREE)
@@ -10512,6 +11191,37 @@ fn begin_global_deallocation_admission(
         }
         Err(GlobalTypeCacheOwnershipRegistration::Inserted) => unreachable!(),
     }
+}
+
+#[inline]
+fn begin_global_deallocation_admission_from_observation(
+    observation: GlobalReclaimObservation,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> GlobalDeallocationAdmission {
+    #[cfg(test)]
+    unsafe {
+        pause_stale_reclaim_after_snapshot_for_test();
+    }
+    begin_global_deallocation_admission_from_lifecycle_observation(
+        observation.ptr as *mut u8,
+        layout,
+        metadata,
+        observation.lifecycle,
+    )
+}
+
+#[inline]
+fn begin_global_deallocation_admission(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> GlobalDeallocationAdmission {
+    begin_global_deallocation_admission_from_observation(
+        observe_global_reclaim(ptr),
+        layout,
+        metadata,
+    )
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -10584,7 +11294,6 @@ unsafe fn terminal_release_retained_raw(
         ownership.expected_snapshot(),
         None,
         ADDRESS_LIFECYCLE_RELEASED,
-        true,
     )
     .unwrap_or_else(|_| panic!("terminal retained ownership disappeared early"));
     match ownership {
@@ -10632,7 +11341,6 @@ unsafe fn terminal_release_retained_guarded(
         ownership.expected_snapshot(),
         None,
         ADDRESS_LIFECYCLE_RELEASED,
-        true,
     )
     .unwrap_or_else(|_| panic!("terminal guarded ownership disappeared early"));
     match ownership {
@@ -10654,7 +11362,11 @@ fn begin_global_delayed_free_ownership(
     metadata: AllocationMetadata,
 ) -> Option<PendingGlobalDelayedFreeOwnership> {
     match begin_global_deallocation_admission(ptr, layout, metadata) {
-        GlobalDeallocationAdmission::DelayedFree(ownership) => Some(ownership),
+        GlobalDeallocationAdmission::DelayedFree(ownership) => {
+            #[cfg(test)]
+            let ownership = ownership.cleanup_on_normal_drop();
+            Some(ownership)
+        }
         GlobalDeallocationAdmission::TypeCache(ownership) => {
             // Test/internal callers of this legacy helper only request the D
             // token. Production keeps the typed T fallback returned by the
@@ -10972,6 +11684,13 @@ pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAl
         let slot = DELAYED_FREE[idx];
         DELAYED_FREE[idx] = DelayedFreeSlot::empty();
         if !slot.is_empty() {
+            #[cfg(test)]
+            if global_address_lifecycle_snapshot(slot.ptr)
+                != GlobalAddressLifecycleSnapshot::DelayedRetained
+            {
+                idx += 1;
+                continue;
+            }
             if let Ok(layout) = Layout::from_size_align(slot.size, slot.align) {
                 if !metadata_record_auth_is_valid(
                     slot.ptr,
@@ -11007,13 +11726,20 @@ pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAl
     let inline = INLINE_TYPE_CACHE_ENTRY;
     INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
     if !inline.is_empty() {
+        #[cfg(test)]
+        let has_ownership = global_address_lifecycle_snapshot(inline.ptr)
+            == GlobalAddressLifecycleSnapshot::TypeRetained;
+        #[cfg(not(test))]
+        let has_ownership = true;
         if let Ok(layout) = Layout::from_size_align(inline.size, inline.align) {
-            if terminal_release_retained_raw(
-                alloc,
-                inline.ptr,
-                layout,
-                TerminalRetainedOwnership::TypeCache,
-            ) {
+            if has_ownership
+                && terminal_release_retained_raw(
+                    alloc,
+                    inline.ptr,
+                    layout,
+                    TerminalRetainedOwnership::TypeCache,
+                )
+            {
                 released = released.saturating_add(1);
             }
         }
@@ -11035,12 +11761,19 @@ pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAl
             let align = node.add(2).read();
             match Layout::from_size_align(size, align) {
                 Ok(layout) => {
-                    if terminal_release_retained_raw(
-                        alloc,
-                        current,
-                        layout,
-                        TerminalRetainedOwnership::TypeCache,
-                    ) {
+                    #[cfg(test)]
+                    let has_ownership = global_address_lifecycle_snapshot(current)
+                        == GlobalAddressLifecycleSnapshot::TypeRetained;
+                    #[cfg(not(test))]
+                    let has_ownership = true;
+                    if has_ownership
+                        && terminal_release_retained_raw(
+                            alloc,
+                            current,
+                            layout,
+                            TerminalRetainedOwnership::TypeCache,
+                        )
+                    {
                         released = released.saturating_add(1);
                     }
                 }
@@ -11225,6 +11958,11 @@ unsafe fn drain_segregated_entry_at_thread_exit(
     if entry.is_empty() {
         return false;
     }
+    #[cfg(test)]
+    if global_address_lifecycle_snapshot(entry.ptr) != GlobalAddressLifecycleSnapshot::TypeRetained
+    {
+        return false;
+    }
     let layout = match Layout::from_size_align(entry.size, entry.align) {
         Ok(layout) => layout,
         Err(_) => return false,
@@ -11371,6 +12109,7 @@ impl RustAllocator {
             return semantic_zero_size_ptr(layout);
         }
         let ptr = if let Some(ptr) = pop_compiler_type_metadata_cache(layout, metadata) {
+            publish_semantic_allocation_return(ptr);
             ptr
         } else {
             self.alloc_raw(layout)
@@ -11378,7 +12117,6 @@ impl RustAllocator {
         if ptr.is_null() {
             return ptr;
         }
-        publish_semantic_allocation_return(ptr);
         if record_recovery && !self.record_fast_recovery_or_global(ptr, layout, metadata) {
             self.dealloc_raw(ptr, layout);
             return core::ptr::null_mut();
@@ -11483,6 +12221,25 @@ impl RustAllocator {
             return ptr;
         }
         publish_semantic_allocation_return(ptr);
+        self.finish_semantic_allocation_no_recovery_after_publication(ptr, layout, metadata)
+    }
+
+    /// Complete semantic allocation work after the pointer source has already
+    /// published one authoritative allocation witness.
+    ///
+    /// Raw allocator misses use the strict `alloc_raw` publication. Cache hits
+    /// and guarded mappings continue through the wrapper above because their
+    /// source-specific lifecycle transition is separate from raw allocation.
+    #[inline]
+    unsafe fn finish_semantic_allocation_no_recovery_after_publication(
+        &self,
+        ptr: *mut u8,
+        layout: Layout,
+        metadata: AllocationMetadata,
+    ) -> *mut u8 {
+        if ptr.is_null() {
+            return ptr;
+        }
         if metadata.requests(FLAG_FORCE_INITIALIZE) {
             core::ptr::write_bytes(ptr, 0, layout.size());
         }
@@ -11506,6 +12263,25 @@ impl RustAllocator {
             return ptr;
         }
         publish_semantic_allocation_return(ptr);
+        self.finish_semantic_allocation_with_policy_after_publication(
+            ptr,
+            layout,
+            metadata,
+            recovery_policy,
+        )
+    }
+
+    #[inline]
+    unsafe fn finish_semantic_allocation_with_policy_after_publication(
+        &self,
+        ptr: *mut u8,
+        layout: Layout,
+        metadata: AllocationMetadata,
+        recovery_policy: RecoveryRecordPolicy,
+    ) -> *mut u8 {
+        if ptr.is_null() {
+            return ptr;
+        }
         if metadata.requests(FLAG_FORCE_INITIALIZE) {
             core::ptr::write_bytes(ptr, 0, layout.size());
         }
@@ -11589,7 +12365,12 @@ impl RustAllocator {
         }
 
         let ptr = self.alloc_raw(layout);
-        self.finish_semantic_allocation_with_policy(ptr, layout, metadata, recovery_policy)
+        self.finish_semantic_allocation_with_policy_after_publication(
+            ptr,
+            layout,
+            metadata,
+            recovery_policy,
+        )
     }
 
     #[inline]
@@ -11617,7 +12398,7 @@ impl RustAllocator {
         }
 
         let ptr = self.alloc_raw(layout);
-        self.finish_semantic_allocation_no_recovery(ptr, layout, metadata)
+        self.finish_semantic_allocation_no_recovery_after_publication(ptr, layout, metadata)
     }
 
     #[inline]
@@ -11670,12 +12451,34 @@ impl RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return true;
         }
+        self.dealloc_with_metadata_inner_from_observation(
+            layout,
+            metadata,
+            recover_allocation_record,
+            observe_global_reclaim(ptr),
+        )
+    }
+
+    #[inline]
+    unsafe fn dealloc_with_metadata_inner_from_observation(
+        &self,
+        layout: Layout,
+        metadata: AllocationMetadata,
+        recover_allocation_record: bool,
+        observation: GlobalReclaimObservation,
+    ) -> bool {
+        let ptr = observation.ptr();
         let (dealloc_metadata, consume_recovery_record) = if recover_allocation_record {
             match lookup_auto_allocation_record(ptr, layout, false) {
-                AutoAllocationRecordLookup::Exact(recorded_metadata) => (
-                    deallocation_metadata_after_recovery_record(metadata, recorded_metadata),
-                    true,
-                ),
+                AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+                    self.dealloc_with_recovery_record_from_observation(
+                        layout,
+                        metadata,
+                        recorded_metadata,
+                        observation,
+                    );
+                    return true;
+                }
                 AutoAllocationRecordLookup::Missing => (metadata, false),
                 AutoAllocationRecordLookup::Mismatched => {
                     // A live record for the pointer with a different
@@ -11687,8 +12490,62 @@ impl RustAllocator {
         } else {
             (metadata, false)
         };
-        self.dealloc_with_resolved_metadata(ptr, layout, dealloc_metadata, consume_recovery_record);
+        self.dealloc_with_resolved_metadata_from_observation(
+            layout,
+            dealloc_metadata,
+            consume_recovery_record,
+            observation,
+        );
         true
+    }
+
+    /// Resolve and commit an exact recovery identity only after the original
+    /// pointer-generation observation has acquired durable deallocation
+    /// ownership. Rejected stale operations therefore cannot change semantic
+    /// validation counters.
+    #[inline]
+    pub(crate) unsafe fn dealloc_with_recovery_record_from_observation(
+        &self,
+        layout: Layout,
+        requested_metadata: AllocationMetadata,
+        recorded_metadata: AllocationMetadata,
+        observation: GlobalReclaimObservation,
+    ) {
+        let ptr = observation.ptr();
+        let dealloc_metadata = preview_deallocation_metadata_after_recovery_record(
+            requested_metadata,
+            recorded_metadata,
+        );
+        verify_memory_tagged_reallocation_source(ptr, layout, dealloc_metadata);
+        let admission = begin_global_deallocation_admission_from_observation(
+            observation,
+            layout,
+            dealloc_metadata,
+        );
+        let committed_metadata =
+            deallocation_metadata_after_recovery_record(requested_metadata, recorded_metadata);
+        debug_assert_eq!(committed_metadata, dealloc_metadata);
+        self.dealloc_with_resolved_metadata_admitted(
+            ptr,
+            layout,
+            committed_metadata,
+            true,
+            admission,
+        );
+    }
+
+    #[inline]
+    pub(crate) unsafe fn dealloc_with_metadata_from_observation(
+        &self,
+        layout: Layout,
+        metadata: AllocationMetadata,
+        observation: GlobalReclaimObservation,
+    ) -> bool {
+        let ptr = observation.ptr();
+        if ptr.is_null() || layout.size() == 0 {
+            return true;
+        }
+        self.dealloc_with_metadata_inner_from_observation(layout, metadata, true, observation)
     }
 
     #[inline]
@@ -11699,10 +12556,30 @@ impl RustAllocator {
         metadata: AllocationMetadata,
         consume_recovery_record: bool,
     ) {
-        // Admit the pointer into exactly one process-visible retained domain
-        // before recovery-record consumption, tag validation/mutation,
-        // statistics, cache mutation, or backend release.
-        let admission = begin_global_deallocation_admission(ptr, layout, metadata);
+        self.dealloc_with_resolved_metadata_from_observation(
+            layout,
+            metadata,
+            consume_recovery_record,
+            observe_global_reclaim(ptr),
+        );
+    }
+
+    #[inline]
+    pub(crate) unsafe fn dealloc_with_resolved_metadata_from_observation(
+        &self,
+        layout: Layout,
+        metadata: AllocationMetadata,
+        consume_recovery_record: bool,
+        observation: GlobalReclaimObservation,
+    ) {
+        let ptr = observation.ptr();
+        // Authentication reads side-table state without mutating it. Run the
+        // fail-stop check before durable D/T ownership, then admit from the
+        // pointer epoch captured before recovery lookup so a correct retry is
+        // possible and a concurrent release/reuse is rejected.
+        verify_memory_tagged_reallocation_source(ptr, layout, metadata);
+        let admission =
+            begin_global_deallocation_admission_from_observation(observation, layout, metadata);
         self.dealloc_with_resolved_metadata_admitted(
             ptr,
             layout,
@@ -11834,7 +12711,21 @@ impl RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
-        self.dealloc_with_resolved_metadata(ptr, layout, metadata, true);
+        self.dealloc_with_peeked_recovery_metadata_from_observation(
+            layout,
+            metadata,
+            observe_global_reclaim(ptr),
+        );
+    }
+
+    #[inline]
+    pub(crate) unsafe fn dealloc_with_peeked_recovery_metadata_from_observation(
+        &self,
+        layout: Layout,
+        metadata: AllocationMetadata,
+        observation: GlobalReclaimObservation,
+    ) {
+        self.dealloc_with_resolved_metadata_from_observation(layout, metadata, true, observation);
     }
 
     #[inline]
@@ -11847,7 +12738,187 @@ impl RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
-        self.dealloc_with_resolved_metadata(ptr, layout, metadata, false);
+        self.dealloc_with_recovered_metadata_from_observation(
+            layout,
+            metadata,
+            observe_global_reclaim(ptr),
+        );
+    }
+
+    #[inline]
+    pub(crate) unsafe fn dealloc_with_recovered_metadata_from_observation(
+        &self,
+        layout: Layout,
+        metadata: AllocationMetadata,
+        observation: GlobalReclaimObservation,
+    ) {
+        self.dealloc_with_resolved_metadata_from_observation(layout, metadata, false, observation);
+    }
+
+    /// Continue a semantic realloc from the lifecycle generation observed
+    /// before the caller inspected the recovery side table.
+    #[inline]
+    pub(crate) unsafe fn realloc_with_split_metadata_from_observation(
+        &self,
+        observation: GlobalReclaimObservation,
+        old_layout: Layout,
+        new_size: usize,
+        old_metadata: AllocationMetadata,
+        new_metadata: AllocationMetadata,
+        old_recovery: AutoAllocationRecordLookup,
+    ) -> *mut u8 {
+        let ptr = observation.ptr();
+        let new_layout = match Layout::from_size_align(new_size, old_layout.align()) {
+            Ok(layout) => layout,
+            Err(_) => return core::ptr::null_mut(),
+        };
+        if ptr.is_null() || old_layout.size() == 0 {
+            return core::ptr::null_mut();
+        }
+        if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched) {
+            return core::ptr::null_mut();
+        }
+        let dealloc_metadata = match old_recovery {
+            AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+                preview_deallocation_metadata_after_recovery_record(old_metadata, recorded_metadata)
+            }
+            AutoAllocationRecordLookup::Missing => old_metadata,
+            AutoAllocationRecordLookup::Mismatched => unreachable!(),
+        };
+        // Tag validation is read-only. Keep it before durable ownership and
+        // replacement publication so a rejected operation remains retryable.
+        verify_memory_tagged_reallocation_source(ptr, old_layout, dealloc_metadata);
+        let admission = begin_global_tracked_reclaim_from_observation(observation);
+        self.realloc_with_split_metadata_from_admission(
+            admission,
+            old_layout,
+            new_layout,
+            old_metadata,
+            new_metadata,
+            old_recovery,
+        )
+    }
+
+    /// Complete a semantic realloc after the caller has already acquired
+    /// durable tracked ownership for the observed pointer generation.
+    #[inline]
+    pub(crate) unsafe fn realloc_with_split_metadata_from_admission(
+        &self,
+        admission: GlobalRawReclaimAdmission,
+        old_layout: Layout,
+        new_layout: Layout,
+        old_metadata: AllocationMetadata,
+        new_metadata: AllocationMetadata,
+        old_recovery: AutoAllocationRecordLookup,
+    ) -> *mut u8 {
+        let ptr = admission.ptr();
+        if ptr.is_null()
+            || old_layout.size() == 0
+            || matches!(old_recovery, AutoAllocationRecordLookup::Mismatched)
+        {
+            rollback_global_raw_reclaim(admission);
+            return core::ptr::null_mut();
+        }
+        let (dealloc_metadata, consume_recovery_record) = match old_recovery {
+            AutoAllocationRecordLookup::Exact(recorded_metadata) => (
+                deallocation_metadata_after_recovery_record(old_metadata, recorded_metadata),
+                true,
+            ),
+            AutoAllocationRecordLookup::Missing => (old_metadata, false),
+            AutoAllocationRecordLookup::Mismatched => unreachable!(),
+        };
+        let new_size = new_layout.size();
+        let mut ownership = Some(admission.into_tracked());
+        if new_size == 0 {
+            self.dealloc_with_resolved_metadata_admitted(
+                ptr,
+                old_layout,
+                dealloc_metadata,
+                consume_recovery_record,
+                deallocation_admission_from_type_reclaim(
+                    ownership
+                        .take()
+                        .expect("nonzero realloc-to-zero must own old storage"),
+                    old_layout,
+                    dealloc_metadata,
+                ),
+            );
+            return semantic_zero_size_ptr(new_layout);
+        }
+        if semantic_realloc_can_reuse_in_place(old_layout, new_size, dealloc_metadata, new_metadata)
+        {
+            let recovery_record_committed = match old_recovery {
+                AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+                    if auto_allocation_recovery_recording_enabled() {
+                        replace_auto_allocation_record_for_reallocation(
+                            ptr,
+                            old_layout,
+                            new_layout,
+                            new_metadata,
+                        )
+                    } else {
+                        take_auto_allocation_records_for_reallocation(ptr, old_layout)
+                            == Some(recorded_metadata)
+                    }
+                }
+                AutoAllocationRecordLookup::Missing => {
+                    !auto_allocation_recovery_recording_enabled()
+                        || replace_auto_allocation_record_for_reallocation(
+                            ptr,
+                            old_layout,
+                            new_layout,
+                            new_metadata,
+                        )
+                }
+                AutoAllocationRecordLookup::Mismatched => unreachable!(),
+            };
+            if !recovery_record_committed {
+                ownership
+                    .take()
+                    .expect("nonzero in-place realloc must own old storage")
+                    .rollback_unmodified();
+                return core::ptr::null_mut();
+            }
+            record_stats_alloc_layout(new_metadata, new_layout);
+            if dealloc_metadata != new_metadata {
+                record_stats_dealloc_layout(dealloc_metadata, old_layout);
+            }
+            if new_size > old_layout.size() && new_metadata.requests(FLAG_FORCE_INITIALIZE) {
+                core::ptr::write_bytes(ptr.add(old_layout.size()), 0, new_size - old_layout.size());
+            }
+            ownership
+                .take()
+                .expect("nonzero in-place realloc must own old storage")
+                .finish_live_reuse();
+            return ptr;
+        }
+        let new_ptr = self.alloc_with_metadata(new_layout, new_metadata);
+        if !new_ptr.is_null() {
+            core::ptr::copy_nonoverlapping(
+                ptr,
+                new_ptr,
+                core::cmp::min(old_layout.size(), new_size),
+            );
+            self.dealloc_with_resolved_metadata_admitted(
+                ptr,
+                old_layout,
+                dealloc_metadata,
+                consume_recovery_record,
+                deallocation_admission_from_type_reclaim(
+                    ownership
+                        .take()
+                        .expect("nonzero moved realloc must own old storage"),
+                    old_layout,
+                    dealloc_metadata,
+                ),
+            );
+        } else {
+            ownership
+                .take()
+                .expect("failed nonzero realloc must own old storage")
+                .rollback_unmodified();
+        }
+        new_ptr
     }
 }
 
@@ -11883,113 +12954,24 @@ unsafe impl SemanticAlloc for RustAllocator {
         if !semantic_realloc_old_pointer_supported(ptr, old_layout) {
             return core::ptr::null_mut();
         }
-        let old_recovery = if ptr.is_null() || old_layout.size() == 0 {
-            AutoAllocationRecordLookup::Missing
-        } else {
-            lookup_auto_allocation_record(ptr, old_layout, false)
-        };
-        if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched) {
-            // The recovery record is the authoritative allocation Layout.
-            // Reject before zero-size success, in-place statistics/tag changes,
-            // replacement allocation, or old-pointer release can make a live
-            // same-address/different-Layout record look like a successful
-            // realloc. The exact record remains available for a correct retry.
-            return core::ptr::null_mut();
-        }
-        let (dealloc_metadata, consume_recovery_record) = match old_recovery {
-            AutoAllocationRecordLookup::Exact(recorded_metadata) => (
-                deallocation_metadata_after_recovery_record(old_metadata, recorded_metadata),
-                true,
-            ),
-            AutoAllocationRecordLookup::Missing => (old_metadata, false),
-            AutoAllocationRecordLookup::Mismatched => unreachable!(),
-        };
-        if !ptr.is_null() && old_layout.size() != 0 {
-            // Authentication reads only the side-table record, not allocation
-            // storage.  Keep it before reclaim admission so an authentication
-            // failure cannot conservatively strand a type-retained entry.
-            verify_memory_tagged_reallocation_source(ptr, old_layout, dealloc_metadata);
-        }
-        let mut ownership = if !ptr.is_null() && old_layout.size() != 0 {
-            Some(begin_global_semantic_reclaim(ptr))
-        } else {
-            None
-        };
-        if new_size == 0 {
-            if let Some(ownership) = ownership.take() {
-                self.dealloc_with_resolved_metadata_admitted(
-                    ptr,
-                    old_layout,
-                    dealloc_metadata,
-                    consume_recovery_record,
-                    deallocation_admission_from_type_reclaim(
-                        ownership,
-                        old_layout,
-                        dealloc_metadata,
-                    ),
-                );
+        if old_layout.size() == 0 {
+            if new_size != 0 {
+                return self.alloc_with_metadata(new_layout, new_metadata);
             }
             return semantic_zero_size_ptr(new_layout);
         }
-        if !ptr.is_null()
-            && semantic_realloc_can_reuse_in_place(
-                old_layout,
-                new_size,
-                dealloc_metadata,
-                new_metadata,
-            )
-        {
-            if auto_allocation_recovery_recording_enabled()
-                && !replace_auto_allocation_record_for_reallocation(
-                    ptr,
-                    old_layout,
-                    new_layout,
-                    new_metadata,
-                )
-            {
-                ownership
-                    .take()
-                    .expect("nonzero in-place realloc must own old storage")
-                    .rollback_unmodified();
-                return core::ptr::null_mut();
-            }
-            record_stats_alloc_layout(new_metadata, new_layout);
-            if dealloc_metadata != new_metadata {
-                record_stats_dealloc_layout(dealloc_metadata, old_layout);
-            }
-            if new_size > old_layout.size() && new_metadata.requests(FLAG_FORCE_INITIALIZE) {
-                core::ptr::write_bytes(ptr.add(old_layout.size()), 0, new_size - old_layout.size());
-            }
-            ownership
-                .take()
-                .expect("nonzero in-place realloc must own old storage")
-                .finish_live_reuse();
-            return ptr;
-        }
-        let new_ptr = self.alloc_with_metadata(new_layout, new_metadata);
-        if !new_ptr.is_null() && !ptr.is_null() {
-            core::ptr::copy_nonoverlapping(
-                ptr,
-                new_ptr,
-                core::cmp::min(old_layout.size(), new_size),
-            );
-            self.dealloc_with_resolved_metadata_admitted(
-                ptr,
-                old_layout,
-                dealloc_metadata,
-                consume_recovery_record,
-                deallocation_admission_from_type_reclaim(
-                    ownership
-                        .take()
-                        .expect("nonzero moved realloc must own old storage"),
-                    old_layout,
-                    dealloc_metadata,
-                ),
-            );
-        } else if let Some(ownership) = ownership.take() {
-            ownership.rollback_unmodified();
-        }
-        new_ptr
+        let observation = observe_global_reclaim(ptr);
+        let old_recovery = lookup_auto_allocation_record(ptr, old_layout, false);
+        #[cfg(test)]
+        pause_reallocation_after_recovery_lookup_for_test(old_recovery);
+        self.realloc_with_split_metadata_from_observation(
+            observation,
+            old_layout,
+            new_size,
+            old_metadata,
+            new_metadata,
+            old_recovery,
+        )
     }
 }
 
@@ -12581,31 +13563,52 @@ unsafe fn realloc_layout_with_split_ffi_metadata(
     {
         return core::ptr::null_mut();
     }
-
-    let old_metadata = match lookup_auto_allocation_record(ptr, old_layout, false) {
+    let allocator = RustAllocator::new();
+    if old_layout.size() == 0 {
+        return with_auto_allocation_recovery_recording(|| {
+            allocator.realloc_with_split_metadata(
+                ptr,
+                old_layout,
+                new_size,
+                requested_old_metadata,
+                requested_new_metadata,
+            )
+        });
+    }
+    let observation = observe_global_reclaim(ptr);
+    let old_recovery = lookup_auto_allocation_record(ptr, old_layout, false);
+    #[cfg(test)]
+    pause_reallocation_after_recovery_lookup_for_test(old_recovery);
+    let old_metadata = match old_recovery {
         AutoAllocationRecordLookup::Exact(recorded) => {
             // The allocation-completion record owns the old object's identity
-            // and policy. This records one validation result for the explicit
-            // old identity without consuming the record. The caller's
-            // requested new metadata remains independent.
-            deallocation_metadata_after_recovery_record(requested_old_metadata, recorded)
+            // and policy. Resolve without changing counters; a successful
+            // commit records the explicit old-identity validation below. The
+            // caller's requested new metadata remains independent.
+            preview_deallocation_metadata_after_recovery_record(requested_old_metadata, recorded)
         }
         AutoAllocationRecordLookup::Missing => requested_old_metadata,
         AutoAllocationRecordLookup::Mismatched => return core::ptr::null_mut(),
     };
-    let allocator = RustAllocator::new();
     // The recovery lookup above is non-consuming. The allocator consumes or
     // replaces the old record only after a successful reallocation commit, so
     // allocation/recording failure leaves the old pointer identity recoverable.
-    with_auto_allocation_recovery_recording(|| {
-        allocator.realloc_with_split_metadata(
-            ptr,
+    let new_ptr = with_auto_allocation_recovery_recording(|| {
+        allocator.realloc_with_split_metadata_from_observation(
+            observation,
             old_layout,
             new_size,
             old_metadata,
             requested_new_metadata,
+            old_recovery,
         )
-    })
+    });
+    if !new_ptr.is_null() {
+        if let AutoAllocationRecordLookup::Exact(recorded) = old_recovery {
+            let _ = deallocation_metadata_after_recovery_record(requested_old_metadata, recorded);
+        }
+    }
+    new_ptr
 }
 
 #[inline]
@@ -12615,48 +13618,70 @@ unsafe fn realloc_layout_with_ffi_metadata(
     new_size: usize,
     metadata: AllocationMetadata,
 ) -> *mut u8 {
-    if !semantic_realloc_old_pointer_supported(ptr, old_layout) {
+    if Layout::from_size_align(new_size, old_layout.align()).is_err()
+        || !semantic_realloc_old_pointer_supported(ptr, old_layout)
+    {
         return core::ptr::null_mut();
     }
     let allocator = RustAllocator::new();
-    let (old_metadata, new_metadata, recovery_record_found) =
-        match lookup_auto_allocation_record(ptr, old_layout, false) {
-            AutoAllocationRecordLookup::Exact(recorded_metadata) => {
-                let delegated =
-                    recovery_delegated_metadata_after_record(metadata, recorded_metadata);
-                (
-                    if delegated.is_some() {
-                        // Preserve delegation provenance through the allocator
-                        // boundary. The exact recovery lookup there resolves
-                        // the old identity without recording a false exact-
-                        // compiler-identity match.
-                        metadata
-                    } else {
-                        recorded_metadata
-                    },
-                    delegated.unwrap_or(metadata),
-                    true,
-                )
-            }
-            AutoAllocationRecordLookup::Missing => (metadata, metadata, false),
-            AutoAllocationRecordLookup::Mismatched => return core::ptr::null_mut(),
-        };
+    if old_layout.size() == 0 {
+        if is_recovery_delegated_metadata_request(metadata) {
+            return without_auto_allocation_recovery_recording(|| {
+                allocator.realloc_with_split_metadata(ptr, old_layout, new_size, metadata, metadata)
+            });
+        }
+        return with_auto_allocation_recovery_recording(|| {
+            allocator.realloc_with_split_metadata(ptr, old_layout, new_size, metadata, metadata)
+        });
+    }
+    let observation = observe_global_reclaim(ptr);
+    let old_recovery = lookup_auto_allocation_record(ptr, old_layout, false);
+    #[cfg(test)]
+    pause_reallocation_after_recovery_lookup_for_test(old_recovery);
+    let (old_metadata, new_metadata, recovery_record_found) = match old_recovery {
+        AutoAllocationRecordLookup::Exact(recorded_metadata) => {
+            let delegated = recovery_delegated_metadata_after_record(metadata, recorded_metadata);
+            (
+                if delegated.is_some() {
+                    // Preserve delegation provenance through the allocator
+                    // boundary. The exact recovery lookup there resolves
+                    // the old identity without recording a false exact-
+                    // compiler-identity match.
+                    metadata
+                } else {
+                    recorded_metadata
+                },
+                delegated.unwrap_or(metadata),
+                true,
+            )
+        }
+        AutoAllocationRecordLookup::Missing => (metadata, metadata, false),
+        AutoAllocationRecordLookup::Mismatched => return core::ptr::null_mut(),
+    };
     if !recovery_record_found && is_recovery_delegated_metadata_request(metadata) {
         // A delegated request without an exact record has no identity to
         // inherit. Keep the operation raw/untyped and do not manufacture a
         // recovery record for unknown metadata.
         return without_auto_allocation_recovery_recording(|| {
-            allocator.realloc_with_split_metadata(
-                ptr,
+            allocator.realloc_with_split_metadata_from_observation(
+                observation,
                 old_layout,
                 new_size,
                 old_metadata,
                 new_metadata,
+                old_recovery,
             )
         });
     }
     with_auto_allocation_recovery_recording(|| {
-        allocator.realloc_with_split_metadata(ptr, old_layout, new_size, old_metadata, new_metadata)
+        allocator.realloc_with_split_metadata_from_observation(
+            observation,
+            old_layout,
+            new_size,
+            old_metadata,
+            new_metadata,
+            old_recovery,
+        )
     })
 }
 
@@ -12678,13 +13703,25 @@ unsafe fn realloc_layout_with_ffi_metadata_local(
     new_size: usize,
     metadata: AllocationMetadata,
 ) -> *mut u8 {
-    if !semantic_realloc_old_pointer_supported(ptr, old_layout) {
+    if Layout::from_size_align(new_size, old_layout.align()).is_err()
+        || !semantic_realloc_old_pointer_supported(ptr, old_layout)
+    {
         return core::ptr::null_mut();
+    }
+    let allocator = RustAllocator::new();
+    if old_layout.size() == 0 {
+        return without_auto_allocation_recovery_recording(|| {
+            allocator.realloc_with_split_metadata(ptr, old_layout, new_size, metadata, metadata)
+        });
     }
     // Local ABI callers promise exact new-object metadata and must never
     // delegate it through a recovery record. A conservative old record may
     // still identify the moved-from object during a mixed transition.
-    let old_metadata = match lookup_auto_allocation_record(ptr, old_layout, false) {
+    let observation = observe_global_reclaim(ptr);
+    let old_recovery = lookup_auto_allocation_record(ptr, old_layout, false);
+    #[cfg(test)]
+    pause_reallocation_after_recovery_lookup_for_test(old_recovery);
+    let old_metadata = match old_recovery {
         AutoAllocationRecordLookup::Exact(recorded_metadata) => recorded_metadata,
         AutoAllocationRecordLookup::Missing => metadata,
         AutoAllocationRecordLookup::Mismatched => {
@@ -12695,18 +13732,16 @@ unsafe fn realloc_layout_with_ffi_metadata_local(
             return core::ptr::null_mut();
         }
     };
-    let allocator = RustAllocator::new();
-    let new_ptr = without_auto_allocation_recovery_recording(|| {
-        allocator.realloc_with_split_metadata(ptr, old_layout, new_size, old_metadata, metadata)
-    });
-    if new_ptr == ptr && !new_ptr.is_null() {
-        // Moved and zero-sized transitions consume the old key during
-        // deallocation. Only an in-place transition leaves that key for this
-        // commit step; probing a freed old address afterward could steal a
-        // concurrently reused pointer's new record.
-        let _ = take_auto_allocation_records_for_reallocation(ptr, old_layout);
-    }
-    new_ptr
+    without_auto_allocation_recovery_recording(|| {
+        allocator.realloc_with_split_metadata_from_observation(
+            observation,
+            old_layout,
+            new_size,
+            old_metadata,
+            metadata,
+            old_recovery,
+        )
+    })
 }
 
 #[inline]
@@ -13848,6 +14883,11 @@ fn push_semantic_scope_metadata(metadata: AllocationMetadata) {
     }
 }
 
+#[inline]
+fn conservative_compiler_scope_metadata(metadata: AllocationMetadata) -> AllocationMetadata {
+    metadata.with_placement_hint(metadata.placement_hint | PLACEMENT_HINT_CROSS_THREAD_RECOVERY)
+}
+
 /// Push a thread-local semantic metadata scope for compiler-inserted MIR.
 ///
 /// This is the fast ABI used by the rustc_driver MIR pass.  It avoids moving a
@@ -13861,7 +14901,9 @@ pub extern "C" fn __unialloc_semantic_scope_push(
     flags: u32,
     callsite: u64,
 ) {
-    push_semantic_scope_metadata(ffi_metadata(type_id, module_id, flags, callsite));
+    push_semantic_scope_metadata(conservative_compiler_scope_metadata(ffi_metadata(
+        type_id, module_id, flags, callsite,
+    )));
 }
 
 /// Push a compiler-proven local semantic metadata scope.
@@ -13892,13 +14934,15 @@ pub extern "C" fn __unialloc_semantic_scope_push_hints(
     placement_hint: u16,
     callsite: u64,
 ) {
-    push_semantic_scope_metadata(ffi_metadata_with_hints(
-        type_id,
-        module_id,
-        flags,
-        lifetime_hint,
-        placement_hint,
-        callsite,
+    push_semantic_scope_metadata(conservative_compiler_scope_metadata(
+        ffi_metadata_with_hints(
+            type_id,
+            module_id,
+            flags,
+            lifetime_hint,
+            placement_hint,
+            callsite,
+        ),
     ));
 }
 
@@ -18211,12 +19255,17 @@ mod tests {
 
         #[cfg(not(feature = "fixed_heap"))]
         {
+            let overflow_ptr = ptrs[AUTO_ALLOCATION_RECORD_PROBE_LIMIT];
+            let home_shard_idx = auto_allocation_record_shard(overflow_ptr);
             assert!(
-                global_auto_allocation_record_location_for_test(
-                    ptrs[AUTO_ALLOCATION_RECORD_PROBE_LIMIT]
-                )
-                .is_some(),
-                "the first record beyond the home-shard bounded probe window should spill into a later shard before mmap overflow"
+                global_auto_allocation_record_location_for_test(overflow_ptr).is_none(),
+                "hosted recovery records beyond the home probe window should not spill into a foreign inline shard"
+            );
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert!(
+                find_auto_allocation_record_in_overflow(table.overflow, overflow_ptr as usize)
+                    .is_some(),
+                "hosted recovery records beyond the home probe window should use home-shard overflow"
             );
         }
         #[cfg(feature = "fixed_heap")]
@@ -18728,7 +19777,6 @@ mod tests {
         let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
         let ptr = (0x3900usize << 4) as *mut u8;
         let (home_shard_idx, _) = auto_allocation_record_shard_and_slot(ptr);
-        let next_shard_idx = next_auto_allocation_record_shard(home_shard_idx, 1);
         let metadata = AllocationMetadata::for_type(0xC002_3901)
             .with_module(0xC0DE)
             .with_callsite(0xA110_C390)
@@ -18757,23 +19805,35 @@ mod tests {
         unsafe {
             assert!(
                 record_global_auto_allocation_metadata(ptr, layout, metadata),
-                "a full home shard should spill into another shard before dropping recovery metadata"
+                "a full home shard should spill into home overflow before dropping recovery metadata"
             );
         }
         assert_eq!(
             AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
             AUTO_ALLOCATION_RECORD_SHARD_SLOTS + 1
         );
-        let (record_shard_idx, _record_idx) =
-            global_auto_allocation_record_location_for_test(ptr).expect("inserted shard record");
-        assert_ne!(
-            record_shard_idx, home_shard_idx,
-            "the overflow record should move out of the contended home shard"
-        );
-        assert_eq!(
-            record_shard_idx, next_shard_idx,
-            "the first overflow shard should be deterministic"
-        );
+        #[cfg(not(feature = "fixed_heap"))]
+        {
+            assert!(
+                global_auto_allocation_record_location_for_test(ptr).is_none(),
+                "hosted home overflow must not shadow the record in another inline shard"
+            );
+            let home = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert!(
+                find_auto_allocation_record_in_overflow(home.overflow, ptr as usize).is_some(),
+                "the overflow record should remain in its pointer-derived home shard"
+            );
+        }
+        #[cfg(feature = "fixed_heap")]
+        {
+            let next_shard_idx = next_auto_allocation_record_shard(home_shard_idx, 1);
+            let (record_shard_idx, _) = global_auto_allocation_record_location_for_test(ptr)
+                .expect("fixed-heap overflow record");
+            assert_eq!(
+                record_shard_idx, next_shard_idx,
+                "fixed-heap mode must retain its complete cross-shard inline capacity"
+            );
+        }
         assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(metadata));
         assert_eq!(
             take_auto_deallocation_metadata(ptr, layout),
@@ -18783,6 +19843,123 @@ mod tests {
         assert_eq!(
             AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
             AUTO_ALLOCATION_RECORD_SHARD_SLOTS
+        );
+
+        clear_auto_allocation_records();
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_home_affinity_updates_legacy_non_home_record_without_shadowing() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let ptr = (0x3920usize << 4) as *mut u8;
+        let home_shard_idx = auto_allocation_record_shard(ptr);
+        let legacy_shard_idx = next_auto_allocation_record_shard(home_shard_idx, 1);
+        let original = AllocationMetadata::for_type(0xC002_3920)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_3920)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let replacement = original.with_callsite(0xA110_3921);
+
+        {
+            let mut legacy = AUTO_ALLOCATION_RECORDS[legacy_shard_idx].lock();
+            assert!(install_global_auto_allocation_inline_record(
+                legacy_shard_idx,
+                &mut *legacy,
+                0,
+                ptr,
+                layout,
+                original,
+            ));
+        }
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+
+        unsafe {
+            assert!(record_global_auto_allocation_metadata(
+                ptr,
+                layout,
+                replacement,
+            ));
+        }
+        assert_eq!(
+            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+            1,
+            "updating a legacy foreign-shard record must not publish a shadow copy"
+        );
+        assert_eq!(
+            global_auto_allocation_record_location_for_test(ptr),
+            Some((legacy_shard_idx, 0)),
+            "the defensive legacy path should update the existing record in place"
+        );
+        assert_eq!(
+            take_auto_deallocation_metadata(ptr, layout),
+            Some(replacement),
+            "legacy non-home state must remain recoverable after an update"
+        );
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+
+        clear_auto_allocation_records();
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_home_affine_records_remain_visible_to_foreign_threads_concurrently() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        const WORKERS: usize = 4;
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let ptrs = core::array::from_fn::<_, WORKERS, _>(|index| {
+            ((0x3940usize + index * 0x100) << 4) as usize
+        });
+        let metadata = core::array::from_fn::<_, WORKERS, _>(|index| {
+            AllocationMetadata::for_type(0xC002_3940 + index as u64)
+                .with_module(0xC0DE)
+                .with_callsite(0xA110_3940 + index as u64)
+                .with_flags(FLAG_TYPE_ISOLATED)
+        });
+        let inserted = std::sync::Arc::new(std::sync::Barrier::new(WORKERS));
+        let mut workers = Vec::new();
+
+        for index in 0..WORKERS {
+            let inserted = inserted.clone();
+            workers.push(thread::spawn(move || {
+                let own_ptr = ptrs[index] as *mut u8;
+                assert!(unsafe {
+                    record_global_auto_allocation_metadata(own_ptr, layout, metadata[index])
+                });
+                inserted.wait();
+                let foreign = (index + 1) % WORKERS;
+                (
+                    foreign,
+                    take_auto_deallocation_metadata(ptrs[foreign] as *mut u8, layout),
+                )
+            }));
+        }
+
+        for worker in workers {
+            let (foreign, recovered) = worker.join().expect("recovery worker");
+            assert_eq!(recovered, Some(metadata[foreign]));
+        }
+        assert_eq!(
+            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+            0,
+            "concurrent foreign-thread removals should consume every home-affine record exactly once"
         );
 
         clear_auto_allocation_records();
@@ -20205,6 +21382,7 @@ mod tests {
     #[test]
     fn thread_exit_drain_releases_two_inline_hugepage_entries_without_mapping() {
         let _guard = test_guard();
+        let _hugepage_stats = system_alloc::HugepageStatsTestGuard::new();
         let _cleanup = SemanticStateCleanup;
         semantic_auto_metadata_disable();
         unsafe {
@@ -23107,6 +24285,7 @@ mod tests {
     #[test]
     fn hugepage_metadata_uses_inline_side_cache_before_bucket_materialization() {
         let _guard = test_guard();
+        let _hugepage_stats = system_alloc::HugepageStatsTestGuard::new();
         unsafe {
             clear_type_cache_for_test();
             drop_hugepage_segregated_type_cache_for_test();
@@ -23344,6 +24523,7 @@ mod tests {
     #[test]
     fn hugepage_metadata_single_free_does_not_allocate_empty_side_cache() {
         let _guard = test_guard();
+        let _hugepage_stats = system_alloc::HugepageStatsTestGuard::new();
         unsafe {
             clear_type_cache_for_test();
             drop_hugepage_segregated_type_cache_for_test();
@@ -23393,6 +24573,7 @@ mod tests {
     #[test]
     fn hugepage_metadata_two_object_reuse_does_not_repeat_mmap_attempts() {
         let _guard = test_guard();
+        let _hugepage_stats = system_alloc::HugepageStatsTestGuard::new();
         unsafe {
             clear_type_cache_for_test();
             drop_hugepage_segregated_type_cache_for_test();
@@ -23572,6 +24753,7 @@ mod tests {
     #[test]
     fn hugepage_metadata_side_cache_uses_hugepage_mmap_backing() {
         let _guard = test_guard();
+        let _hugepage_stats = system_alloc::HugepageStatsTestGuard::new();
         unsafe {
             clear_type_cache_for_test();
             drop_hugepage_segregated_type_cache_for_test();
@@ -24577,7 +25759,6 @@ mod tests {
                 GlobalAddressLifecycleSnapshot::TypeRetained,
                 None,
                 ADDRESS_LIFECYCLE_RELEASED,
-                true,
             )
             .expect("test terminal transition should publish Released");
             GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
@@ -24604,6 +25785,7 @@ mod tests {
             GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT * GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS * 2;
         for index in 0..iterations {
             let ptr = ((index + 1).wrapping_mul(0x1000) | 0x18) as *mut u8;
+            accept_raw_allocation_return(ptr);
             let observation = global_address_lifecycle_observation(ptr);
             let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
                 [global_retained_ownership_arbitration_shard(ptr)]
@@ -24621,7 +25803,6 @@ mod tests {
                 GlobalAddressLifecycleSnapshot::TypeRetained,
                 None,
                 ADDRESS_LIFECYCLE_RELEASED,
-                true,
             )
             .expect("test terminal transition should publish Released");
             GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
@@ -24630,6 +25811,540 @@ mod tests {
         assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
         unsafe {
             clear_type_cache_for_test();
+        }
+    }
+
+    fn lifecycle_probe_colliders_for_test(count: usize) -> Vec<*mut u8> {
+        let target = global_type_cache_ownership_shard_and_slot(8usize as *mut u8);
+        let mut colliders = Vec::with_capacity(count);
+        let mut address = 8usize;
+        while colliders.len() < count {
+            let ptr = address as *mut u8;
+            if global_type_cache_ownership_shard_and_slot(ptr) == target {
+                colliders.push(ptr);
+            }
+            address = address.checked_add(8).unwrap();
+        }
+
+        colliders
+    }
+
+    fn publish_released_lifecycle_for_test(ptr: *mut u8) {
+        accept_raw_allocation_return(ptr);
+        let observation = global_address_lifecycle_observation(ptr);
+        let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+            [global_retained_ownership_arbitration_shard(ptr)]
+        .lock();
+        let ownership = register_global_type_cache_ownership_from_snapshot(ptr, observation)
+            .expect("test address should enter T before release");
+        drop(arbitration);
+        ownership.commit();
+
+        let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+            [global_retained_ownership_arbitration_shard(ptr)]
+        .lock();
+        transition_global_address_lifecycle(
+            ptr,
+            GlobalAddressLifecycleSnapshot::TypeRetained,
+            None,
+            ADDRESS_LIFECYCLE_RELEASED,
+        )
+        .expect("test terminal transition should publish Released");
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+        drop(arbitration);
+    }
+
+    fn released_lifecycle_probe_colliders_for_test() -> Vec<*mut u8> {
+        let colliders =
+            lifecycle_probe_colliders_for_test(GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT + 1);
+        for &ptr in &colliders[..GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT] {
+            publish_released_lifecycle_for_test(ptr);
+        }
+        colliders
+    }
+
+    fn evict_released_lifecycle_probe_for_test(
+        colliders: &[*mut u8],
+    ) -> PendingGlobalTypeCacheOwnership {
+        let incoming = colliders[GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT];
+        accept_raw_allocation_return(incoming);
+        let observation = global_address_lifecycle_observation(incoming);
+        let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+            [global_retained_ownership_arbitration_shard(incoming)]
+        .lock();
+        let ownership = register_global_type_cache_ownership_from_snapshot(incoming, observation)
+            .expect("Released pressure should admit the incoming reclaim");
+        drop(arbitration);
+        ownership
+    }
+
+    #[test]
+    fn evicted_released_history_rejects_stale_reclaim() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let colliders = released_lifecycle_probe_colliders_for_test();
+        let victim = colliders[0];
+        assert_eq!(
+            global_address_lifecycle_snapshot(victim),
+            GlobalAddressLifecycleSnapshot::Released
+        );
+
+        let incoming = evict_released_lifecycle_probe_for_test(&colliders);
+        assert_eq!(
+            global_address_lifecycle_snapshot(victim),
+            GlobalAddressLifecycleSnapshot::RetiredUnknown
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = begin_global_raw_reclaim(victim);
+            }))
+            .is_err(),
+            "an evicted Released address must reject raw stale reclaim"
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = begin_global_semantic_reclaim(victim);
+            }))
+            .is_err(),
+            "an evicted Released address must reject semantic stale reclaim"
+        );
+        incoming.rollback_unmodified();
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn unrelated_same_home_release_does_not_invalidate_absent_observation() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let colliders = lifecycle_probe_colliders_for_test(2);
+        let raw_ptr = colliders[0];
+        let semantic_ptr = colliders[1];
+        let raw_observation = global_address_lifecycle_observation(raw_ptr);
+        assert_eq!(
+            raw_observation.snapshot,
+            GlobalAddressLifecycleSnapshot::Absent
+        );
+
+        publish_released_lifecycle_for_test(semantic_ptr);
+
+        let admission =
+            begin_global_raw_reclaim_from_lifecycle_observation(raw_ptr, raw_observation);
+        assert!(matches!(admission, GlobalRawReclaimAdmission::Untracked(ptr) if ptr == raw_ptr));
+        rollback_global_raw_reclaim(admission);
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn unrelated_same_home_release_does_not_invalidate_live_observation() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let colliders = lifecycle_probe_colliders_for_test(2);
+        let live_ptr = colliders[0];
+        let semantic_ptr = colliders[1];
+
+        let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+            [global_retained_ownership_arbitration_shard(live_ptr)]
+        .lock();
+        transition_global_address_lifecycle(
+            live_ptr,
+            GlobalAddressLifecycleSnapshot::Absent,
+            None,
+            ADDRESS_LIFECYCLE_LIVE,
+        )
+        .expect("test address should publish Live");
+        drop(arbitration);
+        let live_observation = global_address_lifecycle_observation(live_ptr);
+
+        publish_released_lifecycle_for_test(semantic_ptr);
+
+        let admission =
+            begin_global_raw_reclaim_from_lifecycle_observation(live_ptr, live_observation);
+        assert!(matches!(admission, GlobalRawReclaimAdmission::Tracked(_)));
+        rollback_global_raw_reclaim(admission);
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn reclaim_diagnostic_preserves_captured_retained_state() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let ptr = 8usize as *mut u8;
+        assert_eq!(
+            register_global_type_cache_ownership(ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        let observation = observe_global_reclaim(ptr);
+        assert!(unregister_global_type_cache_ownership(ptr));
+
+        let rejection = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            reject_known_retained_or_released_from_observation(&observation);
+        }));
+        let message = rejection
+            .expect_err("the captured retained state must remain diagnostic")
+            .downcast::<&str>()
+            .expect("retained-state rejection must use a static message");
+        assert_eq!(*message, "type-cache pointer already retained");
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn benign_reclaim_diagnostic_defers_generation_change_to_admission() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let ptr = 8usize as *mut u8;
+        let observation = observe_global_reclaim(ptr);
+        publish_released_lifecycle_for_test(ptr);
+
+        reject_known_retained_or_released_from_observation(&observation);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = begin_global_raw_reclaim_from_observation(observation);
+            }))
+            .is_err(),
+            "admission must reject a lifecycle change after a benign observation"
+        );
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn unrelated_released_eviction_does_not_poison_raw_collider() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let colliders =
+            lifecycle_probe_colliders_for_test(GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT + 2);
+        for &ptr in &colliders[..GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT] {
+            publish_released_lifecycle_for_test(ptr);
+        }
+        let incoming = evict_released_lifecycle_probe_for_test(&colliders);
+        let raw_ptr = colliders[GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT + 1];
+        assert_eq!(
+            global_address_lifecycle_snapshot(raw_ptr),
+            GlobalAddressLifecycleSnapshot::Absent,
+            "an unrelated evicted address must not poison a raw-only collider"
+        );
+        let admission = begin_global_raw_reclaim(raw_ptr);
+        assert!(matches!(admission, GlobalRawReclaimAdmission::Untracked(ptr) if ptr == raw_ptr));
+        rollback_global_raw_reclaim(admission);
+        incoming.rollback_unmodified();
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn absent_observation_rejects_after_same_pointer_release_and_eviction() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let stale_ptr = 8usize as *mut u8;
+        let stale_observation = global_address_lifecycle_observation(stale_ptr);
+        let colliders = released_lifecycle_probe_colliders_for_test();
+        assert_eq!(colliders[0], stale_ptr);
+        let incoming = evict_released_lifecycle_probe_for_test(&colliders);
+
+        assert_eq!(
+            global_address_lifecycle_snapshot(stale_ptr),
+            GlobalAddressLifecycleSnapshot::RetiredUnknown
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = begin_global_raw_reclaim_from_lifecycle_observation(
+                    stale_ptr,
+                    stale_observation,
+                );
+            }))
+            .is_err(),
+            "an exact pointer generation must reject its pre-release observation"
+        );
+        incoming.rollback_unmodified();
+
+        accept_raw_allocation_return(stale_ptr);
+        let current = global_address_lifecycle_observation(stale_ptr);
+        assert_eq!(current.snapshot, GlobalAddressLifecycleSnapshot::Absent);
+        assert_ne!(current.epoch, stale_observation.epoch);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = begin_global_raw_reclaim_from_lifecycle_observation(
+                    stale_ptr,
+                    stale_observation,
+                );
+            }))
+            .is_err(),
+            "allocation return must not make a pre-release Absent token current"
+        );
+        let fresh = begin_global_raw_reclaim_from_lifecycle_observation(stale_ptr, current);
+        assert!(matches!(fresh, GlobalRawReclaimAdmission::Tracked(_)));
+        rollback_global_raw_reclaim(fresh);
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn exact_generation_history_is_bounded_without_poisoning_colliders() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let seed = 8usize as *mut u8;
+        let target_shard = global_type_cache_ownership_shard_and_slot(seed).0;
+        let target_bucket = global_address_generation_history_bucket(seed as usize);
+        let mut colliders = Vec::with_capacity(GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS + 2);
+        let mut address = 8usize;
+        while colliders.len() < GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS + 2 {
+            let ptr = address as *mut u8;
+            if global_type_cache_ownership_shard_and_slot(ptr).0 == target_shard
+                && global_address_generation_history_bucket(address) == target_bucket
+            {
+                colliders.push(ptr);
+            }
+            address = address.checked_add(8).unwrap();
+        }
+
+        {
+            let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[target_shard].lock();
+            for &ptr in &colliders[..=GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS] {
+                record_global_address_generation_history(
+                    &mut table,
+                    ptr as usize,
+                    GlobalAddressLifecycleSnapshot::RetiredUnknown,
+                );
+            }
+        }
+
+        assert_eq!(
+            global_address_lifecycle_snapshot(colliders[0]),
+            GlobalAddressLifecycleSnapshot::Absent,
+            "the oldest exact generation should age out at the documented bound"
+        );
+        assert_eq!(
+            global_address_lifecycle_snapshot(colliders[1]),
+            GlobalAddressLifecycleSnapshot::RetiredUnknown,
+            "a retained exact generation should remain fail-stop"
+        );
+        assert_eq!(
+            global_address_lifecycle_snapshot(
+                colliders[GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS + 1]
+            ),
+            GlobalAddressLifecycleSnapshot::Absent,
+            "an unrecorded exact collider must remain raw-only"
+        );
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn historical_absent_reclaim_observation_survives_unrelated_history_eviction() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let ptr = 8usize as *mut u8;
+        publish_released_lifecycle_for_test(ptr);
+        accept_raw_allocation_return(ptr);
+        let observation = observe_global_reclaim(ptr);
+
+        let target_shard = global_type_cache_ownership_shard_and_slot(ptr).0;
+        let target_bucket = global_address_generation_history_bucket(ptr as usize);
+        let mut colliders = Vec::with_capacity(GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS + 1);
+        let mut address = 16usize;
+        while colliders.len() <= GLOBAL_ADDRESS_GENERATION_HISTORY_WAYS {
+            let candidate = address as *mut u8;
+            if candidate != ptr
+                && global_type_cache_ownership_shard_and_slot(candidate).0 == target_shard
+                && global_address_generation_history_bucket(address) == target_bucket
+            {
+                colliders.push(candidate);
+            }
+            address = address.checked_add(8).unwrap();
+        }
+        {
+            let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[target_shard].lock();
+            for &collider in &colliders {
+                record_global_address_generation_history(
+                    &mut table,
+                    collider as usize,
+                    GlobalAddressLifecycleSnapshot::RetiredUnknown,
+                );
+            }
+        }
+
+        let admission = begin_global_raw_reclaim_from_observation(observation);
+        assert!(matches!(admission, GlobalRawReclaimAdmission::Tracked(_)));
+        rollback_global_raw_reclaim(admission);
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn lifecycle_test_reset_rejects_live_history_lease_without_leaking_pin() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let ptr = 8usize as *mut u8;
+        publish_released_lifecycle_for_test(ptr);
+        accept_raw_allocation_return(ptr);
+        let observation = observe_global_reclaim(ptr);
+
+        let shard_idx = global_type_cache_ownership_shard_and_slot(ptr).0;
+        let slot_idx = {
+            let table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
+            global_address_generation_history_entry(&table, ptr as usize)
+                .expect("allocation witness must retain exact Absent history")
+                .0
+        };
+        let pin = &GLOBAL_ADDRESS_GENERATION_HISTORY_PINS[shard_idx][slot_idx];
+        assert_eq!(pin.load(Ordering::Acquire), 1);
+
+        assert!(
+            std::panic::catch_unwind(clear_global_type_cache_ownership_for_test).is_err(),
+            "test reset must reject a live history observation before replacing its table"
+        );
+        {
+            let table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
+            assert_eq!(table.history_ptrs[slot_idx], ptr as usize);
+        }
+
+        drop(observation);
+        assert_eq!(pin.load(Ordering::Acquire), 0);
+        clear_global_type_cache_ownership_for_test();
+    }
+
+    #[test]
+    fn allocation_witness_restores_tracked_reclaim_after_released_eviction() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        let colliders = released_lifecycle_probe_colliders_for_test();
+        let victim = colliders[0];
+        evict_released_lifecycle_probe_for_test(&colliders).rollback_unmodified();
+        assert_eq!(
+            global_address_lifecycle_snapshot(victim),
+            GlobalAddressLifecycleSnapshot::RetiredUnknown
+        );
+
+        accept_raw_allocation_return(victim);
+        let witnessed = global_address_lifecycle_observation(victim);
+        assert_eq!(witnessed.snapshot, GlobalAddressLifecycleSnapshot::Absent);
+        assert_ne!(witnessed.epoch, 0);
+
+        let raw_admission = begin_global_raw_reclaim(victim);
+        assert!(matches!(
+            raw_admission,
+            GlobalRawReclaimAdmission::Tracked(_)
+        ));
+        rollback_global_raw_reclaim(raw_admission);
+        assert_eq!(
+            global_address_lifecycle_snapshot(victim),
+            GlobalAddressLifecycleSnapshot::Absent
+        );
+
+        let type_ownership = begin_global_semantic_reclaim(victim);
+        assert_eq!(
+            global_address_lifecycle_snapshot(victim),
+            GlobalAddressLifecycleSnapshot::TypeRetained
+        );
+        type_ownership.rollback_unmodified();
+        assert_eq!(
+            global_address_lifecycle_snapshot(victim),
+            GlobalAddressLifecycleSnapshot::Absent
+        );
+
+        let layout = Layout::from_size_align(24, align_of::<usize>()).unwrap();
+        let delayed_metadata = AllocationMetadata::unknown().with_flags(FLAG_DELAYED_FREE);
+        match begin_global_deallocation_admission(victim, layout, delayed_metadata) {
+            GlobalDeallocationAdmission::DelayedFree(ownership) => {
+                assert_eq!(
+                    global_address_lifecycle_snapshot(victim),
+                    GlobalAddressLifecycleSnapshot::DelayedRetained
+                );
+                ownership.rollback_unmodified();
+            }
+            GlobalDeallocationAdmission::TypeCache(_) => {
+                panic!("allocation witness should enter available delayed ownership")
+            }
+        }
+        assert_eq!(
+            global_address_lifecycle_snapshot(victim),
+            GlobalAddressLifecycleSnapshot::Absent
+        );
+
+        begin_global_semantic_reclaim(victim).finish_live_reuse();
+        assert_eq!(
+            global_address_lifecycle_snapshot(victim),
+            GlobalAddressLifecycleSnapshot::Absent
+        );
+
+        let raw_ownership = match begin_global_raw_reclaim(victim) {
+            GlobalRawReclaimAdmission::Tracked(ownership) => ownership,
+            GlobalRawReclaimAdmission::Untracked(_) => {
+                panic!("witnessed generation must retain terminal raw ownership")
+            }
+        };
+        raw_ownership.commit();
+        let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+            [global_retained_ownership_arbitration_shard(victim)]
+        .lock();
+        transition_global_address_lifecycle(
+            victim,
+            GlobalAddressLifecycleSnapshot::TypeRetained,
+            None,
+            ADDRESS_LIFECYCLE_RELEASED,
+        )
+        .expect("test terminal transition should publish Released");
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+        drop(arbitration);
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = begin_global_raw_reclaim(victim);
+            }))
+            .is_err(),
+            "a witnessed terminal release must reject duplicate raw reclaim"
+        );
+        accept_raw_allocation_return(victim);
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
         }
     }
 
@@ -24679,6 +26394,132 @@ mod tests {
 
     #[cfg(not(feature = "fixed_heap"))]
     #[test]
+    fn queued_exact_dealloc_keeps_observability_unchanged_before_admission() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_stats_reset();
+        semantic_stats_recording_disable();
+        TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0x7E12_1A21)
+            .with_module(0xC0DE_1A21)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = unsafe { alloc.alloc_with_recovery_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+        let stats_before = semantic_stats_snapshot();
+        let fallback_before = semantic_fallback_attribution_snapshot();
+        let validation_before = semantic_metadata_validation_snapshot();
+
+        let ptr_addr = ptr as usize;
+        let waiter = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            unsafe {
+                TEST_PAUSE_NEXT_RECLAIM_AFTER_SNAPSHOT = true;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                SemanticAlloc::dealloc_with_metadata(&alloc, ptr_addr as *mut u8, layout, metadata);
+            }))
+            .is_err()
+        });
+        while TEST_STALE_RECLAIM_PHASE.load(Ordering::Acquire) != 2 {
+            thread::yield_now();
+        }
+        let queued_stats = semantic_stats_snapshot();
+        let queued_fallback = semantic_fallback_attribution_snapshot();
+        let queued_validation = semantic_metadata_validation_snapshot();
+
+        unsafe {
+            alloc.dealloc_with_peeked_recovery_metadata(ptr, layout, metadata);
+        }
+        TEST_STALE_RECLAIM_PHASE.store(3, Ordering::Release);
+        assert!(waiter.join().expect("exact deallocation waiter"));
+
+        unsafe {
+            if let Some(cached) = pop_semantic_type_cache(layout, metadata) {
+                alloc.dealloc_raw(cached, layout);
+            }
+            clear_auto_allocation_records();
+        }
+        TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
+
+        assert_eq!(queued_stats, stats_before);
+        assert_eq!(queued_fallback, fallback_before);
+        assert_eq!(queued_validation, validation_before);
+        assert_eq!(semantic_stats_snapshot(), stats_before);
+        assert_eq!(semantic_fallback_attribution_snapshot(), fallback_before);
+        assert_eq!(semantic_metadata_validation_snapshot(), validation_before);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn queued_missing_dealloc_keeps_observability_unchanged_before_admission() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_stats_reset();
+        TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let ptr = unsafe { alloc.alloc_raw(layout) };
+        assert!(!ptr.is_null());
+        let stats_before = semantic_stats_snapshot();
+        let fallback_before = semantic_fallback_attribution_snapshot();
+        let validation_before = semantic_metadata_validation_snapshot();
+
+        let ptr_addr = ptr as usize;
+        let waiter = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            unsafe {
+                TEST_PAUSE_NEXT_RECLAIM_AFTER_SNAPSHOT = true;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                GlobalAlloc::dealloc(&alloc, ptr_addr as *mut u8, layout);
+            }))
+            .is_err()
+        });
+        while TEST_STALE_RECLAIM_PHASE.load(Ordering::Acquire) != 2 {
+            thread::yield_now();
+        }
+        let queued_stats = semantic_stats_snapshot();
+        let queued_fallback = semantic_fallback_attribution_snapshot();
+        let queued_validation = semantic_metadata_validation_snapshot();
+
+        semantic_stats_recording_disable();
+        unsafe {
+            alloc.dealloc_with_recovered_metadata(ptr, layout, AllocationMetadata::unknown());
+        }
+        TEST_STALE_RECLAIM_PHASE.store(3, Ordering::Release);
+        assert!(waiter.join().expect("missing deallocation waiter"));
+
+        unsafe {
+            if let Some(cached) = pop_semantic_type_cache(layout, AllocationMetadata::unknown()) {
+                alloc.dealloc_raw(cached, layout);
+            }
+        }
+        TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
+
+        assert_eq!(queued_stats, stats_before);
+        assert_eq!(queued_fallback, fallback_before);
+        assert_eq!(queued_validation, validation_before);
+        assert_eq!(semantic_stats_snapshot(), stats_before);
+        assert_eq!(semantic_fallback_attribution_snapshot(), fallback_before);
+        assert_eq!(semantic_metadata_validation_snapshot(), validation_before);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
     fn queued_metadata_reclaim_rejects_after_terminal_metadata_release() {
         let _guard = test_guard();
         let _cleanup = SemanticStateCleanup;
@@ -24722,10 +26563,13 @@ mod tests {
         TEST_STALE_RECLAIM_PHASE.store(3, Ordering::Release);
         assert!(waiter.join().expect("metadata reclaim waiter"));
 
-        let reused = unsafe { alloc.alloc_raw(layout) };
-        assert_eq!(reused, ptr);
+        let probe = unsafe { alloc.alloc_raw(layout) };
+        assert!(
+            !probe.is_null(),
+            "allocator must remain live after rejecting the queued reclaim"
+        );
         unsafe {
-            alloc.dealloc_raw(reused, layout);
+            alloc.dealloc_raw(probe, layout);
         }
         TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
     }
@@ -24769,6 +26613,151 @@ mod tests {
             alloc.dealloc_raw(reused, layout);
         }
         TEST_STALE_RECLAIM_PHASE.store(0, Ordering::Release);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    fn exercise_exact_recovery_realloc_rejects_reused_generation_after_lookup(entry: u8) {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        TEST_REALLOC_RECOVERY_LOOKUP_PHASE.store(0, Ordering::Release);
+
+        let allocation_size = (MIN_TYPE_CACHE_OBJECT_SIZE + 2..crate::size_class::MAX_SIZE)
+            .find(|size| {
+                crate::size_class::get_size_class(*size).index()
+                    == crate::size_class::get_size_class(*size - 1).index()
+            })
+            .expect("test requires adjacent oversized layouts in one size class");
+        let old_layout =
+            Layout::from_size_align(allocation_size, core::mem::align_of::<usize>()).unwrap();
+        let new_size = allocation_size - 1;
+        let new_layout = Layout::from_size_align(new_size, old_layout.align()).unwrap();
+        let metadata_a = AllocationMetadata::for_type(0x7E12_ABA1)
+            .with_module(0xC0DE_ABA1)
+            .with_callsite(0xA110_ABA1)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY | 0xA1);
+        let metadata_b = metadata_a.with_callsite(0xB110_ABA2);
+        assert!(semantic_realloc_can_reuse_in_place(
+            old_layout, new_size, metadata_a, metadata_a,
+        ));
+
+        let alloc = RustAllocator::new();
+        let ptr = unsafe { alloc.alloc_with_recovery_metadata(old_layout, metadata_a) };
+        assert!(!ptr.is_null());
+        unsafe {
+            core::ptr::write_bytes(ptr, 0xA1, old_layout.size());
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, old_layout),
+            Some(metadata_a)
+        );
+        assert!(!current_thread_fast_auto_allocation_records_active());
+
+        let ptr_addr = ptr as usize;
+        let waiter = thread::spawn(move || {
+            unsafe {
+                TEST_PAUSE_NEXT_REALLOC_AFTER_EXACT_RECOVERY_LOOKUP = true;
+            }
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                match entry {
+                    0 => core::alloc::GlobalAlloc::realloc(
+                        &RustAllocator::new(),
+                        ptr_addr as *mut u8,
+                        old_layout,
+                        new_size,
+                    ),
+                    1 => <RustAllocator as SemanticAlloc>::realloc_with_split_metadata(
+                        &RustAllocator::new(),
+                        ptr_addr as *mut u8,
+                        old_layout,
+                        new_size,
+                        metadata_a,
+                        metadata_a,
+                    ),
+                    2 => realloc_layout_with_ffi_metadata(
+                        ptr_addr as *mut u8,
+                        old_layout,
+                        new_size,
+                        metadata_a,
+                    ),
+                    _ => unreachable!(),
+                }
+            }))
+            .is_err()
+        });
+        while TEST_REALLOC_RECOVERY_LOOKUP_PHASE.load(Ordering::Acquire) != 2 {
+            thread::yield_now();
+        }
+
+        unsafe {
+            alloc.dealloc_with_peeked_recovery_metadata(ptr, old_layout, metadata_a);
+        }
+        let replacement = unsafe { alloc.alloc_with_recovery_metadata(old_layout, metadata_b) };
+        assert_eq!(
+            replacement, ptr,
+            "test requires exact backend address reuse"
+        );
+        unsafe {
+            core::ptr::write_bytes(replacement, 0xB2, old_layout.size());
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(replacement, old_layout),
+            Some(metadata_b)
+        );
+        let stats_before = semantic_stats_snapshot();
+        let fallback_before = semantic_fallback_attribution_snapshot();
+        let validation_before = semantic_metadata_validation_snapshot();
+
+        TEST_REALLOC_RECOVERY_LOOKUP_PHASE.store(3, Ordering::Release);
+        assert!(waiter.join().expect("exact recovery realloc waiter"));
+        assert_eq!(
+            lookup_auto_allocation_metadata(replacement, old_layout),
+            Some(metadata_b),
+            "stale realloc must preserve the replacement recovery identity",
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(replacement, new_layout),
+            None
+        );
+        for offset in 0..old_layout.size() {
+            assert_eq!(unsafe { replacement.add(offset).read() }, 0xB2);
+        }
+        assert_eq!(semantic_stats_snapshot(), stats_before);
+        assert_eq!(semantic_fallback_attribution_snapshot(), fallback_before);
+        assert_eq!(semantic_metadata_validation_snapshot(), validation_before);
+
+        unsafe {
+            alloc.dealloc_with_peeked_recovery_metadata(replacement, old_layout, metadata_b);
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        TEST_REALLOC_RECOVERY_LOOKUP_PHASE.store(0, Ordering::Release);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn exact_global_realloc_rejects_reused_generation_after_lookup() {
+        exercise_exact_recovery_realloc_rejects_reused_generation_after_lookup(0);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn exact_semantic_realloc_rejects_reused_generation_after_lookup() {
+        exercise_exact_recovery_realloc_rejects_reused_generation_after_lookup(1);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn exact_ffi_realloc_rejects_reused_generation_after_lookup() {
+        exercise_exact_recovery_realloc_rejects_reused_generation_after_lookup(2);
     }
 
     #[cfg(not(feature = "fixed_heap"))]
@@ -27652,6 +29641,85 @@ mod tests {
         exercise_moved_realloc_corrupt_old_tag_transaction(metadata);
     }
 
+    #[test]
+    fn alignment_grow_preflights_local_tag_without_recovery_record() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_memory_tags_for_test();
+            clear_auto_allocation_records();
+            restore_active_metadata(AllocationMetadata::unknown());
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let old_layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, core::mem::align_of::<usize>())
+                .unwrap();
+        let new_layout =
+            Layout::from_size_align(old_layout.size() * 2, core::mem::align_of::<usize>() * 2)
+                .unwrap();
+        let metadata = AllocationMetadata::for_type(0x7A6D_A119)
+            .with_module(0xC0DE_A119)
+            .with_callsite(0xA110_A119)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_MEMORY_TAGGING)
+            .with_placement_hint(PLACEMENT_HINT_LOCAL_SCOPE_NO_RECOVERY | 0x19);
+
+        let ptr = unsafe { alloc.alloc_with_no_recovery_metadata(old_layout, metadata) };
+        assert!(!ptr.is_null());
+        let payload = 0xA119_C0DEusize;
+        unsafe {
+            ptr.cast::<usize>().write(payload);
+        }
+        assert_eq!(recorded_reallocation_old_metadata(ptr, old_layout), None);
+        assert_eq!(unsafe { MEMORY_TAG_RECORD_COUNT }, 1);
+        let tag_slot = unsafe { find_memory_tag_slot(ptr).expect("local memory-tag record") };
+        let valid_tag = unsafe { (*tag_slot).tag };
+        let corrupt_tag = valid_tag ^ 1;
+        unsafe {
+            (*tag_slot).tag = corrupt_tag;
+        }
+        let stats_before = semantic_stats_snapshot();
+        let fallback_before = semantic_fallback_attribution_snapshot();
+        let validation_before = semantic_metadata_validation_snapshot();
+
+        let previous = unsafe { set_active_metadata(metadata) };
+        let failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            core::alloc::Allocator::grow(
+                &alloc,
+                NonNull::new_unchecked(ptr),
+                old_layout,
+                new_layout,
+            )
+        }));
+        unsafe {
+            restore_active_metadata(previous);
+        }
+        assert!(
+            failed.is_err(),
+            "corrupt local tag must reject alignment grow"
+        );
+        assert_eq!(unsafe { ptr.cast::<usize>().read() }, payload);
+        assert_eq!(recorded_reallocation_old_metadata(ptr, old_layout), None);
+        assert_eq!(recorded_reallocation_old_metadata(ptr, new_layout), None);
+        assert_eq!(unsafe { MEMORY_TAG_RECORD_COUNT }, 1);
+        assert_eq!(unsafe { (*tag_slot).tag }, corrupt_tag);
+        assert_eq!(semantic_stats_snapshot(), stats_before);
+        assert_eq!(semantic_fallback_attribution_snapshot(), fallback_before);
+        assert_eq!(semantic_metadata_validation_snapshot(), validation_before);
+
+        unsafe {
+            (*tag_slot).tag = valid_tag;
+            alloc.dealloc_with_recovered_metadata(ptr, old_layout, metadata);
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        assert_eq!(unsafe { MEMORY_TAG_RECORD_COUNT }, 0);
+    }
+
     fn exercise_memory_tagged_realloc_to_zero_retires_identity(metadata: AllocationMetadata) {
         let _guard = test_guard();
         let _cleanup = SemanticStateCleanup;
@@ -29979,6 +32047,141 @@ mod tests {
         }
     }
 
+    #[test]
+    fn semantic_raw_allocation_misses_publish_lifecycle_once() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let compiler_metadata = AllocationMetadata::for_type(0xC003_004D)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_C34D)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let generic_metadata = AllocationMetadata::for_type(0xC003_004E)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_C34E);
+
+        let before_strict = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let before_semantic = TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let compiler_ptr = unsafe { alloc.alloc_with_recovery_metadata(layout, compiler_metadata) };
+        let after_strict = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let after_semantic = TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        assert!(!compiler_ptr.is_null());
+        assert_eq!(after_strict - before_strict, 1);
+        assert_eq!(
+            after_semantic - before_semantic,
+            0,
+            "a compiler-cache miss must not republish a strictly validated backend return"
+        );
+        assert_eq!(
+            take_auto_deallocation_metadata(compiler_ptr, layout),
+            Some(compiler_metadata)
+        );
+        unsafe {
+            alloc.dealloc_raw(compiler_ptr, layout);
+            clear_type_cache_for_test();
+        }
+
+        let before_strict = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let before_semantic = TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let recovery_ptr = unsafe { alloc.alloc_with_recovery_metadata(layout, generic_metadata) };
+        let after_strict = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let after_semantic = TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        assert!(!recovery_ptr.is_null());
+        assert_eq!(after_strict - before_strict, 1);
+        assert_eq!(
+            after_semantic - before_semantic,
+            0,
+            "a generic recovery miss must not republish a strictly validated backend return"
+        );
+        assert_eq!(
+            take_auto_deallocation_metadata(recovery_ptr, layout),
+            Some(generic_metadata)
+        );
+        unsafe {
+            alloc.dealloc_raw(recovery_ptr, layout);
+        }
+
+        let before_strict = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let before_semantic = TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let local_ptr = unsafe { alloc.alloc_with_no_recovery_metadata(layout, generic_metadata) };
+        let after_strict = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let after_semantic = TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        assert!(!local_ptr.is_null());
+        assert_eq!(after_strict - before_strict, 1);
+        assert_eq!(
+            after_semantic - before_semantic,
+            0,
+            "a generic local miss must not republish a strictly validated backend return"
+        );
+        assert_eq!(lookup_auto_allocation_metadata(local_ptr, layout), None);
+        unsafe {
+            alloc.dealloc_raw(local_ptr, layout);
+            clear_type_cache_for_test();
+            clear_auto_allocation_records();
+        }
+    }
+
+    #[test]
+    fn compiler_cache_hit_keeps_one_semantic_lifecycle_publication() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_004F)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_C34F)
+            .with_flags(FLAG_TYPE_ISOLATED);
+
+        let ptr = unsafe { alloc.alloc_with_recovery_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+        assert_eq!(take_auto_deallocation_metadata(ptr, layout), Some(metadata));
+        unsafe {
+            alloc.dealloc_with_recovered_metadata(ptr, layout, metadata);
+        }
+        assert_eq!(unsafe { INLINE_TYPE_CACHE_ENTRY.ptr }, ptr);
+
+        let before_strict = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let before_semantic = TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let reused = unsafe { alloc.alloc_with_recovery_metadata(layout, metadata) };
+        let after_strict = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let after_semantic = TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        assert_eq!(reused, ptr);
+        assert_eq!(after_strict - before_strict, 0);
+        assert_eq!(
+            after_semantic - before_semantic,
+            1,
+            "a cache hit must retain its source-specific semantic lifecycle publication"
+        );
+        assert_eq!(
+            take_auto_deallocation_metadata(reused, layout),
+            Some(metadata)
+        );
+        unsafe {
+            alloc.dealloc_raw(reused, layout);
+            clear_type_cache_for_test();
+            clear_auto_allocation_records();
+        }
+    }
+
     #[cfg(feature = "fixed_heap")]
     #[test]
     fn compiler_recovery_allocation_fail_closes_when_record_tables_full() {
@@ -30565,6 +32768,72 @@ mod tests {
             RustAllocator::new().dealloc_raw(final_ptr, layout);
             INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
         }
+    }
+
+    #[test]
+    fn direct_local_semantic_realloc_consumes_old_record_before_releasing_ownership() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let old_size = 57;
+        let old_class = crate::size_class::get_size_class(old_size).index();
+        let new_size = (old_size + 1..old_size + 256)
+            .find(|size| crate::size_class::get_size_class(*size).index() == old_class)
+            .expect("test requires same-size-class growth");
+        let old_layout = Layout::from_size_align(old_size, align_of::<usize>()).unwrap();
+        let new_layout = Layout::from_size_align(new_size, old_layout.align()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_0144)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_C144)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        assert!(semantic_realloc_can_reuse_in_place(
+            old_layout, new_size, metadata, metadata
+        ));
+
+        let alloc = RustAllocator::new();
+        let ptr = unsafe { alloc.alloc_with_recovery_metadata(old_layout, metadata) };
+        assert!(!ptr.is_null());
+        assert_eq!(
+            lookup_auto_allocation_metadata(ptr, old_layout),
+            Some(metadata)
+        );
+
+        let grown = without_auto_allocation_recovery_recording(|| unsafe {
+            SemanticAlloc::realloc_with_split_metadata(
+                &alloc, ptr, old_layout, new_size, metadata, metadata,
+            )
+        });
+        assert_eq!(grown, ptr, "regression must exercise in-place realloc");
+        let old_record = lookup_auto_allocation_metadata(grown, old_layout);
+        let new_record = lookup_auto_allocation_metadata(grown, new_layout);
+
+        // Keep a fail-first implementation from leaking the allocation after
+        // the assertions below: a local semantic realloc promises that later
+        // exact metadata, rather than a recovery record, owns deallocation.
+        let _ = take_auto_allocation_records_for_reallocation(grown, old_layout);
+        unsafe {
+            alloc.dealloc_with_recovered_metadata(grown, new_layout, metadata);
+            if let Some(cached) = pop_semantic_type_cache(new_layout, metadata) {
+                alloc.dealloc_raw(cached, new_layout);
+            }
+            clear_auto_allocation_records();
+        }
+
+        assert_eq!(
+            old_record, None,
+            "local in-place realloc must consume the old recovery key before tracked ownership is released"
+        );
+        assert_eq!(
+            new_record, None,
+            "local in-place realloc must not install a replacement recovery key"
+        );
     }
 
     #[test]
@@ -37239,7 +39508,10 @@ mod tests {
         let previous = unsafe { set_active_metadata(outer) };
         assert_eq!(previous, AllocationMetadata::unknown());
         __unialloc_semantic_scope_push(inner.type_id, inner.module_id, inner.flags, inner.callsite);
-        assert_eq!(active_allocation_metadata(), Some(inner));
+        assert_eq!(
+            active_allocation_metadata(),
+            Some(inner.with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY))
+        );
         __unialloc_semantic_scope_pop();
         assert_eq!(
             active_allocation_metadata(),
@@ -37275,8 +39547,10 @@ mod tests {
         );
         assert_eq!(
             active_allocation_metadata(),
-            Some(metadata),
-            "MIR scope hint ABI must preserve full metadata, not silently zero policy hints"
+            Some(metadata.with_placement_hint(
+                metadata.placement_hint | PLACEMENT_HINT_CROSS_THREAD_RECOVERY
+            )),
+            "conservative MIR scope hint ABI must preserve hints and request process-visible recovery"
         );
         __unialloc_semantic_scope_pop();
         assert_eq!(active_allocation_metadata(), None);
@@ -37360,6 +39634,60 @@ mod tests {
     }
 
     #[test]
+    fn conservative_compiler_scope_survives_foreign_thread_deallocation() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout = Layout::from_size_align(48, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_5107)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5107);
+        let alloc = RustAllocator::new();
+
+        __unialloc_semantic_scope_push(
+            metadata.type_id,
+            metadata.module_id,
+            metadata.flags,
+            metadata.callsite,
+        );
+        let ptr = unsafe { alloc.alloc(layout) };
+        __unialloc_semantic_scope_pop();
+        assert!(!ptr.is_null());
+        assert_eq!(
+            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+            1,
+            "a conservative compiler scope must publish recovery metadata process-wide"
+        );
+        assert!(
+            !current_thread_fast_auto_allocation_records_active(),
+            "a possibly escaping compiler allocation must not leave a TLS-only recovery record"
+        );
+
+        let ptr_addr = ptr as usize;
+        thread::spawn(move || unsafe {
+            RustAllocator::new().dealloc(ptr_addr as *mut u8, layout);
+        })
+        .join()
+        .expect("foreign-thread compiler-scope deallocation");
+
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        unsafe {
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[test]
     fn ffi_scope_push_pop_unknown_base_uses_empty_fast_restore() {
         let _guard = test_guard();
         unsafe {
@@ -37376,7 +39704,10 @@ mod tests {
             metadata.flags,
             metadata.callsite,
         );
-        assert_eq!(active_allocation_metadata(), Some(metadata));
+        assert_eq!(
+            active_allocation_metadata(),
+            Some(metadata.with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY))
+        );
         __unialloc_semantic_scope_pop();
         assert_eq!(
             active_allocation_metadata(),

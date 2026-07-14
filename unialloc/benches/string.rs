@@ -8,7 +8,7 @@ fn bench_with_capacity(b: &mut Bencher) {
 
 #[bench]
 fn bench_push_str(b: &mut Bencher) {
-    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
     b.iter(|| {
         let mut r = String::new();
         r.push_str(s);
@@ -63,7 +63,7 @@ fn from_utf8_lossy_100_ascii(b: &mut Bencher) {
 
 #[bench]
 fn from_utf8_lossy_100_multibyte(b: &mut Bencher) {
-    let s = "𐌀𐌖𐌋𐌄𐌑𐌉ปรدولة الكويتทศไทย中华𐍅𐌿𐌻𐍆𐌹𐌻𐌰".as_bytes();
+    let s = "𐌀𐌖𐌋𐌄𐌑𐌉ปรدولة الكويتทศไทยทศ𐍅𐌿𐌻𐍆𐌹𐌻𐌰".as_bytes();
     assert_eq!(100, s.len());
     b.iter(|| {
         let _ = String::from_utf8_lossy(s);

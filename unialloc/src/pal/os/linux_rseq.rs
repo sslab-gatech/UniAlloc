@@ -255,6 +255,7 @@ mod tests {
         unsafe {
             let rc = libc::syscall(334, 0, 0, 0, 0);
             // EINVAL: invalid argument
+            assert_eq!(-1, rc);
             assert_eq!(22, *libc::__errno_location());
         }
     }

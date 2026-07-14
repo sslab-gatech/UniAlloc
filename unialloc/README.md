@@ -1,4 +1,7 @@
-- disable system-wide rseq
-```
-export GLIBC_TUNABLES=glibc.pthread.rseq=0
-```
+# `unialloc` crate
+
+This crate contains the UniAlloc allocator library, feature-gated policy
+implementations, integration tests, examples, and benchmark targets.
+
+See the [repository README](../README.md) for build instructions and the
+repository map.

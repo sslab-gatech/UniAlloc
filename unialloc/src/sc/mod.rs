@@ -747,6 +747,8 @@ pub(crate) fn fixed_heap_test_guard() -> spin::MutexGuard<'static, ()> {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
     use super::*;
     use crate::PAGE_SIZE;
 
@@ -1003,6 +1005,26 @@ mod tests {
     #[cfg(all(not(feature = "fixed_heap"), target_os = "linux"))]
     #[test]
     fn meta_bump_alloc_does_not_reserve_generic_tail_in_os() {
+        const CHILD_ENV: &str = "UNIALLOC_META_BUMP_TAIL_MAP_CHILD";
+        const TEST_NAME: &str = "sc::tests::meta_bump_alloc_does_not_reserve_generic_tail_in_os";
+
+        if std::env::var_os(CHILD_ENV).is_none() {
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("current allocator test executable"),
+            )
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .env(CHILD_ENV, "1")
+            .env("RUST_BACKTRACE", "0")
+            .output()
+            .expect("spawn isolated metadata bump mapping test");
+            assert!(
+                output.status.success(),
+                "isolated metadata bump mapping test failed: {}",
+                std::string::String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
         struct MappingGuard {
             start: usize,
             size: usize,

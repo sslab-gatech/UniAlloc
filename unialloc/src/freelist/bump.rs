@@ -204,6 +204,8 @@ impl BumpAlloc {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
     use super::*;
 
     #[cfg(not(feature = "fixed_heap"))]
@@ -381,6 +383,27 @@ mod tests {
     #[cfg(all(not(feature = "fixed_heap"), target_os = "linux"))]
     #[test]
     fn fresh_bump_window_does_not_reserve_old_64m_tail_in_os() {
+        const CHILD_ENV: &str = "UNIALLOC_FRESH_BUMP_TAIL_MAP_CHILD";
+        const TEST_NAME: &str =
+            "freelist::bump::tests::fresh_bump_window_does_not_reserve_old_64m_tail_in_os";
+
+        if std::env::var_os(CHILD_ENV).is_none() {
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("current allocator test executable"),
+            )
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .env(CHILD_ENV, "1")
+            .env("RUST_BACKTRACE", "0")
+            .output()
+            .expect("spawn isolated bump-window mapping test");
+            assert!(
+                output.status.success(),
+                "isolated bump-window mapping test failed: {}",
+                std::string::String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
         unsafe fn os_can_map_exact_page(page_addr: usize) -> bool {
             debug_assert_eq!(page_addr % crate::PAGE_SIZE, 0);
             let ptr = libc::mmap(

@@ -1658,10 +1658,34 @@ impl FreeList {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "fixed_heap")]
+    extern crate std;
+
     use super::*;
     use alloc::boxed::Box;
     #[cfg(not(feature = "fixed_heap"))]
     use alloc::vec::Vec;
+
+    #[cfg(feature = "fixed_heap")]
+    fn run_fixed_heap_capacity_test_in_fresh_process(child_env: &str, test_name: &str) -> bool {
+        if std::env::var_os(child_env).is_some() {
+            return false;
+        }
+        let output = std::process::Command::new(
+            std::env::current_exe().expect("current allocator test executable"),
+        )
+        .args(["--exact", test_name, "--nocapture", "--test-threads=1"])
+        .env(child_env, "1")
+        .env("RUST_BACKTRACE", "0")
+        .output()
+        .expect("spawn isolated fixed-heap capacity test");
+        assert!(
+            output.status.success(),
+            "isolated fixed-heap capacity test failed: {}",
+            std::string::String::from_utf8_lossy(&output.stderr)
+        );
+        true
+    }
 
     #[test]
     fn page_run_index_rejects_zero_and_rounding_overflow() {
@@ -2320,6 +2344,13 @@ mod tests {
     #[test]
     fn freelist_alloc_aligned_splits_over_page_runs() {
         #[cfg(feature = "fixed_heap")]
+        if run_fixed_heap_capacity_test_in_fresh_process(
+            "UNIALLOC_FIXED_FREELIST_ALIGNED_SPLIT_CHILD",
+            "freelist::tests::freelist_alloc_aligned_splits_over_page_runs",
+        ) {
+            return;
+        }
+        #[cfg(feature = "fixed_heap")]
         let _fixed_heap_guard = crate::sc::fixed_heap_test_guard();
 
         let freelist = FreeList::new();
@@ -2334,6 +2365,13 @@ mod tests {
 
     #[test]
     fn freelist_alloc_aligned_fallback_reclaims_overreserved_slack() {
+        #[cfg(feature = "fixed_heap")]
+        if run_fixed_heap_capacity_test_in_fresh_process(
+            "UNIALLOC_FIXED_FREELIST_ALIGNED_FALLBACK_CHILD",
+            "freelist::tests::freelist_alloc_aligned_fallback_reclaims_overreserved_slack",
+        ) {
+            return;
+        }
         #[cfg(feature = "fixed_heap")]
         let _fixed_heap_guard = crate::sc::fixed_heap_test_guard();
 
@@ -3380,6 +3418,13 @@ mod tests {
 
     #[test]
     fn freelist_backend_slice_allocation_respects_array_alignment() {
+        #[cfg(feature = "fixed_heap")]
+        if run_fixed_heap_capacity_test_in_fresh_process(
+            "UNIALLOC_FIXED_FREELIST_BACKEND_SLICE_CHILD",
+            "freelist::tests::freelist_backend_slice_allocation_respects_array_alignment",
+        ) {
+            return;
+        }
         #[cfg(feature = "fixed_heap")]
         let _fixed_heap_guard = crate::sc::fixed_heap_test_guard();
 

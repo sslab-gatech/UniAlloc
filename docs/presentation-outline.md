@@ -1,205 +1,205 @@
 # UniAlloc PhD Qualifier Presentation Blueprint
 
-> 目的：把 UniAlloc 讲成一个可以被委员会检验的研究论证，而不是论文目录、功能清单或当前工程进度汇报。
+> Purpose: Present UniAlloc as a research argument the committee can test, with a focused thesis rather than a paper outline, feature inventory, or current engineering status report.
 >
-> 推荐版本：**45 分钟排练目标、48 分钟硬上限 + 12--15 分钟问答，31 张主幻灯片 + 19 张备份页**。
+> Recommended version: **45-minute rehearsal target, 48-minute hard ceiling, plus 12--15 minutes for questions; 31 main slides plus 19 backup slides**.
 >
-> 若学院明确要求“完整主讲 60 分钟，问答另计”，使用本文的 53--55 分钟扩展版，仍保留约 5 分钟缓冲。
+> If the program explicitly requires a full 60-minute talk with questions handled separately, use the 53--55-minute extended version in this document and retain about 5 minutes of buffer.
 
-## 1. 一句话结论
+## 1. One-Sentence Conclusion
 
-### 推荐标题
+### Recommended title
 
 **Beyond Size: Compiler-Assisted, Retargetable Memory Allocation for Rust**
 
-副标题可以使用：
+Recommended subtitle:
 
 **UniAlloc as a Semantic Interface Between the Compiler, Allocation Policy, and Platform**
 
-### 全场唯一主论点
+### The single central claim
 
 > **The conventional Rust allocation boundary exposes layout but not language-level object semantics. UniAlloc carries trusted compiler-derived semantics through an optional channel, uses them for deployable policies, and separates those policies from platform-specific mechanisms.**
 
-中文理解：传统 Rust allocation boundary 暴露 layout 和运行时上下文，却不暴露编译器掌握的 type/module 等语言级语义。UniAlloc 在明确的 trusted-metadata 与 coverage 假设下，用可选 compiler-to-allocator 通道传递这些语义，以此驱动可选择的策略，并把策略与平台机制解耦。
+Interpretation: The conventional Rust allocation boundary exposes layout and runtime context while omitting compiler-known language semantics such as type and module. Under explicit trusted-metadata and coverage assumptions, UniAlloc sends those semantics through an optional compiler-to-allocator channel, uses them to drive selectable policies, and decouples policy from platform mechanism.
 
-这比“UniAlloc 是一个更快/更安全/支持很多 feature 的 allocator”更适合作为 qualifier thesis，因为它同时给出：
+This framing is stronger as a qualifier thesis than describing UniAlloc as a faster, safer, feature-rich allocator because it provides all four of the following:
 
-1. 一个明确的系统接口缺口；
-2. 一个可反驳的设计命题；
-3. 三组可以分别检验的证据；
-4. 清楚的假设、限制与下一步研究问题。
+1. A specific systems-interface gap;
+2. A falsifiable design proposition;
+3. Three independently testable bodies of evidence;
+4. Explicit assumptions, limitations, and next research questions.
 
-## 2. Qualifier 的成功标准与时间选择
+## 2. Qualifier Success Criteria and Timing
 
-Georgia Tech 对 qualifier 的公开描述强调研究准备度、研究深度、创造力，以及能否通过口试继续解释工作；MIT 的公开 qualifier 指南也强调逻辑、基础、方法选择、批判性思考和技术讨论，而不是把它当成普通 conference talk。因此本报告应当证明“我能提出、设计、评估并批判一个研究问题”，而不只是“我做了一个 allocator”。参考：
+Georgia Tech's public qualifier description emphasizes research readiness, depth, creativity, and the ability to continue explaining the work during oral examination. MIT's public qualifier guidance likewise emphasizes logic, foundations, methodological choices, critical thinking, and technical discussion. This presentation should demonstrate that I can formulate, design, evaluate, and critique a research question; a feature demonstration alone would be insufficient. References:
 
 - [Georgia Tech Ph.D. CS Qualifier Exam Information](https://www.cc.gatech.edu/phd-cs-qualifier-exam-information)
 - [MIT MechE Qualifying Exam Presentation](https://mitcommlab.mit.edu/meche/commkit/qualifying-exam-presentation/)
 - [MIT NSE Doctoral Qualifying Exam Presentation](https://mitcommlab.mit.edu/nse/commkit/doctoral-qualifying-exam-presentation/)
 
-### 两种可执行节奏
+### Two executable pacing options
 
-| 场景 | 主讲 | 问答/缓冲 | 建议 |
+| Scenario | Talk | Questions / buffer | Recommendation |
 |---|---:|---:|---|
-| 一小时是整个 exam slot，或委员会可能中途提问 | 45 min target；48 min ceiling | 12--15 min | **默认使用**；准备 42 min 可剪裁版 |
-| 学院明确要求约一小时 uninterrupted talk，问答另计 | 53--55 min | 5--7 min | 加入第 6 节的 5 张扩展页 |
+| One hour covers the full exam slot, or the committee may interrupt with questions | 45 min target; 48 min ceiling | 12--15 min | **Default**; prepare a trimmable 42-minute version |
+| The program explicitly requires an uninterrupted talk of about one hour and handles questions separately | 53--55 min | 5--7 min | Add the 5 extension slides in Section 6 |
 
-不要排练到 59:30。委员会中途追问、切换 backup slide、设备问题都会吃掉时间。
+Do not rehearse to 59:30. Committee follow-ups, backup-slide switches, and equipment issues will consume time.
 
-## 3. Research question、假设与贡献
+## 3. Research Question, Hypotheses, and Contributions
 
 ### Research question
 
 > **Can a Rust allocator use compiler-visible heap-object semantics without breaking existing programs, and can the same allocator runtime be retargeted across userspace, kernels, and constrained systems?**
 
-论文依据：`../rust-alloc-paper/intro.tex:217-224`。
+Paper basis: `../rust-alloc-paper/intro.tex:217-224`.
 
-这里的 “without breaking existing programs” 只能作为论文原问题的 shorthand；主讲必须用 Slide 12 的四维 contract 将其限定为 paired toolchain 下 supported paths 的 source/execution compatibility，而不是 universal binary ABI、FFI 或 cross-rustc compatibility。
+The phrase "without breaking existing programs" is shorthand for the paper's original question. The talk must use Slide 12's four-dimensional contract to limit it to source and execution compatibility on supported paths under a paired toolchain. Universal binary ABI, FFI, and cross-rustc compatibility remain outside this claim.
 
-### 三个可检验假设
+### Three testable hypotheses
 
-| 假设 | 要证明什么 | 不需要证明什么 |
+| Hypothesis | Required evidence | Outside the required evidence |
 |---|---|---|
-| **H1 — Semantic availability** | 配套 compiler/runtime 能把对象语义传到 allocator；supported common paths 不需 source annotation，unknown requests 有 conventional execution path | 所有 allocation site 都有语义，或存在 universal binary/FFI compatibility |
-| **H2 — Policy usefulness** | 至少一个代表性策略能利用语义改变 allocator 的行为，并有可量化的 cost/boundary | UniAlloc 消灭 UAF、普遍更快或对所有 workload 都更省内存 |
-| **H3 — Retargetability** | policy、cache/zone/backend、metadata layout、PAL 之间有可复用边界；retargeting 是 semantic channel 是否为 reusable systems contract 的 generality test | H3 自身证明 security benefit、移植零工作量，或当前源码的所有平台 claim 已完成复现 |
+| **H1 -- Semantic availability** | A paired compiler/runtime can deliver object semantics to the allocator; supported common paths require no source annotations, and unknown requests retain a conventional execution path | Semantic coverage at every allocation site or universal binary/FFI compatibility |
+| **H2 -- Policy usefulness** | At least one representative policy uses semantics to change allocator behavior with measurable cost and boundaries | Elimination of UAF, universal speedups, or lower memory use on every workload |
+| **H3 -- Retargetability** | Reusable boundaries exist among policy, cache/zone/backend, metadata layout, and PAL; retargeting tests whether the semantic channel is a reusable systems contract | Security benefit from H3 alone, zero-effort ports, or completed reproduction of every platform claim in the current source |
 
-每个假设章节最后固定使用两句话：
+End each hypothesis section with these two fixed sentences:
 
 1. **This evidence supports ...**
 2. **It does not establish ...**
 
-### 三项贡献；不要把 feature 列表当贡献列表
+### Three contributions; keep the feature list separate
 
-1. **Semantic allocation API**：可选 metadata 参数，同时保留传统 allocation path。
-2. **Compiler-assisted extraction**：修改 rustc/core allocation path，让已验证的 exact constructor、conversion 与 lifecycle matcher（例如本文列出的 canonical `Box`/`Vec` 路径）产生 metadata，而不是要求这些 supported paths 手工 annotation；不宣称任意 `Box<T>`/`Vec<T>` 都会自动获得 metadata。
-3. **Retargetable allocator runtime**：把 semantic policy 与 platform memory acquisition、cache primitive、metadata layout 分开。
+1. **Semantic allocation API**: An optional metadata argument that preserves the conventional allocation path.
+2. **Compiler-assisted extraction**: Changes to the rustc/core allocation path make validated exact constructors, conversions, and lifecycle matchers, including the canonical `Box`/`Vec` paths listed here, produce metadata without manual annotations on those supported paths. This claim excludes automatic metadata for arbitrary `Box<T>`/`Vec<T>` uses.
+3. **Retargetable allocator runtime**: Separates semantic policy from platform memory acquisition, cache primitives, and metadata layout.
 
-论文依据：`../rust-alloc-paper/intro.tex:246-272`。Type isolation、metadata segregation、hugepages、PAC 等应作为证明架构能力的 **case studies**，而不是各自宣称为独立 thesis。
+Paper basis: `../rust-alloc-paper/intro.tex:246-272`. Type isolation, metadata segregation, hugepages, and PAC are **case studies** that demonstrate architectural capability; each remains subordinate to the central thesis.
 
-## 4. 31 张主幻灯片：逐页可执行 Outline
+## 4. Executable Slide-by-Slide Outline for 31 Main Slides
 
-规则：所有标题都写成委员会应当记住的结论句，而不是写成 “Background”“Design”“Evaluation” 等名词。
+Rule: Phrase every title as a conclusion the committee should remember. Avoid noun-only labels such as "Background," "Design," and "Evaluation."
 
-下列逐页预算合计 **45:00**；45--48 分钟之间的 3 分钟不分配给任何 slide，只作为 transition、短中断和设备缓冲。
+The slide budgets below total **45:00**. The 3 minutes from 45 to 48 remain unassigned as a buffer for transitions, brief interruptions, and equipment.
 
-### A. Hook and gap — 0:00--8:00（Slides 1--6）
+### A. Hook and gap -- 0:00--8:00 (Slides 1--6)
 
-| # | 建议英文标题 | 这一页只完成什么 | 最省事、最清楚的图 | 时间/追问 |
+| # | Recommended English title | Sole purpose of this slide | Simplest clear visual | Time / expected follow-up |
 |---:|---|---|---|---|
-| 1 | **Beyond Size: Compiler-Assisted, Retargetable Memory Allocation for Rust** | 说姓名、题目和一句 thesis；不要讲履历 | 标题 + 一个 `type → metadata → allocator policy` 箭头 | 1:00；不接问题 |
-| 2 | **The conventional Rust allocation boundary omits language-level semantics.** | 直接给 thesis 和三项贡献的预告 | 三层横条：Compiler semantics / Policy / Platform | 1:30；委员会立即知道主张 |
-| 3 | **Same-size reuse can turn a temporal bug into type confusion.** | 建立全场 running example：A free 后被同 size 的 B 占据 | 4 格 UAF 动画；只显示两种类型和同一 slot | 1:30；准备“这是否阻止所有 UAF？” |
-| 4 | **Rust preserves type semantics until the allocation boundary discards them.** | 展示 `Box<T>`/`Vec<T>` 有 `T`，`GlobalAlloc` 最终只见 `Layout` | 左侧 typed object，右侧 `size + align`，中间语义被灰掉 | 1:30；这是全场最重要 gap 图 |
-| 5 | **The conventional Rust API exposes layout, not language-level type or module semantics.** | 用最少背景说明 allocator 还会使用 thread/address/history，但 API 缺少语言级语义 | cache → zone → backend 图，旁边标出 available inputs | 1:15；避免“只看 size”的绝对表述 |
-| 6 | **Prior systems obtain policy inputs from runtime state, manual classes, or fixed hardening mechanisms.** | 用 nearest-neighbor 定位 snmalloc/mimalloc/Temeraire 与 Slitter/hardened malloc/Scudo，再突出 UniAlloc 的 compiler-derived input | 三行表：metadata source / policy / deployment | 1:15；准备 novelty 问题 |
+| 1 | **Beyond Size: Compiler-Assisted, Retargetable Memory Allocation for Rust** | State name, topic, and one-sentence thesis; omit biography | Title plus one `type -> metadata -> allocator policy` arrow | 1:00; take no questions |
+| 2 | **The conventional Rust allocation boundary omits language-level semantics.** | State the thesis directly and preview the three contributions | Three horizontal layers: Compiler semantics / Policy / Platform | 1:30; make the claim immediately clear |
+| 3 | **Same-size reuse can turn a temporal bug into type confusion.** | Establish the running example: after A is freed, same-size B occupies its slot | 4-frame UAF sequence showing only two types and one slot | 1:30; prepare for "Does this prevent every UAF?" |
+| 4 | **Rust preserves type semantics until the allocation boundary discards them.** | Show that `Box<T>`/`Vec<T>` retain `T` while `GlobalAlloc` ultimately sees only `Layout` | Typed object on the left, `size + align` on the right, semantics grayed out between them | 1:30; the most important gap figure |
+| 5 | **The conventional Rust API exposes layout, not language-level type or module semantics.** | Briefly show that allocators also use thread/address/history while the API lacks language-level semantics | cache -> zone -> backend, annotated with available inputs | 1:15; avoid absolute "size only" wording |
+| 6 | **Prior systems obtain policy inputs from runtime state, manual classes, or fixed hardening mechanisms.** | Position snmalloc/mimalloc/Temeraire and Slitter/hardened malloc/Scudo as nearest neighbors, then highlight UniAlloc's compiler-derived input | Three-row table: metadata source / policy / deployment | 1:15; prepare for novelty questions |
 
-**段落转场：** “The bottleneck is not another free-list optimization; it is the information boundary.”
+**Transition:** "The bottleneck is not another free-list optimization; it is the information boundary."
 
-### B. Question, criteria, and answer — 8:00--12:00（Slides 7--9）
+### B. Question, criteria, and answer -- 8:00--12:00 (Slides 7--9)
 
-| # | 建议英文标题 | 这一页只完成什么 | 图 | 时间/追问 |
+| # | Recommended English title | Sole purpose of this slide | Visual | Time / expected follow-up |
 |---:|---|---|---|---|
-| 7 | **Retargetability tests whether the semantic channel is a reusable contract rather than a point integration.** | 把原 RQ 拆为两个相连问题：语义兼容性与 abstraction generality；H3 不直接证明 security benefit | RQ-A → stable contract → RQ-B | 1:15 |
-| 8 | **Three hypotheses make the thesis falsifiable.** | 给出 H1/H2/H3 和各自成功标准 | 三列 hypothesis → measurement | 1:30；告诉委员会后面如何判断成功 |
-| 9 | **UniAlloc answers with an API, compiler extraction, and a reusable runtime.** | 给出三项贡献，明确 features 是 case studies | 三个编号块，颜色贯穿全场 | 1:15 |
+| 7 | **Retargetability tests whether the semantic channel is a reusable contract rather than a point integration.** | Split the original RQ into two connected questions: semantic compatibility and abstraction generality; H3 alone provides no security-benefit proof | RQ-A -> stable contract -> RQ-B | 1:15 |
+| 8 | **Three hypotheses make the thesis falsifiable.** | Present H1/H2/H3 and their success criteria | Three columns: hypothesis -> measurement | 1:30; tell the committee how later evidence will determine success |
+| 9 | **UniAlloc answers with an API, compiler extraction, and a reusable runtime.** | Present the three contributions and identify features as case studies | Three numbered blocks with colors reused throughout | 1:15 |
 
-### C. H1: Semantic availability without abandoning compatibility — 12:00--23:00（Slides 10--16）
+### C. H1: Semantic availability without abandoning compatibility -- 12:00--23:00 (Slides 10--16)
 
-| # | 建议英文标题 | 这一页只完成什么 | 图 | 时间/追问 |
+| # | Recommended English title | Sole purpose of this slide | Visual | Time / expected follow-up |
 |---:|---|---|---|---|
-| 10 | **The security scope trusts compiler/runtime metadata and separates only covered cross-class reuse.** | 明确 attacker、TCB 和 non-goals：trusted metadata；内部 cache lookup-key collision 会做 exact identity check，但 spoofed/identical metadata、compiler type-ID collision、same-type、fallback、metadata corruption 仍是边界 | TCB 边界 + “Protects / Does not protect” | 1:30；先于委员会指出限制 |
-| 11 | **UniAlloc separates semantic input, allocation policy, and platform mechanism.** | 给出全系统 mental model | 把 `fig/overview.pdf` 重画为三条横向 lane，并 progressive reveal | 2:00；原图只放 backup |
-| 12 | **Optional metadata preserves supported source-level execution, not universal ABI compatibility.** | 解释 `AllocationMetadata`、semantic API、`GlobalAlloc` fallback，并预告四维 compatibility contract | 两条路径 + source/toolchain/FFI/ABI 四行表 | 1:30；准备 ABI/compatibility |
-| 13 | **Compiler extraction removes source annotations from supported exact Rust allocation paths.** | 展示一个已验证 exact matcher 中的 `T` 如何通过 optimized MIR rewrite 进入 metadata ABI | supported exact `Box`/`Vec` path → MIR → metadata ABI → allocator，4 个节点 | 2:00；准备 rustc fragility |
-| 14 | **Correct semantics require pairing allocation, reallocation, drop, unwind, and thread transfer.** | 用 actual-rustc 证据区分 direct neutral delegation、allocation-side recovery 与 provider observability boundary | object lifecycle 状态图；三条 pairing lane | 1:30；准备 cross-thread 问题 |
-| 15 | **Fallback preserves execution when semantics are absent, but it also bounds protection.** | 把兼容性与安全 coverage 放在同一张图上 | Coverage 圆：typed/known vs unknown/fallback | 1:30；不要把 fallback 说成安全覆盖 |
-| 16 | **H1 is supported by source-bound probes and an instrumented real application, with version and coverage limits.** | H1 小结：actual-rewrite probes 与 Oxipng integration 支持 feasibility；不证明全面 coverage、unmodified-app deployment 或稳定 ABI | `Supports / Does not establish` 两个框 | 1:00；给证据 badge |
+| 10 | **The security scope trusts compiler/runtime metadata and separates only covered cross-class reuse.** | Define the attacker, TCB, and non-goals: metadata is trusted; an internal cache lookup-key collision receives an exact identity check; spoofed or identical metadata, compiler type-ID collisions, same-type reuse, fallback, and metadata corruption remain boundaries | TCB boundary plus "Protects / Does not protect" | 1:30; state limitations before the committee asks |
+| 11 | **UniAlloc separates semantic input, allocation policy, and platform mechanism.** | Establish the system-wide mental model | Redraw `fig/overview.pdf` as three horizontal lanes with progressive reveal | 2:00; keep the original figure in backup |
+| 12 | **Optional metadata preserves supported source-level execution, not universal ABI compatibility.** | Explain `AllocationMetadata`, the semantic API, and `GlobalAlloc` fallback; preview the four-dimensional compatibility contract | Two paths plus a four-row source/toolchain/FFI/ABI table | 1:30; prepare for ABI and compatibility questions |
+| 13 | **Compiler extraction removes source annotations from supported exact Rust allocation paths.** | Show how `T` from one validated exact matcher reaches the metadata ABI through an optimized MIR rewrite | supported exact `Box`/`Vec` path -> MIR -> metadata ABI -> allocator, 4 nodes | 2:00; prepare for rustc-fragility questions |
+| 14 | **Correct semantics require pairing allocation, reallocation, drop, unwind, and thread transfer.** | Use actual-rustc evidence to distinguish direct neutral delegation, allocation-side recovery, and the provider observability boundary | Object-lifecycle state diagram with three pairing lanes | 1:30; prepare for cross-thread questions |
+| 15 | **Fallback preserves execution when semantics are absent, but it also bounds protection.** | Show compatibility and security coverage in one figure | Coverage circle: typed/known versus unknown/fallback | 1:30; describe fallback as a coverage boundary |
+| 16 | **H1 is supported by source-bound probes and an instrumented real application, with version and coverage limits.** | Summarize H1: actual-rewrite probes and Oxipng integration support feasibility; comprehensive coverage, unmodified-application deployment, and a stable ABI remain unestablished | Two boxes: `Supports / Does not establish` | 1:00; add an evidence badge |
 
-关键实现依据：
+Key implementation evidence:
 
-- `unialloc/src/alloc_api/type_isolation.rs` 的 `AllocationMetadata`：metadata fields/flags 与 unknown 状态。
-- 同文件的 `SemanticAlloc` trait、`impl SemanticAlloc for RustAllocator` 与 `__unialloc_semantic_scope_push*`/`__unialloc_semantic_scope_pop`：semantic alloc/dealloc/realloc API 与 scope ABI。
-- `unialloc/src/cache/mod.rs` 的 `unsafe impl GlobalAlloc for RustAllocator`：semantic path 与普通 `GlobalAlloc` fallback。
-- `tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs` 的 `record_or_rewrite_semantic_scope_candidates`、`push_semantic_scope_pop_block` 与 `record_or_rewrite_semantic_ownership_transfers`：metadata ABI、scope push/original call/pop、ownership transfer 与 unwind cleanup。行号只在 deck freeze 前刷新一次，symbol 是长期入口。
-- `docs/allocator-mir-and-backend-validation.md:38-84,170-300`：real rustc-driver 与 bounded functionality probes；不要把这些叫 performance evidence。
-- `94b2523d...` source-bound presentation snapshot（source digest `56a912ef...`）：direct path 观察到 36 个 actual rewrites、typed runtime `84/84`；semantic-scope path 观察到 116 个 rewrites、28 个 drop rewrites、typed runtime `161/161`；cross-thread path 观察到 4 个 hints、3 个 recovery matches、0 mismatch。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-current-head-94b2523d8823-20260712T060330Z/`。开发 HEAD 已继续前进，因此它是精确绑定的 recent functionality evidence，不应再称 live-HEAD universal coverage 或 performance evidence。
-- `4715d46...` clean-HEAD compiler-driven type-isolation probe：普通 `Box<T>` 源码没有手工 metadata/allocator ABI；real rustc-driver 实际应用 21 个 semantic-scope 与 4 个 Drop rewrite（该 probe 没有 supported direct allocator-call replacement candidate），为两个 same-layout Rust types 产生 distinct compiler-derived IDs。Hosted 与 `fixed_heap` 各单次 PASS：wrong-type reuse 被阻止、producer identity 4/4 完整取回自己的地址，target-type drop/deallocation scope 为 `0/0`，因此该生命周期必须使用 allocation-side recovery；corrupt slots 与 recovery mismatch 均为 0。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/current-source-typeiso-oxipng-4715d46-20260712a/`。它支持 bounded compiler-derived identity → runtime isolation path，不支持 universal UAF prevention、same-key/collision/spoofing/fallback coverage 或 performance claim。
-- `3d08399...` actual-rustc `Box<[T], A> -> Vec<T, A>` ownership-transfer probe：exact DefId + structural type proof 将普通 Rust ownership transfer 实际改写到 `__unialloc_semantic_box_slice_into_vec`，保留 pointer/payload，只把 live recovery `type_id` 从 Box owner rebind 到 distinct compiler-derived Vec identity；module、flags、hints 与 allocation callsite 仍绑定原始 allocation。`python3 tools/unialloc-rustc-pass/test_mir_box_slice_into_vec_rebind.py` 单次 PASS：wrong-type non-reuse、same-Vec-type exact reuse、typed alloc/dealloc `3/3`，raw fallback、recovery mismatch、corrupt slots 均为 `0`。独立 runtime regression `box_slice_into_vec_rebind_rejects_memory_tagged_record_without_mutation` 验证 memory-tagged record fail closed、保留旧 identity 且不发生 mutation。这只是一项 bounded functional probe，不支持 universal coverage、performance 或论文百分比 claim。
-- `9c04871...` wrapped actual-rustc ownership-transfer probe：普通 Rust helper 接收 `Result<Option<Box<[u8]>>, u8>`，经 `?`、`Option::expect` 与显式 move 后调用 `into_vec`；audit 对 direct 与 wrapped 两条 transfer candidate 精确应用 `2/2`。wrapped runtime 保留 pointer/payload，阻止 wrong-type reuse、允许 same-Vec-type reuse，recovery mismatch 为 `0`。这是 bounded Result/Option passthrough 与 ownership-transfer 功能证据，不是通用容器 coverage 或性能 claim。
-- `718aab9...` cross-thread actual-rustc `Box<[u8]> -> Vec<u8>` probe：普通 Rust 程序在 main 分配 Box，move 到 distinct worker 后在那里调用 `into_vec`；该 lane 显式配置 cross-thread recovery placement policy，并非 automatic escape-inference test。audit candidate/applied 为 `1/1`，runtime transfer attempted/applied/rejected 为 `1/1/0`。pointer/payload 跨线程保留，wrong Box identity 不复用、same Vec identity 精确复用；fallback alloc/dealloc、raw alloc/dealloc/realloc-without-metadata、mismatch、corrupt、dropped 均为 `0`。权威入口：`tools/unialloc-rustc-pass/test_mir_cross_thread_box_slice_into_vec_rebind.py`。这是 bounded functional/safety evidence，不是 universal coverage、performance 或论文百分比。
-- `718aab9...` actual-rustc `String::with_capacity -> String::into_bytes -> Vec<u8>` probe：exact non-generic helper candidate/applied 为 `1/1`，compiler-derived String/Vec IDs 分别为 `11507945832468554002 / 13513741751600386252`。runtime `1/1/0`，pointer/capacity/payload 保留，wrong String identity 不复用、same Vec identity 精确复用，fallback/raw/mismatch/corrupt/dropped 全为 `0`。`unialloc/tests/string_into_bytes_rebind.rs` 的独立 safety regression 另验证 wrong expected ID、memory-tagged source、missing record 均 fail closed，aggregate 为 `1 applied / 3 rejected`，hosted 与 `fixed_heap` 各 `1/1` PASS，不发生 trusted-record mutation、fabricated record 或 mismatch。权威入口：`tools/unialloc-rustc-pass/test_mir_string_into_bytes_rebind.py` 与该 integration test。这是 bounded functional/safety evidence，不是 universal coverage、performance 或论文百分比。
-- `99762a9...` actual-rustc `Vec<T, A> -> Box<[T], A>` shrink-aware ownership-transfer probe：exact structural match 对 exact-capacity 与 spare-capacity 两个 candidate 精确应用 `2/2`。单次 runtime 中，`capacity == len` 保留 pointer/payload 且没有 allocation/deallocation/cache lifecycle event；spare shrink 的 pointer 移动但 payload 保留。transfer attempted/applied/rejected 为 `2/2/0`：wrong Vec identity 不复用 Box storage、same-Box identity 可复用，且 old spare Vec identity 可复用释放的旧 storage；fallback alloc/dealloc、raw alloc/dealloc/realloc-without-metadata、mismatch、corrupt 均为 `0`。独立 reviewer 首轮发现 rejected wrong/tagged shrink 会丢 source policy，以及 missing record + outer scope 会被 outer/auto 伪 attribution；修复后 wrong/tagged exact/moved 路径保留 source policy/tag，missing + outer + auto 被抑制，RAII guard 在 panic/unwind 后恢复且不消耗 finite compiler stream。hosted 与 `fixed_heap` focused tests 各 `3/3`。这是 bounded functional/safety evidence，不是 universal coverage、performance 或论文百分比。
-- `5eb25f5...` actual-rustc `VecDeque` same-layout isolation：普通 Rust 源码让 Alpha/Beta 两个同 layout element type 获得 distinct nonzero compiler identities。Hosted 与 `fixed_heap` 各单次 PASS：4 个 Alpha 与 4 个 Beta 地址集合不相交，随后 4 个 Alpha 精确取回原集合；typed alloc/dealloc 为 `12/12`、cache hit `4`，fallback/raw/mismatch/corrupt/dropped 全为 `0`。这是 Slide 14 的 bounded container lifecycle 和 Slide 17 的 covered-path reuse evidence，不是 universal container coverage、安全证明或性能结果。
-- `c02baa6...` exact `VecDeque` capacity owner：current 与 pinned nightly 的 actual `RUSTC_WRAPPER` 对 std-owned `with_capacity` 和 `reserve_exact` 实际应用外层 ring-buffer identity。单次 probe 为 typed alloc/dealloc `4/4`、grow alloc/dealloc `1/1`，wrong-type cache-hit delta `0`、exact-type delta `1`，地址精确回收；fallback/raw/mismatch/corrupt 全为 `0`。`push_back`、custom same-name helper 与 multi-owner `Drop` 保持 fail closed。这只支持 exact capacity-path functional feasibility，不是容器全覆盖或性能 claim。
-- `32c3c5b...` P0 ownership-transfer pairing：actual-rustc `Vec<T,A> -> IntoIter<T,A>` 唯一 candidate 应用 `1/1`，runtime `1/1/0`，保留 pointer/payload、阻止 wrong-Vec reuse、允许 exact-IntoIter reuse，implicit Drop mismatch `0`；`String -> Box<str>` exact/spare 两条 candidate 应用 `2/2`，runtime `2/2/0`，覆盖 pointer-preserving exact rebind 与 moved shrink，wrong-String non-reuse、same-Box reuse 和 old-String old-storage recovery 均成立。对应 fail-closed regression 覆盖 wrong/tagged/missing 等输入，hosted/fixed 均 PASS，fallback/raw/mismatch/corrupt/dropped 为 `0`。这是 Slide 14 的 ownership-consuming pairing 证据，不是所有标准库 conversion 或稳定 rustc ABI 的证明。
-- `2e3c0e2...a7b5f75...` actual-rustc 三 lane deterministic replay：同 class `Layout` shrink 的 alloc 建立 nonzero identity，realloc/dealloc 以全零 type/module/flags/hints strict-neutral delegation 继承该 identity；`63 -> 57`、align 64 的 pointer/layout/payload 均有效，realloc typed alloc/dealloc `1/1`、final typed dealloc `1`，fallback/mismatch/corrupt 均 `0`。Partial-coverage lane 中，seed/recover helper 各有一个 actual `Vec::with_capacity` scope、target helper Drop rows 为 `0`，因此明确由 allocation-side recovery 配对；raw Clone alloc/dealloc 恰为 `1/1`，不能取得 protected address，随后 supported `Vec` 精确取回。Generic helper runtime typed-dealloc/fallback-dealloc/cache-insert 为 `4/0/4`，但 `optimized_mir` 未暴露独立 generic helper row，所以不虚构 generic-skip。证据精确绑定 source `2e3c0e2`、validator `a7b5f75`，`collector_runs=3`、`reruns=0`，只重放 preserved raw；这是功能证据，不是 benchmark、百分比或 universal coverage claim。Artifact：`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-actual-rustc-2e3c0e2-a7b5f75-20260712/`。
-- `7096fc6...37ea7cd...` compiler-driven `Vec` transfer-before-growth probe：creator thread 用普通 `Vec<ProducerPayload>` 完成 capacity-1 allocation 后先转移到 distinct worker；worker 在 growth 前核对 pointer/capacity/payload，再执行 capacity `1 → 8` 的 typed realloc 与最终 Drop。Hosted 与 `fixed_heap` 在 clean `37ea7cd` 各单次 PASS：audit 有 `2` 个 function-bound direct positive-control replacement、`11` 个 semantic-scope、`4` 个 Drop rewrite、`0/0` unsolved；allocation/growth type id 相同，growth typed alloc/dealloc `1/1`、worker Drop typed dealloc `1`、raw realloc/dealloc 与 old-metadata fallback `0`，wrong-type reuse blocked、same-type recovery true、mismatch/corrupt `0/0`。Direct control 在 lifecycle snapshots 后独立运行；这是 bounded actual-rewrite/realloc/drop/thread-transfer/isolation 功能证据，不是 universal container coverage 或 performance claim。
-- `97c7aae...d394f19...` nested unwind actual-rewrite probe：inner `Vec::extend_from_slice` 的 Clone panic 通过真实 MIR cleanup 只弹出 inner scope，runtime 必须恢复仍然 active 的 outer `Box` scope（depth `1`），outer return 后再回到 depth `0`；随后 `Box` allocation/Drop 使用同一个 nonzero compiler-derived type id。Hosted 与 `fixed_heap` 各一次 PASS：typed alloc/dealloc `1/1`、fallback `0`、mismatch/corrupt `0`；audit 为 `8` enter/exit、`8` Drop、`5` unwind pops、`0` unsolved。由于 workspace dev profile 是 `panic=abort`，probe subprocess 明确局部设置 `CARGO_PROFILE_DEV_PANIC=unwind`；这是 bounded unwind-pairing evidence，不是所有 panic/MIR shape 的通用证明。
-- `52a7002...88c35fd...` Clone classifier current-rustc ICE 修复与 fail-closed 边界：plain `Clone::clone` 只在结果中有单一 supported heap owner 时降低；nonheap Clone 被标记为 skipped、ambiguous owner 与 raw-pointer wrapper 保持 unsolved、仍含 type/const params 的 const-generic Clone 保持 unresolved，避免对 `TypingEnv::fully_monomorphized()` 做会 ICE 的 Copy query。`88c35fd` 只加入 exact `indexmap::map::IndexMap` / `indexmap::set::IndexSet` heap-container identity，使用 normalized exact def-path match，不放宽到任意 custom ADT；PngData、Headers 与 crossbeam Sender 仍按边界 fail-closed。
-- `dd30004...` supported plain-Clone positive + ambiguous negative：真实 optimized-MIR 对普通 `Option<Vec<ProducerPayload>>::clone` 应用恰好一条 semantic-scope rewrite；Producer type/module 为 `11653960357981974603 / 13835860698770440193`，同布局 Consumer 使用 distinct type `17450045950661180065`。运行时 Option Clone typed alloc/dealloc/cache-hit/cache-insert 为 `1/1/1/1`、fallback/raw 为 `0`，精确取回 Producer protected address 且不取得 Consumer address；ambiguous `Result<Vec<ProducerPayload>, String>::clone` 仍为一条 fail-closed row 与 raw alloc/dealloc `1/1`。这是单一 supported Clone callsite + 单一 ambiguous control 的 source-bound 功能证据，不是全 Clone/全应用 coverage 或性能证据。
-- `1956350...` Cargo multi-crate allowlist regression：POSIX 临时 fixture 的 selected bin 与 path dependency 均真实编译执行，输出精确为 `target=7 dependency=11 sum=18`；dependency 经 compiler shim，selected target 由 rustc-driver 内部处理。测试要求唯一 target audit/log、`selected_value` 的 actual semantic rewrite，以及 dependency 零 MIR rows；exact unittest `1/1` PASS。它只证明该 target/dependency non-interference path，不证明任意 dependency graph、direct allocator-call coverage、runtime isolation 或性能。
-- `374d455...` ambiguous Clone fallback regression：普通 `Result<Vec<ProducerPayload>, String>::clone` 在真实 rustc audit 中恰有一条 ambiguous/fail-closed row，且不得出现 applied/planned semantic scope；hosted 与 `fixed_heap` 各一次独立复验均观察到 typed Clone allocation `0`、raw fallback alloc/dealloc `1/1`、正确且独立的 clone buffer、recovery mismatch `0`、corrupt slots `0`。这证明该 bounded unsupported path 的 conventional execution 安全退化，不把 fallback 写成 type-isolation coverage。
-- `f8612de...b5b70ed...` `Layout` fallback provenance regression：真实 rustc-driver 对 `Layout::new::<[u64; 4]>().align_to(64).expect(...)` 实际改写，并在 runtime 观察到相同 nonzero compiler-derived identity 的 `32B/align64` alloc/dealloc；`align_to(3).unwrap_or_else(|_| Layout::new::<[u8; 37]>())` 必须改用 unknown-object direct-callsite fallback identity，不能继承源 `[u64; 4]` identity。Clean `b5b70ed` 单次 PASS：两个 identity 不同、typed alloc/dealloc `2/1`、mismatch/corrupt `0/0`，并严格核对 dealloc alignment `64`。它只证明这两个 bounded Result/Layout shape，不是 universal transformer coverage 或性能证据。
-- `addd743...` instrumented Oxipng integration：在 `dea2321...` (`v4.0.3`) 的 detached copy 中加入 UniAlloc dependency/global allocator、runtime counters、symbol-visibility hook 和有限 build plumbing（`lock_api`、`[workspace]`与更新后的 `Cargo.lock`）；保存的 source/build patch 不包含生成的 `Cargo.lock` diff。该历史 run 在真实 Oxipng library/binary MIR 上实际应用 6 个 allocator-call replacements、846 个 semantic scopes 与 532 个 Drop rewrites，剩余 9 个 semantic unsolved、0 个 Drop unsolved。对一个 pinned PNG invocation，功能运行返回 0，输出 SHA-256 与先前 clean harness 相同。instrumented `main` 中的 recording window 观察到 `1058/1067` typed allocation events，即 `9915 bp` counter-truncated coverage（直接比率约 `99.16%`），fallback `9`，type-isolation corrupt slots `0`；pre-main 和 post-snapshot events 不在该 denominator 中。这是 exact `nightly-2022-07-01` 上的 source-bound historical functional evidence；不是 unmodified-app、whole-process coverage、general output equivalence、live-HEAD、object coverage 或 performance claim。
-- `e466831...` pre-multi-owner-fix Oxipng runtime-class smoke：固定 Oxipng v4.0.3 只 build 一次、功能运行一次，输出 SHA 精确匹配；target-crate audit 为 `6` direct rewrites、`848` semantic scopes、`535` Drop rewrites、semantic unresolved `4`、Drop unresolved `0`。runtime 完整保存 `140/140` 个 type-class rows，typed allocation events 为 `1058/1067`，并将 5 个 compiler identities 绑定到 runtime lifecycle rows。它是精确 source-bound 的较早功能证据，但后续 `532435a` 修复了 aggregate Drop first-owner 误归因，所以不能把这里较高的 applied Drop 数继续当作当前安全 coverage。
-- `9c74b95...6aae903...` safer-Drop + injected Oxipng address oracle：`9c74b95` source snapshot/pass 对 265 个 multi-owner Drop rows 明确 fail closed，只应用 278 个可表达的 Drop rows；另有 853 semantic scopes、6 direct rewrites、4 semantic fail-closed rows、131 个完整 runtime rows和 2 个自然 lifecycle matches。正确性修复后没有自然 same-layout pair，因此该项只作 diagnostic。单独标记的 injected oracle 使用 actual MIR 产生的两个同 module、同 `64B/align8` identity：producer type `15719177160194310719` alloc=2/hit=1，wrong type `11520851239810895908` alloc=1；地址关系为 producer `4349034560`、wrong `4349034624`、producer recovery `4349034560`，executed producer/wrong Drop identities 为 `2/1`，mismatch/corrupt/dropped 为 `0/0/0`，PNG hash 匹配。两次 actual build/run 都成功，但 collector 分别暴露“要求未执行 cleanup row 有 runtime row”和“强制自然 pair”两个具体 validator 缺陷；修复后只对 preserved raw 离线 replay，未执行第三次 run。Artifact SHA-256 `debb31038ab3912bdd07260de7facd394f8152ba086a4054e9b098b68b3aab0a`。它只支持一个 injected、compiler-identity-bound 地址序列，不是自然 Oxipng 隔离覆盖、全程序/全地址保证、安全证明或性能证据。
-- `26051b9...` direct-local ownership hardening：`_local` scope 只允许 unprojected owner、单一 acyclic normal path 与 exact `Drop` 的 zero-alias proof；borrow/ref/raw pointer、copy/move、call argument、projection、overwrite、branch/loop/early exit 任一出现即令整个 same-type candidate group recovery-backed，raw `SizeAlign`/`exchange_malloc` 也始终 recovery-backed。actual two-crate `RUSTC_WRAPPER` regression 把 hidden `&mut owner` 传给 dependency 中的 `mem::replace`：fail-first 曾出现 typed `1/1`、fallback `1/1`、`raw_dealloc_no_metadata=1`；修复后 hidden lane 为 typed alloc/dealloc `1/2`、fallback alloc/dealloc `1/0`、raw `0`，positive aggregate 为 typed `4/4`、fallback `0/0`、raw `0`。这是 bounded conservative ownership proof，不是 general escape analysis。
-- `15d892e...` **pre-ownership-hardening** Oxipng v4.0.3 functional run：单次成功 build/run 的 actual MIR audit 为 843 semantic scopes、278 Drop rewrites、265 multi-owner Drop fail-closed、2 semantic fail-closed、6 direct rewrites和 131 个 runtime rows。`PngData::clone` 的两个具体 site 都只把 `Vec<u8>` 认作 allocation owner 并实际应用；`Headers` 因多 owner、`Sender` 因 pass 无法绑定 dependency version 而 fail closed。853→843 是移除 standalone `Arc`/`Rc` handle Clone 假阳性 scope 后的语义精化，不是 coverage regression。功能输出 SHA-256 为 `565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`，injected address oracle 通过。Artifact：`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-arc-vec-15d892e-20260712/`。它不能 rebinding 到 `26051b9` 之后的源码，也不证明 universal compiler coverage 或 publication-grade performance。
-- `af342f7...3dc1039...` **post-ownership-hardening Oxipng v4.0.3 one-shot**：应用 build/run 精确绑定 code-bearing source `af342f7e26dc4a5e132acc18d7f7a450009e6517`，两者 return code 均为 `0`，输出 SHA-256 精确匹配 `565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`。静态 target-crate MIR 分母分别为 6 个 direct rewrites、843 个 semantic-scope rewrites、278 个 Drop rewrites，以及 267 个明确 fail-closed candidates（265 multi-owner Drop + 2 semantic）；1121 个 applied semantic/Drop rows 中 23 个满足 `_local` zero-alias proof、1098 个保守使用 recovery。运行窗口另报 `1061/1070` typed allocation events、9 个 fallback allocations、129 个完整 type rows、0 dropped events、0 corrupt slots；`9915 bp` 只是这个动态事件 counter 的诊断性比率。Injected oracle 的地址序列为 producer `4379656256`、wrong type `4379656320`、same-type recovery `4379656256`，wrong-type 不复用、same-type 精确复用，oracle mismatch before/after 为 `0/0`、corrupt 为 `0`。全 workload 另有 `recovery_identity_mismatches=67`：runtime 均使用 allocation-time recorded identity 做 fail-closed correction，所以这是 `recovery_corrected_non_exact` compiler attribution，明确阻止 whole-app exact pairing claim；它与 267 个静态 fail-closed candidates 不是同一分母。`3dc1039` 修复 validator 将 bounded oracle 与后续 workload counter 解耦，并只离线重放 preserved artifacts，**没有重跑应用**。Artifact：`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-af342f7-20260712a/posthoc-preserved-run-validation.json`。这是一次性功能/诊断证据，不是 benchmark、universal coverage 或 publication-grade performance evidence。
-- `04b8108...` **post-Oxipng compiler fail-closed hardening**：non-Clone receiver call 只检查首个 MIR receiver，factory/constructor 只检查 destination；对选定 receiver/destination 的现有 bounded supported-owner scan 必须恰好得到一个 owner，多 owner 或 unresolved 均 fail closed，不再继承任意 argument 或 textual return identity。真实 `RUSTC_WRAPPER` regression 对 `(Vec<u8>, String)` factory 与 `Vec<String>::resize` 各要求唯一 ambiguous audit row、零 applied/planned scope，常规程序结果保持正确；positive direct-local probe、pinned pass compile 与 15/15 unit tests 通过。该提交发生在 `af342f7` one-shot 之后，因此旧 Oxipng counts 不得 rebinding；该 `04b8108` hardening round 没有重跑 Oxipng。
-- `2ff8770...` **recovery layout/auth fail-closed hardening**：TLS 与 process-visible recovery lookup 区分 `Missing / Mismatched / Exact`。live pointer 的合法但错误 layout/auth 在 FFI 与 `SemanticAlloc` dealloc 上均先于 stats/cache/delayed/raw path 被拒绝并保留 exact record；conservative/recovery-backed FFI single/split realloc ABI wrappers 同样在 copy/dealloc 前返回 null，payload 与 record 保持，exact retry 成功。两个新 regression、邻近 recovery tests、独立 review 与包含 652 个 UniAlloc tests、430 个 std-bench tests 的 full pre-commit suite 通过；这是 current-source correctness evidence，不是 exploit corpus 或性能结论。
-- `0026dfe...` **active recovery-scope P0 hardening**：fail-first 中，scope 前创建的 raw pointer 被错误归因并进入 delayed-free（`occupied_slots=1`，应为 `0`）。修复后 `Missing` 走 unknown/raw fallback、释放并精确记录一次 fallback；moved raw realloc 保留 prefix、为 replacement 建立新 recovery identity，并只记录一次旧 raw release；`Exact` 使用已记录 identity，`Mismatched` fail closed 且不消费 record，允许 exact retry。Hosted 与 `fixed_heap` focused filters 各 `2/2` PASS；这是 correctness evidence，不是性能结论。
-- `427583b...` **earlier hidden/consumed-owner P0 hardening + source-bound Oxipng one-shot**：actual-`RUSTC_WRAPPER` fail-first regressions 中，hidden custom ADT 与 consumed by-value factory/receiver 的冲突路径各从 mismatch `1` 收紧为 audit-only fail-closed、mismatch `0`；same-owner factory/receiver positive controls 仍实际 rewrite 且 mismatch `0`。当时的 instrumented Oxipng v4.0.3 在 pinned `nightly-2022-07-01` 上一次 build、一次功能运行均 PASS，输出 SHA-256 匹配；source `scoped_status=""`，scoped fingerprint 为 `5f36c0a7f1bad4284071cd3a8f6d50bb7a894282e5f76726e6f2b095d5bc49e8`，pass-source SHA-256 为 `aedef38625f6096e3f5875b35f3d89f839709ac3277d7c79e4df6756da8a1373`。target-crate audit 为 6 direct、383 semantic、320 Drop applied 和 581 fail-closed；runtime 为 64 type rows、corrupt `0`。bounded injected address oracle PASS（wrong-type 不复用、same-type 复用、oracle mismatch/corrupt `0/0`），但 whole run 有 13 次 recovery correction，因此仍是 `recovery_corrected_non_exact`，不是 whole-app exact pairing。13 不能归因或 rebinding 成旧 `af342f7` 67 次 correction 的已修复子集；这只是 pinned instrumented functional/diagnostic evidence，不是 unmodified app、benchmark、性能或 publication-grade coverage claim。Artifact：`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-current-427583b-20260712a/oxipng-realapp-repro-summary.json`。
-- `572bfab...` **capacity-only Vec outer-owner coverage**：仅对 `reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit`，且 receiver ADT path 精确为 `std::vec::Vec`/`alloc::vec::Vec` 时，使用 direct outer `Vec` identity；`resize/extend/push/clone_from/Drop/factory` 保持完整 owner-graph 或 consumed-owner fail-closed。current-rustc `Vec<String>` 与 same-layout `Vec<Vec<u8>>` 获得 distinct nonzero compiler/runtime IDs，wrong-type 不复用、same-type 精确复用并有 1 次 cache hit，mismatch/corrupt 为 `0/0`；`Vec<String>::resize` 仍 ambiguous。`427583b` artifact 早于该提交，不能 rebinding 到 `572bfab`；后续 current-content run 单独列于下方。这不是性能证据。
-- `576df61...9bb9f8d...f8f0d90...` **source-bound Oxipng v4.0.3 run at `576df61`**：首次 pinned old-nightly build 暴露 `GenericArg::as_type` 不兼容；最小 cfg adapter 后以 byte-identical 内容提交为 `9bb9f8d`，独立 review 为 `APPROVE`，old-nightly compile、current actual-rustc Box probe 与 embedded tests `16/16` 均 PASS。功能 collection 发生于 HEAD `576df61`、adapter 尚为稳定 uncommitted 内容时；`9bb9f8d` 与 collection 的 60 个 scoped inputs 全部一致。`f8f0d90` 后为 58/60，唯一差异是 post-run summarizer 及其 test，compiler pass 与 allocator/runtime inputs 仍 byte-identical；这不表示 full working tree clean。Oxipng build/run return `0`、输出 hash 精确匹配；audit 为 6 direct + 383 semantic + 320 Drop rewrites，并在 real functions 中观察到 6 个 actual `Box<[u8]> -> Vec<u8>` ownership-transfer rewrites，另有 575 个 fail-closed candidates。runtime 为 typed allocations `904/1070`、64 rows、dropped/corrupt `0/0`；injected wrong-type non-reuse/same-type reuse oracle PASS，但 whole-run 13 次 correction 使 pairing 仍为 `recovery_corrected_non_exact`。Enriched artifact：`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-current-576df61-20260712c-enriched/`，summary SHA-256 `cd14bf7bdcbff8fe99d5fc6d97888ce2065050c527b423baa63b856857bdd43b`；它由 preserved raw audits 确定性重放，精确记录 6 candidates/6 applied/6 selected rows，且与 6 direct rewrites 分开计数，**没有重跑应用**。原 `...20260712b` summary SHA `054b...` 保持不变。这是一次功能运行，无 timing loop，不支持 performance、论文百分比、universal 或 natural-app isolation coverage。
-- `6d955c0...38b8b59...` **source-bound Oxipng ownership-transfer run at `38b8b59`**：`6d955c0` 保留 optimized `vec!` 路径中 immediate `Box<[T; N]>` allocation owner，`38b8b59` 识别实际 `into_vec` callsite 的 optimized storage markers。成功 run 在 start/end 均绑定 HEAD `38b8b59c9748691d07b0ac9c0ad7c6adf94396cf`、pass SHA-256 `c2c83bec49001c0b40d045a32daaed10d4094afb7eea2415685670a756fe6d10` 与 60-file scoped fingerprint `8609ff8ff261f27998779613eefb739ddfcc0c682ac1a76ddefaf9dadbd2eb29`；静态 transfer candidates/applied 为 `6/6`，动态 workload delta 为 attempted/applied/rejected `1/1/0`。实际执行点为 `png::PngData::output`，旧 owner 是 `Box<[u8; 8]>`，basis 为 `exact_immediate_box_array_unsize`，随后 pointer-preserving rebind 到 `Vec<u8>`；功能输出 SHA-256 为 `565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`。成功 artifact：`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-ownership-runtime-38b8b59-20260712d-success/`，summary SHA-256 `292c8ff8479887f4bfa90fc58b48ce60326e27f89a9f26baf7ac50cce1a0e113`。此前 `.../oxipng-ownership-runtime-6d955c0-20260712c-failed-after-first-repair/` 保持历史失败状态：功能进程虽返回 0，但动态 transfer 为 `1/0/1`，不得写成 PASS。这是单次 bounded diagnostic functional evidence，不是 whole-program coverage、benchmark、性能或论文百分比。
-- `a51960d...` **historical presentation bundle at `a51960d`**：source HEAD `a51960d92a7c72deabaf25fc23e985c3b26c09a5`、scoped fingerprint `f23eda54db834f2a81475ea84f28d70a55a54fb5502c379d7b36dc355a6e1d8f`。一次 pinned instrumented build/run 均 PASS，输出 SHA `565f253e...`；static audit 将 6 direct、383 scope、320 Drop、12/12 ownership-transfer candidate/applied 和 575 fail-closed 分开；dynamic transfer 为 `3/1/2`。Injected oracle wrong-type non-reuse、same-type reuse 且 mismatch/corrupt `0/0`；whole-run 13 次 corrected mismatch 单列，因此 pairing 仍是 `recovery_corrected_non_exact`。Full cargo 同一 source 通过 660 UniAlloc unit + 430 std-bench tests。Artifact summary SHA `bc6f32805e58cb021223dde2e01a91887cbe36e653f5ff73257823349a12e685`。Slide 16 应使用这一 source-bound bundle，而不是跨 revision rebinding 旧 counts；它仍不是 natural-app universal isolation、whole-program coverage、安全证明或性能证据。
-- `ed188ca...4cd0d7f...997e840...` **post-bundle type-isolation safety and compiler attribution hardening**：新增 String-to-Vec ownership transfer 后跨线程 Drop 的 hosted/fixed-heap regression，要求 payload 保持、旧 String identity 不复用、精确 Vec identity 可复用且 mismatch 为 0；exact `Vec::with_capacity` destination 现在只归因到 nested `Vec<Vec<u8>>` 的 outer Vec backing，current/legacy actual-rustc probe 均通过；exact `Result<T,E>` factory 只允许 `Ok(T)` 作为返回 allocation identity，`Err(E)` 仅作为 fail-closed hazard。Result A/B/C actual-rustc probe 分别验证 Err-only 不产生 scope、`Ok(Vec)` 实际 rewrite、Ok/Err owner 冲突保持 ambiguous，current/legacy 与 clean-tree Clone/Layout gates 均 PASS，pre-commit full suite 为 660+430。`997e840` 后没有重跑 Oxipng，因此不得声称旧 bundle 的 13 次 correction 已归零，也不得把旧 counts 重新绑定到新 HEAD。
-- `681398e...` **borrowed slice-iterator hazard-only coverage**：只在 by-value hazard scan 中把来自 `core` 且 DefPath 精确为 `slice::Iter`/`IterMut` 的 borrowed iterator 视为 non-owner，使普通 Rust `input.iter().copied().collect::<Vec<u8>>()` 在 current 与 `nightly-2022-07-01` actual-rustc probe 中获得实际 Vec semantic-scope rewrite。runtime 证明 payload 正确、wrong String identity 不复用、exact Vec identity 可复用，transfer 为 `2/2/0`，fallback/raw/mismatch/corruption 均为 `0`；custom raw-pointer iterator 仍 unresolved，含 `IterMut` 与 `IntoIter` 的 Zip Drop 仍为 `2` 条 unresolved、`0` applied，general/Drop/Clone/transfer scans 未扩大。Full pre-commit suite 为 660+430。该提交后未重跑 Oxipng，不得把历史 458-row unresolved 分母或旧 bundle counts rebinding 到新 HEAD；这是一条 bounded actual-rewrite 与隔离效果证据，不是 universal coverage 或性能证据。
-- `8e4d37c...` **canonical-Vec actual-rewrite soundness closure**：fail-first probe 证明一个 `[lib] name="alloc"` 的外部 fake crate 可以提供 callback-bearing `FromIterator`，旧 matcher 只按 alloc 路径形状会把其伪 `Vec<u8>` 错误 applied。修复后 destination 必须同时是 rustc 的 canonical sysroot `Vec` diagnostic item 与 `alloc` crate；current 与 pinned exact actual-wrapper 均 PASS，canonical `slice::Iter<u8>.copied().collect::<Vec<u8>>()` 保持 applied，fake-alloc destination 保持 unresolved / `audit_only_unresolved_heap_object_type`。这是一个 exact matcher 的 fail-closed soundness closure，不证明 arbitrary `Iterator::collect`、所有 `Vec` 构造或 whole-program coverage；`a57d318` Oxipng counts 早于该 compiler commit，不能 rebinding 到 `8e4d37c`。
-- `9240fc6...` **memory-tagged ownership-transfer P0 closure**：fail-first 的普通 Rust `String::into_bytes` 在 policy flags `129` 下虽有 actual MIR rewrite，却只有 runtime transfer `1/0/1`，并出现旧 String identity 复用原地址、新 Vec identity 不复用。修复后 recovery auth 与 matching software memory-tag auth 只替换 `type_id` 并一起提交；TLS/global fast+overflow 全表做 `0/1/>1` exact classification，duplicate、cross-domain duplicate、layout/metadata/auth 不一致均 fail closed，recovery commit 失败时 tag 回滚。current 与 `nightly-2022-07-01` actual-rustc probe 均为 `1/1/0`，payload/pointer/capacity 保持，wrong String non-reuse、exact Vec reuse、tag cleanup 均 PASS，fallback/raw/mismatch/corruption 为 `0`；hosted/fixed-heap、local/global、rollback/duplicate regressions及独立 review PASS，full suite 为 662+430。证据只覆盖 pointer-preserving `String -> Vec<u8>` actual-rewrite contract；不证明所有 ownership transfer、非法并发线性化、Oxipng 最新 HEAD coverage 或性能。
-- `2b33401...` **cross-thread tagged composition closure**：把上述 runtime contract 与 cross-thread recovery 合并到同一条普通 Rust actual-rustc 路径：主线程创建 `String`，worker 调用未手写 metadata 的 `String::into_bytes`，scope rows 同时携带 flags `129` 与 placement `32768`。current 与 `nightly-2022-07-01` 各一次功能运行均为 transfer `1/1/0`，payload/pointer/capacity 保持，wrong String non-reuse、exact Vec reuse、tag cleanup reuse 均 PASS，fallback/raw/mismatch/corrupt/dropped 为 `0`；独立 hosted/fixed-heap 手写边界 regression 各 `1/1` PASS，full pre-commit suite 为 662+430。transfer audit 的 placement 来自 explicit manual policy；这不是自动 escape-analysis、真实外部应用、benchmark、universal coverage 或性能证据。
-- `46d5aaa...` **latest source-bound Oxipng one-shot before module-id hardening**：一次 pinned Oxipng v4.0.3 instrumented build/run 均返回 `0`，输出 SHA `565f253e...` 匹配。target-crate audit 为 6 direct、367 semantic、320 Drop、12/12 ownership-transfer candidate/applied，并明确保留 529 个 fail-closed rows；runtime 为 59 type rows、whole-run mismatch `0`、corrupt/dropped `0/0`，dynamic transfer `3/1/2`，injected oracle wrong-type non-reuse / same-type reuse PASS。Artifact：`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-typeiso-46d5aaa-20260712e/`，summary SHA `f5b8ad7c2fbb0a9f28ccbe052ac7dca6d7c40c98c3482c61d09b6fefcc4e274b`。这是单次功能/诊断 evidence，无 timing loop；不支持 natural-app universal isolation、whole-program coverage 或性能 claim。
-- `0704852...` **multi-crate module isolation closure**：此前 external crates 共用固定 module id；现在 compiler pass 优先用 crate name + rustc `-C metadata`，无 metadata 时用 canonical primary input，再以完整 rustc argv 兜底。两个不同 Cargo package 故意使用相同 rustc crate name、相同源码与同一 compiler type id `13297006753675728434`，actual-rustc run 必须得到两个不同 module ids、wrong-module non-reuse、same-module reuse，mismatch/corrupt `0/0`；两个无 metadata 的 direct-rustc 同名 crate control 也必须分离。current/legacy pass compile、738 allocator + 432 std-bench functional tests与 independent review 均 PASS。该提交晚于 `46d5aaa` Oxipng run，不能把新 module-id 算法 rebinding 到旧 application counts；64-bit hash 仍受 trusted-metadata/collision boundary 约束，且不是性能证据。
-- `eadfa9c...` **lifetime-hint cache-key safety regression**：固定 type/module/flags/placement，只改变显式 lifetime hint；`0x11` 释放的地址不得被 `0x22` 复用，返回 `0x11` 时必须精确取回原地址。Hosted 与 `fixed_heap` 各 `1/1` PASS，fallback allocation/deallocation、recovery mismatch、corrupt slot 均为 `0`。这是手工 metadata 生命周期上的 covered-path allocator evidence，不是 compiler-derived lifetime coverage、universal isolation 或性能证据。
-- `a379f23...` **placement-hint cache-key safety regression**：固定 type/module/flags/lifetime/layout，只改变显式 placement hint；`0x21` 释放的地址不得被 `0x22` 复用，返回 `0x21` 时必须精确取回原地址。Hosted 与 `fixed_heap` 各 `1/1` PASS，fallback allocation/deallocation、recovery mismatch、corrupt slot 均为 `0`。这是手工 metadata 生命周期上的 covered-path allocator evidence，不是 automatic compiler placement inference、universal isolation 或性能证据。
-- `05d18be...` **current-thread duplicate-quarantine fail-stop**：指针进入 delayed-free TLS quarantine 后，第二次 dealloc 即使清空 occupancy hint、且省略 `FLAG_DELAYED_FREE` 试图走 raw/compiler fast path，也会在 recovery consumption、stats、cache mutation 或 raw free 前 fail-stop；quarantine/accounting 不变且 type cache 不被污染。Hosted/fixed-heap focused、邻近 delayed-free `11/11`、full suite `663+430` 与 independent verifier 均 PASS。边界仅为 current-thread TLS quarantine ownership；不证明无 memory-tagging 的 cross-thread duplicate detection，也不是性能证据。
-- `ded36de...` **actual-rustc `Box<str> -> String` ownership pairing**：普通 Rust `Box<str, Global>::into_string` 的唯一 candidate 实际应用 `1/1`，runtime transfer 为 `1/1/0`；compiler-derived Box/String identity 均非零且不同，pointer/payload/length/capacity 保持，旧 Box identity 不复用、精确 String identity 复用，fallback/raw/mismatch/corrupt/dropped 均为 `0`。Hosted/fixed-heap regressions覆盖 accepted、wrong-old-ID、missing record 和 authenticated memory-tagged 路径；邻近 current actual-rustc transfer probes、embedded pass tests `16/16`、legacy pass compile、full suite `663+430` 与独立 review 均 PASS。它是 ordinary-Rust actual rewrite 与 bounded isolation-effect evidence，不是 external-app、universal coverage、benchmark 或性能 claim；没有重跑或 rebinding Oxipng。
-- `e6dc7d6...` **process-visible cross-thread delayed-free ownership**：8 shards × 32 slots 的 bounded registry 在 memory-tag validation、recovery consumption、stats/cache mutation、copy/in-place realloc 和 raw free 前发布 pending/quarantined pointer ownership；panic-before-TLS-publication 由 RAII rollback，release/eviction/valid thread-exit 认证后 unregister。真实 `GlobalAlloc::dealloc/realloc`、raw entry、different-alignment move 和 explicit `SemanticAlloc` same-class realloc 均在触碰 pointer 前 fail-stop。Hosted/fixed-heap delayed-free filters 各 `15/15`，full workspace 为 `668+430`，independent verifier APPROVE。容量满或 oversized 走 authenticated immediate release，不制造 hidden TLS owner。边界是“完成 process-visible registration 后”的 pointer ownership，不是通用并发 double-free 证明或性能证据。
-- `5408c04...` **actual-rustc `CString::into_bytes_with_nul -> Vec<u8>` ownership pairing**：普通 Rust 唯一 candidate 实际应用 `1/1`，runtime transfer `1/1/0`；258-byte pointer/payload/capacity 保持，compiler-derived CString/Vec identities distinct nonzero，旧 CString identity 不复用、精确 Vec identity 复用，fallback/raw/mismatch/corrupt/dropped 全 `0`。Hosted/fixed-heap direct regressions各 `1/1`，覆盖 accepted、wrong-old-ID、missing record 与 authenticated memory-tagged 路径，independent review APPROVE。它只证明 exact `CString -> Vec<u8, Global>` bounded actual rewrite/isolation effect；不支持其他 CString API、custom allocator、external-app、benchmark 或性能 claim。
-- `f007c7b...` **realistic multi-module actual-`RUSTC_WRAPPER` application**：一个生成的 Cargo 应用跨 `ingest/transform/storage/handoff` 模块执行，要求 4 条实际 allocation scope、4 个 distinct nonzero callsites、3 个 distinct nonzero String/Vec/Box type IDs，以及 `String::into_bytes` transfer `1/1`。两个 runtime oracle 分别验证 String→Vec 和 same-layout Box/Vec 的 wrong-identity non-reuse / exact-identity reuse；fallback/raw/mismatch/corrupt/dropped 为 `0`。同一次 run 不提供 manual placement：与真实 `thread::spawn(move || ...)` 同 MIR body 的 Vec 自动得到 placement `0x8000` / `auto_cross_thread_escape`，local control 为 placement `0` / `default`；cross-to-local 不复用，两类各自精确复用，窗口 typed alloc/dealloc/hit/insert 为 `3/4/2/4`。这是一个 generated multi-module app 的 bounded actual-rewrite/placement-isolation regression，不是 arbitrary external app、whole-program、universal/natural-app isolation 或性能证据。
-- `38dfe17...522c7f5...` **pinned-nightly CString compatibility + exact `str` split coverage**：`38dfe17` 对 paper-pinned pre-release 1.64 nightly 恢复 `alloc_c_string` feature gate，同时不把已稳定 gate 带到 current rustc。`522c7f5` 只在 by-value hazard scan 中把 exact `std/core::str::Split` 与 `SplitInclusive` 视为 borrowed non-owner；current/pinned actual-rustc regression 对两条 `collect::<Vec<&str>>()` 各实际应用一条 scope，wrong-type 不复用、exact type 复用，custom raw-pointer iterator 仍 fail closed，fallback/raw/mismatch/corrupt 全 `0`。不支持任意 iterator、任意 rustc ABI、coverage percentage 或性能 claim。
-- `41205d3...` **delayed-free test-state cleanup**：只在 regression tests 中加入 `SemanticStateCleanup`，并在测试暂时取出 delayed-free slot 时用 `PendingGlobalDelayedFreeOwnership` 保持 process-visible ownership，避免 test-order/state leakage；不据此主张新的 production behavior 或性能结果。
-- `41205d3...` **current-source Oxipng v4.0.3 one-shot**：pinned `nightly-2022-07-01` build/run return code 为 `0/0`，输出 SHA-256 `565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`。target-crate audit 为 direct/scope/Drop `6/369/320`、static transfer `12/12`、fail-closed `527`；runtime transfer `3/1/2`、typed `873/1070`、fallback `197`、58 rows、corrupt/dropped `0/0`，injected wrong-type non-reuse / same-type reuse PASS。whole-run mismatch 为 `1`，状态明确是 `recovery_corrected_non_exact`，所以不能称 whole-app exact pairing。Artifact：`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-typeiso-41205d3-20260712a/`，summary SHA-256 `c95808092c197b01399d4723e52e47c92478c8dafd5c498148fa70560c2dc7f4`。与旧 `46d5aaa` summary 的 `367/529` 直接算术对照仅为 exact `+2` applied scope / `-2` fail-closed，且与两个实际 `Split<char> -> Vec<&str>` rows 一致；这是 direct inference，不是 timing、performance、coverage percentage、whole-program/universal 或 natural-app isolation claim。所有数字只绑定 `41205d3`，不得跨 revision rebinding。
-- `e243779...` **PAC × hugepage policy composition regression**：同一 type/module/layout 的 ordinary `type-isolated + PAC` policy 与 `type-isolated + PAC + hugepage-metadata` policy 不得交叉消费 cache entry，随后两种 policy 各自必须精确复用；hosted 与 `fixed_heap` targeted test 各 `1/1` PASS，fallback allocation、identity mismatch、PAC/software-auth failure 与 corrupt slot 均为 `0`。测试要求实际经过 hardware PAC 或安全 software fallback 的 sign/verify，但在当前主机没有真实 PAC/hugepage backing 时只证明安全 fallback 和 policy-domain identity，不证明硬件路径或性能。
-- `5d0822a...` **cross-thread authenticated five-policy composition regression**：同一条 allocator lifecycle 组合 type isolation、memory tagging、delayed free、hugepage metadata、PAC 与 process-visible cross-thread recovery。foreign worker 在错误 Drop identity 下释放时，allocation-time authoritative metadata 必须胜出且只消费一次 recovery/tag；duplicate free 在 stats/cache/registry mutation 前 fail-stop，quarantine release 后只发布正确 hugepage-domain cache entry，ordinary domain 与错误 identity 均 miss，exact identity/domain 才可复用。Hosted 与 `fixed_heap` targeted 各 `1/1` PASS，PAC hardware 或安全 software fallback 的 verification 增加且 auth failure 为 `0`；这是 test-only composition coverage，没有发现新的 production defect，也不证明真实 PAC/hugepage hardware 或性能。
-- `7ec42d4...` **cross-thread authenticated split-realloc composition regression**：foreign worker 通过 hints split-metadata FFI 提供 stale old identity，同时 allocation-time old policy 组合 type isolation、memory tagging、delayed free、hugepage metadata、PAC 与 process-visible recovery，replacement 使用 distinct ordinary-domain identity。测试要求 old recovery authority 只审计一次 mismatch，old recovery/tag 事务性消费并发布 new recovery/tag，moved-from storage 以 authenticated old hugepage identity quarantine；duplicate old free 在 stats/cache mutation 前 fail-stop，old/new identity 与 domain 均只能精确复用，最终 recovery/tag/quarantine 清空。Hosted/fixed-heap exact 各 `1/1` PASS；没有发现 production defect。该证据不覆盖任意 size/error path、真实 PAC/hugepage hardware 或性能。
-- `b3e793e...` **exact `Arc::new` outer-allocation identity**：compiler pass 只在 alloc-crate exact DefId/DefPath、exact `Arc<T, Global>` destination、唯一 `T` 参数与 destination payload 一致时选择 outer `Arc<T>` identity；不扩展到 `ArcLike`、`new_in`、`Rc` 或任意 constructor。Current 与 `nightly-2022-07-01` actual-`RUSTC_WRAPPER` probe 均为 3 次 typed alloc/dealloc、1 次 exact cache hit、3 次 insert，same-layout `Arc<ProducerWithVec>` / `Arc<ConsumerWithBox>` 得到 distinct nonzero IDs、wrong-ID non-reuse、exact-ID reuse，fallback/raw/mismatch/corrupt 全 `0`；custom `ArcLike::new` 保持 ambiguous fail closed。旧 `41205d3` Oxipng artifact 中的 7 个 Arc constructor fail-closed rows 仍只能作为发现该缺口的历史输入；本提交后没有重跑 Oxipng，不能宣称 external-app counts 已改变，也不是 universal Arc safety 或性能证据。
-- `1bd0c9d...` **exact `Rc::new` outer-allocation identity**：compiler pass 只在 alloc-crate exact DefId/DefPath、exact `Rc<T, Global>`（current）或 `Rc<T>`（paper-pinned nightly）destination、唯一 `T` 参数与 destination payload 一致时选择 outer `Rc<T>` identity；不扩展到 `RcLike`、`new_cyclic`、`new_in`、`Weak` 或任意 factory。修复前 exact `Rc::new` 在 current/pinned probe 中均为 audit-only ambiguous，typed alloc/dealloc `0/0`、fallback/raw `3/3`，same-layout wrong type 会立即复用地址；修复后两种 toolchain 均为 typed alloc/dealloc `3/3`、cache hit/insert `1/3`、wrong-ID non-reuse、exact-ID reuse，fallback/raw/mismatch/corrupt 全 `0`。这是 bounded actual-rewrite 与隔离效果证据；未重跑 Oxipng，不支持 universal Rc safety、cross-thread 或性能 claim。
-- `715ba13...` **exact `HashMap::with_capacity` outer-table identity**：compiler pass 只接受 std-crate exact DefId/DefPath、exact `HashMap<K, V, RandomState[, Global]>` destination 与唯一 `usize` argument；不扩展到 hashbrown、HashSet、IndexMap、`with_hasher`、`with_capacity_and_hasher`、`new_in` 或本地同名 constructor。Current 与 `nightly-2022-07-01` actual-`RUSTC_WRAPPER` probe 对 same-geometry、但 key 内分别含 Vec/Box nested owner 的两个 HashMap 产生 distinct nonzero outer IDs；两边均为 typed alloc/dealloc `3/3`、wrong-ID cache-hit delta `0`、exact-ID delta `1`、fallback/raw/mismatch/corrupt `0`，custom same-name 保持 ambiguous fail closed。稳定 HashMap 不暴露 deterministic raw-table address，因此该 oracle 只证明本次运行的 identity-directed cache selection，不证明 universal address behavior、external-app coverage 或性能。
-- `39c827b...` **exact `HashSet::with_capacity` outer-table identity**：compiler pass 只接受 std-crate exact DefId/DefPath、exact `HashSet<T, RandomState[, Global]>` destination 与唯一 `usize` argument；不扩展到 `with_capacity_and_hasher`、`with_hasher`、allocator-specific constructor、hashbrown、IndexSet 或本地同名 helper。修复前 current/pinned actual wrapper 均把 outer HashSet 与 nested Vec/Box element owner 判为 ambiguous，typed alloc/dealloc `0/0`、fallback/raw `3/3`；修复后两种 toolchain 均为 typed alloc/dealloc `3/3`、cache hit/insert `1/3`、wrong-ID hit `0`、exact-ID hit `1`，fallback/raw/mismatch/corrupt 全 `0`。这是 bounded actual-rewrite 与 cache-selection evidence；稳定 HashSet 不暴露 deterministic raw-table address，因此不支持 universal address behavior、external-app coverage 或性能 claim。
-- `8bc2809...6700ca1...` **plain type-cache hash-collision fail-closed**：fail-first tests 强制 inline 与 linked plain cache 使用相同 64-bit cache key 和相同 type id、但不同 module/flags/lifetime/placement；旧实现会返回 foreign pointer。修复后两个路径都保存并精确比较不含 callsite 的 compact allocator-visible identity，linked colliding identities 在 bounded probe table 中占不同 slot。Hosted/fixed-heap collision tests 各 `2/2` PASS，扩大 type-cache family 为 `54/54` 与 `50/50`；64-bit 下代价是约 `+1040 B/thread` TLS。它只闭合 runtime cache-key collision，不能防止完全相同 metadata 的 spoofing/compiler type-id collision、probe exhaustion、UAF 或 hash DoS，也没有性能 claim。
-- `d87d5e0...25d316c...` **semantic-cache footprint reduction with saturation repair**：hosted cold bucket depth `8→4`，memory-tag/recovery fast tiers `256→128`，empty records 转为 demand-zero representation；`fixed_heap` 保留原容量。独立 review 确定性触发了 matching bucket 满后错误溢出到邻框的问题，`25d316c` 修复为 matching depth/per-bucket/aggregate saturation 直接 bypass，而 distinct hash collision 继续 bounded probe。Hosted `308/308`、fixed-heap `277/277` type-isolation filters 与新增 512 KiB aggregate-cap no-replacement regression PASS。另一个 source-bound 64-thread diagnostic 以 `318b66c` 为 baseline、`25d316c` 为 current，各 3 次交错测量；ready/peak/idle/max RSS median 从 `9.578/66.969/71.188/71.922 MiB` 变为 `7.500/64.953/69.141/69.484 MiB`，但 max range overlap。它只支持方向性 regression evidence，不得生成论文百分比。
-- `2e3bc4c...` **plain linked-cache bounded-probe exhaustion regression**：4 个 distinct exact identities 以强制相同 lookup key 填满 bounded probe window，后续 8 个 colliders 必须 fail closed；测试要求 rejected push 不写 node header、不改 64 个 slots/retained-byte accounting，lookup 不返回 foreign pointer，且 4 个 retained pointer 最终只能由 exact owner 取回。Hosted/fixed-heap targeted 各 `1/1`、type-cache family `55/55` 与 `51/51` PASS。该 test 没有复现新的 production defect，只支持单线程内部 collision/exhaustion 的 fail-closed 行为；不证明 hash-DoS、compiler type-ID 唯一性、identical-metadata spoofing、跨线程或性能性质。
-- `19ffb71...` **earlier accepted Oxipng v4.0.3 actual rewrite/isolation one-shot**：前一次并行 collection 因 `type_isolation.rs` 在运行中改变而被 source-binding gate 正确拒绝；修复提交后冻结 claim-bearing source，再执行且仅执行一次 build + 一次 functional invocation，无 retry/timing。start/end HEAD 均为 `19ffb710752466a140067034650190dfdad60328`，scoped status 为空，fingerprint 为 `13f72a5a...`；build/run `0/0`，输出 SHA `565f253e...`。target-crate direct/scope/Drop 为 `6/310/320`，transfer candidate/applied/selected 为 `12/12/12` 且 selected identities 全部非零，fail-closed semantic/Drop 为 `516/119`（117 multi-owner Drop）。runtime typed alloc/dealloc `871/860`、fallback `199/160`、transfer `3/1/2`、53 rows、corrupt/dropped `0/0`；injected wrong-type non-reuse / exact-type reuse PASS。whole-run mismatch `1`，状态仍为 `recovery_corrected_non_exact`，不能称 whole-app exact pairing。Artifact acceptance SHA `efa66ec1...`。这是 instrumented pinned application 的 bounded functional/diagnostic evidence，不是 benchmark、性能、universal/natural-app isolation 或 whole-program coverage claim。
-- `9a02767...ab98075...` **current-source factory provenance + lifecycle fail-closed hardening**：任意 local/platform/dependency factory 只因返回 `Vec`、`String` 或 `Result` 不再获得 caller-side typed attribution；没有 exact constructor/body allocation proof 就只保留 audit row。新增 exact `Box::new` 与 `String::with_capacity` matcher 需要 alloc/std DefId/path、exact destination 与 argument shape，custom same-name/allocator-specific 路径仍 fail closed。Current 与 `nightly-2022-07-01` opaque dependency probe 的 direct/Result typed allocation 均为 `0`，exact `Vec::with_capacity` control 仍为 typed alloc/dealloc `1/1`。`ab98075` 又修正 end-to-end security validator：current toolchain 逐行接受 86 个 audited fail-closed rows（其中 opaque `producer_box/consumer_box` 为 `8/4`），同时 exact inner scope 保持 typed alloc/dealloc `12/12`、wrong-type non-reuse、exact-type reuse、mismatch/corrupt `0/0`。Nested-unwind probe 现在以 exact outer `Vec::extend` receiver 为证据：inner `Vec::extend_from_slice` panic cleanup 后 depth 恢复到 `1`，outer return 后为 `0`，outer allocation/Drop identity 配对；direct-local hidden replacement 若没有 allocation recovery record，later non-local Drop 必须保持 raw，不能从 surrounding scope 伪造 typed attribution。这是 bounded actual-rewrite/fail-closed evidence，不是 arbitrary factory completeness 或 universal unwind proof。
-- `3ccd464...` **current-source metadata-segregated collision/tamper fail-stop**：每个 occupied entry 的 keyed structural authenticator 绑定 lookup key、完整 callsite-agnostic allocator-visible identity、policy、pointer、layout、optional PAC/software auth 与 metadata。Inline/materialized 强制 key collision 只有 exact identity 才可命中；protection/auth downgrade、identity/policy、pointer（含 null）、size/align 篡改均 fail stop，full-bucket replacement/retained-byte projection 在读取 eviction candidate 前先认证。Hosted/fixed-heap collision、structural-tamper、full-bucket projection、metadata-segregated 与 footprint regressions PASS，且 entry footprint 不增加。它只支持 bounded internal cache integrity，不证明 compiler type-ID 唯一、任意 metadata corruption、UAF 消除或性能。
-- `79d0184...61233b6...` **recovery-layout 与 Unix TLS publication fail-closed**：`GlobalAlloc::dealloc` 遇到 live recovery record 但 caller `Layout` 不精确匹配时，在 raw/fallback/cache mutation 前拒绝并保留 record，exact-layout retry 才消费并按原 identity/layout 发布。Unix TLS 先成功建立 pthread destructor ownership 并写入 pthread slot，再发布 fast Rust TLS pointer；注入 save failure 时 pointer 保持不可见并交回 reclamation。两者是 bounded correctness evidence，不是 forged-pointer、Windows FLS 或性能结论。
-- `08a1bbf...` **exact `String::from(immutable &str)` actual rewrite**：matcher 只接受 exact core `From::from` DefId、exact alloc `String` destination 与唯一 immutable `&str` source；其他 `From`/source shape 与任意 String factory 保持 audit-only fail closed。Current 与 `nightly-2022-07-01` actual-wrapper 均为 typed alloc/dealloc `3/3`、wrong-type non-reuse、exact reuse，fallback/raw/mismatch/corrupt 全 `0`。这是 bounded functional evidence，不是 universal String、external-app 或性能 claim；Oxipng 未重跑，`19ffb71` 仍 stale 且不可 rebinding。
-- `c477339...6640305...95d3d8a...cfd887e...6b0747e...` **current platform/recovery/generated-app closure**：Redox `--tests` 与 Linux `--lib --tests` type-check PASS，`mincore` 仅在支持目标编译且 Linux/Darwin residency-byte ABI 可移植；Redox runtime 仍缺外部 linker/runner。Cross-thread `GlobalAlloc` dealloc/realloc wrong-layout 在 raw/cache mutation 前拒绝并保留 record，exact retry 才消费；realloc 的 gate 位于 zero-size、active、auto、quarantine、stats/raw 分发之前，Missing-record fallback 保持。Current generated multi-module actual wrapper 对 exact `Box<[u8]>` PASS：Box/Vec wrong-type non-reuse、exact Box reuse、raw/fallback/mismatch/corrupt `0`；`Box<[String]>` 保持 audit-only。仅为 bounded functional evidence，无 universal app、论文百分比或性能 claim；Oxipng `19ffb71` 仍 stale 且不 rebinding。
-- `465234c...504ed10...` **custom ADT discovery 与 fail-closed ownership boundary**：`465234c` 的 positive-only 尝试扩大了 `Buffer { bytes: Vec<u8> }` destination owner discovery，但独立 review 用“返回既有 `Buffer`，函数内部仅分配/释放无关 `String`”的 actual-wrapper 负例测得 mismatch `1`，因此该版本不能作为安全 rewrite 证据。`504ed10` 修复后，custom aggregate factory、纯 passthrough 与带无关 allocation 的 passthrough 都只保留 unresolved audit row；Current 与 `nightly-2022-07-01` 仍实际 rewrite 精确的内部 `Vec::with_capacity`、无关 `String::with_capacity` 及 backing `Vec` Drop，runtime typed alloc/dealloc `2/2`、fallback/raw/mismatch `0`，两个 passthrough mismatch delta 均为 `0`。multi-owner 仍为 ambiguous audit-only，raw-pointer unresolved audit-only，borrowed/`PhantomData` 不 lower 或保持 unresolved。该证据证明控制层捕获并修复了一次真实误归因；不证明 arbitrary wrapper allocation provenance、external-app coverage 或性能。
-- `1a4127f...` **earlier source-bound Oxipng v4.0.3 one-shot with explicit raw counters**：artifact `oxipng-current-head-1a4127f-20260713-one-shot` 精确绑定 HEAD `1a4127f`；pinned build/run 为 `0/0`，输出 hash 匹配。target-crate direct/scope/Drop 为 `6/256/320`，unresolved semantic/Drop 为 `570/2`，`whole_program_compiler_coverage=false`。runtime typed alloc/dealloc `860/850`、fallback alloc/dealloc `210/170`、raw-no-metadata alloc/dealloc/realloc `183/144/26`、cache hits `808`，dynamic transfer `3/1/2`。唯一 recovery mismatch 已精确定位：`PathBuf` 在 Oxipng library crate 记录 allocation identity、在 binary crate 请求 Drop；type id 相同但 module id 不同，runtime 使用 allocation-time record 做安全 correction，因此不能称 whole-app exact pairing。相对 `24bb079` artifact，`250→256` scopes 与 `576→570` unresolved 只对应六条 exact `<[u8] as ToOwned>::to_owned(&[u8]) -> Vec<u8>` row 的跨 artifact 对照，不是 rebinding。summary SHA-256 `118894ee3e08990a4d616110ad9001976c5ef082e1d3225e88dc9d070c41ce78`。这是单次 bounded functional/diagnostic evidence；无 timing、universal coverage、安全证明或性能 claim。
-- `f5c4fa4...` **earlier source-bound Oxipng one-shot after duplicate-free closure**：artifact `oxipng-current-head-f5c4fa4-20260713-one-shot` 绑定 clean scoped source `f5c4fa4`，summary SHA-256 `448a634ec918fd8a9e9911fd092d0ef842e97074287ca2fe334514c31c78e5c5`；pinned build/run `0/0` 且输出 hash 匹配。direct/scope/Drop 为 `6/256/320`，unresolved semantic/Drop `570/2`，whole-program coverage false；runtime typed `860/850`、fallback `210/170`、raw `183/144/26`、cache hit/insert/bypass `808/840/62`、transfer `3/1/2`、corrupt/dropped `0/0`。injected oracle wrong-type non-reuse / exact-type reuse PASS；唯一 mismatch 是 cross-crate `PathBuf` module difference，状态 `recovery_corrected_non_exact`。该历史 one-shot 无 timing，不支持 universal、whole-program 或 performance claim，也不得 rebind 到后续 source。
-- `a57d318...` **latest external-app source-bound Oxipng one-shot before `8e4d37c`**：artifact `oxipng-current-a57d318-20260713` 在 clean detached worktree 绑定 `a57d3189d1cce3265170a69801d63a6ff5b0157b`；`acceptance.json` SHA-256 为 `b84e5a56c19e9f79537dc33cc5a09cd2e9d184f10e6052de40c9f34252d3651b`，pinned Oxipng v4.0.3 build/run `0/0` 且 output hash 匹配。actual direct/scope/Drop/ownership rewrites 为 `6/260/320/12`；四个自然 `reduced_alpha_*` 函数命中 supported canonical `Vec<u8>` repetition matcher。必须同时展示 unresolved semantic/Drop `566/2`、multi-owner Drop `117` 与 `whole_program_compiler_coverage=false`。runtime fallback alloc/dealloc `210/170`、raw-no-metadata alloc/dealloc/realloc `183/144/26`，并保留一个 cross-crate `PathBuf` recovery identity mismatch；状态为 `recovery_corrected_non_exact`。这是一次 bounded functional/diagnostic smoke，无 timing loop，不是 whole-app exact pairing、universal safety/coverage 或 performance evidence。后续 `8e4d37c` 只由 current/pinned exact wrapper 独立闭合，不把该 Oxipng run rebinding 到新 compiler source。
-- `e352206...` **actual-wrapper cross-crate returned-owner isolation regression**：producer crate 返回 `ReturnedString::Value(String)`，consumer crate 持有并 Drop；current 与 `nightly-2022-07-01` 均 PASS。两 crate 对同一 `String` 得到相同 nonzero type id、不同 nonzero module ids；两次跨 crate Drop 显式记录 allocation-identity correction，wrong-module 不复用 producer storage，而 producer/application 各自 exact module identity 都能取回自己的地址。runtime typed alloc/dealloc `4/4`，recovery match/mismatch `2/2`，fallback、raw-no-metadata 与 corrupt-slot 全为 `0`。这是 bounded enum(`String`) functional security test，说明 allocation-time identity 对 cross-crate return 保持 authoritative；不是 Oxipng aggregate/`PathBuf` 路径证明、universal cross-crate coverage 或性能证据。
-- `c9b2f4d...0cd7696...` **current/pinned type-isolation security-probe compatibility closure**：两种 toolchain 都是 `validated=true`、typed alloc/dealloc `12/12`、cache hit/insert/bypass `4/12/8`、wrong-type blocked / exact reuse、corrupt/dropped `0/0`。Current summary SHA `b302a0776d29e236521d8c22d58017cd6e3d3ea067da2a3d86e010306e5a2040`，MIR 不暴露 producer/consumer target Drop rows `0/0`，因此使用 `allocation_side_recovery`，recovery match/mismatch `8/0`；pinned final summary SHA `cc242b2da1ebe7f013352c1571062b41342ae38f52f619175fa26014d335fc1d`，暴露 exact requested-identity target rows `4/4`，recovery 仍为 `8/0`，generic Drop 保持 unresolved/specialized audit-only `1/0`。两种 MIR 暴露差异都安全且 zero mismatch；不是 universal toolchain/isolation 或性能 claim。
-- `247a599...` **OutFile<Option<PathBuf>> mismatch-shape mechanism regression**：two-crate actual wrapper 在 current 与 pinned 均 PASS；producer `<OutFile as Clone>::clone` allocation 与 consumer aggregate Drops 映射到 nonzero PathBuf type id `441353361075010719`，与 Oxipng mismatch 的 type id 相同，但 module ids 保持 distinct。两次 correction 均可见，wrong-module non-reuse、producer/application exact reuse，recovery match/mismatch `2/2`，typed alloc/dealloc/hit/insert `4/4/2/4`，fallback/raw/corrupt 全 `0`。这是对 Oxipng mismatch shape 的最小机制验证；不 rebind 或闭合 whole Oxipng，也不是 universal/performance evidence。
-- `32eafa2...` **OutFile/PathBuf cleanup-unwind recovery**：two-crate actual-`RUSTC_WRAPPER` fixture 只对该生成的 Cargo build 启用 `panic=unwind`，consumer 中 returned `OutFile` 经既有 MIR cleanup Drop 销毁；该 Drop 位于 cleanup block，因此不宣称 compiler 额外插入 unwind-pop edge。current `nightly-2026-06-11` fresh single run 为 recovery match/mismatch `1/1`、typed alloc/dealloc/cache-hit/cache-insert `2/2/1/2`，fallback/raw/corrupt/dropped 全 `0`，panic 后 producer exact identity 精确取回释放地址。normal-return sibling `247a599` 才承担 wrong-module non-reuse/module-isolation oracle；本扩展只证明 bounded cleanup-unwind recovery lifecycle，不证明 whole Oxipng、universal memory safety 或性能。
+- `AllocationMetadata` in `unialloc/src/alloc_api/type_isolation.rs`: metadata fields/flags and the unknown state.
+- The `SemanticAlloc` trait, `impl SemanticAlloc for RustAllocator`, and `__unialloc_semantic_scope_push*`/`__unialloc_semantic_scope_pop` in the same file: semantic alloc/dealloc/realloc API and scope ABI.
+- `unsafe impl GlobalAlloc for RustAllocator` in `unialloc/src/cache/mod.rs`: the semantic path and conventional `GlobalAlloc` fallback.
+- `record_or_rewrite_semantic_scope_candidates`, `push_semantic_scope_pop_block`, and `record_or_rewrite_semantic_ownership_transfers` in `tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs`: the metadata ABI, scope push/original call/pop, ownership transfer, and unwind cleanup. Refresh line numbers once before deck freeze; symbols are the durable entry points.
+- `docs/allocator-mir-and-backend-validation.md:38-84,170-300`: real rustc-driver and bounded functionality probes; classify them as functionality rather than performance evidence.
+- `94b2523d...` source-bound presentation snapshot (source digest `56a912ef...`): the direct path observed 36 actual rewrites and typed runtime `84/84`; the semantic-scope path observed 116 rewrites, 28 drop rewrites, and typed runtime `161/161`; the cross-thread path observed 4 hints, 3 recovery matches, and 0 mismatches. Evidence resides in `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-current-head-94b2523d8823-20260712T060330Z/`. Development HEAD has advanced, so this is precisely bound recent functionality evidence; live-HEAD universal coverage and performance remain outside its scope.
+- `4715d46...` clean-HEAD compiler-driven type-isolation probe: ordinary `Box<T>` source contains no handwritten metadata/allocator ABI; the real rustc-driver applies 21 semantic-scope and 4 Drop rewrites, with no supported direct allocator-call replacement candidate in this probe, and produces distinct compiler-derived IDs for two same-layout Rust types. Hosted and `fixed_heap` each PASS once: wrong-type reuse is blocked, the producer identity recovers all 4/4 of its addresses, and the target-type drop/deallocation scope is `0/0`, requiring allocation-side recovery for this lifecycle; corrupt slots and recovery mismatches are both 0. Evidence resides in `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/current-source-typeiso-oxipng-4715d46-20260712a/`. It supports a bounded compiler-derived identity -> runtime-isolation path; universal UAF prevention, same-key/collision/spoofing/fallback coverage, and performance claims remain excluded.
+- `3d08399...` actual-rustc `Box<[T], A> -> Vec<T, A>` ownership-transfer probe: exact DefId plus structural type proof rewrites ordinary Rust ownership transfer to `__unialloc_semantic_box_slice_into_vec`, preserves pointer/payload, and rebinds only the live-recovery `type_id` from the Box owner to a distinct compiler-derived Vec identity; module, flags, hints, and allocation callsite stay bound to the original allocation. One run of `python3 tools/unialloc-rustc-pass/test_mir_box_slice_into_vec_rebind.py` passes with wrong-type non-reuse, same-Vec-type exact reuse, typed alloc/dealloc `3/3`, and raw fallback, recovery mismatch, and corrupt slots all `0`. The independent runtime regression `box_slice_into_vec_rebind_rejects_memory_tagged_record_without_mutation` verifies fail-closed handling of a memory-tagged record, preservation of the old identity, and zero mutation. This is a bounded functional probe; it excludes universal coverage, performance, and paper-percentage claims.
+- `9c04871...` wrapped actual-rustc ownership-transfer probe: an ordinary Rust helper accepts `Result<Option<Box<[u8]>>, u8>` and calls `into_vec` after `?`, `Option::expect`, and an explicit move; the audit applies the direct and wrapped transfer candidates exactly `2/2`. The wrapped runtime preserves pointer/payload, blocks wrong-type reuse, permits same-Vec-type reuse, and reports recovery mismatch `0`. This is bounded Result/Option passthrough and ownership-transfer functionality evidence; general container coverage and performance remain outside its scope.
+- `718aab9...` cross-thread actual-rustc `Box<[u8]> -> Vec<u8>` probe: an ordinary Rust program allocates Box in main, moves it to a distinct worker, and calls `into_vec` there; this lane explicitly configures a cross-thread recovery placement policy and does not test automatic escape inference. Audit candidate/applied is `1/1`, and runtime transfer attempted/applied/rejected is `1/1/0`. Pointer/payload survive the thread transfer, wrong Box identity does not reuse, and the same Vec identity reuses exactly; fallback alloc/dealloc, raw alloc/dealloc/realloc-without-metadata, mismatch, corrupt, and dropped are all `0`. Authoritative entry point: `tools/unialloc-rustc-pass/test_mir_cross_thread_box_slice_into_vec_rebind.py`. This is bounded functional/safety evidence; universal coverage, performance, and paper-percentage claims remain excluded.
+- `718aab9...` actual-rustc `String::with_capacity -> String::into_bytes -> Vec<u8>` probe: exact non-generic helper candidate/applied is `1/1`; compiler-derived String/Vec IDs are `11507945832468554002 / 13513741751600386252`. Runtime is `1/1/0`; pointer/capacity/payload are preserved, wrong String identity does not reuse, the same Vec identity reuses exactly, and fallback/raw/mismatch/corrupt/dropped are all `0`. The independent safety regression in `unialloc/tests/string_into_bytes_rebind.rs` also verifies that a wrong expected ID, memory-tagged source, and missing record all fail closed; aggregate is `1 applied / 3 rejected`, hosted and `fixed_heap` each PASS `1/1`, and no trusted-record mutation, fabricated record, or mismatch occurs. Authoritative entry points: `tools/unialloc-rustc-pass/test_mir_string_into_bytes_rebind.py` and that integration test. This is bounded functional/safety evidence; universal coverage, performance, and paper-percentage claims remain excluded.
+- `99762a9...` actual-rustc `Vec<T, A> -> Box<[T], A>` shrink-aware ownership-transfer probe: exact structural matching applies precisely `2/2` exact-capacity and spare-capacity candidates. In one runtime, `capacity == len` preserves pointer/payload with no allocation/deallocation/cache lifecycle event; spare shrink moves the pointer while preserving payload. Transfer attempted/applied/rejected is `2/2/0`: wrong Vec identity does not reuse Box storage, the same Box identity can reuse it, and the old spare Vec identity can reuse the released old storage; fallback alloc/dealloc, raw alloc/dealloc/realloc-without-metadata, mismatch, and corrupt are all `0`. Independent review first found that rejected wrong/tagged shrink lost source policy and that missing record plus outer scope could receive false outer/auto attribution. After repair, wrong/tagged exact/moved paths preserve source policy/tag, missing plus outer plus auto is suppressed, and the RAII guard restores state after panic/unwind without consuming the finite compiler stream. Hosted and `fixed_heap` focused tests each PASS `3/3`. This is bounded functional/safety evidence; universal coverage, performance, and paper-percentage claims remain excluded.
+- `5eb25f5...` actual-rustc `VecDeque` same-layout isolation: ordinary Rust source gives Alpha and Beta, two same-layout element types, distinct nonzero compiler identities. Hosted and `fixed_heap` each PASS once: the address sets for 4 Alpha and 4 Beta objects are disjoint, then 4 Alpha objects recover their original set exactly; typed alloc/dealloc is `12/12`, cache hit is `4`, and fallback/raw/mismatch/corrupt/dropped are all `0`. This is bounded container-lifecycle evidence for Slide 14 and covered-path reuse evidence for Slide 17; universal container coverage, a security proof, and performance results remain outside its scope.
+- `c02baa6...` exact `VecDeque` capacity owner: actual `RUSTC_WRAPPER` on current and pinned nightly applies the outer ring-buffer identity to std-owned `with_capacity` and `reserve_exact`. One probe reports typed alloc/dealloc `4/4`, grow alloc/dealloc `1/1`, wrong-type cache-hit delta `0`, exact-type delta `1`, exact address recovery, and fallback/raw/mismatch/corrupt all `0`. `push_back`, a custom same-name helper, and multi-owner `Drop` remain fail closed. This supports exact capacity-path functional feasibility; full container coverage and performance remain excluded.
+- `32c3c5b...` P0 ownership-transfer pairing: actual-rustc applies the sole `Vec<T,A> -> IntoIter<T,A>` candidate `1/1`; runtime `1/1/0` preserves pointer/payload, blocks wrong-Vec reuse, permits exact-IntoIter reuse, and reports implicit Drop mismatch `0`. It applies the exact/spare `String -> Box<str>` candidates `2/2`; runtime `2/2/0` covers pointer-preserving exact rebind and moved shrink, with wrong-String non-reuse, same-Box reuse, and old-String recovery of old storage. Corresponding fail-closed regressions cover wrong/tagged/missing inputs; hosted/fixed PASS, and fallback/raw/mismatch/corrupt/dropped are `0`. This is Slide 14 evidence for ownership-consuming pairing; it does not prove all standard-library conversions or a stable rustc ABI.
+- `2e3c0e2...a7b5f75...` actual-rustc deterministic replay across three lanes: an allocation for a same-class `Layout` shrink establishes a nonzero identity, while realloc/dealloc with zero type/module/flags/hints use strict-neutral delegation to inherit it. For `63 -> 57` at alignment 64, pointer/layout/payload remain valid; realloc typed alloc/dealloc is `1/1`, final typed dealloc is `1`, and fallback/mismatch/corrupt are all `0`. In the partial-coverage lane, seed/recover helpers each have one actual `Vec::with_capacity` scope while target-helper Drop rows are `0`, explicitly requiring allocation-side recovery; raw Clone alloc/dealloc is exactly `1/1`, cannot obtain the protected address, and the supported `Vec` later recovers it exactly. Generic-helper runtime typed-dealloc/fallback-dealloc/cache-insert is `4/0/4`, while `optimized_mir` exposes no independent generic-helper row, so no generic skip is claimed. Evidence binds exactly to source `2e3c0e2` and validator `a7b5f75`, with `collector_runs=3`, `reruns=0`, and preserved-raw replay only. This is functional evidence, excluding benchmarks, percentages, and universal coverage. Artifact: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-actual-rustc-2e3c0e2-a7b5f75-20260712/`.
+- `7096fc6...37ea7cd...` compiler-driven `Vec` transfer-before-growth probe: the creator thread allocates capacity 1 for an ordinary `Vec<ProducerPayload>`, then transfers it to a distinct worker. Before growth, the worker checks pointer/capacity/payload, then performs typed realloc from capacity `1 -> 8` and final Drop. Hosted and `fixed_heap` each PASS once on clean `37ea7cd`: the audit has `2` function-bound direct positive-control replacements, `11` semantic scopes, `4` Drop rewrites, and `0/0` unsolved; allocation and growth type IDs match, growth typed alloc/dealloc is `1/1`, worker Drop typed dealloc is `1`, raw realloc/dealloc and old-metadata fallback are `0`, wrong-type reuse is blocked, same-type recovery is true, and mismatch/corrupt is `0/0`. The direct control runs independently after lifecycle snapshots. This is bounded actual-rewrite/realloc/drop/thread-transfer/isolation functionality evidence; universal container coverage and performance remain excluded.
+- `97c7aae...d394f19...` nested-unwind actual-rewrite probe: a Clone panic inside `Vec::extend_from_slice` pops only the inner scope through real MIR cleanup; runtime must restore the still-active outer `Box` scope at depth `1`, then return to depth `0` after the outer return. The subsequent `Box` allocation/Drop uses the same nonzero compiler-derived type ID. Hosted and `fixed_heap` each PASS once with typed alloc/dealloc `1/1`, fallback `0`, mismatch/corrupt `0`, and an audit of `8` enter/exits, `8` Drops, `5` unwind pops, and `0` unsolved. Because the workspace dev profile uses `panic=abort`, the probe subprocess locally sets `CARGO_PROFILE_DEV_PANIC=unwind`. This is bounded unwind-pairing evidence; it does not establish every panic or MIR shape.
+- `52a7002...88c35fd...` current-rustc ICE fix and fail-closed boundary for the Clone classifier: plain `Clone::clone` is lowered only when its result has one supported heap owner; nonheap Clone is skipped, ambiguous owners and raw-pointer wrappers remain unsolved, and const-generic Clone with type/const parameters remains unresolved, avoiding an ICE-inducing Copy query against `TypingEnv::fully_monomorphized()`. `88c35fd` adds only exact `indexmap::map::IndexMap` / `indexmap::set::IndexSet` heap-container identities through normalized exact def-path matching and does not broaden matching to arbitrary custom ADTs; PngData, Headers, and crossbeam Sender retain fail-closed boundaries.
+- `dd30004...` supported plain-Clone positive plus ambiguous negative: real optimized MIR applies exactly one semantic-scope rewrite to ordinary `Option<Vec<ProducerPayload>>::clone`; Producer type/module is `11653960357981974603 / 13835860698770440193`, while same-layout Consumer uses distinct type `17450045950661180065`. Runtime Option Clone typed alloc/dealloc/cache-hit/cache-insert is `1/1/1/1`, fallback/raw is `0`, the Producer protected address is recovered exactly, and the Consumer address is never obtained. Ambiguous `Result<Vec<ProducerPayload>, String>::clone` remains one fail-closed row with raw alloc/dealloc `1/1`. This is source-bound functionality evidence for one supported Clone callsite plus one ambiguous control; all-Clone/all-application coverage and performance remain excluded.
+- `1956350...` Cargo multi-crate allowlist regression: a POSIX temporary fixture truly compiles and runs both the selected bin and a path dependency, producing exactly `target=7 dependency=11 sum=18`; the dependency passes through the compiler shim while the selected target is handled inside the rustc-driver. The test requires one target audit/log, an actual semantic rewrite of `selected_value`, and zero MIR rows for the dependency; exact unittest `1/1` PASS. This establishes only that target/dependency non-interference path; arbitrary dependency graphs, direct allocator-call coverage, runtime isolation, and performance remain outside its scope.
+- `374d455...` ambiguous Clone fallback regression: ordinary `Result<Vec<ProducerPayload>, String>::clone` has exactly one ambiguous/fail-closed row in a real rustc audit and no applied/planned semantic scope. Independent hosted and `fixed_heap` verification each observes typed Clone allocation `0`, raw fallback alloc/dealloc `1/1`, a correct independent clone buffer, recovery mismatch `0`, and corrupt slots `0`. This proves conventional execution safely handles this bounded unsupported path; fallback is outside type-isolation coverage.
+- `f8612de...b5b70ed...` `Layout` fallback-provenance regression: the real rustc-driver rewrites `Layout::new::<[u64; 4]>().align_to(64).expect(...)` and runtime observes a matching nonzero compiler-derived identity for `32B/align64` alloc/dealloc. `align_to(3).unwrap_or_else(|_| Layout::new::<[u8; 37]>())` must use an unknown-object direct-callsite fallback identity rather than inherit the source `[u64; 4]` identity. One clean `b5b70ed` run passes with distinct identities, typed alloc/dealloc `2/1`, mismatch/corrupt `0/0`, and an exact dealloc-alignment check of `64`. It establishes only these two bounded Result/Layout shapes; universal transformer coverage and performance remain excluded.
+- `addd743...` instrumented Oxipng integration: a detached copy of `dea2321...` (`v4.0.3`) adds the UniAlloc dependency/global allocator, runtime counters, a symbol-visibility hook, and limited build plumbing (`lock_api`, `[workspace]`, and an updated `Cargo.lock`); the saved source/build patch omits the generated `Cargo.lock` diff. This historical run applies 6 allocator-call replacements, 846 semantic scopes, and 532 Drop rewrites to real Oxipng library/binary MIR, leaving 9 semantic unsolved and 0 Drop unsolved. One pinned PNG invocation returns 0, and output SHA-256 matches the earlier clean harness. The recording window in instrumented `main` observes `1058/1067` typed allocation events, a counter-truncated coverage of `9915 bp` (direct ratio about `99.16%`), fallback `9`, and type-isolation corrupt slots `0`; pre-main and post-snapshot events are outside that denominator. This is source-bound historical functionality evidence for exact `nightly-2022-07-01`; it excludes unmodified applications, whole-process coverage, general output equivalence, live HEAD, object coverage, and performance.
+- `e466831...` pre-multi-owner-fix Oxipng runtime-class smoke: pinned Oxipng v4.0.3 builds once and runs once, with an exact output-SHA match; target-crate audit reports `6` direct rewrites, `848` semantic scopes, `535` Drop rewrites, semantic unresolved `4`, and Drop unresolved `0`. Runtime preserves all `140/140` type-class rows, reports typed allocation events `1058/1067`, and binds 5 compiler identities to runtime lifecycle rows. This is precisely source-bound earlier functionality evidence. Because `532435a` later fixed aggregate Drop first-owner misattribution, the higher applied Drop count cannot represent current safety coverage.
+- `9c74b95...6aae903...` safer-Drop plus injected Oxipng address oracle: the `9c74b95` source snapshot/pass explicitly fails closed on 265 multi-owner Drop rows and applies 278 expressible Drop rows; it also reports 853 semantic scopes, 6 direct rewrites, 4 semantic fail-closed rows, 131 complete runtime rows, and 2 natural lifecycle matches. After the correctness repair there is no natural same-layout pair, so that result is diagnostic only. A separately labeled injected oracle uses two actual-MIR identities with the same module and `64B/align8`: producer type `15719177160194310719` has alloc=2/hit=1, wrong type `11520851239810895908` has alloc=1; addresses are producer `4349034560`, wrong `4349034624`, and producer recovery `4349034560`; executed producer/wrong Drop identities are `2/1`, mismatch/corrupt/dropped are `0/0/0`, and the PNG hash matches. Both actual build/runs succeed, while collectors expose two specific validator defects: requiring an unexecuted cleanup row to have a runtime row, and forcing a natural pair. After repair, only preserved raw data is replayed offline; no third run occurs. Artifact SHA-256 is `debb31038ab3912bdd07260de7facd394f8152ba086a4054e9b098b68b3aab0a`. It supports one injected compiler-identity-bound address sequence; natural Oxipng isolation coverage, whole-program/all-address guarantees, a security proof, and performance remain excluded.
+- `26051b9...` direct-local ownership hardening: `_local` scope requires an unprojected owner, one acyclic normal path, and an exact `Drop` zero-alias proof; any borrow/ref/raw pointer, copy/move, call argument, projection, overwrite, branch/loop, or early exit makes the entire same-type candidate group recovery-backed, while raw `SizeAlign`/`exchange_malloc` always remains recovery-backed. An actual two-crate `RUSTC_WRAPPER` regression passes hidden `&mut owner` to dependency `mem::replace`: fail-first observed typed `1/1`, fallback `1/1`, and `raw_dealloc_no_metadata=1`; after repair the hidden lane is typed alloc/dealloc `1/2`, fallback alloc/dealloc `1/0`, raw `0`, while the positive aggregate is typed `4/4`, fallback `0/0`, raw `0`. This is a bounded conservative ownership proof; general escape analysis remains outside its scope.
+- `15d892e...` **pre-ownership-hardening** Oxipng v4.0.3 functional run: one successful build/run has an actual-MIR audit of 843 semantic scopes, 278 Drop rewrites, 265 multi-owner Drop fail-closed rows, 2 semantic fail-closed rows, 6 direct rewrites, and 131 runtime rows. The two specific `PngData::clone` sites each identify only `Vec<u8>` as the allocation owner and are applied; `Headers` fails closed due to multiple owners, and `Sender` fails closed because the pass cannot bind the dependency version. The change from 853 to 843 is semantic refinement after removing false-positive scopes for standalone `Arc`/`Rc` handle Clone, rather than a coverage regression. Functional output SHA-256 is `565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`, and the injected address oracle passes. Artifact: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-arc-vec-15d892e-20260712/`. It cannot be rebound to source after `26051b9` and does not establish universal compiler coverage or publication-grade performance.
+- `af342f7...3dc1039...` **post-ownership-hardening Oxipng v4.0.3 one-shot**: the application build/run binds exactly to code-bearing source `af342f7e26dc4a5e132acc18d7f7a450009e6517`; both return codes are `0`, and output SHA-256 exactly matches `565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`. Static target-crate MIR denominators are 6 direct rewrites, 843 semantic-scope rewrites, 278 Drop rewrites, and 267 explicit fail-closed candidates (265 multi-owner Drop plus 2 semantic); among 1121 applied semantic/Drop rows, 23 satisfy the `_local` zero-alias proof and 1098 conservatively use recovery. The runtime window separately reports `1061/1070` typed allocation events, 9 fallback allocations, 129 complete type rows, 0 dropped events, and 0 corrupt slots; `9915 bp` is only a diagnostic dynamic-event counter ratio. Injected-oracle addresses are producer `4379656256`, wrong type `4379656320`, and same-type recovery `4379656256`; wrong-type reuse is blocked, same-type reuse is exact, oracle mismatch before/after is `0/0`, and corrupt is `0`. The full workload separately has `recovery_identity_mismatches=67`: runtime uses recorded allocation-time identity for fail-closed correction, classifying this as `recovery_corrected_non_exact` compiler attribution and explicitly precluding a whole-application exact-pairing claim; it has a different denominator from the 267 static fail-closed candidates. `3dc1039` repairs the validator by separating the bounded oracle from later workload counters and replays preserved artifacts offline only, with **no application rerun**. Artifact: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-af342f7-20260712a/posthoc-preserved-run-validation.json`. This is one-shot functional/diagnostic evidence; benchmarks, universal coverage, and publication-grade performance remain excluded.
+- `04b8108...` **post-Oxipng compiler fail-closed hardening**: a non-Clone receiver call examines only the first MIR receiver, while a factory/constructor examines only the destination; the existing bounded supported-owner scan for that selected receiver/destination must produce exactly one owner, with multiple or unresolved owners failing closed, and no identity inherited from arbitrary arguments or textual return types. A real `RUSTC_WRAPPER` regression requires one ambiguous audit row and zero applied/planned scopes for both a `(Vec<u8>, String)` factory and `Vec<String>::resize`, while normal program results remain correct; the positive direct-local probe, pinned pass compile, and 15/15 unit tests PASS. This commit follows the `af342f7` one-shot, so old Oxipng counts cannot be rebound; Oxipng was not rerun in the `04b8108` hardening round.
+- `2ff8770...` **recovery layout/auth fail-closed hardening**: TLS and process-visible recovery lookup distinguish `Missing / Mismatched / Exact`. A valid but wrong layout/auth for a live pointer is rejected before stats/cache/delayed/raw paths on both FFI and `SemanticAlloc` dealloc, preserving the exact record; conservative/recovery-backed FFI single/split realloc ABI wrappers likewise return null before copy/dealloc, preserve payload and record, and permit an exact retry. Two new regressions, adjacent recovery tests, independent review, and the full pre-commit suite of 652 UniAlloc tests plus 430 std-bench tests PASS. This is current-source correctness evidence, excluding exploit-corpus and performance conclusions.
+- `0026dfe...` **active recovery-scope P0 hardening**: fail-first falsely attributed a raw pointer created before the scope and placed it in delayed-free (`occupied_slots=1`, expected `0`). After repair, `Missing` takes unknown/raw fallback, releases, and records exactly one fallback; moved raw realloc preserves the prefix, creates a new recovery identity for the replacement, and records the old raw release once; `Exact` uses the recorded identity, while `Mismatched` fails closed without consuming the record and permits an exact retry. Hosted and `fixed_heap` focused filters each PASS `2/2`. This is correctness evidence, excluding performance conclusions.
+- `427583b...` **earlier hidden/consumed-owner P0 hardening plus source-bound Oxipng one-shot**: in actual-`RUSTC_WRAPPER` fail-first regressions, conflicting paths for a hidden custom ADT and a consumed by-value factory/receiver each tighten from mismatch `1` to audit-only fail-closed with mismatch `0`; same-owner factory/receiver positive controls still rewrite and retain mismatch `0`. The instrumented Oxipng v4.0.3 at that time builds once and runs functionally once on pinned `nightly-2022-07-01`, both PASS, with a matching output SHA-256. Source has `scoped_status=""`, scoped fingerprint `5f36c0a7f1bad4284071cd3a8f6d50bb7a894282e5f76726e6f2b095d5bc49e8`, and pass-source SHA-256 `aedef38625f6096e3f5875b35f3d89f839709ac3277d7c79e4df6756da8a1373`. Target-crate audit is 6 direct, 383 semantic, 320 Drop applied, and 581 fail-closed; runtime has 64 type rows and corrupt `0`. The bounded injected address oracle passes with wrong-type non-reuse, same-type reuse, and oracle mismatch/corrupt `0/0`, while 13 whole-run recovery corrections retain status `recovery_corrected_non_exact` and preclude whole-application exact pairing. The 13 corrections cannot be attributed to, or rebound as a repaired subset of, the earlier 67 corrections at `af342f7`. This is pinned instrumented functional/diagnostic evidence, excluding unmodified applications, benchmarks, performance, and publication-grade coverage. Artifact: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-current-427583b-20260712a/oxipng-realapp-repro-summary.json`.
+- `572bfab...` **capacity-only Vec outer-owner coverage**: direct outer `Vec` identity is used only for `reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit` when the receiver ADT path is exactly `std::vec::Vec`/`alloc::vec::Vec`; `resize/extend/push/clone_from/Drop/factory` retain full owner-graph or consumed-owner fail-closed handling. Current-rustc `Vec<String>` and same-layout `Vec<Vec<u8>>` receive distinct nonzero compiler/runtime IDs, with wrong-type non-reuse, exact same-type reuse, 1 cache hit, and mismatch/corrupt `0/0`; `Vec<String>::resize` stays ambiguous. The `427583b` artifact predates this commit and cannot be rebound to `572bfab`; the later current-content run appears below. This is not performance evidence.
+- `576df61...9bb9f8d...f8f0d90...` **source-bound Oxipng v4.0.3 run at `576df61`**: the first pinned old-nightly build exposes incompatibility in `GenericArg::as_type`; after a minimal cfg adapter, byte-identical content is committed as `9bb9f8d`, independent review is `APPROVE`, and old-nightly compile, the current actual-rustc Box probe, and embedded tests `16/16` all PASS. Functional collection occurs at HEAD `576df61` while the adapter is stable uncommitted content; `9bb9f8d` matches all 60 scoped collection inputs. Later `f8f0d90` matches 58/60; only the post-run summarizer and its test differ, while compiler-pass and allocator/runtime inputs remain byte-identical, which does not imply a clean full working tree. Oxipng build/run return `0`, and the output hash matches exactly; audit is 6 direct plus 383 semantic plus 320 Drop rewrites, with 6 actual `Box<[u8]> -> Vec<u8>` ownership-transfer rewrites in real functions and 575 other fail-closed candidates. Runtime has typed allocations `904/1070`, 64 rows, and dropped/corrupt `0/0`; the injected wrong-type non-reuse/same-type reuse oracle passes, while 13 whole-run corrections keep pairing at `recovery_corrected_non_exact`. Enriched artifact: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-current-576df61-20260712c-enriched/`, summary SHA-256 `cd14bf7bdcbff8fe99d5fc6d97888ce2065050c527b423baa63b856857bdd43b`; deterministic replay from preserved raw audits records exactly 6 candidates/6 applied/6 selected rows separately from 6 direct rewrites, with **no application rerun**. Original `...20260712b` summary SHA `054b...` remains unchanged. This is one functional run without a timing loop and excludes performance, paper percentages, universal coverage, and natural-application isolation coverage.
+- `6d955c0...38b8b59...` **source-bound Oxipng ownership-transfer run at `38b8b59`**: `6d955c0` preserves the immediate `Box<[T; N]>` allocation owner on the optimized `vec!` path, and `38b8b59` recognizes optimized storage markers at the actual `into_vec` callsite. The successful run binds start/end to HEAD `38b8b59c9748691d07b0ac9c0ad7c6adf94396cf`, pass SHA-256 `c2c83bec49001c0b40d045a32daaed10d4094afb7eea2415685670a756fe6d10`, and 60-file scoped fingerprint `8609ff8ff261f27998779613eefb739ddfcc0c682ac1a76ddefaf9dadbd2eb29`; static transfer candidates/applied are `6/6`, and dynamic workload attempted/applied/rejected delta is `1/1/0`. Execution occurs at `png::PngData::output`; the old owner is `Box<[u8; 8]>`, basis is `exact_immediate_box_array_unsize`, and a pointer-preserving rebind follows to `Vec<u8>`. Functional output SHA-256 is `565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`. Successful artifact: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-ownership-runtime-38b8b59-20260712d-success/`, summary SHA-256 `292c8ff8479887f4bfa90fc58b48ce60326e27f89a9f26baf7ac50cce1a0e113`. Earlier `.../oxipng-ownership-runtime-6d955c0-20260712c-failed-after-first-repair/` remains historically failed: the functional process returned 0, while dynamic transfer was `1/0/1`, so it cannot be reported as PASS. This is single-run bounded diagnostic functionality evidence, excluding whole-program coverage, benchmarks, performance, and paper percentages.
+- `a51960d...` **historical presentation bundle at `a51960d`**: source HEAD `a51960d92a7c72deabaf25fc23e985c3b26c09a5`, scoped fingerprint `f23eda54db834f2a81475ea84f28d70a55a54fb5502c379d7b36dc355a6e1d8f`. One pinned instrumented build/run passes with output SHA `565f253e...`; static audit separately reports 6 direct, 383 scope, 320 Drop, 12/12 ownership-transfer candidate/applied, and 575 fail-closed, while dynamic transfer is `3/1/2`. The injected oracle has wrong-type non-reuse, same-type reuse, and mismatch/corrupt `0/0`; 13 whole-run corrected mismatches are listed separately, retaining pairing status `recovery_corrected_non_exact`. Full Cargo on the same source passes 660 UniAlloc unit plus 430 std-bench tests. Artifact summary SHA is `bc6f32805e58cb021223dde2e01a91887cbe36e653f5ff73257823349a12e685`. Slide 16 should use this source-bound bundle rather than rebinding old counts across revisions; natural-application universal isolation, whole-program coverage, a security proof, and performance remain outside its scope.
+- `ed188ca...4cd0d7f...997e840...` **post-bundle type-isolation safety and compiler-attribution hardening**: a new hosted/fixed-heap regression covers cross-thread Drop after String-to-Vec ownership transfer, requiring payload preservation, no reuse under the old String identity, reuse under the exact Vec identity, and mismatch 0; exact `Vec::with_capacity` destination attribution now applies only to the outer Vec backing of nested `Vec<Vec<u8>>`, and both current/legacy actual-rustc probes PASS; exact `Result<T,E>` factories allow only `Ok(T)` as return-allocation identity, while `Err(E)` is a fail-closed hazard. Result A/B/C actual-rustc probes respectively verify no scope for Err-only, actual rewrite for `Ok(Vec)`, and ambiguity for conflicting Ok/Err owners; current/legacy and clean-tree Clone/Layout gates all PASS, with pre-commit full suite 660+430. Oxipng was not rerun after `997e840`, so the old bundle's 13 corrections cannot be claimed as zero or rebound to the new HEAD.
+- `681398e...` **borrowed slice-iterator hazard-only coverage**: only the by-value hazard scan treats exact `core` DefPaths `slice::Iter`/`IterMut` as borrowed non-owners, allowing ordinary Rust `input.iter().copied().collect::<Vec<u8>>()` to receive an actual Vec semantic-scope rewrite in current and `nightly-2022-07-01` actual-rustc probes. Runtime verifies correct payload, wrong String non-reuse, exact Vec reuse, transfer `2/2/0`, and fallback/raw/mismatch/corruption all `0`; a custom raw-pointer iterator stays unresolved, Zip Drop containing `IterMut` and `IntoIter` stays at `2` unresolved and `0` applied, and general/Drop/Clone/transfer scans do not expand. Full pre-commit suite is 660+430. Oxipng was not rerun after this commit, so the historical 458-row unresolved denominator and old bundle counts cannot be rebound to the new HEAD. This is bounded actual-rewrite and isolation-effect evidence, excluding universal coverage and performance.
+- `8e4d37c...` **canonical-Vec actual-rewrite soundness closure**: fail-first shows that an external fake crate with `[lib] name="alloc"` can provide callback-bearing `FromIterator`, and the old matcher would wrongly apply its fake `Vec<u8>` based only on alloc-path shape. After repair, the destination must be both rustc's canonical sysroot `Vec` diagnostic item and from the `alloc` crate; current and pinned exact actual-wrapper probes PASS, canonical `slice::Iter<u8>.copied().collect::<Vec<u8>>()` remains applied, and the fake-alloc destination remains unresolved with `audit_only_unresolved_heap_object_type`. This closes one exact matcher fail-closed; it does not prove arbitrary `Iterator::collect`, every `Vec` construction, or whole-program coverage. The `a57d318` Oxipng counts predate this compiler commit and cannot be rebound to `8e4d37c`.
+- `9240fc6...` **memory-tagged ownership-transfer P0 closure**: fail-first ordinary Rust `String::into_bytes` under policy flags `129` has an actual MIR rewrite but runtime transfer only `1/0/1`, followed by reuse under the old String identity and no reuse under the new Vec identity. After repair, recovery auth and matching software memory-tag auth replace only `type_id` and commit together; TLS/global fast plus overflow tables perform exact `0/1/>1` classification, while duplicate, cross-domain duplicate, and layout/metadata/auth discrepancies fail closed, and tag rolls back if recovery commit fails. Current and `nightly-2022-07-01` actual-rustc probes are each `1/1/0`; payload/pointer/capacity preservation, wrong String non-reuse, exact Vec reuse, and tag cleanup all PASS, with fallback/raw/mismatch/corruption `0`. Hosted/fixed-heap, local/global, rollback/duplicate regressions and independent review PASS; full suite is 662+430. Evidence covers only the pointer-preserving `String -> Vec<u8>` actual-rewrite contract; all ownership transfers, invalid concurrent linearization, latest-HEAD Oxipng coverage, and performance remain excluded.
+- `2b33401...` **cross-thread tagged composition closure**: the preceding runtime contract combines with cross-thread recovery in one ordinary Rust actual-rustc path. The main thread creates `String`, a worker calls `String::into_bytes` without handwritten metadata, and scope rows carry flags `129` plus placement `32768`. Current and `nightly-2022-07-01` each have one functional run with transfer `1/1/0`; payload/pointer/capacity preservation, wrong String non-reuse, exact Vec reuse, and tag-cleanup reuse all PASS, while fallback/raw/mismatch/corrupt/dropped are `0`. Independent hosted/fixed-heap handwritten-boundary regressions each PASS `1/1`, and full pre-commit suite is 662+430. Transfer-audit placement comes from explicit manual policy. This evidence excludes automatic escape analysis, real external applications, benchmarks, universal coverage, and performance.
+- `46d5aaa...` **latest source-bound Oxipng one-shot before module-ID hardening**: one pinned instrumented Oxipng v4.0.3 build/run returns `0` for both stages and matches output SHA `565f253e...`. Target-crate audit is 6 direct, 367 semantic, 320 Drop, 12/12 ownership-transfer candidate/applied, with 529 explicit fail-closed rows; runtime has 59 type rows, whole-run mismatch `0`, corrupt/dropped `0/0`, dynamic transfer `3/1/2`, and an injected oracle that passes wrong-type non-reuse/same-type reuse. Artifact: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-typeiso-46d5aaa-20260712e/`, summary SHA `f5b8ad7c2fbb0a9f28ccbe052ac7dca6d7c40c98c3482c61d09b6fefcc4e274b`. This is one functional/diagnostic run without a timing loop and excludes natural-application universal isolation, whole-program coverage, and performance.
+- `0704852...` **multi-crate module-isolation closure**: external crates previously shared a fixed module ID. The compiler pass now prioritizes crate name plus rustc `-C metadata`, then canonical primary input when metadata is absent, and finally full rustc argv. Two Cargo packages deliberately use the same rustc crate name, identical source, and compiler type ID `13297006753675728434`; actual-rustc must produce different module IDs, wrong-module non-reuse, same-module reuse, and mismatch/corrupt `0/0`. Two same-name direct-rustc crates without metadata must also remain separated. Current/legacy pass compile, 738 allocator plus 432 std-bench functional tests, and independent review all PASS. This commit follows the `46d5aaa` Oxipng run, so the new module-ID algorithm cannot be rebound to old application counts; the 64-bit hash remains within trusted-metadata/collision boundaries, and this is not performance evidence.
+- `eadfa9c...` **lifetime-hint cache-key safety regression**: type/module/flags/placement remain fixed while only an explicit lifetime hint changes; an address freed under `0x11` cannot be reused by `0x22`, and returning to `0x11` must recover the original address exactly. Hosted and `fixed_heap` each PASS `1/1`, with fallback allocation/deallocation, recovery mismatch, and corrupt slot all `0`. This is covered-path allocator evidence for a handwritten-metadata lifecycle; it excludes compiler-derived lifetime coverage, universal isolation, and performance.
+- `a379f23...` **placement-hint cache-key safety regression**: type/module/flags/lifetime/layout remain fixed while only explicit placement changes; an address freed under `0x21` cannot be reused by `0x22`, and returning to `0x21` must recover the original address exactly. Hosted and `fixed_heap` each PASS `1/1`, with fallback allocation/deallocation, recovery mismatch, and corrupt slot all `0`. This is covered-path allocator evidence for a handwritten-metadata lifecycle; it excludes automatic compiler placement inference, universal isolation, and performance.
+- `05d18be...` **current-thread duplicate-quarantine fail-stop**: after a pointer enters delayed-free TLS quarantine, a second dealloc fail-stops before recovery consumption, stats, cache mutation, or raw free even if it clears the occupancy hint and omits `FLAG_DELAYED_FREE` to attempt the raw/compiler fast path; quarantine/accounting remain unchanged and type cache is not polluted. Hosted/fixed-heap focused tests, adjacent delayed-free `11/11`, full suite `663+430`, and independent verification all PASS. The boundary is current-thread TLS quarantine ownership; this does not prove cross-thread duplicate detection without memory tagging and is not performance evidence.
+- `ded36de...` **actual-rustc `Box<str> -> String` ownership pairing**: ordinary Rust `Box<str, Global>::into_string` has one candidate applied `1/1`, with runtime transfer `1/1/0`; compiler-derived Box/String identities are distinct nonzero values, pointer/payload/length/capacity remain intact, the old Box identity cannot reuse, and the exact String identity can reuse, while fallback/raw/mismatch/corrupt/dropped are all `0`. Hosted/fixed-heap regressions cover accepted, wrong-old-ID, missing-record, and authenticated memory-tagged paths; adjacent current actual-rustc transfer probes, embedded pass tests `16/16`, legacy pass compile, full suite `663+430`, and independent review all PASS. This is ordinary-Rust actual-rewrite and bounded isolation-effect evidence, excluding external applications, universal coverage, benchmarks, and performance; Oxipng is neither rerun nor rebound.
+- `e6dc7d6...` **process-visible cross-thread delayed-free ownership**: a bounded registry of 8 shards x 32 slots publishes pending/quarantined pointer ownership before memory-tag validation, recovery consumption, stats/cache mutation, copy/in-place realloc, and raw free. RAII rolls back a panic before TLS publication, and release/eviction/valid thread exit authenticates then unregisters. Real `GlobalAlloc::dealloc/realloc`, raw entry, different-alignment move, and explicit `SemanticAlloc` same-class realloc all fail-stop before touching the pointer. Hosted/fixed-heap delayed-free filters each PASS `15/15`, full workspace is `668+430`, and independent verifier says APPROVE. Full capacity or oversized records use authenticated immediate release without creating a hidden TLS owner. The boundary covers pointer ownership after successful process-visible registration; it does not prove general concurrent double-free prevention or performance.
+- `5408c04...` **actual-rustc `CString::into_bytes_with_nul -> Vec<u8>` ownership pairing**: the sole ordinary-Rust candidate applies `1/1`, with runtime transfer `1/1/0`; the 258-byte pointer/payload/capacity is preserved, compiler-derived CString/Vec identities are distinct nonzero values, old CString identity cannot reuse, exact Vec identity can reuse, and fallback/raw/mismatch/corrupt/dropped are all `0`. Hosted/fixed-heap direct regressions each PASS `1/1`, covering accepted, wrong-old-ID, missing-record, and authenticated memory-tagged paths; independent review says APPROVE. This proves only the exact bounded `CString -> Vec<u8, Global>` actual rewrite/isolation effect; other CString APIs, custom allocators, external applications, benchmarks, and performance remain excluded.
+- `f007c7b...` **realistic multi-module actual-`RUSTC_WRAPPER` application**: a generated Cargo application spans `ingest/transform/storage/handoff` and requires 4 actual allocation scopes, 4 distinct nonzero callsites, 3 distinct nonzero String/Vec/Box type IDs, and `String::into_bytes` transfer `1/1`. Two runtime oracles independently verify wrong-identity non-reuse and exact-identity reuse for String -> Vec and same-layout Box/Vec; fallback/raw/mismatch/corrupt/dropped are `0`. The same run provides no manual placement: a Vec in the same MIR body as real `thread::spawn(move || ...)` automatically receives placement `0x8000` / `auto_cross_thread_escape`, while a local control receives placement `0` / `default`; cross-to-local reuse is blocked and each class reuses exactly, with window typed alloc/dealloc/hit/insert `3/4/2/4`. This is a generated multi-module application's bounded actual-rewrite/placement-isolation regression, excluding arbitrary external applications, whole-program claims, universal/natural-application isolation, and performance.
+- `38dfe17...522c7f5...` **pinned-nightly CString compatibility plus exact `str` split coverage**: `38dfe17` restores the `alloc_c_string` feature gate for the paper-pinned prerelease 1.64 nightly without carrying the stabilized gate into current rustc. `522c7f5` treats only exact `std/core::str::Split` and `SplitInclusive` as borrowed non-owners in the by-value hazard scan; current/pinned actual-rustc regressions apply one scope to each of two `collect::<Vec<&str>>()` paths, block wrong-type reuse, permit exact-type reuse, keep a custom raw-pointer iterator fail closed, and report fallback/raw/mismatch/corrupt all `0`. Arbitrary iterators, arbitrary rustc ABIs, coverage percentages, and performance remain excluded.
+- `41205d3...` **delayed-free test-state cleanup**: adds `SemanticStateCleanup` only in regression tests and keeps process-visible ownership with `PendingGlobalDelayedFreeOwnership` while a test temporarily removes a delayed-free slot, preventing test-order/state leakage. This supports no new production-behavior or performance claim.
+- `41205d3...` **current-source Oxipng v4.0.3 one-shot**: pinned `nightly-2022-07-01` build/run return code is `0/0`, with output SHA-256 `565f253ed6a0ffd51eefa1a25ca1ad217287d19a0777c8271c6686192a1988ff`. Target-crate audit is direct/scope/Drop `6/369/320`, static transfer `12/12`, and fail-closed `527`; runtime transfer is `3/1/2`, typed `873/1070`, fallback `197`, 58 rows, corrupt/dropped `0/0`, and the injected wrong-type non-reuse/same-type reuse oracle passes. Whole-run mismatch is `1`, explicitly yielding `recovery_corrected_non_exact`, so whole-application exact pairing cannot be claimed. Artifact: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-typeiso-41205d3-20260712a/`, summary SHA-256 `c95808092c197b01399d4723e52e47c92478c8dafd5c498148fa70560c2dc7f4`. Direct arithmetic against the older `46d5aaa` summary's `367/529` gives exactly `+2` applied scopes and `-2` fail-closed, consistent with two actual `Split<char> -> Vec<&str>` rows; this is a direct inference, excluding timing, performance, coverage percentages, whole-program/universal claims, and natural-application isolation. Every number binds only to `41205d3` and cannot be rebound across revisions.
+- `e243779...` **PAC x hugepage policy-composition regression**: ordinary `type-isolated + PAC` policy and `type-isolated + PAC + hugepage-metadata` policy with the same type/module/layout cannot consume each other's cache entries, and each must later reuse exactly. Hosted and `fixed_heap` targeted tests each PASS `1/1`, with fallback allocation, identity mismatch, PAC/software-auth failure, and corrupt slot all `0`. The test requires execution through hardware PAC or a safe software fallback sign/verify; on the current host without real PAC/hugepage backing, it establishes safe fallback and policy-domain identity rather than hardware-path or performance evidence.
+- `5d0822a...` **cross-thread authenticated five-policy composition regression**: one allocator lifecycle combines type isolation, memory tagging, delayed free, hugepage metadata, PAC, and process-visible cross-thread recovery. When a foreign worker frees under a wrong Drop identity, authoritative allocation-time metadata must win and recovery/tag must be consumed exactly once; duplicate free fail-stops before stats/cache/registry mutation, quarantine release publishes only the correct hugepage-domain cache entry, ordinary domain and wrong identity both miss, and exact identity/domain alone reuses. Hosted and `fixed_heap` targeted tests each PASS `1/1`; verification through PAC hardware or safe software fallback increases, with auth failure `0`. This is test-only composition coverage, found no new production defect, and excludes real PAC/hugepage hardware and performance.
+- `7ec42d4...` **cross-thread authenticated split-realloc composition regression**: a foreign worker uses hints split-metadata FFI with a stale old identity while the allocation-time old policy combines type isolation, memory tagging, delayed free, hugepage metadata, PAC, and process-visible recovery; the replacement uses a distinct ordinary-domain identity. The test requires one mismatch audit under old recovery authority, transactional consumption of old recovery/tag plus publication of new recovery/tag, and quarantine of moved-from storage under authenticated old hugepage identity; duplicate old free fail-stops before stats/cache mutation, old/new identity and domain each permit exact reuse only, and final recovery/tag/quarantine state is empty. Hosted/fixed-heap exact tests each PASS `1/1`, with no production defect found. Arbitrary size/error paths, real PAC/hugepage hardware, and performance remain excluded.
+- `b3e793e...` **exact `Arc::new` outer-allocation identity**: the compiler pass selects outer `Arc<T>` identity only with alloc-crate exact DefId/DefPath, exact `Arc<T, Global>` destination, one `T` parameter, and matching destination payload; matching does not extend to `ArcLike`, `new_in`, `Rc`, or arbitrary constructors. Current and `nightly-2022-07-01` actual-`RUSTC_WRAPPER` probes each report 3 typed alloc/dealloc, 1 exact cache hit, and 3 inserts; same-layout `Arc<ProducerWithVec>` / `Arc<ConsumerWithBox>` receive distinct nonzero IDs, block wrong-ID reuse, permit exact-ID reuse, and report fallback/raw/mismatch/corrupt all `0`, while custom `ArcLike::new` remains ambiguous fail closed. The 7 Arc-constructor fail-closed rows in the old `41205d3` Oxipng artifact remain only historical inputs that exposed this gap; Oxipng was not rerun after this commit, so external-application counts cannot be claimed as changed. Universal Arc safety and performance remain excluded.
+- `1bd0c9d...` **exact `Rc::new` outer-allocation identity**: the compiler pass selects outer `Rc<T>` identity only with alloc-crate exact DefId/DefPath, exact `Rc<T, Global>` on current or `Rc<T>` on paper-pinned nightly, one `T` parameter, and matching destination payload; matching does not extend to `RcLike`, `new_cyclic`, `new_in`, `Weak`, or arbitrary factories. Before repair, exact `Rc::new` is audit-only ambiguous on current/pinned probes, with typed alloc/dealloc `0/0`, fallback/raw `3/3`, and immediate same-layout wrong-type address reuse. After repair, both toolchains report typed alloc/dealloc `3/3`, cache hit/insert `1/3`, wrong-ID non-reuse, exact-ID reuse, and fallback/raw/mismatch/corrupt all `0`. This is bounded actual-rewrite and isolation-effect evidence; Oxipng was not rerun, and universal Rc safety, cross-thread behavior, and performance remain excluded.
+- `715ba13...` **exact `HashMap::with_capacity` outer-table identity**: the compiler pass accepts only std-crate exact DefId/DefPath, exact `HashMap<K, V, RandomState[, Global]>` destination, and one `usize` argument; hashbrown, HashSet, IndexMap, `with_hasher`, `with_capacity_and_hasher`, `new_in`, and local same-name constructors remain excluded. Current and `nightly-2022-07-01` actual-`RUSTC_WRAPPER` probes produce distinct nonzero outer IDs for two same-geometry HashMaps whose keys contain Vec and Box nested owners respectively; both report typed alloc/dealloc `3/3`, wrong-ID cache-hit delta `0`, exact-ID delta `1`, fallback/raw/mismatch/corrupt `0`, while custom same-name remains ambiguous fail closed. Stable HashMap exposes no deterministic raw-table address, so this oracle establishes identity-directed cache selection only for this run; universal address behavior, external-application coverage, and performance remain excluded.
+- `39c827b...` **exact `HashSet::with_capacity` outer-table identity**: the compiler pass accepts only std-crate exact DefId/DefPath, exact `HashSet<T, RandomState[, Global]>` destination, and one `usize` argument; `with_capacity_and_hasher`, `with_hasher`, allocator-specific constructors, hashbrown, IndexSet, and local same-name helpers remain excluded. Before repair, current/pinned actual wrappers classify outer HashSet and nested Vec/Box element owners as ambiguous, with typed alloc/dealloc `0/0` and fallback/raw `3/3`. After repair, both toolchains report typed alloc/dealloc `3/3`, cache hit/insert `1/3`, wrong-ID hit `0`, exact-ID hit `1`, and fallback/raw/mismatch/corrupt all `0`. This is bounded actual-rewrite and cache-selection evidence; stable HashSet exposes no deterministic raw-table address, so universal address behavior, external-application coverage, and performance remain excluded.
+- `8bc2809...6700ca1...` **plain type-cache hash-collision fail-closed**: fail-first tests force inline and linked plain caches to share a 64-bit cache key and type ID while module/flags/lifetime/placement differ; the old implementation returns a foreign pointer. After repair, both paths store and exactly compare compact callsite-agnostic allocator-visible identity, and linked colliding identities occupy separate slots in a bounded probe table. Hosted/fixed-heap collision tests each PASS `2/2`, with expanded type-cache families `54/54` and `50/50`; the 64-bit cost is about `+1040 B/thread` of TLS. This closes runtime cache-key collision only; identical-metadata spoofing/compiler type-ID collision, probe exhaustion, UAF, hash DoS, and performance remain excluded.
+- `d87d5e0...25d316c...` **semantic-cache footprint reduction with saturation repair**: hosted cold-bucket depth changes `8→4`, memory-tag/recovery fast tiers `256→128`, and empty records become demand-zero representation; `fixed_heap` retains original capacities. Independent review deterministically triggers an erroneous overflow into the adjacent frame after a matching bucket fills; `25d316c` repairs it so matching depth/per-bucket/aggregate saturation bypasses directly while distinct hash collisions retain bounded probing. Hosted `308/308` and fixed-heap `277/277` type-isolation filters plus a new 512 KiB aggregate-cap no-replacement regression PASS. Another source-bound 64-thread diagnostic compares baseline `318b66c` to current `25d316c` in 3 interleaved measurements each; ready/peak/idle/max RSS medians change from `9.578/66.969/71.188/71.922 MiB` to `7.500/64.953/69.141/69.484 MiB`, with overlapping max ranges. This supports directional regression evidence only and cannot yield a paper percentage.
+- `2e3bc4c...` **plain linked-cache bounded-probe exhaustion regression**: 4 distinct exact identities forced to one lookup key fill the bounded probe window, and 8 later colliders must fail closed; the test requires rejected push to leave node header, all 64 slots, and retained-byte accounting unchanged, requires lookup never to return a foreign pointer, and requires each of the 4 retained pointers to be recovered only by its exact owner. Hosted/fixed-heap targeted tests each PASS `1/1`, with type-cache families `55/55` and `51/51`. The test reproduces no new production defect and supports only fail-closed behavior for single-thread internal collision/exhaustion; hash DoS, compiler type-ID uniqueness, identical-metadata spoofing, cross-thread behavior, and performance remain excluded.
+- `19ffb71...` **earlier accepted Oxipng v4.0.3 actual-rewrite/isolation one-shot**: a preceding parallel collection is correctly rejected by the source-binding gate because `type_isolation.rs` changes during execution. After the repair commit freezes claim-bearing source, exactly one build and one functional invocation run without retries or timing. Start/end HEAD is `19ffb710752466a140067034650190dfdad60328`, scoped status is empty, fingerprint is `13f72a5a...`, build/run is `0/0`, and output SHA is `565f253e...`. Target-crate direct/scope/Drop is `6/310/320`, transfer candidate/applied/selected is `12/12/12` with all selected identities nonzero, and fail-closed semantic/Drop is `516/119` (117 multi-owner Drop). Runtime typed alloc/dealloc is `871/860`, fallback `199/160`, transfer `3/1/2`, 53 rows, corrupt/dropped `0/0`; the injected wrong-type non-reuse/exact-type reuse oracle passes. Whole-run mismatch `1` retains status `recovery_corrected_non_exact`, preventing a whole-application exact-pairing claim. Artifact acceptance SHA is `efa66ec1...`. This is bounded functional/diagnostic evidence for an instrumented pinned application; benchmarks, performance, universal/natural-application isolation, and whole-program coverage remain excluded.
+- `9a02767...ab98075...` **current-source factory provenance plus lifecycle fail-closed hardening**: local/platform/dependency factories no longer receive caller-side typed attribution merely for returning `Vec`, `String`, or `Result`; without exact constructor/body-allocation proof, only an audit row remains. New exact `Box::new` and `String::with_capacity` matchers require alloc/std DefId/path, exact destination, and argument shape, while custom same-name/allocator-specific paths remain fail closed. Current and `nightly-2022-07-01` opaque-dependency probes have direct/Result typed allocation `0`, while the exact `Vec::with_capacity` control retains typed alloc/dealloc `1/1`. `ab98075` also repairs the end-to-end security validator: the current toolchain accepts 86 audited fail-closed rows line by line, including opaque `producer_box/consumer_box` at `8/4`, while exact inner scope retains typed alloc/dealloc `12/12`, wrong-type non-reuse, exact-type reuse, and mismatch/corrupt `0/0`. The nested-unwind probe now uses an exact outer `Vec::extend` receiver as evidence: after inner `Vec::extend_from_slice` panic cleanup, depth returns to `1`, then to `0` after outer return, and outer allocation/Drop identities pair. A direct-local hidden replacement without an allocation-recovery record must remain raw at a later non-local Drop and cannot fabricate typed attribution from the surrounding scope. This is bounded actual-rewrite/fail-closed evidence, excluding arbitrary factory completeness and universal unwind proof.
+- `3ccd464...` **current-source metadata-segregated collision/tamper fail-stop**: each occupied entry has a keyed structural authenticator binding lookup key, full callsite-agnostic allocator-visible identity, policy, pointer, layout, optional PAC/software auth, and metadata. Forced key collisions in inline/materialized storage hit only on exact identity; protection/auth downgrade, identity/policy changes, pointer changes including null, and size/align tampering all fail-stop, while full-bucket replacement and retained-byte projection authenticate the eviction candidate before reading it. Hosted/fixed-heap collision, structural-tamper, full-bucket projection, metadata-segregated, and footprint regressions PASS without increasing entry footprint. This supports bounded internal cache integrity and excludes compiler type-ID uniqueness, arbitrary metadata corruption, UAF elimination, and performance.
+- `79d0184...61233b6...` **recovery-layout and Unix TLS publication fail-closed**: when `GlobalAlloc::dealloc` sees a live recovery record but caller `Layout` does not match exactly, it rejects before raw/fallback/cache mutation and preserves the record; only an exact-layout retry consumes and publishes under the original identity/layout. Unix TLS first establishes pthread-destructor ownership and writes the pthread slot, then publishes the fast Rust TLS pointer; on injected save failure, the pointer stays invisible and returns for reclamation. Both are bounded correctness evidence, excluding forged pointers, Windows FLS, and performance conclusions.
+- `08a1bbf...` **exact `String::from(immutable &str)` actual rewrite**: the matcher accepts only exact core `From::from` DefId, exact alloc `String` destination, and one immutable `&str` source; other `From`/source shapes and arbitrary String factories remain audit-only fail closed. Current and `nightly-2022-07-01` actual wrappers each report typed alloc/dealloc `3/3`, wrong-type non-reuse, exact reuse, and fallback/raw/mismatch/corrupt all `0`. This is bounded functional evidence, excluding universal String behavior, external applications, and performance; Oxipng was not rerun, and `19ffb71` remains stale and cannot be rebound.
+- `c477339...6640305...95d3d8a...cfd887e...6b0747e...` **current platform/recovery/generated-app closure**: Redox `--tests` and Linux `--lib --tests` type-check PASS; `mincore` compiles only on supported targets, with a portable Linux/Darwin residency-byte ABI; Redox runtime still lacks an external linker/runner. Cross-thread `GlobalAlloc` dealloc/realloc with wrong layout rejects before raw/cache mutation and preserves the record, while only exact retry consumes it; the realloc gate precedes zero-size, active, auto, quarantine, and stats/raw dispatch, and Missing-record fallback remains. Current generated multi-module actual wrapper passes exact `Box<[u8]>`: Box/Vec wrong-type non-reuse, exact Box reuse, and raw/fallback/mismatch/corrupt `0`; `Box<[String]>` remains audit-only. This is bounded functional evidence, excluding universal applications, paper percentages, and performance; Oxipng `19ffb71` remains stale and unbound.
+- `465234c...504ed10...` **custom ADT discovery and fail-closed ownership boundary**: the positive-only `465234c` attempt broadens destination-owner discovery for `Buffer { bytes: Vec<u8> }`, while independent review uses an actual-wrapper negative that returns an existing `Buffer` and only allocates/frees an unrelated `String` internally, observing mismatch `1`; that version cannot serve as safe rewrite evidence. After `504ed10`, custom aggregate factories, pure passthrough, and passthrough with unrelated allocation retain unresolved audit rows only. Current and `nightly-2022-07-01` still rewrite exact inner `Vec::with_capacity`, unrelated `String::with_capacity`, and backing `Vec` Drop; runtime typed alloc/dealloc is `2/2`, fallback/raw/mismatch `0`, and both passthrough mismatch deltas are `0`. Multi-owner remains ambiguous audit-only, raw-pointer remains unresolved audit-only, and borrowed/`PhantomData` is either not lowered or unresolved. This evidence shows the control layer caught and repaired a real misattribution; arbitrary wrapper-allocation provenance, external-application coverage, and performance remain excluded.
+- `1a4127f...` **earlier source-bound Oxipng v4.0.3 one-shot with explicit raw counters**: artifact `oxipng-current-head-1a4127f-20260713-one-shot` binds exactly to HEAD `1a4127f`; pinned build/run is `0/0` with a matching output hash. Target-crate direct/scope/Drop is `6/256/320`, unresolved semantic/Drop is `570/2`, and `whole_program_compiler_coverage=false`. Runtime typed alloc/dealloc is `860/850`, fallback alloc/dealloc `210/170`, raw-no-metadata alloc/dealloc/realloc `183/144/26`, cache hits `808`, and dynamic transfer `3/1/2`. The sole recovery mismatch is exact: `PathBuf` records allocation identity in the Oxipng library crate and requests Drop in the binary crate; type ID matches while module ID differs, and runtime safely corrects using the allocation-time record, preventing a whole-application exact-pairing claim. Relative to artifact `24bb079`, scopes `250→256` and unresolved `576→570` correspond only to a six-row exact cross-artifact comparison for `<[u8] as ToOwned>::to_owned(&[u8]) -> Vec<u8>`, rather than rebinding. Summary SHA-256 is `118894ee3e08990a4d616110ad9001976c5ef082e1d3225e88dc9d070c41ce78`. This is one bounded functional/diagnostic run without timing, universal coverage, a security proof, or performance.
+- `f5c4fa4...` **earlier source-bound Oxipng one-shot after duplicate-free closure**: artifact `oxipng-current-head-f5c4fa4-20260713-one-shot` binds clean scoped source `f5c4fa4`, summary SHA-256 `448a634ec918fd8a9e9911fd092d0ef842e97074287ca2fe334514c31c78e5c5`; pinned build/run is `0/0` with matching output hash. Direct/scope/Drop is `6/256/320`, unresolved semantic/Drop `570/2`, and whole-program coverage false; runtime typed is `860/850`, fallback `210/170`, raw `183/144/26`, cache hit/insert/bypass `808/840/62`, transfer `3/1/2`, and corrupt/dropped `0/0`. The injected wrong-type non-reuse/exact-type reuse oracle passes; the sole mismatch is the cross-crate `PathBuf` module difference, retaining status `recovery_corrected_non_exact`. This historical one-shot has no timing and excludes universal, whole-program, and performance claims; it cannot be rebound to later source.
+- `a57d318...` **latest external-application source-bound Oxipng one-shot before `8e4d37c`**: artifact `oxipng-current-a57d318-20260713` binds `a57d3189d1cce3265170a69801d63a6ff5b0157b` in a clean detached worktree; `acceptance.json` SHA-256 is `b84e5a56c19e9f79537dc33cc5a09cd2e9d184f10e6052de40c9f34252d3651b`, and pinned Oxipng v4.0.3 build/run is `0/0` with matching output hash. Actual direct/scope/Drop/ownership rewrites are `6/260/320/12`; four natural `reduced_alpha_*` functions hit the supported canonical `Vec<u8>` repetition matcher. Present unresolved semantic/Drop `566/2`, multi-owner Drop `117`, and `whole_program_compiler_coverage=false` alongside those counts. Runtime fallback alloc/dealloc is `210/170`, raw-no-metadata alloc/dealloc/realloc `183/144/26`, with one retained cross-crate `PathBuf` recovery-identity mismatch and status `recovery_corrected_non_exact`. This is one bounded functional/diagnostic smoke without a timing loop, excluding whole-application exact pairing, universal safety/coverage, and performance. The later `8e4d37c` closes only an independent current/pinned exact wrapper and cannot rebind this Oxipng run to new compiler source.
+- `e352206...` **actual-wrapper cross-crate returned-owner isolation regression**: a producer crate returns `ReturnedString::Value(String)`, and a consumer crate owns and Drops it; current and `nightly-2022-07-01` both PASS. Both crates derive the same nonzero type ID for the same `String` and distinct nonzero module IDs; two cross-crate Drops explicitly record allocation-identity correction, wrong-module identity does not reuse producer storage, and producer/application exact module identities each recover their own addresses. Runtime typed alloc/dealloc is `4/4`, recovery match/mismatch `2/2`, and fallback, raw-no-metadata, and corrupt-slot are all `0`. This is a bounded enum(`String`) functional security test showing allocation-time identity stays authoritative across cross-crate return; it excludes proof for Oxipng aggregate/`PathBuf`, universal cross-crate coverage, and performance.
+- `c9b2f4d...0cd7696...` **current/pinned type-isolation security-probe compatibility closure**: both toolchains report `validated=true`, typed alloc/dealloc `12/12`, cache hit/insert/bypass `4/12/8`, wrong-type blocked/exact reuse, and corrupt/dropped `0/0`. Current summary SHA is `b302a0776d29e236521d8c22d58017cd6e3d3ea067da2a3d86e010306e5a2040`; MIR exposes producer/consumer target Drop rows `0/0`, so it uses `allocation_side_recovery`, with recovery match/mismatch `8/0`. Pinned final summary SHA is `cc242b2da1ebe7f013352c1571062b41342ae38f52f619175fa26014d335fc1d`; it exposes exact requested-identity target rows `4/4`, retains recovery `8/0`, and leaves generic Drop unresolved/specialized audit-only at `1/0`. Both MIR-exposure shapes are safe with zero mismatch; universal toolchain/isolation and performance remain excluded.
+- `247a599...` **OutFile<Option<PathBuf>> mismatch-shape mechanism regression**: a two-crate actual wrapper passes on current and pinned; producer `<OutFile as Clone>::clone` allocation and consumer aggregate Drops map to nonzero PathBuf type ID `441353361075010719`, matching the Oxipng mismatch type ID, while module IDs remain distinct. Both corrections are visible, with wrong-module non-reuse, producer/application exact reuse, recovery match/mismatch `2/2`, typed alloc/dealloc/hit/insert `4/4/2/4`, and fallback/raw/corrupt all `0`. This is a minimal mechanism validation of the Oxipng mismatch shape; it neither rebinds nor closes full Oxipng and excludes universal/performance evidence.
+- `32eafa2...` **OutFile/PathBuf cleanup-unwind recovery**: a two-crate actual-`RUSTC_WRAPPER` fixture enables `panic=unwind` only for this generated Cargo build, and returned `OutFile` is destroyed in the consumer through an existing MIR cleanup Drop; because that Drop already resides in a cleanup block, no claim is made that the compiler inserted an extra unwind-pop edge. One fresh current `nightly-2026-06-11` run reports recovery match/mismatch `1/1`, typed alloc/dealloc/cache-hit/cache-insert `2/2/1/2`, and fallback/raw/corrupt/dropped all `0`; after panic, the producer exact identity recovers the released address exactly. Normal-return sibling `247a599` carries the wrong-module non-reuse/module-isolation oracle. This extension establishes only bounded cleanup-unwind recovery lifecycle and excludes full Oxipng, universal memory safety, and performance.
 
-Slide 14 用 `5eb25f5`、`32c3c5b`、`ed188ca...2b33401`、`0704852`、`f007c7b`、`9a02767`、`08a1bbf`、`cfd887e`、`e352206`、`c9b2f4d...0cd7696`、`247a599` 与 `32eafa2` 说明“ordinary Rust source → exact/fail-closed MIR provenance → allocation/transfer/Drop/unwind pairing → bounded reuse effect”；不要把候选行或代码存在当 actual rewrite。Slide 15/16 必须把四种证据分开：**static compiler rows**（candidate/applied/fail-closed）、**runtime transfer/allocation events**（各自窗口和 denominator）、**bounded isolation oracle**（明确执行的 adversarial lifecycle）和 **whole-run recovery corrections**（requested identity 与 allocation-time record 的非精确配对）。四个 denominator/时间窗口不得互换；Slide 16 以 `a57d318` 的 `oxipng-current-a57d318-20260713` one-shot 作为 latest external-app source-bound actual rewrite/runtime evidence，并把 current compiler soundness closure `8e4d37c` 作为独立 exact-wrapper evidence；不得把两者跨 revision rebinding。Oxipng 页必须同时展示唯一 cross-crate `PathBuf` mismatch / `recovery_corrected_non_exact`；`e352206`、`c9b2f4d...0cd7696`、`247a599` 与 `32eafa2` 只作为独立机制/security regressions，不能反推 whole Oxipng 或 universal coverage 已闭合。`f5c4fa4...`、`1a4127f...`、`19ffb71...`、`41205d3...`、`46d5aaa...`、`a51960d...`、`38b8b59...`、`576df61...9bb9f8d...`、`427583b` 与 `af342f7` 只保留各自 revision 的历史证据，不能跨 revision rebinding。地址级 effect 只能引用明确标记的 injected oracle 或独立 adversarial lifecycle regression，不能从自然 Oxipng counter 推导；whole-run correction 也不能被 oracle 的零 delta 隐藏。
+Slide 14 should use `5eb25f5`, `32c3c5b`, `ed188ca...2b33401`, `0704852`, `f007c7b`, `9a02767`, `08a1bbf`, `cfd887e`, `e352206`, `c9b2f4d...0cd7696`, `247a599`, and `32eafa2` to show "ordinary Rust source -> exact/fail-closed MIR provenance -> allocation/transfer/Drop/unwind pairing -> bounded reuse effect"; candidate rows or code presence alone never count as an actual rewrite. Slides 15/16 must separate four evidence classes: **static compiler rows** (candidate/applied/fail-closed), **runtime transfer/allocation events** (with their own windows and denominators), **bounded isolation oracle** (an explicitly executed adversarial lifecycle), and **whole-run recovery corrections** (non-exact pairing between requested identity and the allocation-time record). Never interchange the four denominators or time windows. Slide 16 uses the `a57d318` `oxipng-current-a57d318-20260713` one-shot as the latest external-application source-bound actual-rewrite/runtime evidence and presents current compiler soundness closure `8e4d37c` as independent exact-wrapper evidence; do not rebind them across revisions. The Oxipng slide must show its sole cross-crate `PathBuf` mismatch and `recovery_corrected_non_exact`; `e352206`, `c9b2f4d...0cd7696`, `247a599`, and `32eafa2` are independent mechanism/security regressions and cannot imply closure of full Oxipng or universal coverage. `f5c4fa4...`, `1a4127f...`, `19ffb71...`, `41205d3...`, `46d5aaa...`, `a51960d...`, `38b8b59...`, `576df61...9bb9f8d...`, `427583b`, and `af342f7` retain only revision-specific historical evidence and cannot be rebound across revisions. Address-level effects may cite only explicitly labeled injected oracles or independent adversarial-lifecycle regressions, never natural Oxipng counters; the oracle's zero delta also cannot hide a whole-run correction.
 
-Slide 16/B18 只使用下面这一张 denominator/status 表，不把不同 revision 或窗口相加：
+Slide 16/B18 must use only the denominator/status table below and must never add values across revisions or windows:
 
 | Evidence surface | Exact result | Status / boundary |
 |---|---:|---|
@@ -212,191 +212,286 @@ Slide 16/B18 只使用下面这一张 denominator/status 表，不把不同 revi
 | C002 compiler functional coverage | `430 / 430`, `99.851437%` | G001 read-only freeze digest `235549b2...`; historical/freeze-bound PASS, not live G002 rebinding |
 | Current performance percentage | `N/A` | full reproduction deferred; reduced runs are diagnostic only |
 
-#### Slide 12 必须定义的 compatibility contract
+#### Compatibility contract required on Slide 12
 
-| 维度 | 可以主张 | 不可以主张 |
+| Dimension | Supported claim | Excluded claim |
 |---|---|---|
-| **Application source** | 已验证的 exact `Box`/`Vec` constructor、conversion 与 lifecycle paths 不要求应用手工 annotation；metadata absent 时 conventional path 可执行 | 任意 `Box<T>`/`Vec<T>` 或所有 Rust allocation sites 都获得语义 |
-| **Toolchain** | 配套 rustc/core rewrite 与 runtime ABI 能传递 metadata | 任意未修改 rustc、任意未来 rustc 版本都自动兼容 |
-| **Custom allocator / FFI / unsafe path** | 能进入 conventional path 的请求可 fallback | 这些路径得到 semantic protection；完全绕过 UniAlloc 的 custom allocator 仍由 UniAlloc 管理 |
-| **Binary ABI** | 本工作展示 prototype integration 的执行兼容性 | 跨 compiler/runtime version 的稳定 binary ABI；这仍是下一阶段 contract 问题 |
+| **Application source** | Validated exact `Box`/`Vec` constructor, conversion, and lifecycle paths require no manual application annotation; conventional execution remains available when metadata is absent | Semantics at arbitrary `Box<T>`/`Vec<T>` or every Rust allocation site |
+| **Toolchain** | A paired rustc/core rewrite and runtime ABI can carry metadata | Automatic compatibility with any unmodified rustc or every future rustc release |
+| **Custom allocator / FFI / unsafe path** | Requests that can enter the conventional path can fall back | Semantic protection on those paths, or UniAlloc control over a custom allocator that bypasses UniAlloc completely |
+| **Binary ABI** | This work demonstrates execution compatibility for a prototype integration | Stable binary ABI across compiler/runtime versions; that contract remains future work |
 
-### D. H2: Semantic policy case study — 23:00--31:00（Slides 17--21）
+### D. H2: Semantic policy case study -- 23:00--31:00 (Slides 17--21)
 
-| # | 建议英文标题 | 这一页只完成什么 | 图 | 时间/追问 |
+| # | Recommended English title | Sole purpose of this slide | Visual | Time / expected follow-up |
 |---:|---|---|---|---|
-| 17 | **Distinct trusted allocator-visible identities separate ordinary cross-class reuse.** | 回到 Slide 3：只对 covered requests、distinct trusted exact identities 与 ordinary reuse path 做有限主张 | before/after slot 图；把 trust/coverage 写在图上 | 1:45；内部 lookup-key collision 已 exact-check；identical/spoofed metadata 与 compiler type-ID collision 仍开放 |
-| 18 | **Type isolation and quarantine defend different exploitation steps.** | 与 Scudo/quarantine 做机制层对比，而不是泛化性能胜负 | 横轴 time、纵轴 identity 的 2×2 | 1:15；可叠加，不必二选一 |
-| 19 | **The runtime uses a hashed semantic identity whose trust and stability are part of the contract.** | 展示 64-bit allocator-visible key 结合 type/module/policy/lifetime/placement；解释 callsite 不参与 reuse key | identity-key 拼图 + collision/spoofing boundary | 1:30；准备 type-ID collision/stability |
-| 20 | **Per-type caching trades reuse separation for retention and fragmentation.** | 主动讨论 memory cost、empty slab、bounded TLS cache 和 workload sensitivity | 标注 `CONCEPTUAL` 的机制图，或真实 historical per-workload RSS 点；不要画伪定量曲线 | 1:45；避免“没有 memory overhead” |
-| 21 | **H2 supports policy feasibility, not universal security or optimality.** | H2 小结：type isolation 改变 reuse rule；coverage、same-type reuse、内存与性能均是边界 | `Supports / Does not establish` | 1:45；可在中途提问版缩为 1:00 |
+| 17 | **Distinct trusted allocator-visible identities separate ordinary cross-class reuse.** | Return to Slide 3 and make a bounded claim only for covered requests, distinct trusted exact identities, and ordinary reuse paths | Before/after slot figure with trust and coverage printed on it | 1:45; internal lookup-key collisions receive exact checks; identical/spoofed metadata and compiler type-ID collisions remain open |
+| 18 | **Type isolation and quarantine defend different exploitation steps.** | Compare mechanisms with Scudo/quarantine without generalizing to an overall performance ranking | 2×2 with time on the horizontal axis and identity on the vertical axis | 1:15; mechanisms can compose |
+| 19 | **The runtime uses a hashed semantic identity whose trust and stability are part of the contract.** | Show the 64-bit allocator-visible key over type/module/policy/lifetime/placement and explain that callsite is absent from the reuse key | Identity-key puzzle plus collision/spoofing boundary | 1:30; prepare for type-ID collision and stability questions |
+| 20 | **Per-type caching trades reuse separation for retention and fragmentation.** | Discuss memory cost, empty slabs, bounded TLS cache, and workload sensitivity directly | A mechanism figure labeled `CONCEPTUAL`, or real historical per-workload RSS points; omit fabricated quantitative curves | 1:45; make memory overhead explicit |
+| 21 | **H2 supports policy feasibility, not universal security or optimality.** | Summarize H2: type isolation changes the reuse rule; coverage, same-type reuse, memory, and performance remain boundaries | `Supports / Does not establish` | 1:45; reduce to 1:00 in the interruption-heavy version |
 
-关键实现依据：
+Key implementation evidence:
 
-- `unialloc/src/alloc_api/type_isolation.rs:347-353,4454-4486`：64-bit hashed allocator-visible identity；这不是 collision-free cryptographic type identity。
-- `unialloc/src/alloc_api/type_isolation.rs:5432-5501`：typed vs fallback classification。
-- `unialloc/src/alloc_api/type_isolation.rs:6492-6611,8444-8484,8554-8604`：ordinary matching-key cache 的 allocation/deallocation/recovery。
-- `unialloc/src/cache/thread_cache.rs:22-38,1576-1655`、`unialloc/src/zone.rs:15-43,83-165`：hot path 和 retention bounds。
-- `../rust-alloc-paper/intro.tex:274-286`：论文明确的 defense-in-depth 与 coverage 限制。
-- `94b2523d...` source-bound H2 snapshot：type-id cache separation、cross-thread recovery metadata、moved-realloc corrupt-tag transaction 三项精确 regression tests 均 `1/1`，semantic metadata probe 也通过。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h2-20260712T0604Z/audit.json`。该 snapshot 支持当时源码的 lifecycle 与 routing correctness；live HEAD 的新增安全 regression 另列如下，二者都不支持论文性能百分比。
-- `3acbd6d...` adversarial reuse regression：4 个同 layout 对象经 process-visible cross-thread recovery 在同一 worker TLS cache 中释放；consumer 与 producer 的 module/flags/lifetime/placement 完全相同、只有 `type_id` 不同，consumer 不得获得任一 producer 地址，而 producer identity 随后必须无重复地取回全部 4 个地址。Hosted 与 `fixed_heap` 各 `1/1` PASS；证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-cross-thread-security-3acbd6d/`。这仍是 covered-path mechanism test，不是 universal UAF/exploit-success 证明。
-- `ca9462e...` mismatch/quarantine regression：allocation 带 process-visible cross-thread recovery、type isolation 与 delayed-free；foreign thread 同时处在错误 Drop identity 下。测试要求 global recovery 记录只能消费一次、错误 identity 不得取消 quarantine 或看到该地址、释放 quarantine 后地址只能进入 allocation-side cache。Hosted 与 `fixed_heap` 各 `1/1` PASS。它把 cross-thread、mismatched metadata、delayed-free 和 cache poisoning 四个条件放进同一条 adversarial lifecycle，但仍不代表 arbitrary forged metadata 或完整 exploit corpus。
-- `13807b3...` memory-tagged cross-thread regression：带 global recovery 与 memory tag 的 allocation 在 foreign thread 遇到错误 Drop identity 后，正确 recovery identity 只能 quarantine 一次；重复 typed free 必须 fail-stop，不能二次入队或污染错误 type cache。该测试闭合了 memory-tag side table、cross-thread recovery、mismatch、quarantine 与 duplicate-free 的组合路径，但不等于 hardware tagging、任意 forged metadata 或完整 exploit coverage。
-- `27fc0c8...` split-realloc stale-identity regression：两个公开 split-metadata FFI 都必须以 allocation-completion recovery record 作为 old-object 权威 identity，而不能让调用者提供的 stale old metadata 授权同地址 relabel。一个 parameterized test 在循环内覆盖普通与 hints ABI，hosted 与 fixed-heap 配置各 `1/1` PASS；测试同时要求错误请求只记录一次 mismatch、committed move 以权威 old identity 配对、payload 保留、old storage 进入 recorded delayed-free/type-cache domain，而 requested new metadata 只绑定 replacement。Pre-commit 全仓测试通过；独立复验的 realloc family 为 hosted `46/46`、fixed-heap `48/48` PASS。它闭合的是受 recovery record 保护的两个 public split FFI，不等于 metadata 不可伪造或所有 custom allocator ABI 都受保护。
-- `2eea36f...` cross-thread type-changing realloc regression：old recovery record 必须被精确消费、replacement 必须发布 new identity 并保留 payload；old buffer 在 delayed-free quarantine 中不得被 new type 观察，释放后只能被 old type 回收，cleanup 后不得留下 recovery record。Hosted `696/696` 与 fixed-heap `582/582` full suites PASS。它补上 realloc、跨线程 recovery、quarantine 与 type-cache routing 的组合不变量，但不代表 forged metadata 或所有应用 realloc path。
-- `48cdfcf...ae923c6...` cross-thread realloc policy-domain regression：old hugepage-policy identity 与 replacement ordinary metadata-segregated identity 必须分别进入正确 cache key，old recovery 只消费一次且 payload 保留。Hosted direct snapshot 进一步证明 old pointer 在 physical hugepage side-cache、replacement 在 ordinary inline cache；`fixed_heap` 明确断言两种 policy 都映射到 ordinary physical domain，因此该配置只主张 policy-key/identity separation，不主张物理 hugepage 分域。两种配置 focused test 各 `1/1` PASS；不是 compiler coverage 或性能证据。
-- `6fd22fb...` checked semantic snapshot ABI regressions：semantic-stats、fallback-attribution 与 metadata-validation 三个 checked snapshots 对 null/undersized buffer fail closed，exact/oversized buffer 返回正确字段；hosted 与 `fixed_heap` focused tests 各 `3/3` PASS。它保护 probe/platform 使用的 size-negotiated C inspection contract，但不等于外部平台 runtime evidence。
-- `7096fc6...37ea7cd...` `Vec` transfer-before-growth adversarial lifecycle：同 layout 的 producer/consumer element 都是 64 bytes，但 compiler-derived identity 必须不同；producer 的 allocation 在 creator thread，pointer/capacity/payload 转移后由 worker 完成 typed realloc 与 Drop，再验证 wrong-type non-reuse、same-type exact recovery、zero mismatch/corruption。Hosted 与 `fixed_heap` 在 clean `37ea7cd` 各一次通过。它补上跨线程 realloc 发生在转移之后的 real Rust container path，但仍只覆盖该 bounded Vec lifecycle。
-- `c426a2f...` Arc+Vec multi-owner worker-drop evidence：companion 从 validated raw target rewrite 与 runtime type rows 重算，不接受 summary 自证；function-bound Arc/Vec 使用 distinct nonzero identities 与同一 module，唯一 multi-owner closure skip 满足完整契约，两种 identity 的 allocation/deallocation 均为 exact `1/1`，recovery mismatch 为 `0`。这只闭合 bounded Arc+Vec worker-drop pairing，不是完整 escape analysis、universal container coverage 或性能证据；artifact 位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/cross-thread-multi-owner-pairing-c426a2f-20260712/`。
-- `909a7ad...68749b9...` realloc-to-zero identity retirement：带 process-visible recovery 的 old identity 在 foreign thread 以 distinct same-layout requested type realloc 到零；测试要求 aligned sentinel、old record 精确消费、无 replacement/stale slow path、wrong-type miss、old-type one-shot recovery 与 payload 保留。Hosted/fixed-heap focused 各 `1/1` PASS、mismatch/corrupt `0/0`。该 test 未启用 PAC，明确不提供 PAC failure evidence；只支持 ordinary TLS identity-retirement/cache-routing 不变量。
-- `9ca5a10...` memory-tagged realloc-to-zero retirement：local 与 process-visible recovery 两条路径都必须返回 aligned sentinel、移除 old memory-tag record、精确消费 recovery identity 一次；第二次 dealloc 必须在 cache/raw free 前 panic，且 side-cache snapshot 不变。Hosted/fixed-heap focused 各 `2/2` PASS。它只覆盖 `FLAG_MEMORY_TAGGING` 的 fail-stop double-free，不是 hardware memory tagging、任意 stale pointer 或性能证据。
-- `422c91f...` cross-thread overflow realloc failure invariant：creator 发布 old recovery identity 与 payload，foreign worker 用 distinct requested type 和 `usize::MAX` 发起 invalid-layout realloc；必须返回 null 且 old record/count、payload、validation、cache/delayed-free 状态不变，随后 normal dealloc 精确消费 old identity 一次，new type miss、old type one-shot recovery。Hosted/fixed-heap focused 各 `1/1` PASS；stats disabled 且未请求 PAC，因此不作 PAC 或性能主张。
-- `6603460...` auto-metadata lifecycle hardening：disable/reconfigure 不再清除 live allocation recovery records；global、thread-local、layout-derived policy 都保留 allocation-time exact metadata/generation，长寿 worker 在 generation 变化后从新 compiler-ID stream 的第一个 ID lazy restart。pre-enable raw dealloc 与 unrecorded old-pointer realloc/move 不得继承当前 auto policy；控制变更与 record publication overlap 也有并发 regression。Hosted `stats,type_isolation` suite `720/720`、fixed-heap suite `606/606` PASS。该证据闭合 policy-generation identity 生命周期，不是跨线程 local-only recovery API 的扩张，也不是性能结论。
-- `4dc6814...` recovery matcher 把两个 hashed-key 比较收紧为 allocator-visible fields 的 exact comparison，消除了 recovery agreement 的 hash-collision false match，并少做两次 identity hash。5+5 次同机 probe 的方向性 median 为 `3.497 ms → 2.366 ms`，但冷启动范围很宽；只能作为 diagnostic direction，不得作为论文性能百分比。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-exact-recovery-4dc6814/`。
-- `4937f4f...` hot-path optimization：`auto_metadata_allocations_exhausted()` 先检查 sticky exhaustion atomic，只在 consuming stream 已 exhausted 时读取 `AUTO_METADATA_CONFIG`，从 layout-derived/cyclic auto-metadata 的常见 alloc/dealloc gate 删除一次 `RwLock` read；独立审查确认 generation reset 与 revalidation 语义不变，targeted type-isolation tests `194/194` PASS。严格只做一组 pre 与一组 post 的同 leaf diagnostic：`13.0/30.97 ns`（off/on）到 `12.92/29.09 ns`；variant 明确是 `layout-derived-size-align`、`compiler_site stream=none`、`semantic_policy.ready=false`。因此只把 `-1.88 ns` 视为保留该优化的方向性信号，不报告稳定百分比、统计结论、compiler-attributed cost 或论文结果。
-- `1228f71...` plain-cache accounting/cap repair：首次 cold growth 在 reset/untrusted 后扫描 64 slots 建立 retained-byte aggregate，健康 push/pop 后 O(1) 更新；corruption/accounting repair 将 aggregate 标为 untrusted，下一次 growth 只做一次 bounded rebuild。Inline 与 cold slots 现在共同受 512 KiB cap，空 inline slot 也不能绕过 aggregate headroom。Regression 覆盖 exact cap、push/pop、inline/cold replacement、drain 与 corruption rebuild。单次同条件 micro diagnostic（24 distinct identities、同 64-byte layout、单线程、2.4M typed operations）为 `72.338 -> 54.808 ns/op`（`-24.233%`），两边均为 1.2M hit、1.2M insert、0 bypass；这只有方向性，**没有 median/range**，不得作为 general-app、paper、publication-grade 或稳定百分比 claim。Slide 20 可讲 O(1) accounting 与 512 KiB bound；性能数字只放 speaker note/backup 并带此边界。
+- `unialloc/src/alloc_api/type_isolation.rs:347-353,4454-4486`: 64-bit hashed allocator-visible identity; it is not a collision-free cryptographic type identity.
+- `unialloc/src/alloc_api/type_isolation.rs:5432-5501`: typed versus fallback classification.
+- `unialloc/src/alloc_api/type_isolation.rs:6492-6611,8444-8484,8554-8604`: allocation/deallocation/recovery in the ordinary matching-key cache.
+- `unialloc/src/cache/thread_cache.rs:22-38,1576-1655` and `unialloc/src/zone.rs:15-43,83-165`: hot path and retention bounds.
+- `../rust-alloc-paper/intro.tex:274-286`: the paper's explicit defense-in-depth and coverage limitations.
+- `94b2523d...` source-bound H2 snapshot: type-ID cache separation, cross-thread recovery metadata, and moved-realloc corrupt-tag transaction exact regressions each report `1/1`, and the semantic-metadata probe also passes. Evidence: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h2-20260712T0604Z/audit.json`. The snapshot supports lifecycle and routing correctness for that source; new live-HEAD security regressions appear below. Neither source supports paper performance percentages.
+- `3acbd6d...` adversarial-reuse regression: 4 same-layout objects are freed into one worker TLS cache through process-visible cross-thread recovery; consumer and producer module/flags/lifetime/placement match exactly, and only `type_id` differs. The consumer must receive none of the producer addresses, and the producer identity must then recover all 4 addresses without duplicates. Hosted and `fixed_heap` each PASS `1/1`; evidence: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-cross-thread-security-3acbd6d/`. This remains a covered-path mechanism test and excludes universal UAF/exploit-success proof.
+- `ca9462e...` mismatch/quarantine regression: allocation uses process-visible cross-thread recovery, type isolation, and delayed free while a foreign thread holds the wrong Drop identity. The global recovery record may be consumed once only; the wrong identity cannot cancel quarantine or observe the address; after quarantine release, the address can enter only the allocation-side cache. Hosted and `fixed_heap` each PASS `1/1`. This combines cross-thread, mismatched metadata, delayed free, and cache poisoning in one adversarial lifecycle while excluding arbitrary forged metadata and a complete exploit corpus.
+- `13807b3...` memory-tagged cross-thread regression: after an allocation with global recovery and a memory tag encounters a wrong Drop identity on a foreign thread, the correct recovery identity can quarantine it exactly once; duplicate typed free must fail-stop without a second enqueue or pollution of the wrong type cache. This closes the combined path through the memory-tag side table, cross-thread recovery, mismatch, quarantine, and duplicate free, while excluding hardware tagging, arbitrary forged metadata, and complete exploit coverage.
+- `27fc0c8...` split-realloc stale-identity regression: both public split-metadata FFIs must treat the allocation-completion recovery record as the authoritative old-object identity and must reject caller-supplied stale old metadata as authority to relabel the same address. One parameterized test covers ordinary and hints ABIs in a loop; hosted and fixed-heap each PASS `1/1`. The test also requires one mismatch record for a wrong request, pairing of a committed move with authoritative old identity, payload preservation, routing old storage into the recorded delayed-free/type-cache domain, and binding requested new metadata only to the replacement. The full pre-commit repository suite passes; independent realloc-family verification is hosted `46/46` and fixed-heap `48/48` PASS. This closes two public split FFIs protected by recovery records and excludes claims that metadata is unforgeable or every custom-allocator ABI is protected.
+- `2eea36f...` cross-thread type-changing realloc regression: the old recovery record must be consumed exactly, the replacement must publish a new identity and preserve payload, the new type cannot observe the old buffer while it is in delayed-free quarantine, only the old type can recover it after release, and cleanup must leave no recovery record. Hosted `696/696` and fixed-heap `582/582` full suites PASS. This closes the combined invariant over realloc, cross-thread recovery, quarantine, and type-cache routing while excluding forged metadata and every application realloc path.
+- `48cdfcf...ae923c6...` cross-thread realloc policy-domain regression: the old hugepage-policy identity and replacement ordinary metadata-segregated identity must enter their respective cache keys, with one old-recovery consumption and preserved payload. A hosted direct snapshot additionally shows the old pointer in physical hugepage side-cache and the replacement in ordinary inline cache. `fixed_heap` explicitly maps both policies to the ordinary physical domain, so that configuration claims policy-key/identity separation only, rather than physical hugepage partitioning. Focused tests for both configurations each PASS `1/1`; compiler coverage and performance remain excluded.
+- `6fd22fb...` checked semantic-snapshot ABI regressions: the semantic-stats, fallback-attribution, and metadata-validation checked snapshots fail closed for null/undersized buffers and return correct fields for exact/oversized buffers; hosted and `fixed_heap` focused tests each PASS `3/3`. This protects the size-negotiated C inspection contract used by probes/platforms and does not constitute external-platform runtime evidence.
+- `7096fc6...37ea7cd...` `Vec` transfer-before-growth adversarial lifecycle: producer and consumer elements have the same 64-byte layout but must receive different compiler-derived identities. The producer allocates on the creator thread; after pointer/capacity/payload transfer, the worker performs typed realloc and Drop, then verifies wrong-type non-reuse, same-type exact recovery, and zero mismatch/corruption. Hosted and `fixed_heap` each PASS once on clean `37ea7cd`. This covers a real Rust container path where cross-thread realloc follows transfer, limited to that bounded Vec lifecycle.
+- `c426a2f...` Arc+Vec multi-owner worker-Drop evidence: the companion recalculates results from validated raw target rewrites and runtime type rows rather than trusting the summary. Function-bound Arc/Vec use distinct nonzero identities and the same module; the sole multi-owner closure skip satisfies the full contract; each identity has exact allocation/deallocation `1/1`, and recovery mismatch is `0`. This closes bounded Arc+Vec worker-Drop pairing and excludes complete escape analysis, universal container coverage, and performance. Artifact: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/cross-thread-multi-owner-pairing-c426a2f-20260712/`.
+- `909a7ad...68749b9...` realloc-to-zero identity retirement: an old identity with process-visible recovery is reallocated to zero on a foreign thread using a distinct same-layout requested type. The test requires an aligned sentinel, exact consumption of the old record, no replacement/stale slow path, wrong-type miss, old-type one-shot recovery, and payload preservation. Hosted/fixed-heap focused tests each PASS `1/1`, with mismatch/corrupt `0/0`. PAC is disabled, so this supplies no PAC-failure evidence; it supports only ordinary TLS identity-retirement/cache-routing invariants.
+- `9ca5a10...` memory-tagged realloc-to-zero retirement: both local and process-visible recovery must return an aligned sentinel, remove the old memory-tag record, and consume recovery identity exactly once; a second dealloc must panic before cache/raw free while leaving the side-cache snapshot unchanged. Hosted/fixed-heap focused tests each PASS `2/2`. This covers fail-stop double-free under `FLAG_MEMORY_TAGGING` and excludes hardware memory tagging, arbitrary stale pointers, and performance.
+- `422c91f...` cross-thread overflow-realloc failure invariant: the creator publishes old recovery identity and payload, then a foreign worker attempts invalid-layout realloc with a distinct requested type and `usize::MAX`. It must return null with old record/count, payload, validation, cache, and delayed-free state unchanged; normal dealloc then consumes old identity exactly once, new type misses, and old type recovers once. Hosted/fixed-heap focused tests each PASS `1/1`. Stats are disabled and PAC is not requested, so PAC and performance claims remain excluded.
+- `6603460...` auto-metadata lifecycle hardening: disable/reconfigure no longer clears live allocation-recovery records; global, thread-local, and layout-derived policies preserve allocation-time exact metadata/generation, and a long-lived worker lazily restarts from the first ID of a new compiler-ID stream after generation changes. Pre-enable raw dealloc and unrecorded old-pointer realloc/move cannot inherit current auto policy; a concurrent regression covers control changes overlapping record publication. Hosted `stats,type_isolation` suite `720/720` and fixed-heap suite `606/606` PASS. This closes policy-generation identity lifecycle and does not expand cross-thread local-only recovery API or provide performance conclusions.
+- `4dc6814...` recovery matcher replaces two hashed-key comparisons with exact comparison of allocator-visible fields, eliminating hash-collision false matches in recovery agreement and removing two identity hashes. A directional median from 5+5 same-machine probes changes `3.497 ms → 2.366 ms`, with a wide cold-start range; treat this only as diagnostic direction and never as a paper performance percentage. Evidence: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-exact-recovery-4dc6814/`.
+- `4937f4f...` hot-path optimization: `auto_metadata_allocations_exhausted()` first checks a sticky exhaustion atomic and reads `AUTO_METADATA_CONFIG` only when the consuming stream is exhausted, removing one `RwLock` read from the common layout-derived/cyclic auto-metadata alloc/dealloc gate. Independent review confirms unchanged generation-reset and revalidation semantics; targeted type-isolation tests `194/194` PASS. Exactly one pre and one post run of the same leaf diagnostic changes `13.0/30.97 ns` (off/on) to `12.92/29.09 ns`; the variant is explicitly `layout-derived-size-align`, `compiler_site stream=none`, and `semantic_policy.ready=false`. Treat `-1.88 ns` only as a directional signal to retain the optimization; stable percentages, statistical conclusions, compiler-attributed cost, and paper results remain excluded.
+- `1228f71...` plain-cache accounting/cap repair: the first cold growth after reset/untrusted scans 64 slots to build a retained-byte aggregate, followed by O(1) updates on healthy push/pop; corruption/accounting repair marks the aggregate untrusted, and the next growth performs one bounded rebuild. Inline and cold slots now share a 512 KiB cap, and an empty inline slot cannot bypass aggregate headroom. Regressions cover exact cap, push/pop, inline/cold replacement, drain, and corruption rebuild. One same-condition micro diagnostic with 24 distinct identities, one 64-byte layout, one thread, and 2.4M typed operations changes `72.338 -> 54.808 ns/op` (`-24.233%`); both sides have 1.2M hits, 1.2M inserts, and 0 bypass. This is directional only, with **no median/range**, and cannot support general-application, paper, publication-grade, or stable-percentage claims. Slide 20 may present O(1) accounting and the 512 KiB bound; place performance values only in speaker notes/backup with this boundary.
 
-Slide 10/17 的精确 threat model：attacker 可以触发 temporal bug 和 heap grooming；TCB 信任 compiler/runtime 产生或受信 semantic caller 提供的 metadata，并假设输入 metadata 未被伪造。对 covered requests，若 allocator-visible identities distinct，ordinary cross-class reuse 被分开；plain inline/linked cache 即使发生内部 64-bit lookup-key collision，也要求 exact callsite-agnostic identity 匹配。`3ccd464` 进一步让 metadata-segregated cache 的 occupied-entry structure、exact identity 与 full-bucket eviction projection 在使用前经过 keyed authentication，因此这些 bounded internal tamper regressions fail stop；这不等于 arbitrary-memory-corruption protection。**完全相同或伪造的 input metadata、compiler type-ID collision、same-type reuse、cache 外 metadata corruption、unknown/fallback/custom-allocator path 仍不在该有限保证内。**
+Precise threat model for Slides 10/17: the attacker can trigger a temporal bug and heap grooming. The TCB trusts metadata produced by the compiler/runtime or supplied by a trusted semantic caller and assumes input metadata is not forged. For covered requests with distinct allocator-visible identities, ordinary cross-class reuse is separated. Plain inline/linked caches require exact callsite-agnostic identity matching even under an internal 64-bit lookup-key collision. `3ccd464` additionally authenticates occupied-entry structure, exact identity, and full-bucket eviction projection in the metadata-segregated cache before use, so these bounded internal-tamper regressions fail-stop; arbitrary-memory-corruption protection remains outside the claim. **Identical or forged input metadata, compiler type-ID collision, same-type reuse, metadata corruption outside the cache, and unknown/fallback/custom-allocator paths remain outside this bounded guarantee.**
 
-### E. H3: Retargetability is an architectural boundary — 31:00--36:00（Slides 22--24）
+### E. H3: Retargetability is an architectural boundary -- 31:00--36:00 (Slides 22--24)
 
-| # | 建议英文标题 | 这一页只完成什么 | 图 | 时间/追问 |
+| # | Recommended English title | Sole purpose of this slide | Visual | Time / expected follow-up |
 |---:|---|---|---|---|
-| 22 | **Retargetability comes from stable boundaries, not from feature flags alone.** | 解释 policy、cache/zone/backend、metadata allocator、PAL 各自责任 | 接口边界图；标出 reused vs adapted | 1:45；准备“这只是 cfg 吗？” |
-| 23 | **Hosted and constrained targets reuse the policy while changing memory acquisition.** | 对比 mmap/VirtualAlloc 与 fixed-heap；说明 target 仍需 adapter | 两列 deployment recipe | 1:45；不要说 zero-porting |
-| 24 | **The paper reported five retargeting environments; current functional readiness and external validation remain separate.** | 用 historical badge 展示论文五环境结果；另列 G002 的 macOS PASS、Windows Wine 10 的 earlier lifecycle `3/3` 与 current-source FLS failure-path `1/1` 两个独立 source-bound runs（不得相加）、fixed-heap/hosted current smoke、current-source Redox build/codegen/ABI PASS、历史 artifact-hash-bound Redox runtime evidence（未捕获 source revision），以及 Rust-for-Linux/BlogOS current-source no_std final-link contracts PASS；三者当前 target runtime 仍分别依赖外部 runner/assets | 五行平台矩阵：paper report / reused layer / adapted layer / current functional status | 1:30；完成 H3，再引出 evidence tiers |
+| 22 | **Retargetability comes from stable boundaries, not from feature flags alone.** | Explain the responsibilities of policy, cache/zone/backend, metadata allocator, and PAL | Interface-boundary figure labeling reused versus adapted | 1:45; prepare for "Is this only cfg?" |
+| 23 | **Hosted and constrained targets reuse the policy while changing memory acquisition.** | Compare mmap/VirtualAlloc with fixed heap and show that each target still needs an adapter | Two-column deployment recipe | 1:45; avoid zero-porting claims |
+| 24 | **The paper reported five retargeting environments; current functional readiness and external validation remain separate.** | Use a historical badge for the paper's five environments. Separately list G002 macOS PASS; the independent source-bound Windows Wine 10 earlier-lifecycle `3/3` and current-source FLS failure-path `1/1` runs without adding them; current fixed-heap/hosted smoke; current-source Redox build/codegen/ABI PASS; historical artifact-hash-bound Redox runtime evidence without a captured source revision; and Rust-for-Linux/BlogOS current-source no_std final-link contracts PASS. Current target runtime for the final three still depends on external runners/assets | Five-row platform matrix: paper report / reused layer / adapted layer / current functional status | 1:30; complete H3, then introduce evidence tiers |
 
-关键实现依据：
+Key implementation evidence:
 
-- `unialloc/src/lib.rs:129-150`：Windows `VirtualAlloc`、Darwin/Linux/Unix `mmap`、fixed-heap selection。
-- `unialloc/Cargo.toml:63-95`：fixed heap、alternate slab backend、hugepage、type isolation、metadata segregation、PAC/MTE/MPK/guard/quarantine 等配置面。
-- `unialloc/src/sc/mod.rs:1-24`、`unialloc/src/sc/backend.rs:1-18`：separate-metadata/bitmap backend 是真实 backend choice，不只是命名 flag。
-- `../rust-alloc-paper/sys.tex:52-114`：paper architecture decomposition。
-- `94b2523d...` source-bound H3 smoke：fixed-heap `small_heap` 与 hosted 4-thread allocator workload 均通过、无 compiler warning；fixed-heap semantic C ABI 观察到 typed alloc/dealloc pairing，hosted workload 只证明 global allocator/thread-cache/platform path。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h3-20260712T060354Z-94b2523d8823/`。hosted 普通 Cargo run 没有 MIR rewrite，因此其 `typed_allocations=0` 不得被误读为 H1 failure；开发 HEAD 已前进，不能称这份 snapshot 为 current-HEAD。
-- `f5c4935...` 只闭合 PAL 的对称 FLS accessor（`FlsSetValue`/`FlsGetValue`）；`df5f449...` 才把 production `GlobalTcache` ownership 改为 fiber-local。`f238f10...` 进一步处理 registration/save failure 与 teardown：current-owner callback 做 full drain；`DeleteFiber(B)` 在 A current 时先 narrow-drain OS-thread-shared retained semantic caches，再回收 B，同时保留 live recovery/tag records、active scopes 与 compiler cursor；temporary bind/clear 失败则 fail safe by leak，而不制造 UAF/double free。Host retained-drain test `1/1`、thread-cache filter `69/69`、Windows GNU cross-target type-check/cross-build 与 Zig-linked test executable no-run 均 PASS。使用 `0bd84c1...` 引入的 Wine 10 runner，HEAD `38b8b59...` fresh cross-build 的三个完整模块路径 exact lifecycle tests 均 `1/1`，合计 `3/3` PASS；exe SHA-256 为 `7d4e060d7fc08a32134776f30e45550a8a4561373e15e5bcf077844115c8379b`。Durable transcripts、source hashes、Wine image/runner identity 位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/windows-wine10-fls-38b8b59-20260712b/summary.json`（SHA-256 `d44dbe74b7a5fd30776185ee5be4e7f7254eed2e3be5b5ec9bf08f086835a5a2`）。更早 Wine 8 缺失 `bcryptprimitives.dll` 是 runner dependency blocker（missing），不是 allocator failure。该证据只支持 bounded Wine functional path，不等于 native Windows universality 或性能证据。
-- `3c725a9...` **current-source Windows FLS failure-path runtime**：fresh `x86_64-pc-windows-gnu` test executable 在 pinned Wine 10 image `sha256:a784009cceed4cfd7a29e39c8199a6200281c2bdc168a4cc7eff6f453e39b4f6` 上执行 exact ignored test `global_thread_cache_fls_failures_do_not_lose_cache_ownership_on_windows`，结果 `1/1` PASS。它验证 injected `FlsAlloc` failure 不发布 key/TLS owner且允许 reset/retry；injected `FlsSetValue` failure 返回仍归调用方所有的 unpublished pointer，不错误发布，显式 reclaim 后下一次 metadata allocation 精确复用该地址。Artifact：`.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/windows-wine10-fls-failure-3c725a9-20260713T122658Z/summary.json`，summary SHA-256 `f122afa583d1e9c490e8c24c02696d8e37c7a9cae6b2f8715f66e039de12c1cf`。该 `1/1` 与 `38b8b59` 的 earlier `3/3` 绑定不同 source revision，只能分开报告，不能合成 `4/4`；两者均为 bounded Wine functional evidence，不是 native Windows universality、whole-platform closure 或性能证据。
-- `b3f2cad...`（主线等价提交 `2199624...`）current-source Redox contract：真实 `x86_64-unknown-redox` target 上的 allocator library 与 `small_heap` example check PASS，生成的 object 被验证为 ELF64 little-endian x86-64 `ET_REL`，`llvm-nm` 验证 constrained fixed-heap/metadata/semantic-stats/boot C ABI symbol set 无缺失。证据位于 `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/redox-current-source-b3f2cad-20260712/`。这只闭合 current-source build/codegen/interface contract；当前源码的最终 link/run 仍需 redoxer/QEMU，因此 external runtime validation 是 missing，不是 allocator functional failure。`docs/c007-redox-boot-evidence.md` 中 2026-07-07 的 real target transcript 绑定了 binary/image/config/emulator hashes，但 capture 没有记录 Git commit 或 source digest；它只能称为 historical artifact-hash-bound runtime evidence，不能 rebinding 到当前 HEAD。
-- `00a187b...a581cb4...` BlogOS local contract：独立 `x86_64-unknown-none` no_std final crate 连接 boot heap publication、受初始化状态保护的 `#[global_allocator]`、真实 `Box` allocation/deallocation、panic 与 allocation-error halt handler；linked ELF 与 allocator/handler symbols 检查 PASS。`a581cb4` 又在同一 no_std 状态机上加入 `5/5` host regressions，覆盖 first publish、same-range idempotence、different-range rejection、failed retry 与 concurrent waiter；final ELF SHA 为 `dcb668f...d994b`。真实 BlogOS image/bootloader/QEMU 仍是 external validation missing；这是 behavior/wiring/build evidence，不是 boot/runtime 或性能证据。
-- `bd9d927...` Rust-for-Linux force-link closure：`rust_bench.rs` 显式消费 Makefile 传入的 `--extern unialloc=...`，避免只通过 `extern "C"` bridge 时 rlib 被最终 crate 丢弃。checked-in no_std final-link regression 复用真实 `unialloc_bridge.rs`，linked ELF 的 fixed-heap init/extend/ready、alloc/dealloc/realloc 与 semantic snapshot symbols `11/11` 存在；独立负向对照移除 force-link import 后得到对应 undefined-symbol link failure。真实 kernel module load/run 仍需外部 Rust-for-Linux kernel tree/runner；无 runtime/performance claim。
-- `315cfc4...` constrained-platform ABI parity：同一 no_std final crate 在编译期比较 UniAlloc runtime 与 Rust-for-Linux bridge 的 5 个 ABI version、record size/alignment 和全部 75 个字段 offset；C11 header 也对同 5 records 的全部 75 个 offset 做 static assertion。Rust layout 在 `x86_64-unknown-none` final crate 中检查；C header 只由本机 64-bit Apple clang（`arm64-apple-darwin25.5.0`）检查，并非实际 Rust-for-Linux kernel compiler。Focused contract 与 independent review PASS；这是 layout/build evidence，不是 kernel load/runtime 或性能。
+- `unialloc/src/lib.rs:129-150`: Windows `VirtualAlloc`, Darwin/Linux/Unix `mmap`, and fixed-heap selection.
+- `unialloc/Cargo.toml:63-95`: configuration surface for fixed heap, alternate slab backend, hugepage, type isolation, metadata segregation, PAC/MTE/MPK/guard/quarantine, and related features.
+- `unialloc/src/sc/mod.rs:1-24` and `unialloc/src/sc/backend.rs:1-18`: separate-metadata/bitmap backend is a real backend choice rather than a naming-only flag.
+- `../rust-alloc-paper/sys.tex:52-114`: paper architecture decomposition.
+- `94b2523d...` source-bound H3 smoke: fixed-heap `small_heap` and a hosted 4-thread allocator workload both PASS without compiler warnings; the fixed-heap semantic C ABI observes typed alloc/dealloc pairing, while the hosted workload proves only the global-allocator/thread-cache/platform path. Evidence: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h3-20260712T060354Z-94b2523d8823/`. The ordinary hosted Cargo run has no MIR rewrite, so its `typed_allocations=0` cannot be interpreted as H1 failure. Development HEAD has advanced, and this snapshot is not current-HEAD.
+- `f5c4935...` closes only symmetric PAL FLS accessors (`FlsSetValue`/`FlsGetValue`); `df5f449...` changes production `GlobalTcache` ownership to fiber-local. `f238f10...` further handles registration/save failure and teardown: current-owner callback performs a full drain; `DeleteFiber(B)` while A is current first narrow-drains OS-thread-shared retained semantic caches, then reclaims B while preserving live recovery/tag records, active scopes, and compiler cursor; temporary bind/clear failure fails safe by leaking rather than creating UAF/double free. Host retained-drain test `1/1`, thread-cache filter `69/69`, Windows GNU cross-target type-check/cross-build, and Zig-linked test executable no-run all PASS. Using the Wine 10 runner introduced by `0bd84c1...`, a fresh cross-build at HEAD `38b8b59...` runs three full-module exact-lifecycle tests at `1/1` each, totaling `3/3` PASS; executable SHA-256 is `7d4e060d7fc08a32134776f30e45550a8a4561373e15e5bcf077844115c8379b`. Durable transcripts, source hashes, and Wine image/runner identity reside in `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/windows-wine10-fls-38b8b59-20260712b/summary.json` with SHA-256 `d44dbe74b7a5fd30776185ee5be4e7f7254eed2e3be5b5ec9bf08f086835a5a2`. Earlier Wine 8 lacks `bcryptprimitives.dll`, a missing runner dependency rather than an allocator failure. This supports a bounded Wine functional path and excludes native-Windows universality and performance.
+- `3c725a9...` **current-source Windows FLS failure-path runtime**: a fresh `x86_64-pc-windows-gnu` test executable runs exact ignored test `global_thread_cache_fls_failures_do_not_lose_cache_ownership_on_windows` on pinned Wine 10 image `sha256:a784009cceed4cfd7a29e39c8199a6200281c2bdc168a4cc7eff6f453e39b4f6`, yielding `1/1` PASS. It verifies that injected `FlsAlloc` failure publishes neither key nor TLS owner and permits reset/retry; injected `FlsSetValue` failure returns an unpublished pointer still owned by the caller, avoids false publication, and allows the next metadata allocation to reuse the address exactly after explicit reclaim. Artifact: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/windows-wine10-fls-failure-3c725a9-20260713T122658Z/summary.json`, summary SHA-256 `f122afa583d1e9c490e8c24c02696d8e37c7a9cae6b2f8715f66e039de12c1cf`. This `1/1` and earlier `3/3` at `38b8b59` bind different source revisions and must be reported separately, never as `4/4`; both are bounded Wine functional evidence and exclude native-Windows universality, whole-platform closure, and performance.
+- `b3f2cad...` (mainline-equivalent commit `2199624...`) current-source Redox contract: allocator library and `small_heap` example check PASS on the real `x86_64-unknown-redox` target; the generated object is verified as ELF64 little-endian x86-64 `ET_REL`, and `llvm-nm` finds the complete constrained fixed-heap/metadata/semantic-stats/boot C ABI symbol set. Evidence: `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/redox-current-source-b3f2cad-20260712/`. This closes current-source build/codegen/interface contracts only. Final link/run still requires redoxer/QEMU, so external runtime validation is missing rather than an allocator functional failure. The 2026-07-07 real-target transcript in `docs/c007-redox-boot-evidence.md` binds binary/image/config/emulator hashes but captures no Git commit or source digest; classify it only as historical artifact-hash-bound runtime evidence and never rebind it to current HEAD.
+- `00a187b...a581cb4...` BlogOS local contract: an independent `x86_64-unknown-none` no_std final crate connects boot-heap publication, an initialization-state-guarded `#[global_allocator]`, real `Box` allocation/deallocation, panic, and allocation-error halt handlers; linked ELF and allocator/handler symbol checks PASS. `a581cb4` adds `5/5` host regressions over the same no_std state machine for first publish, same-range idempotence, different-range rejection, failed retry, and concurrent waiter; final ELF SHA is `dcb668f...d994b`. Real BlogOS image/bootloader/QEMU external validation remains missing. This is behavior/wiring/build evidence, excluding boot/runtime and performance.
+- `bd9d927...` Rust-for-Linux force-link closure: `rust_bench.rs` explicitly consumes Makefile-provided `--extern unialloc=...`, preventing the final crate from dropping the rlib when code otherwise reaches it only through an `extern "C"` bridge. A checked-in no_std final-link regression reuses real `unialloc_bridge.rs`; linked ELF contains all `11/11` fixed-heap init/extend/ready, alloc/dealloc/realloc, and semantic-snapshot symbols. An independent negative control removes the force-link import and produces the corresponding undefined-symbol link failure. Real kernel-module load/run still requires an external Rust-for-Linux kernel tree/runner; this carries no runtime or performance claim.
+- `315cfc4...` constrained-platform ABI parity: the same no_std final crate compares at compile time the 5 ABI versions, record sizes/alignments, and all 75 field offsets between the UniAlloc runtime and Rust-for-Linux bridge; a C11 header also statically asserts all 75 offsets across the same 5 records. Rust layout is checked in an `x86_64-unknown-none` final crate. The C header is checked only by local 64-bit Apple clang (`arm64-apple-darwin25.5.0`), rather than the actual Rust-for-Linux kernel compiler. Focused contract and independent review PASS. This is layout/build evidence, excluding kernel load/runtime and performance.
 
-### F. Evaluation and evidence boundary — 36:00--42:00（Slides 25--28）
+### F. Evaluation and evidence boundary — 36:00--42:00 (Slides 25--28)
 
-| # | 建议英文标题 | 这一页只完成什么 | 图 | 时间/追问 |
+| # | Suggested English title | Purpose of this slide | Figure | Time / likely question |
 |---:|---|---|---|---|
-| 25 | **The evaluation asks feasibility, cost, coverage, and retargeting as separate questions.** | 先讲 RQ→metric→baseline→threat，而不是先贴结果 | 四行 evaluation matrix | 1:30；标出 historical methodology |
-| 26 | **The paper reported less than 2% average performance difference in its tested aggregate, with workload-dependent memory retention.** | 历史结果 1：写清 tested baselines/workloads/aggregation；多数内存 comparable，但 Collections/Rust-Redis peak 更高 | 两个 takeaway；exact comparison table 放 B14/B16 | 1:30；页脚写 paper-reported historical |
-| 27 | **The paper reported 5--14% type-isolation slowdown and 72.17% object coverage under its original setup.** | 只回答 H2 的 cost + coverage；metadata segregation、hugepage、PAC 全部移到 backup | 两个 number tiles + coverage boundary；不要混入其他 features | 1:30；不要说 current reproduction |
-| 28 | **Current functional evidence is source-bound; full paper-performance reproduction is intentionally deferred.** | 展示四层 evidence ladder 和 G001→G002 状态；这是诚信页，不是道歉页 | Historical / Current probe / Historical partial record / Deferred claim 四阶梯 | 1:30；委员会可能从这里深挖方法 |
+| 25 | **The evaluation asks feasibility, cost, coverage, and retargeting as separate questions.** | Present RQ→metric→baseline→threat before presenting results | Four-row evaluation matrix | 1:30; label the historical methodology |
+| 26 | **The paper reported less than 2% average performance difference in its tested aggregate, with workload-dependent memory retention.** | Historical result 1: specify the tested baselines, workloads, and aggregation; most memory results were comparable, while Collections/Rust-Redis had higher peaks | Two takeaways; put the exact comparison table in B14/B16 | 1:30; footer says paper-reported historical |
+| 27 | **The paper reported 5--14% type-isolation slowdown and 72.17% object coverage under its original setup.** | Address only H2 cost and coverage; move metadata segregation, hugepage, and PAC to backup | Two number tiles plus the coverage boundary; keep other features separate | 1:30; do not describe this as a current reproduction |
+| 28 | **Current functional evidence is source-bound; full paper-performance reproduction is intentionally deferred.** | Show the four-tier evidence ladder and G001→G002 status; this is the credibility slide | Four steps: Historical / Current probe / Historical partial record / Deferred claim | 1:30; the committee may examine the methodology here |
 
-Slide 25 必须说清原论文方法：`nightly-2021-08-04`；每项六次，报告后五次的 geometric mean；UniAlloc 为 normalization baseline；MPK/MTE simulation 不进入 performance claims。还要主动说明：该方法没有单独给出 uncertainty/confidence interval/significance analysis，六次运行与 geometric mean 本身不能代替统计不确定性。依据：`../rust-alloc-paper/eval.tex:63-91`。
+Slide 25 must state the original paper methodology precisely: `nightly-2021-08-04`; six runs per item, reporting the geometric mean of the final five; UniAlloc as the normalization baseline; and MPK/MTE simulation excluded from performance claims. It must also state proactively that the methodology reports no separate uncertainty, confidence interval, or significance analysis, and that six runs plus a geometric mean do not replace statistical uncertainty analysis. Source: `../rust-alloc-paper/eval.tex:63-91`.
 
-Slide 26 必须在 B14/B16 列出原论文的六个 baselines：tcmalloc、glibc `malloc`、mimalloc、jemalloc、snmalloc、Scudo；UniAlloc optional features 关闭，baselines 使用 default settings（`eval.tex:93-107`）。论文正文只写 “On average, UniAlloc differs by less than 2%”；若没有从原始数据重新确认 aggregation axis，就只能称为 **the paper's tested aggregate**，不能暗示这是每个 workload、每个 baseline 的上界。
+Slide 26 must list the paper's six baselines in B14/B16: tcmalloc, glibc `malloc`, mimalloc, jemalloc, snmalloc, and Scudo; UniAlloc optional features were disabled, and baselines used default settings (`eval.tex:93-107`). The paper text says only, "On average, UniAlloc differs by less than 2%." Without rechecking the aggregation axis from raw data, describe this only as **the paper's tested aggregate**; do not imply a per-workload or per-baseline upper bound.
 
-Slide 26--27 的数字只能使用以下句式：
+The numbers on Slides 26--27 may use only this wording:
 
 > **The paper reported ... under its original toolchain and methodology. These results are historical reference results, not yet a current-source claim-grade reproduction.**
 
-原论文数字位置：
+Locations of the original paper numbers:
 
-- default performance：`../rust-alloc-paper/eval.tex:168-175`；
-- workload-dependent peak memory：`../rust-alloc-paper/eval.tex:193-210`；
-- type isolation and coverage：`../rust-alloc-paper/eval.tex:261-303`；
-- backup only：metadata segregation **4% speedup**（`eval.tex:233-252`）、PAC **1--3% slowdown** 与 hugepage **2--4% speedup**（`eval.tex:314-344`）；
-- historical retargeting：`../rust-alloc-paper/eval.tex:380-455`。
+- default performance: `../rust-alloc-paper/eval.tex:168-175`;
+- workload-dependent peak memory: `../rust-alloc-paper/eval.tex:193-210`;
+- type isolation and coverage: `../rust-alloc-paper/eval.tex:261-303`;
+- backup only: metadata segregation **4% speedup** (`eval.tex:233-252`), PAC **1--3% slowdown**, and hugepage **2--4% speedup** (`eval.tex:314-344`);
+- historical retargeting: `../rust-alloc-paper/eval.tex:380-455`.
 
-#### Slide 28 的四层 evidence ladder
+#### Slide 28 four-tier evidence ladder
 
-| Evidence tier | 能支持的表述 | 不能支持的表述 | 本次审查状态 |
+| Evidence tier | Supported statement | Unsupported statement | Status in this review |
 |---|---|---|---|
-| **Paper-reported historical** | 原 prototype 在原 toolchain/hardware 下曾报告某结果 | 当前源码已经重现 | 可讲，但必须标 historical |
-| **Current implementation/probe** | 当前机制/路径能够构建或运行；某个 bounded probe 观察到某行为 | 完整 performance、coverage 或 platform claim | 有大量机制证据 |
-| **Historical source-bound record (partial)** | 记录曾绑定只读 G001 freeze 且自身验证通过 | allocator comparison、完整 cell 或完整 claim | 20 条已接受记录；campaign 已停止，全部仅作 historical/diagnostic |
-| **Current source-bound claim (complete)** | 当前源码、完整 required evidence、provenance 和门槛共同支持 claim | — | performance claims 被显式 deferred；不能标 pass 或 fail |
+| **Paper-reported historical** | The original prototype reported a result under its original toolchain and hardware | The current source has reproduced it | Present it with an explicit historical label |
+| **Current implementation/probe** | A current mechanism or path builds or runs; a bounded probe observed a behavior | A complete performance, coverage, or platform claim | Extensive mechanism evidence exists |
+| **Historical source-bound record (partial)** | A record was bound to the read-only G001 freeze and passed its own validation | Allocator comparison, a complete cell, or a complete claim | 20 accepted records; the campaign stopped, and all records are historical/diagnostic only |
+| **Current source-bound claim (complete)** | Current source, complete required evidence, provenance, and thresholds jointly support the claim | — | Performance claims are explicitly deferred; label them neither pass nor fail |
 
-状态快照（`2026-07-13`）必须区分 **只读 G001 evidence freeze**、**当前 G002 开发树** 和 **deferred paper-performance work**：
+The status snapshot (`2026-07-13`) must distinguish the **read-only G001 evidence freeze**, the **current G002 development tree**, and **deferred paper-performance work**:
 
-1. 只读历史 freeze 位于 `/Users/hqzhao/Downloads/UniAlloc-G001-freeze-235549b2`，HEAD `0df377b2...`，权威 digest `235549b228dec87334abc90c91c0b4cc8bbf6dfb1c2d5ebaed00d8a97746b451`，clean。
-2. G001 formal campaign 在 20/1008 accepted records 后因用户显式目标变更停止；状态是 `stopped_by_explicit_user_objective_change`。这 20 条记录不得用于论文性能百分比或 allocator comparison。
-3. G001 原性能目标没有完成，因此保持 incomplete 并标记 superseded；当前 active goal 是 implementation-first G002。不要把 superseded 写成 complete。
-4. G002 开发树继续变化；制作和排练时用 `git rev-parse HEAD` 读取 live HEAD，不在主 deck 固化短期 commit。当前 evidence 重点是 actual MIR rewrite、type-isolation lifecycle、fixed-heap/hosted runtime 和平台 adapter 功能。
-5. C002 作为 functional/compiler evidence；C006 只讲 PAC functionality，cost deferred；C007 是 platform-functionality backlog。C001/C003/C004/C005 与 C006 performance percentage 均为 `deferred_by_explicit_user_scope_change`，不是 pass 或 fail。
+1. The read-only historical freeze is at `/Users/hqzhao/Downloads/UniAlloc-G001-freeze-235549b2`, HEAD `0df377b2...`, authoritative digest `235549b228dec87334abc90c91c0b4cc8bbf6dfb1c2d5ebaed00d8a97746b451`, clean.
+2. The G001 formal campaign stopped after 20/1008 accepted records because of an explicit user objective change; its status is `stopped_by_explicit_user_objective_change`. These 20 records cannot support paper performance percentages or allocator comparisons.
+3. The original G001 performance goal remains incomplete and is marked superseded; the active goal is implementation-first G002. Keep superseded distinct from complete.
+4. The G002 development tree continues to change. During deck production and rehearsal, read the live HEAD with `git rev-parse HEAD`; do not pin a short-lived commit in the main deck. Current evidence focuses on actual MIR rewrite, the type-isolation lifecycle, fixed-heap/hosted runtime, and platform adapter functionality.
+5. C002 provides functional/compiler evidence; C006 covers PAC functionality with cost deferred; C007 is the platform-functionality backlog. C001/C003/C004/C005 and the C006 performance percentage are all `deferred_by_explicit_user_scope_change`, neither pass nor fail.
 
-因此主讲中的安全句式是：
+G002 closure speaker-note checkpoint (parent HEAD `364d786`): exact
+lifecycle history uses a recent eight-way window per secondary history bucket,
+keyed by exact address with a separate epoch per entry. A ninth distinct exact key displaces
+the oldest `Missing` record back to raw-only epoch-zero semantics; exact keys and
+epochs eliminate unrelated same-home false positives, while a known-generation
+`Absent` raw reclaim becomes `Tracked`. Reviewed realloc closure covers in-place
+record consumption, prevention of recovery-required scope reattribution for
+unrecorded old storage, compiled quarantine alignment grow, and admission before
+observable mutation. With
+`GLIBC_TUNABLES=glibc.pthread.rseq=0`, hosted Type Isolation tests pass `732/732`
+serially and in parallel; `fixed_heap` Type Isolation passes `602/602` serially
+and in parallel; `quarantine` Type Isolation passes `738/738` serially and in
+parallel. Standard `cargo test` exits `0`,
+including `semantic_std` `12/12` and `std_bench` `430/430`; the default-parallel
+`semantic_std` loop passes `30/30`. The evaluator doctor is ready with the paper
+checkout absent, quick end-to-end diagnostics pass `3/3`, and the realistic
+multi-module actual-rustc probe validates after installing the required compiler
+components. This remains implementation/probe-tier functional evidence. It
+supports no universal UAF/double-free, forged-metadata, universal compiler-
+coverage, external-platform runtime, or publication-grade performance claim.
+
+#### Current source-bound real-world Type Isolation diagnostic
+
+Use this matrix on Slide 28 or a current-source backup slide. Every timing cell
+is `median wall seconds / median peak RSS KiB`. The seven routes are native,
+jemalloc `0.5.4`, mimalloc `0.1.25`, UniAlloc without semantic rewriting,
+actual-MIR `typed_plain`, stats-free `typeiso_perf`, and statistics-enabled
+`typeiso_coverage`. fd's native source already selects jemalloc `0.5.4`, so its
+native and explicit jemalloc rows are route controls.
+
+| Application | Native | jemalloc | mimalloc | UniAlloc | `typed_plain` | `typeiso_perf` | `typeiso_coverage` |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| ripgrep | `0.086309096 / 5120` | `0.086702833 / 6144` | `0.088868793 / 11812` | `0.090066579 / 6144` | `0.092411192 / 6144` | `0.092586986 / 6144` | `0.094015251 / 6144` |
+| fd | `0.136296730 / 6144` | `0.136304143 / 6144` | `0.129672706 / 18872` | `0.167541836 / 6144` | `0.464682945 / 6144` | `0.465833677 / 6144` | `0.491091350 / 6144` |
+| Oxipng | `1.712608439 / 46400` | `1.727841580 / 49088` | `1.634668906 / 71180` | `1.736975509 / 44260` | `1.766903750 / 44508` | `1.754456338 / 44524` | `1.754579386 / 44640` |
+
+`typeiso_coverage` has statistics enabled and is performance-ineligible. Show
+its time and RSS only as artifact-completeness metadata. The primary incremental
+ratio is `typeiso_perf / typed_plain`; the native ratio includes allocator,
+compiler rewrite, recovery, and policy effects.
+
+| Application | Type Isolation / typed plain | Incremental time | Type Isolation / native | End-to-end time | Allocation-event coverage |
+|---|---:|---:|---:|---:|---:|
+| ripgrep | `1.001902302050` | `+0.190230%` | `1.072737292950` | `+7.273729%` | `2266/22725 = 9.97%` (`997` bp) |
+| fd | `1.002476380966` | `+0.247638%` | `3.417790558878` | `+241.779056%` | `616262/831549 = 74.11%` (`7411` bp) |
+| Oxipng | `0.992955240488` | `-0.704476%` | `1.024435182057` | `+2.443518%` | `9661/10368 = 93.18%` (`9318` bp) |
+
+Type Isolation peak-RSS ratios versus typed plain / native are
+`1.000000000000 / 1.200000000000` for ripgrep,
+`1.000000000000 / 1.000000000000` for fd, and
+`1.000359485935 / 0.959568965517` for Oxipng.
+
+The runs use physical CPU 6 and NUMA node 0. ripgrep and fd use full inputs,
+two warmups, and 9 and 7 measured repetitions. Oxipng uses the quick input, one
+warmup, and 5 repetitions. Every variant produces the same application output
+hash. The measured artifact implementation-bundle SHA-256 is
+`7e98e63ce2fbeccc361ea57bd26773ccdb02664b83d772f0475161c980c55929`;
+the pass source SHA-256 is
+`ae7dd0da2368c670323287647c94ce5a90069b6f2e4a3d51b298d48cb9a5ac63`.
+The current runner bundle is
+`94ede1223c7b348639a7041a40a5b1840a6840cc18b4dbcf7d0f7a6ef8bb2cf4`
+after post-measurement binary-reuse validation hardening; allocator and pass
+sources remain unchanged.
+
+Coverage means typed allocation events divided by total allocation events for
+the exact application revision and input. Report it per application. It has no
+source-line, type, byte, or universal-program denominator, and its denominator
+differs from the paper's 72.17% result. The matrix is a measured-source
+diagnostic; the paper reproduction and publication-grade inference remain
+deferred.
+
+The matrix retains default libc-managed rseq and sets no glibc tunable. Linux
+rseq permits this configuration, and the production allocator hot path makes no
+rseq call. The allocator's private rseq self-registration tests alone require
+`GLIBC_TUNABLES=glibc.pthread.rseq=0` at process startup.
+
+Two final implementation changes are relevant in backup discussion. Hosted
+recovery records stay in the pointer-derived home shard and home overflow, with
+legacy exhaustive search available only after legacy non-home state is
+observed; `fixed_heap` preserves bounded cross-shard inline capacity. Generic
+raw allocation misses publish strict lifecycle state once and then complete
+semantic admission through an after-publication path; cache hits, guarded
+mappings, and raw alias rejection retain their original boundaries. Ordinary
+semantic scopes remain conservative for cross-thread recovery, explicit
+`_local` scopes remain local, and exact `Absent` history observations hold an
+eviction lease through admission. The eight-way history fails stop when all
+ways are leased simultaneously.
+
+On the pinned fd full input, these changes move `typed_plain` from
+`0.611635718 s` to `0.464682945 s` (`-24.026192%`) and `typeiso_perf` from
+`0.573481469 s` to `0.465833677 s` (`-18.770928%`), while both remain at
+`6144 KiB` median peak RSS and event coverage remains `74.11%`. The native route
+moves by `-0.218373%`. Treat this as a source-bound directional optimization
+result for one input, with no stable cross-workload speedup claim.
+
+Use this safe wording in the main talk:
 
 > **Full paper performance reproduction was intentionally deferred after 20 source-bound historical records. Current claims are limited to functional and mechanism evidence; reduced benchmark numbers are diagnostic only, and no publication-grade percentage claim is made from them.**
 
-主 Slide 28 只显示这一稳定结论和四层 ladder；live HEAD、probe artifact、freeze digest 与 stop record 放在 B18/speaker notes，并在答辩当天刷新。
+Main Slide 28 should show only this stable conclusion and the four-tier ladder. Put live HEAD, probe artifacts, the freeze digest, and the stop record in B18/speaker notes, and refresh them on the defense date.
 
-不要比较这 20 条 historical records 的 raw timing，也不要把 diagnostic smoke、plan readiness 或 incomplete timing records 称为 performance conclusion。相关入口：
+Do not compare the raw timings of these 20 historical records. Do not describe diagnostic smoke, plan readiness, or incomplete timing records as performance conclusions. Relevant entry points:
 
 - `evaluation/results/claim_check_current.json`
 - `evaluation/results/overclaim_worklist.json`
-- `evaluation/results/paper_performance_gap_plan.json`（historical/deferred）
+- `evaluation/results/paper_performance_gap_plan.json` (historical/deferred)
 - `evaluation/results/platform_matrix_audit.json`
-- `docs/evaluation-gap-analysis.md`（开头的 supersession note 优先于历史 queue）
+- `docs/evaluation-gap-analysis.md` (the opening supersession note takes priority over the historical queue)
 - `.omx/handoff/g001-performance-campaign-stop-user-objective-change-20260712T030350Z.json`
 - `/Users/hqzhao/Downloads/UniAlloc-G001-freeze-235549b2/evaluation/raw/source-freeze-required-bound-plan-235549b2-20260711a/final-verification.json`
-- `.omx/ultragoal/ledger.jsonl`（G001 supersession、G002 functional evidence 和 current-source probe 入口）
+- `.omx/ultragoal/ledger.jsonl` (entry point for G001 supersession, G002 functional evidence, and current-source probes)
 
-在正式答辩前重新生成这页的 live HEAD 和 current probe summaries；历史 freeze digest 与 20-record stop status 保持不变。
+Regenerate this slide's live HEAD and current probe summaries before the formal defense. Preserve the historical freeze digest and 20-record stop status unchanged.
 
-### G. Judgment, agenda, and close — 42:00--45:00（Slides 29--31）
+### G. Judgment, agenda, and close — 42:00--45:00 (Slides 29--31)
 
-| # | 建议英文标题 | 这一页只完成什么 | 图 | 时间/追问 |
+| # | Suggested English title | Purpose of this slide | Figure | Time / likely question |
 |---:|---|---|---|---|
-| 29 | **The scientific contribution is a semantic allocation contract bounded by trust, coverage, and deployment.** | 汇总 contribution、alternatives、limitations；不要把结论降格为 replication status | 3 行 contract / demonstrated use / boundary | 1:15 |
-| 30 | **The next falsifiable question is the minimal stable identity contract under partial coverage and FFI.** | dissertation agenda：identity stability/collision/TCB、partial coverage、FFI/cross-language、exploit corpus；完整 source-bound matrix 是 validation infrastructure | 研究问题 → discriminating experiment → possible outcome | 1:15 |
-| 31 | **Preserve semantics, separate policy, and make evidence provenance explicit.** | 三句话收尾，回到 Slide 2；进入 Q&A | 三项贡献 + 同一颜色；不要放新数据 | 0:30 |
+| 29 | **The scientific contribution is a semantic allocation contract bounded by trust, coverage, and deployment.** | Synthesize the contribution, alternatives, and limitations; preserve the scientific conclusion beyond replication status | 3 rows: contract / demonstrated use / boundary | 1:15 |
+| 30 | **The next falsifiable question is the minimal stable identity contract under partial coverage and FFI.** | Dissertation agenda: identity stability/collision/TCB, partial coverage, FFI/cross-language, and exploit corpus; the complete source-bound matrix is validation infrastructure | Research question → discriminating experiment → possible outcome | 1:15 |
+| 31 | **Preserve semantics, separate policy, and make evidence provenance explicit.** | Close with three sentences, return to Slide 2, and enter Q&A | Three contributions in the same colors; add no new data | 0:30 |
 
-推荐 closing 三句：
+Recommended three closing sentences:
 
 1. **UniAlloc shows that compiler-known heap semantics do not have to disappear at the allocation boundary.**
 2. **Those semantics can drive policies without binding the policies to one platform mechanism.**
 3. **The next scientific question is the minimal stable identity contract that remains useful under partial coverage, FFI, and adversarial conditions.**
 
-## 5. 42 分钟中断可剪裁版本
+## 5. Interruptible 42-minute version
 
-委员会中途提问时，不要加速讲完所有页。按下列顺序逐项剪，预计达到 42 分钟就停止；后两项只用于更长中断，不必全部执行：
+When the committee asks questions during the talk, preserve a measured pace and cut slides in the following order until the estimate reaches 42 minutes. Use the final two cuts only for longer interruptions:
 
-1. Slide 18（type isolation vs quarantine）移到 backup；Slide 17 口头补一句。
-2. Slide 20（memory retention）压缩到 45 秒；详细图移到 backup。
-3. Slide 23（两类 target）压缩为 Slide 22 的一个 build animation。
-4. Slide 26--27 合并为一张“historical result ranges”；保留 Slide 28 的 evidence boundary。
-5. Slide 30 只讲前两个 next steps。
+1. Move Slide 18 (type isolation vs quarantine) to backup; add one spoken sentence to Slide 17.
+2. Compress Slide 20 (memory retention) to 45 seconds; move the detailed figure to backup.
+3. Compress Slide 23 (two target classes) into one build animation on Slide 22.
+4. Merge Slides 26--27 into one "historical result ranges" slide; retain the Slide 28 evidence boundary.
+5. Present only the first two next steps on Slide 30.
 
-绝对不要剪：Slides 2、4、7--9、10--16、17、21、24、25、28、29、31。它们构成完整论证链。
+Always retain Slides 2, 4, 7--9, 10--16, 17, 21, 24, 25, 28, 29, and 31. They form the complete argument chain.
 
-## 6. 如果必须主讲 53--55 分钟：增加 5 张扩展页
+## 6. 5 extension slides for a required 53--55-minute main talk
 
-把下列页插入主 deck；不要用更多 feature 页填时间。
+Insert the following slides into the main deck; avoid filling time with additional feature slides.
 
-| 插入位置 | 扩展页标题 | 价值 | 约时 |
+| Insert after | Extension slide title | Value | Approximate time |
 |---|---|---|---:|
-| Slide 5 后 | **Allocation separates a hot path from refill and raw-memory acquisition.** | 更详细解释 cache/zone/backend，方便非 allocator 委员 | 1:30 |
-| Slide 13 后 | **The MIR transformation preserves the original call and its cleanup behavior.** | 用一个真实但简化的 before/after MIR example 证明 compiler work 不是口号 | 1:45 |
-| Slide 19 后 | **Allocation and deallocation must recover the same semantic identity.** | 解释 direct-local、recovery、cross-thread 的 invariant | 1:30 |
-| Slide 23 后 | **Retargeting is a recipe of PAL, concurrency, and metadata choices.** | 对比 hosted、kernel、fixed heap 的实际 adaptation surface | 1:30 |
-| Slide 25 后 | **A claim is only as current as its source binding and complete matrix.** | 解释 repetitions、geomean、raw evidence、fingerprint 和 fail-closed gate | 1:30 |
+| Slide 5 | **Allocation separates a hot path from refill and raw-memory acquisition.** | Explain cache/zone/backend in more detail for committee members outside allocator research | 1:30 |
+| Slide 13 | **The MIR transformation preserves the original call and its cleanup behavior.** | Use a real but simplified before/after MIR example to demonstrate the compiler work | 1:45 |
+| Slide 19 | **Allocation and deallocation must recover the same semantic identity.** | Explain the invariant across direct-local, recovery, and cross-thread paths | 1:30 |
+| Slide 23 | **Retargeting is a recipe of PAL, concurrency, and metadata choices.** | Compare the actual adaptation surfaces for hosted, kernel, and fixed heap | 1:30 |
+| Slide 25 | **A claim is only as current as its source binding and complete matrix.** | Explain repetitions, geomean, raw evidence, fingerprint, and the fail-closed gate | 1:30 |
 
-五张扩展页的内容预算是 7:45；加到 45 分钟主线后约为 52:45，转场和一次短中断后应在 53--55 分钟结束。不要把 60 分钟全部占满。
+The five extension slides have a 7:45 content budget. Added to the 45-minute main line, they reach about 52:45; transitions and one brief interruption should bring the talk to 53--55 minutes. Preserve time for questions within a 60-minute slot.
 
-## 7. Slide 制作系统：让制作更快、问答更轻松
+## 7. Slide production system for faster preparation and easier Q&A
 
-### 7.1 固定视觉语法
+### 7.1 Fixed visual grammar
 
-全 deck 只使用四种语义颜色：
+Use only four semantic colors throughout the deck:
 
-- **蓝色**：compiler/semantic information；
-- **橙色**：allocation policy；
-- **绿色**：platform/backend/PAL；
-- **灰色**：conventional fallback 或不在当前 claim 范围内。
+- **Blue**: compiler/semantic information;
+- **Orange**: allocation policy;
+- **Green**: platform/backend/PAL;
+- **Gray**: conventional fallback or material outside the current claim scope.
 
-每张 architecture/mechanism 页都沿用这些颜色。委员会看到颜色就知道当前讨论位于哪一层。
+Reuse these colors on every architecture/mechanism slide. The colors should identify the active layer immediately for the committee.
 
 ### 7.2 Evidence badge
 
-所有结果页右下角必须有一个 badge：
+Every results slide must carry one badge in the lower-right corner:
 
 - `PAPER-REPORTED HISTORICAL`
 - `CURRENT FUNCTIONALITY PROBE`
@@ -404,11 +499,11 @@ Slide 26--27 的数字只能使用以下句式：
 - `CURRENT SOURCE-BOUND CLAIM — COMPLETE`
 - `PLANNED / INCOMPLETE`
 
-在 current claim closure 前，不要使用 `CURRENT SOURCE-BOUND CLAIM — COMPLETE`。已停止的 G001 records 只能使用 `HISTORICAL SOURCE-BOUND RECORD — PARTIAL`，不得贴 current badge。数字下方同时写 toolchain/hardware、N、baseline 和 source digest/date；信息太长就链接到 backup 页。
+Before current claim closure, do not use `CURRENT SOURCE-BOUND CLAIM — COMPLETE`. Stopped G001 records may use only `HISTORICAL SOURCE-BOUND RECORD — PARTIAL`, never a current badge. Under each number, also state toolchain/hardware, N, baseline, and source digest/date; link to a backup slide when this information is too long.
 
-### 7.3 每页最小模板
+### 7.3 Minimum template for every slide
 
-每页 speaker notes 固定写五行：
+Use the same five lines in every slide's speaker notes:
 
 ```text
 Takeaway: one sentence
@@ -418,23 +513,23 @@ Short answer: 20-30 seconds
 Deep answer: backup slide number
 ```
 
-这会同时降低制作成本和问答切换成本。
+This reduces both production cost and Q&A switching cost.
 
-### 7.4 现有图的使用策略
+### 7.4 Strategy for existing figures
 
-| 原图 | 主 deck 处理 | 理由 |
+| Original figure | Treatment in main deck | Rationale |
 |---|---|---|
-| `../rust-alloc-paper/fig/overview.pdf` | **重画**为 3-lane progressive architecture；原图放 backup | 内容全面但主讲时过密 |
-| `../rust-alloc-paper/fig/bg-alloc.pdf` | 重画成 cache→zone→backend→PAL | 原图适合论文，不适合口头教学 |
-| `default-perf.pdf`、`perf-type.pdf` | 主 deck 只重画与 Slides 26--27 对应的 aggregate/per-workload takeaway；原图放 backup | 多 baseline bar chart 难以在 30 秒内读懂 |
-| `metadata-separation.pdf`、`hugepage.pdf`、`perf-pac.pdf` | backup only；标注 historical direction：4% speedup、2--4% speedup、1--3% slowdown | 它们不是主论证 H2 所需证据，且当前 claim 未重现 |
-| Windows/macOS result figures | paper figures 只作 backup/historical；G002 functional status 另列 | 不把历史图当作 live five-platform validation；current functional PASS、current probe 与 external validation gap 必须分栏 |
+| `../rust-alloc-paper/fig/overview.pdf` | **Redraw** as a 3-lane progressive architecture; put the original in backup | Comprehensive, but too dense for the main talk |
+| `../rust-alloc-paper/fig/bg-alloc.pdf` | Redraw as cache→zone→backend→PAL | Suited to the paper rather than spoken instruction |
+| `default-perf.pdf`, `perf-type.pdf` | In the main deck, redraw only the aggregate/per-workload takeaways used on Slides 26--27; put the originals in backup | A multi-baseline bar chart cannot be read in 30 seconds |
+| `metadata-separation.pdf`, `hugepage.pdf`, `perf-pac.pdf` | Backup only; label the historical direction: 4% speedup, 2--4% speedup, 1--3% slowdown | They are outside the evidence required for the main H2 argument, and the current claim has not reproduced them |
+| Windows/macOS result figures | Use paper figures only as backup/historical; list G002 functional status separately | Keep historical figures separate from live five-platform validation; show current functional PASS, current probes, and external validation gaps in separate columns |
 
-原则：**一张幻灯片只让委员会比较一个维度。** 不要把论文 screenshot 或段落粘到幻灯片。
+Principle: **Each slide asks the committee to compare only one dimension.** Do not paste paper screenshots or paragraphs onto slides.
 
 ### 7.5 Claim ledger
 
-制作 deck 时维护下列小表；每一张 claim slide 都必须有一行：
+Maintain the following compact table while producing the deck. Every claim slide must have one row:
 
 | Slide | Claim | Evidence tier | Source | Assumption | Does not prove | Backup |
 |---:|---|---|---|---|---|---:|
@@ -444,131 +539,131 @@ Deep answer: backup slide number
 | 26--27 | original prototype observed reported ranges | historical | paper eval | original setup | current reproduction | B14--B16 |
 | 28 | paper-performance reproduction was explicitly deferred while functional work continues | current audit snapshot | G001 stop handoff + G002 probes | exact source binding and evidence tier | mechanism is absent or deferred claims failed | B18 |
 
-## 8. Q&A 方法：先直接回答，再展开证据边界
+## 8. Q&A method: answer directly, then expand the evidence boundary
 
-统一使用：
+Use this sequence consistently:
 
 > **Claim → Mechanism → Evidence → Boundary → Next discriminating test**
 
-- **20 秒版**：直接 yes/no + boundary。
-- **90 秒版**：完整五步。
-- **3 分钟版**：切到一个 backup slide，再给 alternative/tradeoff。
+- **20-second version**: direct yes/no plus boundary.
+- **90-second version**: all five steps.
+- **3-minute version**: switch to one backup slide, then explain the alternative/tradeoff.
 
-不知道时不要猜：
+When evidence is missing, do not guess:
 
 > **I do not yet have evidence for X. The current implementation establishes Y under assumption Z. The discriminating experiment would be W.**
 
-这比模糊扩大 claim 更能显示 qualifier 所需的研究判断力。
+This demonstrates the research judgment required for a qualifier more clearly than an imprecisely expanded claim.
 
-### 最可能的委员会问题与安全回答骨架
+### Most likely committee questions and safe answer outlines
 
-| 问题 | 第一句直接回答 | 必须补的边界/backup |
+| Question | Direct first sentence | Required boundary / backup |
 |---|---|---|
-| **1. Novelty 相对 mimalloc、snmalloc、Temeraire、Scudo/hardened malloc 是什么？** | UniAlloc 的核心新输入是 compiler-provided semantics，以及自动 extraction 和 policy/mechanism separation；不是另一个 size-class free list。 | 说明不同工作可互补；不要宣称所有机制首次出现。B1/B8 |
-| **2. 为什么不完全交给 compiler 或 Rust type system？** | Compiler 提供语义，但 allocator 控制 physical reuse；unsafe、FFI、unsound API 最终仍会表现为 heap reuse。 | Defense-in-depth，不是 type-system replacement。B9 |
-| **3. 为什么是 Rust，不从 C/C++ 开始？** | Rust 的 `Box<T>`、`Vec<T>` 和集中化 allocation path 让研究能先隔离 interface question。 | Cross-language generality 尚未证明。B3 |
-| **4. Type isolation 精确保证什么？** | 对 covered requests，若 trusted allocator-visible metadata distinct，ordinary cross-class reuse 被分开；plain-cache 的内部 64-bit lookup-key collision 还会再做 exact identity check，metadata-segregated occupied entries 在 reuse/accounting/eviction projection 前做 keyed structural authentication。 | 完全相同/伪造 input metadata、compiler type-id collision、cache 外 corruption、uncovered/fallback 均不在有限保证内；它不消灭 UAF。B7/B9 |
-| **5. 为什么不用 quarantine？** | Quarantine 约束 reuse time；type isolation 约束 reuse identity，防御不同步骤且可组合。 | 不要做超出 tested configuration 的性能胜负结论。B8 |
-| **6. `type_id` 如何唯一、稳定且避免 collision？** | 当前 runtime 使用 64-bit hashed allocator-visible identity；stable compiler-level identity、collision policy 与 trust contract 仍需明确化。 | 不要把 helper hash 说成 cryptographic、collision-free 或跨编译稳定保证。B9 |
-| **7. 为什么 reuse identity 不包含 callsite？** | Allocation 和 drop 可能来自不同 callsite；把 callsite 放入 identity 会破坏同一对象类别的合法配对。 | Callsite 仍可用于 provenance/policy，但不应默认成为 reuse key。B9 |
-| **8. ABI/API 变化为何不破坏现有程序？** | 在配套 toolchain 的 supported paths 上不需应用 source annotation；unknown metadata 可走 conventional fallback。 | 这不是跨 rustc binary ABI、任意 custom allocator/FFI 或 universal semantic coverage 的保证。B1--B3 |
-| **9. realloc、drop、unwind、跨线程 deallocation 如何匹配？** | Actual-rustc probe 中 alloc 建立 identity，realloc/dealloc 可用 strict-neutral metadata 委托 recovery；split FFI 若同时收到 stale explicit old metadata，则 allocation-completion record 对 old object 保持权威，而 requested new identity 只绑定 replacement。当 partial/generic helper Drop 未被 provider 暴露时，allocation-side recovery 完成配对。独立 nested-unwind probe 还验证 inner cleanup 只弹出 inner scope、恢复 depth-1 outer scope，outer return 后再回到 depth 0。 | `Vec`、Layout shrink、split FFI、partial/generic 与 nested unwind 各是 bounded lifecycle；provider 未暴露 generic helper row，所以不能虚构 generic-skip，也不是完整 escape analysis。B4 |
-| **10. MIR pass 会不会随 rustc 版本变化而脆弱？** | 会，这是 compiler integration 的明确 maintenance cost。 | 讲稳定 ABI/contract 与 versioned regression suite 的下一步。B3 |
-| **11. Per-type/per-thread cache 会不会导致内存爆炸？** | 会增加 retention/fragmentation 风险；当前设计用 bounded caches/empty-slab controls 缓解，而不是消除。 | 展示历史异常 workload 与 current footprint controls。B10/B11 |
-| **12. “Retargetable” 是否只是 `cfg`/feature flags？** | 不是；复用的是 semantic policy 和 allocator pipeline，适配的是 PAL、raw memory、concurrency 和 metadata layout。 | 仍然不是 zero-porting；每个 target 需要真实运行证据。B12/B17 |
-| **13. 如何证明真的用了 hugepage，而不是 ordinary-page fallback？** | Current HEAD 的 hugepage/ordinary domain 与 fallback tests 为 `17/17`，但本机 direct probe 没有观察到 real hugepage backing；macOS 返回 `KERN_INVALID_ARGUMENT`，因此 backing 仍是 missing。 | Domain separation/fallback PASS 不等于 mapping/backing PASS；需要合适 host 和与当前三对象 side-cache materialization 一致的 fresh probe。B13 |
-| **14. PAC 当前到底验证了什么？** | Current HEAD 验证了 allocator PAC metadata 的安全 software fallback 与 typed side-cache reuse；独立 `no_std` consumer contract 隔离了 std-only dev-dependencies，并允许用 `rust-src` 构建真实 arm64e allocator runtime probe。 | external ABI evidence 不能代替 allocator runtime；只有 source-bound arm64e `no_std` probe 才能支持 hardware functional evidence，且 C006 cost/percentage 仍 deferred。B12 |
-| **15. 72.17% 的 denominator 是什么？是当前数字吗？** | 原论文表述为标准 Rust `alloc` benchmark 中“72.17% of objects”；它不是当前 source-bound 已闭合数字。 | 若 raw evidence 未定义 event/object denominator，不自行改名；给原方法、fallback 与 current audit。B14/B18 |
-| **16. 为什么现在会看到 99.851437% coverage？** | Repository cargo-test hook observed `std_bench` test-mode `430/430` finite inventory；它不是 independent actual-wrapper compiler coverage、性能或 whole-program denominator，且无独立 log artifact。历史 `99.851437%` 仍是 G001 freeze-bound evidence；`a57d318` 的 latest source-bound Oxipng one-shot 只单独报告 actual direct/scope/Drop/ownership `6/260/320/12`，同时保留 unresolved `566/2`、multi-owner `117` 与 `whole_program=false`。后续 `8e4d37c` 只独立报告 current/pinned exact-wrapper soundness closure，不能把不同 revision/denominator 换算或并入旧百分比。 | 先看 source digest、denominator、actual-rewrite/dynamic-execution evidence 和 evidence tier；不要跨 revision rebinding，也不要写成 performance claim。B18 |
-| **17. Evaluation 是否公平？** | 需要相同 workload、baseline、配置、重复运行、明确 normalization、raw provenance 和 source binding 才能比较。 | 原论文旧 toolchain/hardware、simulation，以及没有单独 uncertainty/significance analysis 的限制必须主动说明。B14--B16 |
-| **18. Security benefit 真正测量了吗？** | 当前已有同 layout、跨线程 recovery、不同 trusted `type_id` 的 adversarial reuse regression，证明 covered cache path 的 cross-type address reuse 被阻断；plain cache 另有强制 lookup-key collision regression，但还不是系统性 exploit-success study。 | Same-type、fallback、identical/spoofed metadata、compiler type-ID collision 与真实 exploit corpus 尚未覆盖；下一步测 reuse-success rate 与 attacker capabilities。B19 |
-| **19. 当前源码支持五个平台吗？** | G002 已有 macOS functional PASS；Windows 在 Wine 10 上有 `38b8b59` lifecycle `3/3` 与 current-source `3c725a9` FLS failure-path `1/1` 两个独立 PASS；另有 current-source Redox build/codegen/ABI、Rust-for-Linux 与 BlogOS no_std final-link contracts，以及 current fixed/hosted smoke。当前 Redox runtime、Rust-for-Linux kernel load/run 和 BlogOS boot validation 仍依赖外部 runner/assets。 | `38b8b59` 的三个 lifecycle 与 `3c725a9` 的 exact `FlsAlloc`/`FlsSetValue` ownership-retention regression 绑定不同 revision，不得相加；后者只证明 failure 后保留/回收 owner 并精确复用 allocation。Wine/local-link 证据都不等于 native Windows universality 或 current-HEAD 五平台实机闭合。B17/B18 |
-| **20. 最重要的 dissertation 下一步是什么？** | 找出在 partial coverage、FFI 与 adversarial metadata 下仍有用的最小 stable identity contract。 | Source-bound matrix、exploit corpus 与跨平台实验是检验该问题的基础设施；随后扩展 cross-language/policy automation。B19 |
+| **1. What is novel relative to mimalloc, snmalloc, Temeraire, and Scudo/hardened malloc?** | UniAlloc's central new input is compiler-provided semantics, together with automatic extraction and policy/mechanism separation; the novelty claim does not rest on another size-class free list. | Explain that the systems can complement each other; do not claim that every mechanism appears here for the first time. B1/B8 |
+| **2. Why not leave everything to the compiler or Rust type system?** | The compiler supplies semantics, while the allocator controls physical reuse; unsafe code, FFI, and unsound APIs still manifest as heap reuse. | Defense-in-depth, not a type-system replacement. B9 |
+| **3. Why Rust rather than starting with C/C++?** | Rust's `Box<T>`, `Vec<T>`, and centralized allocation path let the research isolate the interface question first. | Cross-language generality remains unproven. B3 |
+| **4. What exactly does type isolation guarantee?** | For covered requests, when trusted allocator-visible metadata are distinct, ordinary cross-class reuse is separated; the plain cache performs an exact identity check even after an internal 64-bit lookup-key collision, and metadata-segregated occupied entries undergo keyed structural authentication before reuse, accounting, or eviction projection. | Identical or spoofed input metadata, compiler type-ID collision, corruption outside the cache, and uncovered/fallback paths remain outside this limited guarantee; it does not eliminate UAF. B7/B9 |
+| **5. Why not use quarantine?** | Quarantine constrains reuse time; type isolation constrains reuse identity, addressing different steps and composing naturally. | Draw no performance winner from configurations that were not tested. B8 |
+| **6. How is `type_id` unique and stable, and how are collisions avoided?** | The current runtime uses a 64-bit hashed allocator-visible identity; the stable compiler-level identity, collision policy, and trust contract still require explicit definition. | Do not describe the helper hash as cryptographic, collision-free, or stable across compilations. B9 |
+| **7. Why does reuse identity exclude callsite?** | Allocation and drop may occur at different callsites; including callsite in identity would break valid pairing within one object category. | Callsite can still support provenance/policy, but should not be the default reuse key. B9 |
+| **8. Why do the ABI/API changes preserve existing programs?** | Supported paths under the paired toolchain require no application source annotation; unknown metadata can use the conventional fallback. | This does not guarantee cross-rustc binary ABI, arbitrary custom allocator/FFI compatibility, or universal semantic coverage. B1--B3 |
+| **9. How do realloc, drop, unwind, and cross-thread deallocation match?** | In the actual-rustc probe, alloc establishes identity, while realloc/dealloc can delegate recovery through strict-neutral metadata; when split FFI also receives stale explicit old metadata, the allocation-completion record remains authoritative for the old object, while the requested new identity binds only the replacement. When partial/generic helper Drop is not exposed by the provider, allocation-side recovery completes pairing. An independent nested-unwind probe also verifies that inner cleanup pops only the inner scope, restores the depth-1 outer scope, and returns to depth 0 after the outer return. | `Vec`, Layout shrink, split FFI, partial/generic handling, and nested unwind are each bounded lifecycles; the provider exposed no generic helper row, so the evidence cannot invent a generic skip or establish complete escape analysis. B4 |
+| **10. Will the MIR pass be brittle across rustc versions?** | Yes. This is an explicit maintenance cost of compiler integration. | Present a stable ABI/contract and a versioned regression suite as the next step. B3 |
+| **11. Can per-type/per-thread caches cause memory blowup?** | They increase retention/fragmentation risk; the current design mitigates that risk with bounded caches and empty-slab controls. | Show the historical anomalous workloads and current footprint controls. B10/B11 |
+| **12. Is "retargetable" merely `cfg`/feature flags?** | The semantic policy and allocator pipeline are reused; PAL, raw memory, concurrency, and metadata layout are adapted. | Each target still requires real runtime evidence and platform work. B12/B17 |
+| **13. How do you prove that hugepages were actually used rather than ordinary-page fallback?** | Current HEAD has `17/17` hugepage/ordinary-domain and fallback tests, while the local direct probe observed no real hugepage backing; macOS returned `KERN_INVALID_ARGUMENT`, so backing remains missing. | Domain separation/fallback PASS does not equal mapping/backing PASS; closure requires a suitable host and a fresh probe consistent with the current three-object side-cache materialization. B13 |
+| **14. What has PAC actually validated so far?** | Current HEAD validates the allocator PAC metadata's safe software fallback and typed side-cache reuse; an independent `no_std` consumer contract isolates std-only dev-dependencies and permits a real arm64e allocator runtime probe built with `rust-src`. | External ABI evidence cannot replace allocator runtime evidence; only a source-bound arm64e `no_std` probe can support hardware functional evidence, and C006 cost/percentage remains deferred. B12 |
+| **15. What is the denominator for 72.17%, and is it current?** | The original paper describes "72.17% of objects" in the standard Rust `alloc` benchmark; it is not a closed current source-bound number. | When raw evidence does not define the event/object denominator, preserve the original terminology; present the original method, fallback, and current audit. B14/B18 |
+| **16. Why does 99.851437% coverage appear now?** | The repository cargo-test hook observed the `std_bench` test-mode `430/430` finite inventory; this is not independent actual-wrapper compiler coverage, performance, or a whole-program denominator, and it has no independent log artifact. The historical `99.851437%` remains G001 freeze-bound evidence; the latest source-bound Oxipng one-shot at `a57d318` separately reports actual direct/scope/Drop/ownership counts of `6/260/320/12`, while retaining unresolved `566/2`, multi-owner `117`, and `whole_program=false`. The later `8e4d37c` reports only the independent current/pinned exact-wrapper soundness closure; results from different revisions or denominators cannot be converted or merged into the older percentage. | Check the source digest, denominator, actual-rewrite/dynamic-execution evidence, and evidence tier first; do not rebind across revisions or present the value as a performance claim. B18 |
+| **17. Is the evaluation fair?** | Comparison requires the same workload, baseline, configuration, repetitions, explicit normalization, raw provenance, and source binding. | State proactively the limits of the original paper's old toolchain/hardware, simulation, and absence of separate uncertainty/significance analysis. B14--B16 |
+| **18. Has the security benefit actually been measured?** | Current adversarial reuse regressions use same-layout objects, cross-thread recovery, and different trusted `type_id` values to show that the covered cache path blocks cross-type address reuse; the plain cache also has a forced lookup-key collision regression, though no systematic exploit-success study yet exists. | Same-type reuse, fallback, identical/spoofed metadata, compiler type-ID collision, and a real exploit corpus remain uncovered; the next measurements are reuse-success rate and attacker capabilities. B19 |
+| **19. Does the current source support five platforms?** | G002 has a macOS functional PASS; Windows has two separate Wine 10 PASS results: `38b8b59` lifecycle `3/3` and current-source `3c725a9` FLS failure-path `1/1`. It also has current-source Redox build/codegen/ABI, Rust-for-Linux and BlogOS no_std final-link contracts, and current fixed/hosted smoke. Current Redox runtime, Rust-for-Linux kernel load/run, and BlogOS boot validation still depend on external runners/assets. | The three lifecycle tests at `38b8b59` and the exact `FlsAlloc`/`FlsSetValue` ownership-retention regression at `3c725a9` bind to different revisions and cannot be added together; the latter proves only owner preservation/reclamation after failure and exact allocation reuse. Wine/local-link evidence does not establish native Windows universality or current-HEAD five-platform hardware closure. B17/B18 |
+| **20. What is the most important dissertation next step?** | Identify the minimal stable identity contract that remains useful under partial coverage, FFI, and adversarial metadata. | The source-bound matrix, exploit corpus, and cross-platform experiments are infrastructure for testing that question; then extend cross-language support and policy automation. B19 |
 
-### 高风险措辞：不要说
+### High-risk wording to avoid
 
-- “UniAlloc **prevents UAF**.”
-- “UniAlloc **proves Rust memory safety**.”
-- “The 64-bit semantic key is **collision-free, unforgeable, or stable across compilers**.”
-- “Fallback proves **binary ABI and FFI compatibility**.”
-- “The current version **runs on five platforms**.”
-- “Current coverage **is 72.17%**” 或 “**is 99.85%**” 而不说明 denominator、digest 与 evidence tier。
-- “PAC 的 **1--3% overhead 已由当前源码复现**” 而只有 hardware functionality probe、没有完整 cost matrix。
-- “Hugepages **are used**” 而没有 backing/mapping evidence。
-- “All tests pass, therefore the paper claims are reproduced.”
-- “Retargeting requires no platform work.”
-- “The allocator has no overhead.”
+- "UniAlloc **prevents UAF**."
+- "UniAlloc **proves Rust memory safety**."
+- "The 64-bit semantic key is **collision-free, unforgeable, or stable across compilers**."
+- "Fallback proves **binary ABI and FFI compatibility**."
+- "The current version **runs on five platforms**."
+- "Current coverage **is 72.17%**" or "**is 99.85%**" without the denominator, digest, and evidence tier.
+- "PAC's **1--3% overhead has been reproduced by the current source**" when the evidence includes only a hardware functionality probe and no complete cost matrix.
+- "Hugepages **are used**" without backing/mapping evidence.
+- "All tests pass, therefore the paper claims are reproduced."
+- "Retargeting requires no platform work."
+- "The allocator has no overhead."
 
-## 9. 19 张备份页：按问题概率排序
+## 9. 19 backup slides ordered by question probability
 
-编号直接使用 `B1`--`B19`，并在主讲 speaker notes 中写明跳转页。为降低首轮制作成本：**B1--B10 是第一轮必须完成；B11--B19 是第二轮/appendix pass。**
+Use `B1`--`B19` directly as slide numbers and record each jump target in the main-talk speaker notes. To reduce first-pass production cost, **B1--B10 are required in the first pass; B11--B19 belong to the second/appendix pass.**
 
-| Backup | 标题/内容 | 主要回答 |
+| Backup | Title / content | Primary question answered |
 |---:|---|---|
 | B1 | `GlobalAlloc` vs semantic alloc/dealloc/realloc signatures | compatibility/ABI |
-| B2 | `AllocationMetadata` fields、flags、unknown/fallback state | metadata semantics |
+| B2 | `AllocationMetadata` fields, flags, unknown/fallback state | metadata semantics |
 | B3 | rustc optimized-MIR rewrite before/after | compiler automation/fragility |
 | B4 | alloc→realloc→drop→unwind→cross-thread lifecycle | pairing/recovery |
-| B5 | 原始完整 `overview.pdf` | architecture details |
+| B5 | Original complete `overview.pdf` | architecture details |
 | B6 | Cargo feature/configuration matrix and invalid combinations | configurability/test burden |
 | B7 | Trusted hashed-key cache invariant and ordinary matching path | exact guarantee |
 | B8 | Type isolation vs quarantine/Scudo | alternative mechanism |
-| B9 | Type-ID stability、collision、same-type limitation、threat model | security boundary |
-| B10 | Thread cache、zone、empty slab、RSS/fragmentation controls | memory overhead |
+| B9 | Type-ID stability, collision, same-type limitation, threat model | security boundary |
+| B10 | Thread cache, zone, empty slab, RSS/fragmentation controls | memory overhead |
 | B11 | Metadata layouts: in-band/segregated/compressed/hybrid | locality/security/footprint tradeoff |
 | B12 | PAC/MTE/MPK/guard/quarantine: hardware vs software vs simulation | feature evidence |
 | B13 | Hugepage mapping/fallback and fixed-heap/PAL adapters | backing/retargeting |
-| B14 | Original benchmark suite、baselines、hardware、toolchain | method validity |
-| B15 | Six runs、discard first、geomean、normalization | statistics |
+| B14 | Original benchmark suite, baselines, hardware, toolchain | method validity |
+| B15 | Six runs, discard first, geomean, normalization | statistics |
 | B16 | Original per-workload plots; aggregate only after raw view | outliers/fairness |
 | B17 | Platform-by-platform adapter and evidence matrix | retargeting claim |
-| B18 | Current source fingerprint、C001--C007、worklist、gap plan | provenance/current status |
-| B19 | Future experiment design: stable identity contract、exploit corpus、source-frozen matrix、FFI frontend | dissertation direction |
+| B18 | Current source fingerprint, C001--C007, worklist, gap plan | provenance/current status |
+| B19 | Future experiment design: stable identity contract, exploit corpus, source-frozen matrix, FFI frontend | dissertation direction |
 
-## 10. Opening、transition 与 closing 脚本
+## 10. Opening, transition, and closing scripts
 
-### 60 秒 opening（可逐字排练）
+### 60-second opening (rehearse verbatim)
 
 > Allocators can observe layout and runtime state, but the conventional Rust allocation API does not expose language-level information such as type or module context. Rust already knows that information when many heap objects are created. My research question is whether a paired compiler/runtime can carry those semantics without requiring source annotations on supported paths, and whether the resulting policy boundary remains reusable across userspace, kernels, and constrained systems. UniAlloc explores that question through an optional semantic API, compiler-assisted extraction, and a retargetable allocator runtime. I will show what this architecture enables, its trust and compatibility contract, and what the evidence does and does not establish.
 
-### 三个关键 transition
+### Three key transitions
 
-1. **Gap → design**： “If the missing resource is semantic information, the first design question is how to carry it without making compatibility conditional.”
-2. **Design → policy**： “A semantic channel matters only if it changes a meaningful allocator decision; type-isolated reuse is the representative case study.”
-3. **Policy → evaluation**： “The right evaluation is therefore not one benchmark number; it is a set of separate tests for feasibility, cost, coverage, and retargeting.”
+1. **Gap → design**: "If the missing resource is semantic information, the first design question is how to carry it without making compatibility conditional."
+2. **Design → policy**: "A semantic channel matters only if it changes a meaningful allocator decision; type-isolated reuse is the representative case study."
+3. **Policy → evaluation**: "The right evaluation is therefore not one benchmark number; it is a set of separate tests for feasibility, cost, coverage, and retargeting."
 
-### 30 秒 closing
+### 30-second closing
 
 > UniAlloc’s central result is that heap semantics do not have to disappear at the allocator boundary. A compiler-assisted, optional channel can expose trusted semantics while preserving a conventional fallback, and a policy/mechanism separation can reuse the allocator across different deployment environments. The next falsifiable question is the minimal stable identity contract that remains useful under partial coverage, FFI, and adversarial conditions; the source-bound evaluation matrix is how we will test that contract, not the contribution itself.
 
-## 11. 排练与完成标准
+## 11. Rehearsal and completion criteria
 
-### 四轮排练
+### Four rehearsal passes
 
-1. **逻辑排练，不计时**：每页只说一句 takeaway；若两页 takeaway 相同，合并。
-2. **45 分钟排练**：记录每个 section 的实际时间，不要只看总时间；48 分钟只是硬上限。
-3. **中断排练**：请一人随机在 Slides 4、13、17、22、28 打断；练习 20 秒回答后回到论证链。
-4. **42 分钟排练**：按第 5 节剪页，验证没有丢失 H1/H2/H3 的 closure。
+1. **Logic rehearsal, untimed**: State only one takeaway per slide; merge slides whose takeaways are identical.
+2. **45-minute rehearsal**: Record the actual time for every section, not only the total; 48 minutes is the hard ceiling.
+3. **Interruption rehearsal**: Ask someone to interrupt randomly on Slides 4, 13, 17, 22, and 28; practice a 20-second answer and return to the argument chain.
+4. **42-minute rehearsal**: Apply the cuts from Section 5 and verify that the H1/H2/H3 closure remains intact.
 
-MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的人排练；这正是本模板把每页写成 answer-title 的原因。参考：[Practical Advice for Preparing Your Qualifying Exam Presentation](https://mitcommlab.mit.edu/meche/2021/04/20/practical-advice-for-preparing-your-qualifying-exam-presentation/)。
+MIT's practical guide recommends writing one takeaway per slide and rehearsing with people from different technical backgrounds. That advice motivates this template's answer-title format. Reference: [Practical Advice for Preparing Your Qualifying Exam Presentation](https://mitcommlab.mit.edu/meche/2021/04/20/practical-advice-for-preparing-your-qualifying-exam-presentation/).
 
-### 主 deck 完成定义
+### Definition of done for the main deck
 
-- [ ] 31 张主幻灯片排练目标为 45 分钟，任何一次完整排练都不超过 48 分钟。
-- [ ] 每一张标题都是完整 claim sentence。
-- [ ] 每个数字都有 evidence badge、baseline、N、toolchain/hardware 和 date/digest。
-- [ ] H1/H2/H3 各有一张 `Supports / Does not establish` 小结。
-- [ ] Historical paper result 与 current implementation/current claim-grade evidence 视觉上不可混淆。
-- [ ] 19 张 backup 页可在 10 秒内跳转。
-- [ ] 能在 20 秒和 90 秒两种长度回答表中 20 个问题。
-- [ ] Opening 60 秒、closing 30 秒可不看稿完成。
-- [ ] 答辩前重新生成 Slide 28/B18 的 live HEAD、H1/H2/H3 functional probe summary 和 deferred-claim status。
+- [ ] The 31-slide main deck targets 45 minutes in rehearsal, and every complete rehearsal stays within 48 minutes.
+- [ ] Every title is a complete claim sentence.
+- [ ] Every number includes an evidence badge, baseline, N, toolchain/hardware, and date/digest.
+- [ ] H1, H2, and H3 each have a `Supports / Does not establish` summary.
+- [ ] Historical paper results and current implementation/current claim-grade evidence are visually distinct.
+- [ ] All 19 backup slides are reachable within 10 seconds.
+- [ ] All 20 table questions can be answered in both 20-second and 90-second versions.
+- [ ] The 60-second opening and 30-second closing can be delivered without notes.
+- [ ] Regenerate Slide 28/B18 live HEAD, H1/H2/H3 functional probe summaries, and deferred-claim status before the defense.
 
-## 12. 最小 source map
+## 12. Minimal Source Map
 
-以下是制作 slides 时优先打开的文件；不要从聊天记录复制事实。
+Open these files first when building the slides. Copy no factual claims from chat history.
 
-| 目的 | 权威入口 |
+| Purpose | Authoritative entry |
 |---|---|
 | Research question/contributions/scope | `../rust-alloc-paper/intro.tex:217-286` |
 | Design principles | `../rust-alloc-paper/rethink.tex:1-57` |
@@ -581,12 +676,12 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 | Compiler MIR rewrite | `tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs` |
 | Copied-byte collect canonical-Vec spoof regression | `tools/unialloc-rustc-pass/test_mir_slice_iter_hazard_nonowner.py` (`8e4d37c`; current/pinned actual wrapper; canonical `Vec<u8>` applied, callback-bearing fake `[lib] name="alloc"` destination unresolved/audit-only; exact functional soundness only) |
 | Delayed-free + metadata-segregated rejection safety regression | `unialloc/src/alloc_api/type_isolation.rs` (`ee9d0c6`; forced inline/bucket rejection, terminal-release barrier, owner continuity, duplicate-release guard; hosted/fixed exact `1/1`; bounded test-only evidence) |
-| Vec realloc/isolation actual-rewrite probe | `unialloc/src/bin/rustc_driver_mir_vec_realloc_identity_probe.rs`、`tools/unialloc-rustc-pass/test_mir_vec_realloc_identity_probe.py` |
+| Vec realloc/isolation actual-rewrite probe | `unialloc/src/bin/rustc_driver_mir_vec_realloc_identity_probe.rs`, `tools/unialloc-rustc-pass/test_mir_vec_realloc_identity_probe.py` |
 | Cross-thread Box-to-Vec actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_cross_thread_box_slice_into_vec_rebind.py` |
-| String-to-Vec actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_string_into_bytes_rebind.py`、`unialloc/tests/string_into_bytes_rebind.rs` |
+| String-to-Vec actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_string_into_bytes_rebind.py`, `unialloc/tests/string_into_bytes_rebind.rs` |
 | Exact str-to-owned String actual-rewrite/isolation probe | `tools/unialloc-rustc-pass/test_mir_str_to_owned_outer_owner.py` (`24bb079`; current/pinned actual wrapper, slice/generic/custom fail-closed controls, functional only) |
 | Exact fmt-format adversarial fail-closed probe | `tools/unialloc-rustc-pass/test_mir_fmt_format_fail_closed.py` (two-crate current/pinned actual wrapper; reentrant allocating `Display`; functional only) |
-| Vec-to-boxed-slice actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_vec_into_boxed_slice_rebind.py`；runtime regressions `vec_into_boxed_slice_transfers_exact_and_moved_shrink_identities`、`vec_into_boxed_slice_rejection_preserves_exact_source_policy`、`vec_into_boxed_slice_missing_record_suppresses_outer_and_auto_attribution` |
+| Vec-to-boxed-slice actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_vec_into_boxed_slice_rebind.py`; runtime regressions `vec_into_boxed_slice_transfers_exact_and_moved_shrink_identities`, `vec_into_boxed_slice_rejection_preserves_exact_source_policy`, `vec_into_boxed_slice_missing_record_suppresses_outer_and_auto_attribution` |
 | VecDeque same-layout actual-rewrite/isolation probe | `tools/unialloc-rustc-pass/test_mir_vecdeque_same_layout_type_isolation.py` (`5eb25f5`; hosted/fixed one-shot functional evidence) |
 | VecDeque capacity outer-owner actual-rewrite probe | `tools/unialloc-rustc-pass/test_mir_vecdeque_capacity_outer_owner.py` (`c02baa6`; current/pinned exact capacity paths, fail-closed negatives, functional only) |
 | Rc outer-owner actual-rewrite/isolation probe | `tools/unialloc-rustc-pass/test_mir_rc_new_outer_owner.py` (`1bd0c9d`; current/pinned functional evidence, exact constructor boundary) |
@@ -601,382 +696,454 @@ MIT 的实践指南建议为每页写一句 takeaway 并向不同技术背景的
 | Cross-thread authenticated split-realloc composition regression | `unialloc/src/alloc_api/type_isolation.rs` (`7ec42d4`; exact test `cross_thread_split_realloc_preserves_authenticated_old_and_new_identities`; hosted/fixed functional only) |
 | Custom ADT destination discovery / fail-closed provenance | `tools/unialloc-rustc-pass/test_mir_non_generic_adt_destination_owner.py` (`465234c` unsafe positive-only attempt superseded by `504ed10`; current/pinned actual wrapper, exact internal constructors + Drop only) |
 | Delayed-free duplicate-quarantine regression | `unialloc/src/alloc_api/type_isolation.rs` (`05d18be`; current-thread TLS quarantine, stale-mask and omitted-flag bypass; hosted/fixed-heap functional only) |
-| Vec-to-IntoIter and String-to-Box-str pairing probes | `tools/unialloc-rustc-pass/test_mir_vec_into_iter_rebind.py`、`tools/unialloc-rustc-pass/test_mir_string_into_boxed_str_rebind.py`、`unialloc/tests/string_into_boxed_str_rebind.rs` (`32c3c5b`) |
-| Box-str-to-String actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_boxed_str_into_string_rebind.py`、`unialloc/tests/boxed_str_into_string_rebind.rs` (`ded36de`; current-rustc functional only) |
-| Supported/ambiguous Clone actual-rewrite probe | `unialloc/src/bin/rustc_driver_mir_ambiguous_clone_fallback_probe.rs`、`tools/unialloc-rustc-pass/test_mir_ambiguous_clone_fallback_probe.py` |
+| Vec-to-IntoIter and String-to-Box-str pairing probes | `tools/unialloc-rustc-pass/test_mir_vec_into_iter_rebind.py`, `tools/unialloc-rustc-pass/test_mir_string_into_boxed_str_rebind.py`, `unialloc/tests/string_into_boxed_str_rebind.rs` (`32c3c5b`) |
+| Box-str-to-String actual-rewrite/safety probe | `tools/unialloc-rustc-pass/test_mir_boxed_str_into_string_rebind.py`, `unialloc/tests/boxed_str_into_string_rebind.rs` (`ded36de`; current-rustc functional only) |
+| Supported/ambiguous Clone actual-rewrite probe | `unialloc/src/bin/rustc_driver_mir_ambiguous_clone_fallback_probe.rs`, `tools/unialloc-rustc-pass/test_mir_ambiguous_clone_fallback_probe.py` |
 | Cargo multi-crate target allowlist regression | `tools/unialloc-rustc-pass/test_mir_wrapper_target_allowlist.py` |
-| Nested unwind actual-rewrite probe | `unialloc/src/bin/rustc_driver_mir_semantic_scope_unwind_probe.rs`、`tools/unialloc-rustc-pass/test_mir_semantic_scope_unwind_probe_runner.py` |
+| Nested unwind actual-rewrite probe | `unialloc/src/bin/rustc_driver_mir_semantic_scope_unwind_probe.rs`, `tools/unialloc-rustc-pass/test_mir_semantic_scope_unwind_probe_runner.py` |
 | Arbitrary dependency-factory fail-closed provenance | `tools/unialloc-rustc-pass/test_mir_dependency_factory_provenance_fail_closed.py` (`9a02767`; current/pinned actual wrapper, exact control only) |
-| Clone classifier fail-closed fixture | `tools/unialloc-rustc-pass/fixtures/mir_clone_candidate_classification.rs`、`tools/unialloc-rustc-pass/test_mir_type_isolation_security_probe.py` |
+| Clone classifier fail-closed fixture | `tools/unialloc-rustc-pass/fixtures/mir_clone_candidate_classification.rs`, `tools/unialloc-rustc-pass/test_mir_type_isolation_security_probe.py` |
 | Bounded current mechanism validation | `docs/allocator-mir-and-backend-validation.md` |
 | Current actual-rustc identity/recovery replay | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/type-isolation-actual-rustc-2e3c0e2-a7b5f75-20260712/validation-summary.json` |
-| Earlier presentation bundle at `a51960d` | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-type-isolation-a51960d-20260712T202813Z/summary.json`（HEAD `a51960d92a7c72deabaf25fc23e985c3b26c09a5`；scoped fingerprint `f23eda54...`；Oxipng build/run PASS；6/383/320 direct/scope/Drop；static transfer `12/12`；dynamic `3/1/2`；oracle wrong-type non-reuse/same-type reuse、mismatch/corrupt `0/0`；whole-run corrected mismatch `13`、fail-closed `575`；660 UniAlloc + 430 std-bench PASS；summary SHA `bc6f32805e58cb021223dde2e01a91887cbe36e653f5ff73257823349a12e685`） |
-| Earlier source-bound H1 actual-rewrite evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-current-head-94b2523d8823-20260712T060330Z/identity-hash-manifest.json`（historical to exact source; do not rebind） |
-| External Rust application rewrite/isolation evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-current-576df61-20260712c-enriched/oxipng-realapp-repro-summary.json`（collection HEAD `576df61` + stable adapter，byte-identical commit `9bb9f8d`；`f8f0d90` 后为 58/60 scoped hashes，仅 post-run summarizer/test 改变；one-shot build/run；6/383/320 applied + 6 exact Box-to-Vec transfer candidates/applied/selected rows、575 fail-closed、runtime `904/1070`/64 rows、13 recovery-corrected non-exact、bounded oracle PASS；summary SHA-256 `cd14bf7bdcbff8fe99d5fc6d97888ce2065050c527b423baa63b856857bdd43b`；enrichment 确定性重放 preserved raw，program rerun=false，direct count 独立）；这不表示 full working tree clean，也不是 performance/natural-app universal isolation evidence。原 `...20260712b` 与历史 `427583b`、`af342f7` artifacts 均保持 append-only，不能跨 revision rebinding/归因。 |
-| Earlier source-bound external Rust functional run | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-typeiso-46d5aaa-20260712e/oxipng-realapp-repro-summary.json`（HEAD `46d5aaa...`；pass SHA `52ab1465...`；one-shot build/run；output SHA `565f253e...`；6/367/320 direct/scope/Drop；transfer static `12/12`、dynamic `3/1/2`；529 fail-closed；59 runtime rows；whole-run mismatch `0`；oracle PASS；summary SHA `f5b8ad7c...`）；该 run 早于 `0704852` module-id hardening，不得跨 revision rebinding；无 timing/performance claim。 |
-| Earlier accepted source-bound external Rust functional run | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-19ffb71-20260712-one-shot/acceptance.json`（claim-bearing source `19ffb710...`；pinned Oxipng v4.0.3 与 `nightly-2022-07-01` one-shot build/run `0/0`；output SHA `565f253e...`；direct/scope/Drop `6/310/320`；static transfer candidate/applied/selected `12/12/12`、runtime `3/1/2`；fail-closed semantic/Drop `516/119`；53 runtime rows；injected wrong-type non-reuse / same-type reuse PASS；whole-run mismatch `1` 且状态为 `recovery_corrected_non_exact`；acceptance SHA `efa66ec1...`）。该 artifact 只支持 `19ffb71` revision 的 bounded functional/diagnostic claim；不得 rebinding，也不支持其他 revision 的 external-app counts、whole-app exact pairing、universal coverage 或 performance。 |
-| Latest external-app source-bound Rust functional run before `8e4d37c` | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-a57d318-20260713/{acceptance.json,oxipng-realapp-repro-summary.json}`（code-bearing HEAD `a57d3189d1cce3265170a69801d63a6ff5b0157b`；acceptance SHA `b84e5a56c19e9f79537dc33cc5a09cd2e9d184f10e6052de40c9f34252d3651b`；build/run `0/0`、output hash match；direct/scope/Drop/ownership `6/260/320/12`，unresolved semantic/Drop `566/2`，multi-owner Drop `117`，whole-program false；typed alloc/dealloc `860/850`，fallback `210/170`，raw alloc/dealloc/realloc `183/144/26`，dynamic transfer `3/1/2`；injected oracle wrong-type non-reuse / exact-type reuse PASS；唯一 mismatch 为 cross-crate `PathBuf` recorded-library/requested-binary module difference，状态 `recovery_corrected_non_exact`）。单次 source-bound functional/diagnostic evidence only，无 timing loop，不支持 performance、whole-program 或 universal claim；不得 rebinding 到 `8e4d37c`。 |
-| Cross-crate returned-owner isolation regression | `tools/unialloc-rustc-pass/test_mir_crosscrate_returned_string_recovery.py`（`e352206`；current + `nightly-2022-07-01` PASS；same nonzero String type id / distinct nonzero module ids；two visible allocation-identity corrections；wrong-module non-reuse、per-module exact reuse；typed `4/4`、recovery `2/2`、fallback/raw/corrupt `0`）。Bounded enum(`String`) actual-wrapper functional security test only；非 Oxipng aggregate/`PathBuf` proof、universal coverage 或 performance evidence。 |
-| Earlier source-bound external Rust ownership-transfer execution | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-ownership-runtime-38b8b59-20260712d-success/oxipng-realapp-repro-summary.json`（HEAD `38b8b59c...`，pass SHA `c2c83b...`，scoped fingerprint `8609ff...`，static transfer `6/6`，dynamic `1/1/0`，`png::PngData::output` old owner `Box<[u8; 8]>` / `exact_immediate_box_array_unsize`，output SHA `565f...`，summary SHA `292c8f...`）；此前 `...6d955c0...failed-after-first-repair` artifact 保留为 `1/0/1` 历史失败。单次 diagnostic functional only；非 whole-program、benchmark 或性能。 |
-| Source-bound H2 lifecycle evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h2-20260712T0604Z/audit.json`、`sha256sums.txt` |
+| Earlier presentation bundle at `a51960d` | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-type-isolation-a51960d-20260712T202813Z/summary.json` (HEAD `a51960d92a7c72deabaf25fc23e985c3b26c09a5`; scoped fingerprint `f23eda54...`; Oxipng build/run PASS; 6/383/320 direct/scope/Drop; static transfer `12/12`; dynamic `3/1/2`; oracle wrong-type non-reuse/same-type reuse, mismatch/corrupt `0/0`; whole-run corrected mismatch `13`, fail-closed `575`; 660 UniAlloc + 430 std-bench PASS; summary SHA `bc6f32805e58cb021223dde2e01a91887cbe36e653f5ff73257823349a12e685`) |
+| Earlier source-bound H1 actual-rewrite evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-current-head-94b2523d8823-20260712T060330Z/identity-hash-manifest.json` (historical to exact source; do not rebind) |
+| External Rust application rewrite/isolation evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-typeiso-current-576df61-20260712c-enriched/oxipng-realapp-repro-summary.json` (collection HEAD `576df61` + stable adapter, byte-identical commit `9bb9f8d`; after `f8f0d90`, 58/60 scoped hashes, with only post-run summarizer/test changes; one-shot build/run; 6/383/320 applied + 6 exact Box-to-Vec transfer candidates/applied/selected rows, 575 fail-closed, runtime `904/1070`/64 rows, 13 recovery-corrected non-exact, bounded oracle PASS; summary SHA-256 `cd14bf7bdcbff8fe99d5fc6d97888ce2065050c527b423baa63b856857bdd43b`; deterministic enrichment replay preserved raw evidence, program rerun=false, and counted direct rewrites independently). This does not establish a clean full working tree or performance/natural-app universal isolation evidence. The original `...20260712b` and historical `427583b` and `af342f7` artifacts remain append-only and cannot be rebound or attributed across revisions. |
+| Earlier source-bound external Rust functional run | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-typeiso-46d5aaa-20260712e/oxipng-realapp-repro-summary.json` (HEAD `46d5aaa...`; pass SHA `52ab1465...`; one-shot build/run; output SHA `565f253e...`; 6/367/320 direct/scope/Drop; transfer static `12/12`, dynamic `3/1/2`; 529 fail-closed; 59 runtime rows; whole-run mismatch `0`; oracle PASS; summary SHA `f5b8ad7c...`). This run predates `0704852` module-id hardening and cannot be rebound across revisions. It supports no timing/performance claim. |
+| Earlier accepted source-bound external Rust functional run | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-19ffb71-20260712-one-shot/acceptance.json` (claim-bearing source `19ffb710...`; pinned Oxipng v4.0.3 and `nightly-2022-07-01` one-shot build/run `0/0`; output SHA `565f253e...`; direct/scope/Drop `6/310/320`; static transfer candidate/applied/selected `12/12/12`, runtime `3/1/2`; fail-closed semantic/Drop `516/119`; 53 runtime rows; injected wrong-type non-reuse / same-type reuse PASS; whole-run mismatch `1` with status `recovery_corrected_non_exact`; acceptance SHA `efa66ec1...`). This artifact supports only the bounded functional/diagnostic claim for revision `19ffb71`. It cannot be rebound and does not support external-app counts for other revisions, whole-app exact pairing, universal coverage, or performance. |
+| Latest external-app source-bound Rust functional run before `8e4d37c` | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-a57d318-20260713/{acceptance.json,oxipng-realapp-repro-summary.json}` (code-bearing HEAD `a57d3189d1cce3265170a69801d63a6ff5b0157b`; acceptance SHA `b84e5a56c19e9f79537dc33cc5a09cd2e9d184f10e6052de40c9f34252d3651b`; build/run `0/0`, output hash match; direct/scope/Drop/ownership `6/260/320/12`, unresolved semantic/Drop `566/2`, multi-owner Drop `117`, whole-program false; typed alloc/dealloc `860/850`, fallback `210/170`, raw alloc/dealloc/realloc `183/144/26`, dynamic transfer `3/1/2`; injected oracle wrong-type non-reuse / exact-type reuse PASS; the sole mismatch is the cross-crate `PathBuf` recorded-library/requested-binary module difference, with status `recovery_corrected_non_exact`). This is one-shot source-bound functional/diagnostic evidence only, with no timing loop. It supports no performance, whole-program, or universal claim and cannot be rebound to `8e4d37c`. |
+| Cross-crate returned-owner isolation regression | `tools/unialloc-rustc-pass/test_mir_crosscrate_returned_string_recovery.py` (`e352206`; current + `nightly-2022-07-01` PASS; same nonzero String type id / distinct nonzero module ids; two visible allocation-identity corrections; wrong-module non-reuse, per-module exact reuse; typed `4/4`, recovery `2/2`, fallback/raw/corrupt `0`). Bounded enum(`String`) actual-wrapper functional security test only; it is not proof for the Oxipng aggregate/`PathBuf`, universal coverage, or performance. |
+| Earlier source-bound external Rust ownership-transfer execution | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-ownership-runtime-38b8b59-20260712d-success/oxipng-realapp-repro-summary.json` (HEAD `38b8b59c...`, pass SHA `c2c83b...`, scoped fingerprint `8609ff...`, static transfer `6/6`, dynamic `1/1/0`, `png::PngData::output` old owner `Box<[u8; 8]>` / `exact_immediate_box_array_unsize`, output SHA `565f...`, summary SHA `292c8f...`). The earlier `...6d955c0...failed-after-first-repair` artifact remains as the historical `1/0/1` failure. One-shot diagnostic functional evidence only; it is not whole-program, benchmark, or performance evidence. |
+| Source-bound H2 lifecycle evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h2-20260712T0604Z/audit.json`, `sha256sums.txt` |
 | Source-bound H3 fixed/hosted smoke evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/presentation-h3-20260712T060354Z-94b2523d8823/sha256-manifest.json` |
-| Earlier Wine 10 FLS lifecycle evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/windows-wine10-fls-38b8b59-20260712b/summary.json`（source `38b8b59`；fresh Windows GNU cross-build；exact tests `3/3`；exe SHA `7d4e060d...`；Wine image、runner、source-input hashes 与 transcripts preserved；summary SHA `d44dbe74...`）；bounded Wine functional only，非 native-Windows universality/performance。 |
-| Current-source Wine 10 FLS failure-path evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/windows-wine10-fls-failure-3c725a9-20260713T122658Z/summary.json`（source `3c725a9`；Wine image `sha256:a784009c...`；exact ignored test `global_thread_cache_fls_failures_do_not_lose_cache_ownership_on_windows` `1/1` PASS；FlsAlloc/FlsSetValue failure retains ownership, supports reclaim and exact allocation reuse；summary SHA `f122afa5...`）。与 earlier `38b8b59` `3/3` 分开报告，不相加；bounded Wine functional only，非 native-Windows universality/performance。 |
+| Earlier Wine 10 FLS lifecycle evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/windows-wine10-fls-38b8b59-20260712b/summary.json` (source `38b8b59`; fresh Windows GNU cross-build; exact tests `3/3`; exe SHA `7d4e060d...`; Wine image, runner, source-input hashes, and transcripts preserved; summary SHA `d44dbe74...`). Bounded Wine functional evidence only; it does not establish native-Windows universality or performance. |
+| Current-source Wine 10 FLS failure-path evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/windows-wine10-fls-failure-3c725a9-20260713T122658Z/summary.json` (source `3c725a9`; Wine image `sha256:a784009c...`; exact ignored test `global_thread_cache_fls_failures_do_not_lose_cache_ownership_on_windows` `1/1` PASS; FlsAlloc/FlsSetValue failure retains ownership, supports reclaim and exact allocation reuse; summary SHA `f122afa5...`). Report separately from the earlier `38b8b59` `3/3`; do not add the counts. Bounded Wine functional evidence only; it does not establish native-Windows universality or performance. |
 | Current-source Redox build/codegen/ABI evidence | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/redox-current-source-b3f2cad-20260712/summary.json` |
 | BlogOS fixed-heap publication/final-link contract | `tools/blogos-contract/` (`00a187b`, `a581cb4`; no_std ELF/global allocator/boot init/panic handlers + 5 host state-machine regressions; external boot runtime missing) |
-| Rust-for-Linux final-crate force-link contract | `tools/rust-for-linux-link-contract/`、`kernel/kernel-modules/benchmarking/rust_bench.rs` (`bd9d927`; real bridge and 11 required symbols; external kernel runtime missing) |
-| Constrained-platform ABI layout parity | `tools/rust-for-linux-link-contract/src/abi_layout_contract.rs`、`test_rust_for_linux_link_contract.py` (`315cfc4`; 5 records, 75 offsets/language; local-host C compiler boundary) |
+| Rust-for-Linux final-crate force-link contract | `tools/rust-for-linux-link-contract/`, `kernel/kernel-modules/benchmarking/rust_bench.rs` (`bd9d927`; real bridge and 11 required symbols; external kernel runtime missing) |
+| Constrained-platform ABI layout parity | `tools/rust-for-linux-link-contract/src/abi_layout_contract.rs`, `test_rust_for_linux_link_contract.py` (`315cfc4`; 5 records, 75 offsets/language; local-host C compiler boundary) |
 | Cache/footprint controls | `docs/allocator-memory-footprint.md` (`d87d5e0`, `25d316c`; hosted footprint reduction + matching-saturation correctness repair; diagnostic only) |
-| PAC functionality vs cost boundary | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/pac-current-head-94b2523d8823-20260712T060647Z/`、`docs/evaluation-toolchains.md:272-280` |
-| Hugepage domain/fallback vs backing boundary | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/hugepage-domain-smoke-20260712a/hugepage-domain-smoke-summary.json`；current domain/fallback PASS，real backing MISSING |
+| PAC functionality vs cost boundary | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/pac-current-head-94b2523d8823-20260712T060647Z/`, `docs/evaluation-toolchains.md:272-280` |
+| Hugepage domain/fallback vs backing boundary | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/hugepage-domain-smoke-20260712a/hugepage-domain-smoke-summary.json`; current domain/fallback PASS, real backing MISSING |
 | Current claim status | `evaluation/results/claim_check_current.json` |
 | Missing claim requirements | `evaluation/results/overclaim_worklist.json` |
-| Deferred paper-performance scope | `evaluation/results/paper_performance_gap_plan.json`、`.omx/handoff/g001-performance-campaign-stop-user-objective-change-20260712T030350Z.json` |
-| Platform evidence | `docs/c007-redox-boot-evidence.md`；`evaluation/results/platform_matrix_audit.json` 是 2026-07-10 的 historical/stale aggregate，仍含已修复 Redox blocker 与旧 source digest，不得作为 current aggregate 引用 |
-| Historical G001 freeze/partial records | `/Users/hqzhao/Downloads/UniAlloc-G001-freeze-235549b2/evaluation/raw/source-freeze-required-bound-plan-235549b2-20260711a/final-verification.json`；20 accepted records remain historical/diagnostic only |
-| Active implementation goal/status | `.omx/ultragoal/goals.json`、`.omx/ultragoal/ledger.jsonl`、live `git rev-parse HEAD` |
+| Deferred paper-performance scope | `evaluation/results/paper_performance_gap_plan.json`, `.omx/handoff/g001-performance-campaign-stop-user-objective-change-20260712T030350Z.json` |
+| Platform evidence | `docs/c007-redox-boot-evidence.md`; `evaluation/results/platform_matrix_audit.json` is a historical/stale aggregate from 2026-07-10 that still contains the resolved Redox blocker and old source digest, so it must not be cited as the current aggregate |
+| Historical G001 freeze/partial records | `/Users/hqzhao/Downloads/UniAlloc-G001-freeze-235549b2/evaluation/raw/source-freeze-required-bound-plan-235549b2-20260711a/final-verification.json`; 20 accepted records remain historical/diagnostic only |
+| Active implementation goal/status | `.omx/ultragoal/goals.json`, `.omx/ultragoal/ledger.jsonl`, live `git rev-parse HEAD` |
 
-### 答辩前四天的 current-source evidence boundary
+### Current-Source Evidence Boundary Four Days Before the Defense
 
-- **P0 duplicate-free ownership closure：** `8a1cb06` 先加入 plain、
-  metadata-segregated 与 cross-thread-hinted typed-cache duplicate-free
-  regressions，`a93cf97` 再引入 bounded、allocation-free、process-visible 的
-  type-cache pointer registry。cache publish 先取得唯一 ownership；duplicate
-  直接 fail-stop，registry pressure 则绕过 cache 并 raw-free；pop、evict、thread
-  drain 和 delayed-free→type-cache transfer 都成对 retire/register，关闭同一地址
-  同时进入两个 TLS cache 的窗口。checkpoint `654e1d7` validation gate 为 hosted
-  `685/685`、fixed-heap `650/650`。这是 retained-cache ownership 的 P0
-  correctness closure，不是对任意已复用 stale pointer 的 universal detector，
-  也不是性能结论。
-- **registry saturation / tombstone safety：** `45c5e8c` 的 deterministic
-  regression 构造同一 ownership shard/probe-window 的 `PROBE_LIMIT + 1` 个
-  synthetic aligned keys，验证 full window 返回 `Full`、删除中间 owner 后仍能
-  穿过 tombstone 查找/拒绝 duplicate、随后安全复用 tombstone，并在收尾时把
-  global ownership count 恢复为 `0`。这些 keys 只参与 hash/store/compare，绝不
-  dereference 或交给 allocator。hosted 与 `fixed_heap` exact regression 各
-  `1/1` PASS；这是 bounded registry-pressure correctness evidence，不是任意地址
-  空间碰撞或并发 linearizability 的通用证明。
-- **type-cache ownership dispatch guards 与 real-free pressure：** `bbdda3c`
-  的三个 white-box regressions 分别验证：手工发布 bounded registry ownership
-  后，raw dealloc/realloc 对各自独立 live pointer 在释放、复制或修改 storage 前
-  fail-stop 且不改变 bytes/count；isolated child death tests 在 panic hook 内先
-  `abort`，因此不让 panic unwind 穿过 `GlobalAlloc::{dealloc,realloc}`；真实 typed
-  object 所在 probe window 被 synthetic colliders 填满时，semantic free 观察到
-  cache bypass `1`、insert/hit `0`，不发布目标 pointer，也不扰动既有 colliding
-  owners。entrypoint tests 注入的是 registry state，而不是完整真实 cache
-  insertion；pressure test 的对象是真实 allocation，但压力 keys 是 synthetic。
-  hosted/fixed targeted 均为 `3/3`，normal pre-commit gate 为 allocator `689/689`；
-  repository cargo-test hook observed `std_bench` test-mode `430/430` finite
-  inventory。该 hook 结果不是 independent actual-wrapper compiler coverage 或
-  whole-program denominator，且无独立 log artifact；这些结果只验证
-  already-published bounded ownership state 的 dispatch/bypass 行为，不是通用
-  double-free、UAF、任意并发
-  race 或 universal memory-safety proof，也没有 benchmark claim。
-- **single-owner `Result` Clone actual rewrite：** `55148cd`（格式收口
-  `52342fb`）让普通 Rust
-  `Result<Vec<ProducerPayload>, u8>::clone` 通过 actual `RUSTC_WRAPPER` 得到
-  exactly one applied semantic scope。compiler/runtime type id 同为
-  `11653960357981974603`，same-layout Consumer identity 不同；runtime typed
-  alloc/dealloc/cache-hit/cache-insert 为 `1/1/1/1`，fallback/raw 为 `0`，clone
-  只精确复用 Producer storage、不得取得 Consumer storage。已有 ambiguous
-  `Result<Vec<ProducerPayload>, String>::clone` 仍保持一条 fail-closed raw
-  fallback。current-source artifact 位于
-  `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/result-clone-current-head-52342fbe-20260713/`，
-  `summary.json` SHA-256 为
-  `b7bbe7e16249d594da895a6a170d1b85120176dc1d7513ca4406897e7919c3e9`。
-  这是 current `nightly-2026-06-11` 上一个 supported single-owner 与一个
-  ambiguous negative control 的 bounded functional/security probe，不是
-  universal `Clone` coverage 或性能证据。不要宣称 pinned nightly PASS：该次
-  尝试在进入新 Result gate 前命中了既有 explicit `std::mem::drop` audit-shape
-  validator boundary。
-- **`Result` Clone partial unwind：** `4d6a219` 的 generated Cargo app 在 actual
-  `RUSTC_WRAPPER` 下执行普通
-  `Result<Vec<ProducerPayload>, u8>::clone`，第三个 element clone panic；audit
-  要求 Result scope actual applied 且 unwind pop inserted。运行时 scope depth
-  `1 -> 0`、成功 clone `2` 个 element、cleanup witness Drop `1` 次，并严格观察
-  partial Vec buffer `256 B` 的 typed dealloc/cache insert `1/1`。随后 exact
-  Producer 取回 seeded address，same-layout Consumer 不得取得 Producer storage；
-  fallback/raw/mismatch/corrupt/dropped 全为 `0`。最初 `2/2` 是统计窗口误把
-  `catch_unwind` panic transport cleanup 计入，不是 source double-free 或 pass
-  cleanup bug；final witness 已把窗口收窄到 partial-buffer cleanup，independent
-  review APPROVE。artifact `result-clone-partial-unwind-main-4d6a219-20260713`
-  的 `summary.json` SHA-256 为
-  `3d9704c2c2fb5d43809b2007a9bf8f42266975a292a32dbc8dd1490a4dcb8629`。
-  这是 bounded functional/security evidence，不是 universal unwind coverage
-  或性能证据。
-- **PAL mutex handoff：** `b197d4a` 的 OS-thread regression 使用零容量 channel
-  编排 holder/observer，不依赖 sleep 或 timing guess；它验证 holder 持锁时
-  `try_lock` 必须 busy，release 后 observer 能看到写入并把新值交回 main。
-  exact test `1/1`、`sync::tests` `2/2` PASS。这是当前 hosted pthread PAL 的
-  exclusion/visibility 功能证据，不替代其他平台 runtime 验证。
-- **真实 Cargo generic/concrete boundary：** `654e1d7` 的
-  `test_mir_generic_vec_type_isolation_fail_closed.py` 创建真实 Cargo 应用，使用
-  actual `RUSTC_WRAPPER`、`UNIALLOC_ACTUAL_MIR_REWRITE=1` 和
-  `UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE=1` 编译并运行，不是 dry-run。
-  `generic_roundtrip<T>` 的 `Vec<T>::with_capacity` 保持 unresolved/audit-only，
-  无 planned/applied row；运行时 generic typed `0/0/0/0`，fallback/raw
-  alloc/dealloc `8/8`，mismatch/corrupt/dropped `0/0/0`，证明未知泛型 identity
-  安全 fail closed。相同调用中的 same-layout `Vec<Producer>` / `Vec<Consumer>`
-  则各有一条 actual applied scope、distinct nonzero compiler type IDs；运行时
-  typed alloc/dealloc `12/12`、cache hit/insert `4/12`，wrong-type 地址集合不相交，
-  recovered Producer 集合精确等于原 Producer 集合，fallback/raw/mismatch/corrupt
-  全为 `0`。这个 concrete positive control 证明一条 bounded actual-rewrite
-  type-separation 路径；**generic positive isolation 仍缺**，需要
-  monomorphization-aware type evidence 后才能安全 rewrite。
-- **真实 Cargo 跨线程同布局隔离：** `8e462ad` 扩展 multi-module Cargo
-  actual-`RUSTC_WRAPPER` fixture：main thread 分配 `Vec<Producer>` 后把 owner
-  move 到 worker 并在那里 Drop；compiler 为 Producer/Consumer 产生 distinct
-  nonzero type IDs `11365312940488603059 / 17474015272962783245`，三条 scope
-  都由 `auto_cross_thread_escape` 得到 cross-thread placement，而不是手工 metadata
-  hint。worker 随后分配同 layout `Vec<Consumer>`，不得取得 Producer 地址；再分配
-  `Vec<Producer>`，必须精确取得原地址。fresh current-source 单次验证为 typed
-  alloc/dealloc/cache-hit/cache-insert `2/3/1/3`，fallback/raw、recovery mismatch、
-  corrupt slot、dropped stats 全为 `0`。这是一个 generated multi-module Cargo
-  application 上的 bounded actual-rewrite/thread-transfer/address-oracle evidence，
-  不是任意外部应用 coverage、universal memory-safety proof 或性能结果。
-- **latest external-app source-bound real app before `8e4d37c`：** `a57d318` 的 pinned Oxipng v4.0.3
-  one-shot build/run `0/0` 且 output hash 匹配；artifact
-  `oxipng-current-a57d318-20260713/acceptance.json` SHA-256 为
-  `b84e5a56c19e9f79537dc33cc5a09cd2e9d184f10e6052de40c9f34252d3651b`。
-  audit direct/scope/Drop/ownership `6/260/320/12`，unresolved semantic/Drop
-  `566/2`、multi-owner Drop `117`、`whole_program=false`；runtime typed
-  `860/850`、fallback `210/170`、raw `183/144/26`，injected oracle PASS。唯一
-  cross-crate `PathBuf` module mismatch 被 allocation-time identity 安全 correction，
-  状态 `recovery_corrected_non_exact`；因此这证明 supported exact paths 的 bounded
-  actual rewrite 与隔离机制在真实应用中执行，不证明 whole-program coverage、
-  universal isolation 或性能。该 run 无 timing loop，性能表述只能是 diagnostic-only；
-  后续 `8e4d37c` 的 compiler closure 不能 rebinding 到该 application counts。
-- **coverage / performance boundary：** repository cargo-test hook observed `std_bench` test-mode `430/430` finite inventory；这不是
-  independent actual-wrapper compiler coverage、whole-program/universal denominator，
-  且无独立 log artifact，也不把历史 `99.851437%` 跨 source rebind。小规模
-  benchmark 只用于 diagnostic optimization decision；full paper performance
-  matrix 已由用户 scope change 明确 deferred，不从 reduced smoke runs 宣称论文
-  百分比。
-- **真实 Rust 应用：** Oxipng one-shot artifact
+- **Latest lifecycle and generation closure:** The G002 closure patch based on
+  parent `364d786` keeps exact lifecycle history in a recent
+  eight-way window per secondary history bucket. Every entry stores its exact
+  address and its own epoch. A ninth distinct exact key displaces the oldest `Missing` record
+  back to raw-only epoch-zero semantics. Exact keys and per-entry epochs prevent
+  unrelated same-home addresses from inheriting stale-release rejection, while
+  a raw reclaim with a known generation and `Absent` lookup is admitted as
+  `Tracked`. Realloc admission carries the pre-lookup observation and pointer
+  through metadata resolution, tag preflight, mutation, rollback, and release.
+  Reviewed fixes consume the old record exactly once after successful in-place
+  realloc, prevent unrecorded old storage from inheriting a recovery-required
+  active or compiler-auto scope, compile and test alignment-changing grow under
+  `quarantine`, and acquire admission before observable counters, selector
+  consumption, or replacement publication.
+  Deterministic exact-address ABA regressions cover `GlobalAlloc`,
+  `SemanticAlloc`, and split-metadata FFI realloc; the local-tag alignment
+  regression rejects corruption before replacement publication. With
+  `GLIBC_TUNABLES=glibc.pthread.rseq=0`, hosted Type Isolation tests pass
+  `732/732` serially and in parallel, `fixed_heap` Type Isolation passes
+  `602/602` serially and in parallel, and `quarantine` Type Isolation passes
+  `738/738` serially and in parallel. Standard `cargo test` exits
+  `0`, including `semantic_std` `12/12` and `std_bench` `430/430`; a default-
+  parallel `semantic_std` loop passes `30/30`. The evaluator doctor is ready
+  with the paper checkout absent, quick end-to-end diagnostics pass `3/3`, and
+  the realistic multi-module actual-rustc probe validates after installing
+  `rustc-dev`, `rust-src`, and LLVM tools. The final Python suite result is
+  `610/610`. This is source-bound
+  functional evidence with publication performance deferred. Universal UAF or
+  double-free prevention, stale-address detection after an exact generation
+  ages out of its eight-way history bucket, forged-metadata resistance,
+  universal compiler coverage, external-platform runtime closure, and
+  publication-grade performance remain outside its scope.
+- **P0 duplicate-free ownership closure:** `8a1cb06` first added plain,
+  metadata-segregated, and cross-thread-hinted typed-cache duplicate-free
+  regressions. `a93cf97` then introduced a bounded, allocation-free, process-visible
+  type-cache pointer registry. Cache publication first acquires exclusive ownership; duplicates
+  fail-stop immediately, while registry pressure bypasses cache and raw-frees. Pop, eviction, thread
+  drain, and delayed-free -> type-cache transfer retire/register in pairs, closing the window in which one address
+  could enter two TLS caches simultaneously. The checkpoint `654e1d7` validation gate passed hosted
+  `685/685` and fixed-heap `650/650`. This P0 correctness closure covers
+  retained-cache ownership. Arbitrary already-reused stale pointers and performance
+  remain outside its scope.
+- **Registry saturation / tombstone safety:** The deterministic regression in `45c5e8c`
+  constructs `PROBE_LIMIT + 1`
+  synthetic aligned keys in one ownership shard/probe window. It verifies that a full window returns `Full`, a lookup still
+  crosses a tombstone to find/reject a duplicate after an intermediate owner is deleted, the tombstone is then safely reused, and
+  the global ownership count returns to `0` during cleanup. These keys participate only in hash/store/compare operations; they are never
+  dereferenced or passed to the allocator. The hosted and `fixed_heap` exact regressions each
+  passed `1/1`. This is bounded registry-pressure correctness evidence. Arbitrary address-space
+  collisions and concurrent linearizability remain outside its scope.
+- **Type-cache ownership dispatch guards and real-free pressure:** The three white-box
+  regressions in `bbdda3c` verify distinct properties. After bounded registry ownership is published manually,
+  raw dealloc/realloc on separate live pointers fail-stop before freeing, copying, or modifying storage
+  and leave bytes/count unchanged. Isolated child death tests call
+  `abort` inside the panic hook, preventing panic unwind across `GlobalAlloc::{dealloc,realloc}`. When the probe window of a real typed
+  object is filled with synthetic colliders, semantic free observes
+  cache bypass `1` and insert/hit `0`; it publishes no target pointer and leaves existing colliding
+  owners undisturbed. The entrypoint tests inject registry state rather than a complete real cache
+  insertion. The pressure test uses a real allocation, while its pressure keys are synthetic.
+  Hosted/fixed targeted tests both passed `3/3`, and the normal pre-commit gate passed allocator `689/689`.
+  The repository cargo-test hook observed the finite `std_bench` test-mode inventory at `430/430`.
+  That hook result provides neither independent actual-wrapper compiler coverage nor a
+  whole-program denominator, and it has no independent log artifact. These results verify only the dispatch/bypass behavior of
+  already-published bounded ownership state. General
+  double-free, UAF, arbitrary concurrent
+  races, universal memory-safety proofs, and benchmark claims remain outside this evidence.
+- **Single-owner `Result` Clone actual rewrite:** `55148cd`, with formatting finalized in
+  `52342fb`, gives ordinary Rust
+  `Result<Vec<ProducerPayload>, u8>::clone` exactly one applied semantic scope through the actual `RUSTC_WRAPPER`.
+  The compiler/runtime type id is `11653960357981974603` in both cases,
+  while the same-layout Consumer identity differs. Runtime typed
+  alloc/dealloc/cache-hit/cache-insert is `1/1/1/1`, fallback/raw is `0`, and clone
+  reuses only exact Producer storage and never obtains Consumer storage. The existing ambiguous
+  `Result<Vec<ProducerPayload>, String>::clone` retains one fail-closed raw
+  fallback. The current-source artifact is
+  `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/result-clone-current-head-52342fbe-20260713/`,
+  whose `summary.json` SHA-256 is
+  `b7bbe7e16249d594da895a6a170d1b85120176dc1d7513ca4406897e7919c3e9`.
+  This is a bounded functional/security probe for one supported single-owner case and one
+  ambiguous negative control on current `nightly-2026-06-11`. Universal `Clone` coverage and performance
+  remain outside its scope. A pinned-nightly PASS remains unsupported: that
+  attempt encountered the existing explicit `std::mem::drop` audit-shape
+  validator boundary before entering the new Result gate.
+- **`Result` Clone partial unwind:** The generated Cargo app in `4d6a219` runs ordinary
+  `Result<Vec<ProducerPayload>, u8>::clone` under the actual
+  `RUSTC_WRAPPER`, with the third element clone panicking. The audit
+  requires the Result scope to be actually applied and an unwind pop to be inserted. Runtime scope depth changes
+  `1 -> 0`; `2` elements clone successfully; cleanup witness Drop runs `1` time; and typed dealloc/cache insert for the
+  partial Vec buffer of `256 B` is observed exactly at `1/1`. The exact
+  Producer then recovers the seeded address, while the same-layout Consumer cannot obtain Producer storage.
+  Fallback/raw/mismatch/corrupt/dropped are all `0`. The initial `2/2` came from a statistics window that counted
+  `catch_unwind` panic-transport cleanup; source double-free and pass
+  cleanup bugs were excluded. The final witness narrows the window to partial-buffer cleanup, and independent
+  review APPROVED. The `summary.json` SHA-256 for artifact
+  `result-clone-partial-unwind-main-4d6a219-20260713` is
+  `3d9704c2c2fb5d43809b2007a9bf8f42266975a292a32dbc8dd1490a4dcb8629`.
+  This is bounded functional/security evidence, not universal unwind coverage
+  or performance evidence.
+- **PAL mutex handoff:** The OS-thread regression in `b197d4a` uses a zero-capacity channel
+  to coordinate holder/observer without relying on sleep or timing guesses. It verifies that
+  `try_lock` reports busy while the holder owns the lock, and that after release the observer
+  sees the write and returns the new value to main. The exact test `1/1` and `sync::tests` `2/2` PASS. This is exclusion/visibility functional evidence for the current hosted pthread PAL;
+  it does not replace runtime validation on other platforms.
+- **Real Cargo generic/concrete boundary:** `654e1d7`
+  `test_mir_generic_vec_type_isolation_fail_closed.py` creates a real Cargo application and
+  compiles and runs it with an actual `RUSTC_WRAPPER`, `UNIALLOC_ACTUAL_MIR_REWRITE=1`, and
+  `UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE=1`; this is not a dry-run.
+  `Vec<T>::with_capacity` in `generic_roundtrip<T>` remains unresolved/audit-only,
+  with no planned/applied row. Runtime generic typed counts are `0/0/0/0`, fallback/raw
+  alloc/dealloc are `8/8`, and mismatch/corrupt/dropped are `0/0/0`, proving that an unknown generic identity
+  safely fails closed. In the same invocation, same-layout `Vec<Producer>` / `Vec<Consumer>`
+  each have one actually applied scope and distinct nonzero compiler type IDs. Runtime
+  typed alloc/dealloc are `12/12`, cache hit/insert are `4/12`, and wrong-type address sets are disjoint;
+  the recovered Producer set exactly equals the original Producer set, while fallback/raw/mismatch/corrupt
+  are all `0`. This concrete positive control proves one bounded actual-rewrite
+  type-separation path. **Generic positive isolation is still missing** and requires
+  monomorphization-aware type evidence before a safe rewrite is possible.
+- **Real Cargo cross-thread same-layout isolation:** `8e462ad` extends the multi-module Cargo
+  actual-`RUSTC_WRAPPER` fixture. The main thread allocates `Vec<Producer>`, moves the owner
+  to a worker, and drops it there. The compiler generates distinct
+  nonzero type IDs `11365312940488603059 / 17474015272962783245` for Producer/Consumer; all three scopes
+  receive cross-thread placement from `auto_cross_thread_escape`, rather than a manual metadata
+  hint. The worker then allocates same-layout `Vec<Consumer>` and must not receive the Producer address; a later
+  `Vec<Producer>` must recover the original address exactly. One fresh current-source validation reports typed
+  alloc/dealloc/cache-hit/cache-insert `2/3/1/3`, with fallback/raw, recovery mismatch,
+  corrupt slot, and dropped stats all `0`. This is bounded actual-rewrite,
+  thread-transfer, and address-oracle evidence from a generated multi-module Cargo application;
+  it does not establish arbitrary external-application coverage, universal memory safety, or performance.
+- **Latest external-app source-bound real app before `8e4d37c`:** The pinned Oxipng v4.0.3
+  one-shot build/run at `a57d318` completed `0/0` with a matching output hash. Artifact
+  `oxipng-current-a57d318-20260713/acceptance.json` has SHA-256
+  `b84e5a56c19e9f79537dc33cc5a09cd2e9d184f10e6052de40c9f34252d3651b`.
+  Audit direct/scope/Drop/ownership counts are `6/260/320/12`, unresolved semantic/Drop
+  are `566/2`, multi-owner Drop is `117`, and `whole_program=false`; runtime typed
+  counts are `860/850`, fallback `210/170`, raw `183/144/26`, and the injected oracle passed. The sole
+  cross-crate `PathBuf` module mismatch was safely corrected using allocation-time identity,
+  with status `recovery_corrected_non_exact`. This proves that bounded actual rewrites on supported
+  exact paths and the isolation mechanism execute in a real application; it does not prove whole-program coverage,
+  universal isolation, or performance. This run had no timing loop, so performance wording is diagnostic-only;
+  the later compiler closure at `8e4d37c` cannot be rebound to these application counts.
+- **Coverage / performance boundary:** The repository cargo-test hook observed the `std_bench` test-mode `430/430` finite inventory. This is not
+  independent actual-wrapper compiler coverage or a whole-program/universal denominator,
+  it has no independent log artifact, and it does not rebind the historical `99.851437%` across sources. Small
+  benchmarks support diagnostic optimization decisions only. The full paper performance
+  matrix was explicitly deferred by the user's scope change, so reduced smoke runs support no paper
+  percentage claim.
+- **Real Rust application:** The Oxipng one-shot artifact
   `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/oxipng-current-head-d50795f-20260713-one-shot/`
-  绑定 `d50795f892bd38ca3e7fd083da7d6eacafd0db06`，summary SHA-256
-  `e8958683d1957c40f76e4400b25c506b16d70489e9aa2526b1bb5674411d3635`。
-  build/run PASS；6 direct rewrites、236 scopes、320 Drops、12/12 transfers；
-  runtime typed alloc/dealloc `856/846`、cache hits `808`，injected isolation
-  oracle PASS。必须同时展示 `592` unresolved、one recovery-corrected mismatch
-  与 `whole_program_compiler_coverage=false`；这是功能/隔离证据，不是 benchmark。
-- **realloc 安全：** `1abb4dd` + `03a5ef0` 让 alignment-changing
-  `Allocator::{grow,shrink}` 在 recovery-layout mismatch 时先返回
-  `AllocError`；修复前的错误路径可能先分配/复制，再按 caller 的错误 layout
-  释放旧地址。`386759f` 同样修复 default/direct `SemanticAlloc`：minimized
-  pre-fix zero-size case 错误返回 `0x8` success sentinel，现在在
-  zero/in-place/move mutation 前返回 null。两条路径都保留 authoritative exact record，
-  hosted/fixed focused PASS。这是 P0 correctness evidence，不是性能结果。
-- **ownership transfer：** `003704a` 使 exact `Vec<u8>::from(String)` 在 current
-  与 pinned toolchain 均 actual-rewrite PASS，static/runtime `1/1`、`1/1/0`，
-  wrong String 不复用而 exact Vec 复用。不要宣称 explicit `From<&str>` 或
-  custom allocator 已有动态覆盖。
-- **exact `str::to_owned`：** `24bb079` 把 exact alloc
-  `<str as ToOwned>::to_owned(&str) -> String` 降低为 String scope；冻结的
-  `d50795f` Oxipng audit 中该 gap 出现 14 次，但没有跨 revision rebinding。
-  `nightly-2026-06-11` 与 `nightly-2022-07-01` actual `RUSTC_WRAPPER` 均 PASS；
-  slice/generic/custom controls fail closed，runtime typed alloc/dealloc `3/3`、
-  exact cache hit `1`、wrong-type non-reuse，fallback/raw/mismatch/corrupt 全为
-  `0`。这是 exact-surface 功能/隔离证据，不是 universal coverage 或性能。
-- **`24bb079` current-source Oxipng one-shot：** artifact
-  `oxipng-current-head-24bb079-20260713-one-shot` 绑定 clean scoped `24bb079`
-  与 pinned Oxipng `dea2321`；build/run `0/0`、输出 hash 匹配。audit
-  direct/scope/Drop `6/250/320`、transfer `12/12`，但仍有 semantic/Drop
-  unresolved `576/2` 且 `whole_program_compiler_coverage=false`。runtime typed
-  `856/846`、fallback `214/174`、cache hits `808`，injected oracle PASS；
-  whole-run mismatch `1`、状态 `recovery_corrected_non_exact`。runner 未输出
-  raw-no-metadata counters，因此 raw 是 missing，不是 `0`。与 frozen
-  `d50795f` 的 `236→250` / `590→576` 仅是和 14 条 exact matcher row 一致的
-  跨 artifact 算术/推断，不是 rebinding、whole-program 或性能结论。
-- **`1a4127f` earlier source-bound Oxipng one-shot：** artifact
-  `oxipng-current-head-1a4127f-20260713-one-shot` 绑定 HEAD `1a4127f`，summary
-  SHA-256 为 `118894ee3e08990a4d616110ad9001976c5ef082e1d3225e88dc9d070c41ce78`；
-  build/run `0/0`、输出 hash 匹配。audit direct/scope/Drop `6/256/320`，
-  unresolved semantic/Drop `570/2`，`whole_program_compiler_coverage=false`；
-  runtime typed `860/850`、fallback `210/170`、raw alloc/dealloc/realloc
-  `183/144/26`、cache hits `808`、transfer `3/1/2`。唯一 mismatch 是
-  cross-crate `PathBuf`：allocation record 来自 library crate，Drop request 来自
-  binary crate；type id 相同、module id 不同，runtime 用 allocation-time identity
-  correction，因此不是 whole-app exact pairing。相对 `24bb079` 的
-  scope `250→256` / unresolved `576→570` 只对应六条 exact
-  `<[u8] as ToOwned>::to_owned(&[u8]) -> Vec<u8>` row 的跨 artifact 对照，
-  不得写成 rebinding、coverage percentage、universal claim 或性能结果。
-- **cross-crate returned-owner security regression：** `e352206` 的 actual-wrapper
-  fixture 让 producer 返回 `ReturnedString::Value(String)`，再由 application
-  持有并 Drop；current 与 pinned nightly 均 PASS。同一 nonzero String type id
-  在两 crate 下具有 distinct nonzero module ids；两次 allocation-identity
-  correction 可见，wrong module 不复用，producer/application 各自 exact module
-  都能取回自己的地址。runtime typed `4/4`、recovery match/mismatch `2/2`，
-  fallback/raw/corrupt 全 `0`。它是独立 bounded enum(`String`) functional
-  security evidence，不证明 Oxipng aggregate `OutFile`/`PathBuf` 路径、universal
-  cross-crate coverage 或性能。
-- **exact `fmt::format` 有意 fail closed：** current-source 中 11 条 exact row
-  保持 unresolved/audit-only。原因不是尚未补 matcher，而是 `fmt::Arguments`
-  可执行任意、reentrant `Display` callback；callback 可自行分配 `Vec`/`Box`，
-  整体套用外层 `String` scope 会错误继承 identity。新的 two-crate actual-wrapper
-  probe 在 current 与 `nightly-2022-07-01` 均 PASS；helper 明确排除 rewrite，
-  两边 runtime 都是 callback `1`、typed alloc/dealloc/cache-hit/cache-insert
-  `0/0/0/0`、fallback/raw alloc `3/3`、fallback/raw dealloc `3/3`、
-  mismatch/corrupt `0/0`。
-  这是 bounded adversarial regression，不是 universal proof 或性能结果。
-- **runner 与历史 artifact 边界：** `1fcb5c2` 只让未来 Oxipng run 保留 raw
-  counters；没有重跑或 rebind `24bb079` one-shot，所以旧 artifact 的 raw
-  仍是 missing，不是 `0`。
-- **被拒绝的热点优化：** inline type-cache POP 三次 diagnostic baseline
-  median/range 为 `116.40 ns` / `115.66–116.74 ns`，修改后为 `117.39 ns` /
-  `116.51–118.19 ns`，方向 `+0.85%`（更慢）；修改已精确回退。这只解释
-  为什么不接受该优化，不是性能 claim。
-- **被拒绝的 ThreadCache lookup 优化：** exact Collections one-shot 在早期
-  `24ff781` source 为 `14.44 ns/iter`，包含 P0 ownership 改动的 `21c9e2b`
-  source 为 `16.02 ns/iter`；两 revision 不同，无法把差值归因给 lookup
-  reuse，且方向未获确认，所以 `f5c4fa4` 已精确回退该优化并停止重复 timing。
-  这些单次值只记录 reject/revert 决策，不构成稳定百分比或论文 claim。
-- `d50795f`、`24bb079`、`1a4127f`、`f5c4fa4` 与 `a57d318` 数字各自只绑定对应 source；跨 artifact
-  对照不是 rebinding。没有 timing、论文百分比、universal
-  coverage、whole-app exact-pairing 或性能 claim。
+  binds `d50795f892bd38ca3e7fd083da7d6eacafd0db06`, with summary SHA-256
+  `e8958683d1957c40f76e4400b25c506b16d70489e9aa2526b1bb5674411d3635`.
+  Build/run passed; there were 6 direct rewrites, 236 scopes, 320 Drops, and 12/12 transfers;
+  runtime typed alloc/dealloc were `856/846`, cache hits were `808`, and the injected isolation
+  oracle passed. Present `592` unresolved rows, one recovery-corrected mismatch,
+  and `whole_program_compiler_coverage=false` at the same time. This is functionality/isolation evidence, not a benchmark.
+- **Realloc safety:** `1abb4dd` + `03a5ef0` make alignment-changing
+  `Allocator::{grow,shrink}` return
+  `AllocError` before mutation on a recovery-layout mismatch. The pre-fix error path could allocate/copy first,
+  then release the old address using the caller's incorrect layout. `386759f` likewise fixes default/direct `SemanticAlloc`:
+  the minimized pre-fix zero-size case incorrectly returned the `0x8` success sentinel; it now
+  returns null before zero/in-place/move mutation. Both paths preserve the authoritative exact record,
+  with hosted/fixed focused PASS. This is P0 correctness evidence, not a performance result.
+- **Ownership transfer:** `003704a` makes exact `Vec<u8>::from(String)` actual-rewrite PASS under both current
+  and pinned toolchains, with static/runtime `1/1` and `1/1/0`;
+  wrong String does not reuse the address, while exact Vec does. Do not claim dynamic coverage for explicit `From<&str>` or
+  custom allocators.
+- **Exact `str::to_owned`:** `24bb079` lowers exact allocation
+  `<str as ToOwned>::to_owned(&str) -> String` into a String scope. This gap appears 14 times in the frozen
+  `d50795f` Oxipng audit, without cross-revision rebinding.
+  Actual `RUSTC_WRAPPER` passes under `nightly-2026-06-11` and `nightly-2022-07-01`;
+  slice/generic/custom controls fail closed, runtime typed alloc/dealloc are `3/3`,
+  exact cache hit is `1`, wrong-type reuse is blocked, and fallback/raw/mismatch/corrupt are all
+  `0`. This is exact-surface functionality/isolation evidence, not universal coverage or performance.
+- **`24bb079` current-source Oxipng one-shot:** Artifact
+  `oxipng-current-head-24bb079-20260713-one-shot` binds clean scoped `24bb079`
+  and pinned Oxipng `dea2321`; build/run were `0/0`, with a matching output hash. Audit
+  direct/scope/Drop were `6/250/320` and transfer was `12/12`, while semantic/Drop
+  unresolved remained `576/2` and `whole_program_compiler_coverage=false`. Runtime typed
+  were `856/846`, fallback `214/174`, cache hits `808`, and the injected oracle passed;
+  whole-run mismatch was `1`, with status `recovery_corrected_non_exact`. The runner did not emit
+  raw-no-metadata counters, so raw is missing rather than `0`. Relative to frozen
+  `d50795f`, `236→250` / `590→576` is only cross-artifact arithmetic/inference consistent with
+  14 exact matcher rows; it is not rebinding or a whole-program/performance conclusion.
+- **`1a4127f` earlier source-bound Oxipng one-shot:** Artifact
+  `oxipng-current-head-1a4127f-20260713-one-shot` binds HEAD `1a4127f`, with summary
+  SHA-256 `118894ee3e08990a4d616110ad9001976c5ef082e1d3225e88dc9d070c41ce78`;
+  build/run were `0/0`, with a matching output hash. Audit direct/scope/Drop were `6/256/320`,
+  unresolved semantic/Drop were `570/2`, and `whole_program_compiler_coverage=false`;
+  runtime typed were `860/850`, fallback `210/170`, raw alloc/dealloc/realloc
+  `183/144/26`, cache hits `808`, and transfer `3/1/2`. The sole mismatch was
+  cross-crate `PathBuf`: the allocation record came from the library crate and the Drop request from the
+  binary crate. The type id matched, the module id differed, and the runtime used allocation-time identity
+  correction, so this is not whole-app exact pairing. Relative to `24bb079`,
+  scope `250→256` / unresolved `576→570` only corresponds to the six exact
+  `<[u8] as ToOwned>::to_owned(&[u8]) -> Vec<u8>` rows in a cross-artifact comparison;
+  it cannot support rebinding, a coverage percentage, a universal claim, or a performance result.
+- **Cross-crate returned-owner security regression:** The actual-wrapper
+  fixture at `e352206` makes the producer return `ReturnedString::Value(String)`, which the application
+  then owns and drops; both current and pinned nightly PASS. The same nonzero String type id
+  has distinct nonzero module ids in the two crates; two allocation-identity
+  corrections are visible, the wrong module does not reuse an address, and each exact producer/application module
+  recovers its own address. Runtime typed are `4/4`, recovery match/mismatch are `2/2`,
+  and fallback/raw/corrupt are all `0`. This is independent bounded enum(`String`) functional
+  security evidence; it does not prove aggregate Oxipng `OutFile`/`PathBuf` paths, universal
+  cross-crate coverage, or performance.
+- **Exact `fmt::format` intentionally fails closed:** 11 exact rows in current source
+  remain unresolved/audit-only. The reason is `fmt::Arguments`,
+  which can execute arbitrary, reentrant `Display` callbacks; a callback can allocate its own `Vec`/`Box`,
+  and wrapping the whole call in an outer `String` scope would assign the wrong inherited identity. The new two-crate actual-wrapper
+  probe passes under both current and `nightly-2022-07-01`; the helper is explicitly excluded from rewriting,
+  and runtime on both sides reports callback `1`, typed alloc/dealloc/cache-hit/cache-insert
+  `0/0/0/0`, fallback/raw alloc `3/3`, fallback/raw dealloc `3/3`,
+  and mismatch/corrupt `0/0`.
+  This is a bounded adversarial regression, not a universal proof or performance result.
+- **Runner and historical artifact boundary:** `1fcb5c2` only makes future Oxipng runs retain raw
+  counters. It neither reruns nor rebinds the `24bb079` one-shot, so raw in the older artifact
+  remains missing rather than `0`.
+- **Rejected hot-path optimization:** Three diagnostic baselines for inline type-cache POP had
+  median/range `116.40 ns` / `115.66–116.74 ns`, versus `117.39 ns` /
+  `116.51–118.19 ns` after the change, a `+0.85%` direction (slower). The change was precisely reverted.
+  This explains why the optimization was rejected; it is not a performance claim.
+- **Rejected ThreadCache lookup optimization:** The exact Collections one-shot measured
+  `14.44 ns/iter` at earlier source `24ff781` and `16.02 ns/iter` at source `21c9e2b`,
+  which includes P0 ownership changes. The revisions differ, so the delta cannot be attributed to lookup
+  reuse, and the direction was unconfirmed. Therefore, `f5c4fa4` precisely reverted the optimization and stopped repeated timing.
+  These one-shot values record only the reject/revert decision; they do not form a stable percentage or paper claim.
+- Numbers for `d50795f`, `24bb079`, `1a4127f`, `f5c4fa4`, and `a57d318` bind only to their corresponding sources. Cross-artifact
+  comparisons are not rebinding. They support no timing, paper percentage, universal
+  coverage, whole-app exact-pairing, or performance claim.
 
 ---
 
-**最终选择：** 把主 deck 做成“conventional Rust semantic gap → trusted optional compiler channel → bounded representative policy → retargetable boundary → evidence judgment”的单条论证。这样 slide 更容易制作，因为每页只服务一个假设；问答也更轻松，因为所有回答都能回到 H1/H2/H3、compatibility/TCB contract、evidence tier 和明确 boundary。
+**Final choice:** Build the main deck as one argument: "conventional Rust semantic gap → trusted optional compiler channel → bounded representative policy → retargetable boundary → evidence judgment." This makes slide production easier because every slide serves one hypothesis, and it simplifies Q&A because every answer returns to H1/H2/H3, the compatibility/TCB contract, the evidence tier, and an explicit boundary.
 
 ## Current implementation-first presentation checkpoint
 
-- **retained-cache fail-stop：** `e9d56f1` 用真实 retained typed entry 验证 raw
-  dealloc/realloc 在 mutation 前 fail-stop，而 exact typed pop 仍精确取回并只做一次
-  terminal release；这是 bounded retained-cache ownership evidence，不是 universal
-  UAF/double-free detector。
-- **actual rewrite 的两个 owner 边界：** `c55883e` 的普通 `Result::clone` `Err`
-  路径保持 Producer/Consumer 隔离并由 normal Drop 完成 typed cleanup `3/3`；
-  `cf1e685` 的跨线程 `Vec -> IntoIter` 保持 pointer/payload、wrong-Vec non-reuse
-  与 exact-IntoIter reuse，static rewrite `1/1`、runtime transfer `2/2/0`。对应 final
-  summaries 的 SHA-256 分别为 `000423fca7ca07b2c03d020d85f59766b4e546ce70d0de0b14b71c7ec301b844`
-  和 `0a9c868c8274485a4fc4597d04897b3a39f6e5cb49254fb57a18da7b0bac6269`；
-  它们按各自 manifest source-bound，后者 placement 是 manual，不声称 automatic
-  escape inference。
-- **cleanup-funclet P0 closure：** pinned baseline 真实复现
-  `funclet ... has 2 parents`；`ce52203` 后 current+pinned HashMap/Vec 与 nested
-  unwind PASS，current cleanup call 保持 `Terminate(InCleanup)`，callback-capable
-  HashMap 路径 audit-only。失败的 `bc150b3` artifact 继续 append-only 保存，只在
-  current execution 上被成功证据 supersede。
-- **earlier source-bound real Rust application：** `oxipng-final-ce52203-20260713-success` 是 pinned、
-  instrumented Oxipng v4.0.3 one-shot；summary SHA-256 为
-  `aee2957266eddfb88eee21fb6b689e45402bd7b230ec84fae6e55ef196fce39c`。
-  build/run `0/0`、output hash match；direct/scope/Drop `6/256/320`、static transfer
-  `12/12`、runtime transfer `3/1/2`。必须同页显示 unresolved semantic/Drop
-  `570/2`、multi-owner `117` 和 `whole_program_compiler_coverage=false`。
-- **runtime oracle 与措辞边界：** typed `860/850`、fallback `210/170`、raw
-  `183/144/26`、cache hit/insert/bypass `808/841/61`、recovery `830/1`；wrong-type
-  non-reuse、exact reuse、corrupt/dropped `0/0`。PathBuf mismatch 状态是
-  `recovery_corrected_non_exact`。这是 instrumented/pinned functional evidence，
-  不是 unmodified/universal application、performance 或 paper percentage claim；
-  repository cargo-test hook observed `std_bench` test-mode `430/430` finite inventory；
-  这不是 independent actual-wrapper compiler coverage、whole-program denominator，且无
-  standalone log artifact。
-- **`982ee0b` type-cache safety regressions：** 16-thread same-key publication test
-  要求 exactly one owner (`Inserted` 一次、`Duplicate` 十五次、`Full` 零)，并回到
-  baseline；foreign-thread raw dealloc/realloc 对 real retained entry 在 allocator/TLS/
-  payload mutation 前 fail-stop，owner 随后 exact typed reuse、unregister、single
-  release。hosted 与 `fixed_heap` exact tests 均 PASS；这是 test-only bounded safety
-  evidence，不是 forged metadata、stale-pointer 或 universal linearizability proof。
-- **generic fallback realloc：** `c6c0152` 验证无 semantic metadata 的
-  `Allocator::allocate -> grow` 保留 payload prefix，同时保持 raw fallback；auto
-  allocation record、typed attribution、type cache、delayed free 与 stale ownership
-  均为零/不变，hosted 与 `fixed_heap` exact tests PASS。只支持一个 generic grow
-  functional invariant，不是 compiler-derived identity、全 collection coverage 或性能。
-- **cross-thread + unwind actual rewrite：** `87725dc` + `4999ddc` 的普通 Rust
-  fixture 把 `Vec<ProducerPayload>` 从 main move 到 worker；actual wrapper 重写
-  `reserve(usize::MAX)`，panic 时 represented depth `1`、unwind 后/最终 `0`，pointer
-  与 payload 保留。worker Drop 后 Consumer 同 layout 不复用，Producer exact reuse；
-  独立 cleanup window 为 typed dealloc/insert `2/2`，Producer/Consumer 各 `1`，
-  fallback/raw/mismatch/corrupt/dropped 全 `0`，7 个负控全部拒绝，independent
-  review `APPROVE`。artifact `cross-thread-unwind-cleanup-feff198-20260713` 的
-  summary/audit SHA 分别为 `7f150b77...` / `822bfaf6...`。placement 是 manual；不
-  声称 automatic escape inference、universal thread/unwind coverage 或性能。
-- **same-type-id / full-identity recovery：** `107cabe` 构造相同 `type_id`、但
-  module/lifetime/placement/callsite 不同的 FFI metadata；runtime 只按 allocation-time
-  full identity 回收和缓存，colliding requested identity 不能取回该地址，mismatch
-  诊断保留相同 requested/recorded `type_id`。hosted 与 `fixed_heap` regression 均
-  PASS；这是 runtime recovery defense，不证明 compiler hash collision-freedom 或
-  global `type_id` uniqueness。
-- **delayed-free -> type-cache ownership handoff：** `b2d5eab` 让公共 reclaim guard
-  按实际 D->T 发布顺序先查 delayed-free、再查 type cache，并让 resolved dealloc
-  使用同一 guard。确定性 race regression 覆盖 raw、`GlobalAlloc`、semantic 与
-  resolved 四个 reclaim entrypoint；owner 仍能 exact pop、验证 payload 并只做一次
-  terminal release。hosted/fixed exact tests 与 full `693/693` suite PASS；它只闭合
-  D->T registry observation gap，不是 universal UAF/double-free detector 或所有状态
-  转移的 linearizability proof。
-- **terminal retained-ownership release：** `1d0d13f` 修复 delayed-free 与 type-cache
-  在 terminal raw release 前过早撤销 process-visible ownership 的窗口。两个确定性
-  tests 在旧顺序下分别 fail-first；修复后 hosted/fixed 各 `2/2` PASS。六个 terminal
-  release 点都先完成唯一 backend release、成功后才 unregister；backend 不可用则
-  fail-safe 保留 ownership。pre-commit full suite `696/696`、C002 `430/430` PASS。
-  该结论只闭合 concurrent terminal-release interval，不覆盖 release 完成后的任意
-  stale pointer，也不是通用 UAF/double-free 保证。
-- **current gates：** C002 current-source finite inventory 保持 `430/430`，但不是
-  whole-program denominator，也不能替代 actual-wrapper evidence。
-- **两个 exact byte-Vec compiler surface：** `87e81e6` 首先让 current+pinned actual
-  wrapper 对 `slice::Iter<u8>.copied().collect::<Vec<u8>>()` 各实际应用 direct
-  `Vec<u8>` scope；`8e4d37c` 的 fail-first regression 随后证明 fake `[lib]
-  name="alloc"` + callback-bearing `FromIterator` 先前会被错误 applied，并将 matcher
-  收紧到 rustc canonical `Vec` diagnostic item。修复后 current+pinned canonical row
-  applied、fake-alloc row unresolved/audit-only；custom raw-reference iterator仍 fail
-  closed，`Zip<IterMut, IntoIter>` Drop 因 hidden `Vec -> IntoIter` transfer 尚未建模而保持 unresolved。
-  `3fc5a19` + `a57d318` 只支持 canonical sysroot `Vec` 的 exact
-  `vec![0u8; n]`；generic/custom-Clone/same-name 与 `--extern alloc` spoof 全部
-  fail closed。两项都有 wrong-type non-reuse 与 exact-Vec reuse，但都不是任意
-  iterator、通用 `vec![value; n]` 或 whole-program coverage。
-- **cache rejection owner continuity：** `3044166` 的 deterministic tests 分别证明
-  ordinary plain-cache rejection 在 sole raw release 前保留 type-cache owner，以及
-  delayed-free plain-cache rejection 只撤销 temporary type-cache registration、持续保留
-  delayed owner。`ee9d0c6` 又用两个 synthetic inline keys 与满 aggregate budget
-  确定性强制 delayed-free + metadata-segregated insertion rejection，并在 terminal raw
-  release barrier 上观察 delayed owner count `1`、temporary type-cache owner count `0`、
-  payload 完整且 foreign reclaim fail-stop；完成后两个 registry 均归零，side-cache
-  corruption 为 `0`，两次立即 raw allocation 地址不同且可独立写入，排除 duplicate
-  backend release/free-list alias。owner-thread RAII fixture cleanup 经过独立 review 后
-  `APPROVE`；hosted/fixed exact test 各 `1/1`，default pre-commit suite `699/699` 与
-  finite C002 inventory `430/430` PASS。该证据只闭合这一 forced rejection/terminal-release
-  组合，不是通用 UAF/double-free 或任意 metadata corruption 证明。
-- **latest generated multi-module source-bound check before `8e4d37c`：** `a57d318` 上一次 generated Cargo
-  actual-wrapper build/run 为 `validated=true`：4 个 actual scope rows、transfer `1/1`，
-  wrong-record / wrong-Blob-Vec non-reuse、exact Vec/Box reuse，以及 cross-thread
-  same-layout Producer/Consumer wrong-type blocked 与 exact-owner reuse；fallback/raw/
-  mismatch/corrupt/dropped 全为 `0`。这是单个 generated application，不是任意
-  external app、whole-program coverage 或性能证据；不得 rebinding 到后续 compiler commit。
-- **latest external-app source-bound real Rust application before `8e4d37c`：** 同一 code-bearing `a57d318` 在 clean detached
-  worktree 中单次编译并运行 pinned Oxipng `v4.0.3`；artifact
-  `oxipng-current-a57d318-20260713/acceptance.json` SHA-256 为
-  `b84e5a56c19e9f79537dc33cc5a09cd2e9d184f10e6052de40c9f34252d3651b`，build/run
-  `0/0` 且输出 hash 精确匹配。actual pass 应用 direct/scope/Drop/ownership
-  `6/260/320/12`，其中 4 个自然 `reduced_alpha_*` 函数命中 supported canonical
-  `Vec<u8>` repetition scope。独立标注的 address oracle 证明 wrong-type non-reuse、
-  same-type reuse、corrupt `0`。同时必须展示边界：semantic/Drop unresolved
-  `566/2`、multi-owner Drop `117`、`whole_program=false`、1 个 PathBuf recovery
-  correction、fallback alloc/dealloc `210/170` 与 raw alloc/dealloc/realloc
-  `183/144/26`；所以这是 bounded functional PASS，不是 exact whole-app pairing、
-  普适安全/coverage 或性能结论。该 one-shot 无 timing loop；相关性能数字均只能
-  作为 diagnostic，不得作 paper/publication percentage claim；后续 `8e4d37c` 只由
-  current/pinned exact-wrapper PASS 支持，不重解释这次 Oxipng run。
-- **earlier compiled-Rust application check：** 在 code-bearing `1d0d13f` 上，
-  `test_mir_realistic_multimodule_type_isolation.py` 通过真实 `RUSTC_WRAPPER`/MIR
-  pass 编译并运行一个 multi-module Cargo application，单次 PASS。它观察到 4 个
-  actual scope rows、String->Vec ownership transfer、Box/Vec wrong/exact reuse、自动
-  cross-thread placement，以及 same-layout Producer/Consumer 的 wrong-type non-reuse
-  与 exact-type reuse；fallback/raw/mismatch/corrupt/dropped 均为 `0`。结果保存在
-  `current-source-realistic-typeiso-1d0d13f-20260713` artifact；这是 bounded functional
-  evidence，不是 arbitrary external-app、whole-program coverage、安全证明或性能结果。
-- **historical single-sample diagnostic performance：** default `16.59 ns/iter`、type isolation
-  `25.47 ns/iter`，ratio `1.5353` / `+53.526%`；n=1 each、Darwin/current
-  toolchain、layout-derived size/align identity、compiler-site replay disabled、无
-  median/range/variance。后续 bounded profile samples 没有复现该 `+53%` 方向，且同样
-  只走 layout-derived/raw allocator path、不是 compiler typed ABI；因此没有据此采用
-  优化，也不报告稳定百分比。这些数值不是 compiler-pass overhead、paper claim 或
-  publication-grade result。
-- **profile-guided bounded A/B：** `908e12f` 对 empty delayed-owner lookup 做
-  inline fast path；source-bound A/B 是 baseline `3fc5a199` 对 detached candidate
-  `7964094`（同一六行 patch），一次 warmup 后交错各 3 次。相同
-  `vec::bench_with_capacity_1000` 的 baseline median/range 为 `15.36` /
-  `[15.27,15.46] ns/iter`，candidate 为 `14.41` / `[14.38,14.51] ns/iter`，
-  directional `-6.185%`。这是单机 Darwin、layout-derived/raw small benchmark
-  diagnostic，只支持保留该候选的方向性决策；不是稳定百分比、compiler-pass
-  overhead、论文或 publication-grade performance claim。
+- **Retained-cache fail-stop:** `e9d56f1` uses a real retained typed entry to
+  verify that raw deallocation and reallocation fail before mutation, while an
+  exact typed pop still recovers the entry precisely and performs one terminal
+  release. This is bounded retained-cache ownership evidence, with no universal
+  UAF or double-free detection claim.
+- **Two owner boundaries for actual rewrites:** The ordinary `Result::clone`
+  `Err` path in `c55883e` preserves Producer/Consumer isolation and completes
+  typed cleanup `3/3` through normal Drop. The cross-thread `Vec -> IntoIter`
+  path in `cf1e685` preserves the pointer and payload, prevents wrong-Vec reuse,
+  and allows exact-IntoIter reuse, with static rewrite `1/1` and runtime transfer
+  `2/2/0`. The corresponding final summary SHA-256 values are
+  `000423fca7ca07b2c03d020d85f59766b4e546ce70d0de0b14b71c7ec301b844`
+  and `0a9c868c8274485a4fc4597d04897b3a39f6e5cb49254fb57a18da7b0bac6269`.
+  Each is source-bound by its own manifest. Placement in the latter is manual,
+  with no automatic escape-inference claim.
+- **Cleanup-funclet P0 closure:** The pinned baseline reproduces
+  `funclet ... has 2 parents`. After `ce52203`, current and pinned HashMap/Vec
+  probes plus nested unwind pass; the current cleanup call preserves
+  `Terminate(InCleanup)`, and callback-capable HashMap paths remain audit-only.
+  The failed `bc150b3` artifact remains append-only and is superseded only for
+  current execution by successful evidence.
+- **Earlier source-bound real Rust application:**
+  `oxipng-final-ce52203-20260713-success` is a pinned, instrumented Oxipng v4.0.3
+  one-shot with summary SHA-256
+  `aee2957266eddfb88eee21fb6b689e45402bd7b230ec84fae6e55ef196fce39c`.
+  Build/run is `0/0`, the output hash matches, direct/scope/Drop is `6/256/320`,
+  static transfer is `12/12`, and runtime transfer is `3/1/2`. The same slide
+  must show unresolved semantic/Drop `570/2`, multi-owner `117`, and
+  `whole_program_compiler_coverage=false`.
+- **Runtime oracle and wording boundary:** Typed is `860/850`, fallback is
+  `210/170`, raw is `183/144/26`, cache hit/insert/bypass is `808/841/61`, and
+  recovery is `830/1`; wrong-type non-reuse and exact reuse hold, with
+  corrupt/dropped `0/0`. The PathBuf mismatch state is
+  `recovery_corrected_non_exact`. This is instrumented, pinned functional
+  evidence with no unmodified or universal application, performance, or paper
+  percentage claim. The repository cargo-test hook observed a finite
+  `std_bench` test-mode inventory of `430/430`. That observation supplies
+  neither independent actual-wrapper compiler coverage nor a whole-program
+  denominator, and it has no standalone log artifact.
+- **`982ee0b` type-cache safety regressions:** The 16-thread same-key publication
+  test requires exactly one owner: one `Inserted`, fifteen `Duplicate`, and zero
+  `Full`, followed by a return to baseline. Foreign-thread raw deallocation and
+  reallocation fail before allocator, TLS, or payload mutation for a real
+  retained entry. The owner then performs exact typed reuse, unregisters, and
+  releases once. Hosted and `fixed_heap` exact tests pass. This is test-only,
+  bounded safety evidence with no forged-metadata, stale-pointer, or universal
+  linearizability proof.
+- **Generic fallback reallocation:** `c6c0152` verifies that
+  `Allocator::allocate -> grow` without semantic metadata preserves the payload
+  prefix and retains the raw fallback. Automatic allocation records, typed
+  attribution, the type cache, delayed free, and stale ownership remain zero or
+  unchanged. Hosted and `fixed_heap` exact tests pass. This supports one generic
+  grow functional invariant, with no compiler-derived identity, full collection
+  coverage, or performance claim.
+- **Cross-thread plus unwind actual rewrite:** The ordinary Rust fixture in
+  `87725dc` plus `4999ddc` moves `Vec<ProducerPayload>` from main to a worker.
+  The actual wrapper rewrites `reserve(usize::MAX)`; represented depth is `1`
+  during panic and `0` after unwind and at completion, while the pointer and
+  payload survive. After worker Drop, a Consumer with the same layout cannot
+  reuse the storage, while an exact Producer can. The isolated cleanup window
+  records typed deallocation/insertion `2/2`, `1` each for Producer and Consumer;
+  fallback/raw/mismatch/corrupt/dropped are all `0`, all 7 negative controls
+  are rejected, and independent review reports `APPROVE`. Artifact
+  `cross-thread-unwind-cleanup-feff198-20260713` has summary/audit SHA prefixes
+  `7f150b77...` / `822bfaf6...`. Placement is manual, with no automatic escape
+  inference, universal thread/unwind coverage, or performance claim.
+- **Same-type-ID and full-identity recovery:** `107cabe` constructs FFI metadata
+  with an identical `type_id` but different module, lifetime, placement, and
+  callsite values. The runtime recovers and caches only by allocation-time full
+  identity, so the colliding requested identity cannot recover that address.
+  Mismatch diagnostics preserve the identical requested and recorded `type_id`.
+  Hosted and `fixed_heap` regressions pass. This is a runtime recovery defense,
+  with no proof of compiler hash collision freedom or global `type_id`
+  uniqueness.
+- **Delayed-free to type-cache ownership handoff:** `b2d5eab` makes the common
+  reclaim guard check delayed free before the type cache, matching the actual
+  D-to-T publication order, and makes resolved deallocation use the same guard.
+  A deterministic race regression covers the raw, `GlobalAlloc`, semantic, and
+  resolved reclaim entry points. The owner can still pop exactly, validate the
+  payload, and perform one terminal release. Hosted/fixed exact tests and the
+  full `693/693` suite pass. This closes the D-to-T registry observation gap,
+  with no universal UAF/double-free detector or linearizability proof for every
+  state transition.
+- **Terminal retained-ownership release:** `1d0d13f` closes the window in which
+  delayed free and the type cache withdrew process-visible ownership before
+  terminal raw release. Two deterministic tests fail first under the old order;
+  after the fix, hosted and fixed each pass `2/2`. All six terminal release
+  points complete the sole backend release before unregistering. An unavailable
+  backend preserves ownership fail-safe. The pre-commit full suite passes
+  `696/696`, and C002 passes `430/430`. This conclusion covers the concurrent
+  terminal-release interval, with no coverage of arbitrary stale pointers after
+  release and no general UAF/double-free guarantee.
+- **Current gates:** The C002 current-source finite inventory remains `430/430`.
+  It supplies neither a whole-program denominator nor a replacement for
+  actual-wrapper evidence.
+- **Two exact byte-Vec compiler surfaces:** `87e81e6` first makes the current and
+  pinned actual wrappers each apply a direct `Vec<u8>` scope to
+  `slice::Iter<u8>.copied().collect::<Vec<u8>>()`. The fail-first regression in
+  `8e4d37c` then shows that a fake `[lib] name="alloc"` plus callback-bearing
+  `FromIterator` was previously applied incorrectly, and tightens the matcher to
+  the canonical rustc `Vec` diagnostic item. After the fix, the current and
+  pinned canonical rows are applied, while the fake-alloc row is unresolved and
+  audit-only. A custom raw-reference iterator fails closed, and Drop for
+  `Zip<IterMut, IntoIter>` remains unresolved because its hidden
+  `Vec -> IntoIter` transfer is not modeled. `3fc5a19` plus `a57d318` support only
+  exact `vec![0u8; n]` for the canonical sysroot `Vec`; generic, custom-Clone,
+  same-name, and `--extern alloc` spoofs all fail closed. Both surfaces show
+  wrong-type non-reuse and exact-Vec reuse, with no arbitrary iterator, general
+  `vec![value; n]`, or whole-program coverage claim.
+- **Cache-rejection owner continuity:** Deterministic tests in `3044166` show
+  that ordinary plain-cache rejection retains the type-cache owner before the
+  sole raw release, while delayed-free plain-cache rejection removes only the
+  temporary type-cache registration and retains the delayed owner. With two
+  synthetic inline keys and a full aggregate budget, `ee9d0c6` deterministically
+  forces delayed-free plus metadata-segregated insertion rejection. At the
+  terminal raw-release barrier, delayed owner count is `1`, temporary type-cache
+  owner count is `0`, the payload is intact, and foreign reclaim fails closed.
+  Both registries return to zero afterward, side-cache corruption is `0`, and
+  two immediate raw allocations have distinct, independently writable
+  addresses, excluding duplicate backend release or a free-list alias. The
+  owner-thread RAII fixture cleanup receives independent `APPROVE` review;
+  hosted/fixed exact tests each pass `1/1`, the default pre-commit suite passes
+  `699/699`, and the finite C002 inventory passes `430/430`. This evidence closes
+  this forced rejection and terminal-release combination, with no general
+  UAF/double-free or arbitrary metadata-corruption proof.
+- **Latest generated multi-module source-bound check before `8e4d37c`:** The
+  most recent generated Cargo actual-wrapper build/run at `a57d318` reports
+  `validated=true`: 4 actual scope rows, transfer `1/1`, wrong-record and
+  wrong-Blob-Vec non-reuse, exact Vec/Box reuse, and cross-thread same-layout
+  Producer/Consumer wrong-type blocking plus exact-owner reuse. All
+  fallback/raw/mismatch/corrupt/dropped counters are `0`. This is one generated
+  application, with no arbitrary external-application, whole-program coverage,
+  or performance evidence. It must not be rebound to a later compiler commit.
+- **Latest external-application source-bound real Rust application before
+  `8e4d37c`:** The same code-bearing `a57d318` is compiled and run once with
+  pinned Oxipng `v4.0.3` in a clean detached worktree. Artifact
+  `oxipng-current-a57d318-20260713/acceptance.json` has SHA-256
+  `b84e5a56c19e9f79537dc33cc5a09cd2e9d184f10e6052de40c9f34252d3651b`;
+  build/run is `0/0`, and the output hash matches exactly. The actual pass applies
+  direct/scope/Drop/ownership `6/260/320/12`; 4 natural `reduced_alpha_*`
+  functions hit the supported canonical `Vec<u8>` repetition scope. A separately
+  labeled address oracle shows wrong-type non-reuse, same-type reuse, and corrupt
+  `0`. The boundary must also show unresolved semantic/Drop `566/2`, multi-owner
+  Drop `117`, `whole_program=false`, 1 PathBuf recovery correction, fallback
+  allocation/deallocation `210/170`, and raw allocation/deallocation/reallocation
+  `183/144/26`. This is a bounded functional pass with no exact whole-application
+  pairing, universal safety or coverage, or performance conclusion. The one-shot
+  has no timing loop; related performance numbers remain diagnostics and cannot
+  support a paper or publication percentage. Later `8e4d37c` claims rely only on
+  current/pinned exact-wrapper passes and do not reinterpret this Oxipng run.
+- **Earlier compiled-Rust application check:** At code-bearing `1d0d13f`,
+  `test_mir_realistic_multimodule_type_isolation.py` uses a real
+  `RUSTC_WRAPPER`/MIR pass to compile and run a multi-module Cargo application
+  once successfully. It observes 4 actual scope rows, String-to-Vec ownership
+  transfer, Box/Vec wrong and exact reuse, automatic cross-thread placement, and
+  same-layout Producer/Consumer wrong-type non-reuse plus exact-type reuse. All
+  fallback/raw/mismatch/corrupt/dropped counters are `0`. Results are stored in
+  artifact `current-source-realistic-typeiso-1d0d13f-20260713`. This is bounded
+  functional evidence, with no arbitrary external-application, whole-program
+  coverage, safety proof, or performance claim.
+- **Historical single-sample diagnostic performance:** Default is
+  `16.59 ns/iter`, type isolation is `25.47 ns/iter`, and the ratio is `1.5353` /
+  `+53.526%`; each has n=1 on Darwin/current toolchain with layout-derived
+  size/alignment identity, compiler-site replay disabled, and no median, range,
+  or variance. Later bounded profile samples do not reproduce the `+53%`
+  direction and likewise exercise only the layout-derived/raw allocator path,
+  not the compiler typed ABI. No optimization was adopted from this sample, and
+  no stable percentage is reported. These values supply no compiler-pass
+  overhead, paper claim, or publication-grade result.
+- **Profile-guided bounded A/B:** `908e12f` adds an inline fast path for an empty
+  delayed-owner lookup. The source-bound A/B compares baseline `3fc5a199` with
+  detached candidate `7964094`, which contains the same six-line patch, using
+  one warmup followed by 3 interleaved runs each. For the same
+  `vec::bench_with_capacity_1000`, baseline median/range is `15.36` /
+  `[15.27,15.46] ns/iter`, candidate median/range is `14.41` /
+  `[14.38,14.51] ns/iter`, and the direction is `-6.185%`. This single-machine
+  Darwin, layout-derived/raw microbenchmark diagnostic supports only the
+  directional decision to retain the candidate. It supplies no stable
+  percentage, compiler-pass overhead, paper claim, or publication-grade result.

@@ -36,7 +36,7 @@ fn expect_group(it: &mut token_stream::IntoIter) -> Group {
 // extern crate alloc;
 // // use global allocator
 // use alloc::alloc::Global as GlobalBackend;
-// // use customs allocator
+// // use a custom allocator
 // use your_cool_path::your_cool_allocator as GlobalBackend;
 //
 // atomic_static! {
@@ -49,8 +49,8 @@ fn expect_group(it: &mut token_stream::IntoIter) -> Group {
 //
 // # Note
 //
-// The internal representation requires `Box` to allocate objects on heap.
-// However, large objects can potentially overflows the stack.
+// The internal representation requires `Box` to allocate objects on the heap.
+// However, large objects can potentially overflow the stack.
 // The bug is fixed in 2021-03-12 toolchain.
 // See https://github.com/rust-lang/rust/issues/53827.
 pub fn atomic_static(input: TokenStream) -> TokenStream {

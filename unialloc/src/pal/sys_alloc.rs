@@ -3,6 +3,8 @@ use core::alloc::{AllocError, Allocator, GlobalAlloc, Layout};
 use core::ptr::NonNull;
 use core::result::Result;
 use core::slice;
+#[cfg(test)]
+use core::sync::atomic::AtomicBool;
 use core::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
 
 /// A builder to configure the page heap allocator
@@ -275,6 +277,41 @@ static HUGEPAGE_MMAP_HUGETLB_SKIPS: AtomicUsize = AtomicUsize::new(0);
 static HUGEPAGE_MMAP_LAST_PLATFORM_ERROR_STAGE: AtomicUsize =
     AtomicUsize::new(HugePageMmapPlatformErrorStage::None as usize);
 static HUGEPAGE_MMAP_LAST_PLATFORM_ERROR_CODE: AtomicIsize = AtomicIsize::new(0);
+#[cfg(test)]
+static HUGEPAGE_STATS_TEST_CAPTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+#[thread_local]
+static mut HUGEPAGE_STATS_TEST_CAPTURE_OWNER: bool = false;
+#[cfg(test)]
+static HUGEPAGE_STATS_TEST_LOCK: spin::Mutex<()> = spin::Mutex::new(());
+
+#[cfg(test)]
+pub(crate) struct HugepageStatsTestGuard {
+    _lock: spin::MutexGuard<'static, ()>,
+}
+
+#[cfg(test)]
+impl HugepageStatsTestGuard {
+    pub(crate) fn new() -> Self {
+        let lock = HUGEPAGE_STATS_TEST_LOCK.lock();
+        unsafe {
+            HUGEPAGE_STATS_TEST_CAPTURE_OWNER = true;
+        }
+        HUGEPAGE_STATS_TEST_CAPTURE_ACTIVE.store(true, Ordering::Release);
+        hugepage_mmap_stats_reset_for_test();
+        Self { _lock: lock }
+    }
+}
+
+#[cfg(test)]
+impl Drop for HugepageStatsTestGuard {
+    fn drop(&mut self) {
+        unsafe {
+            HUGEPAGE_STATS_TEST_CAPTURE_OWNER = false;
+        }
+        HUGEPAGE_STATS_TEST_CAPTURE_ACTIVE.store(false, Ordering::Release);
+    }
+}
 
 #[cfg(target_os = "linux")]
 const LINUX_HUGETLB_SUPPORT_UNKNOWN: usize = 0;
@@ -387,31 +424,49 @@ fn windows_allocation_granularity() -> usize {
 
 #[inline]
 fn record_hugepage_attempt() {
+    if !hugepage_observation_recording_allowed() {
+        return;
+    }
     HUGEPAGE_MMAP_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
 }
 
 #[inline]
 fn record_hugetlb_mmap_syscall() {
+    if !hugepage_observation_recording_allowed() {
+        return;
+    }
     HUGEPAGE_MMAP_HUGETLB_SYSCALLS.fetch_add(1, Ordering::Relaxed);
 }
 
 #[inline]
 fn record_hugetlb_mmap_skip() {
+    if !hugepage_observation_recording_allowed() {
+        return;
+    }
     HUGEPAGE_MMAP_HUGETLB_SKIPS.fetch_add(1, Ordering::Relaxed);
 }
 
 #[inline]
 fn record_hugepage_success() {
+    if !hugepage_observation_recording_allowed() {
+        return;
+    }
     HUGEPAGE_MMAP_SUCCESSES.fetch_add(1, Ordering::Relaxed);
 }
 
 #[inline]
 fn record_hugepage_fallback() {
+    if !hugepage_observation_recording_allowed() {
+        return;
+    }
     HUGEPAGE_MMAP_FALLBACKS.fetch_add(1, Ordering::Relaxed);
 }
 
 #[inline]
 fn record_hugepage_fallback_backing(backing: HugePageMmapBacking) {
+    if !hugepage_observation_recording_allowed() {
+        return;
+    }
     if backing.is_aligned_fallback() {
         HUGEPAGE_MMAP_ALIGNED_FALLBACKS.fetch_add(1, Ordering::Relaxed);
     }
@@ -429,6 +484,9 @@ fn record_hugepage_fallback_backing(backing: HugePageMmapBacking) {
 
 #[inline]
 fn clear_hugepage_platform_error() {
+    if !hugepage_observation_recording_allowed() {
+        return;
+    }
     HUGEPAGE_MMAP_LAST_PLATFORM_ERROR_CODE.store(0, Ordering::Relaxed);
     HUGEPAGE_MMAP_LAST_PLATFORM_ERROR_STAGE.store(
         HugePageMmapPlatformErrorStage::None as usize,
@@ -438,6 +496,9 @@ fn clear_hugepage_platform_error() {
 
 #[inline]
 fn record_hugepage_platform_error(stage: HugePageMmapPlatformErrorStage, code: isize) {
+    if !hugepage_observation_recording_allowed() {
+        return;
+    }
     HUGEPAGE_MMAP_LAST_PLATFORM_ERROR_CODE.store(code, Ordering::Relaxed);
     HUGEPAGE_MMAP_LAST_PLATFORM_ERROR_STAGE.store(stage as usize, Ordering::Relaxed);
 }
@@ -451,8 +512,24 @@ fn linux_hugetlb_error_is_stable_unsupported(code: isize) -> bool {
 #[cfg(target_os = "linux")]
 #[inline]
 fn record_linux_hugetlb_unsupported(code: isize) {
+    if !hugepage_observation_recording_allowed() {
+        return;
+    }
     LINUX_HUGETLB_UNSUPPORTED_CODE.store(code, Ordering::Relaxed);
     LINUX_HUGETLB_SUPPORT_STATE.store(LINUX_HUGETLB_SUPPORT_UNSUPPORTED, Ordering::Release);
+}
+
+#[inline]
+fn hugepage_observation_recording_allowed() -> bool {
+    #[cfg(test)]
+    {
+        !HUGEPAGE_STATS_TEST_CAPTURE_ACTIVE.load(Ordering::Acquire)
+            || unsafe { HUGEPAGE_STATS_TEST_CAPTURE_OWNER }
+    }
+    #[cfg(not(test))]
+    {
+        true
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -624,7 +701,9 @@ pub unsafe fn mmap_huge_with_backing(req: usize, prot: i32) -> HugePageMmapResul
         0,
     ) as *mut u8;
     if !mmap_failed(huge_ptr) {
-        LINUX_HUGETLB_SUPPORT_STATE.store(LINUX_HUGETLB_SUPPORT_PRESENT, Ordering::Release);
+        if hugepage_observation_recording_allowed() {
+            LINUX_HUGETLB_SUPPORT_STATE.store(LINUX_HUGETLB_SUPPORT_PRESENT, Ordering::Release);
+        }
         record_hugepage_success();
         return HugePageMmapResult::from_ptr(huge_ptr, HugePageMmapBacking::HugePage);
     }
@@ -723,6 +802,9 @@ fn macos_superpage_is_unsupported_error(result: libc::kern_return_t) -> bool {
 #[cfg(target_os = "macos")]
 #[inline]
 fn record_macos_superpage_unsupported(code: libc::kern_return_t) {
+    if !hugepage_observation_recording_allowed() {
+        return;
+    }
     let code = code as isize;
     MACOS_SUPERPAGE_UNSUPPORTED_CODE.store(code, Ordering::Relaxed);
     MACOS_SUPERPAGE_SUPPORT_STATE.store(MACOS_SUPERPAGE_SUPPORT_UNSUPPORTED, Ordering::Relaxed);
@@ -768,7 +850,9 @@ unsafe fn mmap_huge_macos(req: usize, prot: i32) -> *mut u8 {
         return core::ptr::null_mut();
     }
 
-    MACOS_SUPERPAGE_SUPPORT_STATE.store(MACOS_SUPERPAGE_SUPPORT_PRESENT, Ordering::Relaxed);
+    if hugepage_observation_recording_allowed() {
+        MACOS_SUPERPAGE_SUPPORT_STATE.store(MACOS_SUPERPAGE_SUPPORT_PRESENT, Ordering::Relaxed);
+    }
     let ptr = address as *mut u8;
     if !mprotect(ptr, req, prot) {
         record_hugepage_platform_error(HugePageMmapPlatformErrorStage::MacosMprotect, 0);
@@ -1173,9 +1257,9 @@ pub mod prots {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    extern crate std;
 
-    static HUGEPAGE_STATS_TEST_LOCK: spin::Mutex<()> = spin::Mutex::new(());
+    use super::*;
 
     #[test]
     fn page_heap_zero_sized_layout_is_aligned_non_null_and_dealloc_noop() {
@@ -1292,8 +1376,7 @@ mod tests {
 
     #[test]
     fn mmap_huge_zero_sized_request_records_single_failed_fallback() {
-        let _guard = HUGEPAGE_STATS_TEST_LOCK.lock();
-        hugepage_mmap_stats_reset_for_test();
+        let _guard = HugepageStatsTestGuard::new();
         let prot = prots::get_prot(true, true, false);
         unsafe {
             let result = mmap_huge_with_backing(0, prot);
@@ -1326,8 +1409,28 @@ mod tests {
 
     #[test]
     fn mmap_huge_returns_usable_mapping_and_records_fallbacks() {
-        let _guard = HUGEPAGE_STATS_TEST_LOCK.lock();
-        hugepage_mmap_stats_reset_for_test();
+        const CHILD_ENV: &str = "UNIALLOC_HUGEPAGE_STATS_CHILD";
+        const TEST_NAME: &str =
+            "pal::sys_alloc::tests::mmap_huge_returns_usable_mapping_and_records_fallbacks";
+
+        if std::env::var_os(CHILD_ENV).is_none() {
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("current allocator test executable"),
+            )
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .env(CHILD_ENV, "1")
+            .env("RUST_BACKTRACE", "0")
+            .output()
+            .expect("spawn isolated hugepage statistics test");
+            assert!(
+                output.status.success(),
+                "isolated hugepage statistics test failed: {}",
+                std::string::String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
+        let _guard = HugepageStatsTestGuard::new();
         let req = 2 * 1024 * 1024;
         let prot = prots::get_prot(true, true, false);
         unsafe {
@@ -1366,8 +1469,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn mmap_huge_fallback_prefers_hugepage_aligned_mapping() {
-        let _guard = HUGEPAGE_STATS_TEST_LOCK.lock();
-        hugepage_mmap_stats_reset_for_test();
+        let _guard = HugepageStatsTestGuard::new();
         let req = hugepage_fallback_alignment();
         assert!(hugepage_aligned_fallback_supported(req));
         let prot = prots::get_prot(true, true, false);
@@ -1441,8 +1543,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn mmap_huge_linux_skips_cached_stable_hugetlb_unsupported() {
-        let _guard = HUGEPAGE_STATS_TEST_LOCK.lock();
-        hugepage_mmap_stats_reset_for_test();
+        let _guard = HugepageStatsTestGuard::new();
         record_linux_hugetlb_unsupported(22);
         let req = hugepage_fallback_alignment();
         let prot = prots::get_prot(true, true, false);
@@ -1483,8 +1584,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn mmap_huge_macos_classifies_invalid_superpage_flags_as_unsupported() {
-        let _guard = HUGEPAGE_STATS_TEST_LOCK.lock();
-        hugepage_mmap_stats_reset_for_test();
+        let _guard = HugepageStatsTestGuard::new();
         let req = 2 * 1024 * 1024;
         let prot = prots::get_prot(true, true, false);
         unsafe {

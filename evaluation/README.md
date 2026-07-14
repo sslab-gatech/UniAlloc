@@ -182,6 +182,149 @@ Coverage imports default to `claim_grade=false`, including `collect-coverage`, `
 
 For manual imports, `import-coverage` also accepts `--type-id-basis` and repeated `--claim-grade-blocker` so external raw artifacts can carry the same audit metadata instead of silently passing or failing the claim gate.
 
+## Real-world Type Isolation diagnostic
+
+`scripts/realworld_type_isolation_matrix.py` builds and runs pinned ripgrep,
+fd, and Oxipng sources through seven allocator/compiler routes. This is a
+source-bound diagnostic over exact application revisions and inputs. The
+paper's original toolchain, workload matrix, aggregation, and 72.17% coverage
+reproduction remain deferred.
+
+The routes are:
+
+- `native`: the application's original allocator route;
+- `jemalloc`: jemalloc `0.5.4`;
+- `mimalloc`: mimalloc `0.1.25`;
+- `unialloc`: UniAlloc without compiler semantic rewriting;
+- `typed_plain`: the actual MIR rewrite with type metadata and lowering policy
+  flags set to zero;
+- `typeiso_perf`: the same actual MIR rewrite with Type Isolation enabled and
+  runtime statistics disabled;
+- `typeiso_coverage`: Type Isolation with runtime statistics enabled.
+
+The fd source already selects jemalloc `0.5.4` in its native configuration.
+For fd, `native` and explicit `jemalloc` exercise the original source route and
+serve as route controls. The primary incremental comparison is
+`typeiso_perf / typed_plain`, because those binaries share the compiler rewrite
+and allocator while differing in the Type Isolation policy flag. The
+`typeiso_perf / native` ratio is an end-to-end comparison that also includes the
+allocator, compiler rewrite, recovery bookkeeping, and policy.
+
+The final runs used `nightly-2026-06-11`, physical CPU 6, NUMA node 0, and
+libc-managed rseq. ripgrep and fd used full inputs with two warmups and 9 and 7
+measured repetitions, respectively. Oxipng used its quick input with one warmup
+and 5 measured repetitions. Performance routes ran with runtime statistics
+disabled. `typeiso_coverage` timing is performance-ineligible; it exists only
+to collect counters. All seven variants produced the same output SHA-256 within
+each application.
+
+| Application | Variant | Median wall time (s) | Median peak RSS (KiB) | Performance eligible |
+|---|---|---:|---:|---|
+| ripgrep | `native` | `0.086309096` | `5120` | yes |
+| ripgrep | `jemalloc` | `0.086702833` | `6144` | yes |
+| ripgrep | `mimalloc` | `0.088868793` | `11812` | yes |
+| ripgrep | `unialloc` | `0.090066579` | `6144` | yes |
+| ripgrep | `typed_plain` | `0.092411192` | `6144` | yes |
+| ripgrep | `typeiso_perf` | `0.092586986` | `6144` | yes |
+| ripgrep | `typeiso_coverage` | `0.094015251` | `6144` | no |
+| fd | `native` | `0.136296730` | `6144` | yes |
+| fd | `jemalloc` | `0.136304143` | `6144` | yes |
+| fd | `mimalloc` | `0.129672706` | `18872` | yes |
+| fd | `unialloc` | `0.167541836` | `6144` | yes |
+| fd | `typed_plain` | `0.464682945` | `6144` | yes |
+| fd | `typeiso_perf` | `0.465833677` | `6144` | yes |
+| fd | `typeiso_coverage` | `0.491091350` | `6144` | no |
+| Oxipng | `native` | `1.712608439` | `46400` | yes |
+| Oxipng | `jemalloc` | `1.727841580` | `49088` | yes |
+| Oxipng | `mimalloc` | `1.634668906` | `71180` | yes |
+| Oxipng | `unialloc` | `1.736975509` | `44260` | yes |
+| Oxipng | `typed_plain` | `1.766903750` | `44508` | yes |
+| Oxipng | `typeiso_perf` | `1.754456338` | `44524` | yes |
+| Oxipng | `typeiso_coverage` | `1.754579386` | `44640` | no |
+
+| Application | `typeiso_perf / typed_plain` | Incremental time | `typeiso_perf / native` | End-to-end time | Typed allocation events | Total allocation events | Event coverage |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| ripgrep | `1.001902302050` | `+0.190230%` | `1.072737292950` | `+7.273729%` | `2266` | `22725` | `9.97%` (`997` bp) |
+| fd | `1.002476380966` | `+0.247638%` | `3.417790558878` | `+241.779056%` | `616262` | `831549` | `74.11%` (`7411` bp) |
+| Oxipng | `0.992955240488` | `-0.704476%` | `1.024435182057` | `+2.443518%` | `9661` | `10368` | `93.18%` (`9318` bp) |
+
+| Application | Type Isolation RSS (KiB) | Typed-plain RSS (KiB) | RSS ratio vs typed plain | Native RSS (KiB) | RSS ratio vs native |
+|---|---:|---:|---:|---:|---:|
+| ripgrep | `6144` | `6144` | `1.000000000000` | `5120` | `1.200000000000` |
+| fd | `6144` | `6144` | `1.000000000000` | `6144` | `1.000000000000` |
+| Oxipng | `44524` | `44508` | `1.000359485935` | `46400` | `0.959568965517` |
+
+Event coverage is `typed_allocations / total_allocations` for one exact
+application revision and input. It is reported per application; aggregation
+would erase workload-specific compiler and allocator behavior. This metric has
+no source-line, Rust-type, byte, or universal program denominator, and it uses a
+different denominator from the paper's 72.17% result.
+
+The measured artifact source binding is:
+
+- measured implementation-bundle SHA-256:
+  `7e98e63ce2fbeccc361ea57bd26773ccdb02664b83d772f0475161c980c55929`;
+- MIR pass source SHA-256:
+  `ae7dd0da2368c670323287647c94ce5a90069b6f2e4a3d51b298d48cb9a5ac63`;
+- ripgrep source: `4649aa9700619f94cf9c66876e9549d83420e16c`;
+- fd source: `b19136871310b01500b4f09eadd7387b8476be47`;
+- Oxipng source: `dea23211ae6259007e068c59ab16929798d00d96`.
+
+The current matrix-runner implementation-bundle SHA-256 is
+`94ede1223c7b348639a7041a40a5b1840a6840cc18b4dbcf7d0f7a6ef8bb2cf4`.
+It differs because binary-cache reuse validation was hardened after the
+measurements. The allocator and MIR pass sources used by the measured binaries
+are unchanged.
+
+### Optimization trajectory
+
+The fd full-input run provides the clearest before/after signal for the two
+runtime optimizations. Under the same CPU 6 / NUMA 0 pinning and default
+libc-managed rseq contract, the pre-optimization and final medians were:
+
+| Route | Pre-optimization wall (s) | Final wall (s) | Change | Pre/final RSS (KiB) |
+|---|---:|---:|---:|---:|
+| `typed_plain` | `0.611635718` | `0.464682945` | `-24.026192%` | `6144 / 6144` |
+| `typeiso_perf` | `0.573481469` | `0.465833677` | `-18.770928%` | `6144 / 6144` |
+
+The native route moved by `-0.218373%` in the same comparison. Event coverage
+remained `74.11%` (`616259/831530` before and `616262/831549` final). These are
+separate source-bound diagnostic states, so the deltas establish a directional
+optimization result for this fd input rather than a stable cross-workload
+speedup.
+
+The authoritative results are:
+
+- `raw/realworld-nightly-20260713/type-isolation-ripgrep-final/results-pinned-final.json`;
+- `raw/realworld-nightly-20260713/type-isolation-fd-final/results-pinned-final.json`;
+- `raw/realworld-nightly-20260713/type-isolation-oxipng-final/results-pinned-final.json`.
+
+The final runtime optimizations preserve these lifecycle constraints:
+
+1. Hosted automatic-allocation records remain in their pointer-derived home
+   shard and home overflow. A sticky legacy-state marker enables the exhaustive
+   fallback only when old or test-only non-home inline state can exist.
+   `fixed_heap` retains its bounded cross-shard inline behavior. The active-shard
+   mask changes only on live-count transitions from zero to one and one to zero.
+2. A generic raw allocation miss publishes the authoritative strict lifecycle
+   record once, then completes semantic admission through an after-publication
+   path. Cache hits and guarded mappings retain semantic publication, and raw
+   backend alias rejection remains at the strict publication boundary.
+
+Ordinary compiler semantic scopes request conservative cross-thread recovery;
+explicit `_local` scopes retain local placement. Exact history observations pin
+their selected `Absent` entry until admission completes, eviction skips pinned
+entries, and dropping the observation releases its lease. The history remains
+an eight-way bounded window; simultaneous leases on all eight ways use the
+fail-stop availability path.
+
+Linux rseq itself allows libc-managed registration. UniAlloc's production
+allocation hot path currently makes no rseq call. The matrix therefore uses the
+default libc registration (`glibc_rseq_mode=libc_default`, no glibc tunable).
+Only the allocator's private self-registration tests require process startup
+with `GLIBC_TUNABLES=glibc.pthread.rseq=0`; the optional
+`--disable-glibc-rseq` matrix flag exists for that diagnostic boundary.
+
 ## Platform evidence flow
 
 `generate-platform-matrix-template` writes a fill-in matrix with the required artifact roles for every C007 platform. `collect-platform-smoke` runs local retargeting smoke checks and writes a generated matrix under `evaluation/raw/<run-id>/platform-matrix.generated.json`, then imports it into `evaluation/results/platform_matrix.json` unless `--no-import` is used. `audit-platform-matrix` can be run on any hand-authored or collected matrix before import; `import-platform-matrix` always writes `platform-matrix-preflight-audit.json` next to the source matrix and refreshes `evaluation/results/platform_matrix_audit.json`.
@@ -247,7 +390,9 @@ Claim-grade platform entries may use evidence objects such as `{"path": "windows
 ## Local benchmark flow
 
 1. Install/activate the Rust nightly toolchain required by `rust-toolchain`.
-2. Disable glibc rseq interference on Linux:
+2. Keep the default libc-managed rseq environment for application benchmarks.
+   Set the following only when the run intentionally exercises UniAlloc's
+   private rseq self-registration tests:
    ```bash
    export GLIBC_TUNABLES=glibc.pthread.rseq=0
    ```

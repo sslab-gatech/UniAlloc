@@ -1322,7 +1322,18 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             (repo / "file.txt").write_text("clean\n", encoding="utf-8")
             subprocess.run(["git", "add", "file.txt"], cwd=repo, check=True)
             subprocess.run(
-                ["git", "-c", "user.name=Unit Test", "-c", "user.email=test@example.invalid", "commit", "-m", "init"],
+                [
+                    "git",
+                    "-c",
+                    "user.name=Unit Test",
+                    "-c",
+                    "user.email=test@example.invalid",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "commit",
+                    "-m",
+                    "init",
+                ],
                 cwd=repo,
                 check=True,
                 stdout=subprocess.PIPE,

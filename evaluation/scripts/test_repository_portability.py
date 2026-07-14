@@ -3,17 +3,62 @@
 
 from __future__ import annotations
 
+import codecs
 import importlib.util
+import io
 import json
 import pathlib
+import re
+import subprocess
 import tempfile
 import types
 import unittest
+import zipfile
 from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EVALUATE_PATH = ROOT / "evaluation" / "scripts" / "evaluate.py"
+CJK_RANGES = (
+    (0x2E80, 0x303F),
+    (0x3100, 0x312F),
+    (0x31A0, 0x33FF),
+    (0x3400, 0x4DBF),
+    (0x4E00, 0x9FFF),
+    (0xF900, 0xFAFF),
+    (0xFE30, 0xFE4F),
+    (0xFF00, 0xFFEF),
+    (0x20000, 0x2FA1F),
+    (0x30000, 0x323AF),
+)
+CJK_PATTERN = re.compile(
+    "["
+    + "".join(
+        f"\\U{first:08x}-\\U{last:08x}" for first, last in CJK_RANGES
+    )
+    + "]"
+)
+
+
+def decode_unicode_text(data: bytes) -> str:
+    for marker, encoding in (
+        (codecs.BOM_UTF8, "utf-8-sig"),
+        (codecs.BOM_UTF32_LE, "utf-32"),
+        (codecs.BOM_UTF32_BE, "utf-32"),
+        (codecs.BOM_UTF16_LE, "utf-16"),
+        (codecs.BOM_UTF16_BE, "utf-16"),
+    ):
+        if data.startswith(marker):
+            return data.decode(encoding)
+    for marker, encoding in (
+        (b"\x00\x00\x00<", "utf-32-be"),
+        (b"<\x00\x00\x00", "utf-32-le"),
+        (b"\x00<\x00?", "utf-16-be"),
+        (b"<\x00?\x00", "utf-16-le"),
+    ):
+        if data.startswith(marker):
+            return data.decode(encoding)
+    return data.decode("utf-8")
 
 spec = importlib.util.spec_from_file_location("unialloc_evaluate_portability", EVALUATE_PATH)
 assert spec is not None and spec.loader is not None
@@ -22,6 +67,100 @@ spec.loader.exec_module(evaluate)
 
 
 class RepositoryPortabilityTests(unittest.TestCase):
+    def test_cjk_pattern_covers_declared_range_boundaries(self) -> None:
+        for first, last in CJK_RANGES:
+            with self.subTest(first=hex(first), last=hex(last)):
+                self.assertIsNotNone(CJK_PATTERN.fullmatch(chr(first)))
+                self.assertIsNotNone(CJK_PATTERN.fullmatch(chr(last)))
+        self.assertIsNone(CJK_PATTERN.search("ASCII and ไทย remain valid"))
+
+    def test_unicode_decoder_handles_xml_without_a_byte_order_mark(self) -> None:
+        source = '<?xml version="1.0"?><root>portable</root>'
+        for encoding in ("utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be"):
+            with self.subTest(encoding=encoding):
+                self.assertEqual(source, decode_unicode_text(source.encode(encoding)))
+
+    def test_tracked_unicode_text_is_cjk_free(self) -> None:
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--quiet", "--exit-code", "--"],
+            cwd=ROOT,
+            check=False,
+        ).returncode
+        self.assertIn(staged, (0, 1))
+
+        snapshot: list[tuple[str, bytes, bytes]] = []
+        if staged:
+            records = subprocess.check_output(
+                ["git", "ls-files", "-s", "-z"], cwd=ROOT
+            ).split(b"\0")
+            blobs: dict[bytes, bytes] = {}
+            for record in filter(None, records):
+                metadata, encoded_path = record.split(b"\t", 1)
+                mode, object_id, stage = metadata.split()
+                if stage != b"0":
+                    continue
+                content = blobs.get(object_id)
+                if content is None:
+                    content = subprocess.check_output(
+                        ["git", "cat-file", "blob", object_id], cwd=ROOT
+                    )
+                    blobs[object_id] = content
+                snapshot.append((encoded_path.decode("utf-8"), mode, content))
+            snapshot_name = "index"
+        else:
+            tracked = subprocess.check_output(
+                ["git", "ls-files", "-z"], cwd=ROOT
+            ).decode("utf-8").split("\0")
+            for relative in filter(None, tracked):
+                path = ROOT / relative
+                if path.is_symlink():
+                    snapshot.append(
+                        (relative, b"120000", str(path.readlink()).encode("utf-8"))
+                    )
+                elif path.exists():
+                    snapshot.append((relative, b"100644", path.read_bytes()))
+            snapshot_name = "working tree"
+
+        offenders: list[str] = []
+        for relative, mode, data in snapshot:
+            if CJK_PATTERN.search(relative):
+                offenders.append(relative)
+            if mode == b"120000":
+                target = data.decode("utf-8")
+                if CJK_PATTERN.search(target):
+                    offenders.append(f"{relative} -> {target}")
+                continue
+
+            if zipfile.is_zipfile(io.BytesIO(data)):
+                with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                    for member in archive.namelist():
+                        if CJK_PATTERN.search(member):
+                            offenders.append(f"{relative}!{member}")
+                        try:
+                            content = decode_unicode_text(archive.read(member))
+                        except UnicodeDecodeError:
+                            continue
+                        if CJK_PATTERN.search(content):
+                            offenders.append(f"{relative}!{member}")
+                continue
+
+            try:
+                content = decode_unicode_text(data)
+            except UnicodeDecodeError:
+                continue
+            for line_number, line in enumerate(content.splitlines(), start=1):
+                if CJK_PATTERN.search(line):
+                    offenders.append(f"{relative}:{line_number}")
+
+        preview = "\n".join(offenders[:50])
+        if len(offenders) > 50:
+            preview += f"\n... and {len(offenders) - 50} more"
+        if offenders:
+            self.fail(
+                f"CJK text found in {len(offenders)} tracked {snapshot_name} "
+                f"locations:\n{preview}"
+            )
+
     def test_load_config_resolves_relative_paper_checkout_from_repo_root(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = pathlib.Path(tmpdir) / "UniAlloc"

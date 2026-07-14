@@ -92,7 +92,7 @@ const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
 const MODULE_ID_ALGORITHM: &str =
     "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))";
 const TYPE_ID_ALGORITHM: &str =
-    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity, alloc::vec::from_elem::<u8>, String::with_capacity, String::from(&str), <str as ToOwned>::to_owned, <[u8] as ToOwned>::to_owned, Copied<slice::Iter<u8>>::collect::<Vec<u8>>, Box::new, and Box<[u8]>::from(&[u8]) destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer identity because they can change or create only that backing allocation, while generic or non-u8 vec::from_elem, resize/extend/push/clone_from/Drop, and other element-affecting calls retain full owner-graph fail-closed classification; exact alloc::sync::Arc::new and alloc::rc::Rc::new calls select the direct destination Arc<T> or Rc<T> identity only after DefId/crate/path and destination-payload structural checks, without recursively treating nested owners inside T as owners of the ref-counted allocation; exact std::collections::HashMap::with_capacity and std::collections::HashSet::with_capacity calls likewise select the direct destination table identity only after exact std DefId/path, RandomState, optional Global allocator, and capacity-argument checks, without treating nested K/V/T owners as identities for the table allocation; exact std HashMap reserve/try_reserve/shrink calls remain callback-capable audit-only because rehash may execute user Hash/Eq code with unrelated allocations; constructor/factory scopes without an exact DefId/body allocation proof remain audit-only because a direct Vec/String/Result return type alone is not allocation provenance, regardless of whether the opaque callee is local, platform, or a third-party dependency; Result<T, E>/Option<T> candidates still select only the Ok/Some payload for hazard classification while Result Err owners remain fail-closed hazards; custom or aggregate destinations that merely contain a supported owner remain audit-only without an exact constructor matcher or sound callee-body allocation proof; for these shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut and str Split/SplitInclusive wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec/String/Box capacity/constructor, Arc::new, Rc::new, std HashMap::with_capacity, and std HashSet::with_capacity exceptions; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity, alloc::vec::from_elem::<u8>, String::with_capacity, String::from(&str), <str as ToOwned>::to_owned, <[u8] as ToOwned>::to_owned, Copied<slice::Iter<u8>>::collect::<Vec<u8>>, Box::new, and Box<[u8]>::from(&[u8]) destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer identity because they can change or create only that backing allocation, while generic or non-u8 vec::from_elem, resize/extend/push/clone_from/Drop, and other element-affecting calls retain full owner-graph fail-closed classification; exact std::path::Path::to_path_buf and std::path::Path::join calls select the direct PathBuf identity only after exact std DefId/path and destination checks, and join accepts only immutable borrowed Path, OsStr, or str arguments with callback-free standard AsRef implementations; exact alloc::sync::Arc::new and alloc::rc::Rc::new calls select the direct destination Arc<T> or Rc<T> identity only after DefId/crate/path and destination-payload structural checks, without recursively treating nested owners inside T as owners of the ref-counted allocation; exact std::collections::HashMap::with_capacity and std::collections::HashSet::with_capacity calls likewise select the direct destination table identity only after exact std DefId/path, RandomState, optional Global allocator, and capacity-argument checks, without treating nested K/V/T owners as identities for the table allocation; exact std HashMap reserve/try_reserve/shrink calls remain callback-capable audit-only because rehash may execute user Hash/Eq code with unrelated allocations; constructor/factory scopes without an exact DefId/body allocation proof remain audit-only because a direct Vec/String/Result return type alone is not allocation provenance, regardless of whether the opaque callee is local, platform, or a third-party dependency; Result<T, E>/Option<T> candidates still select only the Ok/Some payload for hazard classification while Result Err owners remain fail-closed hazards; custom or aggregate destinations that merely contain a supported owner remain audit-only without an exact constructor matcher or sound callee-body allocation proof; for these shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut and str Split/SplitInclusive wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec/String/Box capacity/constructor, borrowed Path factory, Arc::new, Rc::new, std HashMap::with_capacity, and std HashSet::with_capacity exceptions; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 
@@ -586,6 +586,59 @@ fn lowering_placement_hint_for_body(cross_thread_escape: bool) -> (u16, bool, &'
         (false, false, false) => "default",
     };
     (placement_hint, has_cross_thread_recovery, basis)
+}
+
+fn semantic_scope_placement_hint_from_configured(
+    placement_hint: u16,
+    cross_thread_recovery_hint: bool,
+    placement_hint_basis: &'static str,
+    local_no_recovery: bool,
+) -> (u16, bool, &'static str) {
+    if local_no_recovery {
+        let basis = if placement_hint == 0
+            && !cross_thread_recovery_hint
+            && placement_hint_basis == "default"
+        {
+            "exact_local_no_recovery"
+        } else {
+            placement_hint_basis
+        };
+        return (placement_hint, cross_thread_recovery_hint, basis);
+    }
+    if cross_thread_recovery_hint {
+        return (
+            placement_hint,
+            cross_thread_recovery_hint,
+            placement_hint_basis,
+        );
+    }
+
+    let basis = match placement_hint_basis {
+        "default" => "default_recovery_backed_semantic_scope",
+        "manual_placement_hint" => {
+            "manual_placement_hint_and_default_recovery_backed_semantic_scope"
+        }
+        _ => "configured_hint_and_default_recovery_backed_semantic_scope",
+    };
+    (
+        placement_hint | PLACEMENT_HINT_CROSS_THREAD_RECOVERY,
+        true,
+        basis,
+    )
+}
+
+fn lowering_semantic_scope_placement_hint_for_body(
+    cross_thread_escape: bool,
+    local_no_recovery: bool,
+) -> (u16, bool, &'static str) {
+    let (placement_hint, cross_thread_recovery_hint, placement_hint_basis) =
+        lowering_placement_hint_for_body(cross_thread_escape);
+    semantic_scope_placement_hint_from_configured(
+        placement_hint,
+        cross_thread_recovery_hint,
+        placement_hint_basis,
+        local_no_recovery,
+    )
 }
 
 fn looks_like_rustc_argv0(value: &str) -> bool {
@@ -2785,6 +2838,67 @@ fn exact_alloc_rc_new_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
         && exact_alloc_rc_new_def_path(&tcx.def_path_str(def_id))
 }
 
+fn exact_std_path_def_path(path: &str) -> bool {
+    strip_rustc_crate_disambiguators(path) == "std::path::Path"
+}
+
+fn exact_std_pathbuf_def_path(path: &str) -> bool {
+    strip_rustc_crate_disambiguators(path) == "std::path::PathBuf"
+}
+
+fn exact_std_dir_entry_def_path(path: &str) -> bool {
+    strip_rustc_crate_disambiguators(path) == "std::fs::DirEntry"
+}
+
+fn exact_std_dir_entry_method_def_path(path: &str, method: &str) -> bool {
+    let normalized = strip_rustc_crate_disambiguators(path);
+    if normalized.strip_prefix("std::fs::DirEntry::") == Some(method) {
+        return true;
+    }
+
+    let impl_index = match normalized
+        .strip_prefix("std::fs::{impl#")
+        .and_then(|rest| rest.strip_suffix(&format!("}}::{method}")))
+    {
+        Some(index) => index,
+        None => return false,
+    };
+    !impl_index.is_empty() && impl_index.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn exact_std_dir_entry_method_def_id(tcx: TyCtxt<'_>, def_id: DefId, method: &str) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "std"
+        && exact_std_dir_entry_method_def_path(&tcx.def_path_str(def_id), method)
+}
+
+fn exact_std_os_str_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "std::ffi::os_str::OsStr" | "std::ffi::OsStr"
+    )
+}
+
+fn exact_std_path_method_def_path(path: &str, method: &str) -> bool {
+    let normalized = strip_rustc_crate_disambiguators(path);
+    if normalized.strip_prefix("std::path::Path::") == Some(method) {
+        return true;
+    }
+
+    let impl_index = match normalized
+        .strip_prefix("std::path::{impl#")
+        .and_then(|rest| rest.strip_suffix(&format!("}}::{method}")))
+    {
+        Some(index) => index,
+        None => return false,
+    };
+    !impl_index.is_empty() && impl_index.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn exact_std_path_method_def_id(tcx: TyCtxt<'_>, def_id: DefId, method: &str) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "std"
+        && exact_std_path_method_def_path(&tcx.def_path_str(def_id), method)
+}
+
 fn exact_std_hash_map_def_path(path: &str) -> bool {
     strip_rustc_crate_disambiguators(path) == "std::collections::HashMap"
 }
@@ -4154,6 +4268,123 @@ fn direct_outer_string_from_str_to_owned_destination_owner<'tcx>(
     Some(format!("{:?}", destination_ty))
 }
 
+fn immutable_ref_to_exact_std_path_component<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
+    let inner = match ty.kind() {
+        ty::Ref(_, inner, rustc_ast::Mutability::Not) => *inner,
+        _ => return false,
+    };
+    match inner.kind() {
+        ty::Str => true,
+        ty::Adt(def, args) if args.is_empty() => {
+            tcx.crate_name(def.did().krate).as_str() == "std"
+                && (exact_std_path_def_path(&tcx.def_path_str(def.did()))
+                    || exact_std_os_str_def_path(&tcx.def_path_str(def.did())))
+        }
+        _ => false,
+    }
+}
+
+fn direct_outer_std_path_factory_destination_owner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<String> {
+    if clone_result_has_unresolved_params(destination_ty) {
+        return None;
+    }
+
+    let destination_def = match destination_ty.kind() {
+        ty::Adt(def, args) if args.is_empty() => def,
+        _ => return None,
+    };
+    if tcx.crate_name(destination_def.did().krate).as_str() != "std"
+        || destination_def.did().krate != callee_def_id.krate
+        || !exact_std_pathbuf_def_path(&tcx.def_path_str(destination_def.did()))
+    {
+        return None;
+    }
+
+    let expected_argument_count = if exact_std_path_method_def_id(tcx, callee_def_id, "to_path_buf")
+    {
+        1
+    } else if exact_std_path_method_def_id(tcx, callee_def_id, "join") {
+        2
+    } else {
+        return None;
+    };
+    if argument_tys.len() != expected_argument_count
+        || !argument_tys
+            .iter()
+            .all(|argument_ty| immutable_ref_to_exact_std_path_component(tcx, *argument_ty))
+    {
+        return None;
+    }
+
+    // The receiver must always be the canonical std Path. For join, the
+    // second argument is limited to immutable references whose standard
+    // AsRef<Path> implementation is callback-free: Path, OsStr, or str.
+    let receiver_inner = match argument_tys[0].kind() {
+        ty::Ref(_, inner, rustc_ast::Mutability::Not) => *inner,
+        _ => return None,
+    };
+    let receiver_def = match receiver_inner.kind() {
+        ty::Adt(def, args) if args.is_empty() => def,
+        _ => return None,
+    };
+    if receiver_def.did().krate != callee_def_id.krate
+        || !exact_std_path_def_path(&tcx.def_path_str(receiver_def.did()))
+    {
+        return None;
+    }
+
+    Some(format!("{:?}", destination_ty))
+}
+
+fn direct_outer_std_dir_entry_path_destination_owner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<String> {
+    if !exact_std_dir_entry_method_def_id(tcx, callee_def_id, "path")
+        || clone_result_has_unresolved_params(destination_ty)
+        || argument_tys.len() != 1
+    {
+        return None;
+    }
+
+    let destination_def = match destination_ty.kind() {
+        ty::Adt(def, args) if args.is_empty() => def,
+        _ => return None,
+    };
+    if destination_def.did().krate != callee_def_id.krate
+        || !exact_std_pathbuf_def_path(&tcx.def_path_str(destination_def.did()))
+    {
+        return None;
+    }
+
+    let receiver_inner = match argument_tys[0].kind() {
+        ty::Ref(_, inner, rustc_ast::Mutability::Not) => *inner,
+        _ => return None,
+    };
+    let receiver_def = match receiver_inner.kind() {
+        ty::Adt(def, args) if args.is_empty() => def,
+        _ => return None,
+    };
+    if receiver_def.did().krate != callee_def_id.krate
+        || !exact_std_dir_entry_def_path(&tcx.def_path_str(receiver_def.did()))
+    {
+        return None;
+    }
+
+    // The exact std method, canonical borrowed DirEntry receiver, and direct
+    // PathBuf result prove that allocations inside the precompiled platform
+    // implementation belong to the returned PathBuf. Generic wrappers and
+    // same-name methods retain the fail-closed factory path below.
+    Some(format!("{:?}", destination_ty))
+}
+
 fn direct_outer_vec_u8_from_u8_slice_to_owned_destination_owner<'tcx>(
     tcx: TyCtxt<'tcx>,
     callee_def_id: DefId,
@@ -4696,6 +4927,22 @@ fn non_plain_semantic_scope_heap_class<'tcx>(
         // remain audit-only.
         SemanticScopeHeapClass::Single(owner)
     } else if let Some(owner) = callee_def_id.and_then(|def_id| {
+        direct_outer_std_dir_entry_path_destination_owner(tcx, def_id, destination_ty, argument_tys)
+    }) {
+        // Exact std DirEntry::path returns one direct PathBuf while keeping its
+        // receiver borrowed. This scope reaches the PathBuf allocation and
+        // growth performed inside precompiled std without widening arbitrary
+        // filesystem methods or iterator calls.
+        SemanticScopeHeapClass::Single(owner)
+    } else if let Some(owner) = callee_def_id.and_then(|def_id| {
+        direct_outer_std_path_factory_destination_owner(tcx, def_id, destination_ty, argument_tys)
+    }) {
+        // Exact std Path::to_path_buf and Path::join copy into the direct
+        // PathBuf buffer. Restrict join to canonical immutable borrowed Path,
+        // OsStr, and str arguments so user AsRef callbacks and consumed owners
+        // retain the fail-closed factory path below.
+        SemanticScopeHeapClass::Single(owner)
+    } else if let Some(owner) = callee_def_id.and_then(|def_id| {
         direct_outer_vec_u8_from_u8_slice_to_owned_destination_owner(
             tcx,
             def_id,
@@ -5126,6 +5373,60 @@ mod tests {
     }
 
     #[test]
+    fn semantic_scope_default_recovery_hint_preserves_explicit_hints_and_local_pairs() {
+        assert_eq!(
+            semantic_scope_placement_hint_from_configured(0, false, "default", false),
+            (
+                PLACEMENT_HINT_CROSS_THREAD_RECOVERY,
+                true,
+                "default_recovery_backed_semantic_scope"
+            )
+        );
+        assert_eq!(
+            semantic_scope_placement_hint_from_configured(0, false, "default", true),
+            (0, false, "exact_local_no_recovery")
+        );
+        assert_eq!(
+            semantic_scope_placement_hint_from_configured(7, false, "manual_placement_hint", false,),
+            (
+                7 | PLACEMENT_HINT_CROSS_THREAD_RECOVERY,
+                true,
+                "manual_placement_hint_and_default_recovery_backed_semantic_scope"
+            )
+        );
+        assert_eq!(
+            semantic_scope_placement_hint_from_configured(
+                PLACEMENT_HINT_CROSS_THREAD_RECOVERY,
+                true,
+                "manual_cross_thread_recovery_hint",
+                false,
+            ),
+            (
+                PLACEMENT_HINT_CROSS_THREAD_RECOVERY,
+                true,
+                "manual_cross_thread_recovery_hint"
+            )
+        );
+        assert_eq!(
+            semantic_scope_placement_hint_from_configured(
+                PLACEMENT_HINT_CROSS_THREAD_RECOVERY,
+                true,
+                "auto_cross_thread_escape",
+                false,
+            ),
+            (
+                PLACEMENT_HINT_CROSS_THREAD_RECOVERY,
+                true,
+                "auto_cross_thread_escape"
+            )
+        );
+        assert_eq!(
+            semantic_scope_placement_hint_from_configured(9, false, "manual_placement_hint", true,),
+            (9, false, "manual_placement_hint")
+        );
+    }
+
+    #[test]
     fn plain_clone_matcher_is_trait_exact_and_excludes_clone_from() {
         assert!(plain_clone_trait_call(
             "Val(ZeroSized, FnDef(DefId(2:1 ~ core[2f33]::clone::Clone::clone), [u64]))"
@@ -5528,6 +5829,72 @@ mod tests {
         assert!(exact_alloc_global_def_path("alloc[d734]::alloc::Global"));
         assert!(exact_alloc_global_def_path("std::alloc::Global"));
         assert!(!exact_alloc_global_def_path("my_crate::std::alloc::Global"));
+    }
+
+    #[test]
+    fn path_factory_matcher_is_std_method_exact() {
+        assert!(exact_std_path_def_path("std[3e07]::path::Path"));
+        assert!(exact_std_pathbuf_def_path("std[3e07]::path::PathBuf"));
+        assert!(exact_std_os_str_def_path("std[3e07]::ffi::os_str::OsStr"));
+        assert!(exact_std_path_method_def_path(
+            "std[3e07]::path::{impl#70}::join",
+            "join"
+        ));
+        assert!(exact_std_path_method_def_path(
+            "std[3e07]::path::{impl#70}::to_path_buf",
+            "to_path_buf"
+        ));
+        assert!(exact_std_path_method_def_path(
+            "std::path::Path::join",
+            "join"
+        ));
+        assert!(!exact_std_path_method_def_path(
+            "my_crate::std::path::{impl#70}::join",
+            "join"
+        ));
+        assert!(!exact_std_path_method_def_path(
+            "std::thread::{impl#70}::join",
+            "join"
+        ));
+        assert!(!exact_std_path_method_def_path(
+            "std::path::{impl#70}::join_extra",
+            "join"
+        ));
+        assert!(!exact_std_path_method_def_path(
+            "std::path::{impl#x}::join",
+            "join"
+        ));
+        assert!(!exact_std_path_def_path("my_crate::std::path::Path"));
+        assert!(!exact_std_pathbuf_def_path("my_crate::std::path::PathBuf"));
+        assert!(!exact_std_os_str_def_path(
+            "my_crate::std::ffi::os_str::OsStr"
+        ));
+    }
+
+    #[test]
+    fn dir_entry_path_factory_matcher_is_std_method_exact() {
+        assert!(exact_std_dir_entry_def_path("std[3e07]::fs::DirEntry"));
+        assert!(exact_std_dir_entry_method_def_path(
+            "std[3e07]::fs::{impl#38}::path",
+            "path"
+        ));
+        assert!(exact_std_dir_entry_method_def_path(
+            "std::fs::DirEntry::path",
+            "path"
+        ));
+        assert!(!exact_std_dir_entry_method_def_path(
+            "my_crate::std::fs::{impl#38}::path",
+            "path"
+        ));
+        assert!(!exact_std_dir_entry_method_def_path(
+            "std::fs::{impl#38}::path_extra",
+            "path"
+        ));
+        assert!(!exact_std_dir_entry_method_def_path(
+            "std::fs::{impl#x}::path",
+            "path"
+        ));
+        assert!(!exact_std_dir_entry_def_path("my_crate::std::fs::DirEntry"));
     }
 
     #[test]
@@ -9648,6 +10015,22 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             });
             continue;
         }
+        let exact_local_pair = local_ownership
+            .allocation_pairs
+            .contains(&(semantic_object_type.clone(), destination_place.clone()));
+        let selected_semantic_scope_abi = if exact_local_pair {
+            semantic_scope_local_abi.or(semantic_scope_abi)
+        } else {
+            semantic_scope_abi
+        };
+        let scope_uses_local_no_recovery = selected_semantic_scope_abi
+            .map(|scope_abi| scope_abi.local_no_recovery)
+            .unwrap_or(exact_local_pair);
+        let (placement_hint, cross_thread_recovery_hint, placement_hint_basis) =
+            lowering_semantic_scope_placement_hint_for_body(
+                candidate_cross_thread_escape,
+                scope_uses_local_no_recovery,
+            );
         let mut rewrite_status = "semantic_scope_enter_exit_rewrite_planned";
         let mut replacement_resolution_status = "not_requested_dry_run";
         let mut replacement_preview = format!(
@@ -9662,15 +10045,6 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             semantic_object_type
         );
         let mut semantic_scope_unwind_pop_inserted = false;
-        let exact_local_pair = local_ownership
-            .allocation_pairs
-            .contains(&(semantic_object_type.clone(), destination_place.clone()));
-        let selected_semantic_scope_abi = if exact_local_pair {
-            semantic_scope_local_abi.or(semantic_scope_abi)
-        } else {
-            semantic_scope_abi
-        };
-
         if semantic_scope_rewrite {
             if let (Some(scope_abi), Some(original_target)) =
                 (selected_semantic_scope_abi, original_target)
@@ -10066,6 +10440,21 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             continue;
         }
 
+        let exact_local_pair =
+            local_drop_pairs.contains(&(semantic_object_type.clone(), drop_place.clone()));
+        let selected_semantic_scope_abi = if exact_local_pair {
+            semantic_scope_local_abi.or(semantic_scope_abi)
+        } else {
+            semantic_scope_abi
+        };
+        let scope_uses_local_no_recovery = selected_semantic_scope_abi
+            .map(|scope_abi| scope_abi.local_no_recovery)
+            .unwrap_or(exact_local_pair);
+        let (placement_hint, cross_thread_recovery_hint, placement_hint_basis) =
+            lowering_semantic_scope_placement_hint_for_body(
+                candidate_cross_thread_escape,
+                scope_uses_local_no_recovery,
+            );
         let mut rewrite_status = "semantic_scope_drop_rewrite_planned";
         let mut replacement_resolution_status = "not_requested_dry_run";
         let mut replacement_preview = format!(
@@ -10080,14 +10469,6 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             semantic_object_type
         );
         let mut semantic_scope_unwind_pop_inserted = false;
-        let exact_local_pair =
-            local_drop_pairs.contains(&(semantic_object_type.clone(), drop_place.clone()));
-        let selected_semantic_scope_abi = if exact_local_pair {
-            semantic_scope_local_abi.or(semantic_scope_abi)
-        } else {
-            semantic_scope_abi
-        };
-
         if semantic_scope_rewrite {
             if let Some(scope_abi) = selected_semantic_scope_abi {
                 let push_unit_local = push_internal_local(body, unit_ty(tcx), fn_span);
@@ -10835,7 +11216,7 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     json.push_str("  },\n");
     json.push_str("  \"lowering_contract\": {\n");
     json.push_str("    \"target_allocator_abi\": \"__unialloc_alloc_with_metadata[_hints](size, align, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite), Rust-ABI __unialloc_{alloc,alloc_zeroed,realloc,dealloc}_layout_with_metadata[_hints] plus optional no-recovery alloc/alloc_zeroed/realloc/dealloc _local variants for explicit paired Layout lowerings; size/align __unialloc_alloc_with_metadata[_hints] remains recovery-backed because exchange_malloc has no direct paired dealloc rewrite (original Layout operands, type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite); explicit GlobalAlloc receiver calls are lowered only when the receiver type is UniAlloc/RustAllocator\",\n");
-    json.push_str("    \"semantic_scope_abi\": \"__unialloc_semantic_scope_push[_hints][_local](type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite) / __unialloc_semantic_scope_pop(); _local is selected only for a single normal path with no owner move/call before the exact destination Drop; otherwise recovery-backed\",\n");
+    json.push_str("    \"semantic_scope_abi\": \"__unialloc_semantic_scope_push[_hints][_local](type_id, module_id, flags, [lifetime_hint, placement_hint,] callsite) / __unialloc_semantic_scope_pop(); _local is selected only for a single normal path with no owner move/call before the exact destination Drop; every recovery-backed scope records CROSS_THREAD_RECOVERY by default, and the plain non-hints runtime ABI supplies that default bit\",\n");
     json.push_str("    \"semantic_ownership_transfer_abi\": \"exact DefId and structural owner proofs retarget Box<[T], A> -> Vec<T, A> to __unialloc_semantic_box_slice_into_vec, shrink-aware Vec<T, A> -> Box<[T], A> to __unialloc_semantic_vec_into_boxed_slice, String -> Vec<u8, Global> to __unialloc_semantic_string_into_bytes, shrink-aware String -> Box<str, Global> to __unialloc_semantic_string_into_boxed_str, Box<str, Global> -> String to __unialloc_semantic_boxed_str_into_string, CString -> Vec<u8, Global> to __unialloc_semantic_cstring_into_bytes_with_nul, and Vec<T, A> -> IntoIter<T, A> to __unialloc_semantic_vec_into_iter; no generic semantic allocation scope is inserted and any proof or symbol-resolution failure retains the ordinary ambiguous fail-closed path\",\n");
     json.push_str("    \"size_source\": \"original MIR call arg 0\",\n");
     json.push_str("    \"align_source\": \"original MIR call arg 1\",\n");

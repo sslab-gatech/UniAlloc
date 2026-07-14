@@ -354,14 +354,15 @@ pub fn run_cross_placement_lane() {
 
         let local = local_buffer(0x53);
         let local_pointer = local.as_ptr() as usize;
-        let cross_to_local_non_reuse = local_pointer != escaping_pointer;
-        assert!(cross_to_local_non_reuse);
+        let default_recovery_reuse = local_pointer == escaping_pointer;
+        assert!(default_recovery_reuse);
         drop(local);
 
         let local_again = local_buffer(0x75);
         let local_again_pointer = local_again.as_ptr() as usize;
         let exact_local_reuse = local_again_pointer == local_pointer;
         assert!(exact_local_reuse);
+        drop(local_again);
 
         let cross_again = auto_cross_buffer(0x97);
         let cross_again_pointer = cross_again.as_ptr() as usize;
@@ -370,7 +371,6 @@ pub fn run_cross_placement_lane() {
         assert!(payload_matches(&cross_again, 0x97));
 
         drop(cross_again);
-        drop(local_again);
 
         let stats = semantic_stats_snapshot();
         let fallback = semantic_fallback_attribution_snapshot();
@@ -381,7 +381,7 @@ pub fn run_cross_placement_lane() {
 
         assert_eq!(stats.typed_allocations, 3, "{stats:?}");
         assert_eq!(stats.typed_deallocations, 4, "{stats:?}");
-        assert_eq!(stats.typed_cache_hits, 2, "{stats:?}");
+        assert_eq!(stats.typed_cache_hits, 3, "{stats:?}");
         assert_eq!(stats.typed_cache_inserts, 4, "{stats:?}");
         assert_eq!(stats.fallback_allocations, 0, "{stats:?}");
         assert_eq!(stats.fallback_deallocations, 0, "{stats:?}");
@@ -422,7 +422,7 @@ pub fn run_cross_placement_lane() {
                 "\"local_pointer\":{},",
                 "\"local_again_pointer\":{},",
                 "\"cross_again_pointer\":{},",
-                "\"cross_to_local_non_reuse\":{},",
+                "\"default_recovery_reuse\":{},",
                 "\"exact_local_reuse\":{},",
                 "\"exact_cross_reuse\":{},",
                 "\"typed_allocations\":{},",
@@ -445,7 +445,7 @@ pub fn run_cross_placement_lane() {
             local_pointer,
             local_again_pointer,
             cross_again_pointer,
-            cross_to_local_non_reuse,
+            default_recovery_reuse,
             exact_local_reuse,
             exact_cross_reuse,
             stats.typed_allocations,
@@ -1038,25 +1038,31 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
         assert int(row.get("placement_hint") or 0) == CROSS_THREAD_RECOVERY, row
         assert row.get("cross_thread_recovery_hint") is True, row
         assert row.get("placement_hint_basis") == "auto_cross_thread_escape", row
-    assert int(local_vec.get("placement_hint") or 0) == 0, local_vec
-    assert local_vec.get("cross_thread_recovery_hint") is False, local_vec
-    assert local_vec.get("placement_hint_basis") == "default", local_vec
+    assert (
+        int(local_vec.get("placement_hint") or 0) == CROSS_THREAD_RECOVERY
+    ), local_vec
+    assert local_vec.get("cross_thread_recovery_hint") is True, local_vec
+    assert local_vec.get("placement_hint_basis") == (
+        "default_recovery_backed_semantic_scope"
+    ), local_vec
 
     cross_runtime = parse_runtime(stdout, "cross_placement_lane")
     assert int(cross_runtime["bytes"]) == 768, cross_runtime
     for field in (
-        "cross_to_local_non_reuse",
+        "default_recovery_reuse",
         "exact_local_reuse",
         "exact_cross_reuse",
     ):
         assert cross_runtime.get(field) is True, (field, cross_runtime)
-    assert int(cross_runtime["escaping_pointer"]) != int(cross_runtime["local_pointer"]), cross_runtime
+    assert int(cross_runtime["escaping_pointer"]) == int(
+        cross_runtime["local_pointer"]
+    ), cross_runtime
     assert int(cross_runtime["local_pointer"]) == int(cross_runtime["local_again_pointer"]), cross_runtime
     assert int(cross_runtime["escaping_pointer"]) == int(cross_runtime["cross_again_pointer"]), cross_runtime
     for field, expected in (
         ("typed_allocations", 3),
         ("typed_deallocations", 4),
-        ("typed_cache_hits", 2),
+        ("typed_cache_hits", 3),
         ("typed_cache_inserts", 4),
         ("fallback_allocations", 0),
         ("fallback_deallocations", 0),
@@ -1091,7 +1097,7 @@ def validate(audit: dict[str, object], stdout: str) -> dict[str, object]:
     ].get("deallocations") or 0) == 1, cross_rows
     assert int(cross_runtime_identities[
         (vec_type_id, module_id, int(local_vec["callsite"]))
-    ].get("cache_hits") or 0) == 1, cross_rows
+    ].get("cache_hits") or 0) == 2, cross_rows
     assert int(cross_runtime_identities[
         (vec_type_id, module_id, int(auto_cross_vec["callsite"]))
     ].get("cache_hits") or 0) == 1, cross_rows
@@ -1236,6 +1242,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="unialloc-realistic-multimodule-typeiso-") as raw:
         workspace = Path(raw)
         app = write_fixture(workspace)
+        shutil.copy2(ROOT / "Cargo.lock", app / "Cargo.lock")
         pass_binary = workspace / "unialloc-rustc-mir-rewrite-dry-run"
         build_env = os.environ.copy()
         build_env["RUSTC_BOOTSTRAP"] = "1"

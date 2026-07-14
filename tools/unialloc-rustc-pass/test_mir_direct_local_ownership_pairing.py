@@ -14,6 +14,9 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 PASS_SOURCE = ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
 PROBE_NAME = "direct_local_ownership_probe"
+CROSS_THREAD_RECOVERY = 1 << 15
+DEFAULT_RECOVERY_BASIS = "default_recovery_backed_semantic_scope"
+EXACT_LOCAL_BASIS = "exact_local_no_recovery"
 
 
 def run(command: list[str], *, cwd: Path, env: dict[str, str], timeout: int = 300) -> str:
@@ -180,6 +183,38 @@ def local_symbol(row: dict[str, object]) -> bool:
     return str(row.get("replacement_symbol") or "").endswith("_local")
 
 
+def assert_default_recovery_scope(
+    rows: list[dict[str, object]], label: str
+) -> None:
+    assert rows, label
+    for row in rows:
+        assert row.get("replacement_symbol") == "__unialloc_semantic_scope_push", (
+            label,
+            row,
+        )
+        assert int(row.get("placement_hint") or 0) == CROSS_THREAD_RECOVERY, (
+            label,
+            row,
+        )
+        assert row.get("cross_thread_recovery_hint") is True, (label, row)
+        assert row.get("placement_hint_basis") == DEFAULT_RECOVERY_BASIS, (
+            label,
+            row,
+        )
+
+
+def assert_exact_local_scope(rows: list[dict[str, object]], label: str) -> None:
+    assert rows, label
+    for row in rows:
+        assert row.get("replacement_symbol") == "__unialloc_semantic_scope_push_local", (
+            label,
+            row,
+        )
+        assert int(row.get("placement_hint") or 0) == 0, (label, row)
+        assert row.get("cross_thread_recovery_hint") is False, (label, row)
+        assert row.get("placement_hint_basis") == EXACT_LOCAL_BASIS, (label, row)
+
+
 def validate(audit: dict[str, object], stdout: str) -> None:
     summary = audit.get("summary")
     assert isinstance(summary, dict), summary
@@ -260,6 +295,22 @@ def validate(audit: dict[str, object], stdout: str) -> None:
         positive_allocations,
         positive_drops,
     )
+    assert_default_recovery_scope(
+        conditional_allocations + conditional_drops,
+        "conditional escape allocation and matching Drop",
+    )
+    assert_default_recovery_scope(
+        mixed_allocations + mixed_drops,
+        "mixed escape allocation and matching Drops",
+    )
+    assert_default_recovery_scope(
+        alias_allocations + alias_drops,
+        "aliased escape allocation and matching Drop",
+    )
+    assert_exact_local_scope(
+        positive_allocations + positive_drops,
+        "exact local allocation and matching Drop",
+    )
 
     hidden_runtime = next(
         json.loads(line)
@@ -300,6 +351,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="unialloc-direct-local-owner-") as raw:
         workspace = Path(raw)
         write_probe(workspace)
+        shutil.copy2(ROOT / "Cargo.lock", workspace / PROBE_NAME / "Cargo.lock")
         pass_binary = workspace / "unialloc-rustc-mir-rewrite-dry-run"
         build_env = os.environ.copy()
         build_env["RUSTC_BOOTSTRAP"] = "1"

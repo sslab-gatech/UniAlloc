@@ -137,7 +137,18 @@ class PaperExternalWorkloadAdapterExecutionTests(unittest.TestCase):
             (repo / "README.md").write_text("newer pin validation\n", encoding="utf-8")
             subprocess.run(["git", "add", "README.md"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             subprocess.run(
-                ["git", "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-m", "init"],
+                [
+                    "git",
+                    "-c",
+                    "user.email=test@example.invalid",
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "commit",
+                    "-m",
+                    "init",
+                ],
                 cwd=repo,
                 check=True,
                 stdout=subprocess.PIPE,
@@ -184,7 +195,18 @@ class PaperExternalWorkloadAdapterExecutionTests(unittest.TestCase):
             (repo / "README.md").write_text("fallback pin validation\n", encoding="utf-8")
             subprocess.run(["git", "add", "README.md"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             subprocess.run(
-                ["git", "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-m", "init"],
+                [
+                    "git",
+                    "-c",
+                    "user.email=test@example.invalid",
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "commit",
+                    "-m",
+                    "init",
+                ],
                 cwd=repo,
                 check=True,
                 stdout=subprocess.PIPE,
@@ -368,7 +390,18 @@ class PaperExternalWorkloadAdapterExecutionTests(unittest.TestCase):
             (repo / "README.md").write_text("pin validation\n", encoding="utf-8")
             subprocess.run(["git", "add", "README.md"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             subprocess.run(
-                ["git", "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-m", "init"],
+                [
+                    "git",
+                    "-c",
+                    "user.email=test@example.invalid",
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "commit",
+                    "-m",
+                    "init",
+                ],
                 cwd=repo,
                 check=True,
                 stdout=subprocess.PIPE,
@@ -402,7 +435,18 @@ class PaperExternalWorkloadAdapterExecutionTests(unittest.TestCase):
             (repo / "README.md").write_text("pin validation\n", encoding="utf-8")
             subprocess.run(["git", "add", "README.md"], cwd=repo, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             subprocess.run(
-                ["git", "-c", "user.email=test@example.invalid", "-c", "user.name=Test", "commit", "-m", "init"],
+                [
+                    "git",
+                    "-c",
+                    "user.email=test@example.invalid",
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "commit",
+                    "-m",
+                    "init",
+                ],
                 cwd=repo,
                 check=True,
                 stdout=subprocess.PIPE,

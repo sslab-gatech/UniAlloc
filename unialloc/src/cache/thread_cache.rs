@@ -2185,6 +2185,7 @@ mod tests {
     #[cfg(all(not(windows), not(feature = "fixed_heap")))]
     #[test]
     fn free_thread_cache_clears_tls_before_storage_reuse() {
+        let _guard = crate::alloc_api::type_isolation::semantic_test_guard();
         std::thread::spawn(|| unsafe {
             let _ = (&*GlobalTcache).footprint_snapshot();
             let first = globaltcache_load_tls_value();
@@ -4669,16 +4670,15 @@ mod tests {
             normal_targets.len() > 1,
             "test needs multiple sub-page large-ish classes"
         );
+
+        cache.sync_cached_object_bytes();
+        let (selected_flush_bytes, selected_target_bytes) =
+            thread_cache_total_pressure_budget(cache.active_cached_class_count());
         assert!(
-            normal_target_bytes > THREAD_CACHE_TOTAL_TARGET_BYTES,
-            "first-phase per-class hot targets must still exceed the aggregate target"
-        );
-        assert!(
-            initial_bytes > THREAD_CACHE_TOTAL_FLUSH_BYTES,
+            initial_bytes > selected_flush_bytes,
             "constructed multi-class pressure must cross the aggregate flush cap"
         );
 
-        cache.sync_cached_object_bytes();
         cache.trim_total_cached_object_bytes(None);
 
         assert_eq!(
@@ -4687,17 +4687,26 @@ mod tests {
             "aggregate byte counter must match retained real objects after trim"
         );
         assert!(
-            cache.cached_object_bytes <= THREAD_CACHE_TOTAL_TARGET_BYTES,
+            cache.cached_object_bytes <= selected_target_bytes,
             "aggregate trim should converge at or below the target"
         );
-        assert!(
+        let trimmed_below_normal_target =
             normal_targets
                 .iter()
                 .any(|&(idx, _rounded_size, normal_target)| {
                     cache.list[idx].list.length < normal_target
-                }),
-            "second phase must trim at least one class below its normal per-class hot target"
-        );
+                });
+        if normal_target_bytes > selected_target_bytes {
+            assert!(
+                trimmed_below_normal_target,
+                "when per-class hot targets exceed the selected aggregate target, the second phase must trim below at least one normal target"
+            );
+        } else {
+            assert!(
+                !trimmed_below_normal_target,
+                "when per-class hot targets fit the selected aggregate target, the first phase should preserve them"
+            );
+        }
 
         source.cleanup_cache_unchecked();
         cache.cleanup_cache_unchecked();

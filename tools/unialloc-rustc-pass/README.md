@@ -43,7 +43,8 @@ RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) \
 
 ```sh
 SYSROOT="$(rustc +$(cat rust-toolchain) --print sysroot)"
-DYLD_LIBRARY_PATH="$SYSROOT/lib" /tmp/unialloc-rustc-allocation-sites \
+LD_LIBRARY_PATH="$SYSROOT/lib" DYLD_LIBRARY_PATH="$SYSROOT/lib" \
+  /tmp/unialloc-rustc-allocation-sites \
   --unialloc-type-map-out /tmp/unialloc-rustc-type-map.json \
   --unialloc-pass-log-out /tmp/unialloc-rustc-pass.log \
   -- --sysroot "$SYSROOT" --edition=2021 /tmp/input.rs
@@ -56,7 +57,7 @@ Set `UNIALLOC_RUSTC_TARGET_CRATES` to a comma-separated allowlist when using
 
 ```sh
 SYSROOT="$(rustc +$(cat rust-toolchain) --print sysroot)"
-DYLD_LIBRARY_PATH="$SYSROOT/lib" \
+LD_LIBRARY_PATH="$SYSROOT/lib" DYLD_LIBRARY_PATH="$SYSROOT/lib" \
 UNIALLOC_RUSTC_TARGET_CRATES="my-app,my-helper" \
 UNIALLOC_REWRITE_AUDIT_DIR=/tmp/unialloc-rewrites \
 UNIALLOC_CONTINUE_COMPILATION=1 \

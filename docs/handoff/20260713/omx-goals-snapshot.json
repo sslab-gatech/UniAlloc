@@ -9,8 +9,8 @@
   "goals": [
     {
       "id": "G001-users-hqzhao-downloads-rust-alloc-pa",
-      "title": "根据论文 /Users/hqzhao/Downloads/rust-alloc-paper 完全重构 /Users/hqzhao/Down...",
-      "objective": "根据论文 /Users/hqzhao/Downloads/rust-alloc-paper 完全重构 /Users/hqzhao/Downloads/UniAlloc。本项目需要补全论文主张对应的 allocator 实现与完整 evaluation framework，能够复现实验、产出数据/表格/报告，并以当前源码和可运行验证作为证据逐步达成论文 overclaim 中最好的效果。不要缩小目标；每个阶段都要有文件/命令/测试证据。",
+      "title": "Fully refactor /Users/hqzhao/Downloads/UniAlloc according to /Users/hqzhao/Downloads/rust-alloc-paper...",
+      "objective": "Fully refactor /Users/hqzhao/Downloads/UniAlloc according to /Users/hqzhao/Downloads/rust-alloc-paper. Complete the allocator implementation and evaluation framework required by the paper's claims, reproduce the experiments, produce data, tables, and reports, and use current source plus runnable validation to pursue the strongest defensible results among the paper's overclaims. Preserve the full scope; every phase must provide file, command, and test evidence.",
       "status": "in_progress",
       "attempt": 2,
       "createdAt": "2026-06-11T09:29:21.131Z",

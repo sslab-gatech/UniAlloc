@@ -11,8 +11,9 @@ exclude = [
 [profile.dev]
 opt-level = 1               # Use slightly better optimizations.
 overflow-checks = false     # Disable integer overflow checks.
-panic="abort"
+panic = "abort"
+
 [profile.release]
 lto = "fat"
 codegen-units = 1
-panic="abort"
+panic = "abort"
