@@ -1,0 +1,113 @@
+{
+  "all_accounting_consistent": true,
+  "all_passed": true,
+  "cases": {
+    "exact-types-1": {
+      "median_peak_extents": 2.0,
+      "median_peak_identity_regions": 20.0,
+      "median_steady_extents": 1.0,
+      "median_steady_identity_regions": 10.0,
+      "median_steady_retained_bytes": 2097152.0,
+      "median_steady_retained_slack_bytes": 1441792.0,
+      "samples": 10
+    },
+    "exact-types-32": {
+      "median_peak_extents": 2.0,
+      "median_peak_identity_regions": 64.0,
+      "median_steady_extents": 1.0,
+      "median_steady_identity_regions": 32.0,
+      "median_steady_retained_bytes": 2097152.0,
+      "median_steady_retained_slack_bytes": 1441792.0,
+      "samples": 10
+    },
+    "exact-types-40": {
+      "median_peak_extents": 4.0,
+      "median_peak_identity_regions": 80.0,
+      "median_steady_extents": 2.0,
+      "median_steady_identity_regions": 40.0,
+      "median_steady_retained_bytes": 4194304.0,
+      "median_steady_retained_slack_bytes": 3538944.0,
+      "samples": 10
+    },
+    "exact-types-64": {
+      "median_peak_extents": 4.0,
+      "median_peak_identity_regions": 128.0,
+      "median_steady_extents": 2.0,
+      "median_steady_identity_regions": 64.0,
+      "median_steady_retained_bytes": 4194304.0,
+      "median_steady_retained_slack_bytes": 3538944.0,
+      "samples": 10
+    },
+    "exact-types-8": {
+      "median_peak_extents": 2.0,
+      "median_peak_identity_regions": 32.0,
+      "median_steady_extents": 1.0,
+      "median_steady_identity_regions": 16.0,
+      "median_steady_retained_bytes": 2097152.0,
+      "median_steady_retained_slack_bytes": 1441792.0,
+      "samples": 10
+    },
+    "lifetime-only-types-1": {
+      "median_peak_extents": 2.0,
+      "median_peak_identity_regions": 20.0,
+      "median_steady_extents": 1.0,
+      "median_steady_identity_regions": 10.0,
+      "median_steady_retained_bytes": 2097152.0,
+      "median_steady_retained_slack_bytes": 1441792.0,
+      "samples": 10
+    },
+    "lifetime-only-types-32": {
+      "median_peak_extents": 2.0,
+      "median_peak_identity_regions": 20.0,
+      "median_steady_extents": 1.0,
+      "median_steady_identity_regions": 10.0,
+      "median_steady_retained_bytes": 2097152.0,
+      "median_steady_retained_slack_bytes": 1441792.0,
+      "samples": 10
+    },
+    "lifetime-only-types-40": {
+      "median_peak_extents": 2.0,
+      "median_peak_identity_regions": 20.0,
+      "median_steady_extents": 1.0,
+      "median_steady_identity_regions": 10.0,
+      "median_steady_retained_bytes": 2097152.0,
+      "median_steady_retained_slack_bytes": 1441792.0,
+      "samples": 10
+    },
+    "lifetime-only-types-64": {
+      "median_peak_extents": 2.0,
+      "median_peak_identity_regions": 20.0,
+      "median_steady_extents": 1.0,
+      "median_steady_identity_regions": 10.0,
+      "median_steady_retained_bytes": 2097152.0,
+      "median_steady_retained_slack_bytes": 1441792.0,
+      "samples": 10
+    },
+    "lifetime-only-types-8": {
+      "median_peak_extents": 2.0,
+      "median_peak_identity_regions": 20.0,
+      "median_steady_extents": 1.0,
+      "median_steady_identity_regions": 10.0,
+      "median_steady_retained_bytes": 2097152.0,
+      "median_steady_retained_slack_bytes": 1441792.0,
+      "samples": 10
+    }
+  },
+  "claim_boundary": "synthetic low-occupancy type-diversity stress; structural granularity evidence only",
+  "global_pool_restored_diagnostic": true,
+  "hugepages_free_after": 4096,
+  "hugepages_free_before": 4096,
+  "long_fraction": 0.5,
+  "objects": 320,
+  "repeats": 10,
+  "run_id": "lifetime-hugepage-type-diversity-final-20260714-0421",
+  "schema_version": 1,
+  "slot_bytes": 4096,
+  "types_per_truth": [
+    1,
+    8,
+    32,
+    40,
+    64
+  ]
+}

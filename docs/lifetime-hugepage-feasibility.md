@@ -1,5 +1,7 @@
 # Lifetime-guided Hugepage Placement: Rapid Feasibility Study
 
+> **Historical phase-1 record.** This document covers the bump-only manual-oracle prototype. The integrated production-path allocator, exact compiler profile, error sweep, and final evidence are documented in [`lifetime-hugepage-production-evaluation.md`](lifetime-hugepage-production-evaluation.md).
+
 ## Decision
 
 **Oracle-hint adversarial mechanism: GO for the next production-arena experiment. Compiler-derived policy and real-workload benefit: open.**

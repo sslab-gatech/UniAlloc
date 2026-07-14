@@ -79,7 +79,7 @@ different identities can share an extent and never share a region.
   lifetime placement. Semantic reallocation preserves placement metadata.
 - `lifetime_hugepage_phase_flush_current_thread` drains all retained semantic
   cache and delayed-free entries on the calling thread, including entries that
-  did not originate in this arena. Same-thread reentry is ignored by a TLS
+  originate in other semantic paths. Same-thread reentry is ignored by a TLS
   guard.
 - The experiment's `exact` synthetic mode uses distinct Rust-like type IDs for
   the long and ephemeral cohorts. `lifetime-only` removes that type boundary;

@@ -1,0 +1,156 @@
+{
+  "artifacts": [
+    {
+      "bytes": 371,
+      "path": "perf/long-huge.stderr",
+      "sha256": "e788f702ec0775d114e79900d989a9029c48f30f04b8ee7eacead83e9b487c26"
+    },
+    {
+      "bytes": 12453,
+      "path": "perf/long-huge.stdout",
+      "sha256": "6c23f13e0b0f6d6bffb41cca76c7ba4ea1c3881d12058e9f207ca416c9ec5707"
+    },
+    {
+      "bytes": 374,
+      "path": "perf/ordinary-segregated.stderr",
+      "sha256": "7c2fcb2574fcab8ddcfb6b8aeeec77cdafd2282b37edee7ecbab64b3941d9559"
+    },
+    {
+      "bytes": 12452,
+      "path": "perf/ordinary-segregated.stdout",
+      "sha256": "0431b16bb501db7be4aae17257085848f428d82da4b417ca23739568c7f8f28c"
+    },
+    {
+      "bytes": 501315,
+      "path": "production-samples.jsonl",
+      "sha256": "b7025b4037a029c75f6594277e57f86bb6a1bdc78444518015b9ed23124f4d62"
+    },
+    {
+      "bytes": 28316,
+      "path": "production-summary.json",
+      "sha256": "6a2818590c04af650ab37208ae2e2ffbf03d47d6418e59a919ed9613b85048ce"
+    },
+    {
+      "bytes": 264123,
+      "path": "type-diversity-samples.jsonl",
+      "sha256": "360d53462f393aacc0e60c73e408314409dcc983af20561b22daa59ea7eb07f8"
+    },
+    {
+      "bytes": 3718,
+      "path": "type-diversity-summary.json",
+      "sha256": "bbfee55a1f0b02af347cd94bba4609c553b59b25172532fb5a29bdd5525e4475"
+    }
+  ],
+  "branch": "exp/lifetime-hugepage-orchestration-20260714",
+  "claim_boundary": "Real UniAlloc semantic payload path with manual-oracle and injected-error lifetime labels; exact compiler-profile transport is runtime-tested; trained real-workload classifier coverage and benefits remain open.",
+  "claim_grade": false,
+  "dev_baseline_commit": "a7be5a26b70c541e98d95024841589073e9b96be",
+  "evidence_grade": "integrated-production-path-manual-oracle-synthetic-mechanism",
+  "host": {
+    "cpu": "AMD EPYC 9354 32-Core Processor, 2 sockets, 64 cores, 128 logical CPUs",
+    "hugetlb_page_bytes": 2097152,
+    "kernel": "Linux 6.8.0-111-generic x86_64",
+    "node0_hugetlb_pages": 2722,
+    "node1_hugetlb_pages": 1374,
+    "numa_cpu": 0,
+    "numa_memory_node": 0,
+    "numa_nodes": 2,
+    "ordinary_arena_advice": "MADV_NOHUGEPAGE",
+    "persistent_hugetlb_bytes": 8589934592,
+    "persistent_hugetlb_pages": 4096,
+    "thp_enabled": "madvise"
+  },
+  "invariants": {
+    "all_180_accounting_rows_consistent": true,
+    "all_180_production_rows_passed": true,
+    "all_region_assignments_released": true,
+    "all_routed_allocations_released": true,
+    "max_extent_unmap_failures": 0,
+    "max_hugetlb_fallback_extent_mappings": 0,
+    "max_mapping_failures": 0,
+    "max_nohugepage_advice_failures": 0,
+    "post_perf_pool_free": 4096,
+    "production_pool_free_after": 4096,
+    "production_pool_free_before": 4096,
+    "type_diversity_pool_free_after": 4096,
+    "type_diversity_pool_free_before": 4096
+  },
+  "perf": {
+    "command_shape": "sudo -n perf stat -x ';' -r 5 -e cycles,instructions,page-faults,ls_l1_d_tlb_miss.all_l2_miss,ls_l1_d_tlb_miss.tlb_reload_4k_l2_miss,ls_l1_d_tlb_miss.tlb_reload_2m_l2_miss -- numactl --physcpubind=0 --membind=0 target/release/examples/lifetime_hugepage_allocator_probe --policy <ordinary-segregated|long-huge> --identity-mode exact --types-per-truth 1 --objects 262144 --slot-bytes 4096 --long-fraction 0.5 --false-long-rate 0 --false-short-rate 0 --ephemeral-waves 2 --warmup-passes 4 --passes 256 --seed 20260714 --require-hugetlb",
+    "event_running_percent": 100.0,
+    "long_huge": {
+      "all_l2_dtlb_misses": 1427294,
+      "cycles": 14427945763,
+      "instructions": 3597112235,
+      "l2_dtlb_misses_2m": 224369,
+      "l2_dtlb_misses_4k": 952838,
+      "page_faults": 265718
+    },
+    "ordinary": {
+      "all_l2_dtlb_misses": 36352418,
+      "cycles": 15876933977,
+      "instructions": 4472757897,
+      "l2_dtlb_misses_2m": 387559,
+      "l2_dtlb_misses_4k": 35610654,
+      "page_faults": 396534
+    },
+    "repetitions": 5,
+    "scope": "whole process including allocation, first touch, warmup, measured chain, reclaim, and teardown"
+  },
+  "primary_sources": [
+    {
+      "name": "LLAMA ASPLOS 2020",
+      "url": "https://colinraffel.com/publications/asplos2020learning.pdf"
+    },
+    {
+      "name": "TEMERAIRE OSDI 2021",
+      "url": "https://www.usenix.org/system/files/osdi21-hunter.pdf"
+    },
+    {
+      "name": "TCMalloc warehouse-scale ASPLOS 2024",
+      "url": "https://people.csail.mit.edu/delimitrou/papers/2024.asplos.memory.pdf"
+    },
+    {
+      "name": "Linux HugeTLB documentation",
+      "url": "https://docs.kernel.org/admin-guide/mm/hugetlbpage.html"
+    },
+    {
+      "name": "Linux proc memory accounting",
+      "url": "https://docs.kernel.org/filesystems/proc.html"
+    },
+    {
+      "name": "Rust NLL RFC",
+      "url": "https://rust-lang.github.io/rfcs/2094-nll.html"
+    },
+    {
+      "name": "rustc MIR dataflow",
+      "url": "https://rustc-dev-guide.rust-lang.org/mir/dataflow.html"
+    },
+    {
+      "name": "Rust Drop scopes",
+      "url": "https://doc.rust-lang.org/reference/destructors.html"
+    }
+  ],
+  "production_matrix": {
+    "command": "uv run python evaluation/scripts/lifetime_hugepage_allocator_experiment.py --run-id lifetime-hugepage-production-final-20260714-0408 --objects 262144 --slot-bytes 4096 --types-per-truth 1 --long-fraction 0.5 --error-rates 0.001,0.01,0.05 --include-shuffled --include-lifetime-only-baseline --ephemeral-waves 2 --warmup-passes 4 --passes 64 --repeats 15 --numa-node 0 --cpu 0 --seed 20260714",
+    "fresh_process_per_sample": true,
+    "paired_repeat_seed": true,
+    "paired_touch_bootstrap_95pct": [
+      -0.04067792504681744,
+      0.09566681278017475
+    ],
+    "paired_touch_geomean_improvement": 0.030447832053539958,
+    "randomized_case_order": true,
+    "sample_count": 180,
+    "structural_go": true,
+    "verdict": "go-integrated-placement-performance-inconclusive"
+  },
+  "run_id": "lifetime-hugepage-production-final-20260714-0408",
+  "schema_version": 1,
+  "source_commit": "079711f81238d45a5e9dd8673e067cb335d5e39e",
+  "type_diversity_matrix": {
+    "claim_boundary": "synthetic low-occupancy structural granularity stress",
+    "command_shape": "10 randomized repeats of exact and lifetime-only long-huge probes at 1,8,32,40,64 types per truth cohort; 320 objects, 4 KiB slots, oracle labels",
+    "sample_count": 100
+  }
+}
