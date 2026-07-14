@@ -1,0 +1,63 @@
+{
+  "artifacts": [
+    {
+      "bytes": 571,
+      "path": "perf/ordinary-segregated.stderr",
+      "sha256": "0bc2454a2b1f3d320fc6ebdd01296c572d560a896f93e7b083ac77ed9b39b896"
+    },
+    {
+      "bytes": 3942,
+      "path": "perf/ordinary-segregated.stdout",
+      "sha256": "8d7cdda91bfdea936771334c9ee53ce301b005e73e644a6d4eab03c21a26915c"
+    },
+    {
+      "bytes": 569,
+      "path": "perf/tiered.stderr",
+      "sha256": "ef5294a10893af02849fbfeb9f2ea4243b22b7e2c1384f947c09c823a396383a"
+    },
+    {
+      "bytes": 3912,
+      "path": "perf/tiered.stdout",
+      "sha256": "42ad97ec3513bbd016e286c44a2e6955f378f82de2b1c7e0d318742a35da6388"
+    },
+    {
+      "bytes": 35600,
+      "path": "samples.jsonl",
+      "sha256": "b8d47ba1bcaea9be24f13afe2807cb12477854807b40aa4ece7f5688ce181b97"
+    },
+    {
+      "bytes": 7143,
+      "path": "summary.json",
+      "sha256": "ed35159be6879b34845dfe4c403a14698d8005edb724024d299b564e94667999"
+    }
+  ],
+  "base_commit": "293aca7d624e85557c8a2d08c59465240ef5e7ac",
+  "branch": "exp/lifetime-hugepage-orchestration-20260714",
+  "claim_boundary": "Fixed 4 KiB slots in a bump-only research arena with manual lifetime hints; no compiler-derived classifier or production allocator integration.",
+  "claim_grade": false,
+  "evidence_grade": "manual-oracle-synthetic-mechanism",
+  "host": {
+    "cpu": "AMD EPYC 9354 32-Core Processor, 2 sockets, 128 logical CPUs",
+    "hugetlb_page_bytes": 2097152,
+    "kernel": "Linux 6.8.0-111-generic x86_64",
+    "node0_hugetlb_pages": 2722,
+    "node1_hugetlb_pages": 1374,
+    "numa_cpu": 0,
+    "numa_memory_node": 0,
+    "persistent_hugetlb_pages": 4096
+  },
+  "invariants": {
+    "all_own_mappings_released": true,
+    "all_probe_rows_passed": true,
+    "global_pool_restored_in_selected_run": true,
+    "max_hugetlb_fallbacks": 0,
+    "max_madv_nohugepage_failures": 0,
+    "sample_count": 25
+  },
+  "matrix_command": "uv run python evaluation/scripts/lifetime_hugepage_experiment.py --run-id lifetime-hugepage-oracle-chain-final-20260714 --extents 2048 --slot-bytes 4096 --warmup-passes 4 --passes 32 --repeats 5 --numa-node 0 --cpu 0 --seed 20260714",
+  "perf_command_shape": "sudo -n perf stat -x ';' -r 3 -e <documented Zen4 events> -- numactl --physcpubind=0 --membind=0 target/release/examples/lifetime_hugepage_probe --policy <ordinary-segregated|tiered> --extents 2048 --slot-bytes 4096 --warmup-passes 4 --passes 32 --require-hugetlb",
+  "perf_event_multiplex_running_percent": 62.0,
+  "perf_repetitions": 3,
+  "run_id": "lifetime-hugepage-oracle-chain-final-20260714",
+  "schema_version": 1
+}

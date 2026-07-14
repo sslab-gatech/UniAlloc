@@ -60,9 +60,10 @@ use core::alloc::{GlobalAlloc, Layout};
 
 pub use alloc_api::{
     active_allocation_metadata, auto_deallocation_metadata, delayed_free_snapshot,
-    metadata_pointer_auth_runtime_probe, metadata_segregation_side_cache_snapshot,
-    semantic_auto_compiler_metadata_enable, semantic_auto_compiler_metadata_enabled,
-    semantic_auto_compiler_metadata_stream_enable, semantic_auto_compiler_metadata_stream_enabled,
+    lifetime_placement_class, metadata_pointer_auth_runtime_probe,
+    metadata_segregation_side_cache_snapshot, semantic_auto_compiler_metadata_enable,
+    semantic_auto_compiler_metadata_enabled, semantic_auto_compiler_metadata_stream_enable,
+    semantic_auto_compiler_metadata_stream_enabled,
     semantic_auto_compiler_metadata_stream_thread_local_recovery_enable,
     semantic_auto_compiler_metadata_thread_local_recovery_enable, semantic_auto_metadata_disable,
     semantic_auto_metadata_enable, semantic_auto_metadata_enabled,
@@ -74,12 +75,13 @@ pub use alloc_api::{
     semantic_stats_snapshot, semantic_type_id, semantic_type_stats_recording_disable,
     semantic_type_stats_recording_enable, semantic_type_stats_recording_enabled,
     semantic_type_stats_snapshot, type_isolation_side_cache_snapshot, with_rust_type_metadata_at,
-    with_semantic_metadata, AllocationMetadata, DelayedFreeSnapshot,
+    with_semantic_metadata, AllocationMetadata, DelayedFreeSnapshot, LifetimePlacementClass,
     MetadataPointerAuthRuntimeProbe, MetadataSegregationSideCacheSnapshot, SemanticAlloc,
     SemanticFallbackAttributionSnapshot, SemanticMetadataValidationSnapshot,
     SemanticOwnershipTransferSnapshot, SemanticScopeDepthSnapshot, SemanticStatsSnapshot,
     SemanticTypeStatsSnapshot, TypeIsolationSideCacheSnapshot, AUTO_LAYOUT_MODULE_ID,
-    FLAG_HUGEPAGE_METADATA, FLAG_TYPE_ISOLATED, SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION,
+    FLAG_HUGEPAGE_METADATA, FLAG_TYPE_ISOLATED, LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LONG_LIVED,
+    SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION,
     SEMANTIC_METADATA_VALIDATION_SNAPSHOT_ABI_VERSION, SEMANTIC_STATS_SNAPSHOT_ABI_VERSION,
     SEMANTIC_TYPE_STATS_SNAPSHOT_ABI_VERSION,
 };
@@ -93,9 +95,9 @@ pub use pal::arch::*;
 #[cfg(not(feature = "fixed_heap"))]
 pub use pal::sys_alloc::{
     hugepage_aligned_fallback_supported, hugepage_fallback_alignment,
-    hugepage_mmap_platform_status_snapshot, hugepage_mmap_stats_snapshot, HugePageMmapBacking,
-    HugePageMmapPlatformErrorStage, HugePageMmapPlatformStatus, HugePageMmapResult,
-    HugePageMmapStats,
+    hugepage_mmap_platform_status_snapshot, hugepage_mmap_stats_snapshot, mmap_huge_with_backing,
+    HugePageMmapBacking, HugePageMmapPlatformErrorStage, HugePageMmapPlatformStatus,
+    HugePageMmapResult, HugePageMmapStats,
 };
 
 #[cfg(not(feature = "fixed_heap"))]

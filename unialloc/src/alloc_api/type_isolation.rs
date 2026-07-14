@@ -288,6 +288,38 @@ pub const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 /// inside the same thread/context.
 pub const PLACEMENT_HINT_LOCAL_SCOPE_NO_RECOVERY: u16 = 1 << 14;
 
+/// Prototype lifetime class for allocations expected to die before the next
+/// long-lived phase boundary.
+///
+/// The compiler/runtime ABI has always transported the complete `u16` value.
+/// These two exact values give the lifetime-aware hugepage experiment an
+/// explicit, conservative vocabulary: any other value remains unclassified.
+pub const LIFETIME_HINT_EPHEMERAL: u16 = 1;
+
+/// Prototype lifetime class for allocations expected to span multiple phases
+/// and benefit from dense placement on a long-lived hugepage arena.
+pub const LIFETIME_HINT_LONG_LIVED: u16 = 2;
+
+/// Placement class understood by the prototype lifetime/hugepage policy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum LifetimePlacementClass {
+    Unknown = 0,
+    Ephemeral = 1,
+    LongLived = 2,
+}
+
+/// Interpret an ABI lifetime hint without assigning policy to legacy/custom
+/// values. This exact-match rule keeps existing hint identities unchanged.
+#[inline]
+pub const fn lifetime_placement_class(lifetime_hint: u16) -> LifetimePlacementClass {
+    match lifetime_hint {
+        LIFETIME_HINT_EPHEMERAL => LifetimePlacementClass::Ephemeral,
+        LIFETIME_HINT_LONG_LIVED => LifetimePlacementClass::LongLived,
+        _ => LifetimePlacementClass::Unknown,
+    }
+}
+
 /// Route covered objects through type-isolated policy state.
 pub const FLAG_TYPE_ISOLATED: u32 = 1 << 0;
 /// Store allocator metadata out-of-line when the selected backend supports it.
