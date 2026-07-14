@@ -185,6 +185,52 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
         self.assertEqual(dependency, 'jemallocator = "=0.5.4"')
         self.assertEqual(features, ())
 
+    def test_mimalloc_sys_is_pinned_to_audited_v3_source(self) -> None:
+        dependency, features = matrix.dependency_for_variant("mimalloc")
+        self.assertEqual(
+            dependency,
+            'mimalloc = { version = "=0.1.25", default-features = false }',
+        )
+        self.assertEqual(features, ())
+        self.assertEqual(
+            matrix.MIMALLOC_SYS_DEPENDENCY,
+            'libmimalloc-sys = "=0.1.49"',
+        )
+
+    def test_system_and_tcmalloc_are_explicit_realworld_variants(self) -> None:
+        self.assertIn("system", matrix.VARIANTS)
+        self.assertIn("tcmalloc", matrix.VARIANTS)
+        with self.assertRaises(matrix.MatrixError):
+            matrix.dependency_for_variant("system")
+        with self.assertRaises(matrix.MatrixError):
+            matrix.dependency_for_variant("tcmalloc")
+
+    def test_tcmalloc_uses_system_binary_with_preload_not_rust_wrapper(self) -> None:
+        system = {
+            "variant": "system",
+            "success": True,
+            "binary": "/tmp/rg-system",
+            "binary_sha256": "same-binary",
+            "original_allocator": "system",
+            "allocator_route": "rust-system",
+        }
+        runtime = {
+            "label": "gperftools-tcmalloc-2.18.1-full-preload",
+            "library": "/tmp/libtcmalloc.so.4.6.5",
+            "library_sha256": "library-hash",
+        }
+        aliased = matrix.tcmalloc_build_record(system, runtime)
+        self.assertEqual(aliased["variant"], "tcmalloc")
+        self.assertEqual(aliased["base_build_variant"], "system")
+        self.assertEqual(aliased["binary"], system["binary"])
+        self.assertEqual(aliased["binary_sha256"], system["binary_sha256"])
+        self.assertEqual(aliased["allocator_route"], "system-api-ld-preload")
+
+        prefix = matrix.allocator_runtime_prefix("tcmalloc", runtime)
+        self.assertEqual(prefix[:7], ["env", "-u", "HEAPPROFILE", "-u", "CPUPROFILE", "-u", "MALLOCSTATS"])
+        self.assertEqual(prefix[-1], "LD_PRELOAD=/tmp/libtcmalloc.so.4.6.5")
+        self.assertEqual(matrix.allocator_runtime_prefix("unialloc", runtime), [])
+
     def test_quick_mode_uses_one_warmup_and_three_measurements(self) -> None:
         args = matrix.parse_args(["--quick"])
         self.assertEqual(matrix.measurement_counts(args), (1, 3))
@@ -504,6 +550,10 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
             matrix.cargo_feature_args(fd, "mimalloc"),
             ["--no-default-features", "--features", "completions"],
         )
+        self.assertEqual(
+            matrix.cargo_feature_args(fd, "system"),
+            ["--no-default-features", "--features", "completions"],
+        )
 
     def test_typed_plain_uses_unialloc_dependency_workarounds(self) -> None:
         self.assertTrue(matrix.uses_unialloc("typed_plain"))
@@ -557,6 +607,40 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
         self.assertEqual(result["stdout_sha256"], expected)
         self.assertGreater(result["wall_seconds"], 0)
         self.assertGreater(result["peak_rss_kib"], 0)
+        self.assertGreaterEqual(result["user_cpu_seconds"], 0)
+        self.assertGreaterEqual(result["system_cpu_seconds"], 0)
+        self.assertGreaterEqual(result["minor_page_faults"], 0)
+        self.assertGreaterEqual(result["voluntary_context_switches"], 0)
+
+    def test_gnu_time_parser_requires_complete_prefixed_record(self) -> None:
+        text = (
+            "warning before metrics\n"
+            "UNIALLOC_GNU_TIME\t1.25\t0.50\t97%\t6144\t1\t22\t3\t4\t0\n"
+        )
+        self.assertEqual(
+            matrix.parse_gnu_time_metrics(text),
+            {
+                "user_cpu_seconds": 1.25,
+                "system_cpu_seconds": 0.5,
+                "cpu_percent": 97.0,
+                "peak_rss_kib": 6144,
+                "major_page_faults": 1,
+                "minor_page_faults": 22,
+                "involuntary_context_switches": 3,
+                "voluntary_context_switches": 4,
+                "gnu_time_exit_status": 0,
+            },
+        )
+        with self.assertRaises(matrix.MatrixError):
+            matrix.parse_gnu_time_metrics("6144\n")
+
+    def test_affinity_prefix_uses_numactl_for_cpu_and_memory_binding(self) -> None:
+        with mock.patch.object(matrix.shutil, "which", return_value="/usr/bin/numactl"):
+            self.assertEqual(
+                matrix.measurement_command_prefix("20", 0),
+                ["numactl", "--physcpubind=20", "--membind=0"],
+            )
+        self.assertEqual(matrix.measurement_command_prefix(None, None), [])
 
     def test_measurement_order_rotates_variants(self) -> None:
         variants = ("native", "jemalloc", "mimalloc")
@@ -570,6 +654,15 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
             "peak_rss_kib": 100,
             "output_sha256": "same",
             "stats": None,
+            "user_cpu_seconds": 0.5,
+            "system_cpu_seconds": 0.25,
+            "cpu_percent": 75.0,
+            "major_page_faults": 0,
+            "minor_page_faults": 10,
+            "involuntary_context_switches": 1,
+            "voluntary_context_switches": 2,
+            "work_amount": 1024,
+            "work_unit": "bytes",
         }
         summaries = matrix.summarize_measurements(
             [
@@ -586,6 +679,50 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
         isolated = next(row for row in summaries if row["variant"] == "typeiso_perf")
         self.assertAlmostEqual(isolated["wall_ratio_vs_typed_plain"], 1.1)
         self.assertAlmostEqual(isolated["rss_ratio_vs_typed_plain"], 1.1)
+        self.assertEqual(isolated["median_total_cpu_seconds"], 0.75)
+        self.assertEqual(isolated["throughput_unit"], "MiB/s")
+
+    def test_summary_uses_system_baseline_and_paired_comparator_ratios(self) -> None:
+        rows = []
+        for round_index, (system_wall, mimalloc_wall, unialloc_wall) in enumerate(
+            ((2.0, 1.5, 1.8), (2.2, 1.6, 2.0), (1.8, 1.4, 1.6))
+        ):
+            for variant, wall, rss in (
+                ("system", system_wall, 100),
+                ("mimalloc", mimalloc_wall, 120),
+                ("unialloc", unialloc_wall, 90),
+            ):
+                rows.append(
+                    {
+                        "app": "ripgrep",
+                        "variant": variant,
+                        "round": round_index,
+                        "measurement_index": round_index,
+                        "warmup": False,
+                        "wall_seconds": wall,
+                        "peak_rss_kib": rss,
+                        "output_sha256": "same",
+                        "stats": None,
+                        "user_cpu_seconds": wall * 0.75,
+                        "system_cpu_seconds": wall * 0.25,
+                        "cpu_percent": 100.0,
+                        "major_page_faults": 0,
+                        "minor_page_faults": 10,
+                        "involuntary_context_switches": 0,
+                        "voluntary_context_switches": 1,
+                        "work_amount": 1024 * 1024,
+                        "work_unit": "bytes",
+                    }
+                )
+        summaries = matrix.summarize_measurements(rows)
+        unialloc = next(row for row in summaries if row["variant"] == "unialloc")
+        self.assertEqual(unialloc["baseline_variant"], "system")
+        self.assertAlmostEqual(unialloc["wall_ratio_vs_system"], 0.9)
+        self.assertAlmostEqual(
+            unialloc["paired_wall_ratio_vs_mimalloc"],
+            1.2,
+        )
+        self.assertAlmostEqual(unialloc["paired_rss_ratio_vs_mimalloc"], 0.75)
 
     def test_search_workloads_include_ignored_raw_corpus(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -598,9 +735,11 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
                     source_checkout=root,
                     run_dir=root,
                     quick=True,
+                    path_repetitions=3,
                 )
                 self.assertIn("--no-ignore", command)
                 self.assertIsNone(output)
+                self.assertEqual(command.count("."), 3)
 
     def test_fd_metadata_tree_shape_and_digest_are_deterministic(self) -> None:
         self.assertEqual(matrix.fd_tree_file_count(True), 20_480)

@@ -21,6 +21,7 @@ import statistics
 import subprocess
 import sys
 import time
+import tomllib
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
@@ -36,6 +37,9 @@ PASS_SOURCE = (
     / "unialloc-rustc-mir-rewrite-dry-run.rs"
 )
 STATS_PREFIX = "UNIALLOC_REALWORLD_STATS="
+GNU_TIME_PREFIX = "UNIALLOC_GNU_TIME"
+GNU_TIME_FORMAT = GNU_TIME_PREFIX + "\t%U\t%S\t%P\t%M\t%F\t%R\t%c\t%w\t%x"
+MIMALLOC_SYS_DEPENDENCY = 'libmimalloc-sys = "=0.1.49"'
 INSTRUMENTATION_MARKER = "// UniAlloc real-world allocator matrix instrumentation."
 FORCE_LOAD_MARKER = "// UniAlloc real-world Type Isolation force-load."
 FORCE_LOAD_WRAPPER_SOURCE = r'''#!/usr/bin/env python3
@@ -118,13 +122,16 @@ os.execv(str(driver), [str(driver), *arguments])
 '''
 VARIANTS = (
     "native",
+    "system",
     "jemalloc",
     "mimalloc",
+    "tcmalloc",
     "unialloc",
     "typed_plain",
     "typeiso_perf",
     "typeiso_coverage",
 )
+DEFAULT_VARIANTS = tuple(variant for variant in VARIANTS if variant != "tcmalloc")
 TYPEISO_VARIANTS = frozenset(("typed_plain", "typeiso_perf", "typeiso_coverage"))
 
 
@@ -241,7 +248,7 @@ def parse_csv(raw: str, allowed: Iterable[str], label: str) -> tuple[str, ...]:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apps", default=",".join(APP_SPECS))
-    parser.add_argument("--variants", default=",".join(VARIANTS))
+    parser.add_argument("--variants", default=",".join(DEFAULT_VARIANTS))
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--quick", dest="quick", action="store_true")
     mode.add_argument("--full", dest="quick", action="store_false")
@@ -254,9 +261,40 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--toolchain", default="nightly-2026-06-11")
     parser.add_argument("--time-binary", type=pathlib.Path, default=pathlib.Path("/usr/bin/time"))
     parser.add_argument("--jobs", type=int, default=max(1, os.cpu_count() or 1))
+    parser.add_argument(
+        "--cpu-list",
+        help="physical CPU list passed to numactl for measured commands",
+    )
+    parser.add_argument(
+        "--numa-node",
+        type=int,
+        help="NUMA memory node passed to numactl for measured commands",
+    )
+    parser.add_argument(
+        "--ripgrep-path-repetitions",
+        type=int,
+        default=1,
+        help="repeat the ripgrep corpus path within one process",
+    )
+    parser.add_argument(
+        "--fd-path-repetitions",
+        type=int,
+        default=1,
+        help="repeat the fd search path within one process",
+    )
+    parser.add_argument(
+        "--tcmalloc-library",
+        type=pathlib.Path,
+        help="absolute gperftools libtcmalloc shared library used with LD_PRELOAD",
+    )
     parser.add_argument("--build-timeout", type=int, default=1800)
     parser.add_argument("--run-timeout", type=int, default=300)
     parser.add_argument("--reuse-binaries", action="store_true")
+    parser.add_argument(
+        "--discard-run-output",
+        action="store_true",
+        help="retain hashes and metrics without persisting per-run stdout/stderr",
+    )
     parser.add_argument(
         "--disable-glibc-rseq",
         action="store_true",
@@ -277,6 +315,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         parser.error("--repetitions must be positive")
     if args.jobs < 1:
         parser.error("--jobs must be positive")
+    if args.numa_node is not None and args.numa_node < 0:
+        parser.error("--numa-node must be non-negative")
+    if args.ripgrep_path_repetitions < 1:
+        parser.error("--ripgrep-path-repetitions must be positive")
+    if args.fd_path_repetitions < 1:
+        parser.error("--fd-path-repetitions must be positive")
+    if "tcmalloc" in args.variants and args.tcmalloc_library is None:
+        parser.error("--tcmalloc-library is required for the tcmalloc variant")
     return args
 
 
@@ -354,6 +400,73 @@ def locked_package_names(lock_path: pathlib.Path) -> set[str]:
         raise MatrixError(f"missing Cargo lockfile: {lock_path}")
     text = lock_path.read_text(encoding="utf-8")
     return set(re.findall(r'(?m)^name\s*=\s*"([^"]+)"\s*$', text))
+
+
+def locked_package(lock_path: pathlib.Path, name: str) -> dict[str, Any] | None:
+    if not lock_path.is_file():
+        return None
+    try:
+        record = tomllib.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, tomllib.TOMLDecodeError):
+        return None
+    packages = record.get("package")
+    if not isinstance(packages, list):
+        return None
+    matches = [package for package in packages if package.get("name") == name]
+    return dict(matches[0]) if len(matches) == 1 else None
+
+
+def mimalloc_build_provenance(
+    lock_path: pathlib.Path, target_dir: pathlib.Path
+) -> dict[str, Any]:
+    wrapper = locked_package(lock_path, "mimalloc")
+    sys_package = locked_package(lock_path, "libmimalloc-sys")
+    if not isinstance(wrapper, dict) or not isinstance(sys_package, dict):
+        raise MatrixError("mimalloc build lockfile has incomplete allocator provenance")
+    if sys_package.get("version") != "0.1.49":
+        raise MatrixError(
+            f"unexpected libmimalloc-sys version: {sys_package.get('version')}"
+        )
+    source_roots = sorted(
+        (pathlib.Path.home() / ".cargo" / "registry" / "src").glob(
+            "*/libmimalloc-sys-0.1.49"
+        )
+    )
+    headers = [
+        root / "c_src" / "mimalloc" / "v3" / "include" / "mimalloc.h"
+        for root in source_roots
+    ]
+    header = next((path for path in headers if path.is_file()), None)
+    if header is None:
+        raise MatrixError("mimalloc v3 header is absent from the Cargo source cache")
+    header_text = header.read_text(encoding="utf-8")
+    version_match = re.search(r"(?m)^#define MI_MALLOC_VERSION\s+(\d+)", header_text)
+    if version_match is None:
+        raise MatrixError(f"mimalloc core version is absent from {header}")
+    archives = sorted(
+        (target_dir / "release" / "build").glob(
+            "libmimalloc-sys-*/out/libmimalloc.a"
+        )
+    )
+    return {
+        "route": "rust-global-allocator-native-api",
+        "wrapper_package": wrapper,
+        "sys_package": sys_package,
+        "core_generation": "v3",
+        "core_version_number": int(version_match.group(1)),
+        "core_header": str(header.resolve()),
+        "core_header_sha256": sha256_file(header),
+        "lockfile_sha256": sha256_file(lock_path),
+        "static_archives": [
+            {
+                "path": str(path.resolve()),
+                "size_bytes": path.stat().st_size,
+                "sha256": sha256_file(path),
+            }
+            for path in archives
+        ],
+        "secure_feature_enabled": False,
+    }
 
 
 def validate_force_load_lock_targets(spec: AppSpec, lock_path: pathlib.Path) -> None:
@@ -593,6 +706,138 @@ def runtime_environment(
     if disable_glibc_rseq:
         env["GLIBC_TUNABLES"] = merge_glibc_tunable(env.get("GLIBC_TUNABLES", ""))
     return env
+
+
+def measurement_command_prefix(
+    cpu_list: str | None, numa_node: int | None
+) -> list[str]:
+    if cpu_list is None and numa_node is None:
+        return []
+    if not shutil.which("numactl"):
+        raise MatrixError("numactl is required for measurement affinity")
+    prefix = ["numactl"]
+    if cpu_list is not None:
+        prefix.append(f"--physcpubind={cpu_list}")
+    if numa_node is not None:
+        prefix.append(f"--membind={numa_node}")
+    return prefix
+
+
+def tcmalloc_runtime_evidence(library: pathlib.Path) -> dict[str, Any]:
+    resolved = library.expanduser().resolve()
+    if not resolved.is_file():
+        raise MatrixError(f"missing TCMalloc shared library: {resolved}")
+    if ".so" not in resolved.name:
+        raise MatrixError(f"TCMalloc runtime must be a shared library: {resolved}")
+    evidence: dict[str, Any] = {
+        "label": "gperftools-tcmalloc-full-preload",
+        "library": str(resolved),
+        "library_name": resolved.name,
+        "library_size_bytes": resolved.stat().st_size,
+        "library_sha256": sha256_file(resolved),
+        "activation": "system-api-ld-preload",
+    }
+    receipt = resolved.parent.parent / "receipt.json"
+    if receipt.is_file():
+        try:
+            record = json.loads(receipt.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            record = None
+        if isinstance(record, dict):
+            built = record.get("built_library")
+            source = record.get("dependency_source")
+            if (
+                isinstance(built, dict)
+                and built.get("sha256") == evidence["library_sha256"]
+            ):
+                evidence["soname"] = built.get("soname")
+            if isinstance(source, dict):
+                evidence["source_version"] = source.get("version")
+                evidence["source_archive_sha256"] = source.get("archive_sha256")
+                version = source.get("version")
+                if isinstance(version, str) and version:
+                    evidence["label"] = f"{version}-full-preload"
+            configure = record.get("configure")
+            if isinstance(configure, dict):
+                evidence["configure_flags"] = configure.get("flags")
+    return evidence
+
+
+def allocator_runtime_prefix(
+    variant: str, tcmalloc_runtime: dict[str, Any] | None
+) -> list[str]:
+    if variant != "tcmalloc":
+        return []
+    if not isinstance(tcmalloc_runtime, dict):
+        raise MatrixError("missing TCMalloc runtime evidence")
+    library = str(tcmalloc_runtime.get("library", ""))
+    if not library:
+        raise MatrixError("missing TCMalloc preload library path")
+    return [
+        "env",
+        "-u",
+        "HEAPPROFILE",
+        "-u",
+        "CPUPROFILE",
+        "-u",
+        "MALLOCSTATS",
+        f"LD_PRELOAD={library}",
+    ]
+
+
+def tcmalloc_build_record(
+    system_build: dict[str, Any], tcmalloc_runtime: dict[str, Any]
+) -> dict[str, Any]:
+    if system_build.get("variant") != "system" or not system_build.get("success"):
+        raise MatrixError("TCMalloc requires a successful System allocator build")
+    return {
+        **system_build,
+        "variant": "tcmalloc",
+        "base_build_variant": "system",
+        "original_allocator": "system",
+        "allocator_route": "system-api-ld-preload",
+        "tcmalloc_runtime": dict(tcmalloc_runtime),
+    }
+
+
+def prove_tcmalloc_preload(
+    binary: pathlib.Path,
+    tcmalloc_runtime: dict[str, Any],
+    *,
+    timeout: int,
+) -> dict[str, Any]:
+    library = pathlib.Path(str(tcmalloc_runtime["library"])).resolve()
+    dynamic_linker = pathlib.Path("/lib64/ld-linux-x86-64.so.2")
+    if not dynamic_linker.is_file():
+        raise MatrixError(f"missing dynamic linker for preload proof: {dynamic_linker}")
+    env = os.environ.copy()
+    for name in ("HEAPPROFILE", "CPUPROFILE", "MALLOCSTATS"):
+        env.pop(name, None)
+    env["LD_PRELOAD"] = str(library)
+    result = execute(
+        [dynamic_linker, "--list", binary],
+        cwd=binary.parent,
+        env=env,
+        timeout=timeout,
+    )
+    stdout = result["stdout"].decode("utf-8", errors="replace")
+    success = (
+        result["exit_code"] == 0
+        and not result["timed_out"]
+        and str(library) in stdout
+    )
+    proof = {
+        "success": success,
+        "command": result["command"],
+        "exit_code": result["exit_code"],
+        "timed_out": result["timed_out"],
+        "stdout_sha256": sha256_bytes(result["stdout"]),
+        "stderr_sha256": sha256_bytes(result["stderr"]),
+        "resolved_library": str(library),
+    }
+    if not success:
+        raise MatrixError(f"TCMalloc preload proof failed for {binary}: {proof}")
+    return proof
 
 
 def typeiso_environment(
@@ -1093,13 +1338,15 @@ def build_variant(
     copy_checkout(source_checkout, worktree)
     ensure_standalone_workspace(worktree / "Cargo.toml")
     patched_manifests: list[pathlib.Path] = []
-    if variant != "native" and not uses_original_jemalloc(spec, variant):
+    if variant not in {"native", "system"} and not uses_original_jemalloc(spec, variant):
         root_manifest = worktree / "Cargo.toml"
         if variant in TYPEISO_VARIANTS:
             inject_allocator_main(worktree / spec.main_source, variant)
         else:
             dependency, _features = dependency_for_variant(variant)
             add_dependency(root_manifest, dependency)
+            if variant == "mimalloc":
+                add_dependency(root_manifest, MIMALLOC_SYS_DEPENDENCY)
             patched_manifests = [root_manifest]
             if uses_unialloc(variant):
                 add_spin_patch(root_manifest, find_cached_spin())
@@ -1163,12 +1410,19 @@ def build_variant(
         "force_load_wrapper_sha256": force_load_wrapper_sha256,
         "force_load": force_load,
         "original_allocator": (
-            spec.original_allocator
-            if variant == "native" or uses_original_jemalloc(spec, variant)
-            else None
+            "system"
+            if variant == "system"
+            else (
+                spec.original_allocator
+                if variant == "native" or uses_original_jemalloc(spec, variant)
+                else None
+            )
         ),
         "allocator_route": (
-            "original-native"
+            "rust-system"
+            if variant == "system"
+            else (
+                "original-native"
             if variant == "native"
             else (
                 "original-fd-use-jemalloc"
@@ -1178,6 +1432,7 @@ def build_variant(
                     if variant in TYPEISO_VARIANTS
                     else "injected"
                 )
+            )
             )
         ),
         "success": success,
@@ -1210,6 +1465,10 @@ def build_variant(
                 "binary_size_bytes": output_binary.stat().st_size,
             }
         )
+        if variant == "mimalloc":
+            record["allocator_provenance"] = mimalloc_build_provenance(
+                worktree / "Cargo.lock", target_dir
+            )
     record_path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     if not success:
         stderr = result["stderr"].decode("utf-8", errors="replace")
@@ -1291,7 +1550,10 @@ def workload_command(
     source_checkout: pathlib.Path,
     run_dir: pathlib.Path,
     quick: bool,
+    path_repetitions: int = 1,
 ) -> tuple[list[str], pathlib.Path, pathlib.Path | None]:
+    if path_repetitions < 1:
+        raise MatrixError("path repetitions must be positive")
     if spec.name == "ripgrep":
         return (
             [
@@ -1306,7 +1568,7 @@ def workload_command(
                 "--no-heading",
                 "--line-number",
                 r"UNIALLOC_MATRIX_NEEDLE_[0-9]+",
-                ".",
+                *(["."] * path_repetitions),
             ],
             corpus,
             None,
@@ -1322,7 +1584,7 @@ def workload_command(
                 "f",
                 "--glob",
                 "*.txt",
-                ".",
+                *(["."] * path_repetitions),
             ],
             corpus,
             None,
@@ -1356,26 +1618,29 @@ def run_measured(
     time_binary: pathlib.Path,
     rss_path: pathlib.Path,
     timeout: int,
+    command_prefix: Sequence[str | os.PathLike[str]] = (),
 ) -> dict[str, Any]:
     if not time_binary.exists():
         raise MatrixError(f"GNU time binary is missing: {time_binary}")
     rss_path.parent.mkdir(parents=True, exist_ok=True)
+    measured_command = [*command_prefix, *command]
     result = execute(
-        [time_binary, "-f", "%M", "-o", rss_path, "--", *command],
+        [time_binary, "-f", GNU_TIME_FORMAT, "-o", rss_path, "--", *measured_command],
         cwd=cwd,
         env=env,
         timeout=timeout,
     )
     try:
-        peak_rss_kib = int(rss_path.read_text(encoding="utf-8").strip().splitlines()[-1])
-    except (OSError, ValueError, IndexError) as error:
-        raise MatrixError(f"unable to parse GNU time RSS output: {rss_path}") from error
+        metrics = parse_gnu_time_metrics(rss_path.read_text(encoding="utf-8"))
+    except OSError as error:
+        raise MatrixError(f"unable to read GNU time output: {rss_path}") from error
     return {
         "command": [str(value) for value in command],
+        "measured_command": [str(value) for value in measured_command],
         "exit_code": result["exit_code"],
         "timed_out": result["timed_out"],
         "wall_seconds": result["wall_seconds"],
-        "peak_rss_kib": peak_rss_kib,
+        **metrics,
         "stdout": result["stdout"],
         "stderr": result["stderr"],
         "stdout_sha256": sha256_bytes(result["stdout"]),
@@ -1383,11 +1648,67 @@ def run_measured(
     }
 
 
+def parse_gnu_time_metrics(text: str) -> dict[str, Any]:
+    record = next(
+        (line for line in reversed(text.splitlines()) if line.startswith(GNU_TIME_PREFIX + "\t")),
+        None,
+    )
+    if record is None:
+        raise MatrixError("GNU time emitted no complete metric record")
+    fields = record.split("\t")
+    if len(fields) != 10:
+        raise MatrixError(f"GNU time metric record has {len(fields) - 1} fields, expected 9")
+    try:
+        return {
+            "user_cpu_seconds": float(fields[1]),
+            "system_cpu_seconds": float(fields[2]),
+            "cpu_percent": float(fields[3].removesuffix("%")),
+            "peak_rss_kib": int(fields[4]),
+            "major_page_faults": int(fields[5]),
+            "minor_page_faults": int(fields[6]),
+            "involuntary_context_switches": int(fields[7]),
+            "voluntary_context_switches": int(fields[8]),
+            "gnu_time_exit_status": int(fields[9]),
+        }
+    except ValueError as error:
+        raise MatrixError(f"invalid GNU time metric record: {record}") from error
+
+
 def persist_result(path: pathlib.Path, record: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(path)
+
+
+def median_absolute_deviation(values: Sequence[float]) -> float:
+    center = statistics.median(values)
+    return statistics.median(abs(value - center) for value in values)
+
+
+def throughput_value(work_amount: int | float, work_unit: str, wall_seconds: float) -> tuple[float, str]:
+    if wall_seconds <= 0:
+        raise MatrixError("wall time must be positive for throughput")
+    if work_unit == "bytes":
+        return float(work_amount) / (1024 * 1024) / wall_seconds, "MiB/s"
+    return float(work_amount) / wall_seconds, f"{work_unit}/s"
+
+
+def paired_median_ratio(
+    rows: Sequence[dict[str, Any]],
+    reference_rows: Sequence[dict[str, Any]],
+    field: str,
+) -> float | None:
+    reference = {
+        row.get("measurement_index"): float(row[field]) for row in reference_rows
+    }
+    ratios = [
+        float(row[field]) / reference[row.get("measurement_index")]
+        for row in rows
+        if row.get("measurement_index") in reference
+        and reference[row.get("measurement_index")] != 0
+    ]
+    return statistics.median(ratios) if ratios else None
 
 
 def summarize_measurements(measurements: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1399,31 +1720,167 @@ def summarize_measurements(measurements: Sequence[dict[str, Any]]) -> list[dict[
             for row in measurements
             if row["app"] == app and row["variant"] == variant and not row["warmup"]
         ]
+        wall_values = [float(row["wall_seconds"]) for row in rows]
+        rss_values = [float(row["peak_rss_kib"]) for row in rows]
+        total_cpu_values = [
+            float(row["user_cpu_seconds"]) + float(row["system_cpu_seconds"])
+            for row in rows
+        ]
+        throughput_values = [
+            throughput_value(row["work_amount"], row["work_unit"], row["wall_seconds"])[0]
+            for row in rows
+        ]
+        _, throughput_unit = throughput_value(
+            rows[0]["work_amount"], rows[0]["work_unit"], rows[0]["wall_seconds"]
+        )
         summaries.append(
             {
                 "app": app,
                 "variant": variant,
                 "sample_count": len(rows),
-                "median_wall_seconds": statistics.median(row["wall_seconds"] for row in rows),
-                "median_peak_rss_kib": statistics.median(row["peak_rss_kib"] for row in rows),
+                "median_wall_seconds": statistics.median(wall_values),
+                "wall_mad_seconds": median_absolute_deviation(wall_values),
+                "min_wall_seconds": min(wall_values),
+                "max_wall_seconds": max(wall_values),
+                "median_user_cpu_seconds": statistics.median(
+                    float(row["user_cpu_seconds"]) for row in rows
+                ),
+                "median_system_cpu_seconds": statistics.median(
+                    float(row["system_cpu_seconds"]) for row in rows
+                ),
+                "median_total_cpu_seconds": statistics.median(total_cpu_values),
+                "median_cpu_percent": statistics.median(
+                    float(row["cpu_percent"]) for row in rows
+                ),
+                "median_peak_rss_kib": statistics.median(rss_values),
+                "min_peak_rss_kib": min(rss_values),
+                "max_peak_rss_kib": max(rss_values),
+                "rss_mad_kib": median_absolute_deviation(rss_values),
+                "median_major_page_faults": statistics.median(
+                    int(row["major_page_faults"]) for row in rows
+                ),
+                "median_minor_page_faults": statistics.median(
+                    int(row["minor_page_faults"]) for row in rows
+                ),
+                "median_involuntary_context_switches": statistics.median(
+                    int(row["involuntary_context_switches"]) for row in rows
+                ),
+                "median_voluntary_context_switches": statistics.median(
+                    int(row["voluntary_context_switches"]) for row in rows
+                ),
+                "median_throughput_per_second": statistics.median(throughput_values),
+                "throughput_unit": throughput_unit,
+                "work_amount": rows[0]["work_amount"],
+                "work_unit": rows[0]["work_unit"],
                 "output_sha256": rows[0]["output_sha256"],
                 "stats": rows[-1].get("stats"),
                 "performance_eligible": variant != "typeiso_coverage",
             }
         )
     by_app = {name: [row for row in summaries if row["app"] == name] for name in APP_SPECS}
-    for rows in by_app.values():
-        baseline = next((row for row in rows if row["variant"] == "native"), None)
-        typed_plain = next((row for row in rows if row["variant"] == "typed_plain"), None)
-        for row in rows:
+    for app, summary_rows in by_app.items():
+        baseline = next(
+            (row for row in summary_rows if row["variant"] == "system"),
+            next((row for row in summary_rows if row["variant"] == "native"), None),
+        )
+        typed_plain = next(
+            (row for row in summary_rows if row["variant"] == "typed_plain"), None
+        )
+        measurement_rows = [
+            row for row in measurements if row["app"] == app and not row["warmup"]
+        ]
+        rows_by_variant = {
+            variant: [row for row in measurement_rows if row["variant"] == variant]
+            for variant in {row["variant"] for row in measurement_rows}
+        }
+        for row in summary_rows:
             if row["performance_eligible"]:
                 if baseline is not None:
-                    row["wall_ratio_vs_native"] = row["median_wall_seconds"] / baseline["median_wall_seconds"]
-                    row["rss_ratio_vs_native"] = row["median_peak_rss_kib"] / baseline["median_peak_rss_kib"]
+                    baseline_name = str(baseline["variant"])
+                    row["baseline_variant"] = baseline_name
+                    row[f"wall_ratio_vs_{baseline_name}"] = row["median_wall_seconds"] / baseline["median_wall_seconds"]
+                    row[f"rss_ratio_vs_{baseline_name}"] = row["median_peak_rss_kib"] / baseline["median_peak_rss_kib"]
                 if typed_plain is not None:
                     row["wall_ratio_vs_typed_plain"] = row["median_wall_seconds"] / typed_plain["median_wall_seconds"]
                     row["rss_ratio_vs_typed_plain"] = row["median_peak_rss_kib"] / typed_plain["median_peak_rss_kib"]
+                current_rows = rows_by_variant.get(str(row["variant"]), [])
+                for comparator in ("system", "native", "mimalloc", "tcmalloc", "unialloc", "typed_plain"):
+                    reference_rows = rows_by_variant.get(comparator)
+                    if comparator == row["variant"] or not reference_rows:
+                        continue
+                    wall_ratio = paired_median_ratio(
+                        current_rows, reference_rows, "wall_seconds"
+                    )
+                    rss_ratio = paired_median_ratio(
+                        current_rows, reference_rows, "peak_rss_kib"
+                    )
+                    if wall_ratio is not None:
+                        row[f"paired_wall_ratio_vs_{comparator}"] = wall_ratio
+                    if rss_ratio is not None:
+                        row[f"paired_rss_ratio_vs_{comparator}"] = rss_ratio
     return summaries
+
+
+def path_repetitions_for_app(spec: AppSpec, args: argparse.Namespace) -> int:
+    if spec.name == "ripgrep":
+        return args.ripgrep_path_repetitions
+    if spec.name == "fd":
+        return args.fd_path_repetitions
+    return 1
+
+
+def workload_evidence(
+    spec: AppSpec,
+    result: dict[str, Any],
+    source_checkout: pathlib.Path,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    repetitions = path_repetitions_for_app(spec, args)
+    if spec.name == "ripgrep":
+        corpus = result["corpus"]
+        total_bytes = int(corpus["file_count"]) * int(corpus["file_bytes"]) * repetitions
+        return {
+            "description": "single-thread regex search over repeated deterministic paths",
+            "path_repetitions": repetitions,
+            "work_amount": total_bytes,
+            "work_unit": "bytes",
+        }
+    if spec.name == "fd":
+        tree = result["fd_tree"]
+        return {
+            "description": "single-thread metadata traversal over repeated deterministic paths",
+            "path_repetitions": repetitions,
+            "work_amount": int(tree["file_count"]) * repetitions,
+            "work_unit": "files",
+        }
+    input_name = "issue-141.png" if args.quick else "issue-167.png"
+    input_path = source_checkout / "tests" / "files" / input_name
+    return {
+        "description": "single-thread lossless PNG optimization",
+        "input": str(input_path.resolve()),
+        "input_sha256": sha256_file(input_path),
+        "work_amount": input_path.stat().st_size,
+        "work_unit": "bytes",
+    }
+
+
+def host_snapshot() -> dict[str, Any]:
+    model_name = None
+    cpuinfo = pathlib.Path("/proc/cpuinfo")
+    if cpuinfo.is_file():
+        match = re.search(
+            r"(?m)^model name\s*:\s*(.+)$", cpuinfo.read_text(encoding="utf-8")
+        )
+        model_name = match.group(1).strip() if match else None
+    load = os.getloadavg()
+    return {
+        "kernel": os.uname().release,
+        "machine": os.uname().machine,
+        "cpu_model": model_name,
+        "logical_cpu_count": os.cpu_count(),
+        "process_affinity": sorted(os.sched_getaffinity(0)),
+        "load_average": {"one_minute": load[0], "five_minutes": load[1], "fifteen_minutes": load[2]},
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1436,9 +1893,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     wrapper = ensure_wrapper((args.wrapper or (raw_dir / "tools" / "unialloc-rustc-wrapper")).resolve(), args.toolchain, args.build_timeout)
     sysroot = rustc_sysroot(args.toolchain)
     warmups, repetitions = measurement_counts(args)
+    affinity_prefix = measurement_command_prefix(args.cpu_list, args.numa_node)
+    tcmalloc_runtime = (
+        tcmalloc_runtime_evidence(args.tcmalloc_library)
+        if "tcmalloc" in args.variants and args.tcmalloc_library is not None
+        else None
+    )
     result_path = raw_dir / "results.json"
     result: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "unialloc-realworld-type-isolation-matrix",
         "success": False,
         "quick": args.quick,
@@ -1451,6 +1914,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         "implementation_sha256": implementation_digest(),
         "pass_source_sha256": sha256_file(PASS_SOURCE),
         "sysroot": str(sysroot),
+        "host": host_snapshot(),
+        "measurement_affinity": {
+            "cpu_list": args.cpu_list,
+            "numa_node": args.numa_node,
+            "command_prefix": affinity_prefix,
+        },
+        "tcmalloc_runtime": tcmalloc_runtime,
         "glibc_rseq_mode": (
             "disabled_for_self_registration_testing"
             if args.disable_glibc_rseq
@@ -1459,7 +1929,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "glibc_tunable": runtime_env.get("GLIBC_TUNABLES"),
         "performance_stats_enabled": False,
         "coverage_variant_performance_eligible": False,
+        "run_output_retained": not args.discard_run_output,
         "checkouts": {},
+        "workloads": {},
         "builds": [],
         "measurements": [],
         "summaries": [],
@@ -1473,23 +1945,43 @@ def main(argv: Sequence[str] | None = None) -> int:
     result["corpus"] = prepare_corpus(raw_dir / "corpus", args.quick)
     if "fd" in args.apps:
         result["fd_tree"] = prepare_fd_tree(raw_dir / "fd-tree", args.quick)
+    for app in args.apps:
+        result["workloads"][app] = workload_evidence(
+            APP_SPECS[app], result, checkouts[app], args
+        )
     persist_result(result_path, result)
 
     builds: dict[tuple[str, str], dict[str, Any]] = {}
+    base_builds: dict[tuple[str, str], dict[str, Any]] = {}
     for app in args.apps:
         for variant in args.variants:
-            build = build_variant(
-                APP_SPECS[app],
-                variant,
-                source_checkout=checkouts[app],
-                raw_dir=raw_dir,
-                wrapper=wrapper,
-                sysroot=sysroot,
-                toolchain=args.toolchain,
-                jobs=args.jobs,
-                timeout=args.build_timeout,
-                reuse_binary=args.reuse_binaries,
-            )
+            base_variant = "system" if variant == "tcmalloc" else variant
+            base_key = (app, base_variant)
+            if base_key not in base_builds:
+                base_builds[base_key] = build_variant(
+                    APP_SPECS[app],
+                    base_variant,
+                    source_checkout=checkouts[app],
+                    raw_dir=raw_dir,
+                    wrapper=wrapper,
+                    sysroot=sysroot,
+                    toolchain=args.toolchain,
+                    jobs=args.jobs,
+                    timeout=args.build_timeout,
+                    reuse_binary=args.reuse_binaries,
+                )
+            build = base_builds[base_key]
+            if variant == "tcmalloc":
+                assert tcmalloc_runtime is not None
+                build = tcmalloc_build_record(build, tcmalloc_runtime)
+                build["preload_proof"] = prove_tcmalloc_preload(
+                    pathlib.Path(build["binary"]),
+                    tcmalloc_runtime,
+                    timeout=args.run_timeout,
+                )
+                persist_result(
+                    raw_dir / "binaries" / app / "tcmalloc" / "build.json", build
+                )
             builds[(app, variant)] = build
             result["builds"].append(build)
             persist_result(result_path, result)
@@ -1524,7 +2016,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     source_checkout=checkouts[app],
                     run_dir=run_dir,
                     quick=args.quick,
+                    path_repetitions=path_repetitions_for_app(spec, args),
                 )
+                command_prefix = [
+                    *affinity_prefix,
+                    *allocator_runtime_prefix(variant, tcmalloc_runtime),
+                ]
                 measured = run_measured(
                     command,
                     cwd=cwd,
@@ -1532,10 +2029,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                     time_binary=args.time_binary,
                     rss_path=run_dir / "peak-rss-kib.txt",
                     timeout=args.run_timeout,
+                    command_prefix=command_prefix,
                 )
-                (run_dir / "stdout.bin").write_bytes(measured.pop("stdout"))
+                stdout = measured.pop("stdout")
                 stderr = measured.pop("stderr")
-                (run_dir / "stderr.bin").write_bytes(stderr)
+                if not args.discard_run_output:
+                    (run_dir / "stdout.bin").write_bytes(stdout)
+                    (run_dir / "stderr.bin").write_bytes(stderr)
                 if measured["exit_code"] != 0 or measured["timed_out"]:
                     raise MatrixError(f"workload failed for {app}/{variant}: {measured}")
                 output_sha = sha256_file(output_file) if output_file is not None else measured["stdout_sha256"]
@@ -1559,6 +2059,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "output_sha256": output_sha,
                     "stats": stats,
                     "performance_eligible": variant != "typeiso_coverage",
+                    "work_amount": result["workloads"][app]["work_amount"],
+                    "work_unit": result["workloads"][app]["work_unit"],
                 }
                 result["measurements"].append(row)
                 persist_result(result_path, result)
