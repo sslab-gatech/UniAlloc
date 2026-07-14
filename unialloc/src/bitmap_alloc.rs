@@ -570,16 +570,37 @@ impl SegmentPageAllocator {
         }
         let mut start = self.aligned_start_in(left, right, pages, align)?;
         let step_pages = max(1, align / self.page_size);
+        debug_assert!(step_pages.is_power_of_two());
         let used = self.node(idx).leaf_bits;
+        if used == 0 {
+            return Some(start);
+        }
         while start.checked_add(pages)? <= right {
             let local = start - left;
             let mask = Self::range_mask(local, local + pages);
-            if used & mask == 0 {
+            let conflicts = used & mask;
+            if conflicts == 0 {
                 return Some(start);
             }
-            start = start.checked_add(step_pages)?;
+            start = Self::advance_past_leaf_conflict(start, local, conflicts, step_pages)?;
         }
         None
+    }
+
+    #[inline(always)]
+    fn advance_past_leaf_conflict(
+        start: usize,
+        local: usize,
+        conflicts: u64,
+        step_pages: usize,
+    ) -> Option<usize> {
+        // Every candidate up to the last occupied page in this window still
+        // overlaps that page. Jump past it, rounded to the next aligned
+        // candidate, rather than retrying every page.
+        let last_conflict = LEAF_PAGES - 1 - conflicts.leading_zeros() as usize;
+        let conflict_delta = last_conflict - local;
+        let advance = conflict_delta.checked_add(step_pages)? & !(step_pages - 1);
+        start.checked_add(advance)
     }
 
     #[inline]
@@ -725,6 +746,27 @@ mod tests {
     }
 
     #[test]
+    fn fragmented_first_fit_uses_cross_leaf_summary() {
+        let (mut allocator, _nodes) = allocator(128);
+        let pages: Vec<_> = (0..128)
+            .map(|_| allocator.allocate_bytes(PAGE, PAGE).unwrap())
+            .collect();
+        for ptr in pages[8..12]
+            .iter()
+            .chain(&pages[24..30])
+            .chain(&pages[60..68])
+        {
+            allocator.deallocate_bytes(*ptr, PAGE).unwrap();
+        }
+
+        assert_eq!(allocator.largest_free_run(), 8);
+        assert_eq!(
+            allocator.allocate_bytes(PAGE * 8, PAGE).unwrap() as usize,
+            BASE + PAGE * 60
+        );
+    }
+
+    #[test]
     fn over_page_alignment_finds_an_aligned_subrun() {
         let (mut allocator, _nodes) = allocator(32);
         let prefix = allocator.allocate_bytes(PAGE, PAGE).unwrap();
@@ -732,6 +774,38 @@ mod tests {
         assert_eq!(prefix as usize, BASE);
         assert_eq!(aligned as usize % (PAGE * 8), 0);
         assert_eq!(aligned as usize, BASE + PAGE * 8);
+    }
+
+    #[test]
+    fn leaf_search_skips_conflicts_to_the_first_complete_run() {
+        let (mut allocator, _nodes) = allocator(64);
+        let pages: Vec<_> = (0..64)
+            .map(|_| allocator.allocate_bytes(PAGE, PAGE).unwrap())
+            .collect();
+        for ptr in pages[8..16].iter().chain(&pages[24..32]) {
+            allocator.deallocate_bytes(*ptr, PAGE).unwrap();
+        }
+
+        assert_eq!(
+            allocator.allocate_bytes(PAGE * 8, PAGE).unwrap() as usize,
+            BASE + PAGE * 8
+        );
+    }
+
+    #[test]
+    fn conflict_skip_preserves_over_page_alignment() {
+        let (mut allocator, _nodes) = allocator(64);
+        let pages: Vec<_> = (0..64)
+            .map(|_| allocator.allocate_bytes(PAGE, PAGE).unwrap())
+            .collect();
+        for ptr in &pages[9..24] {
+            allocator.deallocate_bytes(*ptr, PAGE).unwrap();
+        }
+
+        assert_eq!(
+            allocator.allocate_bytes(PAGE * 4, PAGE * 8).unwrap() as usize,
+            BASE + PAGE * 16
+        );
     }
 
     #[test]

@@ -127,6 +127,37 @@ impl HostedArena {
     }
 }
 
+#[cfg(not(unialloc_target_arm64e))]
+#[derive(Clone, Copy)]
+struct HostedBitmapThreadHints {
+    // Unit tests instantiate multiple managers. Production has one private
+    // static manager, so its hot path keeps only the two arena candidates.
+    #[cfg(test)]
+    allocator: *const HostedBitmapPageAllocator,
+    allocation_arena: *mut HostedArena,
+    owner_arena: *mut HostedArena,
+}
+
+#[cfg(not(unialloc_target_arm64e))]
+impl HostedBitmapThreadHints {
+    const fn empty() -> Self {
+        Self {
+            #[cfg(test)]
+            allocator: ptr::null(),
+            allocation_arena: null_mut(),
+            owner_arena: null_mut(),
+        }
+    }
+}
+
+// Direct static TLS avoids the PAL's destructor-bearing TLS slot. Production
+// has one private static manager; tests additionally scope hints by manager
+// identity. Every candidate revalidates arena activity, range/capacity, and the
+// locked arena state.
+#[cfg(not(unialloc_target_arm64e))]
+#[thread_local]
+static mut HOSTED_BITMAP_THREAD_HINTS: HostedBitmapThreadHints = HostedBitmapThreadHints::empty();
+
 #[repr(C)]
 struct OwnerRadixNode {
     slots: [AtomicPtr<()>; OWNER_RADIX_SLOTS],
@@ -298,12 +329,12 @@ impl OwnerDirectory {
 ///
 /// The registry is append-only, while payload and tree mappings are retired
 /// and inactive descriptors are reused. Allocation scans atomic max-free
-/// summaries and takes only the selected arena lock. A short creation lock
-/// serializes mmap and descriptor publication on capacity misses.
+/// summaries and takes only the selected arena lock. Thread-local candidate
+/// hints bypass that scan and the owner radix on repeated arena traffic. A
+/// short creation lock serializes mmap and descriptor publication on capacity
+/// misses.
 pub(crate) struct HostedBitmapPageAllocator {
     head: AtomicPtr<HostedArena>,
-    capacity_hint: AtomicPtr<HostedArena>,
-    owner_hint: AtomicPtr<HostedArena>,
     owners: OwnerDirectory,
     create_lock: PthreadMutex<()>,
     warm_empty_limit: usize,
@@ -311,17 +342,21 @@ pub(crate) struct HostedBitmapPageAllocator {
     warm_empty_arenas: AtomicUsize,
     descriptor_count: AtomicUsize,
     mapped_payload_bytes: AtomicUsize,
+    #[cfg(test)]
+    local_allocation_hint_hits: AtomicUsize,
+    #[cfg(test)]
+    local_owner_hint_hits: AtomicUsize,
+    #[cfg(test)]
+    owner_directory_lookups: AtomicUsize,
 }
 
 unsafe impl Send for HostedBitmapPageAllocator {}
 unsafe impl Sync for HostedBitmapPageAllocator {}
 
 impl HostedBitmapPageAllocator {
-    pub const fn new(warm_empty_limit: usize) -> Self {
+    const fn new(warm_empty_limit: usize) -> Self {
         Self {
             head: AtomicPtr::new(null_mut()),
-            capacity_hint: AtomicPtr::new(null_mut()),
-            owner_hint: AtomicPtr::new(null_mut()),
             owners: OwnerDirectory::new(),
             create_lock: PthreadMutex::new(()),
             warm_empty_limit,
@@ -329,8 +364,116 @@ impl HostedBitmapPageAllocator {
             warm_empty_arenas: AtomicUsize::new(0),
             descriptor_count: AtomicUsize::new(0),
             mapped_payload_bytes: AtomicUsize::new(0),
+            #[cfg(test)]
+            local_allocation_hint_hits: AtomicUsize::new(0),
+            #[cfg(test)]
+            local_owner_hint_hits: AtomicUsize::new(0),
+            #[cfg(test)]
+            owner_directory_lookups: AtomicUsize::new(0),
         }
     }
+
+    #[cfg(not(unialloc_target_arm64e))]
+    #[inline]
+    fn thread_allocation_hint(&self) -> *mut HostedArena {
+        unsafe {
+            let hints = core::ptr::addr_of!(HOSTED_BITMAP_THREAD_HINTS);
+            #[cfg(test)]
+            if core::ptr::addr_of!((*hints).allocator).read() != self as *const Self {
+                return null_mut();
+            }
+            core::ptr::addr_of!((*hints).allocation_arena).read()
+        }
+    }
+
+    #[cfg(unialloc_target_arm64e)]
+    #[inline]
+    fn thread_allocation_hint(&self) -> *mut HostedArena {
+        null_mut()
+    }
+
+    #[cfg(not(unialloc_target_arm64e))]
+    #[inline]
+    fn thread_owner_hint(&self, addr: usize) -> *mut HostedArena {
+        unsafe {
+            let hints = core::ptr::addr_of!(HOSTED_BITMAP_THREAD_HINTS);
+            #[cfg(test)]
+            if core::ptr::addr_of!((*hints).allocator).read() != self as *const Self {
+                return null_mut();
+            }
+            let owner = core::ptr::addr_of!((*hints).owner_arena).read();
+            match owner.as_ref() {
+                Some(arena) if arena.may_contain(addr) => owner,
+                _ => null_mut(),
+            }
+        }
+    }
+
+    #[cfg(unialloc_target_arm64e)]
+    #[inline]
+    fn thread_owner_hint(&self, _addr: usize) -> *mut HostedArena {
+        null_mut()
+    }
+
+    #[cfg(not(unialloc_target_arm64e))]
+    #[inline]
+    fn remember_thread_arena(&self, arena: *mut HostedArena, has_capacity: bool) {
+        unsafe {
+            let hints_ptr = core::ptr::addr_of_mut!(HOSTED_BITMAP_THREAD_HINTS);
+            #[cfg(test)]
+            if core::ptr::addr_of!((*hints_ptr).allocator).read() != self as *const Self {
+                core::ptr::addr_of_mut!((*hints_ptr).allocator).write(self as *const Self);
+            }
+            if core::ptr::addr_of!((*hints_ptr).owner_arena).read() != arena {
+                core::ptr::addr_of_mut!((*hints_ptr).owner_arena).write(arena);
+            }
+            let allocation_arena = if has_capacity { arena } else { null_mut() };
+            if core::ptr::addr_of!((*hints_ptr).allocation_arena).read() != allocation_arena {
+                core::ptr::addr_of_mut!((*hints_ptr).allocation_arena).write(allocation_arena);
+            }
+        }
+    }
+
+    #[cfg(unialloc_target_arm64e)]
+    #[inline]
+    fn remember_thread_arena(&self, _arena: *mut HostedArena, _has_capacity: bool) {}
+
+    #[cfg(not(unialloc_target_arm64e))]
+    #[inline]
+    fn forget_thread_arena(&self, arena: *mut HostedArena) {
+        unsafe {
+            let hints_ptr = core::ptr::addr_of_mut!(HOSTED_BITMAP_THREAD_HINTS);
+            #[cfg(test)]
+            if core::ptr::addr_of!((*hints_ptr).allocator).read() != self as *const Self {
+                return;
+            }
+            if core::ptr::addr_of!((*hints_ptr).allocation_arena).read() == arena {
+                core::ptr::addr_of_mut!((*hints_ptr).allocation_arena).write(null_mut());
+            }
+            if core::ptr::addr_of!((*hints_ptr).owner_arena).read() == arena {
+                core::ptr::addr_of_mut!((*hints_ptr).owner_arena).write(null_mut());
+            }
+        }
+    }
+
+    #[cfg(unialloc_target_arm64e)]
+    #[inline]
+    fn forget_thread_arena(&self, _arena: *mut HostedArena) {}
+
+    #[cfg(all(test, not(unialloc_target_arm64e)))]
+    #[inline]
+    fn clear_thread_hints(&self) {
+        unsafe {
+            let hints_ptr = core::ptr::addr_of_mut!(HOSTED_BITMAP_THREAD_HINTS);
+            if hints_ptr.read().allocator == self as *const Self {
+                hints_ptr.write(HostedBitmapThreadHints::empty());
+            }
+        }
+    }
+
+    #[cfg(all(test, unialloc_target_arm64e))]
+    #[inline]
+    fn clear_thread_hints(&self) {}
 
     #[inline]
     fn rounded_pages(size: usize) -> Option<usize> {
@@ -417,17 +560,7 @@ impl HostedBitmapPageAllocator {
         }
         let capacity = state.allocator.largest_free_run();
         arena.largest_free_run.store(capacity, Ordering::Release);
-        if capacity == 0 {
-            let _ = self.capacity_hint.compare_exchange(
-                arena_ptr,
-                null_mut(),
-                Ordering::AcqRel,
-                Ordering::Relaxed,
-            );
-        } else {
-            self.capacity_hint.store(arena_ptr, Ordering::Release);
-        }
-        self.owner_hint.store(arena_ptr, Ordering::Release);
+        self.remember_thread_arena(arena_ptr, capacity != 0);
         Some(ptr)
     }
 
@@ -465,11 +598,14 @@ impl HostedBitmapPageAllocator {
     }
 
     fn try_allocate_existing(&self, layout: Layout, pages: usize) -> ArenaAllocationAttempt {
-        let hint = self.capacity_hint.load(Ordering::Acquire);
+        let hint = self.thread_allocation_hint();
         let mut busy = null_mut();
         match self.try_allocate_arena(hint, layout, pages) {
             ArenaAllocationAttempt::Allocated(ptr) => {
-                return ArenaAllocationAttempt::Allocated(ptr)
+                #[cfg(test)]
+                self.local_allocation_hint_hits
+                    .fetch_add(1, Ordering::Relaxed);
+                return ArenaAllocationAttempt::Allocated(ptr);
             }
             ArenaAllocationAttempt::Busy(arena) => busy = arena,
             ArenaAllocationAttempt::Miss => {}
@@ -581,8 +717,7 @@ impl HostedBitmapPageAllocator {
         // Publish activity last so lock-free registry readers observe the base,
         // end, and root capacity from this initialization.
         arena.active.store(true, Ordering::Release);
-        self.capacity_hint.store(arena_ptr, Ordering::Release);
-        self.owner_hint.store(arena_ptr, Ordering::Release);
+        self.remember_thread_arena(arena_ptr, state.allocator.largest_free_run() != 0);
         self.active_arenas.fetch_add(1, Ordering::Relaxed);
         self.mapped_payload_bytes
             .fetch_add(mapping_bytes, Ordering::Relaxed);
@@ -690,18 +825,7 @@ impl HostedBitmapPageAllocator {
         // the old active value recheck it after taking the arena lock.
         arena.active.store(false, Ordering::Release);
         let arena_ptr = arena as *const HostedArena as *mut HostedArena;
-        let _ = self.capacity_hint.compare_exchange(
-            arena_ptr,
-            null_mut(),
-            Ordering::AcqRel,
-            Ordering::Relaxed,
-        );
-        let _ = self.owner_hint.compare_exchange(
-            arena_ptr,
-            null_mut(),
-            Ordering::AcqRel,
-            Ordering::Relaxed,
-        );
+        self.forget_thread_arena(arena_ptr);
         arena.largest_free_run.store(0, Ordering::Release);
         arena.base.store(0, Ordering::Relaxed);
         arena.end.store(0, Ordering::Relaxed);
@@ -738,10 +862,15 @@ impl HostedBitmapPageAllocator {
             return Ok(());
         }
         let addr = ptr as usize;
-        let hinted_owner = self.owner_hint.load(Ordering::Acquire);
-        let arena_ptr = match hinted_owner.as_ref() {
-            Some(arena) if arena.may_contain(addr) => hinted_owner,
-            _ => self.owners.owner_for(addr),
+        let hinted_owner = self.thread_owner_hint(addr);
+        let arena_ptr = if hinted_owner.is_null() {
+            #[cfg(test)]
+            self.owner_directory_lookups.fetch_add(1, Ordering::Relaxed);
+            self.owners.owner_for(addr)
+        } else {
+            #[cfg(test)]
+            self.local_owner_hint_hits.fetch_add(1, Ordering::Relaxed);
+            hinted_owner
         };
         if let Some(arena) = arena_ptr.as_ref() {
             let mut state = arena.state.lock();
@@ -763,8 +892,7 @@ impl HostedBitmapPageAllocator {
                         arena
                             .largest_free_run
                             .store(state.allocator.largest_free_run(), Ordering::Release);
-                        self.capacity_hint.store(arena_ptr, Ordering::Release);
-                        self.owner_hint.store(arena_ptr, Ordering::Release);
+                        self.remember_thread_arena(arena_ptr, true);
                     } else {
                         if can_stay_warm {
                             let counted = self.warm_empty_arenas.fetch_sub(1, Ordering::AcqRel);
@@ -778,8 +906,7 @@ impl HostedBitmapPageAllocator {
                 arena
                     .largest_free_run
                     .store(state.allocator.largest_free_run(), Ordering::Release);
-                self.capacity_hint.store(arena_ptr, Ordering::Release);
-                self.owner_hint.store(arena_ptr, Ordering::Release);
+                self.remember_thread_arena(arena_ptr, true);
                 if let Some(bytes) = Self::rounded_mapping_bytes(layout.size()) {
                     if bytes >= DISCARD_FREE_RUN_MIN_BYTES {
                         Self::discard_free_pages(ptr, bytes);
@@ -814,8 +941,18 @@ impl HostedBitmapPageAllocator {
     }
 
     #[cfg(test)]
+    fn hint_stats_for_tests(&self) -> (usize, usize, usize) {
+        (
+            self.local_allocation_hint_hits.load(Ordering::Relaxed),
+            self.local_owner_hint_hits.load(Ordering::Relaxed),
+            self.owner_directory_lookups.load(Ordering::Relaxed),
+        )
+    }
+
+    #[cfg(test)]
     unsafe fn release_payloads_for_tests(&self) {
         let _create_guard = self.create_lock.lock();
+        self.clear_thread_hints();
         let mut current = self.head.load(Ordering::Acquire);
         while let Some(arena) = current.as_ref() {
             let mut state = arena.state.lock();
@@ -836,8 +973,6 @@ impl HostedBitmapPageAllocator {
             current = arena.next;
         }
         self.active_arenas.store(0, Ordering::Release);
-        self.capacity_hint.store(null_mut(), Ordering::Release);
-        self.owner_hint.store(null_mut(), Ordering::Release);
         self.warm_empty_arenas.store(0, Ordering::Release);
         self.mapped_payload_bytes.store(0, Ordering::Release);
     }
@@ -851,7 +986,7 @@ mod tests {
     use super::*;
     use alloc::vec::Vec;
     use std::collections::HashSet;
-    use std::sync::{Arc, Barrier, Mutex};
+    use std::sync::{mpsc, Arc, Barrier, Mutex};
     use std::thread;
 
     extern crate std;
@@ -1029,11 +1164,301 @@ mod tests {
         let manager = TestAllocator::new(1);
         let layout = page_layout(MAX_ARENA_BYTES / crate::PAGE_SIZE + 1);
         unsafe {
-            let ptr = manager.allocator.allocate_layout(layout).unwrap();
-            assert!(!ptr.is_null());
-            assert_eq!(manager.allocator.stats(), HostedBitmapStats::default());
-            manager.allocator.deallocate_layout(ptr, layout).unwrap();
+            let guard = manager.allocator.allocate_layout(page_layout(1)).unwrap();
+            let reusable = manager.allocator.allocate_layout(page_layout(1)).unwrap();
+            manager
+                .allocator
+                .deallocate_layout(reusable, page_layout(1))
+                .unwrap();
+            let before = manager.allocator.stats();
+
+            let direct = manager.allocator.allocate_layout(layout).unwrap();
+            assert!(!direct.is_null());
+            assert!(manager
+                .allocator
+                .owners
+                .owner_for(direct as usize)
+                .is_null());
+            manager.allocator.deallocate_layout(direct, layout).unwrap();
+            assert_eq!(manager.allocator.stats(), before);
+
+            let reused = manager.allocator.allocate_layout(page_layout(1)).unwrap();
+            assert_eq!(reused, reusable);
+            manager
+                .allocator
+                .deallocate_layout(reused, page_layout(1))
+                .unwrap();
+            manager
+                .allocator
+                .deallocate_layout(guard, page_layout(1))
+                .unwrap();
         }
+    }
+
+    #[cfg(not(unialloc_target_arm64e))]
+    #[test]
+    fn hosted_thread_hints_are_allocator_scoped() {
+        thread::spawn(|| unsafe {
+            let first_manager = TestAllocator::new(1);
+            let second_manager = TestAllocator::new(1);
+            let layout = page_layout(1);
+
+            let first = first_manager.allocator.allocate_layout(layout).unwrap();
+            let second = second_manager.allocator.allocate_layout(layout).unwrap();
+            let first_again = first_manager.allocator.allocate_layout(layout).unwrap();
+
+            assert!(!first_manager
+                .allocator
+                .owners
+                .owner_for(first as usize)
+                .is_null());
+            assert!(!first_manager
+                .allocator
+                .owners
+                .owner_for(first_again as usize)
+                .is_null());
+            assert!(second_manager
+                .allocator
+                .owners
+                .owner_for(first_again as usize)
+                .is_null());
+
+            first_manager
+                .allocator
+                .deallocate_layout(first_again, layout)
+                .unwrap();
+            first_manager
+                .allocator
+                .deallocate_layout(first, layout)
+                .unwrap();
+            second_manager
+                .allocator
+                .deallocate_layout(second, layout)
+                .unwrap();
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[cfg(not(unialloc_target_arm64e))]
+    #[test]
+    fn hosted_same_thread_fast_path_hits_local_arena_and_owner_hints() {
+        thread::spawn(|| unsafe {
+            let manager = TestAllocator::new(1);
+            let layout = page_layout(8);
+            let first = manager.allocator.allocate_layout(layout).unwrap();
+            let second = manager.allocator.allocate_layout(layout).unwrap();
+            manager.allocator.deallocate_layout(first, layout).unwrap();
+
+            let (allocation_hits, owner_hits, directory_lookups) =
+                manager.allocator.hint_stats_for_tests();
+            assert!(allocation_hits >= 1);
+            assert!(owner_hits >= 1);
+            assert_eq!(directory_lookups, 0);
+
+            manager.allocator.deallocate_layout(second, layout).unwrap();
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[cfg(not(unialloc_target_arm64e))]
+    #[test]
+    fn hosted_owner_hint_falls_back_between_live_arenas_then_recaches() {
+        thread::spawn(|| unsafe {
+            let manager = TestAllocator::new(2);
+            let layout = page_layout(8);
+            let mapping_bytes = HostedBitmapPageAllocator::arena_mapping_bytes(layout).unwrap();
+            let first = manager.allocator.allocate_layout(layout).unwrap();
+            let second = manager.allocator.allocate_layout(layout).unwrap();
+            let first_arena = manager.allocator.owners.owner_for(first as usize);
+            assert_eq!(
+                manager.allocator.owners.owner_for(second as usize),
+                first_arena
+            );
+
+            let other = manager
+                .allocator
+                .create_arena_and_allocate(mapping_bytes, layout, true)
+                .unwrap();
+            let other_arena = manager.allocator.owners.owner_for(other as usize);
+            let other_guard = manager
+                .allocator
+                .allocate_arena_blocking(other_arena, layout)
+                .unwrap();
+            assert_ne!(other_arena, first_arena);
+
+            manager.allocator.deallocate_layout(first, layout).unwrap();
+            manager.allocator.deallocate_layout(second, layout).unwrap();
+            let (_, owner_hits, directory_lookups) = manager.allocator.hint_stats_for_tests();
+            assert_eq!(directory_lookups, 1);
+            assert_eq!(owner_hits, 1);
+
+            manager
+                .allocator
+                .deallocate_layout(other_guard, layout)
+                .unwrap();
+            manager.allocator.deallocate_layout(other, layout).unwrap();
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[cfg(not(unialloc_target_arm64e))]
+    #[test]
+    fn hosted_cross_thread_free_uses_radix_once_then_owner_hint() {
+        let manager = Arc::new(TestAllocator::new(1));
+        let layout = page_layout(8);
+        unsafe {
+            let first = manager.allocator.allocate_layout(layout).unwrap();
+            let second = manager.allocator.allocate_layout(layout).unwrap();
+            let guard = manager.allocator.allocate_layout(layout).unwrap();
+            let first = first as usize;
+            let second = second as usize;
+            let worker_manager = Arc::clone(&manager);
+            thread::spawn(move || {
+                worker_manager
+                    .allocator
+                    .deallocate_layout(first as *mut u8, layout)
+                    .unwrap();
+                worker_manager
+                    .allocator
+                    .deallocate_layout(second as *mut u8, layout)
+                    .unwrap();
+                let replacement_first = worker_manager.allocator.allocate_layout(layout).unwrap();
+                let replacement_second = worker_manager.allocator.allocate_layout(layout).unwrap();
+                let expected = HashSet::from([first, second]);
+                let actual =
+                    HashSet::from([replacement_first as usize, replacement_second as usize]);
+                assert_eq!(actual, expected);
+                worker_manager
+                    .allocator
+                    .deallocate_layout(replacement_first, layout)
+                    .unwrap();
+                worker_manager
+                    .allocator
+                    .deallocate_layout(replacement_second, layout)
+                    .unwrap();
+            })
+            .join()
+            .unwrap();
+
+            let (_, owner_hits, directory_lookups) = manager.allocator.hint_stats_for_tests();
+            assert!(owner_hits >= 1);
+            assert_eq!(directory_lookups, 1);
+            manager.allocator.deallocate_layout(guard, layout).unwrap();
+        }
+    }
+
+    #[cfg(not(unialloc_target_arm64e))]
+    #[test]
+    fn hosted_stale_thread_hint_survives_retire_and_descriptor_reuse() {
+        let manager = Arc::new(TestAllocator::new(1));
+        let small_layout = page_layout(8);
+        let large_layout = page_layout(MIN_ARENA_BYTES / crate::PAGE_SIZE + 1);
+        let mapping_bytes = HostedBitmapPageAllocator::arena_mapping_bytes(small_layout).unwrap();
+        unsafe {
+            let first_arena_live = manager.allocator.allocate_layout(page_layout(97)).unwrap();
+            let second_arena_guard = manager
+                .allocator
+                .create_arena_and_allocate(mapping_bytes, small_layout, true)
+                .unwrap();
+            let second_arena = manager
+                .allocator
+                .owners
+                .owner_for(second_arena_guard as usize);
+            let second_arena_target = manager
+                .allocator
+                .allocate_arena_blocking(second_arena, small_layout)
+                .unwrap();
+            let second_arena_target = second_arena_target as usize;
+            manager
+                .allocator
+                .deallocate_layout(first_arena_live, page_layout(97))
+                .unwrap();
+
+            let (ready_tx, ready_rx) = mpsc::sync_channel(0);
+            let (reuse_tx, reuse_rx) = mpsc::sync_channel(0);
+            let worker_manager = Arc::clone(&manager);
+            let worker = thread::spawn(move || {
+                worker_manager
+                    .allocator
+                    .deallocate_layout(second_arena_target as *mut u8, small_layout)
+                    .unwrap();
+                let before = worker_manager.allocator.hint_stats_for_tests().0;
+                ready_tx.send(before).unwrap();
+                reuse_rx.recv().unwrap();
+                let ptr = worker_manager
+                    .allocator
+                    .allocate_layout(small_layout)
+                    .unwrap();
+                let owner = worker_manager.allocator.owners.owner_for(ptr as usize);
+                worker_manager
+                    .allocator
+                    .deallocate_layout(ptr, small_layout)
+                    .unwrap();
+                (owner as usize, ptr as usize)
+            });
+
+            let allocation_hits_before = ready_rx.recv().unwrap();
+            manager
+                .allocator
+                .deallocate_layout(second_arena_guard, small_layout)
+                .unwrap();
+            assert!(!(*second_arena).active.load(Ordering::Acquire));
+            assert!(manager
+                .allocator
+                .owners
+                .owner_for(second_arena_guard as usize)
+                .is_null());
+
+            let large = manager.allocator.allocate_layout(large_layout).unwrap();
+            assert_eq!(
+                manager.allocator.owners.owner_for(large as usize),
+                second_arena
+            );
+            assert_eq!(manager.allocator.stats().descriptor_count, 2);
+            reuse_tx.send(()).unwrap();
+            let (worker_owner, worker_ptr) = worker.join().unwrap();
+            assert_eq!(worker_owner, second_arena as usize);
+            assert_ne!(worker_ptr, 0);
+            assert!(manager.allocator.hint_stats_for_tests().0 > allocation_hits_before);
+
+            manager
+                .allocator
+                .deallocate_layout(large, large_layout)
+                .unwrap();
+        }
+    }
+
+    #[cfg(not(unialloc_target_arm64e))]
+    #[test]
+    fn hosted_retirement_clears_current_thread_hints() {
+        thread::spawn(|| unsafe {
+            let manager = TestAllocator::new(0);
+            let layout = page_layout(8);
+            let first = manager.allocator.allocate_layout(layout).unwrap();
+            let descriptor = manager.allocator.owners.owner_for(first as usize);
+            manager.allocator.deallocate_layout(first, layout).unwrap();
+
+            assert!(manager.allocator.thread_allocation_hint().is_null());
+            assert!(manager
+                .allocator
+                .thread_owner_hint(first as usize)
+                .is_null());
+            let allocation_hits = manager.allocator.hint_stats_for_tests().0;
+
+            let reused = manager.allocator.allocate_layout(layout).unwrap();
+            assert_eq!(
+                manager.allocator.owners.owner_for(reused as usize),
+                descriptor
+            );
+            assert_eq!(manager.allocator.stats().descriptor_count, 1);
+            assert_eq!(manager.allocator.hint_stats_for_tests().0, allocation_hits);
+            manager.allocator.deallocate_layout(reused, layout).unwrap();
+        })
+        .join()
+        .unwrap();
     }
 
     #[test]
@@ -1126,7 +1551,7 @@ mod tests {
 
     #[test]
     fn hosted_busy_arena_creates_a_contention_shard() {
-        let manager = Arc::new(TestAllocator::new(CONTENTION_ARENA_LIMIT));
+        let manager = TestAllocator::new(CONTENTION_ARENA_LIMIT);
         let layout = page_layout(8);
         unsafe {
             let original = manager.allocator.allocate_layout(layout).unwrap();
@@ -1138,13 +1563,7 @@ mod tests {
             let original_arena = manager.allocator.owners.owner_for(original as usize);
             let original_arena = original_arena.as_ref().expect("warm original arena");
             let original_guard = original_arena.state.lock();
-            let sharded = thread::scope(|scope| {
-                let manager = Arc::clone(&manager);
-                scope
-                    .spawn(move || manager.allocator.allocate_layout(layout).unwrap() as usize)
-                    .join()
-                    .unwrap() as *mut u8
-            });
+            let sharded = manager.allocator.allocate_layout(layout).unwrap();
             assert_ne!(
                 manager.allocator.owners.owner_for(sharded as usize),
                 original_arena as *const HostedArena as *mut HostedArena
