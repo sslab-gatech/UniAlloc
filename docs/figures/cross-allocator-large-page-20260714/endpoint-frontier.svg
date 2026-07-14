@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="chart-title chart-description">
+  <title id="chart-title">Allocator endpoint frontier</title>
+  <desc id="chart-description">Lower-left is better; connected marks are matched modes and bubble area reflects actual large-page backing</desc>
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #17202A; }
+    .axis { stroke: #566573; stroke-width: 1.5; }
+    .grid { stroke: #D5DBDB; stroke-width: 1; }
+    .small { font-size: 15px; }
+    .label { font-size: 17px; font-weight: 600; }
+  </style>
+  <rect id="background" x="0" y="0" width="1600" height="900" fill="#FFFFFF"/>
+  <text x="70" y="62" font-size="34" font-weight="700">Allocator endpoint frontier</text>
+  <text x="70" y="102" font-size="18" fill="#566573">Lower-left is better; connected marks are matched modes and bubble area reflects actual large-page backing</text>
+  <g id="endpoint-plot">
+    <rect x="145.0" y="165.0" width="1045.0" height="570.0" fill="#FAFBFC" stroke="#D5DBDB"/>
+    <line class="grid" x1="145.00" y1="165.0" x2="145.00" y2="735.0"/>
+    <text x="145.00" y="765.0" font-size="14" text-anchor="middle" fill="#566573">30</text>
+    <line class="grid" x1="493.33" y1="165.0" x2="493.33" y2="735.0"/>
+    <text x="493.33" y="765.0" font-size="14" text-anchor="middle" fill="#566573">40</text>
+    <line class="grid" x1="841.67" y1="165.0" x2="841.67" y2="735.0"/>
+    <text x="841.67" y="765.0" font-size="14" text-anchor="middle" fill="#566573">50</text>
+    <line class="grid" x1="1190.00" y1="165.0" x2="1190.00" y2="735.0"/>
+    <text x="1190.00" y="765.0" font-size="14" text-anchor="middle" fill="#566573">60</text>
+    <line class="grid" x1="145.0" y1="735.00" x2="1190.0" y2="735.00"/>
+    <text x="131.0" y="740.00" font-size="14" text-anchor="end" fill="#566573">515</text>
+    <line class="grid" x1="145.0" y1="640.00" x2="1190.0" y2="640.00"/>
+    <text x="131.0" y="645.00" font-size="14" text-anchor="end" fill="#566573">520</text>
+    <line class="grid" x1="145.0" y1="545.00" x2="1190.0" y2="545.00"/>
+    <text x="131.0" y="550.00" font-size="14" text-anchor="end" fill="#566573">525</text>
+    <line class="grid" x1="145.0" y1="450.00" x2="1190.0" y2="450.00"/>
+    <text x="131.0" y="455.00" font-size="14" text-anchor="end" fill="#566573">530</text>
+    <line class="grid" x1="145.0" y1="355.00" x2="1190.0" y2="355.00"/>
+    <text x="131.0" y="360.00" font-size="14" text-anchor="end" fill="#566573">535</text>
+    <line class="grid" x1="145.0" y1="260.00" x2="1190.0" y2="260.00"/>
+    <text x="131.0" y="265.00" font-size="14" text-anchor="end" fill="#566573">540</text>
+    <line class="grid" x1="145.0" y1="165.00" x2="1190.0" y2="165.00"/>
+    <text x="131.0" y="170.00" font-size="14" text-anchor="end" fill="#566573">545</text>
+    <text x="667.5" y="815" font-size="18" font-weight="600" text-anchor="middle">Nanoseconds per touch</text>
+    <text x="0" y="0" font-size="18" font-weight="600" text-anchor="middle" transform="translate(42 450.0) rotate(-90)">Maximum effective resident memory (MiB)</text>
+    <text x="163.0" y="717.0" font-size="14" font-weight="700" fill="#566573">preferred direction ↙</text>
+    <polyline points="985.40,599.18 1180.05,682.01" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: mimalloc</title></polyline>
+    <polyline points="988.32,237.47 1152.89,332.59" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: jemalloc</title></polyline>
+    <polyline points="387.09,517.46 1168.44,562.74" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: gperftools</title></polyline>
+    <polyline points="1164.04,592.35 1185.08,592.35" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: snmalloc</title></polyline>
+    <polyline id="pareto-frontier" points="204.26,671.39 1180.05,682.01" fill="none" stroke="#4D4D4D" stroke-width="3" stroke-dasharray="10 6"><title>Pareto frontier</title></polyline>
+    <polygon points="204.26,663.39 212.26,671.39 204.26,679.39 196.26,671.39" fill="#0072B2" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>glibc: 31.70 ns/touch, 518.3 MiB resident, 0.0 MiB large-page backing; mode=default, pair=glibc</title></polygon>
+    <line x1="204.26" y1="671.39" x2="232.26" y2="655.39" stroke="#0072B2" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="236.26" y="660.39" font-size="14" font-weight="700" text-anchor="start" fill="#0072B2">glibc</text>
+    <text x="236.26" y="678.39" font-size="12" text-anchor="start" fill="#566573">31.70 ns/touch · 518.3 MiB</text>
+    <rect x="1172.05" y="674.01" width="16.00" height="16.00" rx="2" fill="#D55E00" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>mimalloc off: 59.71 ns/touch, 517.8 MiB resident, 0.0 MiB large-page backing; mode=off, pair=mimalloc</title></rect>
+    <line x1="1180.05" y1="682.01" x2="1152.05" y2="704.00" stroke="#D55E00" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="1148.05" y="709.00" font-size="14" font-weight="700" text-anchor="end" fill="#D55E00">mimalloc off</text>
+    <text x="1148.05" y="727.00" font-size="12" text-anchor="end" fill="#566573">59.71 ns/touch · 517.8 MiB</text>
+    <circle cx="985.40" cy="599.18" r="18.00" fill="#D55E00" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>mimalloc THP: 54.13 ns/touch, 522.1 MiB resident, 516.0 MiB large-page backing; mode=on, pair=mimalloc</title></circle>
+    <line x1="985.40" y1="599.18" x2="947.40" y2="612.00" stroke="#D55E00" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="943.40" y="617.00" font-size="14" font-weight="700" text-anchor="end" fill="#D55E00">mimalloc THP</text>
+    <text x="943.40" y="635.00" font-size="12" text-anchor="end" fill="#566573">54.13 ns/touch · 522.1 MiB</text>
+    <rect x="1144.89" y="324.59" width="16.00" height="16.00" rx="2" fill="#009E73" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>jemalloc off: 58.93 ns/touch, 536.2 MiB resident, 0.0 MiB large-page backing; mode=off, pair=jemalloc</title></rect>
+    <line x1="1152.89" y1="332.59" x2="1124.89" y2="352.59" stroke="#009E73" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="1120.89" y="357.59" font-size="14" font-weight="700" text-anchor="end" fill="#009E73">jemalloc off</text>
+    <text x="1120.89" y="375.59" font-size="12" text-anchor="end" fill="#566573">58.93 ns/touch · 536.2 MiB</text>
+    <circle cx="988.32" cy="237.47" r="18.00" fill="#009E73" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>jemalloc THP: 54.21 ns/touch, 541.2 MiB resident, 516.0 MiB large-page backing; mode=on, pair=jemalloc</title></circle>
+    <line x1="988.32" y1="237.47" x2="950.32" y2="221.47" stroke="#009E73" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="946.32" y="226.47" font-size="14" font-weight="700" text-anchor="end" fill="#009E73">jemalloc THP</text>
+    <text x="946.32" y="244.47" font-size="12" text-anchor="end" fill="#566573">54.21 ns/touch · 541.2 MiB</text>
+    <rect x="1160.44" y="554.74" width="16.00" height="16.00" rx="2" fill="#0072B2" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>gperftools anon: 59.38 ns/touch, 524.1 MiB resident, 0.0 MiB large-page backing; mode=off, pair=gperftools</title></rect>
+    <line x1="1168.44" y1="562.74" x2="1140.44" y2="566.00" stroke="#0072B2" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="1136.44" y="571.00" font-size="14" font-weight="700" text-anchor="end" fill="#0072B2">gperftools anon</text>
+    <text x="1136.44" y="589.00" font-size="12" text-anchor="end" fill="#566573">59.38 ns/touch · 524.1 MiB</text>
+    <circle cx="387.09" cy="517.46" r="17.98" fill="#CC79A7" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>gperftools HugeTLB: 36.95 ns/touch, 526.4 MiB resident, 514.0 MiB large-page backing; mode=on, pair=gperftools</title></circle>
+    <line x1="387.09" y1="517.46" x2="425.07" y2="501.46" stroke="#CC79A7" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="429.07" y="506.46" font-size="14" font-weight="700" text-anchor="start" fill="#CC79A7">gperftools HugeTLB</text>
+    <text x="429.07" y="524.46" font-size="12" text-anchor="start" fill="#566573">36.95 ns/touch · 526.4 MiB</text>
+    <circle cx="1185.08" cy="592.35" r="8.00" fill="#E69F00" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>snmalloc eligible: 59.86 ns/touch, 522.5 MiB resident, 0.0 MiB large-page backing; mode=on, pair=snmalloc</title></circle>
+    <line x1="1185.08" y1="592.35" x2="1157.08" y2="658.00" stroke="#E69F00" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="1153.08" y="663.00" font-size="14" font-weight="700" text-anchor="end" fill="#E69F00">snmalloc eligible</text>
+    <text x="1153.08" y="681.00" font-size="12" text-anchor="end" fill="#566573">59.86 ns/touch · 522.5 MiB</text>
+    <rect x="1156.04" y="584.35" width="16.00" height="16.00" rx="2" fill="#E69F00" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>snmalloc disabled: 59.25 ns/touch, 522.5 MiB resident, 0.0 MiB large-page backing; mode=off, pair=snmalloc</title></rect>
+    <line x1="1164.04" y1="592.35" x2="1136.04" y2="520.00" stroke="#E69F00" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="1132.04" y="525.00" font-size="14" font-weight="700" text-anchor="end" fill="#E69F00">snmalloc disabled</text>
+    <text x="1132.04" y="543.00" font-size="12" text-anchor="end" fill="#566573">59.25 ns/touch · 522.5 MiB</text>
+  </g>
+  <g id="mechanism-legend">
+    <text x="1240.0" y="180.0" font-size="18" font-weight="700">Mechanism</text>
+    <circle cx="1248.0" cy="207.0" r="7" fill="#0072B2"/>
+    <text x="1264.0" y="212.0" font-size="14"><title>default</title>default</text>
+    <circle cx="1248.0" cy="238.0" r="7" fill="#D55E00"/>
+    <text x="1264.0" y="243.0" font-size="14"><title>process-wide-thp</title>process-wide-thp</text>
+    <circle cx="1248.0" cy="269.0" r="7" fill="#009E73"/>
+    <text x="1264.0" y="274.0" font-size="14"><title>allocator-wide-thp</title>allocator-wide-thp</text>
+    <circle cx="1248.0" cy="300.0" r="7" fill="#CC79A7"/>
+    <text x="1264.0" y="305.0" font-size="14"><title>explicit-hugetlb</title>explicit-hugetlb</text>
+    <circle cx="1248.0" cy="331.0" r="7" fill="#E69F00"/>
+    <text x="1264.0" y="336.0" font-size="14"><title>os-eligibility</title>os-eligibility</text>
+    <text x="1240.0" y="400.0" font-size="18" font-weight="700">Mode shape</text>
+    <circle cx="1248.0" cy="425.0" r="7" fill="#566573"/><text x="1264.0" y="430.0" font-size="14">on / enabled</text>
+    <rect x="1241.0" y="443.0" width="14" height="14" fill="#566573"/><text x="1264.0" y="456.0" font-size="14">off / disabled</text>
+    <polygon points="1248.0,470.0 1255.0,477.0 1248.0,484.0 1241.0,477.0" fill="#566573"/><text x="1264.0" y="482.0" font-size="14">default</text>
+    <text x="1240.0" y="524.0" font-size="13" fill="#566573">Bubble area encodes</text>
+    <text x="1240.0" y="542.0" font-size="13" fill="#566573">large-page backing.</text>
+  </g>
+</svg>

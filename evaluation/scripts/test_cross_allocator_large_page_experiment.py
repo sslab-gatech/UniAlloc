@@ -43,10 +43,42 @@ def paired_rows(values: list[tuple[float, float]]) -> dict[str, list[dict[str, o
 
 
 class CrossAllocatorLargePageExperimentTests(unittest.TestCase):
+    def test_semantic_summary_normalizes_historical_mechanism_metadata(self) -> None:
+        row = {
+            "case": "unialloc_default",
+            "label": "UniAlloc default",
+            "mechanism": "selective-lifetime-thp",
+            "ns_per_touch": 1.0,
+            "max_effective_resident_kib": 2.0,
+            "allocator_lifecycle_ns_per_allocation": 3.0,
+            "observed_anon_huge_delta_kib": 0.0,
+            "peak_hugetlb_kib": 0.0,
+            "classification_failure_rate": 0.05,
+            "policy_intent_placement_failure_rate": 1 / 3,
+        }
+        summary = experiment.median_summary([row], "unialloc-semantic")
+        self.assertEqual(summary["mechanism"], "allocator-default")
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "summary.csv"
+            experiment.write_summary_csv(
+                {"case_summaries": {"unialloc_default": summary}}, path
+            )
+            self.assertNotIn(b"\r\n", path.read_bytes())
+
     def test_matrix_separates_true_allocator_controls_from_os_sensitivity(self) -> None:
+        semantic = {case.name: case for case in experiment.SEMANTIC_CASES}
+        self.assertEqual(
+            semantic["unialloc_lifetime_thp_off"].mechanism,
+            "lifetime-layout-thp-disabled",
+        )
+        self.assertEqual(
+            semantic["unialloc_lifetime_thp_on"].mechanism,
+            "selective-lifetime-thp",
+        )
         cases = {case.name: case for case in experiment.neutral_cases()}
         self.assertEqual(cases["mimalloc_thp_on"].expected_backing, "thp")
         self.assertEqual(cases["jemalloc_thp_off"].expected_backing, "no-thp")
+        self.assertEqual(cases["jemalloc_thp_on"].mechanism, "allocator-wide-thp")
         self.assertEqual(cases["gperftools_hugetlb"].mechanism, "explicit-hugetlb")
         self.assertEqual(cases["snmalloc_default"].mechanism, "os-eligibility")
         self.assertTrue(cases["snmalloc_os_thp_off"].disable_process_thp)

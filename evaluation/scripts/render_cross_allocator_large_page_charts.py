@@ -382,7 +382,7 @@ def render_incremental_effect(rows: Sequence[Mapping[str, Any]]) -> str:
             point_field="speedup_pct",
             low_field="speedup_ci_low_pct",
             high_field="speedup_ci_high_pct",
-            favorable="Positive values mean faster allocation-touch execution",
+            favorable="Positive values mean faster dependent-pointer touch execution",
             colors=colors,
         )
     )
@@ -401,8 +401,11 @@ def render_incremental_effect(rows: Sequence[Mapping[str, Any]]) -> str:
             colors=colors,
         )
     )
-    body.append(
-        f'  <text x="800" y="850" font-size="15" text-anchor="middle" fill="{MUTED}">The zero line denotes no change from the matched off/default mode.</text>'
+    body.extend(
+        [
+            f'  <text x="800" y="835" font-size="13" text-anchor="middle" fill="{MUTED}">Within-pair deltas only: UniAlloc uses a semantic Rust probe; others share a neutral C probe. 20 paired blocks; 95% bootstrap CI.</text>',
+            f'  <text x="800" y="859" font-size="13" text-anchor="middle" fill="{MUTED}">gperftools uses explicit pre-reserved HugeTLB; resident delta excludes unused pool capacity. Zero = matched off/default.</text>',
+        ]
     )
     return _svg_document(title, subtitle, body)
 
@@ -582,6 +585,7 @@ def render_endpoint_frontier(rows: Sequence[Mapping[str, Any]]) -> str:
         y = float(layout["y"])
         radius = float(layout["radius"])
         color = str(layout["color"])
+        backing = float(row["large_page_backing_mib"])
         label_x = float(layout["label_x"])
         label_y = float(layout["label_y"])
         anchor = str(layout["anchor"])
@@ -637,7 +641,7 @@ def render_endpoint_frontier(rows: Sequence[Mapping[str, Any]]) -> str:
 
 def render_actual_backing(rows: Sequence[Mapping[str, Any]]) -> str:
     title = "Actual large-page backing"
-    subtitle = "Process smaps evidence separates anonymous THP from explicit HugeTLB backing"
+    subtitle = "Process evidence: anonymous THP from smaps; explicit HugeTLB from status"
     body = _title_block(title, subtitle)
     plot_left, plot_right = 110.0, 1505.0
     plot_top, plot_bottom = 175.0, 670.0
@@ -677,7 +681,7 @@ def render_actual_backing(rows: Sequence[Mapping[str, Any]]) -> str:
                 f'    <rect x="{center - bar_width / 2:.2f}" y="{anon_y:.2f}" width="{bar_width:.2f}" height="{anon_height:.2f}" fill="#0072B2"><title>{_escape(row["label"])} anonymous THP: {anon:.1f} MiB</title></rect>',
                 f'    <rect x="{center - bar_width / 2:.2f}" y="{total_y:.2f}" width="{bar_width:.2f}" height="{huge_height:.2f}" fill="#D55E00"><title>{_escape(row["label"])} HugeTLB: {hugetlb:.1f} MiB</title></rect>',
                 f'    <text x="{center:.2f}" y="{max(total_y - 12, plot_top + 14):.2f}" font-size="14" font-weight="700" text-anchor="middle">{total:.1f} MiB</text>',
-                f'    <text x="{center:.2f}" y="{plot_bottom + 30:.1f}" font-size="14" font-weight="700" text-anchor="middle"><title>{_escape(row["label"])}</title>{_escape(_truncate(str(row["label"]), 20))}</text>',
+                f'    <text x="{center:.2f}" y="{plot_bottom + 30:.1f}" font-size="14" font-weight="700" text-anchor="middle"><title>{_escape(row["label"])}</title>{_escape(_truncate(str(row["label"]), 24))}</text>',
                 f'    <text x="{center:.2f}" y="{plot_bottom + 52:.1f}" font-size="12" text-anchor="middle" fill="{MUTED}">THP {anon:.1f} · HugeTLB {hugetlb:.1f}</text>',
             ]
         )
@@ -690,6 +694,7 @@ def render_actual_backing(rows: Sequence[Mapping[str, Any]]) -> str:
             '    <rect x="805" y="805" width="18" height="18" fill="#D55E00"/>',
             '    <text x="833" y="820" font-size="16">Explicit HugeTLB</text>',
             "  </g>",
+            f'  <text x="800" y="860" font-size="14" text-anchor="middle" fill="{MUTED}">Same 512 MiB peak requested payload; cross-family comparison is backing-only.</text>',
         ]
     )
     return _svg_document(title, subtitle, body)
@@ -723,7 +728,12 @@ def _write_csv(
         delete=False,
     ) as handle:
         temporary = pathlib.Path(handle.name)
-        writer = csv.DictWriter(handle, fieldnames=list(fields), extrasaction="ignore")
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=list(fields),
+            extrasaction="ignore",
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(rows)
     temporary.replace(path)

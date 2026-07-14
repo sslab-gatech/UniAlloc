@@ -1,0 +1,64 @@
+Cross-allocator large-page evidence verification
+Run: cross-allocator-large-page-final-20260714
+Run code: 256aadd60d5bb385e181a657cdffa9be67ecb682
+Host: AMD EPYC 9354; Linux 6.8.0-111-generic; CPU 15; NUMA node 0
+Host THP: madvise; defrag: madvise; HugeTLB: 4096 x 2 MiB
+
+Campaign completeness
+- 273 successful process samples: 13 discarded warmup cells plus 20 measured blocks x 13 cells.
+- Every block contains each expected case exactly once; every probe reports passed=true.
+- 131072 x 4096-byte objects = 512 MiB peak requested payload; 65536 retained objects; 32 measured dependent-pointer passes.
+- Case order was randomized within each block; paired comparisons use the same per-block seed.
+
+Comparability checks
+- Allocator-neutral blocks use one exact binary/command/geometry. All nine cases share one checksum within every block, and every requested preload was observed in /proc/self/maps.
+- UniAlloc THP-on and forced-off use the same long-thp policy and prediction trace. The normalized commands differ only in THP eligibility requirements.
+- The following fields match on/off in all 21 blocks: prediction_trace_digest, routed_allocations, routed_deallocations, thp_extent_mappings, ordinary_extent_mappings, identity_region_assignments, slot_bump_allocations, slot_reuse_hits, repeat_seed, objects, slot_bytes, touches, types_per_truth, long_objects, ephemeral_objects, false_long, false_short, classification_failure_rate, policy_intent_placement_failure_rate.
+- Rust probe checksums include ASLR-dependent pointer values. Semantic comparability uses prediction_trace_digest plus topology and classification fields.
+
+Physical-backing checks
+- UniAlloc on: 258 MiB median anonymous THP and 100% allocator THP coverage; forced off: 0 MiB.
+- mimalloc on/off: 516/0 MiB anonymous THP.
+- jemalloc on/off: 516/0 MiB anonymous THP; enabled median coverage 97.18%.
+- gperftools HugeTLB/default: 514/0 MiB explicit HugeTLB; HugeTLB pool restored after every process and after the campaign.
+- snmalloc eligible/disabled: 0/0 MiB large-page backing.
+- Anonymous THP comes from /proc/self/smaps_rollup AnonHugePages. Explicit HugeTLB comes from /proc/self/status HugetlbPages. Effective resident is VmRSS + HugetlbPages.
+
+Independent statistics check
+- 20 matched measured blocks; geometric mean of per-block target/baseline ratios; 20000 paired bootstrap resamples; 95% percentile intervals.
+- UniAlloc selective THP: +10.371% touch speedup [6.719%, 14.054%], +0.334% maximum effective resident [0.309%, 0.358%].
+- mimalloc process THP: +7.415% [3.754%, 9.726%], +0.842% resident.
+- jemalloc allocator THP: +4.509% [-0.701%, 8.319%], inconclusive, +0.789% resident.
+- gperftools explicit HugeTLB: +36.997% [36.023%, 37.908%], +0.550% resident.
+- snmalloc OS eligibility: -1.530% [-3.308%, -0.010%], zero THP in both modes, resident practically equal.
+- summary JSON, exported CSVs, and chart CSVs agree numerically.
+- Presentation-only metadata was normalized during curation: jemalloc changed from process-wide to allocator-wide because metadata_thp stayed disabled, and historical semantic rows' blanket selective-lifetime-thp tag became a per-case canonical mechanism. samples.jsonl retains original run metadata; all numerical fields remained value-identical.
+
+UniAlloc internal ablation check
+- selective THP vs same layout off: +10.371% touch, +31.987% allocate/fault/free lifecycle, -0.283% steady-resident reduction, -0.334% max-resident reduction.
+- selective THP vs default: +16.896% touch, +16.546% allocate/fault/free lifecycle, +8.092% steady-resident reduction, -0.072% max-resident reduction.
+- same layout off vs default: +8.352% steady-resident reduction and -22.703% allocate/fault/free lifecycle speedup.
+- unialloc-ablation-effects.csv stores every paired estimate, interval, sample count, resample count, and fixed bootstrap seed. Positive values mean the target metric is lower/better.
+
+Artifact integrity
+- Before raw-log curation, every raw JSON key/value was preserved in the corresponding enriched sample row; all 273 stderr files were empty. Redundant raw logs were removed after this check.
+- manifest.json was regenerated after curation and every listed byte count and SHA-256 was verified.
+- Host snapshots show THP/HugeTLB settings unchanged and HugePages_Free=4096 before and after.
+- SVG charts are canonical editable 1600x900 assets; PNG companions are 3200x1800. All three were rendered and visually inspected.
+
+Claim boundaries
+- Raw timing and statistical-superiority claims stay within the UniAlloc semantic or allocator-neutral probe family.
+- Cross-family comparison is limited to side-by-side within-pair effects, actual backing footprint, and deployment mechanism.
+- gperftools uses explicit pre-reserved HugeTLB and is distinct from THP and Google TCMalloc HPAA.
+- snmalloc has no public allocator THP toggle; this is a process-eligibility sensitivity control.
+- This campaign injects 5% false-long and 5% false-short prediction noise; its observed 4.993% classification failure is a synthetic robustness control, not empirical compiler accuracy.
+- This campaign validates actual runtime backing. Runtime-confirmed classifier accuracy is separate evidence; the prior 4.990% to 1.263% epoch result also uses synthetic injected error.
+- Maximum/steady effective resident are process-residency metrics; they do not directly measure allocator fragmentation.
+- CPU frequency was not fixed, CPU 15 was not isolated, and hardware performance counters were unavailable (perf_event_paranoid=4).
+
+Software verification
+- 43 Python evaluator, renderer, and lifetime-large-page tests passed.
+- The allocator-neutral C probe compiled with -Wall -Wextra -Werror and passed a deterministic smoke run.
+- The Rust release probe built successfully; 12 lifetime_hugepage_allocator tests and 1 lifetime_hugepage_policy test passed.
+- cargo fmt --all -- --check and Python py_compile passed.
+- cargo clippy for the touched example completed with the repository's existing warning policy. Strict -D warnings remains blocked by repository-wide lint debt outside this change (169 diagnostics in the audited checkout).

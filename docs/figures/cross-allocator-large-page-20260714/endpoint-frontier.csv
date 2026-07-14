@@ -1,0 +1,10 @@
+label,mechanism,ns_per_touch,max_effective_resident_mib,large_page_backing_mib,pair,mode
+glibc,default,31.7011220455,518.34765625,0.0,glibc,default
+mimalloc off,process-wide-thp,59.714310646,517.7890625,0.0,mimalloc,off
+mimalloc THP,process-wide-thp,54.126274347000006,522.1484375,516.0,mimalloc,on
+jemalloc off,allocator-wide-thp,58.93454051,536.1796875,0.0,jemalloc,off
+jemalloc THP,allocator-wide-thp,54.2101855275,541.185546875,516.0,jemalloc,on
+gperftools anon,default,59.3809161185,524.06640625,0.0,gperftools,off
+gperftools HugeTLB,explicit-hugetlb,36.949908972,526.44921875,514.0,gperftools,on
+snmalloc eligible,os-eligibility,59.8586440085,522.5078125,0.0,snmalloc,on
+snmalloc disabled,os-eligibility,59.254756451000006,522.5078125,0.0,snmalloc,off

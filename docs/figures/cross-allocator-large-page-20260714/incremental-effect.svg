@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="chart-title chart-description">
+  <title id="chart-title">Incremental effect of enabling large-page allocation</title>
+  <desc id="chart-description">Paired change within each allocator; points are estimates and whiskers are confidence intervals</desc>
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #17202A; }
+    .axis { stroke: #566573; stroke-width: 1.5; }
+    .grid { stroke: #D5DBDB; stroke-width: 1; }
+    .small { font-size: 15px; }
+    .label { font-size: 17px; font-weight: 600; }
+  </style>
+  <rect id="background" x="0" y="0" width="1600" height="900" fill="#FFFFFF"/>
+  <text x="70" y="62" font-size="34" font-weight="700">Incremental effect of enabling large-page allocation</text>
+  <text x="70" y="102" font-size="18" fill="#566573">Paired change within each allocator; points are estimates and whiskers are confidence intervals</text>
+  <g class="effect-panel" data-metric="speedup_pct">
+    <rect x="55.0" y="145.0" width="730.0" height="650.0" rx="12" fill="#FAFBFC" stroke="#D5DBDB"/>
+    <text x="79.0" y="183.0" font-size="22" font-weight="700">Touch speedup</text>
+    <text x="79.0" y="210.0" font-size="14" fill="#566573">Positive values mean faster dependent-pointer touch execution</text>
+    <line class="grid" x1="275.00" y1="218.0" x2="275.00" y2="746.0"/>
+    <text x="275.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">-10%</text>
+    <line class="axis" x1="371.00" y1="218.0" x2="371.00" y2="746.0"/>
+    <text x="371.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">0%</text>
+    <line class="grid" x1="467.00" y1="218.0" x2="467.00" y2="746.0"/>
+    <text x="467.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">10%</text>
+    <line class="grid" x1="563.00" y1="218.0" x2="563.00" y2="746.0"/>
+    <text x="563.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">20%</text>
+    <line class="grid" x1="659.00" y1="218.0" x2="659.00" y2="746.0"/>
+    <text x="659.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">30%</text>
+    <line class="grid" x1="755.00" y1="218.0" x2="755.00" y2="746.0"/>
+    <text x="755.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">40%</text>
+    <line x1="275.0" y1="323.84" x2="755.0" y2="323.84" stroke="#EDF1F2"/>
+    <text x="75.0" y="278.00" font-size="16.0" font-weight="600"><title>UniAlloc selective THP</title>UniAlloc selective THP</text>
+    <text x="75.0" y="299.00" font-size="13.0" fill="#566573">selective-thp</text>
+    <line x1="435.51" y1="281.00" x2="505.92" y2="281.00" stroke="#0072B2" stroke-width="4" stroke-linecap="round"/>
+    <line x1="435.51" y1="274.00" x2="435.51" y2="288.00" stroke="#0072B2" stroke-width="2"/>
+    <line x1="505.92" y1="274.00" x2="505.92" y2="288.00" stroke="#0072B2" stroke-width="2"/>
+    <circle cx="470.56" cy="281.00" r="7" fill="#0072B2" stroke="#FFFFFF" stroke-width="2"><title>UniAlloc selective THP: +10.4% [+6.7%, +14.1%]</title></circle>
+    <text x="481.56" y="271.00" font-size="13" font-weight="700" text-anchor="start" fill="#0072B2">+10.4%</text>
+    <line x1="275.0" y1="425.84" x2="755.0" y2="425.84" stroke="#EDF1F2"/>
+    <text x="75.0" y="380.00" font-size="16.0" font-weight="600"><title>mimalloc global THP</title>mimalloc global THP</text>
+    <text x="75.0" y="401.00" font-size="13.0" fill="#566573">process-wide-thp</text>
+    <line x1="407.04" y1="383.00" x2="464.37" y2="383.00" stroke="#D55E00" stroke-width="4" stroke-linecap="round"/>
+    <line x1="407.04" y1="376.00" x2="407.04" y2="390.00" stroke="#D55E00" stroke-width="2"/>
+    <line x1="464.37" y1="376.00" x2="464.37" y2="390.00" stroke="#D55E00" stroke-width="2"/>
+    <circle cx="442.19" cy="383.00" r="7" fill="#D55E00" stroke="#FFFFFF" stroke-width="2"><title>mimalloc global THP: +7.4% [+3.8%, +9.7%]</title></circle>
+    <text x="453.19" y="373.00" font-size="13" font-weight="700" text-anchor="start" fill="#D55E00">+7.4%</text>
+    <line x1="275.0" y1="527.84" x2="755.0" y2="527.84" stroke="#EDF1F2"/>
+    <text x="75.0" y="482.00" font-size="16.0" font-weight="600"><title>jemalloc allocator THP</title>jemalloc allocator THP</text>
+    <text x="75.0" y="503.00" font-size="13.0" fill="#566573">allocator-wide-thp</text>
+    <line x1="364.27" y1="485.00" x2="450.86" y2="485.00" stroke="#009E73" stroke-width="4" stroke-linecap="round"/>
+    <line x1="364.27" y1="478.00" x2="364.27" y2="492.00" stroke="#009E73" stroke-width="2"/>
+    <line x1="450.86" y1="478.00" x2="450.86" y2="492.00" stroke="#009E73" stroke-width="2"/>
+    <circle cx="414.29" cy="485.00" r="7" fill="#009E73" stroke="#FFFFFF" stroke-width="2"><title>jemalloc allocator THP: +4.5% [−0.7%, +8.3%]</title></circle>
+    <text x="425.29" y="475.00" font-size="13" font-weight="700" text-anchor="start" fill="#009E73">+4.5%</text>
+    <line x1="275.0" y1="629.84" x2="755.0" y2="629.84" stroke="#EDF1F2"/>
+    <text x="75.0" y="584.00" font-size="16.0" font-weight="600"><title>gperftools HugeTLB</title>gperftools HugeTLB</text>
+    <text x="75.0" y="605.00" font-size="13.0" fill="#566573">explicit-hugetlb</text>
+    <line x1="716.82" y1="587.00" x2="734.92" y2="587.00" stroke="#CC79A7" stroke-width="4" stroke-linecap="round"/>
+    <line x1="716.82" y1="580.00" x2="716.82" y2="594.00" stroke="#CC79A7" stroke-width="2"/>
+    <line x1="734.92" y1="580.00" x2="734.92" y2="594.00" stroke="#CC79A7" stroke-width="2"/>
+    <circle cx="726.17" cy="587.00" r="7" fill="#CC79A7" stroke="#FFFFFF" stroke-width="2"><title>gperftools HugeTLB: +37.0% [+36.0%, +37.9%]</title></circle>
+    <text x="715.17" y="577.00" font-size="13" font-weight="700" text-anchor="end" fill="#CC79A7">+37.0%</text>
+    <line x1="275.0" y1="731.84" x2="755.0" y2="731.84" stroke="#EDF1F2"/>
+    <text x="75.0" y="686.00" font-size="16.0" font-weight="600"><title>snmalloc OS eligibility</title>snmalloc OS eligibility</text>
+    <text x="75.0" y="707.00" font-size="13.0" fill="#566573">os-eligibility</text>
+    <line x1="339.24" y1="689.00" x2="370.91" y2="689.00" stroke="#E69F00" stroke-width="4" stroke-linecap="round"/>
+    <line x1="339.24" y1="682.00" x2="339.24" y2="696.00" stroke="#E69F00" stroke-width="2"/>
+    <line x1="370.91" y1="682.00" x2="370.91" y2="696.00" stroke="#E69F00" stroke-width="2"/>
+    <circle cx="356.31" cy="689.00" r="7" fill="#E69F00" stroke="#FFFFFF" stroke-width="2"><title>snmalloc OS eligibility: −1.5% [−3.3%, 0.0%]</title></circle>
+    <text x="367.31" y="679.00" font-size="13" font-weight="700" text-anchor="start" fill="#E69F00">−1.5%</text>
+  </g>
+  <g class="effect-panel" data-metric="max_resident_change_pct">
+    <rect x="815.0" y="145.0" width="730.0" height="650.0" rx="12" fill="#FAFBFC" stroke="#D5DBDB"/>
+    <text x="839.0" y="183.0" font-size="22" font-weight="700">Maximum effective resident memory</text>
+    <text x="839.0" y="210.0" font-size="14" fill="#566573">Negative values mean a smaller resident footprint</text>
+    <line class="grid" x1="1035.00" y1="218.0" x2="1035.00" y2="746.0"/>
+    <text x="1035.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">-0.2%</text>
+    <line class="axis" x1="1115.00" y1="218.0" x2="1115.00" y2="746.0"/>
+    <text x="1115.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">0%</text>
+    <line class="grid" x1="1195.00" y1="218.0" x2="1195.00" y2="746.0"/>
+    <text x="1195.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">0.2%</text>
+    <line class="grid" x1="1275.00" y1="218.0" x2="1275.00" y2="746.0"/>
+    <text x="1275.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">0.4%</text>
+    <line class="grid" x1="1355.00" y1="218.0" x2="1355.00" y2="746.0"/>
+    <text x="1355.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">0.6%</text>
+    <line class="grid" x1="1435.00" y1="218.0" x2="1435.00" y2="746.0"/>
+    <text x="1435.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">0.8%</text>
+    <line class="grid" x1="1515.00" y1="218.0" x2="1515.00" y2="746.0"/>
+    <text x="1515.00" y="772.0" font-size="13" text-anchor="middle" fill="#566573">1%</text>
+    <line x1="1035.0" y1="323.84" x2="1515.0" y2="323.84" stroke="#EDF1F2"/>
+    <text x="835.0" y="278.00" font-size="16.0" font-weight="600"><title>UniAlloc selective THP</title>UniAlloc selective THP</text>
+    <text x="835.0" y="299.00" font-size="13.0" fill="#566573">selective-thp</text>
+    <line x1="1238.77" y1="281.00" x2="1258.15" y2="281.00" stroke="#0072B2" stroke-width="4" stroke-linecap="round"/>
+    <line x1="1238.77" y1="274.00" x2="1238.77" y2="288.00" stroke="#0072B2" stroke-width="2"/>
+    <line x1="1258.15" y1="274.00" x2="1258.15" y2="288.00" stroke="#0072B2" stroke-width="2"/>
+    <circle cx="1248.72" cy="281.00" r="7" fill="#0072B2" stroke="#FFFFFF" stroke-width="2"><title>UniAlloc selective THP: +0.3% [+0.3%, +0.4%]</title></circle>
+    <text x="1259.72" y="271.00" font-size="13" font-weight="700" text-anchor="start" fill="#0072B2">+0.3%</text>
+    <line x1="1035.0" y1="425.84" x2="1515.0" y2="425.84" stroke="#EDF1F2"/>
+    <text x="835.0" y="380.00" font-size="16.0" font-weight="600"><title>mimalloc global THP</title>mimalloc global THP</text>
+    <text x="835.0" y="401.00" font-size="13.0" fill="#566573">process-wide-thp</text>
+    <line x1="1451.65" y1="383.00" x2="1451.87" y2="383.00" stroke="#D55E00" stroke-width="4" stroke-linecap="round"/>
+    <line x1="1451.65" y1="376.00" x2="1451.65" y2="390.00" stroke="#D55E00" stroke-width="2"/>
+    <line x1="1451.87" y1="376.00" x2="1451.87" y2="390.00" stroke="#D55E00" stroke-width="2"/>
+    <circle cx="1451.77" cy="383.00" r="7" fill="#D55E00" stroke="#FFFFFF" stroke-width="2"><title>mimalloc global THP: +0.8% [+0.8%, +0.8%]</title></circle>
+    <text x="1440.77" y="373.00" font-size="13" font-weight="700" text-anchor="end" fill="#D55E00">+0.8%</text>
+    <line x1="1035.0" y1="527.84" x2="1515.0" y2="527.84" stroke="#EDF1F2"/>
+    <text x="835.0" y="482.00" font-size="16.0" font-weight="600"><title>jemalloc allocator THP</title>jemalloc allocator THP</text>
+    <text x="835.0" y="503.00" font-size="13.0" fill="#566573">allocator-wide-thp</text>
+    <line x1="1378.49" y1="485.00" x2="1476.27" y2="485.00" stroke="#009E73" stroke-width="4" stroke-linecap="round"/>
+    <line x1="1378.49" y1="478.00" x2="1378.49" y2="492.00" stroke="#009E73" stroke-width="2"/>
+    <line x1="1476.27" y1="478.00" x2="1476.27" y2="492.00" stroke="#009E73" stroke-width="2"/>
+    <circle cx="1430.60" cy="485.00" r="7" fill="#009E73" stroke="#FFFFFF" stroke-width="2"><title>jemalloc allocator THP: +0.8% [+0.7%, +0.9%]</title></circle>
+    <text x="1441.60" y="475.00" font-size="13" font-weight="700" text-anchor="start" fill="#009E73">+0.8%</text>
+    <line x1="1035.0" y1="629.84" x2="1515.0" y2="629.84" stroke="#EDF1F2"/>
+    <text x="835.0" y="584.00" font-size="16.0" font-weight="600"><title>gperftools HugeTLB</title>gperftools HugeTLB</text>
+    <text x="835.0" y="605.00" font-size="13.0" fill="#566573">explicit-hugetlb</text>
+    <line x1="1282.30" y1="587.00" x2="1395.21" y2="587.00" stroke="#CC79A7" stroke-width="4" stroke-linecap="round"/>
+    <line x1="1282.30" y1="580.00" x2="1282.30" y2="594.00" stroke="#CC79A7" stroke-width="2"/>
+    <line x1="1395.21" y1="580.00" x2="1395.21" y2="594.00" stroke="#CC79A7" stroke-width="2"/>
+    <circle cx="1334.98" cy="587.00" r="7" fill="#CC79A7" stroke="#FFFFFF" stroke-width="2"><title>gperftools HugeTLB: +0.5% [+0.4%, +0.7%]</title></circle>
+    <text x="1345.98" y="577.00" font-size="13" font-weight="700" text-anchor="start" fill="#CC79A7">+0.5%</text>
+    <line x1="1035.0" y1="731.84" x2="1515.0" y2="731.84" stroke="#EDF1F2"/>
+    <text x="835.0" y="686.00" font-size="16.0" font-weight="600"><title>snmalloc OS eligibility</title>snmalloc OS eligibility</text>
+    <text x="835.0" y="707.00" font-size="13.0" fill="#566573">os-eligibility</text>
+    <line x1="1113.88" y1="689.00" x2="1115.90" y2="689.00" stroke="#E69F00" stroke-width="4" stroke-linecap="round"/>
+    <line x1="1113.88" y1="682.00" x2="1113.88" y2="696.00" stroke="#E69F00" stroke-width="2"/>
+    <line x1="1115.90" y1="682.00" x2="1115.90" y2="696.00" stroke="#E69F00" stroke-width="2"/>
+    <circle cx="1114.90" cy="689.00" r="7" fill="#E69F00" stroke="#FFFFFF" stroke-width="2"><title>snmalloc OS eligibility: 0.0% [0.0%, 0.0%]</title></circle>
+    <text x="1125.90" y="679.00" font-size="13" font-weight="700" text-anchor="start" fill="#E69F00">0.0%</text>
+  </g>
+  <text x="800" y="835" font-size="13" text-anchor="middle" fill="#566573">Within-pair deltas only: UniAlloc uses a semantic Rust probe; others share a neutral C probe. 20 paired blocks; 95% bootstrap CI.</text>
+  <text x="800" y="859" font-size="13" text-anchor="middle" fill="#566573">gperftools uses explicit pre-reserved HugeTLB; resident delta excludes unused pool capacity. Zero = matched off/default.</text>
+</svg>

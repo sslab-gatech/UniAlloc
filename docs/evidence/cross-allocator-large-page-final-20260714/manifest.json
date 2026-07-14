@@ -1,0 +1,55 @@
+{
+  "files": [
+    {
+      "bytes": 4547,
+      "path": "host-after.txt",
+      "sha256": "72d50f4f7bf6d7e22d836ced2b6fae0a16baa784e109d3f8ae2abbc402ff0f64"
+    },
+    {
+      "bytes": 4547,
+      "path": "host-before.txt",
+      "sha256": "e54e2586e184aec8f4abe3110cf75b3b473a2f8be52ad77b42032879e384ffb9"
+    },
+    {
+      "bytes": 3460,
+      "path": "library-build-provenance.json",
+      "sha256": "dd107165f29200d20bb6146ee0ddb16e37e1c5061d8f54bd0097b4be181cee9f"
+    },
+    {
+      "bytes": 3729,
+      "path": "runner-manifest.json",
+      "sha256": "dcabf69e922fce993e64b97a7c7ca814cb1fa33c098a68997fcc16e813d7a876"
+    },
+    {
+      "bytes": 1209195,
+      "path": "samples.jsonl",
+      "sha256": "77f6a2e3e1d5d6b126068d0e37f83c043b46c3e578d5da10b2e5c05f661e2878"
+    },
+    {
+      "bytes": 1860,
+      "path": "summary.csv",
+      "sha256": "f19dc285131cb451c8fc05a2ff090bf7248873565e5bd4cd0fa9078a780b482d"
+    },
+    {
+      "bytes": 24992,
+      "path": "summary.json",
+      "sha256": "8161635ad9cb402a906934e5780c70cf02ed93de02a10c9e1bd26fac5c3823e4"
+    },
+    {
+      "bytes": 1068,
+      "path": "toggle-effects.csv",
+      "sha256": "9ab08109b1bdc2f402062c56045da527bebb63ab603b715f19d4895633b59cb5"
+    },
+    {
+      "bytes": 3760,
+      "path": "unialloc-ablation-effects.csv",
+      "sha256": "5a423f6bc965b76e0f860ce922b8b934f8f7215690e8087e733106b36a9b57b7"
+    },
+    {
+      "bytes": 6142,
+      "path": "verification.txt",
+      "sha256": "11846013be13dfca1efa128a919db6240e365781742ceb088a8889100784db72"
+    }
+  ],
+  "schema_version": 1
+}

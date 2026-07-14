@@ -1,0 +1,62 @@
+{
+  "captured_for_run": "cross-allocator-large-page-final-20260714",
+  "compiler": "GCC 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04.1)",
+  "libraries": {
+    "glibc": {
+      "artifact_at_run": "/usr/lib/x86_64-linux-gnu/libc.so.6",
+      "loading": "default executable runtime; no LD_PRELOAD",
+      "sha256": "d8db8739a1633c972cec6a4fe0566bdcec6fd088f98723492ab0361f66238f75",
+      "source_kind": "Ubuntu system runtime",
+      "version": "2.39"
+    },
+    "gperftools_tcmalloc": {
+      "artifact_at_run": "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5",
+      "build_recipe": [
+        "${SOURCE}/configure --prefix=${PREFIX} --disable-dependency-tracking --disable-cpu-profiler --enable-heap-profiler --disable-heap-checker --disable-debugalloc",
+        "make -j2 libtcmalloc.la"
+      ],
+      "identity_boundary": "gperftools TCMalloc; distinct from Google TCMalloc HPAA/Temeraire",
+      "sha256": "3e9994675a51a1a7f893e02236b36e3150a37b5e8ea740e0cc78f6650f7b1841",
+      "source_kind": "upstream release source build",
+      "source_url": "https://github.com/gperftools/gperftools/tree/gperftools-2.18.1",
+      "version": "2.18.1"
+    },
+    "jemalloc": {
+      "artifact_at_run": "/usr/lib/x86_64-linux-gnu/libjemalloc.so.2",
+      "build_recipe": [
+        "apt package libjemalloc2=5.3.0-2build1"
+      ],
+      "sha256": "567efa52ecf445d5966025e1dcfd6b927a986472d272be3742f74a4a373baf12",
+      "source_kind": "Ubuntu package libjemalloc2 amd64",
+      "source_url": "https://jemalloc.net/",
+      "version": "5.3.0-2build1"
+    },
+    "mimalloc": {
+      "artifact_at_run": "/home/hanqing/alloc/UniAlloc-thp-cross-allocator/evaluation/raw/cross-allocator-local-builds/mimalloc-manual/libmimalloc.so",
+      "build_recipe": [
+        "SOURCE=${CARGO_REGISTRY}/libmimalloc-sys-0.1.49/v3",
+        "cc -std=c11 -O3 -fPIC -shared -DNDEBUG -DMI_BUILD_RELEASE -DMI_SHARED_LIB -DMI_SHARED_LIB_EXPORT -DMI_MALLOC_OVERRIDE -fvisibility=hidden -ftls-model=initial-exec -I${SOURCE}/include -I${SOURCE}/src ${SOURCE}/src/static.c -pthread -lrt -latomic -o libmimalloc.so"
+      ],
+      "sha256": "4b76f4b7619e206792c762e9cd0ffb192d59fd47061e313e36828f70af9e85dd",
+      "source_kind": "libmimalloc-sys 0.1.49 crate, vendored v3 source",
+      "source_url": "https://github.com/microsoft/mimalloc/tree/v3.3.2",
+      "source_vcs_sha1": "abcd2be6171e89190f8087fcaccf001d8bd5bc96",
+      "version": "core 3.3.2 (mi_version=30302)"
+    },
+    "snmalloc": {
+      "artifact_at_run": "/home/hanqing/alloc/UniAlloc-thp-cross-allocator/evaluation/raw/cross-allocator-local-builds/snmalloc/libsnmallocshim.so",
+      "build_recipe": [
+        "SOURCE=${CARGO_REGISTRY}/snmalloc-sys-0.2.27/snmalloc",
+        "cmake -S ${SOURCE} -B build -DCMAKE_BUILD_TYPE=Release -DSNMALLOC_BUILD_TESTING=OFF",
+        "cmake --build build --target snmallocshim -j2"
+      ],
+      "recipe_evidence": "reconstructed from retained CMakeCache.txt and build logs; linked artifact hash is exact",
+      "sha256": "033acad913ffdeb043608f322007752755225088b18787d7c86313aa5d459b98",
+      "source_kind": "snmalloc-sys 0.2.27 crate, vendored upstream source",
+      "source_url": "https://github.com/microsoft/snmalloc",
+      "source_vcs_sha1": "96ee80ecf9392ff5c24ccd5cfada6d8d2876c6a1",
+      "version": "0.2.27"
+    }
+  },
+  "schema_version": 1
+}

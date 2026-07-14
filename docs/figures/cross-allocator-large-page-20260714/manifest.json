@@ -1,0 +1,50 @@
+{
+  "files": [
+    {
+      "bytes": 251,
+      "path": "actual-backing.csv",
+      "sha256": "11dedb9240fe3af71481a6f68bc9e78e9b038fa35f47ffb0e83511b8b28578c1"
+    },
+    {
+      "bytes": 202021,
+      "path": "actual-backing.png",
+      "sha256": "72dab11863d8599f691e824564299c59cebae28d27c11d795c7c7ad8bc2744c9"
+    },
+    {
+      "bytes": 7869,
+      "path": "actual-backing.svg",
+      "sha256": "15c0572238cb2eb8ad3e8d6de0a29864dfd55d7c11da4270cab9e1ce0ec15146"
+    },
+    {
+      "bytes": 758,
+      "path": "endpoint-frontier.csv",
+      "sha256": "9aeb12270e7cb8abde40025318414fcfc9228028c9efbdc3cab723eb0816b7f2"
+    },
+    {
+      "bytes": 490003,
+      "path": "endpoint-frontier.png",
+      "sha256": "375b1603ecd67f80f967ecf8aa8c175dc6e414d232a8b24f4389a0dcd89e82e6"
+    },
+    {
+      "bytes": 11235,
+      "path": "endpoint-frontier.svg",
+      "sha256": "9c483c1e72045b4f97146179dbece48e7d5081623c42edb5a6b3bad694d583f2"
+    },
+    {
+      "bytes": 912,
+      "path": "incremental-effect.csv",
+      "sha256": "98f12507f3ab0970b7054784b77bec1f44c8b317060c86a03c22af18c211235e"
+    },
+    {
+      "bytes": 312703,
+      "path": "incremental-effect.png",
+      "sha256": "a480cfe59f00ccc1fb1e5934caecd6472368949dd75bb7f9372d870d81e11bd1"
+    },
+    {
+      "bytes": 13109,
+      "path": "incremental-effect.svg",
+      "sha256": "a8ea825e0a5381e76693d033d5b3c960069133c564b97b77db16333a210e2503"
+    }
+  ],
+  "schema_version": 1
+}

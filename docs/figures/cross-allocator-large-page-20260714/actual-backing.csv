@@ -1,0 +1,10 @@
+label,anon_thp_mib,hugetlb_mib
+UniAlloc off,0.0,0.0
+UniAlloc selective THP,258.0,0.0
+mimalloc off,0.0,0.0
+mimalloc THP,516.0,0.0
+jemalloc off,0.0,0.0
+jemalloc THP,516.0,0.0
+gperftools anon,0.0,0.0
+gperftools HugeTLB,0.0,514.0
+snmalloc default,0.0,0.0

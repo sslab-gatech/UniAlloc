@@ -59,6 +59,7 @@ class SemanticCase:
     label: str
     policy: str
     expected_backing: str
+    mechanism: str
     disable_process_thp: bool = False
 
 
@@ -74,18 +75,26 @@ class NeutralCase:
 
 
 SEMANTIC_CASES = (
-    SemanticCase("unialloc_default", "UniAlloc default", "raw-default", "system-default"),
+    SemanticCase(
+        "unialloc_default",
+        "UniAlloc default",
+        "raw-default",
+        "system-default",
+        "allocator-default",
+    ),
     SemanticCase(
         "unialloc_ordinary",
         "UniAlloc ordinary arenas",
         "ordinary-segregated",
         "ordinary-no-thp",
+        "lifetime-segregated-ordinary",
     ),
     SemanticCase(
         "unialloc_lifetime_thp_off",
         "UniAlloc lifetime layout / THP off",
         "long-thp",
         "ordinary-no-thp",
+        "lifetime-layout-thp-disabled",
         True,
     ),
     SemanticCase(
@@ -93,8 +102,18 @@ SEMANTIC_CASES = (
         "UniAlloc selective lifetime THP",
         "long-thp",
         "thp",
+        "selective-lifetime-thp",
     ),
 )
+
+CANONICAL_MECHANISM_BY_CASE = {
+    case.name: case.mechanism for case in SEMANTIC_CASES
+} | {
+    # Historical evidence used the broader process-wide label. opt.thp controls
+    # jemalloc-managed default extents while metadata THP remains disabled.
+    "jemalloc_thp_off": "allocator-wide-thp",
+    "jemalloc_thp_on": "allocator-wide-thp",
+}
 
 
 def neutral_cases() -> tuple[NeutralCase, ...]:
@@ -127,7 +146,7 @@ def neutral_cases() -> tuple[NeutralCase, ...]:
         NeutralCase(
             "jemalloc_thp_off",
             "jemalloc THP off",
-            "process-wide-thp",
+            "allocator-wide-thp",
             "no-thp",
             "jemalloc",
             (("MALLOC_CONF", "abort_conf:true,thp:never,metadata_thp:disabled"),),
@@ -135,7 +154,7 @@ def neutral_cases() -> tuple[NeutralCase, ...]:
         NeutralCase(
             "jemalloc_thp_on",
             "jemalloc THP on",
-            "process-wide-thp",
+            "allocator-wide-thp",
             "thp",
             "jemalloc",
             (("MALLOC_CONF", "abort_conf:true,thp:always,metadata_thp:disabled"),),
@@ -600,7 +619,7 @@ def run_block(
                 "family": "unialloc-semantic",
                 "case": case.name,
                 "label": case.label,
-                "mechanism": "selective-lifetime-thp",
+                "mechanism": case.mechanism,
                 "block": block,
                 "measured": measured,
                 "order_index": order_index,
@@ -764,7 +783,11 @@ def median_summary(rows: list[dict[str, Any]], family: str) -> dict[str, Any]:
             "case": rows[0]["case"],
             "label": rows[0]["label"],
             "family": family,
-            "mechanism": rows[0]["mechanism"],
+            # Normalize historical samples when presentation-only metadata was
+            # too broad; raw measured values remain untouched.
+            "mechanism": CANONICAL_MECHANISM_BY_CASE.get(
+                str(rows[0]["case"]), str(rows[0]["mechanism"])
+            ),
             "samples": len(rows),
         }
     )
@@ -801,8 +824,8 @@ def summarize(
             "jemalloc_thp",
             "jemalloc_thp_on",
             "jemalloc_thp_off",
-            "jemalloc global THP",
-            "process-wide-thp",
+            "jemalloc allocator THP",
+            "allocator-wide-thp",
         ),
         (
             "gperftools_hugetlb",
@@ -993,7 +1016,9 @@ def write_summary_csv(summary: dict[str, Any], path: Path) -> None:
         "median_hugetlb_delta_kib",
     )
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+        writer = csv.DictWriter(
+            handle, fieldnames=fields, extrasaction="ignore", lineterminator="\n"
+        )
         writer.writeheader()
         for case in sorted(summary["case_summaries"]):
             writer.writerow(summary["case_summaries"][case])
@@ -1002,7 +1027,9 @@ def write_summary_csv(summary: dict[str, Any], path: Path) -> None:
 def write_toggle_csv(summary: dict[str, Any], path: Path) -> None:
     rows = summary["slide_data"]["toggle_effects"]
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=tuple(rows[0]))
+        writer = csv.DictWriter(
+            handle, fieldnames=tuple(rows[0]), lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(rows)
 

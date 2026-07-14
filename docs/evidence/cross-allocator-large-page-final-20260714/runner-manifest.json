@@ -1,0 +1,114 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "/home/hanqing/alloc/UniAlloc-thp-cross-allocator/evaluation/scripts/cross_allocator_large_page_experiment.py",
+    "--output-dir",
+    "docs/evidence/cross-allocator-large-page-final-20260714",
+    "--repeats",
+    "20",
+    "--warmup-blocks",
+    "1",
+    "--bootstrap-resamples",
+    "20000",
+    "--objects",
+    "131072",
+    "--slot-bytes",
+    "4096",
+    "--passes",
+    "32",
+    "--warmup-passes",
+    "2",
+    "--waves",
+    "2",
+    "--settle-ms",
+    "25",
+    "--types-per-truth",
+    "8",
+    "--false-long-rate",
+    "0.05",
+    "--false-short-rate",
+    "0.05",
+    "--cpu",
+    "15",
+    "--numa-node",
+    "0",
+    "--tcmalloc-memfs-prefix",
+    "/dev/hugepages/unialloc-eval/tcmalloc"
+  ],
+  "bootstrap_resamples": 20000,
+  "cpu": 15,
+  "git_head": "256aadd60d5bb385e181a657cdffa9be67ecb682",
+  "git_status": "?? docs/evidence/cross-allocator-large-page-final-20260714/",
+  "libraries": {
+    "jemalloc": {
+      "path": "/usr/lib/x86_64-linux-gnu/libjemalloc.so.2",
+      "sha256": "567efa52ecf445d5966025e1dcfd6b927a986472d272be3742f74a4a373baf12",
+      "version_label": "jemalloc 5.3.x system package"
+    },
+    "mimalloc": {
+      "path": "/home/hanqing/alloc/UniAlloc-thp-cross-allocator/evaluation/raw/cross-allocator-local-builds/mimalloc-manual/libmimalloc.so",
+      "sha256": "4b76f4b7619e206792c762e9cd0ffb192d59fd47061e313e36828f70af9e85dd",
+      "version_label": "mimalloc core 3.3.2"
+    },
+    "snmalloc": {
+      "path": "/home/hanqing/alloc/UniAlloc-thp-cross-allocator/evaluation/raw/cross-allocator-local-builds/snmalloc/libsnmallocshim.so",
+      "sha256": "033acad913ffdeb043608f322007752755225088b18787d7c86313aa5d459b98",
+      "version_label": "snmalloc 0.2.27 vendored build"
+    },
+    "tcmalloc": {
+      "path": "/home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5",
+      "sha256": "3e9994675a51a1a7f893e02236b36e3150a37b5e8ea740e0cc78f6650f7b1841",
+      "version_label": "gperftools TCMalloc 2.18.1"
+    }
+  },
+  "min_neutral_thp_coverage": 0.25,
+  "min_semantic_thp_coverage": 0.95,
+  "neutral_source_sha256": "8fdfaf2eb138680374877a83e1a598e74b5b56dd5ea4387004bf76429da7f5b5",
+  "numa_node": 0,
+  "objects": 131072,
+  "passes": 32,
+  "probe_builds": [
+    {
+      "binary": "target/evaluation/cross_allocator_large_page_workload",
+      "binary_sha256": "29e4b0c8ae6764b479ecda51d839e79065cbad904ab359655c45f09bfb197ba0",
+      "command": [
+        "cc",
+        "-std=c11",
+        "-O3",
+        "-DNDEBUG",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-fno-builtin-malloc",
+        "/home/hanqing/alloc/UniAlloc-thp-cross-allocator/evaluation/probes/cross_allocator_large_page_workload.c",
+        "-o",
+        "/home/hanqing/alloc/UniAlloc-thp-cross-allocator/target/evaluation/cross_allocator_large_page_workload"
+      ]
+    },
+    {
+      "binary": "target/release/examples/lifetime_hugepage_allocator_probe",
+      "binary_sha256": "6ba118be8281a8061c6e5d6ba65ca6516384e80c1a485660d1da19fbd5944f7d",
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "-p",
+        "unialloc",
+        "--example",
+        "lifetime_hugepage_allocator_probe",
+        "--features",
+        "lifetime_hugepage"
+      ]
+    }
+  ],
+  "repeats": 20,
+  "schema_version": 1,
+  "seed": 20260714,
+  "semantic_source_sha256": "6fc125abc613176058b4ab947b813c39555d823c48991e1337ac435326d7b896",
+  "settle_ms": 25,
+  "slot_bytes": 4096,
+  "tcmalloc_memfs_prefix": "/dev/hugepages/unialloc-eval/tcmalloc",
+  "warmup_blocks": 1,
+  "warmup_passes": 2,
+  "waves": 2
+}

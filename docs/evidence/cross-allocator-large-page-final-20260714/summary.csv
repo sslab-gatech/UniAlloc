@@ -1,0 +1,14 @@
+case,label,family,mechanism,samples,median_ns_per_touch,median_lifecycle_ns_per_allocation,median_max_effective_resident_kib,median_anon_huge_delta_kib,median_hugetlb_delta_kib
+glibc_default,glibc default,allocator-neutral,default,20,31.7011220455,944.891950607,530788.0,0.0,0.0
+gperftools_default,gperftools TCMalloc default,allocator-neutral,default,20,59.3809161185,997.460741043,536644.0,0.0,0.0
+gperftools_hugetlb,gperftools explicit HugeTLB,allocator-neutral,explicit-hugetlb,20,36.949908972,241.200504303,539084.0,0.0,526336.0
+jemalloc_thp_off,jemalloc THP off,allocator-neutral,allocator-wide-thp,20,58.93454051,1093.3854904175,549048.0,0.0,0.0
+jemalloc_thp_on,jemalloc THP on,allocator-neutral,allocator-wide-thp,20,54.2101855275,376.890253067,554174.0,528384.0,0.0
+mimalloc_thp_off,mimalloc THP off,allocator-neutral,process-wide-thp,20,59.714310646,965.0574893954999,530216.0,0.0,0.0
+mimalloc_thp_on,mimalloc THP on,allocator-neutral,process-wide-thp,20,54.126274347000006,160.3845558165,534680.0,528384.0,0.0
+snmalloc_default,snmalloc default eligibility,allocator-neutral,os-eligibility,20,59.8586440085,917.178812027,535048.0,0.0,0.0
+snmalloc_os_thp_off,snmalloc process THP disabled,allocator-neutral,os-eligibility,20,59.254756451000006,921.3372135165,535048.0,0.0,0.0
+unialloc_default,UniAlloc default,unialloc-semantic,allocator-default,20,57.5085055,1553.209187825521,535470.0,0.0,0.0
+unialloc_lifetime_thp_off,UniAlloc lifetime layout / THP off,unialloc-semantic,lifetime-layout-thp-disabled,20,53.262061,1907.3704096476235,534064.0,0.0,0.0
+unialloc_lifetime_thp_on,UniAlloc selective lifetime THP,unialloc-semantic,selective-lifetime-thp,20,48.964903,1298.9410400390625,535868.0,264192.0,0.0
+unialloc_ordinary,UniAlloc ordinary arenas,unialloc-semantic,lifetime-segregated-ordinary,20,52.921257499999996,1904.111592610677,534080.0,0.0,0.0

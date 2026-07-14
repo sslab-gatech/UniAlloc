@@ -146,16 +146,25 @@ class CrossAllocatorLargePageChartTests(unittest.TestCase):
             )
             self.assertIn("+12.4%", incremental)
             self.assertIn("−8.3%", incremental)
+            self.assertIn("dependent-pointer touch execution", incremental)
+            self.assertIn("semantic Rust probe", incremental)
+            self.assertIn("resident delta excludes unused pool capacity", incremental)
             endpoint = (output_dir / "endpoint-frontier.svg").read_text(
                 encoding="utf-8"
             )
             self.assertIn("4.20 ns/touch · 128.0 MiB", endpoint)
+            self.assertIn("96.0 MiB large-page backing", endpoint)
+            self.assertIn("0.0 MiB large-page backing", endpoint)
             self.assertIn('id="pareto-frontier"', endpoint)
             backing = (output_dir / "actual-backing.svg").read_text(
                 encoding="utf-8"
             )
             self.assertIn("96.0 MiB", backing)
             self.assertIn("THP 96.0 · HugeTLB 0.0", backing)
+            self.assertIn(
+                "anonymous THP from smaps; explicit HugeTLB from status", backing
+            )
+            self.assertIn("cross-family comparison is backing-only", backing)
 
     def test_csv_preserves_source_fields_and_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -199,6 +208,7 @@ class CrossAllocatorLargePageChartTests(unittest.TestCase):
                 ),
             }
             for filename, (fields, source_rows) in expected.items():
+                self.assertNotIn(b"\r\n", (output_dir / filename).read_bytes())
                 with (output_dir / filename).open(encoding="utf-8", newline="") as handle:
                     reader = csv.DictReader(handle)
                     rows = list(reader)
