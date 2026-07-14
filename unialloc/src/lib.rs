@@ -117,9 +117,10 @@ pub use alloc_api::{
 };
 #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
 pub use alloc_api::{
-    lifetime_hugepage_configure, lifetime_hugepage_phase_flush_current_thread,
-    lifetime_hugepage_policy, lifetime_hugepage_stats_reset, lifetime_hugepage_stats_snapshot,
-    LifetimeHugepagePolicy, LifetimeHugepageStatsSnapshot, LIFETIME_HUGEPAGE_EXTENT_BYTES,
+    lifetime_hugepage_advance_epoch, lifetime_hugepage_configure,
+    lifetime_hugepage_phase_flush_current_thread, lifetime_hugepage_policy,
+    lifetime_hugepage_stats_reset, lifetime_hugepage_stats_snapshot, LifetimeHugepagePolicy,
+    LifetimeHugepageStatsSnapshot, LIFETIME_HUGEPAGE_EXTENT_BYTES,
     LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
 };
 pub use cache::RustAllocator as UniAlloc;

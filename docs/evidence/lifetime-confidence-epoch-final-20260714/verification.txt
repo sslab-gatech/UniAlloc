@@ -1,0 +1,38 @@
+Lifetime confidence + epoch cohort verification
+Date: 2026-07-14
+Source implementation commit: 81653d07ca8a33c7fe7503a91f3cc3efac4e3d88
+Dev baseline commit: 8d369c3a41509b8d77d11768d7d414b94096f1ed
+Branch: exp/lifetime-death-epoch-confidence-20260714
+
+Formal experiments:
+- Main confidence matrix: PASS 140/140 rows; 14 cases x 10 randomized fresh-process repeats; paired prediction digests match; allocator/classification invariants pass; zero HugeTLB fallback; pool 4096 -> 4096.
+- Rolling epoch cohort: PASS 60/60 rows; 2 policies x 30 randomized fresh-process paired repeats; target retention -50%; target+reset -33.333333%; full-cycle -20%; runtime exclusions/fallbacks/mapping failures zero; pool restored after every row.
+- Rolling verdict: FRAGMENTATION-GO; PERFORMANCE-INCONCLUSIVE. Managed lifecycle/object overhead +35.224359%, bootstrap 95% CI [+34.001744%, +36.436126%].
+- PMU diagnostic: perf stat -r 5 collected for ordinary, all-HugeTLB, binary lifetime, binary 5% error, and confidence 5% error; each command returned zero; final pool 4096/4096.
+
+Verification commands and results:
+- cargo fmt --all -- --check: PASS
+- cargo check -p unialloc --features lifetime_hugepage: PASS
+- cargo build -p unialloc --release --examples --features lifetime_hugepage: PASS; existing warnings in unrelated examples
+- cargo test -p unialloc --features lifetime_hugepage --test lifetime_hugepage_allocator -- --test-threads=1: PASS 11/11
+- uv run python -m unittest evaluation/scripts/test_lifetime_hugepage_allocator_experiment.py evaluation/scripts/test_lifetime_epoch_cohort_experiment.py -v: PASS 15/15
+- uv run python tools/unialloc-rustc-pass/test_mir_lifetime_profile.py -v: PASS 3/3
+- uv run python tools/unialloc-rustc-pass/test_mir_lifetime_hugepage_integration.py -v: PASS 1/1
+- rustc --test tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs: PASS 22/22
+- cargo test --workspace --all-targets: 741 lib tests passed and 2 host rseq registration tests failed because rseq registration is unavailable in this environment
+- cargo test --workspace --all-targets -- --skip pal::os::linux_rseq::tests::register_rseq_test --skip pal::os::linux_rseq::tests::register_rseq_multithread_test: PASS across all remaining targets; 741/741 lib tests plus integration/example/bench targets
+- cargo clippy -p unialloc --features lifetime_hugepage --all-targets -- -D warnings: BLOCKED by 265 existing warnings promoted to errors in unrelated allocator files; first failures are literal grouping warnings in type_isolation.rs
+- git diff --check: PASS
+
+Final HugeTLB pool:
+- HugePages_Total: 4096
+- HugePages_Free: 4096
+- HugePages_Rsvd: 0
+- HugePages_Surp: 0
+
+Measurement units and claim boundary:
+- Runtime object counters count allocation/storage generations; a moved realloc creates a new generation.
+- Runtime byte confusion uses allocator-rounded arena slot bytes; effective placement confusion uses requested payload bytes.
+- Main and rolling predictors use synthetic calibrated hints and injected errors. The mechanism is compiler/runtime integrated, while trained real-workload Rust classifier coverage and application throughput remain open.
+- Rolling byte-epochs are sums across logical observation boundaries, not wall-clock MiB-seconds.
+- There is no same-host LLAMA or TEMERAIRE implementation in this evidence, so no direct cross-paper superiority percentage is claimed.

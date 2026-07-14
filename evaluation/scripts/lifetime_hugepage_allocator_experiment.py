@@ -13,14 +13,99 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 
+DEFAULT_CONFIDENCE_THRESHOLD = 80
+DEFAULT_CORRECT_CONFIDENCE = 90
+DEFAULT_ERROR_CONFIDENCE = 60
+DEFAULT_CONFIDENCE_OVERLAP_RATE = 0.10
+DEFAULT_PERF_EVENTS = (
+    "cycles",
+    "instructions",
+    "page-faults",
+    "ls_l1_d_tlb_miss.all",
+    "ls_l1_d_tlb_miss.all_l2_miss",
+    "ls_l1_d_tlb_miss.tlb_reload_2m_l2_hit",
+    "ls_l1_d_tlb_miss.tlb_reload_2m_l2_miss",
+    "ls_l1_d_tlb_miss.tlb_reload_4k_l2_hit",
+    "ls_l1_d_tlb_miss.tlb_reload_4k_l2_miss",
+)
+
+
+class Case(NamedTuple):
+    name: str
+    policy: str
+    false_long: float
+    false_short: float
+    identity_mode: str
+    confidence_threshold: int
+    correct_confidence: int
+    error_confidence: int
+    confidence_overlap_rate: float
+    unknown_rate: float
+
+
+# Keep the controls explicit even where two perfect-prediction rows are
+# intentionally equivalent.  `long-huge-oracle` is the truth ceiling;
+# `long-huge-binary` is the policy comparator for paired error arms.
 BASE_CASES = (
-    ("policy-off", "policy-off", 0.0, 0.0, "exact"),
-    ("ordinary-segregated", "ordinary-segregated", 0.0, 0.0, "exact"),
-    ("all-huge-segregated", "all-huge-segregated", 0.0, 0.0, "exact"),
-    ("long-huge-oracle", "long-huge", 0.0, 0.0, "exact"),
+    Case("raw-default", "raw-default", 0.0, 0.0, "exact", 0, 100, 100, 0.0, 0.0),
+    Case("policy-off", "policy-off", 0.0, 0.0, "exact", 0, 100, 100, 0.0, 0.0),
+    Case(
+        "ordinary-segregated",
+        "ordinary-segregated",
+        0.0,
+        0.0,
+        "exact",
+        0,
+        100,
+        100,
+        0.0,
+        0.0,
+    ),
+    Case(
+        "all-huge-segregated",
+        "all-huge-segregated",
+        0.0,
+        0.0,
+        "exact",
+        0,
+        100,
+        100,
+        0.0,
+        0.0,
+    ),
+    Case(
+        "long-huge-binary", "long-huge", 0.0, 0.0, "exact", 0, 100, 100, 0.0, 0.0
+    ),
+    Case(
+        "long-huge-oracle", "long-huge", 0.0, 0.0, "exact", 0, 100, 100, 0.0, 0.0
+    ),
+    Case(
+        "confidence-only",
+        "long-huge",
+        0.0,
+        0.0,
+        "exact",
+        DEFAULT_CONFIDENCE_THRESHOLD,
+        DEFAULT_CORRECT_CONFIDENCE,
+        DEFAULT_ERROR_CONFIDENCE,
+        DEFAULT_CONFIDENCE_OVERLAP_RATE,
+        0.0,
+    ),
+    Case(
+        "confidence-epoch",
+        "epoch-cohort",
+        0.0,
+        0.0,
+        "exact",
+        DEFAULT_CONFIDENCE_THRESHOLD,
+        DEFAULT_CORRECT_CONFIDENCE,
+        DEFAULT_ERROR_CONFIDENCE,
+        DEFAULT_CONFIDENCE_OVERLAP_RATE,
+        0.0,
+    ),
 )
 
 
@@ -36,6 +121,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--error-rates", default="0.001,0.01,0.05")
     parser.add_argument("--include-shuffled", action="store_true")
     parser.add_argument("--include-lifetime-only-baseline", action="store_true")
+    parser.add_argument(
+        "--confidence-threshold", type=int, default=DEFAULT_CONFIDENCE_THRESHOLD
+    )
+    parser.add_argument(
+        "--correct-confidence", type=int, default=DEFAULT_CORRECT_CONFIDENCE
+    )
+    parser.add_argument(
+        "--error-confidence", type=int, default=DEFAULT_ERROR_CONFIDENCE
+    )
+    parser.add_argument(
+        "--confidence-overlap-rate",
+        type=float,
+        default=DEFAULT_CONFIDENCE_OVERLAP_RATE,
+    )
+    parser.add_argument("--unknown-rate", type=float, default=0.0)
     parser.add_argument("--ephemeral-waves", type=int, default=1)
     parser.add_argument("--warmup-passes", type=int, default=2)
     parser.add_argument("--passes", type=int, default=16)
@@ -45,6 +145,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=20260714)
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--skip-build", action="store_true")
+    parser.add_argument("--perf", action="store_true")
     parser.add_argument("--allow-hugetlb-fallback", action="store_true")
     args = parser.parse_args()
     try:
@@ -62,8 +163,13 @@ def parse_args() -> argparse.Namespace:
         or args.ephemeral_waves <= 0
         or not 0.0 < args.long_fraction < 1.0
         or any(rate <= 0.0 or rate > 0.5 for rate in args.error_rates)
+        or not 0 <= args.confidence_threshold <= 100
+        or not 1 <= args.correct_confidence <= 100
+        or not 1 <= args.error_confidence <= 100
+        or not 0.0 <= args.confidence_overlap_rate <= 1.0
+        or not 0.0 <= args.unknown_rate <= 1.0
     ):
-        parser.error("invalid workload geometry or error rate")
+        parser.error("invalid workload geometry, error rate, or confidence configuration")
     return args
 
 
@@ -75,31 +181,124 @@ def cases(
     error_rates: tuple[float, ...],
     include_shuffled: bool,
     include_lifetime_only_baseline: bool,
-) -> list[tuple[str, str, float, float, str]]:
-    result = list(BASE_CASES)
+    *,
+    confidence_threshold: int = DEFAULT_CONFIDENCE_THRESHOLD,
+    correct_confidence: int = DEFAULT_CORRECT_CONFIDENCE,
+    error_confidence: int = DEFAULT_ERROR_CONFIDENCE,
+    confidence_overlap_rate: float = DEFAULT_CONFIDENCE_OVERLAP_RATE,
+    unknown_rate: float = 0.0,
+) -> list[Case]:
+    result = [
+        case._replace(
+            confidence_threshold=(
+                confidence_threshold
+                if case.name in {"confidence-only", "confidence-epoch"}
+                else 0
+            ),
+            correct_confidence=(
+                correct_confidence
+                if case.name
+                in {"long-huge-binary", "confidence-only", "confidence-epoch"}
+                else 100
+            ),
+            error_confidence=(
+                error_confidence
+                if case.name
+                in {"long-huge-binary", "confidence-only", "confidence-epoch"}
+                else 100
+            ),
+            confidence_overlap_rate=(
+                confidence_overlap_rate
+                if case.name
+                in {"long-huge-binary", "confidence-only", "confidence-epoch"}
+                else 0.0
+            ),
+            unknown_rate=(
+                unknown_rate
+                if case.name
+                in {"long-huge-binary", "confidence-only", "confidence-epoch"}
+                else 0.0
+            ),
+        )
+        for case in BASE_CASES
+    ]
+
+    def append_policy_triplet(suffix: str, false_long: float, false_short: float) -> None:
+        result.extend(
+            (
+                Case(
+                    f"long-huge-binary-{suffix}",
+                    "long-huge",
+                    false_long,
+                    false_short,
+                    "exact",
+                    0,
+                    correct_confidence,
+                    error_confidence,
+                    confidence_overlap_rate,
+                    unknown_rate,
+                ),
+                Case(
+                    f"confidence-only-{suffix}",
+                    "long-huge",
+                    false_long,
+                    false_short,
+                    "exact",
+                    confidence_threshold,
+                    correct_confidence,
+                    error_confidence,
+                    confidence_overlap_rate,
+                    unknown_rate,
+                ),
+                Case(
+                    f"confidence-epoch-{suffix}",
+                    "epoch-cohort",
+                    false_long,
+                    false_short,
+                    "exact",
+                    confidence_threshold,
+                    correct_confidence,
+                    error_confidence,
+                    confidence_overlap_rate,
+                    unknown_rate,
+                ),
+            )
+        )
+
     for rate in error_rates:
         label = str(rate).replace(".", "p")
-        result.append((f"long-huge-error-{label}", "long-huge", rate, rate, "exact"))
+        append_policy_triplet(f"error-{label}", rate, rate)
+        append_policy_triplet(f"fp-heavy-{label}", rate, 0.0)
         if include_lifetime_only_baseline:
             result.append(
-                (
+                Case(
                     f"long-huge-lifetime-only-error-{label}",
                     "long-huge",
                     rate,
                     rate,
                     "lifetime-only",
+                    0,
+                    correct_confidence,
+                    error_confidence,
+                    confidence_overlap_rate,
+                    unknown_rate,
                 )
             )
     if include_shuffled:
-        result.append(("long-huge-shuffled", "long-huge", 0.5, 0.5, "exact"))
+        append_policy_triplet("shuffled", 0.5, 0.5)
         if include_lifetime_only_baseline:
             result.append(
-                (
+                Case(
                     "long-huge-lifetime-only-shuffled",
                     "long-huge",
                     0.5,
                     0.5,
                     "lifetime-only",
+                    0,
+                    correct_confidence,
+                    error_confidence,
+                    confidence_overlap_rate,
+                    unknown_rate,
                 )
             )
     return result
@@ -130,17 +329,30 @@ def pinned_command(command: list[str], numa_node: int, cpu: int) -> list[str]:
 
 def probe_command(
     binary: Path,
-    case: tuple[str, str, float, float, str],
+    case: Case | tuple[str, str, float, float, str],
     args: argparse.Namespace,
     repeat_seed: int,
 ) -> list[str]:
-    _, policy, false_long, false_short, identity_mode = case
+    if len(case) == 5:
+        name, policy, false_long, false_short, identity_mode = case
+        case = Case(
+            name,
+            policy,
+            false_long,
+            false_short,
+            identity_mode,
+            0,
+            getattr(args, "correct_confidence", DEFAULT_CORRECT_CONFIDENCE),
+            getattr(args, "error_confidence", DEFAULT_ERROR_CONFIDENCE),
+            getattr(args, "confidence_overlap_rate", 0.0),
+            getattr(args, "unknown_rate", 0.0),
+        )
     command = [
         str(binary),
         "--policy",
-        policy,
+        case.policy,
         "--identity-mode",
-        identity_mode,
+        case.identity_mode,
         "--types-per-truth",
         str(args.types_per_truth),
         "--objects",
@@ -150,9 +362,19 @@ def probe_command(
         "--long-fraction",
         str(args.long_fraction),
         "--false-long-rate",
-        str(false_long),
+        str(case.false_long),
         "--false-short-rate",
-        str(false_short),
+        str(case.false_short),
+        "--confidence-threshold",
+        str(case.confidence_threshold),
+        "--correct-confidence",
+        str(case.correct_confidence),
+        "--error-confidence",
+        str(case.error_confidence),
+        "--confidence-overlap-rate",
+        str(case.confidence_overlap_rate),
+        "--unknown-rate",
+        str(case.unknown_rate),
         "--ephemeral-waves",
         str(args.ephemeral_waves),
         "--warmup-passes",
@@ -174,6 +396,23 @@ def parse_probe(stdout: str) -> dict[str, Any]:
     row = json.loads(rows[0])
     if row.get("source") != "lifetime_hugepage_allocator_probe" or not row.get("passed"):
         raise RuntimeError(f"probe reported failure: {row}")
+    total_allocations = int(row.get("total_allocations", 0))
+    if total_allocations > 0:
+        observed_lifecycle_ns = sum(
+            int(row.get(field, 0))
+            for field in (
+                "allocation_ns",
+                "ephemeral_release_ns",
+                "wave_ns",
+                "teardown_ns",
+            )
+        )
+        row["observed_lifecycle_ns_per_allocation"] = (
+            observed_lifecycle_ns / total_allocations
+        )
+    wave_allocations = int(row.get("wave_allocations", 0))
+    if wave_allocations > 0:
+        row["wave_ns_per_allocation"] = int(row.get("wave_ns", 0)) / wave_allocations
     return row
 
 
@@ -185,6 +424,273 @@ def hugepages_free() -> int | None:
     except (OSError, ValueError, IndexError):
         return None
     return None
+
+
+CONFUSION_CELLS = ("tp", "tn", "fp", "fn")
+CONFUSION_UNITS = ("objects", "bytes")
+
+
+def safe_ratio(numerator: int, denominator: int) -> float | None:
+    return None if denominator == 0 else numerator / denominator
+
+
+def confusion_counts(
+    rows: list[dict[str, Any]], prefix: str, unit: str
+) -> dict[str, int]:
+    return {
+        cell: sum(int(row[f"{prefix}_{cell}_{unit}"]) for row in rows)
+        for cell in CONFUSION_CELLS
+    }
+
+
+def confusion_metrics(
+    counts: dict[str, int], *, coverage_total: int
+) -> dict[str, Any]:
+    decided = sum(counts.values())
+    correct = counts["tp"] + counts["tn"]
+    incorrect = counts["fp"] + counts["fn"]
+    return {
+        **counts,
+        "decided": decided,
+        "coverage": safe_ratio(decided, coverage_total),
+        "success": safe_ratio(correct, decided),
+        "failure": safe_ratio(incorrect, decided),
+        "precision": safe_ratio(counts["tp"], counts["tp"] + counts["fp"]),
+        "recall": safe_ratio(counts["tp"], counts["tp"] + counts["fn"]),
+    }
+
+
+def reported_classification_metric(row: dict[str, Any], name: str) -> float | None:
+    for field in (f"classification_{name}", f"classification_{name}_rate"):
+        if field in row:
+            return float(row[field])
+    return None
+
+
+def close_metric(reported: float | None, derived: float | None) -> bool:
+    if reported is None or derived is None:
+        return True
+    return math.isclose(reported, derived, rel_tol=1e-6, abs_tol=1e-6)
+
+
+def row_confusion_closure(row: dict[str, Any]) -> tuple[bool, list[str]]:
+    required = {
+        "total_allocations",
+        "slot_bytes",
+        "static_classified",
+        "static_unknown",
+        "runtime_validated_objects",
+        "runtime_validated_bytes",
+        "runtime_validation_excluded_objects",
+        "runtime_validation_excluded_bytes",
+        "routed_allocations",
+        "routed_deallocations",
+        *(
+            f"{prefix}_{cell}_{unit}"
+            for prefix in ("predictor", "placement", "effective_placement")
+            for cell in CONFUSION_CELLS
+            for unit in CONFUSION_UNITS
+        ),
+    }
+    missing = sorted(field for field in required if field not in row)
+    if missing:
+        return False, [f"missing:{field}" for field in missing]
+
+    total = int(row["total_allocations"])
+    classified = int(row["static_classified"])
+    unknown = int(row["static_unknown"])
+    validated_objects = int(row["runtime_validated_objects"])
+    validated_bytes = int(row["runtime_validated_bytes"])
+    excluded_objects = int(row["runtime_validation_excluded_objects"])
+    failures: list[str] = []
+
+    if classified + unknown != total:
+        failures.append("static_objects")
+
+    matrices: dict[tuple[str, str], dict[str, int]] = {}
+    for prefix in ("predictor", "placement", "effective_placement"):
+        for unit in CONFUSION_UNITS:
+            counts = {
+                cell: int(row[f"{prefix}_{cell}_{unit}"])
+                for cell in CONFUSION_CELLS
+            }
+            matrices[(prefix, unit)] = counts
+            if prefix == "effective_placement":
+                expected = total if unit == "objects" else total * int(row["slot_bytes"])
+            else:
+                expected = validated_objects if unit == "objects" else validated_bytes
+            if sum(counts.values()) != expected:
+                failures.append(f"{prefix}_{unit}")
+
+    routed_deallocations = int(row["routed_deallocations"])
+    if validated_objects + excluded_objects != routed_deallocations:
+        failures.append("runtime_objects")
+    policy = str(row.get("policy") or "")
+    if policy not in {"raw-default", "policy-off"}:
+        if classified != int(row["routed_allocations"]):
+            failures.append("classified_routed")
+        if "unknown_bypasses" in row and unknown != int(row["unknown_bypasses"]):
+            failures.append("unknown_bypasses")
+
+    static_fields = [f"static_{cell}_objects" for cell in CONFUSION_CELLS]
+    static_counts: dict[str, int] | None = None
+    if all(field in row for field in static_fields):
+        static_counts = {
+            cell: int(row[f"static_{cell}_objects"])
+            for cell in CONFUSION_CELLS
+        }
+        if sum(static_counts.values()) != classified:
+            failures.append("static_confusion_objects")
+    elif any(field in row for field in static_fields):
+        failures.append("static_confusion_partial")
+
+    # The probe's reported classification rates describe the static predictor.
+    # Runtime predictor counters are equivalent for routed policies, while the
+    # policy-off control intentionally has no runtime-routed observations.
+    reported_counts = static_counts or matrices[("predictor", "objects")]
+    predictor = confusion_metrics(reported_counts, coverage_total=total)
+    derived = {
+        "coverage": safe_ratio(classified, total),
+        "success": predictor["success"],
+        "failure": predictor["failure"],
+        "precision": predictor["precision"],
+        "recall": predictor["recall"],
+    }
+    for name, value in derived.items():
+        if not close_metric(reported_classification_metric(row, name), value):
+            failures.append(f"classification_{name}")
+    effective = confusion_metrics(
+        matrices[("effective_placement", "objects")], coverage_total=total
+    )
+    for name in ("success", "failure", "precision", "recall"):
+        reported = row.get(f"placement_{name}")
+        if reported is None:
+            reported = row.get(f"placement_{name}_rate")
+        if not close_metric(
+            None if reported is None else float(reported), effective[name]
+        ):
+            failures.append(f"placement_{name}")
+    return not failures, failures
+
+
+def aggregate_classification(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    marker_fields = {
+        "static_classified",
+        "static_unknown",
+        "runtime_validated_objects",
+        "predictor_tp_objects",
+        "placement_tp_objects",
+        "effective_placement_tp_objects",
+    }
+    if not any(marker_fields.intersection(row) for row in rows):
+        return {
+            "available": False,
+            "all_confusion_closed": True,
+            "closure_failures": [],
+        }
+
+    closures = [row_confusion_closure(row) for row in rows]
+    complete = all(ok for ok, _ in closures)
+    failures = sorted({failure for _, row_failures in closures for failure in row_failures})
+    required_counts_present = all(
+        all(
+            f"{prefix}_{cell}_{unit}" in row
+            for prefix in ("predictor", "placement", "effective_placement")
+            for cell in CONFUSION_CELLS
+            for unit in CONFUSION_UNITS
+        )
+        for row in rows
+    )
+    if not required_counts_present:
+        return {
+            "available": True,
+            "all_confusion_closed": False,
+            "closure_failures": failures,
+        }
+
+    total_objects = sum(int(row.get("total_allocations", 0)) for row in rows)
+    total_bytes = sum(
+        int(row.get("total_allocations", 0)) * int(row.get("slot_bytes", 0))
+        for row in rows
+    )
+    total_runtime_slot_bytes = sum(
+        int(row.get("total_allocations", 0))
+        * int(row.get("arena_slot_bytes", row.get("slot_bytes", 0)))
+        for row in rows
+    )
+    static_classified = sum(int(row.get("static_classified", 0)) for row in rows)
+    static_unknown = sum(int(row.get("static_unknown", 0)) for row in rows)
+    validated_objects = sum(int(row.get("runtime_validated_objects", 0)) for row in rows)
+    validated_bytes = sum(int(row.get("runtime_validated_bytes", 0)) for row in rows)
+    excluded_objects = sum(
+        int(row.get("runtime_validation_excluded_objects", 0)) for row in rows
+    )
+    excluded_bytes = sum(
+        int(row.get("runtime_validation_excluded_bytes", 0)) for row in rows
+    )
+    return {
+        "available": True,
+        "all_confusion_closed": complete,
+        "closure_failures": failures,
+        "total_objects": total_objects,
+        "total_bytes": total_bytes,
+        "total_runtime_slot_bytes": total_runtime_slot_bytes,
+        "static_classified_objects": static_classified,
+        "static_unknown_objects": static_unknown,
+        "static_coverage": safe_ratio(static_classified, static_classified + static_unknown),
+        "runtime_validated_objects": validated_objects,
+        "runtime_validated_bytes": validated_bytes,
+        "runtime_validation_excluded_objects": excluded_objects,
+        "runtime_validation_excluded_bytes": excluded_bytes,
+        "runtime_byte_weighting": "rounded_arena_slot_bytes",
+        "effective_placement_byte_weighting": "requested_payload_bytes",
+        "runtime_validation_coverage_objects": safe_ratio(
+            validated_objects, validated_objects + excluded_objects + static_unknown
+        ),
+        "predictor_objects": confusion_metrics(
+            confusion_counts(rows, "predictor", "objects"),
+            coverage_total=total_objects,
+        ),
+        "predictor_bytes": confusion_metrics(
+            confusion_counts(rows, "predictor", "bytes"),
+            coverage_total=total_runtime_slot_bytes,
+        ),
+        "runtime_placement_objects": confusion_metrics(
+            confusion_counts(rows, "placement", "objects"),
+            coverage_total=total_objects,
+        ),
+        "runtime_placement_bytes": confusion_metrics(
+            confusion_counts(rows, "placement", "bytes"),
+            coverage_total=total_runtime_slot_bytes,
+        ),
+        "effective_placement_objects": confusion_metrics(
+            confusion_counts(rows, "effective_placement", "objects"),
+            coverage_total=total_objects,
+        ),
+        "effective_placement_bytes": confusion_metrics(
+            confusion_counts(rows, "effective_placement", "bytes"),
+            coverage_total=total_bytes,
+        ),
+        # Primary end-to-end placement aliases include abstained/Unknown
+        # predictions, which fall back to ordinary pages.
+        "placement_objects": confusion_metrics(
+            confusion_counts(rows, "effective_placement", "objects"),
+            coverage_total=total_objects,
+        ),
+        "placement_bytes": confusion_metrics(
+            confusion_counts(rows, "effective_placement", "bytes"),
+            coverage_total=total_bytes,
+        ),
+        "median_current_epoch": statistics.median(
+            int(row.get("current_epoch", 0)) for row in rows
+        ),
+        "median_phase_advances": statistics.median(
+            int(row.get("phase_advances", 0)) for row in rows
+        ),
+        "median_epoch_cohort_extent_mappings": statistics.median(
+            int(row.get("epoch_cohort_extent_mappings", 0)) for row in rows
+        ),
+    }
 
 
 def median_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -217,6 +723,24 @@ def median_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "identity_region_releases",
     ):
         result[f"median_{field}"] = statistics.median(float(row[field]) for row in rows)
+    for field in (
+        "retained_byte_epochs",
+        "hugetlb_byte_epochs",
+        "ordinary_byte_epochs",
+        "peak_cohort_pinned_unassigned_region_bytes",
+        "steady_cohort_pinned_unassigned_region_bytes",
+    ):
+        result[f"median_{field}"] = statistics.median(
+            float(row.get(field, 0)) for row in rows
+        )
+    result["median_observed_lifecycle_ns_per_allocation"] = statistics.median(
+        float(row.get("observed_lifecycle_ns_per_allocation", row["allocation_ns_per_object"]))
+        for row in rows
+    )
+    wave_costs = [float(row["wave_ns_per_allocation"]) for row in rows if "wave_ns_per_allocation" in row]
+    result["median_wave_ns_per_allocation"] = (
+        statistics.median(wave_costs) if wave_costs else None
+    )
     # Linux accounts explicit hugetlb mappings outside VmRSS.  Add the two
     # process-status fields before comparing resident working sets so the
     # ordinary and HugeTLB policies use the same physical-memory denominator.
@@ -257,6 +781,9 @@ def median_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         and int(row["final_live_slot_bytes"]) == 0
         for row in rows
     )
+    classification = aggregate_classification(rows)
+    result["classification"] = classification
+    result["all_confusion_closed"] = classification["all_confusion_closed"]
     return result
 
 
@@ -301,7 +828,238 @@ def paired_geomean_effect(
     }
 
 
-def summarize(rows_by_case: dict[str, list[dict[str, Any]]], *, seed: int = 20260714) -> dict[str, Any]:
+def confidence_policy_triplets(
+    rows_by_case: dict[str, list[dict[str, Any]]],
+) -> list[tuple[str, str, str]]:
+    triplets: list[tuple[str, str, str]] = []
+    base = ("long-huge-binary", "confidence-only", "confidence-epoch")
+    if all(name in rows_by_case for name in base):
+        triplets.append(base)
+    for epoch_name in sorted(rows_by_case):
+        if not epoch_name.startswith("confidence-epoch-"):
+            continue
+        suffix = epoch_name.removeprefix("confidence-epoch-")
+        binary_name = f"long-huge-binary-{suffix}"
+        confidence_name = f"confidence-only-{suffix}"
+        if binary_name in rows_by_case and confidence_name in rows_by_case:
+            triplets.append((binary_name, confidence_name, epoch_name))
+    return triplets
+
+
+def confidence_binary_pairs(
+    rows_by_case: dict[str, list[dict[str, Any]]],
+) -> list[tuple[str, str]]:
+    return [
+        (binary_name, epoch_name)
+        for binary_name, _confidence_name, epoch_name in confidence_policy_triplets(
+            rows_by_case
+        )
+    ]
+
+
+def paired_prediction_trace_evidence(
+    rows_by_case: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    triplets = confidence_policy_triplets(rows_by_case)
+    trace_available = any(
+        "prediction_trace_digest" in row
+        for rows in rows_by_case.values()
+        for row in rows
+    )
+    if not trace_available:
+        return {
+            "available": False,
+            "all_matched": True,
+            "pairs": [],
+            "mismatches": [],
+        }
+
+    triplet_evidence: list[dict[str, Any]] = []
+    mismatches: list[dict[str, Any]] = []
+    for binary_name, confidence_name, epoch_name in triplets:
+        traces = {
+            name: {
+                int(row["repeat"]): row.get("prediction_trace_digest")
+                for row in rows_by_case[name]
+            }
+            for name in (binary_name, confidence_name, epoch_name)
+        }
+        repeats = sorted(set().union(*(set(values) for values in traces.values())))
+        matched = 0
+        for repeat in repeats:
+            digests = {name: values.get(repeat) for name, values in traces.items()}
+            present = [digest for digest in digests.values() if digest is not None]
+            if len(present) == 3 and len(set(present)) == 1:
+                matched += 1
+                continue
+            mismatches.append(
+                {
+                    "binary": binary_name,
+                    "confidence_only": confidence_name,
+                    "confidence_epoch": epoch_name,
+                    "repeat": repeat,
+                    "digests": digests,
+                }
+            )
+        triplet_evidence.append(
+            {
+                "binary": binary_name,
+                "confidence_only": confidence_name,
+                "confidence_epoch": epoch_name,
+                "repeat_pairs": len(repeats),
+                "matched_repeat_pairs": matched,
+            }
+        )
+    return {
+        "available": True,
+        "all_matched": bool(triplets) and not mismatches,
+        "pairs": triplet_evidence,
+        "mismatches": mismatches,
+    }
+
+
+def relative_reduction(target: float | int | None, baseline: float | int | None) -> float | None:
+    if target is None or baseline is None:
+        return None
+    return 0.0 if float(baseline) == 0.0 else 1.0 - float(target) / float(baseline)
+
+
+def metric_delta(target: float | int | None, baseline: float | int | None) -> float | None:
+    if target is None or baseline is None:
+        return None
+    return float(target) - float(baseline)
+
+
+def policy_comparison(
+    rows_by_case: dict[str, list[dict[str, Any]]],
+    summaries: dict[str, dict[str, Any]],
+    baseline_name: str,
+    target_name: str,
+    *,
+    seed: int,
+) -> dict[str, Any]:
+    baseline = summaries[baseline_name]
+    target = summaries[target_name]
+    baseline_classification = baseline["classification"]
+    target_classification = target["classification"]
+    entry: dict[str, Any] = {
+        "baseline": baseline_name,
+        "target": target_name,
+        "steady_retained_bytes_reduction": relative_reduction(
+            target["median_steady_retained_bytes"],
+            baseline["median_steady_retained_bytes"],
+        ),
+        "steady_retained_slack_bytes_reduction": relative_reduction(
+            target["median_steady_retained_slack_bytes"],
+            baseline["median_steady_retained_slack_bytes"],
+        ),
+        "peak_hugetlb_extents_reduction": relative_reduction(
+            target["median_peak_hugetlb_extents"],
+            baseline["median_peak_hugetlb_extents"],
+        ),
+        "retained_byte_epochs_reduction": relative_reduction(
+            target["median_retained_byte_epochs"],
+            baseline["median_retained_byte_epochs"],
+        ),
+        "hugetlb_byte_epochs_reduction": relative_reduction(
+            target["median_hugetlb_byte_epochs"],
+            baseline["median_hugetlb_byte_epochs"],
+        ),
+        "ordinary_byte_epochs_reduction": relative_reduction(
+            target["median_ordinary_byte_epochs"],
+            baseline["median_ordinary_byte_epochs"],
+        ),
+        "touch": paired_geomean_effect(
+            rows_by_case,
+            baseline_name,
+            target_name,
+            "ns_per_touch",
+            seed=seed,
+        ),
+    }
+    if baseline_classification["available"] and target_classification["available"]:
+        baseline_predictor = baseline_classification["predictor_objects"]
+        target_predictor = target_classification["predictor_objects"]
+        baseline_placement = baseline_classification["effective_placement_objects"]
+        target_placement = target_classification["effective_placement_objects"]
+        entry["classification"] = {
+            "baseline_static_coverage": baseline_classification["static_coverage"],
+            "target_static_coverage": target_classification["static_coverage"],
+            "static_coverage_delta": metric_delta(
+                target_classification["static_coverage"],
+                baseline_classification["static_coverage"],
+            ),
+            "predictor_precision_delta": metric_delta(
+                target_predictor["precision"], baseline_predictor["precision"]
+            ),
+            "predictor_recall_delta": metric_delta(
+                target_predictor["recall"], baseline_predictor["recall"]
+            ),
+            "predictor_false_positive_objects_reduction": relative_reduction(
+                target_predictor["fp"], baseline_predictor["fp"]
+            ),
+            "predictor_false_negative_objects_reduction": relative_reduction(
+                target_predictor["fn"], baseline_predictor["fn"]
+            ),
+            "effective_placement_precision_delta": metric_delta(
+                target_placement["precision"], baseline_placement["precision"]
+            ),
+            "effective_placement_recall_delta": metric_delta(
+                target_placement["recall"], baseline_placement["recall"]
+            ),
+            "effective_placement_false_positive_objects_reduction": relative_reduction(
+                target_placement["fp"], baseline_placement["fp"]
+            ),
+            "effective_placement_false_positive_bytes_reduction": relative_reduction(
+                target_classification["effective_placement_bytes"]["fp"],
+                baseline_classification["effective_placement_bytes"]["fp"],
+            ),
+        }
+    return entry
+
+
+def confidence_epoch_comparisons(
+    rows_by_case: dict[str, list[dict[str, Any]]],
+    summaries: dict[str, dict[str, Any]],
+    *,
+    seed: int,
+) -> dict[str, Any]:
+    comparisons: dict[str, Any] = {}
+    for index, (binary_name, confidence_name, epoch_name) in enumerate(
+        confidence_policy_triplets(rows_by_case)
+    ):
+        comparisons[epoch_name] = {
+            "binary": binary_name,
+            "confidence_only": confidence_name,
+            "confidence_epoch": epoch_name,
+            "abstention_gain": policy_comparison(
+                rows_by_case,
+                summaries,
+                binary_name,
+                confidence_name,
+                seed=seed + index * 3,
+            ),
+            "cohort_increment": policy_comparison(
+                rows_by_case,
+                summaries,
+                confidence_name,
+                epoch_name,
+                seed=seed + index * 3 + 1,
+            ),
+            "total": policy_comparison(
+                rows_by_case,
+                summaries,
+                binary_name,
+                epoch_name,
+                seed=seed + index * 3 + 2,
+            ),
+        }
+    return comparisons
+
+
+def summarize(
+    rows_by_case: dict[str, list[dict[str, Any]]], *, seed: int = 20260714
+) -> dict[str, Any]:
     summaries = {name: median_metrics(rows) for name, rows in rows_by_case.items()}
     touch = paired_geomean_effect(
         rows_by_case,
@@ -315,16 +1073,19 @@ def summarize(rows_by_case: dict[str, list[dict[str, Any]]], *, seed: int = 2026
     peak_hugetlb_reduction = (
         0.0 if all_huge_peak == 0 else 1.0 - long_huge_peak / all_huge_peak
     )
-    policy_off_steady_resident = summaries["policy-off"][
+    resident_baseline_name = (
+        "raw-default" if "raw-default" in summaries else "policy-off"
+    )
+    baseline_steady_resident = summaries[resident_baseline_name][
         "median_steady_effective_resident_kib"
     ]
 
     def steady_resident_reduction(target: str) -> float:
-        if policy_off_steady_resident == 0:
+        if baseline_steady_resident == 0:
             return 0.0
         return 1.0 - (
             summaries[target]["median_steady_effective_resident_kib"]
-            / policy_off_steady_resident
+            / baseline_steady_resident
         )
 
     ordinary_steady_resident_reduction = steady_resident_reduction(
@@ -333,7 +1094,22 @@ def summarize(rows_by_case: dict[str, list[dict[str, Any]]], *, seed: int = 2026
     long_huge_steady_resident_reduction = steady_resident_reduction(
         "long-huge-oracle"
     )
-    invariants = all(
+    policy_off_steady_resident = summaries["policy-off"][
+        "median_steady_effective_resident_kib"
+    ]
+
+    def reduction_vs_policy_off(target: str) -> float:
+        if policy_off_steady_resident == 0:
+            return 0.0
+        return 1.0 - (
+            summaries[target]["median_steady_effective_resident_kib"]
+            / policy_off_steady_resident
+        )
+    classification_invariants = all(
+        summary["all_confusion_closed"] for summary in summaries.values()
+    )
+    trace_evidence = paired_prediction_trace_evidence(rows_by_case)
+    allocator_invariants = all(
         summary["all_passed"]
         and summary["all_own_mappings_released"]
         and summary["all_accounting_consistent"]
@@ -347,7 +1123,12 @@ def summarize(rows_by_case: dict[str, list[dict[str, Any]]], *, seed: int = 2026
         and summary["max_unsupported_layout_bypasses"] == 0
         for summary in summaries.values()
     )
-    structural_go = (
+    invariants = (
+        allocator_invariants
+        and classification_invariants
+        and trace_evidence["all_matched"]
+    )
+    binary_placement_go = (
         invariants
         and all_huge_peak > 0
         and long_huge_peak > 0
@@ -357,12 +1138,40 @@ def summarize(rows_by_case: dict[str, list[dict[str, Any]]], *, seed: int = 2026
         and long_huge_steady_resident_reduction >= 0.4
     )
     touch_ci = touch["bootstrap_95pct"]
-    if structural_go and touch_ci[0] > 0.0:
-        verdict = "go-integrated-placement-and-tlb"
-    elif structural_go:
-        verdict = "go-integrated-placement-performance-inconclusive"
+    confidence_comparisons = confidence_epoch_comparisons(
+        rows_by_case, summaries, seed=seed
+    )
+    confidence_error_rows = {
+        name: comparison
+        for name, comparison in confidence_comparisons.items()
+        if "-error-" in name or "-fp-heavy-" in name or name.endswith("-shuffled")
+    }
+    confidence_abstention_evaluated = bool(confidence_error_rows)
+    confidence_abstention_go = confidence_abstention_evaluated and any(
+        (comparison["abstention_gain"].get("retained_byte_epochs_reduction") or 0.0)
+        > 0.0
+        and (
+            comparison["abstention_gain"]
+            .get("classification", {})
+            .get("effective_placement_false_positive_objects_reduction")
+            or 0.0
+        )
+        >= 0.5
+        for comparison in confidence_error_rows.values()
+    )
+    # The persistent-long/ephemeral-wave matrix cannot identify incremental
+    # epoch-cohort reclamation. A separate rolling-overlap evaluator owns that
+    # claim and its lifecycle-cost gate.
+    epoch_cohort_reclaim_evaluated = False
+    epoch_cohort_reclaim_go = None
+    if binary_placement_go and confidence_abstention_go:
+        verdict = "go-binary-and-confidence-abstention-epoch-unresolved"
+    elif binary_placement_go and touch_ci[0] > 0.0:
+        verdict = "go-binary-lifetime-placement-and-tlb"
+    elif binary_placement_go:
+        verdict = "go-binary-lifetime-placement-performance-inconclusive"
     else:
-        verdict = "no-go-integrated-arena"
+        verdict = "no-go-binary-lifetime-placement"
     sensitivity = {
         name: {
             "median_steady_retained_bytes": summary["median_steady_retained_bytes"],
@@ -379,7 +1188,10 @@ def summarize(rows_by_case: dict[str, list[dict[str, Any]]], *, seed: int = 2026
             "median_ns_per_touch": summary["median_ns_per_touch"],
         }
         for name, summary in summaries.items()
-        if name.startswith("long-huge-error-") or name == "long-huge-shuffled"
+        if name.startswith("long-huge-error-")
+        or name.startswith("long-huge-binary-error-")
+        or name.startswith("long-huge-binary-fp-heavy-")
+        or name in {"long-huge-shuffled", "long-huge-binary-shuffled"}
     }
     lifetime_only_sensitivity = {
         name: {
@@ -402,7 +1214,10 @@ def summarize(rows_by_case: dict[str, list[dict[str, Any]]], *, seed: int = 2026
     }
     identity_packing = {}
     for exact_name, exact_summary in sensitivity.items():
-        suffix = exact_name.removeprefix("long-huge-")
+        if exact_name.startswith("long-huge-binary-"):
+            suffix = exact_name.removeprefix("long-huge-binary-")
+        else:
+            suffix = exact_name.removeprefix("long-huge-")
         relaxed_name = f"long-huge-lifetime-only-{suffix}"
         relaxed_summary = lifetime_only_sensitivity.get(relaxed_name)
         if relaxed_summary is None:
@@ -432,27 +1247,161 @@ def summarize(rows_by_case: dict[str, list[dict[str, Any]]], *, seed: int = 2026
             ),
         }
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "production_allocator_path": True,
         "case_summaries": summaries,
         "comparisons": {
             "long_huge_peak_hugetlb_reduction_vs_all_huge": peak_hugetlb_reduction,
-            "ordinary_segregated_steady_resident_reduction_vs_policy_off": ordinary_steady_resident_reduction,
-            "long_huge_steady_resident_reduction_vs_policy_off": long_huge_steady_resident_reduction,
+            "ordinary_segregated_steady_resident_reduction_vs_policy_off": reduction_vs_policy_off(
+                "ordinary-segregated"
+            ),
+            "long_huge_steady_resident_reduction_vs_policy_off": reduction_vs_policy_off(
+                "long-huge-oracle"
+            ),
+            "resident_comparison_baseline": resident_baseline_name,
+            "ordinary_segregated_steady_resident_reduction_vs_raw_default": (
+                ordinary_steady_resident_reduction
+            ),
+            "long_huge_steady_resident_reduction_vs_raw_default": (
+                long_huge_steady_resident_reduction
+            ),
             "long_huge_touch_vs_ordinary_segregated": touch,
             "misprediction_sensitivity": sensitivity,
             "lifetime_only_misprediction_sensitivity": lifetime_only_sensitivity,
             "exact_identity_packing_vs_lifetime_only": identity_packing,
+            "confidence_epoch_vs_binary": confidence_comparisons,
+            "paired_prediction_trace": trace_evidence,
         },
+        "allocator_invariants_passed": allocator_invariants,
+        "classification_invariants_passed": classification_invariants,
+        "paired_prediction_traces_passed": trace_evidence["all_matched"],
         "invariants_passed": invariants,
-        "structural_go": structural_go,
+        "binary_placement_go": binary_placement_go,
+        "confidence_abstention_evaluated": confidence_abstention_evaluated,
+        "confidence_abstention_go": confidence_abstention_go,
+        "epoch_cohort_reclaim_evaluated": epoch_cohort_reclaim_evaluated,
+        "epoch_cohort_reclaim_go": epoch_cohort_reclaim_go,
+        "structural_go": binary_placement_go,
         "verdict": verdict,
         "claim_grade": False,
         "claim_boundary": (
-            "production allocator integration with manual-oracle and injected-error hints; "
-            "compiler profile plumbing is implemented, while real-workload trained profiles remain open"
+            "binary lifetime placement and confidence abstention use synthetic calibrated "
+            "hints plus injected errors; this persistent-long matrix does not identify "
+            "incremental epoch-cohort reclaim, and real-workload trained profiles remain open"
         ),
     }
+
+
+def perf_cases(matrix: list[Case]) -> list[Case]:
+    base_names = {
+        "ordinary-segregated",
+        "all-huge-segregated",
+        "long-huge-binary",
+        "confidence-only",
+        "confidence-epoch",
+    }
+    return [
+        case
+        for case in matrix
+        if case.name in base_names
+        or case.name.startswith("long-huge-binary-error-")
+        or case.name.startswith("long-huge-binary-fp-heavy-")
+        or case.name.startswith("confidence-only-error-")
+        or case.name.startswith("confidence-only-fp-heavy-")
+        or case.name.startswith("confidence-epoch-error-")
+        or case.name.startswith("confidence-epoch-fp-heavy-")
+        or case.name
+        in {
+            "long-huge-binary-shuffled",
+            "confidence-only-shuffled",
+            "confidence-epoch-shuffled",
+        }
+    ]
+
+
+def perf_command(
+    binary: Path,
+    case: Case,
+    args: argparse.Namespace,
+    repeat_seed: int,
+) -> list[str]:
+    return [
+        "sudo",
+        "-n",
+        "perf",
+        "stat",
+        "-x",
+        ";",
+        "-e",
+        ",".join(DEFAULT_PERF_EVENTS),
+        "--",
+        *probe_command(binary, case, args, repeat_seed),
+    ]
+
+
+def run_perf(
+    binary: Path,
+    raw_dir: Path,
+    args: argparse.Namespace,
+    matrix: list[Case],
+) -> dict[str, Any]:
+    if not shutil.which("perf") or not shutil.which("sudo"):
+        return {"status": "skipped", "reason": "perf or sudo unavailable"}
+    preflight = subprocess.run(
+        ["sudo", "-n", "true"],
+        cwd=repo_root(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=min(args.timeout, 10),
+        check=False,
+    )
+    if preflight.returncode != 0:
+        return {
+            "status": "skipped",
+            "reason": "sudo -n unavailable",
+            "stderr": preflight.stderr.strip(),
+        }
+
+    records: list[dict[str, Any]] = []
+    for case in perf_cases(matrix):
+        command = perf_command(binary, case, args, args.seed)
+        completed = subprocess.run(
+            command,
+            cwd=repo_root(),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=args.timeout,
+            check=False,
+        )
+        stdout_name = f"perf-{case.name}.stdout"
+        stderr_name = f"perf-{case.name}.stderr"
+        (raw_dir / stdout_name).write_text(completed.stdout, encoding="utf-8")
+        (raw_dir / stderr_name).write_text(completed.stderr, encoding="utf-8")
+        records.append(
+            {
+                "case": case.name,
+                "returncode": completed.returncode,
+                "stdout": stdout_name,
+                "stderr": stderr_name,
+                "command": command,
+            }
+        )
+
+    result = {
+        "status": (
+            "collected"
+            if records and all(record["returncode"] == 0 for record in records)
+            else "partial"
+        ),
+        "events": list(DEFAULT_PERF_EVENTS),
+        "records": records,
+    }
+    (raw_dir / "perf-manifest.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return result
 
 
 def main() -> int:
@@ -487,6 +1436,11 @@ def main() -> int:
         args.error_rates,
         args.include_shuffled,
         args.include_lifetime_only_baseline,
+        confidence_threshold=args.confidence_threshold,
+        correct_confidence=args.correct_confidence,
+        error_confidence=args.error_confidence,
+        confidence_overlap_rate=args.confidence_overlap_rate,
+        unknown_rate=args.unknown_rate,
     )
     rows_by_case: dict[str, list[dict[str, Any]]] = {name: [] for name, *_ in matrix}
     randomizer = random.Random(args.seed)
@@ -534,6 +1488,11 @@ def main() -> int:
             "long_fraction": args.long_fraction,
             "error_rates": args.error_rates,
             "include_lifetime_only_baseline": args.include_lifetime_only_baseline,
+            "confidence_threshold": args.confidence_threshold,
+            "correct_confidence": args.correct_confidence,
+            "error_confidence": args.error_confidence,
+            "confidence_overlap_rate": args.confidence_overlap_rate,
+            "unknown_rate": args.unknown_rate,
             "ephemeral_waves": args.ephemeral_waves,
             "warmup_passes": args.warmup_passes,
             "passes": args.passes,
@@ -543,7 +1502,14 @@ def main() -> int:
             "seed": args.seed,
             "hugepages_free_before": pool_before,
             "hugepages_free_after": pool_after,
-            "global_pool_restored_diagnostic": pool_before is not None and pool_before == pool_after,
+            "global_pool_restored_diagnostic": (
+                pool_before is not None and pool_before == pool_after
+            ),
+            "perf": (
+                run_perf(binary, raw_dir, args, matrix)
+                if args.perf
+                else {"status": "skipped"}
+            ),
         }
     )
     summary_path = result_dir / "summary.json"

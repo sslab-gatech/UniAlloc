@@ -92,19 +92,39 @@ unialloc-lifetime-profile-v1
 0xd670bc4f00ad57ef 0xefa40a42f3015a14 0xfa02c02b1264f343 long-lived
 ```
 
+The v2 format adds a required confidence in the range `1..=100`:
+
+```text
+unialloc-lifetime-profile-v2
+# callsite type_id module_id lifetime_class confidence
+0xd082983f56011871 0xefa40a42f3015a14 0xfa02c02b1264f343 ephemeral 95
+0xd670bc4f00ad57ef 0xefa40a42f3015a14 0xfa02c02b1264f343 long-lived 60
+```
+
+Set the minimum accepted confidence with
+`--unialloc-lifetime-confidence-threshold <0..100>` or
+`UNIALLOC_LIFETIME_CONFIDENCE_THRESHOLD=<0..100>`. The default threshold is
+`0`, so every valid v2 entry is accepted. An exact entry below the threshold
+abstains with `lifetime_hint=0`, preserves its source confidence in the audit,
+and records `profile_below_confidence_threshold` as its basis. V1 remains fully
+compatible and assigns confidence `100` to each valid four-column entry.
+
 Decimal identifiers and numeric classes `1` (ephemeral) and `2` (long-lived)
 are also accepted. The profile lookup is exact: a missing site, a type/module
-guard mismatch, an invalid class, an invalid format, or a duplicate key emits
-`lifetime_hint=0` (`Unknown`). When a profile is present, this fail-closed result
-also overrides any invocation-wide `--unialloc-lifetime-hint` value.
+guard mismatch, an invalid class or confidence, an invalid format, or a
+duplicate key emits `lifetime_hint=0` (`Unknown`). When a profile is present,
+this fail-closed result also overrides any invocation-wide
+`--unialloc-lifetime-hint` value.
 
-Every rewrite row records `lifetime_hint_basis`. The compiler-pass audit records
-profile match/miss counts, invalid/duplicate counts, the exact-key binding, the
-source path, and a `fnv1a64-raw-bytes` digest. The digest is a reproducibility
-fingerprint rather than a cryptographic authenticity claim. The type/module
-guards protect against applying an otherwise identical callsite hash to a stale
-object identity or compilation unit; regenerated MIR/source spans can change a
-callsite and therefore produce a conservative miss. Match/miss counts cover
+Every rewrite row records `lifetime_hint_confidence` and
+`lifetime_hint_basis`. The compiler-pass audit records the configured threshold,
+profile match/miss/abstention counts, invalid/duplicate counts, the exact-key
+binding, the source path, and a `fnv1a64-raw-bytes` digest. Abstentions form a
+separate count from profile misses. The digest is a reproducibility fingerprint
+rather than a cryptographic authenticity claim. The type/module guards protect
+against applying an otherwise identical callsite hash to a stale object identity
+or compilation unit; regenerated MIR/source spans can change a callsite and
+therefore produce a conservative miss. Match/miss/abstention counts cover
 metadata-carrying candidates; fail-closed skipped candidates have an explicit
 `not_applicable_skipped_candidate` basis.
 

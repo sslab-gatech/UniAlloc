@@ -72,6 +72,8 @@ fn main() {
         *,
         fixture: Path | None = None,
         actual_semantic_rewrite: bool = False,
+        confidence_threshold: int | None = None,
+        confidence_threshold_from_env: bool = False,
         extra_rustc_args: tuple[str, ...] = (),
     ) -> dict[str, object]:
         audit = self.tmp / f"{label}.json"
@@ -85,6 +87,10 @@ fn main() {
             command.append("--unialloc-actual-semantic-scope-rewrite")
         if profile is not None:
             command.extend(["--unialloc-lifetime-profile", str(profile)])
+        if confidence_threshold is not None and not confidence_threshold_from_env:
+            command.extend(
+                ["--unialloc-lifetime-confidence-threshold", str(confidence_threshold)]
+            )
         command.extend(
             [
                 "--",
@@ -98,6 +104,9 @@ fn main() {
             ]
         )
         env = os.environ.copy()
+        env.pop("UNIALLOC_LIFETIME_CONFIDENCE_THRESHOLD", None)
+        if confidence_threshold is not None and confidence_threshold_from_env:
+            env["UNIALLOC_LIFETIME_CONFIDENCE_THRESHOLD"] = str(confidence_threshold)
         library_path = str(self.sysroot / "lib")
         env["LD_LIBRARY_PATH"] = library_path
         env["DYLD_LIBRARY_PATH"] = library_path
@@ -150,6 +159,8 @@ fn main() {
         exact_long_lived = self.target_row(exact, "long_lived_site")
         self.assertEqual(exact_ephemeral["lifetime_hint"], 1)
         self.assertEqual(exact_long_lived["lifetime_hint"], 2)
+        self.assertEqual(exact_ephemeral["lifetime_hint_confidence"], 100)
+        self.assertEqual(exact_long_lived["lifetime_hint_confidence"], 100)
         self.assertEqual(exact_ephemeral["lifetime_hint_basis"], "profile_exact_match")
         self.assertEqual(exact_long_lived["lifetime_hint_basis"], "profile_exact_match")
         compiler_pass = exact["compiler_pass"]
@@ -158,6 +169,8 @@ fn main() {
             compiler_pass["lifetime_profile_binding"], "exact(callsite,type_id,module_id)"
         )
         self.assertEqual(compiler_pass["lifetime_profile_match_count"], 2)
+        self.assertEqual(compiler_pass["lifetime_profile_abstention_count"], 0)
+        self.assertEqual(compiler_pass["lifetime_profile_format"], "unialloc-lifetime-profile-v1")
         self.assertRegex(str(compiler_pass["lifetime_profile_digest"]), r"^[0-9a-f]{16}$")
 
         guarded_profile = self.tmp / "guarded.profile"
@@ -192,6 +205,52 @@ fn main() {
         self.assertEqual(guarded_pass["lifetime_profile_invalid_line_count"], 1)
         self.assertEqual(guarded_pass["lifetime_profile_duplicate_key_count"], 1)
         self.assertGreaterEqual(guarded_pass["lifetime_profile_miss_count"], 2)
+
+    def test_v2_confidence_threshold_abstains_and_cli_matches_environment(self) -> None:
+        baseline = self.run_pass("confidence-baseline")
+        ephemeral = self.target_row(baseline, "ephemeral_site")
+        long_lived = self.target_row(baseline, "long_lived_site")
+
+        profile = self.tmp / "confidence-v2.profile"
+        profile.write_text(
+            "\n".join(
+                [
+                    "unialloc-lifetime-profile-v2",
+                    f"{self.profile_line(ephemeral, 1)} 95",
+                    f"{self.profile_line(long_lived, 2)} 40",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        for label, from_env in (("confidence-cli", False), ("confidence-env", True)):
+            with self.subTest(configuration=label):
+                audit = self.run_pass(
+                    label,
+                    profile,
+                    confidence_threshold=80,
+                    confidence_threshold_from_env=from_env,
+                )
+                accepted = self.target_row(audit, "ephemeral_site")
+                abstained = self.target_row(audit, "long_lived_site")
+                self.assertEqual(accepted["lifetime_hint"], 1)
+                self.assertEqual(accepted["lifetime_hint_confidence"], 95)
+                self.assertEqual(accepted["lifetime_hint_basis"], "profile_exact_match")
+                self.assertEqual(abstained["lifetime_hint"], 0)
+                self.assertEqual(abstained["lifetime_hint_confidence"], 40)
+                self.assertEqual(
+                    abstained["lifetime_hint_basis"],
+                    "profile_below_confidence_threshold",
+                )
+                compiler_pass = audit["compiler_pass"]
+                self.assertEqual(
+                    compiler_pass["lifetime_profile_format"],
+                    "unialloc-lifetime-profile-v2",
+                )
+                self.assertEqual(compiler_pass["lifetime_profile_confidence_threshold"], 80)
+                self.assertEqual(compiler_pass["lifetime_profile_match_count"], 1)
+                self.assertEqual(compiler_pass["lifetime_profile_abstention_count"], 1)
 
     def test_actual_rewrite_passes_exact_profile_hints_to_runtime(self) -> None:
         stub_source = self.tmp / "unialloc_stub.rs"

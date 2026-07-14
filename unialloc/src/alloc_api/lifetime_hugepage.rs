@@ -1,10 +1,21 @@
 //! Feature-gated payload arenas driven by exact lifetime metadata.
 //!
+//! Classified objects carry one of the stable ABI values Unknown/Ephemeral/
+//! LongLived. A process-wide logical epoch records whether each routed object
+//! dies within its allocation phase or survives a phase boundary, producing
+//! object- and rounded-slot-byte-weighted predictor and placement confusion
+//! matrices. Regions reused across epochs by a non-cohort policy are excluded
+//! when individual object epochs cannot be recovered without side metadata. The
+//! epoch-cohort policy also keeps different birth epochs out of the same 2 MiB
+//! extent so runtime truth can guide reclaim-oriented placement experiments.
+//!
 //! The implementation deliberately owns all bookkeeping in fixed process
 //! tables. Mapping or releasing an extent therefore cannot recurse through the
 //! allocator whose payload path it is implementing.
 
-use super::type_isolation::{lifetime_placement_class, AllocationMetadata, LifetimePlacementClass};
+use super::type_isolation::{
+    lifetime_placement_class, AllocationMetadata, LifetimePlacementClass, FLAG_DELAYED_FREE,
+};
 use crate::pal::sys_alloc::{self, prots, HugePageMmapBacking};
 use crate::size_class::{get_size_class_tuple, SizeClass, TOTAL_SIZE_CLASS};
 use core::alloc::Layout;
@@ -38,6 +49,10 @@ pub enum LifetimeHugepagePolicy {
     SegregatedOrdinary = 1,
     LongLivedHugepage = 2,
     SegregatedHugepage = 3,
+    /// Apply the binary lifetime policy while keeping allocations from
+    /// different runtime epochs out of the same 2 MiB extent. Static
+    /// confidence abstention happens before this ABI and arrives as Unknown.
+    EpochCohortHugepage = 4,
 }
 
 impl LifetimeHugepagePolicy {
@@ -47,6 +62,7 @@ impl LifetimeHugepagePolicy {
             1 => Self::SegregatedOrdinary,
             2 => Self::LongLivedHugepage,
             3 => Self::SegregatedHugepage,
+            4 => Self::EpochCohortHugepage,
             _ => Self::Disabled,
         }
     }
@@ -56,12 +72,21 @@ impl LifetimeHugepagePolicy {
         match (self, class) {
             (Self::Disabled, _) | (_, LifetimePlacementClass::Unknown) => None,
             (Self::SegregatedOrdinary, _) => Some(RequestedBacking::Ordinary),
-            (Self::LongLivedHugepage, LifetimePlacementClass::Ephemeral) => {
-                Some(RequestedBacking::Ordinary)
-            }
-            (Self::LongLivedHugepage, LifetimePlacementClass::LongLived)
+            (
+                Self::LongLivedHugepage | Self::EpochCohortHugepage,
+                LifetimePlacementClass::Ephemeral,
+            ) => Some(RequestedBacking::Ordinary),
+            (
+                Self::LongLivedHugepage | Self::EpochCohortHugepage,
+                LifetimePlacementClass::LongLived,
+            )
             | (Self::SegregatedHugepage, _) => Some(RequestedBacking::Hugepage),
         }
+    }
+
+    #[inline]
+    fn separates_epoch_extents(self) -> bool {
+        self == Self::EpochCohortHugepage
     }
 }
 
@@ -93,9 +118,14 @@ impl ActualBacking {
 pub struct LifetimeHugepageStatsSnapshot {
     pub policy: LifetimeHugepagePolicy,
     pub extent_bytes: usize,
+    /// Current process-wide allocation epoch. Epoch 1 is the initial phase.
+    pub current_epoch: usize,
+    pub phase_advances: usize,
+    pub epoch_cohort_extent_mappings: usize,
     pub routed_allocations: usize,
     pub routed_deallocations: usize,
     pub unknown_bypasses: usize,
+    pub unknown_bypass_requested_bytes: usize,
     pub unsupported_layout_bypasses: usize,
     pub allocation_fallbacks: usize,
     pub slot_reuse_hits: usize,
@@ -119,12 +149,49 @@ pub struct LifetimeHugepageStatsSnapshot {
     pub live_ephemeral_objects: usize,
     pub live_long_lived_objects: usize,
     pub live_slot_bytes: usize,
+    /// Allocation generations whose allocate/release epochs produced runtime
+    /// truth. A moved realloc closes the old generation and starts a new one;
+    /// an in-place realloc preserves its original birth epoch.
+    pub runtime_validated_objects: usize,
+    pub runtime_validated_bytes: usize,
+    /// Objects excluded because delayed release or a mixed-epoch region
+    /// obscures the individual object's logical death epoch.
+    pub runtime_validation_excluded_objects: usize,
+    pub runtime_validation_excluded_bytes: usize,
+    pub runtime_delayed_free_excluded_objects: usize,
+    pub runtime_delayed_free_excluded_bytes: usize,
+    pub runtime_mixed_epoch_excluded_objects: usize,
+    pub runtime_mixed_epoch_excluded_bytes: usize,
+    /// Predictor confusion matrix. "Positive" means predicted long-lived;
+    /// byte fields measure rounded arena slot bytes.
+    pub predictor_true_positive_objects: usize,
+    pub predictor_true_positive_bytes: usize,
+    pub predictor_true_negative_objects: usize,
+    pub predictor_true_negative_bytes: usize,
+    pub predictor_false_positive_objects: usize,
+    pub predictor_false_positive_bytes: usize,
+    pub predictor_false_negative_objects: usize,
+    pub predictor_false_negative_bytes: usize,
+    /// Actual-placement confusion matrix. "Positive" means the extent was
+    /// backed by HugeTLB after mapping/fallback; byte fields measure rounded
+    /// arena slot bytes.
+    pub placement_true_positive_objects: usize,
+    pub placement_true_positive_bytes: usize,
+    pub placement_true_negative_objects: usize,
+    pub placement_true_negative_bytes: usize,
+    pub placement_false_positive_objects: usize,
+    pub placement_false_positive_bytes: usize,
+    pub placement_false_negative_objects: usize,
+    pub placement_false_negative_bytes: usize,
     pub current_identity_regions: usize,
     pub peak_identity_regions: usize,
     pub retained_bytes: usize,
-    /// Bytes held in completely unassigned regions of otherwise-live extents.
-    /// They can serve any exact identity in the same coarse bucket immediately.
+    /// Bytes held in completely unassigned regions that can serve the current
+    /// policy and allocation epoch immediately.
     pub reusable_unassigned_region_bytes: usize,
+    /// Unassigned bytes pinned in older epoch-cohort extents. They cannot be
+    /// reused by a later cohort while any slot in the extent remains live.
+    pub cohort_pinned_unassigned_region_bytes: usize,
     /// Bytes inside assigned regions that are not occupied by live slots.
     pub assigned_region_slack_bytes: usize,
     /// Total retained payload capacity beyond the current live rounded slots.
@@ -139,6 +206,55 @@ struct SlotGeometry {
     slot_size: usize,
     region_capacity: usize,
     bucket: usize,
+}
+
+#[derive(Clone, Copy)]
+struct ConfusionCounters {
+    true_positive_objects: usize,
+    true_positive_bytes: usize,
+    true_negative_objects: usize,
+    true_negative_bytes: usize,
+    false_positive_objects: usize,
+    false_positive_bytes: usize,
+    false_negative_objects: usize,
+    false_negative_bytes: usize,
+}
+
+impl ConfusionCounters {
+    const fn new() -> Self {
+        Self {
+            true_positive_objects: 0,
+            true_positive_bytes: 0,
+            true_negative_objects: 0,
+            true_negative_bytes: 0,
+            false_positive_objects: 0,
+            false_positive_bytes: 0,
+            false_negative_objects: 0,
+            false_negative_bytes: 0,
+        }
+    }
+
+    #[inline]
+    fn record(&mut self, predicted_positive: bool, actual_positive: bool, bytes: usize) {
+        match (predicted_positive, actual_positive) {
+            (true, true) => {
+                self.true_positive_objects = self.true_positive_objects.saturating_add(1);
+                self.true_positive_bytes = self.true_positive_bytes.saturating_add(bytes);
+            }
+            (false, false) => {
+                self.true_negative_objects = self.true_negative_objects.saturating_add(1);
+                self.true_negative_bytes = self.true_negative_bytes.saturating_add(bytes);
+            }
+            (true, false) => {
+                self.false_positive_objects = self.false_positive_objects.saturating_add(1);
+                self.false_positive_bytes = self.false_positive_bytes.saturating_add(bytes);
+            }
+            (false, true) => {
+                self.false_negative_objects = self.false_negative_objects.saturating_add(1);
+                self.false_negative_bytes = self.false_negative_bytes.saturating_add(bytes);
+            }
+        }
+    }
 }
 
 /// Match the semantic cache's exact reuse boundary. Callsite stays
@@ -177,6 +293,11 @@ impl ArenaIdentity {
 #[derive(Clone, Copy)]
 struct IdentityRegion {
     identity: ArenaIdentity,
+    /// Allocation epoch when every live slot is known to share one epoch.
+    birth_epoch: usize,
+    /// A non-cohort policy reused this region across allocation epochs while
+    /// older slots remained live, so per-object death epochs are ambiguous.
+    epoch_mixed: bool,
     next_unused: usize,
     live: usize,
     free_head: usize,
@@ -187,6 +308,8 @@ impl IdentityRegion {
     const fn empty() -> Self {
         Self {
             identity: ArenaIdentity::unknown(),
+            birth_epoch: 0,
+            epoch_mixed: false,
             next_unused: 0,
             live: 0,
             free_head: NONE,
@@ -209,6 +332,8 @@ struct Extent {
     bucket: usize,
     regions: [IdentityRegion; IDENTITY_REGIONS_PER_EXTENT],
     lifetime_class: LifetimePlacementClass,
+    /// Nonzero only when policy forbids cross-epoch extent mixing.
+    cohort_epoch: usize,
     backing: ActualBacking,
     available_prev: usize,
     available_next: usize,
@@ -226,6 +351,7 @@ impl Extent {
             bucket: 0,
             regions: [IdentityRegion::empty(); IDENTITY_REGIONS_PER_EXTENT],
             lifetime_class: LifetimePlacementClass::Unknown,
+            cohort_epoch: 0,
             backing: ActualBacking::Unmapped,
             available_prev: NONE,
             available_next: NONE,
@@ -240,10 +366,16 @@ impl Extent {
     }
 
     #[inline]
-    fn matching_region_with_space(&self, identity: ArenaIdentity) -> Option<usize> {
+    fn matching_region_with_space(
+        &self,
+        identity: ArenaIdentity,
+        birth_epoch: usize,
+        require_epoch_match: bool,
+    ) -> Option<usize> {
         self.regions.iter().position(|region| {
             region.assigned
                 && region.identity == identity
+                && (!require_epoch_match || region.birth_epoch == birth_epoch)
                 && region.has_available_slot(self.region_capacity)
         })
     }
@@ -269,9 +401,13 @@ struct LifetimeArenaState {
     available_heads: [usize; BUCKET_COUNT],
     next_unused_descriptor: usize,
     free_descriptor_head: usize,
+    current_epoch: usize,
+    phase_advances: usize,
+    epoch_cohort_extent_mappings: usize,
     routed_allocations: usize,
     routed_deallocations: usize,
     unknown_bypasses: usize,
+    unknown_bypass_requested_bytes: usize,
     unsupported_layout_bypasses: usize,
     allocation_fallbacks: usize,
     slot_reuse_hits: usize,
@@ -295,6 +431,16 @@ struct LifetimeArenaState {
     live_ephemeral_objects: usize,
     live_long_lived_objects: usize,
     live_slot_bytes: usize,
+    runtime_validated_objects: usize,
+    runtime_validated_bytes: usize,
+    runtime_validation_excluded_objects: usize,
+    runtime_validation_excluded_bytes: usize,
+    runtime_delayed_free_excluded_objects: usize,
+    runtime_delayed_free_excluded_bytes: usize,
+    runtime_mixed_epoch_excluded_objects: usize,
+    runtime_mixed_epoch_excluded_bytes: usize,
+    predictor_confusion: ConfusionCounters,
+    placement_confusion: ConfusionCounters,
     current_identity_regions: usize,
     peak_identity_regions: usize,
 }
@@ -307,9 +453,13 @@ impl LifetimeArenaState {
             available_heads: [NONE; BUCKET_COUNT],
             next_unused_descriptor: 0,
             free_descriptor_head: NONE,
+            current_epoch: 1,
+            phase_advances: 0,
+            epoch_cohort_extent_mappings: 0,
             routed_allocations: 0,
             routed_deallocations: 0,
             unknown_bypasses: 0,
+            unknown_bypass_requested_bytes: 0,
             unsupported_layout_bypasses: 0,
             allocation_fallbacks: 0,
             slot_reuse_hits: 0,
@@ -333,6 +483,16 @@ impl LifetimeArenaState {
             live_ephemeral_objects: 0,
             live_long_lived_objects: 0,
             live_slot_bytes: 0,
+            runtime_validated_objects: 0,
+            runtime_validated_bytes: 0,
+            runtime_validation_excluded_objects: 0,
+            runtime_validation_excluded_bytes: 0,
+            runtime_delayed_free_excluded_objects: 0,
+            runtime_delayed_free_excluded_bytes: 0,
+            runtime_mixed_epoch_excluded_objects: 0,
+            runtime_mixed_epoch_excluded_bytes: 0,
+            predictor_confusion: ConfusionCounters::new(),
+            placement_confusion: ConfusionCounters::new(),
             current_identity_regions: 0,
             peak_identity_regions: 0,
         }
@@ -340,9 +500,13 @@ impl LifetimeArenaState {
 
     #[inline]
     fn reset_counters(&mut self) {
+        self.current_epoch = 1;
+        self.phase_advances = 0;
+        self.epoch_cohort_extent_mappings = 0;
         self.routed_allocations = 0;
         self.routed_deallocations = 0;
         self.unknown_bypasses = 0;
+        self.unknown_bypass_requested_bytes = 0;
         self.unsupported_layout_bypasses = 0;
         self.allocation_fallbacks = 0;
         self.slot_reuse_hits = 0;
@@ -356,6 +520,16 @@ impl LifetimeArenaState {
         self.nohugepage_advice_failures = 0;
         self.extent_unmaps = 0;
         self.extent_unmap_failures = 0;
+        self.runtime_validated_objects = 0;
+        self.runtime_validated_bytes = 0;
+        self.runtime_validation_excluded_objects = 0;
+        self.runtime_validation_excluded_bytes = 0;
+        self.runtime_delayed_free_excluded_objects = 0;
+        self.runtime_delayed_free_excluded_bytes = 0;
+        self.runtime_mixed_epoch_excluded_objects = 0;
+        self.runtime_mixed_epoch_excluded_bytes = 0;
+        self.predictor_confusion = ConfusionCounters::new();
+        self.placement_confusion = ConfusionCounters::new();
         self.peak_extents = self.current_extents;
         self.peak_ordinary_extents = self.current_ordinary_extents;
         self.peak_hugetlb_extents = self.current_hugetlb_extents;
@@ -370,16 +544,39 @@ impl LifetimeArenaState {
         let assigned_region_bytes = self
             .current_identity_regions
             .saturating_mul(LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES);
-        let reusable_unassigned_region_bytes = retained_bytes.saturating_sub(assigned_region_bytes);
+        let unassigned_region_bytes = retained_bytes.saturating_sub(assigned_region_bytes);
+        let cohort_pinned_unassigned_region_bytes =
+            if lifetime_hugepage_policy() == LifetimeHugepagePolicy::EpochCohortHugepage {
+                self.extents
+                    .iter()
+                    .filter(|extent| extent.in_use() && extent.cohort_epoch != self.current_epoch)
+                    .map(|extent| {
+                        extent
+                            .regions
+                            .iter()
+                            .filter(|region| !region.assigned)
+                            .count()
+                            .saturating_mul(LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES)
+                    })
+                    .fold(0usize, usize::saturating_add)
+            } else {
+                0
+            };
+        let reusable_unassigned_region_bytes =
+            unassigned_region_bytes.saturating_sub(cohort_pinned_unassigned_region_bytes);
         let assigned_region_slack_bytes =
             assigned_region_bytes.saturating_sub(self.live_slot_bytes);
         let retained_slack_bytes = retained_bytes.saturating_sub(self.live_slot_bytes);
         LifetimeHugepageStatsSnapshot {
             policy: lifetime_hugepage_policy(),
             extent_bytes: LIFETIME_HUGEPAGE_EXTENT_BYTES,
+            current_epoch: self.current_epoch,
+            phase_advances: self.phase_advances,
+            epoch_cohort_extent_mappings: self.epoch_cohort_extent_mappings,
             routed_allocations: self.routed_allocations,
             routed_deallocations: self.routed_deallocations,
             unknown_bypasses: self.unknown_bypasses,
+            unknown_bypass_requested_bytes: self.unknown_bypass_requested_bytes,
             unsupported_layout_bypasses: self.unsupported_layout_bypasses,
             allocation_fallbacks: self.allocation_fallbacks,
             slot_reuse_hits: self.slot_reuse_hits,
@@ -403,10 +600,35 @@ impl LifetimeArenaState {
             live_ephemeral_objects: self.live_ephemeral_objects,
             live_long_lived_objects: self.live_long_lived_objects,
             live_slot_bytes: self.live_slot_bytes,
+            runtime_validated_objects: self.runtime_validated_objects,
+            runtime_validated_bytes: self.runtime_validated_bytes,
+            runtime_validation_excluded_objects: self.runtime_validation_excluded_objects,
+            runtime_validation_excluded_bytes: self.runtime_validation_excluded_bytes,
+            runtime_delayed_free_excluded_objects: self.runtime_delayed_free_excluded_objects,
+            runtime_delayed_free_excluded_bytes: self.runtime_delayed_free_excluded_bytes,
+            runtime_mixed_epoch_excluded_objects: self.runtime_mixed_epoch_excluded_objects,
+            runtime_mixed_epoch_excluded_bytes: self.runtime_mixed_epoch_excluded_bytes,
+            predictor_true_positive_objects: self.predictor_confusion.true_positive_objects,
+            predictor_true_positive_bytes: self.predictor_confusion.true_positive_bytes,
+            predictor_true_negative_objects: self.predictor_confusion.true_negative_objects,
+            predictor_true_negative_bytes: self.predictor_confusion.true_negative_bytes,
+            predictor_false_positive_objects: self.predictor_confusion.false_positive_objects,
+            predictor_false_positive_bytes: self.predictor_confusion.false_positive_bytes,
+            predictor_false_negative_objects: self.predictor_confusion.false_negative_objects,
+            predictor_false_negative_bytes: self.predictor_confusion.false_negative_bytes,
+            placement_true_positive_objects: self.placement_confusion.true_positive_objects,
+            placement_true_positive_bytes: self.placement_confusion.true_positive_bytes,
+            placement_true_negative_objects: self.placement_confusion.true_negative_objects,
+            placement_true_negative_bytes: self.placement_confusion.true_negative_bytes,
+            placement_false_positive_objects: self.placement_confusion.false_positive_objects,
+            placement_false_positive_bytes: self.placement_confusion.false_positive_bytes,
+            placement_false_negative_objects: self.placement_confusion.false_negative_objects,
+            placement_false_negative_bytes: self.placement_confusion.false_negative_bytes,
             current_identity_regions: self.current_identity_regions,
             peak_identity_regions: self.peak_identity_regions,
             retained_bytes,
             reusable_unassigned_region_bytes,
+            cohort_pinned_unassigned_region_bytes,
             assigned_region_slack_bytes,
             retained_slack_bytes,
             stranded_bytes: retained_slack_bytes,
@@ -475,7 +697,28 @@ impl LifetimeArenaState {
         self.extents[idx].on_available_list = false;
     }
 
-    fn find_available(&mut self, bucket: usize, identity: ArenaIdentity) -> Option<usize> {
+    /// Epoch-cohort extents from older phases remain valid for their live
+    /// objects, while new allocations must start from a current-epoch list.
+    /// Detaching once per explicit phase keeps allocation search independent
+    /// of the number of surviving historical cohorts.
+    fn detach_available_epoch_cohorts(&mut self) {
+        self.available_heads = [NONE; BUCKET_COUNT];
+        for extent in self.extents[..self.next_unused_descriptor].iter_mut() {
+            if extent.in_use() {
+                extent.available_prev = NONE;
+                extent.available_next = NONE;
+                extent.on_available_list = false;
+            }
+        }
+    }
+
+    fn find_available(
+        &mut self,
+        bucket: usize,
+        identity: ArenaIdentity,
+        birth_epoch: usize,
+        require_extent_cohort: bool,
+    ) -> Option<usize> {
         let mut idx = self.available_heads[bucket];
         let mut unassigned_fallback = NONE;
         let mut visited = 0usize;
@@ -484,10 +727,16 @@ impl LifetimeArenaState {
             if extent.bucket != bucket || !extent.on_available_list {
                 panic!("corrupt lifetime-arena available list");
             }
-            if extent.matching_region_with_space(identity).is_some() {
+            let cohort_matches = !require_extent_cohort || extent.cohort_epoch == birth_epoch;
+            if cohort_matches
+                && extent
+                    .matching_region_with_space(identity, birth_epoch, require_extent_cohort)
+                    .is_some()
+            {
                 break;
             }
-            if unassigned_fallback == NONE && extent.unassigned_region().is_some() {
+            if cohort_matches && unassigned_fallback == NONE && extent.unassigned_region().is_some()
+            {
                 unassigned_fallback = idx;
             }
             idx = extent.available_next;
@@ -627,6 +876,8 @@ impl LifetimeArenaState {
         geometry: SlotGeometry,
         class: LifetimePlacementClass,
         requested: RequestedBacking,
+        birth_epoch: usize,
+        epoch_cohort: bool,
     ) -> Option<usize> {
         let idx = match self.allocate_descriptor() {
             Some(idx) => idx,
@@ -654,6 +905,7 @@ impl LifetimeArenaState {
             bucket: geometry.bucket,
             regions: [IdentityRegion::empty(); IDENTITY_REGIONS_PER_EXTENT],
             lifetime_class: class,
+            cohort_epoch: if epoch_cohort { birth_epoch } else { 0 },
             backing,
             available_prev: NONE,
             available_next: NONE,
@@ -667,6 +919,9 @@ impl LifetimeArenaState {
             return None;
         }
         self.add_available(idx);
+        if epoch_cohort {
+            self.epoch_cohort_extent_mappings = self.epoch_cohort_extent_mappings.saturating_add(1);
+        }
         self.note_mapped_extent(backing);
         Some(idx)
     }
@@ -676,9 +931,15 @@ impl LifetimeArenaState {
         idx: usize,
         identity: ArenaIdentity,
         class: LifetimePlacementClass,
+        birth_epoch: usize,
+        require_epoch_match: bool,
     ) -> *mut u8 {
         debug_assert!(self.extents[idx].has_available_slot());
-        let region_idx = match self.extents[idx].matching_region_with_space(identity) {
+        let region_idx = match self.extents[idx].matching_region_with_space(
+            identity,
+            birth_epoch,
+            require_epoch_match,
+        ) {
             Some(region_idx) => region_idx,
             None => {
                 let region_idx = self.extents[idx]
@@ -686,6 +947,8 @@ impl LifetimeArenaState {
                     .expect("available extent has no identity region");
                 self.extents[idx].regions[region_idx] = IdentityRegion {
                     identity,
+                    birth_epoch,
+                    epoch_mixed: false,
                     next_unused: 0,
                     live: 0,
                     free_head: NONE,
@@ -699,6 +962,9 @@ impl LifetimeArenaState {
                 region_idx
             }
         };
+        if self.extents[idx].regions[region_idx].birth_epoch != birth_epoch {
+            self.extents[idx].regions[region_idx].epoch_mixed = true;
+        }
         let region_base = self.extents[idx].base
             + region_idx.saturating_mul(LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES);
         let slot_index = if self.extents[idx].regions[region_idx].free_head != NONE {
@@ -735,6 +1001,52 @@ impl LifetimeArenaState {
         (region_base + slot_index * slot_size) as *mut u8
     }
 
+    #[inline]
+    fn note_runtime_validation(
+        &mut self,
+        class: LifetimePlacementClass,
+        actual_backing: ActualBacking,
+        identity: ArenaIdentity,
+        birth_epoch: usize,
+        epoch_mixed: bool,
+        bytes: usize,
+    ) {
+        if identity.flags & FLAG_DELAYED_FREE != 0 {
+            self.runtime_validation_excluded_objects =
+                self.runtime_validation_excluded_objects.saturating_add(1);
+            self.runtime_validation_excluded_bytes =
+                self.runtime_validation_excluded_bytes.saturating_add(bytes);
+            self.runtime_delayed_free_excluded_objects =
+                self.runtime_delayed_free_excluded_objects.saturating_add(1);
+            self.runtime_delayed_free_excluded_bytes = self
+                .runtime_delayed_free_excluded_bytes
+                .saturating_add(bytes);
+            return;
+        }
+        if epoch_mixed {
+            self.runtime_validation_excluded_objects =
+                self.runtime_validation_excluded_objects.saturating_add(1);
+            self.runtime_validation_excluded_bytes =
+                self.runtime_validation_excluded_bytes.saturating_add(bytes);
+            self.runtime_mixed_epoch_excluded_objects =
+                self.runtime_mixed_epoch_excluded_objects.saturating_add(1);
+            self.runtime_mixed_epoch_excluded_bytes = self
+                .runtime_mixed_epoch_excluded_bytes
+                .saturating_add(bytes);
+            return;
+        }
+        let actual_long = self.current_epoch != birth_epoch;
+        self.runtime_validated_objects = self.runtime_validated_objects.saturating_add(1);
+        self.runtime_validated_bytes = self.runtime_validated_bytes.saturating_add(bytes);
+        self.predictor_confusion.record(
+            class == LifetimePlacementClass::LongLived,
+            actual_long,
+            bytes,
+        );
+        self.placement_confusion
+            .record(actual_backing.is_hugetlb(), actual_long, bytes);
+    }
+
     unsafe fn deallocate(&mut self, ptr: *mut u8) -> bool {
         let base = (ptr as usize) & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
         let idx = match self.lookup_extent(base) {
@@ -744,6 +1056,7 @@ impl LifetimeArenaState {
         let extent_base = self.extents[idx].base;
         let extent_backing = self.extents[idx].backing;
         let lifetime_class = self.extents[idx].lifetime_class;
+        let cohort_epoch = self.extents[idx].cohort_epoch;
         let slot_size = self.extents[idx].slot_size;
         let offset = (ptr as usize).saturating_sub(extent_base);
         if offset >= LIFETIME_HUGEPAGE_EXTENT_BYTES || self.extents[idx].live == 0 {
@@ -759,6 +1072,14 @@ impl LifetimeArenaState {
         {
             panic!("invalid lifetime-arena identity-region pointer release");
         }
+        self.note_runtime_validation(
+            lifetime_class,
+            extent_backing,
+            region.identity,
+            region.birth_epoch,
+            region.epoch_mixed,
+            slot_size,
+        );
         let was_full = !self.extents[idx].has_available_slot();
         let slot_index = region_offset / slot_size;
         (ptr as *mut usize).write(region.free_head);
@@ -770,7 +1091,10 @@ impl LifetimeArenaState {
             self.identity_region_releases = self.identity_region_releases.saturating_add(1);
             self.current_identity_regions = self.current_identity_regions.saturating_sub(1);
         }
-        if was_full {
+        let extent_accepts_current_epoch = lifetime_hugepage_policy()
+            != LifetimeHugepagePolicy::EpochCohortHugepage
+            || cohort_epoch == self.current_epoch;
+        if was_full && extent_accepts_current_epoch {
             self.add_available(idx);
         }
         self.routed_deallocations = self.routed_deallocations.saturating_add(1);
@@ -800,7 +1124,9 @@ impl LifetimeArenaState {
             // Preserve provenance and reuse capability if the kernel refused
             // the terminal release.
             self.extent_unmap_failures = self.extent_unmap_failures.saturating_add(1);
-            self.add_available(idx);
+            if extent_accepts_current_epoch {
+                self.add_available(idx);
+            }
         }
         true
     }
@@ -961,6 +1287,25 @@ pub fn lifetime_hugepage_stats_snapshot() -> LifetimeHugepageStatsSnapshot {
     ARENA.lock().snapshot()
 }
 
+/// Advance the process-wide logical phase used by runtime lifetime validation.
+/// The caller is responsible for placing a workload barrier around the phase
+/// boundary. Advancing never frees storage or invalidates live pointers.
+pub fn lifetime_hugepage_advance_epoch() -> usize {
+    let mut state = ARENA.lock();
+    if lifetime_hugepage_policy() == LifetimeHugepagePolicy::Disabled {
+        return state.current_epoch;
+    }
+    state.current_epoch = state.current_epoch.wrapping_add(1);
+    if state.current_epoch == 0 {
+        state.current_epoch = 1;
+    }
+    state.phase_advances = state.phase_advances.saturating_add(1);
+    if lifetime_hugepage_policy() == LifetimeHugepagePolicy::EpochCohortHugepage {
+        state.detach_available_epoch_cohorts();
+    }
+    state.current_epoch
+}
+
 /// End a lifetime phase on the current thread by terminally releasing its
 /// retained semantic cache and delayed-free entries. This makes phase
 /// boundaries actionable for extent reclamation instead of waiting for TLS
@@ -1000,6 +1345,9 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
         None => {
             if class == LifetimePlacementClass::Unknown {
                 state.unknown_bypasses = state.unknown_bypasses.saturating_add(1);
+                state.unknown_bypass_requested_bytes = state
+                    .unknown_bypass_requested_bytes
+                    .saturating_add(layout.size());
             }
             return None;
         }
@@ -1012,10 +1360,20 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
         }
     };
     let identity = ArenaIdentity::from_metadata(metadata);
-    let idx = if let Some(idx) = state.find_available(geometry.bucket, identity) {
+    let birth_epoch = state.current_epoch;
+    let epoch_cohort = policy.separates_epoch_extents();
+    let idx = if let Some(idx) =
+        state.find_available(geometry.bucket, identity, birth_epoch, epoch_cohort)
+    {
         idx
     } else {
-        match state.create_extent(geometry, class, requested_backing) {
+        match state.create_extent(
+            geometry,
+            class,
+            requested_backing,
+            birth_epoch,
+            epoch_cohort,
+        ) {
             Some(idx) => idx,
             None => {
                 state.allocation_fallbacks = state.allocation_fallbacks.saturating_add(1);
@@ -1023,7 +1381,7 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
             }
         }
     };
-    Some(state.allocate_from_extent(idx, identity, class))
+    Some(state.allocate_from_extent(idx, identity, class, birth_epoch, epoch_cohort))
 }
 
 #[inline]

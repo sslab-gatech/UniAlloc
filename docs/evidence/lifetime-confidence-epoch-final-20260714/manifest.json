@@ -1,0 +1,168 @@
+{
+  "artifacts": [
+    {
+      "bytes": 731513,
+      "path": "main-samples.jsonl",
+      "sha256": "cdca78c466cf3f87ee2fe481f964eec3f55c03772b654a9e120b669d9174e3e5"
+    },
+    {
+      "bytes": 100827,
+      "path": "main-summary.json",
+      "sha256": "4ffbf62b39d7f97340c64855cf7638f11f9b1fb87a6034a6b98f1a998a22bc07"
+    },
+    {
+      "bytes": 549,
+      "path": "perf/perf5-all-huge-segregated.stderr",
+      "sha256": "d47e03d074cb778d601f4cafd79270a4fbdd48c08d803dfbfdea68d9d187aab0"
+    },
+    {
+      "bytes": 23679,
+      "path": "perf/perf5-all-huge-segregated.stdout",
+      "sha256": "68483a46615564bf032ae7249be592ed97b8695a77e28ff3978bb860e7a59660"
+    },
+    {
+      "bytes": 566,
+      "path": "perf/perf5-confidence-only-error-0p05.stderr",
+      "sha256": "ee78b3dff60032b3dfee0d5bfe0f6e83b871ce0c33199a9a8c8c0a545aeb7cfd"
+    },
+    {
+      "bytes": 24460,
+      "path": "perf/perf5-confidence-only-error-0p05.stdout",
+      "sha256": "a2424676cacb07a314b37aeefbe8ca25d188c860dac0c8ddda17cea73dfda5c5"
+    },
+    {
+      "bytes": 566,
+      "path": "perf/perf5-long-huge-binary-error-0p05.stderr",
+      "sha256": "53c366c892c4ed4550d008b3fa84e6d13aed278327ce51cb30f00732a2b27534"
+    },
+    {
+      "bytes": 24434,
+      "path": "perf/perf5-long-huge-binary-error-0p05.stdout",
+      "sha256": "40cb4e078e4dee09d3fced6c4c5ebf126aa9f65cf84725c84101e7b270d6e8d1"
+    },
+    {
+      "bytes": 567,
+      "path": "perf/perf5-long-huge-binary.stderr",
+      "sha256": "38cf2c82cf433ec67ee16b5749766429df988ae667682b6e844d59b689ae6041"
+    },
+    {
+      "bytes": 23645,
+      "path": "perf/perf5-long-huge-binary.stdout",
+      "sha256": "38568689f5455f42354364669988b6109a87680505223a6f22eb40223630dcc7"
+    },
+    {
+      "bytes": 7767,
+      "path": "perf/perf5-manifest.json",
+      "sha256": "9db1282dd57148bbd07964b6dea72465234b30313b2edc924d357c2f75f4f538"
+    },
+    {
+      "bytes": 568,
+      "path": "perf/perf5-ordinary-segregated.stderr",
+      "sha256": "928c02d36d2c3c7e336730b4744b49699e28a1f695c0dfe770572915ad4bfda5"
+    },
+    {
+      "bytes": 23657,
+      "path": "perf/perf5-ordinary-segregated.stdout",
+      "sha256": "5f7a1e89df1f72cd540ab3033f6ea2ef3f046d07bddff32230f0e57233d9b349"
+    },
+    {
+      "bytes": 225328,
+      "path": "rolling-samples.jsonl",
+      "sha256": "cc022a30be2ee308c683a777b3e6e4e0dc56f82ecf0d1921f1ca29f7e1cda00c"
+    },
+    {
+      "bytes": 23578,
+      "path": "rolling-summary.json",
+      "sha256": "9af92d9dcf2f18c2e5d9721d3a1eaefa523b640c007f8b33790e7e4f4ce2cd2d"
+    },
+    {
+      "bytes": 3392,
+      "path": "verification.txt",
+      "sha256": "c67a722f007eb9f461dff68d846c0c99e65013b6fd3b1e26589d7d46e02c7107"
+    }
+  ],
+  "branch": "exp/lifetime-death-epoch-confidence-20260714",
+  "claim_boundary": "Static profile confidence, runtime death-epoch truth, actual HugeTLB placement, and epoch-cohort reclamation are integrated and measured on synthetic calibrated traces. Trained real-workload Rust classifier accuracy, mixed-size/multi-identity generalization, application throughput, and direct LLAMA/TEMERAIRE superiority remain open.",
+  "claim_grade": false,
+  "dev_baseline_commit": "8d369c3a41509b8d77d11768d7d414b94096f1ed",
+  "evidence_grade": "integrated-runtime-validated-synthetic-policy-and-fragmentation-mechanism",
+  "host": {
+    "cpu": "AMD EPYC 9354 32-Core Processor, 2 sockets, 64 cores, 128 logical CPUs",
+    "hugetlb_page_bytes": 2097152,
+    "kernel": "6.8.0-111-generic",
+    "main_cpu": 15,
+    "numa_memory_node": 0,
+    "numa_nodes": 2,
+    "persistent_hugetlb_bytes": 8589934592,
+    "persistent_hugetlb_pages": 4096,
+    "rolling_cpu": 10
+  },
+  "invariants": {
+    "hugetlb_fallback_extent_mappings": 0,
+    "main_rows_passed": 140,
+    "mapping_and_unmap_failures": 0,
+    "pool_free_after": 4096,
+    "pool_reserved_after": 0,
+    "pool_total_after": 4096,
+    "rolling_rows_passed": 60,
+    "runtime_validation_exclusions": 0
+  },
+  "main_matrix": {
+    "case_count": 14,
+    "command": "uv run python evaluation/scripts/lifetime_hugepage_allocator_experiment.py --run-id lifetime-confidence-final-20260714 --objects 262144 --slot-bytes 4096 --types-per-truth 8 --long-fraction 0.5 --error-rates 0.05 --ephemeral-waves 3 --warmup-passes 4 --passes 64 --repeats 10 --confidence-threshold 80 --correct-confidence 90 --error-confidence 60 --confidence-overlap-rate 0.10 --numa-node 0 --cpu 15 --seed 20260714",
+    "epoch_increment_evaluated": false,
+    "invariants_passed": true,
+    "paired_prediction_traces_passed": true,
+    "run_id": "lifetime-confidence-final-20260714",
+    "sample_count": 140,
+    "verdict": "go-binary-and-confidence-abstention-epoch-unresolved"
+  },
+  "perf5": {
+    "binary_error_to_confidence_error_reductions": {
+      "cycles": -0.23032522075492,
+      "l2_dtlb_misses": -0.8578866721453531,
+      "page_faults": -0.8063540008583552
+    },
+    "event_running_percent": 62.0,
+    "interpretation": "directional PMU diagnostic; negative reductions are costs; formal paired touch timing and rolling evaluator retain PERFORMANCE-INCONCLUSIVE",
+    "ordinary_to_binary_reductions": {
+      "4k_reload_l2_misses": 0.8542384499964856,
+      "cycles": 0.06175108716849054,
+      "l1_dtlb_misses": 0.20322699793769816,
+      "l2_dtlb_misses": 0.8051112651987038
+    },
+    "repetitions": 5,
+    "scope": "whole process including allocation, touch, epoch transitions, reclaim, and teardown"
+  },
+  "primary_sources": [
+    {
+      "name": "LLAMA ASPLOS 2020",
+      "url": "https://www.cs.utexas.edu/~mckinley/papers/llama-asplos-2020.pdf"
+    },
+    {
+      "name": "TEMERAIRE OSDI 2021",
+      "url": "https://www.usenix.org/system/files/osdi21-hunter.pdf"
+    },
+    {
+      "name": "TCMalloc Temeraire design",
+      "url": "https://google.github.io/tcmalloc/temeraire.html"
+    }
+  ],
+  "rolling_matrix": {
+    "command": "uv run python evaluation/scripts/lifetime_epoch_cohort_experiment.py --run-id lifetime-epoch-cohort-final-20260714 --warmup-cycles 5 --cycles 20 --repeats 30 --cpu 10 --numa-node 0 --bootstrap-samples 10000",
+    "full_cycle_retention_reduction": 0.19999999999999996,
+    "managed_lifecycle_bootstrap_95pct": [
+      0.34001744193114014,
+      0.3643612646617631
+    ],
+    "managed_lifecycle_overhead": 0.35224359321889254,
+    "paired_repeats": 30,
+    "performance_recommendation": "INCONCLUSIVE",
+    "recommendation": "FRAGMENTATION-GO",
+    "sample_count": 60,
+    "target_reset_retention_reduction": 0.33333333333333337,
+    "target_retention_reduction": 0.5
+  },
+  "schema_version": 1,
+  "source_implementation_commit": "81653d07ca8a33c7fe7503a91f3cc3efac4e3d88"
+}
