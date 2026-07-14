@@ -60,9 +60,21 @@ test = false
 bench = false
 required-features = ["pac"]
 
+[[example]]
+name = "page_run_backend_bench"
+path = "examples/page_run_backend_bench.rs"
+test = false
+bench = false
+required-features = ["fixed_heap"]
+
 [features]
 default = ["pthread_dtor", "rseq"]
 fixed_heap = []
+# Experimental contiguous fixed-heap page-run backend. The segment tree keeps
+# prefix/suffix/max-free summaries so adjacent frees coalesce during updates
+# and contiguous-run lookup stays logarithmic under fragmentation. Heap growth
+# is rejected transactionally because tree metadata is sized at initialization.
+bitmap_page_allocator = ["fixed_heap"]
 # Opt-in slab-class backend switch: default builds keep efficient_sc.
 # When enabled, zone/thread-cache calls are adapted to the bitmap-backed
 # separate size-class/page-management path without changing allocator callers.

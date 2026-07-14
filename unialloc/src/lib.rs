@@ -28,6 +28,7 @@
 #![feature(generic_const_exprs)]
 
 pub mod alloc_api;
+pub mod bitmap_alloc;
 mod cache;
 mod collections;
 mod error;
@@ -532,6 +533,22 @@ mod fixed_heap_c_abi_tests {
             let ptr = unialloc_alloc(32, 8);
             assert!(!ptr.is_null());
             unialloc_dealloc(ptr, 32, 8);
+        }
+    }
+
+    #[cfg(feature = "bitmap_page_allocator")]
+    #[test]
+    fn bitmap_page_allocator_rejects_growth_without_mutating_live_tree() {
+        unsafe {
+            let _fixed_heap_guard = ensure_ready();
+            assert!(!unialloc_fixed_heap_try_extend(
+                crate::PAGE_SIZE,
+                crate::PAGE_SIZE
+            ));
+
+            let ptr = unialloc_alloc(crate::PAGE_SIZE * 8, crate::PAGE_SIZE);
+            assert!(!ptr.is_null());
+            unialloc_dealloc(ptr, crate::PAGE_SIZE * 8, crate::PAGE_SIZE);
         }
     }
 
