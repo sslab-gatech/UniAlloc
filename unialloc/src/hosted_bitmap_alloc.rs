@@ -1247,6 +1247,47 @@ mod tests {
     }
 
     #[test]
+    fn hosted_pooled_overaligned_run_preserves_owner_provenance() {
+        let manager = TestAllocator::new(1);
+        let guard_layout = page_layout(1);
+        let aligned_layout =
+            Layout::from_size_align(3 * crate::PAGE_SIZE, 8 * crate::PAGE_SIZE).unwrap();
+        unsafe {
+            let guard = manager
+                .allocator
+                .allocate_pooled_layout(guard_layout)
+                .unwrap();
+            let aligned = manager
+                .allocator
+                .allocate_pooled_layout(aligned_layout)
+                .unwrap();
+
+            assert_eq!(aligned as usize % aligned_layout.align(), 0);
+            let owner = manager.allocator.owners.owner_for(aligned as usize);
+            assert!(!owner.is_null());
+            assert_eq!(
+                manager
+                    .allocator
+                    .owners
+                    .owner_for(aligned.add(aligned_layout.size() - 1) as usize),
+                owner
+            );
+            assert!(manager
+                .allocator
+                .try_deallocate_owned(aligned, aligned_layout)
+                .unwrap());
+            assert!(manager
+                .allocator
+                .try_deallocate_owned(guard, guard_layout)
+                .unwrap());
+            assert_eq!(
+                manager.allocator.live_allocations.load(Ordering::Acquire),
+                0
+            );
+        }
+    }
+
+    #[test]
     fn hosted_owned_deallocation_distinguishes_foreign_page_heap_runs() {
         let manager = TestAllocator::new(1);
         let layout = page_layout(8);

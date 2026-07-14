@@ -279,6 +279,55 @@ impl TreeNode for RadixBottomNode {
 static RDPTR: AtomicPtr<RadixTree> = AtomicPtr::new(null_mut());
 static RD_TREE_LOCK: RadixTreeMutex<()> = RadixTreeMutex::new(());
 
+// Contention is a routing hint, so probing every radix-tree access spends more
+// on uncontended pthread_mutex_trylock calls than the hint is worth. Sampling
+// still observes sustained contention within a bounded number of accesses.
+#[cfg(all(
+    feature = "adaptive_bitmap_page_allocator",
+    not(feature = "fixed_heap"),
+    not(unialloc_target_arm64e)
+))]
+const RD_TREE_CONTENTION_PROBE_INTERVAL: u8 = 8;
+
+#[cfg(all(
+    feature = "adaptive_bitmap_page_allocator",
+    not(feature = "fixed_heap"),
+    not(unialloc_target_arm64e)
+))]
+#[thread_local]
+static mut RD_TREE_CONTENTION_PROBE_COUNTDOWN: u8 = 0;
+
+#[cfg(all(
+    feature = "adaptive_bitmap_page_allocator",
+    not(feature = "fixed_heap"),
+    not(unialloc_target_arm64e)
+))]
+#[inline]
+fn advance_contention_probe(countdown: &mut u8) -> bool {
+    if *countdown == 0 {
+        *countdown = RD_TREE_CONTENTION_PROBE_INTERVAL - 1;
+        true
+    } else {
+        *countdown -= 1;
+        false
+    }
+}
+
+#[cfg(all(
+    feature = "adaptive_bitmap_page_allocator",
+    not(feature = "fixed_heap"),
+    not(unialloc_target_arm64e)
+))]
+#[inline]
+fn should_probe_rd_tree_contention() -> bool {
+    let countdown = unsafe {
+        core::ptr::addr_of_mut!(RD_TREE_CONTENTION_PROBE_COUNTDOWN)
+            .as_mut()
+            .expect("thread-local radix contention probe")
+    };
+    advance_contention_probe(countdown)
+}
+
 #[cfg(not(feature = "fixed_heap"))]
 fn try_get_rd_tree_unlocked() -> Result<&'static mut RadixTree, AllocError> {
     let mut ptr = RDPTR.load(Ordering::Relaxed);
@@ -319,18 +368,24 @@ fn try_get_rd_tree_unlocked() -> Result<&'static mut RadixTree, AllocError> {
 pub fn try_with_rd_tree<R>(f: impl FnOnce(&mut RadixTree) -> R) -> Result<R, AllocError> {
     #[cfg(all(
         feature = "adaptive_bitmap_page_allocator",
-        not(feature = "fixed_heap")
+        not(feature = "fixed_heap"),
+        not(unialloc_target_arm64e)
     ))]
-    let _guard = match RD_TREE_LOCK.try_lock() {
-        Some(guard) => guard,
-        None => {
-            crate::adaptive_bitmap_alloc::note_freelist_contention();
-            RD_TREE_LOCK.lock()
+    let _guard = if should_probe_rd_tree_contention() {
+        match RD_TREE_LOCK.try_lock() {
+            Some(guard) => guard,
+            None => {
+                crate::adaptive_bitmap_alloc::note_freelist_contention();
+                RD_TREE_LOCK.lock()
+            }
         }
+    } else {
+        RD_TREE_LOCK.lock()
     };
     #[cfg(not(all(
         feature = "adaptive_bitmap_page_allocator",
-        not(feature = "fixed_heap")
+        not(feature = "fixed_heap"),
+        not(unialloc_target_arm64e)
     )))]
     let _guard = RD_TREE_LOCK.lock();
     Ok(f(try_get_rd_tree_unlocked()?))
@@ -583,6 +638,22 @@ mod tests {
 
     #[cfg(not(feature = "fixed_heap"))]
     pub type RadixTree = RadixNodeHead<RadixBottomNode>;
+
+    #[cfg(all(
+        feature = "adaptive_bitmap_page_allocator",
+        not(feature = "fixed_heap"),
+        not(unialloc_target_arm64e)
+    ))]
+    #[test]
+    fn adaptive_contention_probe_has_a_bounded_cadence() {
+        let mut countdown = 0;
+        for access in 0..RD_TREE_CONTENTION_PROBE_INTERVAL * 3 {
+            assert_eq!(
+                advance_contention_probe(&mut countdown),
+                access % RD_TREE_CONTENTION_PROBE_INTERVAL == 0
+            );
+        }
+    }
 
     #[test]
     fn array_node_extend_rejects_underflow() {

@@ -182,6 +182,15 @@ where
 }
 
 fn main() {
+    let mode = std::env::args().nth(1).unwrap_or_else(|| "all".to_owned());
+    assert!(
+        matches!(
+            mode.as_str(),
+            "all" | "same" | "fragmented" | "coalesce" | "contended"
+        ),
+        "usage: page_run_backend_bench [all|same|fragmented|coalesce|contended]"
+    );
+
     let heap = HeapRange::new();
     let initialized = unsafe {
         unialloc::unialloc_fixed_heap_try_init(heap.ptr as usize, HEAP_BYTES, unialloc::PAGE_SIZE)
@@ -200,10 +209,18 @@ fn main() {
         unialloc::PAGE_SIZE
     );
 
-    // Populate allocator metadata and code paths outside the measured region.
-    let _ = same_run_reuse(2_000);
-    benchmark("same_run_reuse", 7, || same_run_reuse(200_000));
-    benchmark("fragmented_exact_reuse", 7, || fragmented_exact_reuse(200));
-    benchmark("coalesce_and_refill", 7, || coalesce_and_refill(40));
-    benchmark("contended_same_run_4t", 7, || contended_same_run(4, 50_000));
+    if matches!(mode.as_str(), "all" | "same") {
+        // Populate allocator metadata and code paths outside the measured region.
+        let _ = same_run_reuse(2_000);
+        benchmark("same_run_reuse", 7, || same_run_reuse(200_000));
+    }
+    if matches!(mode.as_str(), "all" | "fragmented") {
+        benchmark("fragmented_exact_reuse", 7, || fragmented_exact_reuse(200));
+    }
+    if matches!(mode.as_str(), "all" | "coalesce") {
+        benchmark("coalesce_and_refill", 7, || coalesce_and_refill(40));
+    }
+    if matches!(mode.as_str(), "all" | "contended") {
+        benchmark("contended_same_run_4t", 7, || contended_same_run(4, 50_000));
+    }
 }

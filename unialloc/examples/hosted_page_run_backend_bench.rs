@@ -1,4 +1,6 @@
 use std::alloc::{GlobalAlloc, Layout};
+#[cfg(feature = "adaptive_bitmap_page_allocator")]
+use std::hint::black_box;
 use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -148,6 +150,39 @@ fn contended_same_run(threads: usize, iterations_per_thread: usize) -> (Duration
     (started.elapsed(), threads * iterations_per_thread * 2)
 }
 
+#[cfg(feature = "adaptive_bitmap_page_allocator")]
+fn route_decision_only(iterations: usize) -> (Duration, usize) {
+    let layout = Layout::from_size_align(FRAGMENT_PAGES * unialloc::PAGE_SIZE, unialloc::PAGE_SIZE)
+        .expect("valid route-probe layout");
+    let mut bitmap_decisions = 0usize;
+    let started = Instant::now();
+    for _ in 0..iterations {
+        bitmap_decisions += black_box(unialloc::adaptive_page_run_route_probe_for_bench(
+            black_box(layout),
+        )) as usize;
+    }
+    black_box(bitmap_decisions);
+    (started.elapsed(), iterations)
+}
+
+fn phase_transition_probe(bucket_iterations: usize, buckets: usize) {
+    let _ = same_run_reuse(2_000);
+    let (before, before_ops) = same_run_reuse(bucket_iterations);
+    print_result("phase_exact_before", before, before_ops);
+
+    let (trigger, trigger_ops) = guarded_coalesce_and_refill(2);
+    print_result("phase_coalesce_trigger", trigger, trigger_ops);
+
+    for bucket in 0..buckets {
+        let (elapsed, operations) = same_run_reuse(bucket_iterations);
+        print_result(
+            &format!("phase_exact_after_{bucket:02}"),
+            elapsed,
+            operations,
+        );
+    }
+}
+
 fn print_result(name: &str, elapsed: Duration, operations: usize) {
     println!(
         "{{\"workload\":\"{}\",\"operations\":{},\"elapsed_ns\":{},\"ns_per_op\":{:.3}}}",
@@ -185,9 +220,16 @@ fn main() {
     assert!(
         matches!(
             mode.as_str(),
-            "all" | "single" | "same" | "fragmented" | "coalesce" | "contended"
+            "all"
+                | "single"
+                | "same"
+                | "fragmented"
+                | "coalesce"
+                | "contended"
+                | "route"
+                | "phase"
         ),
-        "usage: hosted_page_run_backend_bench [all|single|same|fragmented|coalesce|contended]"
+        "usage: hosted_page_run_backend_bench [all|single|same|fragmented|coalesce|contended|route|phase]"
     );
     println!(
         "{{\"backend\":\"{}\",\"page_size\":{}}}",
@@ -212,6 +254,17 @@ fn main() {
     }
     if matches!(mode.as_str(), "all" | "contended") {
         benchmark("contended_same_run_4t", 7, || contended_same_run(4, 50_000));
+    }
+    if mode == "route" {
+        #[cfg(feature = "adaptive_bitmap_page_allocator")]
+        benchmark("adaptive_route_decision", 7, || {
+            route_decision_only(20_000_000)
+        });
+        #[cfg(not(feature = "adaptive_bitmap_page_allocator"))]
+        panic!("route mode requires adaptive_bitmap_page_allocator");
+    }
+    if mode == "phase" {
+        phase_transition_probe(100_000, 12);
     }
 
     #[cfg(all(

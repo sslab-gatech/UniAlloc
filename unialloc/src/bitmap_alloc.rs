@@ -720,6 +720,69 @@ mod tests {
         (allocator, nodes)
     }
 
+    fn assert_subtree_summaries(
+        allocator: &mut SegmentPageAllocator,
+        idx: usize,
+        left: usize,
+        right: usize,
+    ) -> Summary {
+        if right - left == LEAF_PAGES {
+            let node = allocator.node(idx);
+            let expected = SegmentPageAllocator::summary_for_bits(node.leaf_bits, LEAF_PAGES);
+            assert_eq!(node.prefix_free as usize, expected.prefix_free);
+            assert_eq!(node.suffix_free as usize, expected.suffix_free);
+            assert_eq!(node.max_free as usize, expected.max_free);
+            let expected_state = if expected.max_free == LEAF_PAGES {
+                NODE_FREE
+            } else if expected.max_free == 0 {
+                NODE_USED
+            } else {
+                NODE_MIXED
+            };
+            assert_eq!(node.state, expected_state);
+            return expected;
+        }
+
+        allocator.push(idx, left, right);
+        let mid = left + (right - left) / 2;
+        let left_summary = assert_subtree_summaries(allocator, idx * 2, left, mid);
+        let right_summary = assert_subtree_summaries(allocator, idx * 2 + 1, mid, right);
+        let expected = Summary::merge(left_summary, right_summary);
+        let node = allocator.node(idx);
+        assert_eq!(node.prefix_free as usize, expected.prefix_free);
+        assert_eq!(node.suffix_free as usize, expected.suffix_free);
+        assert_eq!(node.max_free as usize, expected.max_free);
+        let expected_state = if expected.max_free == expected.len {
+            NODE_FREE
+        } else if expected.max_free == 0 {
+            NODE_USED
+        } else {
+            NODE_MIXED
+        };
+        assert!(
+            node.state == NODE_MIXED || node.state == expected_state,
+            "node {idx} has state {} for expected state {expected_state}",
+            node.state
+        );
+        expected
+    }
+
+    fn assert_tree_summaries(allocator: &mut SegmentPageAllocator) {
+        let summary = assert_subtree_summaries(allocator, 1, 0, allocator.leaf_capacity);
+        assert_eq!(summary.max_free, allocator.largest_free_run());
+
+        let words = (allocator.page_count + LEAF_PAGES - 1) / LEAF_PAGES;
+        let mut allocated_pages = 0usize;
+        for word_idx in 0..words {
+            let leaf_idx = allocator.materialize_leaf(word_idx);
+            let valid_pages = min(LEAF_PAGES, allocator.page_count - word_idx * LEAF_PAGES);
+            allocated_pages += (allocator.node(leaf_idx).leaf_bits
+                & SegmentPageAllocator::low_bits_mask(valid_pages))
+            .count_ones() as usize;
+        }
+        assert_eq!(allocated_pages, allocator.allocated_pages());
+    }
+
     #[test]
     fn adjacent_frees_form_a_larger_run_without_explicit_coalescing() {
         let (mut allocator, _nodes) = allocator(16);
@@ -822,6 +885,84 @@ mod tests {
     }
 
     #[test]
+    fn partial_tail_pages_are_never_allocated() {
+        let (mut allocator, _nodes) = allocator(65);
+        let first = allocator.allocate_bytes(PAGE * 64, PAGE).unwrap();
+        let tail = allocator.allocate_bytes(PAGE, PAGE).unwrap();
+        assert_eq!(first as usize, BASE);
+        assert_eq!(tail as usize, BASE + PAGE * 64);
+        assert_eq!(
+            allocator.allocate_bytes(PAGE, PAGE),
+            Err(RunBitmapError::OutOfMemory)
+        );
+        allocator.deallocate_bytes(tail, PAGE).unwrap();
+        allocator.deallocate_bytes(first, PAGE * 64).unwrap();
+        assert_eq!(allocator.largest_free_run(), 65);
+        assert_tree_summaries(&mut allocator);
+    }
+
+    #[test]
+    fn aligned_cross_leaf_run_uses_tree_summary_after_leaf_fast_path_misses() {
+        let (mut allocator, _nodes) = allocator(128);
+        let pages: Vec<_> = (0..128)
+            .map(|_| allocator.allocate_bytes(PAGE, PAGE).unwrap())
+            .collect();
+        for ptr in &pages[60..72] {
+            allocator.deallocate_bytes(*ptr, PAGE).unwrap();
+        }
+        assert_eq!(
+            allocator.allocate_bytes(PAGE * 12, PAGE * 4).unwrap() as usize,
+            BASE + PAGE * 60
+        );
+        assert_tree_summaries(&mut allocator);
+    }
+
+    #[test]
+    fn cross_leaf_partial_free_rejects_later_full_range_free() {
+        let (mut allocator, _nodes) = allocator(128);
+        let prefix = allocator.allocate_bytes(PAGE * 62, PAGE).unwrap();
+        let run = allocator.allocate_bytes(PAGE * 6, PAGE).unwrap();
+        allocator
+            .deallocate_bytes((run as usize + PAGE * 2) as *mut u8, PAGE * 2)
+            .unwrap();
+        assert_eq!(
+            allocator.deallocate_bytes(run, PAGE * 6),
+            Err(RunBitmapError::RangeAlreadyFree)
+        );
+        assert_eq!(allocator.allocated_pages(), 66);
+        allocator.deallocate_bytes(prefix, PAGE * 62).unwrap();
+        assert_tree_summaries(&mut allocator);
+    }
+
+    #[test]
+    fn search_word_rewinds_after_freeing_an_earlier_leaf() {
+        let (mut allocator, _nodes) = allocator(LEAF_PAGES * 10);
+        let runs: Vec<_> = (0..9)
+            .map(|_| allocator.allocate_bytes(PAGE * LEAF_PAGES, PAGE).unwrap())
+            .collect();
+        allocator
+            .deallocate_bytes(runs[0], PAGE * LEAF_PAGES)
+            .unwrap();
+        assert_eq!(
+            allocator.allocate_bytes(PAGE * LEAF_PAGES, PAGE).unwrap() as usize,
+            BASE
+        );
+        assert_tree_summaries(&mut allocator);
+    }
+
+    #[test]
+    fn conflict_skip_rounds_to_the_next_aligned_candidate() {
+        assert_eq!(
+            SegmentPageAllocator::advance_past_leaf_conflict(8, 8, 1 << 15, 8),
+            Some(16)
+        );
+        assert_eq!(
+            SegmentPageAllocator::advance_past_leaf_conflict(8, 8, 1 << 23, 8),
+            Some(24)
+        );
+    }
+
+    #[test]
     fn deallocation_rejects_double_free_and_foreign_ranges() {
         let (mut allocator, _nodes) = allocator(8);
         let ptr = allocator.allocate_bytes(PAGE * 2, PAGE).unwrap();
@@ -844,7 +985,7 @@ mod tests {
         let mut live: Vec<(usize, usize)> = Vec::new();
         let mut random = 0x9e37_79b9_u32;
 
-        for _ in 0..10_000 {
+        for step in 0..10_000 {
             random = random.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
             let should_free = !live.is_empty() && random & 3 == 0;
             if should_free {
@@ -882,6 +1023,10 @@ mod tests {
                 (None, Err(RunBitmapError::OutOfMemory)) => {}
                 pair => panic!("segment tree diverged from naive model: {:?}", pair),
             }
+            if step % 127 == 0 {
+                assert_tree_summaries(&mut allocator);
+            }
         }
+        assert_tree_summaries(&mut allocator);
     }
 }

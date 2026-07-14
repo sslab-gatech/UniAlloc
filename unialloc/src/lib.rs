@@ -57,6 +57,12 @@ pub use cache::{thread_cache_footprint_snapshot, ThreadCacheFootprintSnapshot};
 
 #[cfg(all(
     feature = "adaptive_bitmap_page_allocator",
+    not(feature = "fixed_heap")
+))]
+#[doc(hidden)]
+pub use adaptive_bitmap_alloc::route_probe_for_bench as adaptive_page_run_route_probe_for_bench;
+#[cfg(all(
+    feature = "adaptive_bitmap_page_allocator",
     feature = "stats",
     not(feature = "fixed_heap")
 ))]
