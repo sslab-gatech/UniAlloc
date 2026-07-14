@@ -1,0 +1,35 @@
+Lifetime-HugeTLB final verification
+Date: 2026-07-14
+Performance evidence source commit: 079711f81238d45a5e9dd8673e067cb335d5e39e
+Post-integration tested commit: d09cfae7924a1fcb3cd49c5fad3d214576626e64
+Included dev commit: 22558d733bc3f41f6950e07499bf602b995b7e85
+Branch relation at verification: 7 ahead / 0 behind dev
+Worktree state at verification: clean
+
+Commands and results:
+- cargo fmt --all -- --check: PASS
+- cargo check -p unialloc --all-targets --features lifetime_hugepage: PASS
+- cargo check -p unialloc --lib --features fixed_heap,lifetime_hugepage: PASS
+- cargo test -p unialloc --features lifetime_hugepage --test lifetime_hugepage_allocator -- --test-threads=1: PASS 7/7
+- cargo test -p unialloc --features type_isolation,stats --test type_isolation_lifetime_hint -- --test-threads=1: PASS 1/1
+- cargo test -p unialloc --no-default-features --features fixed_heap,type_isolation,stats --test type_isolation_lifetime_hint -- --test-threads=1: PASS 1/1
+- uv run python -m unittest -v tools/unialloc-rustc-pass/test_mir_lifetime_profile.py: PASS 2/2
+- uv run python -m unittest -v tools/unialloc-rustc-pass/test_mir_lifetime_hugepage_integration.py: PASS 1/1; 3 exact matches, 0 misses, 3 applied rewrites, 1 real 2 MiB HugeTLB mapping, 0 fallback, 1 unmap
+- uv run python -m unittest -v evaluation/scripts/test_lifetime_hugepage_experiment.py evaluation/scripts/test_lifetime_hugepage_allocator_experiment.py: PASS 4/4
+- cargo test -p unialloc --release --no-default-features --test type_isolation_feature_contract -- --test-threads=1: PASS 1/1
+- cargo test -p unialloc --lib --features lifetime_hugepage -- --skip register_rseq_test --skip register_rseq_multithread_test --test-threads=1: PASS 741/741; two known host rseq registration tests filtered
+
+Evidence validation:
+- Manifest artifact byte counts and SHA-256: PASS 8/8 before this verification record was added
+- Production matrix: PASS 180/180 rows, 12 cases x 15 repeats
+- Type-diversity matrix: PASS 100/100 rows, 10 cases x 10 repeats
+- Accounting, allocation/release pairing, region assignment/release pairing, final-zero state, zero mapping fallback, and zero mapping/unmap failure: PASS for every row
+
+Final HugeTLB pool:
+- HugePages_Total: 4096
+- HugePages_Free: 4096
+- HugePages_Rsvd: 0
+- HugePages_Surp: 0
+
+Claim boundary:
+The compiler-to-HugeTLB gate is a synthetic single-Vec mechanism proof. The performance matrix uses manual-oracle and injected-error labels. Trained real-workload classifier coverage, accuracy, application throughput, and production memory benefit remain open.

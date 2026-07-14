@@ -39,10 +39,15 @@
       "bytes": 3718,
       "path": "type-diversity-summary.json",
       "sha256": "bbfee55a1f0b02af347cd94bba4609c553b59b25172532fb5a29bdd5525e4475"
+    },
+    {
+      "bytes": 2568,
+      "path": "verification.txt",
+      "sha256": "ba2b318d0e59a92ff8dc0d561f993e00b5c7615c71c568489de97eb7399a68a3"
     }
   ],
   "branch": "exp/lifetime-hugepage-orchestration-20260714",
-  "claim_boundary": "Real UniAlloc semantic payload path with manual-oracle and injected-error lifetime labels; exact compiler-profile transport is runtime-tested; trained real-workload classifier coverage and benefits remain open.",
+  "claim_boundary": "A synthetic single-binary exact compiler profile controls a real UniAlloc HugeTLB mapping and release; the production performance matrix uses manual-oracle and injected-error labels; trained real-workload classifier coverage and benefits remain open.",
   "claim_grade": false,
   "dev_baseline_commit": "a7be5a26b70c541e98d95024841589073e9b96be",
   "evidence_grade": "integrated-production-path-manual-oracle-synthetic-mechanism",
@@ -96,6 +101,25 @@
     },
     "repetitions": 5,
     "scope": "whole process including allocation, first touch, warmup, measured chain, reclaim, and teardown"
+  },
+  "post_integration_verification": {
+    "allocator_integration_tests": 7,
+    "compiler_to_hugetlb_gate": {
+      "extent_unmaps": 1,
+      "hugetlb_fallbacks": 0,
+      "hugetlb_mappings": 1,
+      "passed": true,
+      "profile_matches": 3,
+      "profile_misses": 0,
+      "rewrites_applied": 3
+    },
+    "included_dev_commit": "22558d733bc3f41f6950e07499bf602b995b7e85",
+    "known_host_rseq_tests_filtered": 2,
+    "lib_tests_passed": 741,
+    "pool_free": 4096,
+    "pool_reserved": 0,
+    "pool_total": 4096,
+    "tested_commit": "d09cfae7924a1fcb3cd49c5fad3d214576626e64"
   },
   "primary_sources": [
     {
