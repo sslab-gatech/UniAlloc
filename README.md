@@ -19,18 +19,17 @@ platform backends.
 cargo build
 ```
 
-The pinned toolchain is declared in `rust-toolchain`. Linux itself does not
-require disabling libc restartable-sequence registration. A small set of
-allocator tests currently self-register a private rseq area, so those test
-processes must start with glibc's automatic registration disabled:
+The pinned toolchain is declared in `rust-toolchain`. Run the default test suite
+directly:
 
 ```bash
-export GLIBC_TUNABLES=glibc.pthread.rseq=0
 cargo test
 ```
 
-Normal applications and the real-world evaluation retain libc-managed rseq.
-The production allocation hot path currently makes no rseq call.
+The private-rseq registration tests isolate themselves in child processes with
+glibc registration disabled. Normal applications, the parent test process, and
+the real-world evaluation retain libc-managed rseq. The production allocation
+hot path currently makes no rseq call.
 
 ## Use UniAlloc as the Global Allocator
 

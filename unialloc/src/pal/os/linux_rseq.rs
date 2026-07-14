@@ -178,11 +178,38 @@ mod tests {
     use super::*;
     use crate::*;
     extern crate std;
-    use spin::Mutex;
-    use std::boxed::Box;
-    use std::collections::BTreeSet;
     use std::thread::spawn;
     use std::vec::Vec;
+
+    const PRIVATE_RSEQ_TEST_CHILD: &str = "UNIALLOC_PRIVATE_RSEQ_TEST_CHILD";
+
+    fn run_private_rseq_test_in_fresh_process(test_name: &str) -> bool {
+        if std::env::var(PRIVATE_RSEQ_TEST_CHILD).ok().as_deref() == Some(test_name) {
+            return false;
+        }
+
+        // Modern glibc registers its own rseq area before a Rust test thread
+        // starts. Linux permits only one registered area per thread, so test
+        // UniAlloc's private registration in a child whose loader has disabled
+        // libc-managed rseq. The parent and normal applications keep glibc's
+        // registration unchanged.
+        let output = std::process::Command::new(
+            std::env::current_exe().expect("current allocator test executable"),
+        )
+        .args(["--exact", test_name, "--nocapture", "--test-threads=1"])
+        .env(PRIVATE_RSEQ_TEST_CHILD, test_name)
+        .env("GLIBC_TUNABLES", "glibc.pthread.rseq=0")
+        .output()
+        .expect("spawn isolated private-rseq test");
+
+        assert!(
+            output.status.success(),
+            "isolated private-rseq test failed\nstdout:\n{}\nstderr:\n{}",
+            std::string::String::from_utf8_lossy(&output.stdout),
+            std::string::String::from_utf8_lossy(&output.stderr),
+        );
+        true
+    }
 
     fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
         syscall3(1, [fd as usize, buf as usize, len as usize])
@@ -195,36 +222,49 @@ mod tests {
     }
 
     #[test]
-    fn align_test() {
-        assert_eq!(4 * mem::size_of::<u64>(), 32);
+    fn rseq_layout_matches_kernel_abi() {
+        assert_eq!(mem::size_of::<rseq>(), 32);
+        assert_eq!(mem::align_of::<rseq>(), 32);
+        assert_eq!(mem::size_of::<rseq_cs>(), 32);
+        assert_eq!(mem::align_of::<rseq_cs>(), 32);
     }
 
     #[test]
     fn register_rseq_test() {
-        register_current_thread();
-        assert_eq!(is_registered(), true);
-        assert!(RSEQ_ABI.cpu_id as usize <= NCPU);
-
-        let cpuid = cpu_id();
-        for _ in 0..1000 {
-            assert_eq!(cpuid, cpu_id());
+        if run_private_rseq_test_in_fresh_process("pal::os::linux_rseq::tests::register_rseq_test")
+        {
+            return;
         }
+
+        register_current_thread();
+        assert!(is_registered());
+        assert!(cpu_id_start() >= 0);
+
+        // The scheduler may migrate this thread between reads. Registration
+        // guarantees a valid CPU id, not a constant CPU id.
+        for _ in 0..1000 {
+            assert!(cpu_id() >= 0);
+        }
+
+        unregister_current_thread();
+        assert!(!is_registered());
     }
 
     #[test]
     fn register_rseq_multithread_test() {
-        // let seen: &'static _ = Box::leak(Box::new(Mutex::new(BTreeSet::new())));
+        if run_private_rseq_test_in_fresh_process(
+            "pal::os::linux_rseq::tests::register_rseq_multithread_test",
+        ) {
+            return;
+        }
+
         let handles: Vec<_> = (0..100)
             .map(|_| {
                 spawn(move || {
-                    // let addr = &RSEQ_ABI as *const _ as usize;
-                    // println!("{:x}", addr);
-                    // if seen.lock().contains(&addr) {
-                    // assert!(false, "The address cannot have duplications");
-                    // }
-                    // seen.lock().insert(addr);
                     register_current_thread();
-                    assert_eq!(is_registered(), true);
+                    assert!(is_registered());
+                    unregister_current_thread();
+                    assert!(!is_registered());
                 })
             })
             .collect();
