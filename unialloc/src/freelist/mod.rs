@@ -1448,6 +1448,16 @@ impl FreeList {
 
         let mut final_ptr = ptr;
         let mut final_idx = origin_size;
+        #[cfg(all(
+            feature = "adaptive_bitmap_page_allocator",
+            not(feature = "fixed_heap")
+        ))]
+        let mut merged_previous = false;
+        #[cfg(all(
+            feature = "adaptive_bitmap_page_allocator",
+            not(feature = "fixed_heap")
+        ))]
+        let mut merged_next = false;
         #[cfg(not(feature = "fixed_heap"))]
         let mut unmap: Option<(*mut u8, usize)> = None;
         #[cfg(feature = "fixed_heap")]
@@ -1487,6 +1497,13 @@ impl FreeList {
                     ) {
                         //successfully combine with previous
                         final_ptr = prev_ptr;
+                        #[cfg(all(
+                            feature = "adaptive_bitmap_page_allocator",
+                            not(feature = "fixed_heap")
+                        ))]
+                        {
+                            merged_previous = true;
+                        }
                         final_idx = match final_idx.checked_add(pflag_pages) {
                             Some(idx) => idx,
                             None => return,
@@ -1506,6 +1523,13 @@ impl FreeList {
                         .is_some()
                     {
                         //successfully combine with next
+                        #[cfg(all(
+                            feature = "adaptive_bitmap_page_allocator",
+                            not(feature = "fixed_heap")
+                        ))]
+                        {
+                            merged_next = true;
+                        }
                         final_idx = match final_idx.checked_add(nflag_pages) {
                             Some(idx) => idx,
                             None => return,
@@ -1592,6 +1616,13 @@ impl FreeList {
             };
             #[cfg(feature = "fixed_heap")]
             let _ = (ptr, size);
+        }
+        #[cfg(all(
+            feature = "adaptive_bitmap_page_allocator",
+            not(feature = "fixed_heap")
+        ))]
+        if merged_previous && merged_next && unmap.is_none() {
+            crate::adaptive_bitmap_alloc::note_freelist_bridge_merge();
         }
     }
 
@@ -3613,6 +3644,13 @@ unsafe impl GlobalAlloc for BuddySystemAllocator {
         if layout.size() == 0 || layout.size() > isize::MAX as usize {
             return core::ptr::null_mut::<u8>();
         }
+        #[cfg(all(
+            feature = "adaptive_bitmap_page_allocator",
+            not(feature = "fixed_heap")
+        ))]
+        {
+            crate::adaptive_bitmap_alloc::allocate_layout(layout)
+        }
         #[cfg(feature = "bitmap_page_allocator")]
         {
             crate::bitmap_alloc::PAGE_RUN_BITMAP
@@ -3620,7 +3658,11 @@ unsafe impl GlobalAlloc for BuddySystemAllocator {
                 .allocate_bytes(layout.size(), layout.align())
                 .unwrap_or(null_mut())
         }
-        #[cfg(all(feature = "hosted_bitmap_page_allocator", not(feature = "fixed_heap")))]
+        #[cfg(all(
+            feature = "hosted_bitmap_page_allocator",
+            not(feature = "adaptive_bitmap_page_allocator"),
+            not(feature = "fixed_heap")
+        ))]
         {
             crate::hosted_bitmap_alloc::HOSTED_PAGE_RUN_BITMAP
                 .allocate_layout(layout)
@@ -3628,7 +3670,7 @@ unsafe impl GlobalAlloc for BuddySystemAllocator {
         }
         #[cfg(not(any(
             feature = "bitmap_page_allocator",
-            feature = "hosted_bitmap_page_allocator"
+            all(feature = "hosted_bitmap_page_allocator", not(feature = "fixed_heap"))
         )))]
         if layout.align() > crate::PAGE_SIZE {
             if layout.align() % crate::PAGE_SIZE != 0 {
@@ -3640,13 +3682,20 @@ unsafe impl GlobalAlloc for BuddySystemAllocator {
         }
         #[cfg(not(any(
             feature = "bitmap_page_allocator",
-            feature = "hosted_bitmap_page_allocator"
+            all(feature = "hosted_bitmap_page_allocator", not(feature = "fixed_heap"))
         )))]
         FREELIST.alloc(layout.size()).unwrap_or(null_mut())
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if !ptr.is_null() && layout.size() != 0 {
+            #[cfg(all(
+                feature = "adaptive_bitmap_page_allocator",
+                not(feature = "fixed_heap")
+            ))]
+            {
+                crate::adaptive_bitmap_alloc::deallocate_layout(ptr, layout);
+            }
             #[cfg(feature = "bitmap_page_allocator")]
             {
                 let result = crate::bitmap_alloc::PAGE_RUN_BITMAP
@@ -3654,7 +3703,11 @@ unsafe impl GlobalAlloc for BuddySystemAllocator {
                     .deallocate_bytes(ptr, layout.size());
                 debug_assert!(result.is_ok(), "bitmap page-run deallocation rejected");
             }
-            #[cfg(all(feature = "hosted_bitmap_page_allocator", not(feature = "fixed_heap")))]
+            #[cfg(all(
+                feature = "hosted_bitmap_page_allocator",
+                not(feature = "adaptive_bitmap_page_allocator"),
+                not(feature = "fixed_heap")
+            ))]
             {
                 let result = crate::hosted_bitmap_alloc::HOSTED_PAGE_RUN_BITMAP
                     .deallocate_layout(ptr, layout);
@@ -3665,7 +3718,7 @@ unsafe impl GlobalAlloc for BuddySystemAllocator {
             }
             #[cfg(not(any(
                 feature = "bitmap_page_allocator",
-                feature = "hosted_bitmap_page_allocator"
+                all(feature = "hosted_bitmap_page_allocator", not(feature = "fixed_heap"))
             )))]
             FREELIST.free(ptr, layout.size())
         }

@@ -317,6 +317,21 @@ fn try_get_rd_tree_unlocked() -> Result<&'static mut RadixTree, AllocError> {
 }
 
 pub fn try_with_rd_tree<R>(f: impl FnOnce(&mut RadixTree) -> R) -> Result<R, AllocError> {
+    #[cfg(all(
+        feature = "adaptive_bitmap_page_allocator",
+        not(feature = "fixed_heap")
+    ))]
+    let _guard = match RD_TREE_LOCK.try_lock() {
+        Some(guard) => guard,
+        None => {
+            crate::adaptive_bitmap_alloc::note_freelist_contention();
+            RD_TREE_LOCK.lock()
+        }
+    };
+    #[cfg(not(all(
+        feature = "adaptive_bitmap_page_allocator",
+        not(feature = "fixed_heap")
+    )))]
     let _guard = RD_TREE_LOCK.lock();
     Ok(f(try_get_rd_tree_unlocked()?))
 }

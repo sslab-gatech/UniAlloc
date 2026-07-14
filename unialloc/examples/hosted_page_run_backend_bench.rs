@@ -183,8 +183,11 @@ where
 fn main() {
     let mode = std::env::args().nth(1).unwrap_or_else(|| "all".to_owned());
     assert!(
-        matches!(mode.as_str(), "all" | "single" | "contended"),
-        "usage: hosted_page_run_backend_bench [all|single|contended]"
+        matches!(
+            mode.as_str(),
+            "all" | "single" | "same" | "fragmented" | "coalesce" | "contended"
+        ),
+        "usage: hosted_page_run_backend_bench [all|single|same|fragmented|coalesce|contended]"
     );
     println!(
         "{{\"backend\":\"{}\",\"page_size\":{}}}",
@@ -192,10 +195,14 @@ fn main() {
         unialloc::PAGE_SIZE
     );
 
-    if mode != "contended" {
+    if matches!(mode.as_str(), "all" | "single" | "same") {
         let _ = same_run_reuse(2_000);
         benchmark("same_run_reuse", 7, || same_run_reuse(200_000));
+    }
+    if matches!(mode.as_str(), "all" | "single" | "fragmented") {
         benchmark("fragmented_exact_reuse", 7, || fragmented_exact_reuse(100));
+    }
+    if matches!(mode.as_str(), "all" | "single" | "coalesce") {
         for _ in 0..10 {
             let _ = guarded_coalesce_and_refill(30);
         }
@@ -203,7 +210,28 @@ fn main() {
             guarded_coalesce_and_refill(30)
         });
     }
-    if mode != "single" {
+    if matches!(mode.as_str(), "all" | "contended") {
         benchmark("contended_same_run_4t", 7, || contended_same_run(4, 50_000));
+    }
+
+    #[cfg(all(
+        feature = "adaptive_bitmap_page_allocator",
+        feature = "stats",
+        not(feature = "fixed_heap")
+    ))]
+    {
+        let stats = unialloc::adaptive_page_run_stats_snapshot();
+        println!(
+            "{{\"adaptive_stats\":{{\"freelist_allocations\":{},\"bitmap_allocations\":{},\"bitmap_fallbacks\":{},\"freelist_deallocations\":{},\"owned_deallocations\":{},\"bridge_signals\":{},\"bridge_activations\":{},\"contention_signals\":{},\"contention_activations\":{}}}}}",
+            stats.freelist_allocations,
+            stats.bitmap_allocations,
+            stats.bitmap_fallbacks,
+            stats.freelist_deallocations,
+            stats.owned_deallocations,
+            stats.bridge_signals,
+            stats.bridge_activations,
+            stats.contention_signals,
+            stats.contention_activations,
+        );
     }
 }

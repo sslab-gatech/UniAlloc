@@ -18,6 +18,8 @@ cargo run --release -p unialloc \
 
 The feature is opt-in and exclusive with `fixed_heap`. The existing
 `bitmap_page_allocator` feature remains the fixed-heap integration.
+Workload-sensitive regular-path routing is described in
+[`adaptive-bitmap-page-routing.md`](adaptive-bitmap-page-routing.md).
 
 ## Multi-arena design
 
@@ -50,7 +52,7 @@ directory growth outside `GlobalBackend` and avoids allocator recursion.
 
 ## Correctness coverage
 
-Seventeen focused tests cover:
+Nineteen focused tests cover:
 
 - adjacent cross-leaf frees recombining into one exact larger allocation;
 - over-page alignment and full-arena deallocation;

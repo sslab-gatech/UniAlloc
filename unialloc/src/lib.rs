@@ -27,6 +27,11 @@
 #![cfg_attr(not(unialloc_has_stable_const_mut_refs), feature(const_mut_refs))]
 #![feature(generic_const_exprs)]
 
+#[cfg(all(
+    feature = "adaptive_bitmap_page_allocator",
+    not(feature = "fixed_heap")
+))]
+mod adaptive_bitmap_alloc;
 pub mod alloc_api;
 pub mod bitmap_alloc;
 mod cache;
@@ -49,6 +54,15 @@ include!(concat!(env!("OUT_DIR"), "/consts.rs"));
 extern crate alloc;
 
 pub use cache::{thread_cache_footprint_snapshot, ThreadCacheFootprintSnapshot};
+
+#[cfg(all(
+    feature = "adaptive_bitmap_page_allocator",
+    feature = "stats",
+    not(feature = "fixed_heap")
+))]
+pub use adaptive_bitmap_alloc::{
+    stats_snapshot as adaptive_page_run_stats_snapshot, AdaptivePageRunStats,
+};
 
 #[cfg(feature = "stats")]
 pub use cache::{
@@ -141,7 +155,9 @@ pub fn platform_tls_save_failure_count() -> usize {
 }
 
 pub const fn platform_allocator_backend() -> &'static str {
-    if cfg!(feature = "hosted_bitmap_page_allocator") {
+    if cfg!(feature = "adaptive_bitmap_page_allocator") {
+        "adaptive_hosted_page_run"
+    } else if cfg!(feature = "hosted_bitmap_page_allocator") {
         "hosted_segment_bitmap"
     } else if cfg!(feature = "fixed_heap") {
         "fixed_heap"
