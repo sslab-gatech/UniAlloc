@@ -188,6 +188,68 @@ hashes are stored in
 `benchmark-results/adaptive-page-run-phase-lease-ab.jsonl` (SHA-256
 `5e9546a42ca3364ab8a994e75a1ab03c802ad8e7c26524d0b194a3eb6b6e665f`).
 
+## Memory-overhead A/B
+
+`hosted_page_run_memory_probe` separates process memory from bitmap-owned
+mappings. It explicitly touches every live payload page, reads Linux
+`smaps_rollup`, and records quiescent hosted-bitmap snapshots. Each result below
+is the median of five counterbalanced, CPU-8-pinned processes built from
+`53ef6fa` with `stats` enabled. Timing claims continue to use the stats-free
+builds above.
+
+```bash
+cargo run --locked --release -p unialloc \
+  --example hosted_page_run_memory_probe --features stats -- retention
+cargo run --locked --release -p unialloc \
+  --example hosted_page_run_memory_probe \
+  --features hosted_bitmap_page_allocator,stats -- retention
+cargo run --locked --release -p unialloc \
+  --example hosted_page_run_memory_probe \
+  --features adaptive_bitmap_page_allocator,stats -- coalesce
+```
+
+The 32-MiB exact-retention workload stayed on the free-list route under the
+adaptive policy:
+
+| Backend | Touched-live RSS delta | All-freed RSS delta | Bitmap mappings after free |
+|---|---:|---:|---:|
+| Free list | 32.031 MiB | 0.297 MiB | 0 |
+| Hosted bitmap | 32.676 MiB | 2.449 MiB | 2.352 MiB |
+| Adaptive | 32.094 MiB | 0.391 MiB | 0 |
+
+The hosted bitmap's live metadata was 0.586 MiB for 64 active 512-KiB arenas,
+or 1.83% of their 32-MiB payload mapping. After all frees, four warm arenas
+retained 2 MiB of payload; 16 KiB of live trees, 256 KiB of descriptor mappings,
+and 88 KiB of owner-directory mappings brought the bitmap-owned total to
+2.352 MiB. Adaptive created no bitmap arena for quiet exact reuse.
+
+The guarded coalescing workload first touched 32 MiB of small runs, retained one
+guard per logical arena, and then touched 24 MiB of 32-page runs. The requested
+live payload at the coalesced checkpoint was 26 MiB.
+
+| Backend | Peak RSS delta | All-freed RSS delta | Bitmap mappings at coalesced live | Bitmap mappings after free |
+|---|---:|---:|---:|---:|
+| Free list | 32.027 MiB | 6.254 MiB | 0 | 0 |
+| Hosted bitmap | 32.691 MiB | 2.461 MiB | 32.586 MiB | 2.352 MiB |
+| Adaptive | 32.211 MiB | 8.391 MiB | 24.445 MiB | 2.273 MiB |
+
+Adaptive kept the 2-MiB guards on the free list and placed the 24-MiB large-run
+phase in 48 full bitmap arenas. Pure bitmap kept guards and large runs together
+in 64 partially occupied arenas, leaving 6 MiB of mapped arena slack. Peak RSS
+therefore stayed close across the three backends. After all frees, adaptive
+retained both the free-list residue and 2.273 MiB of bitmap mappings, producing
+a 2.14-MiB RSS premium over the free list in this phase-transition shape.
+
+One cold 8-page bitmap allocation maps a 512-KiB minimum arena plus 32 KiB of
+tree, descriptor, and owner metadata: 544 KiB of virtual mappings for 32 KiB of
+live payload. Demand paging held the measured touched RSS delta to 152 KiB. The
+single warm arena retained the same mappings after free.
+
+The capture contains 225 raw checkpoint records, 45 process summaries, and 45
+aggregates in `benchmark-results/hosted-page-run-memory-overhead-ab.jsonl`
+(SHA-256
+`9c78b35e5cbae7efffd2d199b582a63bf467b273707940aa3f0d7596fe4d2bbb`).
+
 ## Fixed-heap boundary
 
 The fixed free list and fixed bitmap currently cover the same caller-provided
@@ -218,6 +280,12 @@ opposite contention result both support a separate fixed-heap design.
 - Sampling can miss contention bursts shorter than eight radix accesses; it
   preserves exclusion and changes only the routing hint.
 - Mixed live owners require owner-directory probes for free-list deallocations.
+- The adaptive coalescing path can retain both free-list state and up to four
+  warm bitmap arenas. The measured 8-page arena shape retained 2 MiB of bitmap
+  payload; the configured four-arena, 2-MiB-per-arena bound permits an 8-MiB
+  payload high-water for larger warm arenas.
+- Descriptor mappings and owner-directory nodes follow peak arena/address
+  coverage and are reused without a current reclamation path.
 - The policy reacts to radix-lock contention shared by page-run metadata and
   higher allocator layers; the signal intentionally represents observed global
   metadata pressure.

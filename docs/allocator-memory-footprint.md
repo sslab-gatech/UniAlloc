@@ -102,6 +102,24 @@ Key rules:
 - Active-class and retained-class bitsets guide trimming so cleanup work is
   proportional to classes with visible state, not every possible class.
 
+### Hosted bitmap page-run diagnostics
+
+Builds with `hosted_bitmap_page_allocator` expose the cold-path
+`hosted_bitmap_page_run_snapshot()`. It reports live/warm arenas, live
+allocations, allocated and mapped payload bytes, tree mappings, descriptor
+mappings, and owner-directory mappings. The function walks stable arena
+descriptors and locks each arena state; it adds no per-allocation accounting
+operation. Quiescent checkpoints give exact cross-field totals, while concurrent
+mutation yields a race-safe best-effort aggregate.
+
+`hosted_page_run_memory_probe` combines that snapshot with explicit page
+touches, Linux `smaps_rollup`, process faults, thread-cache footprint, zone
+retention, and adaptive route counts. Its `cold`, `retention`, and `coalesce`
+modes distinguish virtual reservation, physical RSS, live payload, free arena
+slack, and retained metadata. The current five-process capture is stored in
+`benchmark-results/hosted-page-run-memory-overhead-ab.jsonl`; the policy-level
+interpretation is in `docs/adaptive-bitmap-page-routing.md`.
+
 These rules reduce external fragmentation while keeping common same-class reuse
 fast.
 
