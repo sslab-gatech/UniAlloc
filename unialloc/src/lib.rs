@@ -69,6 +69,8 @@ pub use adaptive_bitmap_alloc::route_probe_for_bench as adaptive_page_run_route_
 pub use adaptive_bitmap_alloc::{
     stats_snapshot as adaptive_page_run_stats_snapshot, AdaptivePageRunStats,
 };
+#[cfg(all(feature = "hosted_bitmap_page_allocator", not(feature = "fixed_heap")))]
+pub use hosted_bitmap_alloc::{hosted_bitmap_page_run_snapshot, HostedBitmapPageRunSnapshot};
 
 #[cfg(feature = "stats")]
 pub use cache::{

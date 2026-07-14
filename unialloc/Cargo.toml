@@ -79,6 +79,12 @@ path = "examples/segment_tree_page_allocator_bench.rs"
 test = false
 bench = false
 
+[[example]]
+name = "hosted_page_run_memory_probe"
+path = "examples/hosted_page_run_memory_probe.rs"
+test = false
+bench = false
+
 [features]
 default = ["pthread_dtor", "rseq"]
 fixed_heap = []

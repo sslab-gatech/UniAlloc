@@ -48,6 +48,28 @@ pub(crate) struct HostedBitmapStats {
     pub mapped_payload_bytes: usize,
 }
 
+/// Cold-path memory snapshot for the hosted bitmap page-run backend.
+///
+/// Mapped byte counters describe allocator-owned mappings.
+/// `allocated_payload_bytes` is computed by walking active arena descriptors
+/// under their arena locks, so it is intended for diagnostics and benchmark
+/// accounting rather than allocation hot paths. Every field is race-safe, but
+/// concurrent mutations can make the aggregate span multiple instants; a
+/// quiescent checkpoint gives the exact cross-field accounting view.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(C)]
+pub struct HostedBitmapPageRunSnapshot {
+    pub active_arenas: usize,
+    pub warm_empty_arenas: usize,
+    pub descriptor_count: usize,
+    pub live_allocations: usize,
+    pub mapped_payload_bytes: usize,
+    pub allocated_payload_bytes: usize,
+    pub mapped_tree_bytes: usize,
+    pub mapped_descriptor_bytes: usize,
+    pub mapped_owner_directory_bytes: usize,
+}
+
 struct HostedArenaState {
     allocator: SegmentPageAllocator,
     base: usize,
@@ -166,6 +188,8 @@ struct OwnerRadixNode {
 struct OwnerDirectory {
     root: AtomicPtr<OwnerRadixNode>,
     update_lock: PthreadMutex<()>,
+    node_count: AtomicUsize,
+    mapped_node_bytes: AtomicUsize,
 }
 
 unsafe impl Send for OwnerDirectory {}
@@ -176,6 +200,8 @@ impl OwnerDirectory {
         Self {
             root: AtomicPtr::new(null_mut()),
             update_lock: PthreadMutex::new(()),
+            node_count: AtomicUsize::new(0),
+            mapped_node_bytes: AtomicUsize::new(0),
         }
     }
 
@@ -186,10 +212,13 @@ impl OwnerDirectory {
             & OWNER_RADIX_MASK
     }
 
-    unsafe fn allocate_node() -> *mut OwnerRadixNode {
-        let bytes = match HostedBitmapPageAllocator::rounded_mapping_bytes(core::mem::size_of::<
-            OwnerRadixNode,
-        >()) {
+    #[inline]
+    fn node_mapping_bytes() -> Option<usize> {
+        HostedBitmapPageAllocator::rounded_mapping_bytes(core::mem::size_of::<OwnerRadixNode>())
+    }
+
+    unsafe fn allocate_node(&self) -> *mut OwnerRadixNode {
+        let bytes = match Self::node_mapping_bytes() {
             Some(bytes) => bytes,
             None => return null_mut(),
         };
@@ -204,6 +233,8 @@ impl OwnerDirectory {
                 AtomicPtr::new(null_mut()),
             );
         }
+        self.node_count.fetch_add(1, Ordering::Relaxed);
+        self.mapped_node_bytes.fetch_add(bytes, Ordering::Relaxed);
         node
     }
 
@@ -212,7 +243,7 @@ impl OwnerDirectory {
         if !current.is_null() {
             return Ok(current);
         }
-        let node = Self::allocate_node();
+        let node = self.allocate_node();
         if node.is_null() {
             return Err(HostedBitmapError::MappingFailed);
         }
@@ -227,7 +258,7 @@ impl OwnerDirectory {
             let slot = &(*node).slots[idx];
             let mut child = slot.load(Ordering::Acquire).cast::<OwnerRadixNode>();
             if child.is_null() {
-                child = Self::allocate_node();
+                child = self.allocate_node();
                 if child.is_null() {
                     return Err(HostedBitmapError::MappingFailed);
                 }
@@ -342,6 +373,8 @@ pub(crate) struct HostedBitmapPageAllocator {
     warm_empty_arenas: AtomicUsize,
     descriptor_count: AtomicUsize,
     mapped_payload_bytes: AtomicUsize,
+    mapped_tree_bytes: AtomicUsize,
+    mapped_descriptor_bytes: AtomicUsize,
     live_allocations: AtomicUsize,
     #[cfg(test)]
     local_allocation_hint_hits: AtomicUsize,
@@ -365,6 +398,8 @@ impl HostedBitmapPageAllocator {
             warm_empty_arenas: AtomicUsize::new(0),
             descriptor_count: AtomicUsize::new(0),
             mapped_payload_bytes: AtomicUsize::new(0),
+            mapped_tree_bytes: AtomicUsize::new(0),
+            mapped_descriptor_bytes: AtomicUsize::new(0),
             live_allocations: AtomicUsize::new(0),
             #[cfg(test)]
             local_allocation_hint_hits: AtomicUsize::new(0),
@@ -538,6 +573,8 @@ impl HostedBitmapPageAllocator {
         // before readers can traverse from the new head.
         self.head.store(descriptor, Ordering::Release);
         self.descriptor_count.fetch_add(1, Ordering::Relaxed);
+        self.mapped_descriptor_bytes
+            .fetch_add(descriptor_bytes, Ordering::Relaxed);
         Ok(descriptor)
     }
 
@@ -724,6 +761,8 @@ impl HostedBitmapPageAllocator {
         self.active_arenas.fetch_add(1, Ordering::Relaxed);
         self.mapped_payload_bytes
             .fetch_add(mapping_bytes, Ordering::Relaxed);
+        self.mapped_tree_bytes
+            .fetch_add(node_mapping_bytes, Ordering::Relaxed);
         self.live_allocations.fetch_add(1, Ordering::Release);
         Ok(allocated)
     }
@@ -861,6 +900,8 @@ impl HostedBitmapPageAllocator {
         self.active_arenas.fetch_sub(1, Ordering::Relaxed);
         self.mapped_payload_bytes
             .fetch_sub(mapping_bytes, Ordering::Relaxed);
+        self.mapped_tree_bytes
+            .fetch_sub(node_mapping_bytes, Ordering::Relaxed);
     }
 
     #[cfg(unix)]
@@ -966,6 +1007,35 @@ impl HostedBitmapPageAllocator {
         }
     }
 
+    pub fn snapshot(&self) -> HostedBitmapPageRunSnapshot {
+        let mut allocated_payload_bytes = 0usize;
+        let mut current = self.head.load(Ordering::Acquire);
+        while let Some(arena) = unsafe { current.as_ref() } {
+            let state = arena.state.lock();
+            if arena.active.load(Ordering::Acquire) && state.allocator.is_initialized() {
+                allocated_payload_bytes = allocated_payload_bytes.saturating_add(
+                    state
+                        .allocator
+                        .allocated_pages()
+                        .saturating_mul(crate::PAGE_SIZE),
+                );
+            }
+            current = arena.next;
+        }
+
+        HostedBitmapPageRunSnapshot {
+            active_arenas: self.active_arenas.load(Ordering::Acquire),
+            warm_empty_arenas: self.warm_empty_arenas.load(Ordering::Acquire),
+            descriptor_count: self.descriptor_count.load(Ordering::Acquire),
+            live_allocations: self.live_allocations.load(Ordering::Acquire),
+            mapped_payload_bytes: self.mapped_payload_bytes.load(Ordering::Acquire),
+            allocated_payload_bytes,
+            mapped_tree_bytes: self.mapped_tree_bytes.load(Ordering::Acquire),
+            mapped_descriptor_bytes: self.mapped_descriptor_bytes.load(Ordering::Acquire),
+            mapped_owner_directory_bytes: self.owners.mapped_node_bytes.load(Ordering::Acquire),
+        }
+    }
+
     #[cfg(test)]
     fn arena_bounds_for_tests(&self, addr: usize) -> Option<(usize, usize)> {
         let arena = unsafe { self.owners.owner_for(addr).as_ref()? };
@@ -1012,12 +1082,17 @@ impl HostedBitmapPageAllocator {
         self.active_arenas.store(0, Ordering::Release);
         self.warm_empty_arenas.store(0, Ordering::Release);
         self.mapped_payload_bytes.store(0, Ordering::Release);
+        self.mapped_tree_bytes.store(0, Ordering::Release);
         self.live_allocations.store(0, Ordering::Release);
     }
 }
 
 pub(crate) static HOSTED_PAGE_RUN_BITMAP: HostedBitmapPageAllocator =
     HostedBitmapPageAllocator::new(WARM_EMPTY_ARENA_LIMIT);
+
+pub fn hosted_bitmap_page_run_snapshot() -> HostedBitmapPageRunSnapshot {
+    HOSTED_PAGE_RUN_BITMAP.snapshot()
+}
 
 #[cfg(test)]
 mod tests {
@@ -1243,6 +1318,109 @@ mod tests {
                 Err(HostedBitmapError::InvalidLayout)
             );
             assert_eq!(manager.allocator.stats(), HostedBitmapStats::default());
+        }
+    }
+
+    #[test]
+    fn hosted_snapshot_reports_precise_live_and_mapped_bytes() {
+        let manager = TestAllocator::new(1);
+        let descriptor_bytes =
+            HostedBitmapPageAllocator::rounded_mapping_bytes(core::mem::size_of::<HostedArena>())
+                .unwrap();
+        let owner_node_bytes = OwnerDirectory::node_mapping_bytes().unwrap();
+        let tree_bytes = HostedBitmapPageAllocator::rounded_mapping_bytes(
+            SegmentPageAllocator::required_layout(MIN_ARENA_BYTES / crate::PAGE_SIZE)
+                .unwrap()
+                .size(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            manager.allocator.snapshot(),
+            HostedBitmapPageRunSnapshot::default()
+        );
+
+        unsafe {
+            let eight_pages = manager.allocator.allocate_layout(page_layout(8)).unwrap();
+            let first_snapshot = manager.allocator.snapshot();
+            assert_eq!(first_snapshot.active_arenas, 1);
+            assert_eq!(first_snapshot.warm_empty_arenas, 0);
+            assert_eq!(first_snapshot.descriptor_count, 1);
+            assert_eq!(first_snapshot.live_allocations, 1);
+            assert_eq!(first_snapshot.mapped_payload_bytes, MIN_ARENA_BYTES);
+            assert_eq!(first_snapshot.allocated_payload_bytes, 8 * crate::PAGE_SIZE);
+            assert_eq!(first_snapshot.mapped_tree_bytes, tree_bytes);
+            assert_eq!(first_snapshot.mapped_descriptor_bytes, descriptor_bytes);
+            assert_eq!(
+                first_snapshot.mapped_owner_directory_bytes,
+                manager.allocator.owners.node_count.load(Ordering::Acquire) * owner_node_bytes
+            );
+            assert!(
+                first_snapshot.mapped_owner_directory_bytes
+                    >= OWNER_RADIX_LEVELS * owner_node_bytes
+            );
+
+            let three_pages = manager.allocator.allocate_layout(page_layout(3)).unwrap();
+            let two_live = manager.allocator.snapshot();
+            assert_eq!(two_live.live_allocations, 2);
+            assert_eq!(two_live.allocated_payload_bytes, 11 * crate::PAGE_SIZE);
+            assert_eq!(two_live.mapped_payload_bytes, MIN_ARENA_BYTES);
+            assert_eq!(two_live.mapped_tree_bytes, tree_bytes);
+            assert_eq!(two_live.mapped_descriptor_bytes, descriptor_bytes);
+
+            manager
+                .allocator
+                .deallocate_layout(eight_pages, page_layout(8))
+                .unwrap();
+            let one_live = manager.allocator.snapshot();
+            assert_eq!(one_live.live_allocations, 1);
+            assert_eq!(one_live.allocated_payload_bytes, 3 * crate::PAGE_SIZE);
+
+            manager
+                .allocator
+                .deallocate_layout(three_pages, page_layout(3))
+                .unwrap();
+            let warm = manager.allocator.snapshot();
+            assert_eq!(warm.active_arenas, 1);
+            assert_eq!(warm.warm_empty_arenas, 1);
+            assert_eq!(warm.live_allocations, 0);
+            assert_eq!(warm.allocated_payload_bytes, 0);
+            assert_eq!(warm.mapped_payload_bytes, MIN_ARENA_BYTES);
+            assert_eq!(warm.mapped_tree_bytes, tree_bytes);
+            assert_eq!(warm.mapped_descriptor_bytes, descriptor_bytes);
+            assert_eq!(
+                warm.mapped_owner_directory_bytes,
+                manager.allocator.owners.node_count.load(Ordering::Acquire) * owner_node_bytes
+            );
+        }
+    }
+
+    #[test]
+    fn hosted_snapshot_drops_payload_and_tree_bytes_on_retirement() {
+        let manager = TestAllocator::new(0);
+        let descriptor_bytes =
+            HostedBitmapPageAllocator::rounded_mapping_bytes(core::mem::size_of::<HostedArena>())
+                .unwrap();
+        let owner_node_bytes = OwnerDirectory::node_mapping_bytes().unwrap();
+        unsafe {
+            let ptr = manager.allocator.allocate_layout(page_layout(8)).unwrap();
+            manager
+                .allocator
+                .deallocate_layout(ptr, page_layout(8))
+                .unwrap();
+            let snapshot = manager.allocator.snapshot();
+            assert_eq!(snapshot.active_arenas, 0);
+            assert_eq!(snapshot.warm_empty_arenas, 0);
+            assert_eq!(snapshot.descriptor_count, 1);
+            assert_eq!(snapshot.live_allocations, 0);
+            assert_eq!(snapshot.mapped_payload_bytes, 0);
+            assert_eq!(snapshot.allocated_payload_bytes, 0);
+            assert_eq!(snapshot.mapped_tree_bytes, 0);
+            assert_eq!(snapshot.mapped_descriptor_bytes, descriptor_bytes);
+            assert_eq!(
+                snapshot.mapped_owner_directory_bytes,
+                manager.allocator.owners.node_count.load(Ordering::Acquire) * owner_node_bytes
+            );
         }
     }
 
