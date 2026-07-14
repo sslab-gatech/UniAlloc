@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "bytes": 958,
+      "path": "README.md",
+      "sha256": "cd8e3f554fae849cfcf3da0e25d45eb83cb9be404d54f4ceff04435b5f308588"
+    },
+    {
+      "bytes": 1024,
+      "path": "lifetime-aware-feature-decomposition.csv",
+      "sha256": "43fb5d9f9eefbff3d990d0708fa9393d152caee044680c368d47c3d6c48a0901"
+    },
+    {
+      "bytes": 487730,
+      "path": "lifetime-aware-feature-decomposition.png",
+      "sha256": "964ba200fb65dcf611b6c9e44be93642afe24f9a5c10f7cf534c2025054a16e2"
+    },
+    {
+      "bytes": 6863,
+      "path": "lifetime-aware-feature-decomposition.svg",
+      "sha256": "fe6db28ded63349014f7e57393fda7bdf20e32f52aad4b365bf56a7240d37c7c"
+    },
+    {
+      "bytes": 631622,
+      "path": "lifetime-aware-thp-pipeline.png",
+      "sha256": "10e06837fde089d0986db5795f04fb1af58a0738614d0e4f72c4254d98f7c14a"
+    },
+    {
+      "bytes": 8665,
+      "path": "lifetime-aware-thp-pipeline.svg",
+      "sha256": "fc4eb6ac3ba9554578f11695a20b1a995ad7249125aae9628c546dea89ce6704"
+    }
+  ],
+  "schema_version": 1
+}

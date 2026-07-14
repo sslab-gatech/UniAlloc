@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Lifetime-aware THP design pipeline</title>
+  <desc id="desc">Rust semantic identity flows through a fail-closed contract, lifetime layout, selective physical backing, and measured outcomes.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, "DejaVu Sans", Arial, sans-serif; fill: #17202A; }
+      .muted { fill: #566573; }
+      .card { fill: #F8FAFC; stroke: #D5DBDB; stroke-width: 2; }
+      .stage-title { font-size: 23px; font-weight: 700; }
+      .body { font-size: 16px; }
+      .small { font-size: 14px; }
+      .metric { font-size: 28px; font-weight: 800; }
+      .rail-title { font-size: 18px; font-weight: 700; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#7F8C8D"/>
+    </marker>
+  </defs>
+  <rect id="background" x="0" y="0" width="1600" height="900" fill="#FFFFFF"/>
+  <text x="55" y="62" font-size="39" font-weight="800">Lifetime-aware THP: semantic signal to physical backing</text>
+  <text x="55" y="103" font-size="20" class="muted">Exact Rust identity selects cohorts; lifetime policy spends THP only where it is expected to pay.</text>
+
+  <g id="stage-1">
+    <rect class="card" x="50" y="165" width="270" height="410" rx="18"/>
+    <rect x="50" y="165" width="270" height="12" rx="6" fill="#0072B2"/>
+    <circle cx="83" cy="218" r="20" fill="#0072B2"/>
+    <text x="83" y="226" text-anchor="middle" font-size="20" font-weight="800" fill="#FFFFFF">1</text>
+    <text x="113" y="226" class="stage-title">Rust semantic signal</text>
+    <text x="75" y="278" class="body" font-weight="700">Exact profile key</text>
+    <text x="75" y="307" class="body">callsite + type + module</text>
+    <text x="75" y="354" class="body" font-weight="700">Discrete lifetime class</text>
+    <text x="75" y="383" class="body">Unknown / Ephemeral / Long</text>
+    <text x="75" y="430" class="body" font-weight="700">Classifier-side gate</text>
+    <text x="75" y="459" class="body">confidence can abstain</text>
+    <text x="75" y="488" class="body">to Unknown</text>
+    <rect x="73" y="518" width="224" height="38" rx="9" fill="#EAF4FA"/>
+    <text x="185" y="543" text-anchor="middle" class="small" fill="#0072B2">compiler/runtime input</text>
+  </g>
+
+  <line x1="324" y1="370" x2="352" y2="370" stroke="#7F8C8D" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g id="stage-2">
+    <rect class="card" x="360" y="165" width="270" height="410" rx="18"/>
+    <rect x="360" y="165" width="270" height="12" rx="6" fill="#6C5CE7"/>
+    <circle cx="393" cy="218" r="20" fill="#6C5CE7"/>
+    <text x="393" y="226" text-anchor="middle" font-size="20" font-weight="800" fill="#FFFFFF">2</text>
+    <text x="423" y="226" class="stage-title">Fail-closed contract</text>
+    <text x="385" y="278" class="body" font-weight="700">Allocator identity</text>
+    <text x="385" y="307" class="body">type + module + flags</text>
+    <text x="385" y="336" class="body">+ lifetime + placement</text>
+    <text x="385" y="383" class="body" font-weight="700">Exact equality authorizes</text>
+    <text x="385" y="412" class="body">reuse and routing</text>
+    <text x="385" y="459" class="body" font-weight="700">Unknown / unsupported</text>
+    <text x="385" y="488" class="body">existing allocator path</text>
+    <rect x="383" y="518" width="224" height="38" rx="9" fill="#F0EDFD"/>
+    <text x="495" y="543" text-anchor="middle" class="small" fill="#6C5CE7">bounded optimization</text>
+  </g>
+
+  <line x1="634" y1="370" x2="662" y2="370" stroke="#7F8C8D" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g id="stage-3">
+    <rect class="card" x="670" y="165" width="270" height="410" rx="18"/>
+    <rect x="670" y="165" width="270" height="12" rx="6" fill="#009E73"/>
+    <circle cx="703" cy="218" r="20" fill="#009E73"/>
+    <text x="703" y="226" text-anchor="middle" font-size="20" font-weight="800" fill="#FFFFFF">3</text>
+    <text x="733" y="226" class="stage-title">Lifetime layout</text>
+    <text x="695" y="278" class="body" font-weight="700">2 MiB aligned extents</text>
+    <text x="695" y="325" class="body">short and long cohorts</text>
+    <text x="695" y="354" class="body">use separate placement</text>
+    <text x="695" y="401" class="body" font-weight="700">32 × 64 KiB regions</text>
+    <text x="695" y="430" class="body">preserve exact identity</text>
+    <text x="695" y="477" class="body" font-weight="700">Empty extent</text>
+    <text x="695" y="506" class="body">whole-map release</text>
+    <rect x="693" y="518" width="224" height="38" rx="9" fill="#E8F6F2"/>
+    <text x="805" y="543" text-anchor="middle" class="small" fill="#007A59">packing + reclamation</text>
+  </g>
+
+  <line x1="944" y1="370" x2="972" y2="370" stroke="#7F8C8D" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g id="stage-4">
+    <rect class="card" x="980" y="165" width="270" height="410" rx="18"/>
+    <rect x="980" y="165" width="270" height="12" rx="6" fill="#E69F00"/>
+    <circle cx="1013" cy="218" r="20" fill="#E69F00"/>
+    <text x="1013" y="226" text-anchor="middle" font-size="20" font-weight="800" fill="#FFFFFF">4</text>
+    <text x="1043" y="226" class="stage-title">Physical policy</text>
+    <rect x="1004" y="262" width="222" height="76" rx="11" fill="#FFF5D9"/>
+    <text x="1019" y="290" class="body" font-weight="700">Long-lived eager</text>
+    <text x="1019" y="317" class="small">MADV_HUGEPAGE</text>
+    <rect x="1004" y="354" width="222" height="76" rx="11" fill="#F2F4F4"/>
+    <text x="1019" y="382" class="body" font-weight="700">Ephemeral</text>
+    <text x="1019" y="409" class="small">MADV_NOHUGEPAGE</text>
+    <rect x="1004" y="446" width="222" height="86" rx="11" fill="#FDF0E6"/>
+    <text x="1019" y="474" class="body" font-weight="700">Optional validation</text>
+    <text x="1019" y="501" class="small">survive epoch + occupancy</text>
+    <text x="1019" y="521" class="small">then MADV_COLLAPSE</text>
+    <text x="1115" y="554" text-anchor="middle" class="small" fill="#A76F00">page backend</text>
+  </g>
+
+  <line x1="1254" y1="370" x2="1282" y2="370" stroke="#7F8C8D" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g id="stage-5">
+    <rect x="1290" y="165" width="260" height="410" rx="18" fill="#102A43" stroke="#102A43" stroke-width="2"/>
+    <circle cx="1323" cy="218" r="20" fill="#FFFFFF"/>
+    <text x="1323" y="226" text-anchor="middle" font-size="20" font-weight="800" fill="#102A43">5</text>
+    <text x="1353" y="226" font-size="20" font-weight="700" fill="#FFFFFF">Measured outcome</text>
+    <text x="1315" y="291" class="metric" fill="#66D9C5">+16.9%</text>
+    <text x="1315" y="318" class="small" fill="#D9E2EC">dependent-touch</text>
+    <text x="1315" y="371" class="metric" fill="#66D9C5">+16.6%</text>
+    <text x="1315" y="398" class="small" fill="#D9E2EC">allocate/fault/free</text>
+    <text x="1315" y="451" class="metric" fill="#66D9C5">−8.1%</text>
+    <text x="1315" y="478" class="small" fill="#D9E2EC">steady resident</text>
+    <text x="1315" y="531" class="metric" fill="#F9C74F">258 MiB</text>
+    <text x="1315" y="558" class="small" fill="#D9E2EC">actual selective THP</text>
+  </g>
+
+  <g id="safety-rail">
+    <rect x="50" y="620" width="1500" height="176" rx="18" fill="#F4F7F9" stroke="#CCD6DD" stroke-width="2"/>
+    <text x="78" y="660" font-size="20" font-weight="800">Evidence and safety rail</text>
+    <line x1="535" y1="676" x2="535" y2="770" stroke="#CCD6DD" stroke-width="2"/>
+    <line x1="1030" y1="676" x2="1030" y2="770" stroke="#CCD6DD" stroke-width="2"/>
+    <text x="78" y="704" class="rail-title" fill="#6C5CE7">Exact fallback</text>
+    <text x="78" y="735" class="body">Unknown / ambiguous / unsupported</text>
+    <text x="78" y="764" class="body">→ existing allocator semantics</text>
+    <text x="570" y="704" class="rail-title" fill="#0072B2">Physical proof</text>
+    <text x="570" y="735" class="body">AnonHugePages: off = 0 MiB</text>
+    <text x="570" y="764" class="body">selective on = 258 MiB</text>
+    <text x="1065" y="704" class="rail-title" fill="#009E73">Causal pair</text>
+    <text x="1065" y="735" class="body">same policy, layout, trace, topology</text>
+    <text x="1065" y="764" class="body">physical THP eligibility changes</text>
+  </g>
+
+  <text x="800" y="850" text-anchor="middle" font-size="15" class="muted">Formal result: 20 paired blocks on one synthetic 50/50 trace. Held-out Rust classifiers, long-run fragmentation, and hardware-counter attribution remain next gates.</text>
+</svg>
