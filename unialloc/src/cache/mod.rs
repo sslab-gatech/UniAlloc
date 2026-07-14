@@ -8,9 +8,10 @@ use crate::alloc_api::type_isolation::{
     begin_global_raw_reclaim, begin_global_raw_reclaim_from_observation,
     begin_global_tracked_reclaim_from_observation, checked_recorded_reallocation_old_metadata,
     deallocation_metadata_after_recovery_record, finish_global_raw_reclaim_in_place,
-    observe_global_reclaim, preview_deallocation_metadata_after_recovery_record,
-    recorded_reallocation_old_metadata, reject_known_retained_or_released_from_observation,
-    release_global_raw_reclaim, release_global_reclaim_with_metadata, rollback_global_raw_reclaim,
+    global_address_lifecycle_tracking_active, observe_global_reclaim,
+    preview_deallocation_metadata_after_recovery_record, recorded_reallocation_old_metadata,
+    reject_known_retained_or_released_from_observation, release_global_raw_reclaim,
+    release_global_reclaim_with_metadata, rollback_global_raw_reclaim,
     select_auto_allocation_metadata, semantic_allocation_slow_path_enabled,
     semantic_auto_metadata_enabled, semantic_fallback_attribution_record_raw_alloc_no_metadata,
     semantic_fallback_attribution_record_raw_dealloc_no_metadata,
@@ -932,9 +933,17 @@ unsafe impl GlobalAlloc for RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
+        let semantic_slow_path = semantic_runtime_slow_path_enabled();
+        if !cfg!(feature = "quarantine")
+            && !semantic_slow_path
+            && !global_address_lifecycle_tracking_active()
+        {
+            let _ = self.dealloc_raw_backend(ptr, layout);
+            return;
+        }
         let reclaim_observation = observe_global_reclaim(ptr);
         reject_known_retained_or_released_from_observation(&reclaim_observation);
-        if !cfg!(feature = "quarantine") && !semantic_runtime_slow_path_enabled() {
+        if !cfg!(feature = "quarantine") && !semantic_slow_path {
             return self.dealloc_raw_from_observation(layout, reclaim_observation);
         }
         if let Some(metadata) = active_allocation_metadata() {
@@ -1050,9 +1059,20 @@ unsafe impl GlobalAlloc for RustAllocator {
             }
         }
 
+        let semantic_slow_path = semantic_runtime_slow_path_enabled();
+        if !cfg!(feature = "quarantine")
+            && !semantic_slow_path
+            && !global_address_lifecycle_tracking_active()
+        {
+            return self.realloc_raw_from_admission(
+                GlobalRawReclaimAdmission::Untracked(ptr),
+                layout,
+                new_layout,
+            );
+        }
         let reclaim_observation = observe_global_reclaim(ptr);
         reject_known_retained_or_released_from_observation(&reclaim_observation);
-        if !cfg!(feature = "quarantine") && !semantic_runtime_slow_path_enabled() {
+        if !cfg!(feature = "quarantine") && !semantic_slow_path {
             return self.realloc_raw_from_observation(reclaim_observation, layout, new_layout);
         }
         let old_recovery = checked_recorded_reallocation_old_metadata(ptr, layout);
