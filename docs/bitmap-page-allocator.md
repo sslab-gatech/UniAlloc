@@ -49,6 +49,7 @@ The unit tests cover:
 
 - adjacent frees becoming one larger allocatable run;
 - aligned fragmented runs crossing leaf and tree-child boundaries;
+- partial frees that materialize two leaves beneath a lazy used parent;
 - partial tail leaves remaining unavailable;
 - cross-leaf partial-free rejection;
 - search-cursor rewind across the eight-leaf fast-scan boundary;
@@ -85,6 +86,38 @@ All 180 benchmark-output records, 20 process medians, commands, affinity,
 binary hash, and four aggregates are stored in
 `benchmark-results/segment-tree-direct-benchmark.jsonl` (SHA-256
 `e14393b6a1c6974784a94086c452fd8d3cefe762b6f06425cde96bf218205911`).
+
+### Adjacent-leaf fast-path follow-up
+
+Runs of at most 64 pages now get a second bounded lookup after the existing
+leaf-local scan misses. The allocator checks the free suffix and prefix of two
+adjacent leaves, updates both occupancy words directly, and pulls their common
+ancestor path once. Longer runs and misses continue through the full summary
+tree. Cross-leaf deallocation validates both words before changing either one.
+
+Nine counterbalanced direct-process pairs measured the aligned 12-page run:
+
+| Direct workload | Summary-tree fallback | Adjacent-leaf path | Change |
+|---|---:|---:|---:|
+| Aligned cross-leaf reuse | 186.986 ns/op | 151.296 ns/op | **-19.09%, 1.24x** |
+
+The fixed-heap integration stayed balanced across its broader seven-pair
+matrix:
+
+| Fixed bitmap workload | Before | After | Change |
+|---|---:|---:|---:|
+| Same-run reuse | 54.692 ns/op | 54.581 ns/op | -0.20% |
+| Fragmented exact reuse | 70.053 ns/op | 70.001 ns/op | -0.07% |
+| Coalesce and refill | 68.466 ns/op | 69.079 ns/op | +0.90% |
+| Four-thread same-run | 109.514 ns/op | 104.586 ns/op | -4.50% |
+
+The release benchmark binary grows by 2,944 bytes, including 2,432 bytes of
+text. An inline adjacent scan reached about 57 ns/op on the direct workload but
+regressed hosted contention by about 67%, so the retained version outlines the
+allocation miss and preserves the ordinary deallocation tail. Full raw output,
+binary hashes, and the code-layout rejection record are in
+`benchmark-results/bitmap-high-roi-optimizations-ab.jsonl` (SHA-256
+`6df9bde5b008eaa9a876697fda3945dc3537adea1bb6a9075def6db4d9a1917f`).
 
 ## Performance result
 
@@ -127,9 +160,9 @@ is being selected.
 - Fixed-heap growth returns `false` before changing allocator state because the
   tree metadata is sized during initialization.
 - Hosted mmap windows have a separate opt-in multi-arena integration.
-- The leaf scan uses scalar `u64` operations plus highest-conflict-bit skipping.
-  SIMD remains a candidate for long multiword scans after a workload shows that
-  the segment fallback dominates.
+- The leaf and adjacent-leaf scans use scalar `u64` operations plus
+  highest-conflict-bit skipping. SIMD remains a candidate for long multiword
+  scans after a workload shows that the segment fallback dominates.
 
 The next integration step is an adaptive policy that keeps exact-size hot reuse
 on the free list and routes coalescing-heavy fixed arenas to the segment bitmap,

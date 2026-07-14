@@ -38,8 +38,9 @@ A hosted process grows through independent OS mappings, so each mapping owns one
   descriptors, giving deallocation a bounded owner lookup;
 - descriptors form an append-only registry and are reused after payload and tree
   mappings are retired;
-- four small empty arenas stay warm, and lock contention can create up to four
-  arena shards; this bounds retained warm payload at 8 MiB;
+- pure hosted mode keeps four small empty arenas warm, and lock contention can
+  create up to four arena shards; adaptive mode uses a separate one-arena
+  post-phase cap while preserving the same four-shard contention capacity;
 - freeing at least 256 KiB inside a live arena issues `MADV_DONTNEED` on Unix.
 
 Each arena uses the same 64-page leaf words and prefix/suffix/max-free internal
@@ -133,6 +134,29 @@ RUSTFLAGS='-C target-cpu=native' \
 The measured policy is strongest for concurrent and fragmented page-run
 traffic. Exact-size hot reuse remains the free list's strongest case. The
 hosted bitmap therefore stays an explicit workload-selective feature.
+
+### Adjacent-leaf code-layout guardrail
+
+The adjacent-two-leaf bitmap path was evaluated against the immediately prior
+implementation in both default and `--no-default-features` hosted builds.
+Close single-thread cases were extended to 21 counterbalanced process pairs:
+
+| Hosted build | Same | Fragmented | Coalescing | Four-thread |
+|---|---:|---:|---:|---:|
+| Default features | +1.58% | +2.94% | +0.09% | **-3.12%** |
+| No default features | +1.31% | +0.51% | +1.71% | **-11.81%** |
+
+For default fragmented reuse, the aggregate change was +2.94% and the paired
+median was +2.06%. Every stable common-workload change stayed within the 3%
+guardrail, while the targeted direct cross-leaf operation improved by 19.09%.
+The candidate adds 2,944 bytes to each release benchmark binary. A fully
+outlined deallocation tail was rejected after it moved no-default contention
+from about 22.6 to 35.0 ns/op through fat-LTO code layout alone.
+
+The 7-pair matrix, 21-pair close-case extensions, binary hashes, and raw trials
+are recorded in `benchmark-results/bitmap-high-roi-optimizations-ab.jsonl`
+(SHA-256
+`6df9bde5b008eaa9a876697fda3945dc3537adea1bb6a9075def6db4d9a1917f`).
 
 ## Current boundaries
 

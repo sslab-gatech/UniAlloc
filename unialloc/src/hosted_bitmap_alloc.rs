@@ -1896,7 +1896,7 @@ mod tests {
     }
 
     #[test]
-    fn hosted_contention_shards_stop_at_the_warm_arena_limit() {
+    fn hosted_contention_shards_stop_at_the_contention_limit() {
         let manager = TestAllocator::new(CONTENTION_ARENA_LIMIT);
         let layout = page_layout(8);
         let mapping_bytes = HostedBitmapPageAllocator::arena_mapping_bytes(layout).unwrap();
@@ -1960,6 +1960,26 @@ mod tests {
             assert_eq!(stats.active_arenas, WARM_EMPTY_ARENA_LIMIT);
             assert_eq!(stats.warm_empty_arenas, WARM_EMPTY_ARENA_LIMIT);
             assert_eq!(stats.descriptor_count, CONTENTION_ARENA_LIMIT);
+
+            let snapshot = manager.allocator.snapshot();
+            let expected_tree_bytes = HostedBitmapPageAllocator::rounded_mapping_bytes(
+                SegmentPageAllocator::required_layout(mapping_bytes / crate::PAGE_SIZE)
+                    .unwrap()
+                    .size(),
+            )
+            .unwrap();
+            let expected_descriptor_bytes = HostedBitmapPageAllocator::rounded_mapping_bytes(
+                core::mem::size_of::<HostedArena>(),
+            )
+            .unwrap()
+                * CONTENTION_ARENA_LIMIT;
+            assert_eq!(snapshot.active_arenas, 1);
+            assert_eq!(snapshot.warm_empty_arenas, 1);
+            assert_eq!(snapshot.live_allocations, 0);
+            assert_eq!(snapshot.mapped_payload_bytes, mapping_bytes);
+            assert_eq!(snapshot.allocated_payload_bytes, 0);
+            assert_eq!(snapshot.mapped_tree_bytes, expected_tree_bytes);
+            assert_eq!(snapshot.mapped_descriptor_bytes, expected_descriptor_bytes);
         }
     }
 }

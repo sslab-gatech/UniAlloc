@@ -250,6 +250,46 @@ aggregates in `benchmark-results/hosted-page-run-memory-overhead-ab.jsonl`
 (SHA-256
 `9c78b35e5cbae7efffd2d199b582a63bf467b273707940aa3f0d7596fe4d2bbb`).
 
+### High-ROI residency follow-up
+
+Adaptive routing now separates post-phase residency from contention capacity.
+It keeps one empty bitmap arena warm after a phase while still allowing four
+simultaneously active contention shards. Pure
+`hosted_bitmap_page_allocator` keeps its four-arena warm policy.
+
+Five counterbalanced process pairs showed that the smaller adaptive warm cap
+keeps repeated allocation/free on an already mapped arena and leaves the
+single-thread paths stable:
+
+| Adaptive workload | Four warm arenas | One warm arena | Change |
+|---|---:|---:|---:|
+| Same-run reuse | 21.617 ns/op | 21.599 ns/op | -0.08% |
+| Fragmented exact reuse | 39.552 ns/op | 38.375 ns/op | -2.98% |
+| Guarded coalescing | 43.677 ns/op | 43.524 ns/op | -0.35% |
+| Four-thread same-run | 35.385 ns/op | 28.741 ns/op | -18.78% |
+
+The contended result is machine-local and includes the effect of starting each
+trial with fewer idle arenas; the policy claim relies on the neutral
+single-thread rows and the separate four-shard capacity test.
+
+The five-pair coalescing memory probe measured the retained-state reduction:
+
+| Quiescent checkpoint | Four warm arenas | One warm arena | Difference |
+|---|---:|---:|---:|
+| All-freed RSS/PSS delta | 8,588 KiB | 7,052 KiB | -1,536 KiB |
+| Bitmap-owned mappings | 2,379,776 B | 798,720 B | -1,581,056 B |
+| Warm payload mappings | 2,097,152 B | 524,288 B | -1,572,864 B |
+| Active / warm arenas | 4 / 4 | 1 / 1 | -3 / -3 |
+
+The live coalesced checkpoint stayed effectively unchanged: RSS delta moved
+from 32,980 to 32,992 KiB and bitmap-owned mappings from 25,628,672 to
+25,632,768 bytes. Exact-retention stayed entirely on the free-list route with
+zero bitmap arenas. The full timing, memory, adjacent-leaf, and common-workload
+evidence is stored in
+`benchmark-results/bitmap-high-roi-optimizations-ab.jsonl` (2,466 records,
+SHA-256
+`6df9bde5b008eaa9a876697fda3945dc3537adea1bb6a9075def6db4d9a1917f`).
+
 ## Fixed-heap boundary
 
 The fixed free list and fixed bitmap currently cover the same caller-provided
@@ -280,10 +320,10 @@ opposite contention result both support a separate fixed-heap design.
 - Sampling can miss contention bursts shorter than eight radix accesses; it
   preserves exclusion and changes only the routing hint.
 - Mixed live owners require owner-directory probes for free-list deallocations.
-- The adaptive coalescing path can retain both free-list state and up to four
-  warm bitmap arenas. The measured 8-page arena shape retained 2 MiB of bitmap
-  payload; the configured four-arena, 2-MiB-per-arena bound permits an 8-MiB
-  payload high-water for larger warm arenas.
+- The adaptive coalescing path can retain both free-list state and one warm
+  bitmap arena. The warm arena is capped at 2 MiB of payload; contention can
+  temporarily expand to four active shards, which retire back to one after the
+  phase. Pure hosted bitmap mode retains its separate four-arena warm policy.
 - Descriptor mappings and owner-directory nodes follow peak arena/address
   coverage and are reused without a current reclamation path.
 - The policy reacts to radix-lock contention shared by page-run metadata and
