@@ -246,6 +246,60 @@ const fn hosted_free_run_retain_max_pages() -> usize {
     }
 }
 
+// The default hosted intrusive backend keeps one recently freed medium-large
+// page run outside the radix-indexed lists.  This closes the repeated
+// mmap/munmap loop for workloads that allocate and free one stable large size,
+// while bounding the additional mapped footprint of each FreeList to 512 KiB.
+// Experimental bitmap backends retain their existing ownership and release
+// policies, so this state is absent from those builds.
+#[cfg(all(
+    not(feature = "fixed_heap"),
+    not(feature = "bitmap_page_allocator"),
+    not(feature = "hosted_bitmap_page_allocator")
+))]
+const HOSTED_WARM_LARGE_RUN_MAX_BYTES: usize = 512 * 1024;
+
+#[cfg(all(
+    not(feature = "fixed_heap"),
+    not(feature = "bitmap_page_allocator"),
+    not(feature = "hosted_bitmap_page_allocator")
+))]
+#[derive(Clone, Copy)]
+struct HostedWarmLargeRun {
+    addr: usize,
+    page_count: usize,
+}
+
+#[cfg(all(
+    not(feature = "fixed_heap"),
+    not(feature = "bitmap_page_allocator"),
+    not(feature = "hosted_bitmap_page_allocator")
+))]
+impl HostedWarmLargeRun {
+    #[inline]
+    fn unmap_range(self) -> Option<(*mut u8, usize)> {
+        checked_page_size_from_count(self.page_count)
+            .ok()
+            .map(|size| (self.addr as *mut u8, size))
+    }
+}
+
+#[cfg(all(
+    not(feature = "fixed_heap"),
+    not(feature = "bitmap_page_allocator"),
+    not(feature = "hosted_bitmap_page_allocator")
+))]
+#[inline]
+fn hosted_warm_large_run_eligible(page_count: usize) -> bool {
+    if page_count <= hosted_free_run_retain_max_pages() {
+        return false;
+    }
+    matches!(
+        checked_page_size_from_count(page_count),
+        Ok(size) if size <= HOSTED_WARM_LARGE_RUN_MAX_BYTES
+    )
+}
+
 impl DoubleLinkedList {
     const fn new() -> Self {
         Self {
@@ -305,6 +359,12 @@ pub struct FreeList {
     non_empty_word1: AtomicUsize,
     non_empty_word2: AtomicUsize,
     non_empty_word3: AtomicUsize,
+    #[cfg(all(
+        not(feature = "fixed_heap"),
+        not(feature = "bitmap_page_allocator"),
+        not(feature = "hosted_bitmap_page_allocator")
+    ))]
+    warm_large_run: Mutex<Option<HostedWarmLargeRun>>,
 }
 
 impl FreeList {
@@ -315,7 +375,58 @@ impl FreeList {
             non_empty_word1: AtomicUsize::new(0),
             non_empty_word2: AtomicUsize::new(0),
             non_empty_word3: AtomicUsize::new(0),
+            #[cfg(all(
+                not(feature = "fixed_heap"),
+                not(feature = "bitmap_page_allocator"),
+                not(feature = "hosted_bitmap_page_allocator")
+            ))]
+            warm_large_run: Mutex::new(None),
         }
+    }
+
+    #[cfg(all(
+        not(feature = "fixed_heap"),
+        not(feature = "bitmap_page_allocator"),
+        not(feature = "hosted_bitmap_page_allocator")
+    ))]
+    #[inline]
+    fn try_take_warm_large_run(&self, page_count: usize, align: usize) -> Option<*mut u8> {
+        if !hosted_warm_large_run_eligible(page_count) || align == 0 || !align.is_power_of_two() {
+            return None;
+        }
+
+        let mut slot = self.warm_large_run.lock();
+        match slot.as_ref() {
+            Some(run) if run.page_count == page_count && run.addr % align == 0 => {
+                let addr = run.addr;
+                *slot = None;
+                Some(addr as *mut u8)
+            }
+            _ => None,
+        }
+    }
+
+    #[cfg(all(
+        not(feature = "fixed_heap"),
+        not(feature = "bitmap_page_allocator"),
+        not(feature = "hosted_bitmap_page_allocator")
+    ))]
+    #[inline]
+    fn try_store_warm_large_run(
+        &self,
+        ptr: *mut u8,
+        page_count: usize,
+    ) -> Result<Option<HostedWarmLargeRun>, ()> {
+        if ptr.is_null() || !hosted_warm_large_run_eligible(page_count) {
+            return Err(());
+        }
+        debug_assert_eq!(ptr as usize % PAGE_SIZE, 0);
+
+        let mut slot = self.warm_large_run.lock();
+        Ok(slot.replace(HostedWarmLargeRun {
+            addr: ptr as usize,
+            page_count,
+        }))
     }
 
     #[inline]
@@ -1303,6 +1414,14 @@ impl FreeList {
 
     pub fn alloc(&self, size: usize) -> Result<*mut u8, AllocError> {
         let origin_size = page_run_index_for_size(size)?;
+        #[cfg(all(
+            not(feature = "fixed_heap"),
+            not(feature = "bitmap_page_allocator"),
+            not(feature = "hosted_bitmap_page_allocator")
+        ))]
+        if let Some(ans) = self.try_take_warm_large_run(origin_size + 1, PAGE_SIZE) {
+            return Ok(ans);
+        }
         let list_len = self
             .try_get_existing_slice()
             .map(|slice| slice.len())
@@ -1360,6 +1479,15 @@ impl FreeList {
             .ok_or(AllocError::ESIZE)?;
         let total_size = checked_page_size_from_count(total_pages)?;
         let payload_size = checked_page_size_from_count(payload_pages)?;
+
+        #[cfg(all(
+            not(feature = "fixed_heap"),
+            not(feature = "bitmap_page_allocator"),
+            not(feature = "hosted_bitmap_page_allocator")
+        ))]
+        if let Some(reused) = self.try_take_warm_large_run(payload_pages, align) {
+            return Ok(reused);
+        }
 
         if let Some(reused) = self.remove_head_aligned_run(payload_pages, align)? {
             return Ok(reused);
@@ -1545,6 +1673,14 @@ impl FreeList {
                         None => return,
                     };
                     if final_pages > hosted_free_run_retain_max_pages() {
+                        #[cfg(all(
+                            not(feature = "bitmap_page_allocator"),
+                            not(feature = "hosted_bitmap_page_allocator")
+                        ))]
+                        if let Ok(evicted) = self.try_store_warm_large_run(final_ptr, final_pages) {
+                            unmap = evicted.and_then(HostedWarmLargeRun::unmap_range);
+                            return;
+                        }
                         unmap = hosted_unmap_run_from_idx(final_ptr, final_idx);
                         return;
                     }
@@ -1595,6 +1731,16 @@ impl FreeList {
                 }
                 #[cfg(not(feature = "fixed_heap"))]
                 {
+                    #[cfg(all(
+                        not(feature = "bitmap_page_allocator"),
+                        not(feature = "hosted_bitmap_page_allocator")
+                    ))]
+                    if let Some(final_pages) = final_idx.checked_add(1) {
+                        if let Ok(evicted) = self.try_store_warm_large_run(final_ptr, final_pages) {
+                            unmap = evicted.and_then(HostedWarmLargeRun::unmap_range);
+                            return;
+                        }
+                    }
                     unmap = hosted_unmap_run_from_idx(final_ptr, final_idx);
                 }
             }
@@ -1689,7 +1835,6 @@ impl FreeList {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "fixed_heap")]
     extern crate std;
 
     use super::*;
@@ -2474,6 +2619,204 @@ mod tests {
 
     #[cfg(all(
         not(feature = "fixed_heap"),
+        not(feature = "hosted_bitmap_page_allocator")
+    ))]
+    #[test]
+    fn hosted_warm_large_run_eligibility_has_strict_bounded_edges() {
+        let retain_pages = hosted_free_run_retain_max_pages();
+        let warm_max_pages = HOSTED_WARM_LARGE_RUN_MAX_BYTES / PAGE_SIZE;
+
+        assert!(!hosted_warm_large_run_eligible(retain_pages));
+        if retain_pages < warm_max_pages {
+            assert!(hosted_warm_large_run_eligible(retain_pages + 1));
+        }
+        if warm_max_pages != 0 {
+            assert!(hosted_warm_large_run_eligible(warm_max_pages));
+            assert!(!hosted_warm_large_run_eligible(warm_max_pages + 1));
+        }
+
+        if PAGE_SIZE == 4096 {
+            assert_eq!(retain_pages, 64);
+            assert_eq!(warm_max_pages, 128);
+            assert!(!hosted_warm_large_run_eligible(64));
+            assert!(hosted_warm_large_run_eligible(65));
+            assert!(hosted_warm_large_run_eligible(128));
+            assert!(!hosted_warm_large_run_eligible(129));
+        }
+    }
+
+    #[cfg(all(
+        not(feature = "fixed_heap"),
+        not(feature = "hosted_bitmap_page_allocator"),
+        unix
+    ))]
+    fn mmap_page_run_for_warm_test(run_pages: usize) -> *mut u8 {
+        let run_size = checked_page_size_from_count(run_pages).expect("warm test run size");
+        let prot = system_alloc::prots::get_prot(true, true, false);
+        let ptr = unsafe { system_alloc::mmap(run_size, prot) };
+        assert!(!system_alloc::mmap_failed(ptr));
+        ptr
+    }
+
+    #[cfg(all(
+        not(feature = "fixed_heap"),
+        not(feature = "hosted_bitmap_page_allocator"),
+        unix
+    ))]
+    #[test]
+    fn hosted_warm_large_run_reuses_cap_plus_one_and_98_pages() {
+        if PAGE_SIZE != 4096 {
+            return;
+        }
+
+        let freelist = FreeList::new();
+        for run_pages in [hosted_free_run_retain_max_pages() + 1, 98] {
+            let run_size = checked_page_size_from_count(run_pages).expect("warm page-run size");
+            let ptr = mmap_page_run_for_warm_test(run_pages);
+            unsafe { core::ptr::write_volatile(ptr, 0xA5) };
+
+            freelist.free(ptr, run_size);
+            let reused = freelist.alloc(run_size).expect("exact warm page-run reuse");
+
+            assert_eq!(reused, ptr);
+            unsafe { system_alloc::munmap(reused, run_size) };
+        }
+    }
+
+    #[cfg(all(
+        not(feature = "fixed_heap"),
+        not(feature = "hosted_bitmap_page_allocator"),
+        unix
+    ))]
+    #[test]
+    fn hosted_warm_large_run_mismatch_does_not_consume_the_slot() {
+        if PAGE_SIZE != 4096 {
+            return;
+        }
+
+        let freelist = FreeList::new();
+        let ptr = mmap_page_run_for_warm_test(98);
+        assert!(freelist
+            .try_store_warm_large_run(ptr, 98)
+            .expect("eligible run should enter the warm slot")
+            .is_none());
+
+        let mut incompatible_align = PAGE_SIZE * 2;
+        while (ptr as usize) % incompatible_align == 0 {
+            incompatible_align = incompatible_align
+                .checked_mul(2)
+                .expect("mapped address must have a finite alignment");
+        }
+        assert!(freelist
+            .try_take_warm_large_run(98, incompatible_align)
+            .is_none());
+        assert!(freelist.try_take_warm_large_run(97, PAGE_SIZE).is_none());
+        assert_eq!(freelist.try_take_warm_large_run(98, PAGE_SIZE), Some(ptr));
+
+        let run_size = checked_page_size_from_count(98).expect("98-page run size");
+        unsafe { system_alloc::munmap(ptr, run_size) };
+    }
+
+    #[cfg(all(
+        not(feature = "fixed_heap"),
+        not(feature = "hosted_bitmap_page_allocator"),
+        any(target_os = "linux", target_os = "macos")
+    ))]
+    #[test]
+    fn hosted_warm_large_run_replacement_unmaps_the_evicted_run() {
+        if PAGE_SIZE != 4096 {
+            return;
+        }
+
+        let freelist = FreeList::new();
+        let retained_pages = hosted_free_run_retain_max_pages() + 1;
+        let retained_size =
+            checked_page_size_from_count(retained_pages).expect("cap-plus-one run size");
+        let incoming_pages = 98;
+        let incoming_size = checked_page_size_from_count(incoming_pages).expect("98-page run size");
+        let retained = mmap_page_run_for_warm_test(retained_pages);
+        let incoming = mmap_page_run_for_warm_test(incoming_pages);
+        unsafe {
+            core::ptr::write_volatile(retained, 0x5A);
+            core::ptr::write_volatile(incoming, 0xA5);
+        }
+
+        freelist.free(retained, retained_size);
+        freelist.free(incoming, incoming_size);
+
+        assert_page_unmapped_for_test(retained);
+        assert_eq!(
+            freelist.alloc(incoming_size).expect("newest warm run"),
+            incoming
+        );
+        unsafe { system_alloc::munmap(incoming, incoming_size) };
+    }
+
+    #[cfg(all(
+        not(feature = "fixed_heap"),
+        not(feature = "hosted_bitmap_page_allocator"),
+        any(target_os = "linux", target_os = "macos")
+    ))]
+    #[test]
+    fn hosted_warm_large_run_above_512_kib_is_unmapped() {
+        let run_pages = HOSTED_WARM_LARGE_RUN_MAX_BYTES / PAGE_SIZE + 1;
+        let run_size = checked_page_size_from_count(run_pages).expect("above-warm run size");
+        let freelist = FreeList::new();
+        let ptr = mmap_page_run_for_warm_test(run_pages);
+        unsafe { core::ptr::write_volatile(ptr, 0xC3) };
+
+        freelist.free(ptr, run_size);
+
+        assert_page_unmapped_for_test(ptr);
+    }
+
+    #[cfg(all(
+        not(feature = "fixed_heap"),
+        not(feature = "hosted_bitmap_page_allocator"),
+        unix
+    ))]
+    #[test]
+    fn hosted_warm_large_run_has_single_consumer_under_concurrency() {
+        if PAGE_SIZE != 4096 {
+            return;
+        }
+
+        use std::sync::Arc;
+
+        let freelist = Arc::new(FreeList::new());
+        let ptr = mmap_page_run_for_warm_test(98);
+        assert!(freelist
+            .try_store_warm_large_run(ptr, 98)
+            .expect("eligible run should enter the warm slot")
+            .is_none());
+
+        let first_freelist = Arc::clone(&freelist);
+        let first = std::thread::spawn(move || {
+            first_freelist
+                .try_take_warm_large_run(98, PAGE_SIZE)
+                .map(|ptr| ptr as usize)
+        });
+        let second_freelist = Arc::clone(&freelist);
+        let second = std::thread::spawn(move || {
+            second_freelist
+                .try_take_warm_large_run(98, PAGE_SIZE)
+                .map(|ptr| ptr as usize)
+        });
+
+        let first = first.join().expect("first warm consumer");
+        let second = second.join().expect("second warm consumer");
+        assert_eq!(
+            usize::from(first.is_some()) + usize::from(second.is_some()),
+            1
+        );
+        assert_eq!(first.or(second), Some(ptr as usize));
+
+        let run_size = checked_page_size_from_count(98).expect("98-page run size");
+        unsafe { system_alloc::munmap(ptr, run_size) };
+    }
+
+    #[cfg(all(
+        not(feature = "fixed_heap"),
         any(target_os = "linux", target_os = "macos")
     ))]
     fn os_page_is_mapped_for_test(ptr: *mut u8) -> bool {
@@ -2521,17 +2864,16 @@ mod tests {
         any(target_os = "linux", target_os = "macos")
     ))]
     #[test]
-    fn hosted_free_above_representable_retention_cap_is_unmapped() {
-        let retain_pages = hosted_free_run_retain_max_pages();
-        if retain_pages >= BACKEND_MAX_PAGE {
-            // If a target page size ever rounds the hosted cap up to the largest
-            // representable class, there is no above-cap-but-representable run.
-            return;
-        }
-
+    fn hosted_free_above_active_warm_retention_policy_is_unmapped() {
         let freelist = FreeList::new();
-        let run_pages = retain_pages + 1;
-        let run_size = checked_page_size_from_count(run_pages).expect("above-cap run size");
+        #[cfg(all(
+            not(feature = "bitmap_page_allocator"),
+            not(feature = "hosted_bitmap_page_allocator")
+        ))]
+        let run_pages = HOSTED_WARM_LARGE_RUN_MAX_BYTES / PAGE_SIZE + 1;
+        #[cfg(feature = "hosted_bitmap_page_allocator")]
+        let run_pages = hosted_free_run_retain_max_pages() + 1;
+        let run_size = checked_page_size_from_count(run_pages).expect("above-retention run size");
         let _guard_before = freelist.alloc(PAGE_SIZE).expect("leading guard page");
         let ptr = freelist.alloc(run_size).expect("above-cap page run");
         let _guard_after = freelist.alloc(PAGE_SIZE).expect("trailing guard page");
@@ -2551,16 +2893,25 @@ mod tests {
     #[test]
     fn hosted_free_unmaps_when_freelist_metadata_unavailable() {
         let freelist = FreeList::new();
+        let run_pages = if PAGE_SIZE == 4096 { 98 } else { 1 };
+        let run_size = checked_page_size_from_count(run_pages).expect("faulted run size");
         let _guard_before = freelist.alloc(PAGE_SIZE).expect("leading guard page");
-        let ptr = freelist.alloc(PAGE_SIZE).expect("hosted page run");
+        let ptr = freelist.alloc(run_size).expect("hosted page run");
         let _guard_after = freelist.alloc(PAGE_SIZE).expect("trailing guard page");
 
         unsafe { core::ptr::write_volatile(ptr, 0xA7) };
         assert!(os_page_is_mapped_for_test(ptr));
 
-        freelist.free_with_hosted_metadata_failure_for_test(ptr, PAGE_SIZE);
+        freelist.free_with_hosted_metadata_failure_for_test(ptr, run_size);
 
         assert_page_unmapped_for_test(ptr);
+        #[cfg(all(
+            not(feature = "bitmap_page_allocator"),
+            not(feature = "hosted_bitmap_page_allocator")
+        ))]
+        assert!(freelist
+            .try_take_warm_large_run(run_pages, PAGE_SIZE)
+            .is_none());
         assert!(
             !freelist.free_list_metadata_initialized(),
             "metadata-failure fallback must not initialize reusable freelist state"
