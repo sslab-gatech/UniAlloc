@@ -3,8 +3,8 @@
 //! Every leaf stores one 64-page occupancy word. Internal nodes cache the
 //! longest free prefix, suffix, and sub-run. Allocating and freeing a range is
 //! therefore `O(log pages)`, and freeing adjacent ranges merges them as part of
-//! the normal parent-summary update. A bounded leaf-word scan handles the hot
-//! path; the tree supplies the fragmented and cross-word fallback.
+//! the normal parent-summary update. A bounded leaf-word and adjacent-leaf scan
+//! handles the hot path; the tree supplies the fragmented and long-run fallback.
 
 use core::alloc::Layout;
 use core::cmp::{max, min};
@@ -224,17 +224,7 @@ impl SegmentPageAllocator {
         let effective_align = max(align, self.page_size);
         let start = match self.try_allocate_from_leaf_words(pages, effective_align) {
             Some(start) => start,
-            None => {
-                let start = self
-                    .find_aligned(1, 0, self.leaf_capacity, pages, effective_align)
-                    .ok_or(RunBitmapError::OutOfMemory)?;
-                let end = start
-                    .checked_add(pages)
-                    .filter(|end| *end <= self.page_count)
-                    .ok_or(RunBitmapError::OutOfMemory)?;
-                self.assign(1, 0, self.leaf_capacity, start, end, NODE_USED);
-                start
-            }
+            None => self.allocate_after_leaf_miss(pages, effective_align)?,
         };
         self.allocated_pages = self
             .allocated_pages
@@ -288,6 +278,9 @@ impl SegmentPageAllocator {
                 .ok_or(RunBitmapError::RangeAlreadyFree)?;
             return Ok(());
         }
+        if pages <= LEAF_PAGES && (end - 1) / LEAF_PAGES == start / LEAF_PAGES + 1 {
+            return self.deallocate_from_two_leaf_words(start, pages);
+        }
         let summary = self
             .query(1, 0, self.leaf_capacity, start, end)
             .ok_or(RunBitmapError::InvalidPointer)?;
@@ -296,6 +289,58 @@ impl SegmentPageAllocator {
         }
         self.assign(1, 0, self.leaf_capacity, start, end, NODE_FREE);
         self.search_word = min(self.search_word, start / LEAF_PAGES);
+        self.allocated_pages = self
+            .allocated_pages
+            .checked_sub(pages)
+            .ok_or(RunBitmapError::RangeAlreadyFree)?;
+        Ok(())
+    }
+
+    #[inline(never)]
+    fn allocate_after_leaf_miss(
+        &mut self,
+        pages: usize,
+        align: usize,
+    ) -> Result<usize, RunBitmapError> {
+        if let Some(start) = self.try_allocate_from_two_leaf_words(pages, align) {
+            return Ok(start);
+        }
+        let start = self
+            .find_aligned(1, 0, self.leaf_capacity, pages, align)
+            .ok_or(RunBitmapError::OutOfMemory)?;
+        let end = start
+            .checked_add(pages)
+            .filter(|end| *end <= self.page_count)
+            .ok_or(RunBitmapError::OutOfMemory)?;
+        self.assign(1, 0, self.leaf_capacity, start, end, NODE_USED);
+        Ok(start)
+    }
+
+    #[inline(never)]
+    fn deallocate_from_two_leaf_words(
+        &mut self,
+        start: usize,
+        pages: usize,
+    ) -> Result<(), RunBitmapError> {
+        let left_word_idx = start / LEAF_PAGES;
+        let right_word_idx = left_word_idx + 1;
+        let left_leaf_idx = self.materialize_leaf(left_word_idx);
+        let right_leaf_idx = self.materialize_leaf(right_word_idx);
+        let local_left = start % LEAF_PAGES;
+        let left_mask = Self::range_mask(local_left, LEAF_PAGES);
+        let right_pages = pages - (LEAF_PAGES - local_left);
+        let right_mask = Self::low_bits_mask(right_pages);
+        if self.node(left_leaf_idx).leaf_bits & left_mask != left_mask
+            || self.node(right_leaf_idx).leaf_bits & right_mask != right_mask
+        {
+            return Err(RunBitmapError::RangeAlreadyFree);
+        }
+        self.node_mut(left_leaf_idx).leaf_bits &= !left_mask;
+        self.node_mut(right_leaf_idx).leaf_bits &= !right_mask;
+        self.recompute_leaf(left_leaf_idx);
+        self.recompute_leaf(right_leaf_idx);
+        self.pull_two_leaf_ancestors(left_leaf_idx, right_leaf_idx);
+        self.search_word = min(self.search_word, left_word_idx);
         self.allocated_pages = self
             .allocated_pages
             .checked_sub(pages)
@@ -332,6 +377,56 @@ impl SegmentPageAllocator {
         None
     }
 
+    #[inline(never)]
+    fn try_allocate_from_two_leaf_words(&mut self, pages: usize, align: usize) -> Option<usize> {
+        if pages > LEAF_PAGES {
+            return None;
+        }
+        let words = (self.page_count + LEAF_PAGES - 1) / LEAF_PAGES;
+        if words < 2 {
+            return None;
+        }
+        let scans = min(words, FAST_LEAF_SCAN_LIMIT);
+        for offset in 0..scans {
+            let word_idx = (self.search_word + offset) % words;
+            if word_idx + 1 >= words {
+                continue;
+            }
+            let leaf_idx = self.materialize_leaf(word_idx);
+            let right_leaf_idx = self.materialize_leaf(word_idx + 1);
+            let left = word_idx * LEAF_PAGES;
+            let right = left + LEAF_PAGES;
+            let left_suffix = self.node(leaf_idx).suffix_free as usize;
+            let right_prefix = self.node(right_leaf_idx).prefix_free as usize;
+            if left_suffix == 0 || right_prefix == 0 || left_suffix + right_prefix < pages {
+                continue;
+            }
+            let cross_left = right - left_suffix;
+            let cross_right = right + right_prefix;
+            let Some(start) = self.aligned_start_in(cross_left, cross_right, pages, align) else {
+                continue;
+            };
+            let end = start.checked_add(pages)?;
+            if start >= right || end <= right {
+                continue;
+            }
+
+            let local_left = start - left;
+            let left_mask = Self::range_mask(local_left, LEAF_PAGES);
+            let right_mask = Self::low_bits_mask(end - right);
+            self.node_mut(leaf_idx).leaf_bits |= left_mask;
+            self.node_mut(right_leaf_idx).leaf_bits |= right_mask;
+            self.recompute_leaf(leaf_idx);
+            self.recompute_leaf(right_leaf_idx);
+            self.pull_two_leaf_ancestors(leaf_idx, right_leaf_idx);
+            if word_idx == self.search_word && self.node(leaf_idx).max_free == 0 {
+                self.search_word = (word_idx + 1) % words;
+            }
+            return Some(start);
+        }
+        None
+    }
+
     fn materialize_leaf(&mut self, word_idx: usize) -> usize {
         let mut idx = 1usize;
         let mut left = 0usize;
@@ -356,6 +451,22 @@ impl SegmentPageAllocator {
         while idx > 1 {
             idx /= 2;
             self.pull(idx, child_len, child_len);
+            child_len *= 2;
+        }
+    }
+
+    fn pull_two_leaf_ancestors(&mut self, mut left_idx: usize, mut right_idx: usize) {
+        debug_assert_ne!(left_idx, right_idx);
+        let mut child_len = LEAF_PAGES;
+        while left_idx > 1 {
+            let left_parent = left_idx / 2;
+            let right_parent = right_idx / 2;
+            self.pull(left_parent, child_len, child_len);
+            if right_parent != left_parent {
+                self.pull(right_parent, child_len, child_len);
+            }
+            left_idx = left_parent;
+            right_idx = right_parent;
             child_len *= 2;
         }
     }
@@ -918,10 +1029,62 @@ mod tests {
     }
 
     #[test]
+    fn aligned_two_leaf_run_across_subtrees_round_trips_without_summary_corruption() {
+        let (mut allocator, _nodes) = allocator(256);
+        let pages: Vec<_> = (0..256)
+            .map(|_| allocator.allocate_bytes(PAGE, PAGE).unwrap())
+            .collect();
+        for ptr in &pages[124..136] {
+            allocator.deallocate_bytes(*ptr, PAGE).unwrap();
+        }
+
+        let run = allocator.allocate_bytes(PAGE * 12, PAGE * 4).unwrap();
+        assert_eq!(run as usize, BASE + PAGE * 124);
+        assert_eq!(allocator.allocated_pages(), 256);
+        assert_tree_summaries(&mut allocator);
+
+        allocator.deallocate_bytes(run, PAGE * 12).unwrap();
+        assert_eq!(allocator.largest_free_run(), 12);
+        assert_eq!(allocator.allocated_pages(), 244);
+        assert_tree_summaries(&mut allocator);
+    }
+
+    #[test]
+    fn two_leaf_partial_free_materializes_a_lazy_used_subtree() {
+        let (mut allocator, _nodes) = allocator(256);
+        let run = allocator.allocate_bytes(PAGE * 256, PAGE).unwrap();
+        assert_eq!(run as usize, BASE);
+        assert_eq!(allocator.node(1).state, NODE_USED);
+        // The used parent still owns the lazy state; its children have not
+        // been materialized since initialization zeroed the backing nodes.
+        assert_eq!(allocator.node(2).state, NODE_MIXED);
+        assert_eq!(allocator.node(2).leaf_bits, 0);
+
+        let cross = (run as usize + PAGE * 60) as *mut u8;
+        allocator.deallocate_bytes(cross, PAGE * 12).unwrap();
+        assert_eq!(
+            allocator.allocate_bytes(PAGE * 12, PAGE * 4).unwrap(),
+            cross
+        );
+        assert_tree_summaries(&mut allocator);
+
+        allocator.deallocate_bytes(run, PAGE * 256).unwrap();
+        assert_eq!(allocator.allocated_pages(), 0);
+        assert_eq!(allocator.largest_free_run(), 256);
+        assert_tree_summaries(&mut allocator);
+    }
+
+    #[test]
     fn cross_leaf_partial_free_rejects_later_full_range_free() {
         let (mut allocator, _nodes) = allocator(128);
-        let prefix = allocator.allocate_bytes(PAGE * 62, PAGE).unwrap();
+        let pages: Vec<_> = (0..128)
+            .map(|_| allocator.allocate_bytes(PAGE, PAGE).unwrap())
+            .collect();
+        for ptr in &pages[62..68] {
+            allocator.deallocate_bytes(*ptr, PAGE).unwrap();
+        }
         let run = allocator.allocate_bytes(PAGE * 6, PAGE).unwrap();
+        assert_eq!(run as usize, BASE + PAGE * 62);
         allocator
             .deallocate_bytes((run as usize + PAGE * 2) as *mut u8, PAGE * 2)
             .unwrap();
@@ -929,8 +1092,47 @@ mod tests {
             allocator.deallocate_bytes(run, PAGE * 6),
             Err(RunBitmapError::RangeAlreadyFree)
         );
-        assert_eq!(allocator.allocated_pages(), 66);
-        allocator.deallocate_bytes(prefix, PAGE * 62).unwrap();
+        assert_eq!(allocator.allocated_pages(), 126);
+        let refilled = allocator.allocate_bytes(PAGE * 2, PAGE).unwrap();
+        assert_eq!(refilled as usize, BASE + PAGE * 64);
+        allocator.deallocate_bytes(run, PAGE * 6).unwrap();
+        for ptr in pages[..62].iter().chain(&pages[68..]) {
+            allocator.deallocate_bytes(*ptr, PAGE).unwrap();
+        }
+        assert_eq!(allocator.allocated_pages(), 0);
+        assert_tree_summaries(&mut allocator);
+    }
+
+    #[test]
+    fn cross_leaf_free_rewinds_the_leaf_scan_hint() {
+        let (mut allocator, _nodes) = allocator(LEAF_PAGES * 10);
+        let runs: Vec<_> = (0..9)
+            .map(|_| allocator.allocate_bytes(PAGE * LEAF_PAGES, PAGE).unwrap())
+            .collect();
+        let cross = (runs[0] as usize + PAGE * (LEAF_PAGES - 4)) as *mut u8;
+
+        allocator.deallocate_bytes(cross, PAGE * 8).unwrap();
+        assert_eq!(allocator.allocate_bytes(PAGE * 8, PAGE * 4).unwrap(), cross);
+        assert_tree_summaries(&mut allocator);
+    }
+
+    #[test]
+    fn two_leaf_run_never_uses_pages_past_a_partial_tail() {
+        let (mut allocator, _nodes) = allocator(70);
+        let pages: Vec<_> = (0..70)
+            .map(|_| allocator.allocate_bytes(PAGE, PAGE).unwrap())
+            .collect();
+        for ptr in &pages[60..70] {
+            allocator.deallocate_bytes(*ptr, PAGE).unwrap();
+        }
+
+        let run = allocator.allocate_bytes(PAGE * 10, PAGE).unwrap();
+        assert_eq!(run as usize, BASE + PAGE * 60);
+        assert_eq!(
+            allocator.allocate_bytes(PAGE, PAGE),
+            Err(RunBitmapError::OutOfMemory)
+        );
+        allocator.deallocate_bytes(run, PAGE * 10).unwrap();
         assert_tree_summaries(&mut allocator);
     }
 
@@ -1000,7 +1202,7 @@ mod tests {
                 continue;
             }
 
-            let pages = 1 + (random as usize % 9);
+            let pages = 1 + (random as usize % (LEAF_PAGES + 1));
             let align_pages = 1usize << ((random >> 8) as usize % 4);
             let expected = (0..=PAGES.saturating_sub(pages)).find(|start| {
                 (BASE + start * PAGE) % (align_pages * PAGE) == 0

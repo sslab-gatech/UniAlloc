@@ -214,7 +214,7 @@ fn run_cross() {
     assert_eq!(tree.page_index(probe), CROSS_RUN_START);
     tree.deallocate(probe, CROSS_RUN_PAGES);
     let _ = aligned_cross_leaf_reuse(&mut tree, 2_000);
-    benchmark("aligned_cross_leaf_tree_fallback", || {
+    benchmark("aligned_cross_leaf_reuse", || {
         aligned_cross_leaf_reuse(&mut tree, CROSS_ITERATIONS)
     });
 }
