@@ -3,8 +3,9 @@
 ## Scope
 
 The `bitmap_page_allocator` feature selects an experimental page-run backend for
-the contiguous `fixed_heap` configuration. The default hosted and fixed-heap
-backends retain their existing intrusive free lists.
+the contiguous `fixed_heap` configuration. The default page-run backend retains
+its intrusive free lists. The hosted counterpart is described in
+[`hosted-bitmap-page-allocator.md`](hosted-bitmap-page-allocator.md).
 
 ```bash
 cargo run --release -p unialloc \
@@ -71,7 +72,7 @@ The feature remains opt-in while workload policy is being selected.
 - A single `spin::Mutex` serializes page-run tree mutations.
 - Fixed-heap growth returns `false` before changing allocator state because the
   tree metadata is sized during initialization.
-- Hosted mmap windows continue using the existing free list and unmap policy.
+- Hosted mmap windows have a separate opt-in multi-arena integration.
 - The leaf scan uses scalar `u64` operations. SIMD remains a candidate for long
   multiword scans after a workload shows that the segment fallback dominates.
 

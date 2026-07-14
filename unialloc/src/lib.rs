@@ -33,6 +33,8 @@ mod cache;
 mod collections;
 mod error;
 mod freelist;
+#[cfg(all(feature = "hosted_bitmap_page_allocator", not(feature = "fixed_heap")))]
+mod hosted_bitmap_alloc;
 mod mm;
 mod page;
 mod pal;
@@ -130,12 +132,19 @@ pub fn platform_tls_save_failure_count() -> usize {
 }
 
 pub const fn platform_allocator_backend() -> &'static str {
-    if cfg!(feature = "fixed_heap") {
+    if cfg!(feature = "hosted_bitmap_page_allocator") {
+        "hosted_segment_bitmap"
+    } else if cfg!(feature = "fixed_heap") {
         "fixed_heap"
     } else {
         "page_heap_thread_cache"
     }
 }
+
+#[cfg(all(feature = "hosted_bitmap_page_allocator", feature = "fixed_heap"))]
+compile_error!(
+    "hosted_bitmap_page_allocator manages OS mmap arenas and cannot be combined with fixed_heap"
+);
 
 pub const fn platform_system_backend() -> &'static str {
     if cfg!(feature = "fixed_heap") {

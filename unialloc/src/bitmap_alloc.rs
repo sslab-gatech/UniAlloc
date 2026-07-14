@@ -1,6 +1,6 @@
 //! Segment-tree-backed contiguous page bitmap.
 //!
-//! Every leaf represents one page (`free` or `used`). Internal nodes cache the
+//! Every leaf stores one 64-page occupancy word. Internal nodes cache the
 //! longest free prefix, suffix, and sub-run. Allocating and freeing a range is
 //! therefore `O(log pages)`, and freeing adjacent ranges merges them as part of
 //! the normal parent-summary update. A bounded leaf-word scan handles the hot

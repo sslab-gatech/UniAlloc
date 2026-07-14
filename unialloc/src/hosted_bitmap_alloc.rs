@@ -1,0 +1,1198 @@
+//! Hosted page-run allocation over independent mmap arenas.
+//!
+//! The fixed-heap bitmap owns one stable address interval. Hosted allocation
+//! instead grows through multiple OS mappings, so every mapping gets its own
+//! [`SegmentPageAllocator`]. Arena descriptors form an append-only registry;
+//! inactive descriptors are reused after their payload and tree mappings are
+//! released. The stable descriptor lifetime lets allocation use per-arena
+//! locks without a global lifetime hazard.
+
+use crate::bitmap_alloc::{RunBitmapError, RunNode, SegmentPageAllocator};
+use crate::pal::sys_alloc as system_alloc;
+use crate::sync::PthreadMutex;
+use core::alloc::{GlobalAlloc, Layout};
+use core::ptr::{self, null_mut};
+use core::sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering};
+
+const MIN_ARENA_BYTES: usize = 512 * 1024;
+const MAX_ARENA_BYTES: usize = 64 * 1024 * 1024;
+const WARM_EMPTY_ARENA_LIMIT: usize = 4;
+const WARM_EMPTY_ARENA_MAX_BYTES: usize = 2 * 1024 * 1024;
+const CONTENTION_ARENA_LIMIT: usize = WARM_EMPTY_ARENA_LIMIT;
+const DISCARD_FREE_RUN_MIN_BYTES: usize = 256 * 1024;
+const OWNER_RADIX_BITS: usize = 9;
+const OWNER_RADIX_SLOTS: usize = 1 << OWNER_RADIX_BITS;
+const OWNER_RADIX_MASK: usize = OWNER_RADIX_SLOTS - 1;
+// Six 9-bit levels cover every possible page index in a 64-bit address space
+// with 4KiB or larger pages.
+const OWNER_RADIX_LEVELS: usize = 6;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum HostedBitmapError {
+    InvalidLayout,
+    MappingFailed,
+    Bitmap(RunBitmapError),
+}
+
+enum ArenaAllocationAttempt {
+    Allocated(*mut u8),
+    Busy(*mut HostedArena),
+    Miss,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct HostedBitmapStats {
+    pub active_arenas: usize,
+    pub warm_empty_arenas: usize,
+    pub descriptor_count: usize,
+    pub mapped_payload_bytes: usize,
+}
+
+struct HostedArenaState {
+    allocator: SegmentPageAllocator,
+    base: usize,
+    mapping_bytes: usize,
+    node_mapping: *mut u8,
+    node_mapping_bytes: usize,
+    warm_empty: bool,
+}
+
+impl HostedArenaState {
+    const fn empty() -> Self {
+        Self {
+            allocator: SegmentPageAllocator::empty(),
+            base: 0,
+            mapping_bytes: 0,
+            node_mapping: null_mut(),
+            node_mapping_bytes: 0,
+            warm_empty: false,
+        }
+    }
+
+    #[inline]
+    fn end(&self) -> Option<usize> {
+        self.base.checked_add(self.mapping_bytes)
+    }
+
+    #[inline]
+    fn contains(&self, addr: usize) -> bool {
+        self.base != 0 && addr >= self.base && self.end().map(|end| addr < end).unwrap_or(false)
+    }
+}
+
+struct HostedArena {
+    // Written before release-publishing this descriptor and immutable after it
+    // joins the registry.
+    next: *mut HostedArena,
+    // Full active arenas also have a zero max-free summary, so lifetime state is
+    // published separately from capacity.
+    active: AtomicBool,
+    // Caches the tree root's max-free summary and lets readers skip locks for
+    // undersized arenas.
+    largest_free_run: AtomicUsize,
+    base: AtomicUsize,
+    end: AtomicUsize,
+    state: spin::Mutex<HostedArenaState>,
+}
+
+unsafe impl Send for HostedArena {}
+unsafe impl Sync for HostedArena {}
+
+impl HostedArena {
+    const fn new(next: *mut HostedArena) -> Self {
+        Self {
+            next,
+            active: AtomicBool::new(false),
+            largest_free_run: AtomicUsize::new(0),
+            base: AtomicUsize::new(0),
+            end: AtomicUsize::new(0),
+            state: spin::Mutex::new(HostedArenaState::empty()),
+        }
+    }
+
+    #[inline]
+    fn is_candidate(&self, pages: usize) -> bool {
+        self.active.load(Ordering::Acquire)
+            && self.largest_free_run.load(Ordering::Relaxed) >= pages
+    }
+
+    #[inline]
+    fn may_contain(&self, addr: usize) -> bool {
+        if !self.active.load(Ordering::Acquire) {
+            return false;
+        }
+        let base = self.base.load(Ordering::Relaxed);
+        let end = self.end.load(Ordering::Relaxed);
+        addr >= base && addr < end
+    }
+}
+
+#[repr(C)]
+struct OwnerRadixNode {
+    slots: [AtomicPtr<()>; OWNER_RADIX_SLOTS],
+}
+
+struct OwnerDirectory {
+    root: AtomicPtr<OwnerRadixNode>,
+    update_lock: PthreadMutex<()>,
+}
+
+unsafe impl Send for OwnerDirectory {}
+unsafe impl Sync for OwnerDirectory {}
+
+impl OwnerDirectory {
+    const fn new() -> Self {
+        Self {
+            root: AtomicPtr::new(null_mut()),
+            update_lock: PthreadMutex::new(()),
+        }
+    }
+
+    #[inline]
+    fn slot_index(page: usize, level: usize) -> usize {
+        page.checked_shr((level * OWNER_RADIX_BITS) as u32)
+            .unwrap_or(0)
+            & OWNER_RADIX_MASK
+    }
+
+    unsafe fn allocate_node() -> *mut OwnerRadixNode {
+        let bytes = match HostedBitmapPageAllocator::rounded_mapping_bytes(core::mem::size_of::<
+            OwnerRadixNode,
+        >()) {
+            Some(bytes) => bytes,
+            None => return null_mut(),
+        };
+        let raw = HostedBitmapPageAllocator::map_bytes(bytes);
+        if raw.is_null() {
+            return null_mut();
+        }
+        let node = raw.cast::<OwnerRadixNode>();
+        for idx in 0..OWNER_RADIX_SLOTS {
+            ptr::write(
+                core::ptr::addr_of_mut!((*node).slots[idx]),
+                AtomicPtr::new(null_mut()),
+            );
+        }
+        node
+    }
+
+    unsafe fn root_or_create(&self) -> Result<*mut OwnerRadixNode, HostedBitmapError> {
+        let current = self.root.load(Ordering::Acquire);
+        if !current.is_null() {
+            return Ok(current);
+        }
+        let node = Self::allocate_node();
+        if node.is_null() {
+            return Err(HostedBitmapError::MappingFailed);
+        }
+        self.root.store(node, Ordering::Release);
+        Ok(node)
+    }
+
+    unsafe fn leaf_slot_or_create(&self, page: usize) -> Result<&AtomicPtr<()>, HostedBitmapError> {
+        let mut node = self.root_or_create()?;
+        for level in (1..OWNER_RADIX_LEVELS).rev() {
+            let idx = Self::slot_index(page, level);
+            let slot = &(*node).slots[idx];
+            let mut child = slot.load(Ordering::Acquire).cast::<OwnerRadixNode>();
+            if child.is_null() {
+                child = Self::allocate_node();
+                if child.is_null() {
+                    return Err(HostedBitmapError::MappingFailed);
+                }
+                slot.store(child.cast::<()>(), Ordering::Release);
+            }
+            node = child;
+        }
+        Ok(&(*node).slots[page & OWNER_RADIX_MASK])
+    }
+
+    unsafe fn leaf_slot(&self, page: usize) -> Option<&AtomicPtr<()>> {
+        let mut node = self.root.load(Ordering::Acquire);
+        if node.is_null() {
+            return None;
+        }
+        for level in (1..OWNER_RADIX_LEVELS).rev() {
+            let idx = Self::slot_index(page, level);
+            node = (*node).slots[idx]
+                .load(Ordering::Acquire)
+                .cast::<OwnerRadixNode>();
+            if node.is_null() {
+                return None;
+            }
+        }
+        Some(&(*node).slots[page & OWNER_RADIX_MASK])
+    }
+
+    unsafe fn rollback_inserted(
+        &self,
+        first_page: usize,
+        inserted: usize,
+        owner: *mut HostedArena,
+    ) {
+        for offset in 0..inserted {
+            if let Some(slot) = self.leaf_slot(first_page + offset) {
+                if slot.load(Ordering::Acquire).cast::<HostedArena>() == owner {
+                    slot.store(null_mut(), Ordering::Release);
+                }
+            }
+        }
+    }
+
+    unsafe fn insert_range(
+        &self,
+        base: usize,
+        pages: usize,
+        owner: *mut HostedArena,
+    ) -> Result<(), HostedBitmapError> {
+        let _guard = self.update_lock.lock();
+        let first_page = base / crate::PAGE_SIZE;
+        let mut inserted = 0usize;
+        while inserted < pages {
+            let page = match first_page.checked_add(inserted) {
+                Some(page) => page,
+                None => {
+                    self.rollback_inserted(first_page, inserted, owner);
+                    return Err(HostedBitmapError::InvalidLayout);
+                }
+            };
+            let slot = match self.leaf_slot_or_create(page) {
+                Ok(slot) => slot,
+                Err(error) => {
+                    self.rollback_inserted(first_page, inserted, owner);
+                    return Err(error);
+                }
+            };
+            let current = slot.load(Ordering::Acquire).cast::<HostedArena>();
+            if !current.is_null() && current != owner {
+                self.rollback_inserted(first_page, inserted, owner);
+                return Err(HostedBitmapError::MappingFailed);
+            }
+            slot.store(owner.cast::<()>(), Ordering::Release);
+            inserted += 1;
+        }
+        Ok(())
+    }
+
+    unsafe fn remove_range(&self, base: usize, pages: usize, owner: *mut HostedArena) {
+        let _guard = self.update_lock.lock();
+        let first_page = base / crate::PAGE_SIZE;
+        for offset in 0..pages {
+            if let Some(slot) = self.leaf_slot(first_page + offset) {
+                if slot.load(Ordering::Acquire).cast::<HostedArena>() == owner {
+                    slot.store(null_mut(), Ordering::Release);
+                }
+            }
+        }
+    }
+
+    #[inline]
+    unsafe fn owner_for(&self, addr: usize) -> *mut HostedArena {
+        self.leaf_slot(addr / crate::PAGE_SIZE)
+            .map(|slot| slot.load(Ordering::Acquire).cast::<HostedArena>())
+            .unwrap_or(null_mut())
+    }
+}
+
+/// Multi-arena hosted wrapper around [`SegmentPageAllocator`].
+///
+/// The registry is append-only, while payload and tree mappings are retired
+/// and inactive descriptors are reused. Allocation scans atomic max-free
+/// summaries and takes only the selected arena lock. A short creation lock
+/// serializes mmap and descriptor publication on capacity misses.
+pub(crate) struct HostedBitmapPageAllocator {
+    head: AtomicPtr<HostedArena>,
+    capacity_hint: AtomicPtr<HostedArena>,
+    owner_hint: AtomicPtr<HostedArena>,
+    owners: OwnerDirectory,
+    create_lock: PthreadMutex<()>,
+    warm_empty_limit: usize,
+    active_arenas: AtomicUsize,
+    warm_empty_arenas: AtomicUsize,
+    descriptor_count: AtomicUsize,
+    mapped_payload_bytes: AtomicUsize,
+}
+
+unsafe impl Send for HostedBitmapPageAllocator {}
+unsafe impl Sync for HostedBitmapPageAllocator {}
+
+impl HostedBitmapPageAllocator {
+    pub const fn new(warm_empty_limit: usize) -> Self {
+        Self {
+            head: AtomicPtr::new(null_mut()),
+            capacity_hint: AtomicPtr::new(null_mut()),
+            owner_hint: AtomicPtr::new(null_mut()),
+            owners: OwnerDirectory::new(),
+            create_lock: PthreadMutex::new(()),
+            warm_empty_limit,
+            active_arenas: AtomicUsize::new(0),
+            warm_empty_arenas: AtomicUsize::new(0),
+            descriptor_count: AtomicUsize::new(0),
+            mapped_payload_bytes: AtomicUsize::new(0),
+        }
+    }
+
+    #[inline]
+    fn rounded_pages(size: usize) -> Option<usize> {
+        size.checked_add(crate::PAGE_SIZE - 1)?
+            .checked_div(crate::PAGE_SIZE)
+            .filter(|pages| *pages != 0)
+    }
+
+    #[inline]
+    fn rounded_mapping_bytes(size: usize) -> Option<usize> {
+        Self::rounded_pages(size)?.checked_mul(crate::PAGE_SIZE)
+    }
+
+    #[inline]
+    fn alignment_slack_pages(align: usize) -> Option<usize> {
+        if align <= crate::PAGE_SIZE {
+            Some(0)
+        } else if align % crate::PAGE_SIZE == 0 && align.is_power_of_two() {
+            align.checked_div(crate::PAGE_SIZE)?.checked_sub(1)
+        } else {
+            None
+        }
+    }
+
+    fn arena_mapping_bytes(layout: Layout) -> Option<usize> {
+        let payload_pages = Self::rounded_pages(layout.size())?;
+        let required_pages =
+            payload_pages.checked_add(Self::alignment_slack_pages(layout.align())?)?;
+        let required_bytes = required_pages.checked_mul(crate::PAGE_SIZE)?;
+        if required_bytes > MAX_ARENA_BYTES {
+            return None;
+        }
+        let requested = core::cmp::max(required_bytes, MIN_ARENA_BYTES);
+        requested
+            .checked_next_power_of_two()
+            .filter(|bytes| *bytes <= MAX_ARENA_BYTES)
+    }
+
+    unsafe fn map_bytes(bytes: usize) -> *mut u8 {
+        let prot = system_alloc::prots::get_prot(true, true, false);
+        let ptr = system_alloc::mmap(bytes, prot);
+        if system_alloc::mmap_failed(ptr) {
+            null_mut()
+        } else {
+            ptr
+        }
+    }
+
+    unsafe fn allocate_descriptor(&self) -> Result<*mut HostedArena, HostedBitmapError> {
+        let descriptor_bytes = Self::rounded_mapping_bytes(core::mem::size_of::<HostedArena>())
+            .ok_or(HostedBitmapError::InvalidLayout)?;
+        let raw = Self::map_bytes(descriptor_bytes);
+        if raw.is_null() {
+            return Err(HostedBitmapError::MappingFailed);
+        }
+        let descriptor = raw.cast::<HostedArena>();
+        let head = self.head.load(Ordering::Acquire);
+        ptr::write(descriptor, HostedArena::new(head));
+        // All descriptor fields, including immutable `next`, become visible
+        // before readers can traverse from the new head.
+        self.head.store(descriptor, Ordering::Release);
+        self.descriptor_count.fetch_add(1, Ordering::Relaxed);
+        Ok(descriptor)
+    }
+
+    fn allocate_locked(
+        &self,
+        arena_ptr: *mut HostedArena,
+        arena: &HostedArena,
+        state: &mut HostedArenaState,
+        layout: Layout,
+    ) -> Option<*mut u8> {
+        if !arena.active.load(Ordering::Acquire) {
+            return None;
+        }
+        let ptr = state
+            .allocator
+            .allocate_bytes(layout.size(), layout.align())
+            .ok()?;
+        if state.warm_empty {
+            state.warm_empty = false;
+            let previous = self.warm_empty_arenas.fetch_sub(1, Ordering::AcqRel);
+            debug_assert!(previous > 0, "warm arena accounting underflow");
+        }
+        let capacity = state.allocator.largest_free_run();
+        arena.largest_free_run.store(capacity, Ordering::Release);
+        if capacity == 0 {
+            let _ = self.capacity_hint.compare_exchange(
+                arena_ptr,
+                null_mut(),
+                Ordering::AcqRel,
+                Ordering::Relaxed,
+            );
+        } else {
+            self.capacity_hint.store(arena_ptr, Ordering::Release);
+        }
+        self.owner_hint.store(arena_ptr, Ordering::Release);
+        Some(ptr)
+    }
+
+    fn try_allocate_arena(
+        &self,
+        arena_ptr: *mut HostedArena,
+        layout: Layout,
+        pages: usize,
+    ) -> ArenaAllocationAttempt {
+        let arena = match unsafe { arena_ptr.as_ref() } {
+            Some(arena) => arena,
+            None => return ArenaAllocationAttempt::Miss,
+        };
+        if !arena.is_candidate(pages) {
+            return ArenaAllocationAttempt::Miss;
+        }
+        let mut state = match arena.state.try_lock() {
+            Some(state) => state,
+            None => return ArenaAllocationAttempt::Busy(arena_ptr),
+        };
+        match self.allocate_locked(arena_ptr, arena, &mut state, layout) {
+            Some(ptr) => ArenaAllocationAttempt::Allocated(ptr),
+            None => ArenaAllocationAttempt::Miss,
+        }
+    }
+
+    fn allocate_arena_blocking(
+        &self,
+        arena_ptr: *mut HostedArena,
+        layout: Layout,
+    ) -> Option<*mut u8> {
+        let arena = unsafe { arena_ptr.as_ref()? };
+        let mut state = arena.state.lock();
+        self.allocate_locked(arena_ptr, arena, &mut state, layout)
+    }
+
+    fn try_allocate_existing(&self, layout: Layout, pages: usize) -> ArenaAllocationAttempt {
+        let hint = self.capacity_hint.load(Ordering::Acquire);
+        let mut busy = null_mut();
+        match self.try_allocate_arena(hint, layout, pages) {
+            ArenaAllocationAttempt::Allocated(ptr) => {
+                return ArenaAllocationAttempt::Allocated(ptr)
+            }
+            ArenaAllocationAttempt::Busy(arena) => busy = arena,
+            ArenaAllocationAttempt::Miss => {}
+        }
+
+        let mut current = self.head.load(Ordering::Acquire);
+        while let Some(arena) = unsafe { current.as_ref() } {
+            let arena_ptr = arena as *const HostedArena as *mut HostedArena;
+            if arena_ptr != hint {
+                match self.try_allocate_arena(arena_ptr, layout, pages) {
+                    ArenaAllocationAttempt::Allocated(ptr) => {
+                        return ArenaAllocationAttempt::Allocated(ptr)
+                    }
+                    ArenaAllocationAttempt::Busy(arena) if busy.is_null() => busy = arena,
+                    ArenaAllocationAttempt::Busy(_) | ArenaAllocationAttempt::Miss => {}
+                }
+            }
+            current = arena.next;
+        }
+        if busy.is_null() {
+            ArenaAllocationAttempt::Miss
+        } else {
+            ArenaAllocationAttempt::Busy(busy)
+        }
+    }
+
+    unsafe fn initialize_and_allocate(
+        &self,
+        arena: &HostedArena,
+        state: &mut HostedArenaState,
+        mapping_bytes: usize,
+        layout: Layout,
+    ) -> Result<*mut u8, HostedBitmapError> {
+        debug_assert!(!arena.active.load(Ordering::Acquire));
+        let payload = Self::map_bytes(mapping_bytes);
+        if payload.is_null() {
+            return Err(HostedBitmapError::MappingFailed);
+        }
+        let end = match (payload as usize).checked_add(mapping_bytes) {
+            Some(end) => end,
+            None => {
+                system_alloc::munmap(payload, mapping_bytes);
+                return Err(HostedBitmapError::InvalidLayout);
+            }
+        };
+
+        let pages = mapping_bytes / crate::PAGE_SIZE;
+        let node_layout = match SegmentPageAllocator::required_layout(pages) {
+            Some(layout) => layout,
+            None => {
+                system_alloc::munmap(payload, mapping_bytes);
+                return Err(HostedBitmapError::InvalidLayout);
+            }
+        };
+        let node_mapping_bytes = match Self::rounded_mapping_bytes(node_layout.size()) {
+            Some(bytes) => bytes,
+            None => {
+                system_alloc::munmap(payload, mapping_bytes);
+                return Err(HostedBitmapError::InvalidLayout);
+            }
+        };
+        let node_mapping = Self::map_bytes(node_mapping_bytes);
+        if node_mapping.is_null() {
+            system_alloc::munmap(payload, mapping_bytes);
+            return Err(HostedBitmapError::MappingFailed);
+        }
+
+        let mut allocator = SegmentPageAllocator::empty();
+        if let Err(error) = allocator.initialize(
+            payload as usize,
+            pages,
+            crate::PAGE_SIZE,
+            node_mapping.cast::<RunNode>(),
+            node_layout.size() / core::mem::size_of::<RunNode>(),
+        ) {
+            system_alloc::munmap(node_mapping, node_mapping_bytes);
+            system_alloc::munmap(payload, mapping_bytes);
+            return Err(HostedBitmapError::Bitmap(error));
+        }
+        let allocated = match allocator.allocate_bytes(layout.size(), layout.align()) {
+            Ok(ptr) => ptr,
+            Err(error) => {
+                system_alloc::munmap(node_mapping, node_mapping_bytes);
+                system_alloc::munmap(payload, mapping_bytes);
+                return Err(HostedBitmapError::Bitmap(error));
+            }
+        };
+
+        let arena_ptr = arena as *const HostedArena as *mut HostedArena;
+        if let Err(error) = self.owners.insert_range(payload as usize, pages, arena_ptr) {
+            system_alloc::munmap(node_mapping, node_mapping_bytes);
+            system_alloc::munmap(payload, mapping_bytes);
+            return Err(error);
+        }
+
+        *state = HostedArenaState {
+            allocator,
+            base: payload as usize,
+            mapping_bytes,
+            node_mapping,
+            node_mapping_bytes,
+            warm_empty: false,
+        };
+        arena.base.store(state.base, Ordering::Relaxed);
+        arena.end.store(end, Ordering::Relaxed);
+        arena
+            .largest_free_run
+            .store(state.allocator.largest_free_run(), Ordering::Release);
+        // Publish activity last so lock-free registry readers observe the base,
+        // end, and root capacity from this initialization.
+        arena.active.store(true, Ordering::Release);
+        self.capacity_hint.store(arena_ptr, Ordering::Release);
+        self.owner_hint.store(arena_ptr, Ordering::Release);
+        self.active_arenas.fetch_add(1, Ordering::Relaxed);
+        self.mapped_payload_bytes
+            .fetch_add(mapping_bytes, Ordering::Relaxed);
+        Ok(allocated)
+    }
+
+    unsafe fn create_arena_and_allocate(
+        &self,
+        mapping_bytes: usize,
+        layout: Layout,
+        contention_shard: bool,
+    ) -> Result<*mut u8, HostedBitmapError> {
+        let _create_guard = self.create_lock.lock();
+
+        let pages = Self::rounded_pages(layout.size()).ok_or(HostedBitmapError::InvalidLayout)?;
+        let rescan_existing = !contention_shard
+            || self.active_arenas.load(Ordering::Acquire) >= CONTENTION_ARENA_LIMIT;
+        if rescan_existing {
+            match self.try_allocate_existing(layout, pages) {
+                ArenaAllocationAttempt::Allocated(ptr) => return Ok(ptr),
+                ArenaAllocationAttempt::Busy(arena) => {
+                    if let Some(ptr) = self.allocate_arena_blocking(arena, layout) {
+                        return Ok(ptr);
+                    }
+                }
+                ArenaAllocationAttempt::Miss => {}
+            }
+        }
+
+        let mut current = self.head.load(Ordering::Acquire);
+        while let Some(arena) = current.as_ref() {
+            if !arena.active.load(Ordering::Acquire) {
+                let mut state = arena.state.lock();
+                if !arena.active.load(Ordering::Acquire) && state.base == 0 {
+                    return self.initialize_and_allocate(arena, &mut state, mapping_bytes, layout);
+                }
+            }
+            current = arena.next;
+        }
+
+        let descriptor = self.allocate_descriptor()?;
+        let arena = descriptor
+            .as_ref()
+            .ok_or(HostedBitmapError::MappingFailed)?;
+        let mut state = arena.state.lock();
+        self.initialize_and_allocate(arena, &mut state, mapping_bytes, layout)
+    }
+
+    pub(crate) unsafe fn allocate_layout(
+        &self,
+        layout: Layout,
+    ) -> Result<*mut u8, HostedBitmapError> {
+        if layout.size() == 0
+            || layout.size() > isize::MAX as usize
+            || Self::alignment_slack_pages(layout.align()).is_none()
+        {
+            return Err(HostedBitmapError::InvalidLayout);
+        }
+
+        let pages = Self::rounded_pages(layout.size()).ok_or(HostedBitmapError::InvalidLayout)?;
+        let mapping_bytes = match Self::arena_mapping_bytes(layout) {
+            Some(bytes) => bytes,
+            None => {
+                let ptr = system_alloc::PageHeap::default().alloc(layout);
+                return if ptr.is_null() {
+                    Err(HostedBitmapError::MappingFailed)
+                } else {
+                    Ok(ptr)
+                };
+            }
+        };
+
+        let contention_shard = match self.try_allocate_existing(layout, pages) {
+            ArenaAllocationAttempt::Allocated(ptr) => return Ok(ptr),
+            ArenaAllocationAttempt::Busy(arena) => {
+                if self.active_arenas.load(Ordering::Acquire) >= CONTENTION_ARENA_LIMIT {
+                    if let Some(ptr) = self.allocate_arena_blocking(arena, layout) {
+                        return Ok(ptr);
+                    }
+                    false
+                } else {
+                    true
+                }
+            }
+            ArenaAllocationAttempt::Miss => false,
+        };
+        match self.create_arena_and_allocate(mapping_bytes, layout, contention_shard) {
+            Ok(ptr) => Ok(ptr),
+            Err(_) => {
+                // The experimental pooled path must preserve hosted allocation
+                // progress when arena metadata or payload mapping is exhausted.
+                let ptr = system_alloc::PageHeap::default().alloc(layout);
+                if ptr.is_null() {
+                    Err(HostedBitmapError::MappingFailed)
+                } else {
+                    Ok(ptr)
+                }
+            }
+        }
+    }
+
+    unsafe fn retire_arena(&self, arena: &HostedArena, state: &mut HostedArenaState) {
+        debug_assert_eq!(state.allocator.allocated_pages(), 0);
+        // Stop new readers before invalidating either mapping. Readers that saw
+        // the old active value recheck it after taking the arena lock.
+        arena.active.store(false, Ordering::Release);
+        let arena_ptr = arena as *const HostedArena as *mut HostedArena;
+        let _ = self.capacity_hint.compare_exchange(
+            arena_ptr,
+            null_mut(),
+            Ordering::AcqRel,
+            Ordering::Relaxed,
+        );
+        let _ = self.owner_hint.compare_exchange(
+            arena_ptr,
+            null_mut(),
+            Ordering::AcqRel,
+            Ordering::Relaxed,
+        );
+        arena.largest_free_run.store(0, Ordering::Release);
+        arena.base.store(0, Ordering::Relaxed);
+        arena.end.store(0, Ordering::Relaxed);
+
+        let base = state.base as *mut u8;
+        let mapping_bytes = state.mapping_bytes;
+        let node_mapping = state.node_mapping;
+        let node_mapping_bytes = state.node_mapping_bytes;
+        self.owners
+            .remove_range(state.base, state.allocator.page_count(), arena_ptr);
+        *state = HostedArenaState::empty();
+
+        system_alloc::munmap(node_mapping, node_mapping_bytes);
+        system_alloc::munmap(base, mapping_bytes);
+        self.active_arenas.fetch_sub(1, Ordering::Relaxed);
+        self.mapped_payload_bytes
+            .fetch_sub(mapping_bytes, Ordering::Relaxed);
+    }
+
+    #[cfg(unix)]
+    unsafe fn discard_free_pages(ptr: *mut u8, bytes: usize) {
+        let _ = libc::madvise(ptr.cast::<libc::c_void>(), bytes, libc::MADV_DONTNEED);
+    }
+
+    #[cfg(not(unix))]
+    unsafe fn discard_free_pages(_ptr: *mut u8, _bytes: usize) {}
+
+    pub(crate) unsafe fn deallocate_layout(
+        &self,
+        ptr: *mut u8,
+        layout: Layout,
+    ) -> Result<(), HostedBitmapError> {
+        if ptr.is_null() || layout.size() == 0 {
+            return Ok(());
+        }
+        let addr = ptr as usize;
+        let hinted_owner = self.owner_hint.load(Ordering::Acquire);
+        let arena_ptr = match hinted_owner.as_ref() {
+            Some(arena) if arena.may_contain(addr) => hinted_owner,
+            _ => self.owners.owner_for(addr),
+        };
+        if let Some(arena) = arena_ptr.as_ref() {
+            let mut state = arena.state.lock();
+            if arena.active.load(Ordering::Acquire) && state.contains(addr) {
+                state
+                    .allocator
+                    .deallocate_bytes(ptr, layout.size())
+                    .map_err(HostedBitmapError::Bitmap)?;
+
+                if state.allocator.allocated_pages() == 0 {
+                    let can_stay_warm = state.mapping_bytes <= WARM_EMPTY_ARENA_MAX_BYTES;
+                    let previous = if can_stay_warm {
+                        self.warm_empty_arenas.fetch_add(1, Ordering::AcqRel)
+                    } else {
+                        self.warm_empty_limit
+                    };
+                    if can_stay_warm && previous < self.warm_empty_limit {
+                        state.warm_empty = true;
+                        arena
+                            .largest_free_run
+                            .store(state.allocator.largest_free_run(), Ordering::Release);
+                        self.capacity_hint.store(arena_ptr, Ordering::Release);
+                        self.owner_hint.store(arena_ptr, Ordering::Release);
+                    } else {
+                        if can_stay_warm {
+                            let counted = self.warm_empty_arenas.fetch_sub(1, Ordering::AcqRel);
+                            debug_assert!(counted > 0, "warm arena accounting underflow");
+                        }
+                        self.retire_arena(arena, &mut state);
+                    }
+                    return Ok(());
+                }
+
+                arena
+                    .largest_free_run
+                    .store(state.allocator.largest_free_run(), Ordering::Release);
+                self.capacity_hint.store(arena_ptr, Ordering::Release);
+                self.owner_hint.store(arena_ptr, Ordering::Release);
+                if let Some(bytes) = Self::rounded_mapping_bytes(layout.size()) {
+                    if bytes >= DISCARD_FREE_RUN_MIN_BYTES {
+                        Self::discard_free_pages(ptr, bytes);
+                    }
+                }
+                return Ok(());
+            }
+        }
+
+        system_alloc::PageHeap::default().dealloc(ptr, layout);
+        Ok(())
+    }
+
+    pub(crate) fn stats(&self) -> HostedBitmapStats {
+        HostedBitmapStats {
+            active_arenas: self.active_arenas.load(Ordering::Acquire),
+            warm_empty_arenas: self.warm_empty_arenas.load(Ordering::Acquire),
+            descriptor_count: self.descriptor_count.load(Ordering::Acquire),
+            mapped_payload_bytes: self.mapped_payload_bytes.load(Ordering::Acquire),
+        }
+    }
+
+    #[cfg(test)]
+    fn arena_bounds_for_tests(&self, addr: usize) -> Option<(usize, usize)> {
+        let arena = unsafe { self.owners.owner_for(addr).as_ref()? };
+        let state = arena.state.lock();
+        if arena.active.load(Ordering::Acquire) && state.contains(addr) {
+            state.end().map(|end| (state.base, end))
+        } else {
+            None
+        }
+    }
+
+    #[cfg(test)]
+    unsafe fn release_payloads_for_tests(&self) {
+        let _create_guard = self.create_lock.lock();
+        let mut current = self.head.load(Ordering::Acquire);
+        while let Some(arena) = current.as_ref() {
+            let mut state = arena.state.lock();
+            if state.base != 0 {
+                arena.active.store(false, Ordering::Release);
+                arena.largest_free_run.store(0, Ordering::Release);
+                arena.base.store(0, Ordering::Relaxed);
+                arena.end.store(0, Ordering::Relaxed);
+                self.owners.remove_range(
+                    state.base,
+                    state.allocator.page_count(),
+                    arena as *const HostedArena as *mut HostedArena,
+                );
+                system_alloc::munmap(state.node_mapping, state.node_mapping_bytes);
+                system_alloc::munmap(state.base as *mut u8, state.mapping_bytes);
+                *state = HostedArenaState::empty();
+            }
+            current = arena.next;
+        }
+        self.active_arenas.store(0, Ordering::Release);
+        self.capacity_hint.store(null_mut(), Ordering::Release);
+        self.owner_hint.store(null_mut(), Ordering::Release);
+        self.warm_empty_arenas.store(0, Ordering::Release);
+        self.mapped_payload_bytes.store(0, Ordering::Release);
+    }
+}
+
+pub(crate) static HOSTED_PAGE_RUN_BITMAP: HostedBitmapPageAllocator =
+    HostedBitmapPageAllocator::new(WARM_EMPTY_ARENA_LIMIT);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec::Vec;
+    use std::collections::HashSet;
+    use std::sync::{Arc, Barrier, Mutex};
+    use std::thread;
+
+    extern crate std;
+
+    struct TestAllocator {
+        allocator: HostedBitmapPageAllocator,
+    }
+
+    impl TestAllocator {
+        fn new(warm_empty_limit: usize) -> Self {
+            Self {
+                allocator: HostedBitmapPageAllocator::new(warm_empty_limit),
+            }
+        }
+    }
+
+    impl Drop for TestAllocator {
+        fn drop(&mut self) {
+            unsafe { self.allocator.release_payloads_for_tests() }
+        }
+    }
+
+    fn page_layout(pages: usize) -> Layout {
+        Layout::from_size_align(pages * crate::PAGE_SIZE, crate::PAGE_SIZE).unwrap()
+    }
+
+    #[test]
+    fn owner_radix_high_levels_collapse_to_zero_without_shift_overflow() {
+        let level_above_pointer_width = usize::BITS as usize / OWNER_RADIX_BITS + 1;
+        assert_eq!(
+            OwnerDirectory::slot_index(usize::MAX, level_above_pointer_width),
+            0
+        );
+    }
+
+    #[test]
+    fn hosted_arena_cross_leaf_adjacent_frees_recombine() {
+        let manager = TestAllocator::new(1);
+        unsafe {
+            let guard = manager.allocator.allocate_layout(page_layout(32)).unwrap();
+            let first = manager.allocator.allocate_layout(page_layout(32)).unwrap();
+            let second = manager.allocator.allocate_layout(page_layout(32)).unwrap();
+            let other_guard = manager.allocator.allocate_layout(page_layout(1)).unwrap();
+
+            manager
+                .allocator
+                .deallocate_layout(first, page_layout(32))
+                .unwrap();
+            manager
+                .allocator
+                .deallocate_layout(second, page_layout(32))
+                .unwrap();
+            let merged = manager.allocator.allocate_layout(page_layout(64)).unwrap();
+            assert_eq!(
+                merged, first,
+                "cross-leaf neighbors should merge in-place: guard={guard:p} first={first:p} \
+                 second={second:p} other_guard={other_guard:p}"
+            );
+
+            manager
+                .allocator
+                .deallocate_layout(merged, page_layout(64))
+                .unwrap();
+            manager
+                .allocator
+                .deallocate_layout(other_guard, page_layout(1))
+                .unwrap();
+            manager
+                .allocator
+                .deallocate_layout(guard, page_layout(32))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn hosted_arena_honors_over_page_alignment() {
+        let manager = TestAllocator::new(1);
+        unsafe {
+            let prefix = manager.allocator.allocate_layout(page_layout(1)).unwrap();
+            let aligned_layout =
+                Layout::from_size_align(3 * crate::PAGE_SIZE, 8 * crate::PAGE_SIZE).unwrap();
+            let aligned = manager.allocator.allocate_layout(aligned_layout).unwrap();
+            assert_eq!(aligned as usize % aligned_layout.align(), 0);
+            assert!(aligned as usize >= prefix as usize + crate::PAGE_SIZE);
+            manager
+                .allocator
+                .deallocate_layout(aligned, aligned_layout)
+                .unwrap();
+            manager
+                .allocator
+                .deallocate_layout(prefix, page_layout(1))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn hosted_directory_uses_an_arena_with_sufficient_max_free() {
+        let manager = TestAllocator::new(2);
+        unsafe {
+            let first = manager.allocator.allocate_layout(page_layout(97)).unwrap();
+            let second = manager.allocator.allocate_layout(page_layout(32)).unwrap();
+            let (first_base, first_end) = manager
+                .allocator
+                .arena_bounds_for_tests(first as usize)
+                .expect("first allocation arena");
+            assert!(
+                (second as usize) < first_base || (second as usize) >= first_end,
+                "a 31-page tail cannot satisfy a 32-page request"
+            );
+            assert_eq!(manager.allocator.stats().active_arenas, 2);
+            manager
+                .allocator
+                .deallocate_layout(second, page_layout(32))
+                .unwrap();
+            manager
+                .allocator
+                .deallocate_layout(first, page_layout(97))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn hosted_full_arena_remains_addressable_for_deallocation() {
+        let manager = TestAllocator::new(1);
+        let full_layout = page_layout(MIN_ARENA_BYTES / crate::PAGE_SIZE);
+        unsafe {
+            let full = manager.allocator.allocate_layout(full_layout).unwrap();
+            assert_eq!(manager.allocator.stats().active_arenas, 1);
+            manager
+                .allocator
+                .deallocate_layout(full, full_layout)
+                .expect("a zero max-free root still belongs to an active arena");
+            assert_eq!(manager.allocator.stats().warm_empty_arenas, 1);
+
+            let reused = manager.allocator.allocate_layout(page_layout(1)).unwrap();
+            assert_eq!(reused, full, "warm full arena should become reusable");
+            manager
+                .allocator
+                .deallocate_layout(reused, page_layout(1))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn hosted_empty_policy_keeps_one_warm_arena_and_reuses_descriptors() {
+        let manager = TestAllocator::new(1);
+        unsafe {
+            let first = manager.allocator.allocate_layout(page_layout(97)).unwrap();
+            let second = manager.allocator.allocate_layout(page_layout(32)).unwrap();
+            manager
+                .allocator
+                .deallocate_layout(first, page_layout(97))
+                .unwrap();
+            manager
+                .allocator
+                .deallocate_layout(second, page_layout(32))
+                .unwrap();
+            let after_free = manager.allocator.stats();
+            assert_eq!(after_free.active_arenas, 1);
+            assert_eq!(after_free.warm_empty_arenas, 1);
+            assert_eq!(after_free.mapped_payload_bytes, MIN_ARENA_BYTES);
+
+            let descriptors = after_free.descriptor_count;
+            let reused = manager.allocator.allocate_layout(page_layout(97)).unwrap();
+            assert_eq!(manager.allocator.stats().descriptor_count, descriptors);
+            manager
+                .allocator
+                .deallocate_layout(reused, page_layout(97))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn hosted_large_request_bypasses_arena_registry() {
+        let manager = TestAllocator::new(1);
+        let layout = page_layout(MAX_ARENA_BYTES / crate::PAGE_SIZE + 1);
+        unsafe {
+            let ptr = manager.allocator.allocate_layout(layout).unwrap();
+            assert!(!ptr.is_null());
+            assert_eq!(manager.allocator.stats(), HostedBitmapStats::default());
+            manager.allocator.deallocate_layout(ptr, layout).unwrap();
+        }
+    }
+
+    #[test]
+    fn hosted_randomized_multi_arena_operations_do_not_overlap() {
+        let manager = TestAllocator::new(2);
+        let mut live: Vec<(*mut u8, Layout)> = Vec::new();
+        let mut random = 0x9e37_79b9_u32;
+
+        unsafe {
+            for _ in 0..10_000 {
+                random = random.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                if !live.is_empty() && random & 1 == 0 {
+                    let idx = random as usize % live.len();
+                    let (ptr, layout) = live.swap_remove(idx);
+                    manager.allocator.deallocate_layout(ptr, layout).unwrap();
+                    continue;
+                }
+
+                let pages = 1 + random as usize % 40;
+                let align_pages = 1usize << ((random >> 8) as usize % 4);
+                let layout = Layout::from_size_align(
+                    pages * crate::PAGE_SIZE,
+                    align_pages * crate::PAGE_SIZE,
+                )
+                .unwrap();
+                let ptr = manager.allocator.allocate_layout(layout).unwrap();
+                let start = ptr as usize;
+                let end = start + pages * crate::PAGE_SIZE;
+                assert_eq!(start % layout.align(), 0);
+                for (other, other_layout) in live.iter().copied() {
+                    let other_start = other as usize;
+                    let other_end = other_start
+                        + HostedBitmapPageAllocator::rounded_mapping_bytes(other_layout.size())
+                            .unwrap();
+                    assert!(end <= other_start || start >= other_end);
+                }
+                ptr.write_volatile(0xA5);
+                ptr.add(layout.size() - 1).write_volatile(0x5A);
+                live.push((ptr, layout));
+            }
+
+            for (ptr, layout) in live.drain(..) {
+                manager.allocator.deallocate_layout(ptr, layout).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn hosted_multi_thread_alloc_free_keeps_live_runs_unique() {
+        let manager = Arc::new(TestAllocator::new(4));
+        let live = Arc::new(Mutex::new(HashSet::new()));
+        let barrier = Arc::new(Barrier::new(5));
+
+        thread::scope(|scope| {
+            for thread_idx in 0..4 {
+                let manager = Arc::clone(&manager);
+                let live = Arc::clone(&live);
+                let barrier = Arc::clone(&barrier);
+                scope.spawn(move || {
+                    barrier.wait();
+                    for iteration in 0..5_000 {
+                        let pages = if (iteration + thread_idx) & 7 == 0 {
+                            32
+                        } else {
+                            8
+                        };
+                        let layout = page_layout(pages);
+                        unsafe {
+                            let ptr = manager.allocator.allocate_layout(layout).unwrap();
+                            {
+                                let mut live = live.lock().unwrap();
+                                assert!(live.insert(ptr as usize), "duplicate live page run");
+                            }
+                            ptr.write_volatile(thread_idx as u8);
+                            ptr.add(layout.size() - 1).write_volatile(iteration as u8);
+                            {
+                                let mut live = live.lock().unwrap();
+                                assert!(live.remove(&(ptr as usize)));
+                            }
+                            manager.allocator.deallocate_layout(ptr, layout).unwrap();
+                        }
+                    }
+                });
+            }
+            barrier.wait();
+        });
+
+        assert!(live.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn hosted_busy_arena_creates_a_contention_shard() {
+        let manager = Arc::new(TestAllocator::new(CONTENTION_ARENA_LIMIT));
+        let layout = page_layout(8);
+        unsafe {
+            let original = manager.allocator.allocate_layout(layout).unwrap();
+            manager
+                .allocator
+                .deallocate_layout(original, layout)
+                .unwrap();
+
+            let original_arena = manager.allocator.owners.owner_for(original as usize);
+            let original_arena = original_arena.as_ref().expect("warm original arena");
+            let original_guard = original_arena.state.lock();
+            let sharded = thread::scope(|scope| {
+                let manager = Arc::clone(&manager);
+                scope
+                    .spawn(move || manager.allocator.allocate_layout(layout).unwrap() as usize)
+                    .join()
+                    .unwrap() as *mut u8
+            });
+            assert_ne!(
+                manager.allocator.owners.owner_for(sharded as usize),
+                original_arena as *const HostedArena as *mut HostedArena
+            );
+            drop(original_guard);
+
+            manager
+                .allocator
+                .deallocate_layout(sharded, layout)
+                .unwrap();
+            let stats = manager.allocator.stats();
+            assert_eq!(stats.active_arenas, 2);
+            assert_eq!(stats.warm_empty_arenas, 2);
+            assert_eq!(stats.descriptor_count, 2);
+        }
+    }
+
+    #[test]
+    fn hosted_contention_shards_stop_at_the_warm_arena_limit() {
+        let manager = TestAllocator::new(CONTENTION_ARENA_LIMIT);
+        let layout = page_layout(8);
+        let mapping_bytes = HostedBitmapPageAllocator::arena_mapping_bytes(layout).unwrap();
+        let mut allocations = Vec::new();
+        let mut owners = Vec::new();
+        unsafe {
+            for _ in 0..CONTENTION_ARENA_LIMIT {
+                let ptr = manager
+                    .allocator
+                    .create_arena_and_allocate(mapping_bytes, layout, true)
+                    .unwrap();
+                allocations.push(ptr);
+                owners.push(manager.allocator.owners.owner_for(ptr as usize));
+            }
+            let capped = manager
+                .allocator
+                .create_arena_and_allocate(mapping_bytes, layout, true)
+                .unwrap();
+            let capped_owner = manager.allocator.owners.owner_for(capped as usize);
+            assert!(owners.contains(&capped_owner));
+
+            let stats = manager.allocator.stats();
+            assert_eq!(stats.active_arenas, CONTENTION_ARENA_LIMIT);
+            assert_eq!(stats.descriptor_count, CONTENTION_ARENA_LIMIT);
+
+            allocations.push(capped);
+            for ptr in allocations {
+                manager.allocator.deallocate_layout(ptr, layout).unwrap();
+            }
+        }
+    }
+}
