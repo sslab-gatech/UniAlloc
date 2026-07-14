@@ -63,6 +63,44 @@ def args(**overrides: object) -> argparse.Namespace:
     return argparse.Namespace(**values)
 
 
+def plain_semantic_selection(bench_filter: object = None) -> dict[str, object]:
+    return {
+        "required": False,
+        "strategy": "full-row" if bench_filter is None else "validated-libtest-filter",
+        "bench_filter": bench_filter,
+        "selected_benches": [],
+        "selected_target_benches": [],
+        "derived_skips": [],
+        "bench_list_count": None,
+        "deferred_for_dry_run": False,
+    }
+
+
+def authenticated_scudo_runtime_probe(runtime: str) -> dict[str, object]:
+    identity = {
+        "path": runtime,
+        "realpath": runtime,
+        "size_bytes": 1234,
+        "sha256": "a" * 64,
+        "platform": "Linux",
+        "architecture": "x86_64",
+    }
+    authenticity = {
+        "ok": True,
+        "runtime_authenticity_verified": True,
+        "verification_scheme": "dpkg-compiler-rt-content-and-scudo-stats-v1",
+        "runtime_library_identity": identity,
+    }
+    return {
+        "ok": True,
+        "identity_ok": True,
+        "runtime_authenticity_verified": True,
+        "configured_runtime_library": runtime,
+        "runtime_library_identity": identity,
+        "runtime_authenticity": authenticity,
+    }
+
+
 class PaperWorkloadDriverSemanticHarnessTests(unittest.TestCase):
     def test_cli_benchmark_timeout_emits_elapsed_logs_and_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -724,6 +762,35 @@ class PaperWorkloadDriverSemanticHarnessTests(unittest.TestCase):
         self.assertTrue(provenance["uses_system_toolchain"])
         self.assertFalse(provenance["paper_exact_toolchain"])
 
+    def test_system_toolchain_clears_inherited_rustup_selection(self) -> None:
+        ns = args(
+            dataset="default_performance",
+            allocator="unialloc",
+            rust_toolchain="system",
+        )
+        observed_env: dict[str, str] = {}
+
+        def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            observed_env.update(kwargs["env"])
+            return subprocess.CompletedProcess(command, 1, "", "unsupported")
+
+        with mock.patch.dict(
+            driver.os.environ,
+            {
+                "RUSTUP_TOOLCHAIN": "nightly-2022-07-01",
+                driver.RUST_TOOLCHAIN_ENV: "nightly-2022-07-01",
+            },
+            clear=False,
+        ), mock.patch.object(driver.subprocess, "run", side_effect=fake_run):
+            probe = driver.scudo_toolchain_probe(ns)
+            child_env = driver.cargo_subprocess_env(ns)
+
+        self.assertFalse(probe["ok"])
+        self.assertNotIn("RUSTUP_TOOLCHAIN", observed_env)
+        self.assertNotIn(driver.RUST_TOOLCHAIN_ENV, observed_env)
+        self.assertNotIn("RUSTUP_TOOLCHAIN", child_env)
+        self.assertNotIn(driver.RUST_TOOLCHAIN_ENV, child_env)
+
     def test_bench_list_fingerprint_includes_effective_toolchain(self) -> None:
         repo_toolchain = driver.read_repo_rust_toolchain()
         repo_fingerprint = driver.bench_list_fingerprint(["bench_ourself"], repo_toolchain)
@@ -821,15 +888,312 @@ class PaperWorkloadDriverSemanticHarnessTests(unittest.TestCase):
         with mock.patch.object(driver, "scudo_toolchain_probe", return_value={"ok": False}), mock.patch.object(
             driver,
             "scudo_runtime_probe",
-            return_value={"ok": True, "configured_runtime_library": runtime},
-        ), mock.patch.dict(driver.os.environ, {}, clear=True):
+            return_value=authenticated_scudo_runtime_probe(runtime),
+        ), mock.patch.dict(
+            driver.os.environ,
+            {
+                "UNIALLOC_SCUDO_RUNTIME_LIBRARY": "/tmp/inherited-fake-scudo.so",
+                "SCUDO_RUNTIME_LIBRARY": "/tmp/inherited-fake-scudo.so",
+                "LD_PRELOAD": "/tmp/inherited-fake-scudo.so",
+            },
+            clear=True,
+        ):
             execution = driver.scudo_execution_probe(ns)
             env = driver.cargo_subprocess_env(ns)
         self.assertTrue(execution["ok"], execution)
         self.assertEqual(execution["selected_mode"], "ld-preload")
+        self.assertEqual(execution["execution_state"], "planned")
+        self.assertFalse(execution["runtime_verified"], execution)
+        self.assertFalse(execution["paper_allocator_equivalent"], execution)
         self.assertEqual(env["UNIALLOC_SCUDO_RUNTIME_LIBRARY"], runtime)
         self.assertEqual(env["LD_PRELOAD"].split()[0], runtime)
         self.assertNotIn(driver.SCUDO_SANITIZER_RUSTFLAGS, env.get("RUSTFLAGS", ""))
+
+    def test_scudo_discovery_orders_host_arch_system_runtime_before_lookalikes(self) -> None:
+        candidates = [
+            pathlib.Path(
+                "/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.scudo_standalone-i386.so"
+            ),
+            pathlib.Path(
+                "/tmp/newer/libclang_rt.scudo_standalone-x86_64.so"
+            ),
+            pathlib.Path(
+                "/usr/lib/llvm-18/lib/clang/18/lib/linux/libclang_rt.scudo_standalone-x86_64.so"
+            ),
+        ]
+        with mock.patch.object(driver.platform, "machine", return_value="x86_64"), mock.patch.object(
+            driver,
+            "path_mtime",
+            side_effect=lambda path: 999.0 if str(path).startswith("/tmp") else 1.0,
+        ):
+            ordered = sorted(candidates, key=driver.scudo_runtime_candidate_order)
+
+        self.assertEqual(ordered[0].name, "libclang_rt.scudo_standalone-x86_64.so")
+        self.assertTrue(str(ordered[0]).startswith("/usr/lib/llvm-18/"))
+
+    def test_scudo_rust_sanitizer_route_remains_planned_until_benchmark(self) -> None:
+        ns = args(
+            dataset="default_performance",
+            allocator="scudo",
+            scudo_mode="rust-sanitizer",
+        )
+        with mock.patch.object(driver, "scudo_toolchain_probe", return_value={"ok": True}), mock.patch.object(
+            driver,
+            "scudo_runtime_probe",
+            return_value={"ok": False, "configured_runtime_library": None},
+        ), mock.patch.dict(
+            driver.os.environ,
+            {
+                "UNIALLOC_SCUDO_RUNTIME_LIBRARY": "/tmp/inherited-fake-scudo.so",
+                "SCUDO_RUNTIME_LIBRARY": "/tmp/inherited-fake-scudo.so",
+                "LD_PRELOAD": "/tmp/inherited-fake-scudo.so",
+            },
+            clear=True,
+        ):
+            execution = driver.scudo_execution_probe(ns)
+            env = driver.cargo_subprocess_env(ns)
+
+        self.assertTrue(execution["ok"], execution)
+        self.assertEqual(execution["selected_mode"], "rust-sanitizer")
+        self.assertFalse(execution["paper_allocator_equivalent"], execution)
+        self.assertIn(driver.SCUDO_SANITIZER_RUSTFLAGS, env["RUSTFLAGS"])
+        self.assertNotIn("LD_PRELOAD", env)
+        self.assertNotIn("UNIALLOC_SCUDO_RUNTIME_LIBRARY", env)
+        self.assertNotIn("SCUDO_RUNTIME_LIBRARY", env)
+
+    def test_scudo_runtime_probe_records_identity_but_rejects_untrusted_lookalike(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            tmp = pathlib.Path(td)
+            runtime = tmp / "libclang_rt.scudo_standalone-x86_64.so.real"
+            runtime_bytes = b"scudo-runtime-test\x00identity"
+            runtime.write_bytes(runtime_bytes)
+            configured = tmp / "libclang_rt.scudo_standalone-x86_64.so"
+            configured.symlink_to(runtime.name)
+            ns = args(scudo_runtime_library=str(configured))
+            with mock.patch.object(driver, "discover_scudo_runtime_library", return_value=None):
+                probe = driver.scudo_runtime_probe(ns)
+
+        self.assertFalse(probe["ok"], probe)
+        self.assertTrue(probe["identity_ok"], probe)
+        self.assertFalse(probe["runtime_authenticity_verified"], probe)
+        self.assertEqual(probe["configured_runtime_library"], str(configured))
+        identity = probe["runtime_library_identity"]
+        self.assertEqual(identity["realpath"], str(runtime.resolve()))
+        self.assertEqual(identity["size_bytes"], len(runtime_bytes))
+        self.assertEqual(
+            identity["sha256"],
+            driver.hashlib.sha256(runtime_bytes).hexdigest(),
+        )
+        self.assertEqual(identity["platform"], driver.platform.system())
+        self.assertEqual(identity["architecture"], driver.platform.machine())
+        self.assertEqual(probe["host_platform"], driver.platform.system())
+        self.assertEqual(probe["host_architecture"], driver.platform.machine())
+
+    def test_missing_explicit_scudo_runtime_does_not_fall_back_to_discovery(self) -> None:
+        ns = args(scudo_runtime_library="/definitely/missing/libscudo.so")
+        with mock.patch.object(driver, "discover_scudo_runtime_library") as discover:
+            probe = driver.scudo_runtime_probe(ns)
+
+        discover.assert_not_called()
+        self.assertFalse(probe["ok"], probe)
+        self.assertIsNone(probe["configured_runtime_library"])
+        self.assertIn("explicit Scudo runtime library path could not be resolved", probe["blockers"])
+
+    def test_auto_rejects_invalid_explicit_scudo_runtime_when_sanitizer_is_available(self) -> None:
+        ns = args(
+            scudo_mode="auto",
+            scudo_runtime_library="/definitely/missing/libscudo.so",
+        )
+        runtime_probe = {
+            "ok": False,
+            "runtime_authenticity_verified": False,
+            "configured_runtime_library": None,
+            "configured_runtime_library_input": ns.scudo_runtime_library,
+            "blockers": ["explicit Scudo runtime library path could not be resolved"],
+        }
+        with mock.patch.object(
+            driver,
+            "scudo_toolchain_probe",
+            return_value={"ok": True},
+        ), mock.patch.object(driver, "scudo_runtime_probe", return_value=runtime_probe):
+            execution = driver.scudo_execution_probe(ns)
+
+        self.assertFalse(execution["ok"], execution)
+        self.assertIsNone(execution["selected_mode"])
+        self.assertTrue(
+            any("explicit Scudo runtime" in blocker for blocker in execution["blockers"]),
+            execution,
+        )
+
+    def test_scudo_authenticity_skips_execution_when_package_provenance_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            runtime = pathlib.Path(td) / "libclang_rt.scudo_standalone-x86_64.so"
+            runtime.write_bytes(b"ELF-lookalike-with-forged-scudo-symbols")
+            with mock.patch.object(
+                driver,
+                "scudo_runtime_dpkg_provenance",
+                return_value={"ok": False, "blockers": ["untrusted package"]},
+            ), mock.patch.object(driver, "scudo_runtime_behavioral_probe") as behavior:
+                result = driver.scudo_runtime_authenticity_probe(runtime)
+
+        self.assertFalse(result["ok"], result)
+        self.assertFalse(result["runtime_authenticity_verified"], result)
+        self.assertTrue(result["behavioral_probe"]["skipped"], result)
+        behavior.assert_not_called()
+
+    def test_scudo_authenticity_timeout_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            runtime = pathlib.Path(td) / "libclang_rt.scudo_standalone-x86_64.so"
+            runtime.write_bytes(b"timeout-probe")
+            with mock.patch.object(
+                driver,
+                "scudo_runtime_dpkg_provenance",
+                side_effect=subprocess.TimeoutExpired(["dpkg-query"], 20),
+            ):
+                result = driver.scudo_runtime_authenticity_probe(runtime)
+
+        self.assertFalse(result["ok"], result)
+        self.assertTrue(
+            any("package verification failed" in item for item in result["blockers"]),
+            result,
+        )
+
+    def test_scudo_runtime_marker_requires_exact_stderr_line(self) -> None:
+        self.assertTrue(
+            driver.scudo_runtime_identity_marker_present(
+                "cargo noise\n" + driver.SCUDO_RUNTIME_IDENTITY_MARKER
+            )
+        )
+        self.assertFalse(
+            driver.scudo_runtime_identity_marker_present(
+                driver.SCUDO_RUNTIME_IDENTITY_MARKER.rstrip("\n")
+            )
+        )
+        self.assertFalse(
+            driver.scudo_runtime_identity_marker_present(
+                "prefix " + driver.SCUDO_RUNTIME_IDENTITY_MARKER
+            )
+        )
+
+    def test_scudo_dry_run_reports_planned_unverified_route(self) -> None:
+        runtime = "/opt/scudo/libclang_rt.scudo_standalone-x86_64.so"
+        ns = args(
+            dataset="default_performance",
+            allocator="scudo",
+            bench_filter=None,
+            dry_run=True,
+            rust_toolchain="system",
+        )
+        stdout = io.StringIO()
+        with mock.patch.object(driver, "scudo_toolchain_probe", return_value={"ok": False}), mock.patch.object(
+            driver,
+            "scudo_runtime_probe",
+            return_value=authenticated_scudo_runtime_probe(runtime),
+        ), mock.patch.object(
+            driver,
+            "semantic_harness_selection",
+            return_value=plain_semantic_selection(),
+        ), contextlib.redirect_stdout(stdout):
+            exit_code = driver.run(ns)
+
+        self.assertEqual(exit_code, 0)
+        record = json.loads(stdout.getvalue())
+        self.assertTrue(record["dry_run"], record)
+        self.assertFalse(record["claim_grade"], record)
+        self.assertEqual(record["scudo_execution_probe"]["execution_state"], "planned")
+        self.assertFalse(record["scudo_execution_probe"]["runtime_verified"], record)
+        semantics = record["allocator_semantics"]
+        self.assertEqual(semantics["implementation_kind"], "planned_scudo_runtime_route")
+        self.assertFalse(semantics["paper_allocator_equivalent"], semantics)
+        self.assertFalse(semantics["runtime_identity_verified"], semantics)
+
+    def test_scudo_success_marker_verifies_equivalence_and_claim_grade(self) -> None:
+        runtime = "/opt/scudo/libclang_rt.scudo_standalone-x86_64.so"
+        ns = args(
+            dataset="default_performance",
+            allocator="scudo",
+            bench_filter=None,
+            dry_run=False,
+            rust_toolchain=driver.PAPER_EXACT_RUST_TOOLCHAIN,
+        )
+        stdout = io.StringIO()
+        benchmark_result = {
+            "exit_code": 0,
+            "timed_out": False,
+            "stdout": "test vec::bench_with_capacity_1000 ... bench: 10 ns/iter (+/- 1)\n",
+            "stderr": driver.SCUDO_RUNTIME_IDENTITY_MARKER,
+        }
+        with mock.patch.object(driver, "scudo_toolchain_probe", return_value={"ok": False}), mock.patch.object(
+            driver,
+            "scudo_runtime_probe",
+            return_value=authenticated_scudo_runtime_probe(runtime),
+        ), mock.patch.object(
+            driver,
+            "semantic_harness_selection",
+            return_value=plain_semantic_selection(),
+        ), mock.patch.object(
+            driver,
+            "run_benchmark_command",
+            return_value=benchmark_result,
+        ), contextlib.redirect_stdout(stdout):
+            exit_code = driver.run(ns)
+
+        self.assertEqual(exit_code, 0)
+        record = json.loads(stdout.getvalue())
+        self.assertTrue(record["claim_grade"], record)
+        self.assertTrue(record["scudo_execution_probe"]["runtime_verified"], record)
+        self.assertTrue(record["scudo_execution_probe"]["paper_allocator_equivalent"], record)
+        semantics = record["allocator_semantics"]
+        self.assertEqual(
+            semantics["implementation_kind"],
+            "verified_external_scudo_runtime",
+        )
+        self.assertTrue(semantics["paper_allocator_equivalent"], semantics)
+        self.assertTrue(semantics["runtime_identity_verified"], semantics)
+        self.assertEqual(semantics["scudo_runtime_mode"], "ld-preload")
+        self.assertEqual(semantics["runtime_provenance"]["runtime_library"], runtime)
+
+    def test_scudo_zero_exit_without_identity_marker_fails_non_equivalent(self) -> None:
+        runtime = "/opt/scudo/libclang_rt.scudo_standalone-x86_64.so"
+        ns = args(
+            dataset="default_performance",
+            allocator="scudo",
+            bench_filter=None,
+            dry_run=False,
+            rust_toolchain=driver.PAPER_EXACT_RUST_TOOLCHAIN,
+        )
+        stderr = io.StringIO()
+        benchmark_result = {
+            "exit_code": 0,
+            "timed_out": False,
+            "stdout": "test vec::bench_with_capacity_1000 ... bench: 10 ns/iter (+/- 1)\n",
+            "stderr": "cargo finished without allocator identity evidence\n",
+        }
+        with mock.patch.object(driver, "scudo_toolchain_probe", return_value={"ok": False}), mock.patch.object(
+            driver,
+            "scudo_runtime_probe",
+            return_value=authenticated_scudo_runtime_probe(runtime),
+        ), mock.patch.object(
+            driver,
+            "semantic_harness_selection",
+            return_value=plain_semantic_selection(),
+        ), mock.patch.object(
+            driver,
+            "run_benchmark_command",
+            return_value=benchmark_result,
+        ), contextlib.redirect_stderr(stderr):
+            exit_code = driver.run(ns)
+
+        self.assertEqual(exit_code, 1)
+        record = json.loads(stderr.getvalue())
+        self.assertFalse(record["ok"], record)
+        self.assertIn("without the required runtime identity marker", record["error"])
+        self.assertFalse(record["scudo_execution_probe"]["runtime_verified"], record)
+        self.assertFalse(record["allocator_semantics"]["paper_allocator_equivalent"], record)
+        self.assertEqual(
+            record["allocator_semantics"]["implementation_kind"],
+            "unverified_scudo_runtime_route",
+        )
 
     def test_scudo_validate_accepts_ld_preload_when_toolchain_rejects(self) -> None:
         runtime = "/usr/lib/llvm-16/lib/clang/16/lib/linux/libclang_rt.scudo_standalone-aarch64.so"
@@ -842,7 +1206,7 @@ class PaperWorkloadDriverSemanticHarnessTests(unittest.TestCase):
         with mock.patch.object(driver, "scudo_toolchain_probe", return_value={"ok": False}), mock.patch.object(
             driver,
             "scudo_runtime_probe",
-            return_value={"ok": True, "configured_runtime_library": runtime},
+            return_value=authenticated_scudo_runtime_probe(runtime),
         ):
             self.assertIsNone(driver.validate_args(ns))
 

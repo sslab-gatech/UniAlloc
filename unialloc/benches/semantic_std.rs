@@ -1,5 +1,8 @@
 #![feature(test)]
 
+#[cfg(feature = "bench_scudo")]
+compile_error!("semantic_std is UniAlloc-only and cannot produce Scudo allocator timing");
+
 extern crate test;
 
 use std::boxed::Box;

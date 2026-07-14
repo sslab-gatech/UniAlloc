@@ -125,6 +125,8 @@ bench_ptmalloc = []
 bench_mimalloc = ["mimalloc"]
 bench_tcmalloc = ["tcmalloc"]
 bench_snmalloc = ["snmalloc-rs"]
+# `System` is only the C allocator ABI bridge for this selector. The benchmark
+# startup guard rejects execution unless those ABI symbols resolve to Scudo.
 bench_scudo = []
 allow_mem_leak = []
 type_isolation = []

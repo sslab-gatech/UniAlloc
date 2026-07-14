@@ -1,6 +1,9 @@
 use std::collections::VecDeque;
 use std::time::Instant;
 
+#[cfg(feature = "bench_scudo")]
+mod scudo_runtime;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "bench_jemalloc")] {
         use jemallocator::Jemalloc;
@@ -18,6 +21,8 @@ cfg_if::cfg_if! {
         #[global_allocator]
         static SNMALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
     } else if #[cfg(feature = "bench_scudo")] {
+        // The scudo_runtime constructor verifies System's allocation ABI is
+        // actually interposed by Scudo before this benchmark can execute.
         use std::alloc::System;
         #[global_allocator]
         static SCUDO_SYSTEM: System = System;

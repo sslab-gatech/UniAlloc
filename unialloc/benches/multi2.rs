@@ -13,6 +13,10 @@ use std::{
 
 #[macro_use]
 extern crate alloc;
+
+#[cfg(feature = "bench_scudo")]
+mod scudo_runtime;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "bench_jemalloc")] {
         use jemallocator::Jemalloc;
@@ -31,6 +35,7 @@ cfg_if::cfg_if! {
         #[global_allocator]
         static TCMALLOC: TCMalloc = TCMalloc;
     } else if #[cfg(feature = "bench_scudo")] {
+        // The shared constructor rejects execution unless System resolves to Scudo.
         use std::alloc::System;
         #[global_allocator]
         static SCUDO_SYSTEM: System = System;

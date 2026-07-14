@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -23,14 +24,28 @@ import re
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+try:
+    import paper_workload_driver as _paper_workload_driver
+except ModuleNotFoundError as exc:
+    if exc.name != "paper_workload_driver":
+        raise
+    _driver_path = Path(__file__).resolve().with_name("paper_workload_driver.py")
+    _driver_spec = importlib.util.spec_from_file_location("paper_workload_driver", _driver_path)
+    if _driver_spec is None or _driver_spec.loader is None:  # pragma: no cover - installation failure
+        raise ImportError(f"could not load canonical Scudo driver from {_driver_path}") from exc
+    _paper_workload_driver = importlib.util.module_from_spec(_driver_spec)
+    _driver_spec.loader.exec_module(_paper_workload_driver)
+
 BENCH_LINE = re.compile(
     r"^test (?P<name>\S+)\s+\.\.\. bench:\s+"
-    r"(?P<ns>[0-9,]+)\s+ns/iter(?:\s+\(\+/-\s+(?P<dev>[0-9,]+)\))?"
+    r"(?P<ns>[0-9][0-9,]*(?:\.[0-9]+)?)\s+ns/iter"
+    r"(?:\s+\(\+/-\s+(?P<dev>[0-9][0-9,]*(?:\.[0-9]+)?)\))?"
 )
 
 ALLOCATOR_FEATURES = {
@@ -49,6 +64,8 @@ ALLOCATOR_FEATURES = {
 ALLOCATOR_CARGO_OVERLAY_MARKER = "# UniAlloc evaluation external cargo allocator overlay."
 ALLOCATOR_OLD_NIGHTLY_PIN_MARKER = "# UniAlloc evaluation external cargo old-nightly dependency pins."
 ALLOCATOR_BENCH_OVERLAY_MARKER = "// UniAlloc evaluation external cargo allocator overlay."
+ALLOCATOR_BENCH_OVERLAY_END_MARKER = "// End UniAlloc evaluation external cargo allocator overlay."
+SCUDO_RUNTIME_IDENTITY_MARKER = _paper_workload_driver.SCUDO_RUNTIME_IDENTITY_MARKER
 
 POLARS_JSONPATH_STALE_GIT_DEP = (
     'jsonpath_lib = { version = "0.3.0", optional = true, '
@@ -165,13 +182,19 @@ def parse_bench_rows(text: str, *, name_filter: str = "") -> List[Dict[str, Any]
         name = match.group("name")
         if name_filter and name_filter not in name:
             continue
-        ns = int(match.group("ns").replace(",", ""))
+        ns_text = match.group("ns").replace(",", "")
+        ns: float | int = float(ns_text) if "." in ns_text else int(ns_text)
         dev_raw = match.group("dev")
+        dev_text = dev_raw.replace(",", "") if dev_raw else ""
         rows.append(
             {
                 "name": name,
                 "ns_per_iter": ns,
-                "stddev_ns_per_iter": int(dev_raw.replace(",", "")) if dev_raw else None,
+                "stddev_ns_per_iter": (
+                    float(dev_text) if "." in dev_text else int(dev_text)
+                )
+                if dev_text
+                else None,
                 "measurement_source": "libtest_bench_ns_per_iter",
                 "raw": raw.strip(),
             }
@@ -967,6 +990,229 @@ def allocator_feature(allocator: str) -> str:
     return ALLOCATOR_FEATURES.get(normalize_allocator_name(allocator), "")
 
 
+def cargo_command_features(command: Iterable[str]) -> List[str]:
+    """Return explicitly requested Cargo features from a child command."""
+
+    args = [str(part) for part in command]
+    values: List[str] = []
+    for index, token in enumerate(args):
+        if token in {"--features", "--feature"} and index + 1 < len(args):
+            values.append(args[index + 1])
+        elif token.startswith("--features="):
+            values.append(token.split("=", 1)[1])
+        elif token.startswith("--feature="):
+            values.append(token.split("=", 1)[1])
+    return unique_strings(
+        feature
+        for value in values
+        for feature in re.split(r"[,\s]+", value)
+        if feature
+    )
+
+
+def command_requests_scudo_feature(command: Iterable[str]) -> bool:
+    return "bench_scudo" in cargo_command_features(command)
+
+
+def scudo_request_sources(args: argparse.Namespace, command: Iterable[str]) -> List[str]:
+    sources: List[str] = []
+    if allocator_feature(args.allocator) == "bench_scudo":
+        sources.append("allocator-selector")
+    if command_requests_scudo_feature(command):
+        sources.append("cargo-feature")
+    return sources
+
+
+def canonical_scudo_driver_args(
+    args: argparse.Namespace,
+    command: List[str],
+    real_workload_dir: Path,
+) -> argparse.Namespace:
+    """Build the narrow Namespace required by the canonical Scudo driver."""
+
+    cached = getattr(args, "_external_scudo_driver_args", None)
+    if isinstance(cached, argparse.Namespace):
+        return cached
+    effective_toolchain = effective_rust_toolchain_for_workload(real_workload_dir, command)
+    driver_args = argparse.Namespace(
+        allocator="scudo",
+        # The canonical driver uses None to mean the UniAlloc repository pin.
+        # An external checkout with no explicit/local toolchain instead runs
+        # the PATH/system cargo, so preserve that route with its explicit alias.
+        rust_toolchain=effective_toolchain or "system",
+        scudo_probe_cwd=str(real_workload_dir),
+        extra_feature=[],
+        compiler_site_replay_type_mapping=None,
+        compiler_site_id_mode="cyclic-replay",
+        compiler_site_recovery_scope="thread-local",
+        compiler_site_replay_limit=_paper_workload_driver.COMPILER_SITE_REPLAY_DEFAULT_LIMIT,
+        tcmalloc_lib_dir=None,
+        cmake_bin=None,
+        scudo_mode=str(
+            getattr(args, "scudo_mode", _paper_workload_driver.SCUDO_DEFAULT_MODE)
+            or _paper_workload_driver.SCUDO_DEFAULT_MODE
+        ),
+        scudo_runtime_library=getattr(args, "scudo_runtime_library", None),
+    )
+    setattr(args, "_external_scudo_driver_args", driver_args)
+    return driver_args
+
+
+def prepare_scudo_execution(
+    args: argparse.Namespace,
+    command: List[str],
+    real_workload_dir: Path,
+) -> Dict[str, Any]:
+    """Resolve a real Scudo route before any child benchmark may execute."""
+
+    driver_args = canonical_scudo_driver_args(args, command, real_workload_dir)
+    probe = _paper_workload_driver.scudo_execution_probe(driver_args)
+    state = "planned" if probe.get("ok") else "unavailable"
+    execution = _paper_workload_driver.scudo_execution_runtime_record(
+        probe,
+        runtime_verified=False,
+        verification_status=state,
+    )
+    execution["request_sources"] = list(getattr(args, "_external_scudo_request_sources", []))
+    setattr(args, "_external_scudo_execution_probe", probe)
+    setattr(args, "_external_scudo_execution_record", execution)
+    return execution
+
+
+def apply_scudo_subprocess_env(args: argparse.Namespace, env: Dict[str, str]) -> Dict[str, Any]:
+    """Apply only the canonical driver's Scudo-specific child environment."""
+
+    driver_args = getattr(args, "_external_scudo_driver_args", None)
+    probe = getattr(args, "_external_scudo_execution_probe", None)
+    if not isinstance(driver_args, argparse.Namespace) or not isinstance(probe, dict) or not probe.get("ok"):
+        return {
+            "ok": False,
+            "error": "canonical Scudo execution route was not prepared",
+            "scudo_execution_probe": getattr(args, "_external_scudo_execution_record", probe),
+        }
+
+    canonical_env = _paper_workload_driver.cargo_subprocess_env(driver_args)
+    mode = probe.get("selected_mode")
+    removed_env: List[str] = []
+    if mode == "rust-sanitizer":
+        removed_env = list(_paper_workload_driver.SCUDO_SANITIZER_CONFLICTING_ENV_NAMES)
+        for name in removed_env:
+            env.pop(name, None)
+        env["RUSTFLAGS"] = _paper_workload_driver.append_env_flags(
+            env.get("RUSTFLAGS"),
+            _paper_workload_driver.SCUDO_SANITIZER_RUSTFLAGS,
+        )
+    elif mode == "ld-preload":
+        runtime = probe.get("runtime_library")
+        if not runtime:
+            return {
+                "ok": False,
+                "error": "canonical LD_PRELOAD route did not identify a Scudo runtime library",
+                "scudo_execution_probe": getattr(args, "_external_scudo_execution_record", probe),
+            }
+        runtime_path = Path(str(runtime))
+        env["UNIALLOC_SCUDO_RUNTIME_LIBRARY"] = str(runtime_path)
+        env["LD_PRELOAD"] = _paper_workload_driver.prepend_preload_library(
+            env.get("LD_PRELOAD"),
+            runtime_path,
+        )
+    else:
+        return {
+            "ok": False,
+            "error": f"unsupported canonical Scudo execution mode: {mode}",
+            "scudo_execution_probe": getattr(args, "_external_scudo_execution_record", probe),
+        }
+
+    env_delta = {
+        key: env[key]
+        for key in ("UNIALLOC_SCUDO_RUNTIME_LIBRARY", "LD_PRELOAD", "RUSTFLAGS")
+        if key in env and env.get(key) != os.environ.get(key)
+    }
+    # Preserve the exact canonical values as an audit cross-check.  The wrapper
+    # may add legacy-toolchain RUSTFLAGS before appending the sanitizer flag.
+    canonical_delta = {
+        key: canonical_env[key]
+        for key in ("UNIALLOC_SCUDO_RUNTIME_LIBRARY", "LD_PRELOAD", "RUSTFLAGS")
+        if key in canonical_env and canonical_env.get(key) != os.environ.get(key)
+    }
+    record = {
+        "ok": True,
+        "selected_mode": mode,
+        "subprocess_env_delta": env_delta,
+        "subprocess_env_effective": {
+            key: env[key]
+            for key in ("UNIALLOC_SCUDO_RUNTIME_LIBRARY", "LD_PRELOAD", "RUSTFLAGS")
+            if key in env
+        },
+        "canonical_subprocess_env_delta": canonical_delta,
+        "scudo_execution_probe": getattr(args, "_external_scudo_execution_record", probe),
+    }
+    if removed_env:
+        record["subprocess_env_removed"] = removed_env
+        record["subprocess_env_effective_absence"] = {
+            name: name not in env for name in removed_env
+        }
+    return record
+
+
+def verify_scudo_runtime_identity(args: argparse.Namespace, stderr_text: Any) -> Dict[str, Any]:
+    """Promote Scudo semantics only after the child constructor marker."""
+
+    probe = getattr(args, "_external_scudo_execution_probe", None)
+    if not isinstance(probe, dict):
+        probe = {}
+    verified = _paper_workload_driver.scudo_runtime_identity_marker_present(stderr_text)
+    status = "runtime-verified" if verified else "verification-failed"
+    execution = _paper_workload_driver.scudo_execution_runtime_record(
+        probe,
+        runtime_verified=verified,
+        verification_status=status,
+    )
+    execution["request_sources"] = list(getattr(args, "_external_scudo_request_sources", []))
+    setattr(args, "_external_scudo_execution_record", execution)
+    return execution
+
+
+def scudo_runtime_guard_source_probe(real_workload_dir: Path, command: List[str]) -> Dict[str, Any]:
+    """Prove the selected bench root contains the exact current guarded overlay."""
+
+    surface = resolve_cargo_bench_surface(real_workload_dir, command)
+    overlay = allocator_bench_overlay_text()
+    overlay_sha256 = hashlib.sha256(overlay.encode("utf-8")).hexdigest()
+    raw_source = surface.get("bench_source")
+    source_path = Path(str(raw_source)) if raw_source else None
+    source_text = ""
+    source_error = None
+    if source_path is not None:
+        try:
+            source_text = source_path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            source_error = str(exc)
+    exact_overlay_verified = bool(source_text) and allocator_overlay_at_crate_root(source_text, overlay)
+
+    return {
+        "schema_version": 1,
+        "source": "paper-external-cargo-bench-json-scudo-runtime-guard-probe",
+        "ok": exact_overlay_verified,
+        "cargo_bench_surface": surface,
+        "guard_source": str(source_path) if source_path is not None else None,
+        "guard_source_sha256": (
+            hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+            if source_text
+            else None
+        ),
+        "expected_overlay_sha256": overlay_sha256,
+        "exact_overlay_verified": exact_overlay_verified,
+        "runtime_identity_marker": SCUDO_RUNTIME_IDENTITY_MARKER,
+        "error": (
+            None
+            if exact_overlay_verified
+            else source_error
+            or "selected benchmark root does not contain the exact current guarded allocator overlay"
+        ),
+    }
+
+
 def unique_strings(values: Iterable[Any]) -> List[str]:
     seen = set()
     out: List[str] = []
@@ -1419,13 +1665,11 @@ def allocator_semantics_record(args: argparse.Namespace) -> Dict[str, Any]:
     """Describe whether the selected feature matches the named paper allocator.
 
     The cargo-bench bridge patches historical benchmark crates with feature
-    gated global allocators.  Some selectors are only plumbing conveniences on
-    the active host: `bench_ptmalloc` and `bench_scudo` both install
-    `std::alloc::System` in the generated overlay, so a successful benchmark is
-    not automatically evidence for Linux/glibc ptmalloc or Scudo sanitizer
-    behavior.  Emit that distinction in the child JSON itself so downstream
-    plan runners do not need an out-of-band plan note to keep the sample out of
-    paper evidence.
+    gated global allocators.  `bench_ptmalloc` resolves through the host System
+    allocator.  `bench_scudo` also uses Rust's System ABI surface, while a
+    fail-closed constructor plus the canonical workload-driver route proves
+    that malloc/free resolve to the selected Scudo runtime before timings can be
+    accepted.
     """
 
     allocator = normalize_allocator_name(args.allocator)
@@ -1448,15 +1692,37 @@ def allocator_semantics_record(args: argparse.Namespace) -> Dict[str, Any]:
                 "bench_ptmalloc routes to std::alloc::System on this host, not Linux/glibc ptmalloc paper evidence"
             )
     elif feature == "bench_scudo":
-        implementation_kind = "std_alloc_system_fallback"
-        paper_allocator_equivalent = False
-        blockers.append(
-            "bench_scudo currently routes to std::alloc::System; scudo paper evidence requires sanitizer runtime/toolchain support or an external wrapper"
+        execution = getattr(args, "_external_scudo_execution_record", None)
+        execution = execution if isinstance(execution, dict) else {}
+        runtime_verified = execution.get("runtime_verified") is True
+        status = str(execution.get("execution_state") or "unresolved")
+        implementation_kind = (
+            "verified_external_scudo_runtime"
+            if runtime_verified
+            else "planned_scudo_runtime_route"
+            if status == "planned"
+            else "unavailable_scudo_runtime_route"
+            if status == "unavailable"
+            else "unverified_scudo_runtime_route"
         )
+        paper_allocator_equivalent = runtime_verified
+        if runtime_verified:
+            notes.append(
+                "bench_scudo malloc/free providers matched the Scudo identity-symbol provider and emitted the required runtime marker"
+            )
+        elif status == "planned":
+            blockers.append(
+                "Scudo execution route is planned; the child runtime identity marker has not been verified"
+            )
+        elif status == "unavailable":
+            blockers.extend(str(item) for item in execution.get("blockers", []) if str(item).strip())
+            blockers.append("no executable Scudo runtime route is available")
+        else:
+            blockers.append("Scudo runtime identity was not verified by the child benchmark")
     elif feature:
         paper_allocator_equivalent = True
 
-    return {
+    record = {
         "schema_version": 1,
         "source": "paper-external-cargo-bench-json-allocator-semantics",
         "requested_allocator": allocator or None,
@@ -1469,6 +1735,28 @@ def allocator_semantics_record(args: argparse.Namespace) -> Dict[str, Any]:
         "claim_grade_blockers": blockers,
         "notes": notes,
     }
+    if feature == "bench_scudo":
+        execution = getattr(args, "_external_scudo_execution_record", None)
+        if isinstance(execution, dict):
+            canonical = _paper_workload_driver.scudo_allocator_semantics(
+                execution,
+                runtime_verified=execution.get("runtime_verified") is True,
+                verification_status=str(execution.get("execution_state") or "unresolved"),
+            )
+            record.update(
+                {
+                    "runtime_identity_verified": canonical.get("runtime_identity_verified"),
+                    "runtime_authenticity_verified": canonical.get("runtime_authenticity_verified"),
+                    "runtime_identity_status": canonical.get("runtime_identity_status"),
+                    "runtime_identity_marker": canonical.get("runtime_identity_marker"),
+                    "scudo_runtime_mode": canonical.get("scudo_runtime_mode"),
+                    "scudo_runtime_library": canonical.get("scudo_runtime_library"),
+                    "scudo_runtime_library_identity": canonical.get("scudo_runtime_library_identity"),
+                    "scudo_runtime_authenticity": canonical.get("scudo_runtime_authenticity"),
+                    "runtime_provenance": canonical.get("runtime_provenance"),
+                }
+            )
+    return record
 
 
 def section_bounds(text: str, header: str) -> Optional[tuple[int, int]]:
@@ -2087,6 +2375,139 @@ static SNMALLOC_EXTERNAL_CARGO_BENCH_ALLOCATOR: snmalloc_rs::SnMalloc = snmalloc
 #[cfg(any(feature = "bench_ptmalloc", feature = "bench_scudo"))]
 #[global_allocator]
 static SYSTEM_EXTERNAL_CARGO_BENCH_ALLOCATOR: std::alloc::System = std::alloc::System;
+
+#[cfg(all(
+    feature = "bench_scudo",
+    any(
+        feature = "bench_ourself",
+        feature = "bench_ptmalloc",
+        feature = "bench_jemalloc",
+        feature = "bench_mimalloc",
+        feature = "bench_tcmalloc",
+        feature = "bench_snmalloc"
+    )
+))]
+compile_error!("bench_scudo must be the only enabled benchmark allocator feature");
+
+#[cfg(all(feature = "bench_scudo", not(target_os = "linux")))]
+compile_error!("bench_scudo requires Linux and a verifiable Scudo runtime");
+
+#[cfg(all(feature = "bench_scudo", target_os = "linux"))]
+mod unialloc_external_scudo_runtime_identity {{
+    use std::mem::MaybeUninit;
+    use std::os::raw::{{c_char, c_int, c_void}};
+    use std::ptr;
+
+    #[repr(C)]
+    struct DlInfo {{
+        dli_fname: *const c_char,
+        dli_fbase: *mut c_void,
+        dli_sname: *const c_char,
+        dli_saddr: *mut c_void,
+    }}
+
+    #[link(name = "dl")]
+    extern "C" {{
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+        fn dladdr(address: *const c_void, info: *mut DlInfo) -> c_int;
+    }}
+
+    extern "C" {{
+        fn write(fd: c_int, buffer: *const c_void, count: usize) -> isize;
+        fn _exit(status: c_int) -> !;
+        fn getenv(name: *const c_char) -> *mut c_char;
+        fn realpath(path: *const c_char, resolved: *mut c_char) -> *mut c_char;
+    }}
+
+    const EXIT_SCUDO_UNVERIFIED: c_int = 86;
+    const SUCCESS: &[u8] = b"unialloc: verified Scudo runtime identity\\n";
+    const FAILURE: &[u8] = b"unialloc: bench_scudo requires a verified Scudo runtime\\n";
+    const SCUDO_IDENTITY_SYMBOL: &[u8] = b"__scudo_print_stats\\0";
+    const SCUDO_RUNTIME_LIBRARY_ENV: &[u8] = b"UNIALLOC_SCUDO_RUNTIME_LIBRARY\\0";
+    const PATH_CAPACITY: usize = 4096;
+    const ALLOCATOR_ABI_SYMBOLS: [&[u8]; 5] = [
+        b"malloc\\0",
+        b"calloc\\0",
+        b"realloc\\0",
+        b"free\\0",
+        b"posix_memalign\\0",
+    ];
+
+    fn emit(message: &[u8]) {{
+        unsafe {{
+            write(2, message.as_ptr() as *const c_void, message.len());
+        }}
+    }}
+
+    fn fail_closed() -> ! {{
+        emit(FAILURE);
+        unsafe {{ _exit(EXIT_SCUDO_UNVERIFIED) }}
+    }}
+
+    unsafe fn symbol_provider(symbol: &[u8]) -> Option<DlInfo> {{
+        let address = dlsym(ptr::null_mut(), symbol.as_ptr() as *const c_char);
+        if address.is_null() {{
+            return None;
+        }}
+        let mut info = MaybeUninit::<DlInfo>::uninit();
+        if dladdr(address as *const c_void, info.as_mut_ptr()) == 0 {{
+            return None;
+        }}
+        Some(info.assume_init())
+    }}
+
+    fn same_c_path(left: &[c_char], right: &[c_char]) -> bool {{
+        for index in 0..std::cmp::min(left.len(), right.len()) {{
+            if left[index] != right[index] {{
+                return false;
+            }}
+            if left[index] == 0 {{
+                return true;
+            }}
+        }}
+        false
+    }}
+
+    unsafe fn provider_matches_configured_runtime(provider: &DlInfo) -> bool {{
+        let configured = getenv(SCUDO_RUNTIME_LIBRARY_ENV.as_ptr() as *const c_char);
+        if configured.is_null() || *configured == 0 {{
+            return true;
+        }}
+        if provider.dli_fname.is_null() {{
+            return false;
+        }}
+        let mut configured_realpath = [0 as c_char; PATH_CAPACITY];
+        let mut provider_realpath = [0 as c_char; PATH_CAPACITY];
+        if realpath(configured, configured_realpath.as_mut_ptr()).is_null()
+            || realpath(provider.dli_fname, provider_realpath.as_mut_ptr()).is_null()
+        {{
+            return false;
+        }}
+        same_c_path(&configured_realpath, &provider_realpath)
+    }}
+
+    extern "C" fn verify_scudo_runtime_identity() {{
+        let scudo_provider = unsafe {{ symbol_provider(SCUDO_IDENTITY_SYMBOL) }}
+            .unwrap_or_else(|| fail_closed());
+        if !unsafe {{ provider_matches_configured_runtime(&scudo_provider) }} {{
+            fail_closed();
+        }}
+        for symbol in ALLOCATOR_ABI_SYMBOLS.iter() {{
+            let provider = unsafe {{ symbol_provider(symbol) }}.unwrap_or_else(|| fail_closed());
+            if provider.dli_fbase != scudo_provider.dli_fbase
+                || !unsafe {{ provider_matches_configured_runtime(&provider) }}
+            {{
+                fail_closed();
+            }}
+        }}
+        emit(SUCCESS);
+    }}
+
+    #[used]
+    #[link_section = ".init_array"]
+    static VERIFY_SCUDO_RUNTIME_IDENTITY: extern "C" fn() = verify_scudo_runtime_identity;
+}}
+{ALLOCATOR_BENCH_OVERLAY_END_MARKER}
 """.lstrip()
 
 
@@ -2184,6 +2605,71 @@ fn unialloc_sort_init_rand(size: usize, null_probability: f64, modulo: i32) -> I
     return next_text, repairs
 
 
+def allocator_overlay_at_crate_root(text: str, overlay: str) -> bool:
+    """Require the byte-exact current overlay at the crate-root insertion point."""
+
+    overlay_index = text.find(overlay)
+    if overlay_index < 0 or text.find(overlay, overlay_index + 1) >= 0:
+        return False
+    prefix = text[:overlay_index]
+    return crate_root_overlay_insertion_index(prefix) == len(prefix)
+
+
+def remove_known_allocator_bench_overlay(text: str, overlay: str) -> tuple[str, Dict[str, Any]]:
+    """Remove one current/legacy adapter overlay so it can be upgraded exactly."""
+
+    marker_count = text.count(ALLOCATOR_BENCH_OVERLAY_MARKER)
+    record: Dict[str, Any] = {
+        "removed": False,
+        "marker_count": marker_count,
+        "previous_overlay_kind": None,
+    }
+    if marker_count != 1:
+        record["error"] = f"expected exactly one allocator overlay marker, found {marker_count}"
+        return text, record
+    marker_index = text.find(ALLOCATOR_BENCH_OVERLAY_MARKER)
+    if overlay in text:
+        start = text.find(overlay)
+        end = start + len(overlay)
+        kind = "current-overlay-relocation"
+    else:
+        end_marker_index = text.find(ALLOCATOR_BENCH_OVERLAY_END_MARKER, marker_index)
+        if end_marker_index >= 0:
+            start = marker_index
+            end = end_marker_index + len(ALLOCATOR_BENCH_OVERLAY_END_MARKER)
+            kind = "versioned-legacy-overlay"
+        else:
+            legacy_end = (
+                "static SYSTEM_EXTERNAL_CARGO_BENCH_ALLOCATOR: std::alloc::System = "
+                "std::alloc::System;"
+            )
+            legacy_end_index = text.find(legacy_end, marker_index)
+            if legacy_end_index >= 0:
+                start = marker_index
+                end = legacy_end_index + len(legacy_end)
+                kind = "pre-versioned-system-overlay"
+            else:
+                first_inner_attr = text.find("#![", marker_index)
+                if first_inner_attr >= 0:
+                    start = marker_index
+                    end = first_inner_attr
+                    kind = "pre-versioned-overlay-before-inner-attribute"
+                else:
+                    record["error"] = "unrecognized allocator overlay marker; refusing an ambiguous replacement"
+                    return text, record
+    while end < len(text) and text[end] in "\r\n":
+        end += 1
+    previous = text[start:end]
+    record.update(
+        {
+            "removed": True,
+            "previous_overlay_kind": kind,
+            "previous_overlay_sha256": hashlib.sha256(previous.encode("utf-8")).hexdigest(),
+        }
+    )
+    return text[:start] + text[end:], record
+
+
 def ensure_allocator_bench_overlay(
     real_workload_dir: Path,
     command: List[str],
@@ -2215,36 +2701,45 @@ def ensure_allocator_bench_overlay(
     if not bench_rs.exists():
         record["error"] = f"missing benchmark source: {bench_rs}"
         return record
-    text = bench_rs.read_text(encoding="utf-8")
-    text, api_repairs = repair_known_benchmark_source_api_drift(text, surface=surface)
+    original_text = bench_rs.read_text(encoding="utf-8")
+    text, api_repairs = repair_known_benchmark_source_api_drift(original_text, surface=surface)
     if api_repairs:
-        record["changed"] = True
         record["api_compat_repairs"] = api_repairs
     overlay = allocator_bench_overlay_text()
-    if ALLOCATOR_BENCH_OVERLAY_MARKER in text:
-        marker_index = text.find(ALLOCATOR_BENCH_OVERLAY_MARKER)
-        first_inner_attr = text.find("#![")
-        if first_inner_attr >= 0 and marker_index >= 0 and marker_index < first_inner_attr:
-            block_end = text.find("\n#![", marker_index)
-            if block_end >= 0:
-                repaired = text[:marker_index] + text[block_end + 1 :]
-                insert_at = crate_root_overlay_insertion_index(repaired)
-                if mutation_journal is not None:
-                    mutation_journal.snapshot(bench_rs)
-                bench_rs.write_text(repaired[:insert_at] + overlay + "\n" + repaired[insert_at:], encoding="utf-8")
-                record.update({"changed": True, "prepared": True, "repaired_inner_attribute_order": True})
-                return record
-        if api_repairs:
+    overlay_sha256 = hashlib.sha256(overlay.encode("utf-8")).hexdigest()
+    record["expected_overlay_sha256"] = overlay_sha256
+    if allocator_overlay_at_crate_root(text, overlay):
+        if text != original_text:
             if mutation_journal is not None:
                 mutation_journal.snapshot(bench_rs)
             bench_rs.write_text(text, encoding="utf-8")
-        record["prepared"] = True
+            record["changed"] = True
+        record.update({"prepared": True, "exact_overlay_verified": True})
         return record
+
+    upgrade: Optional[Dict[str, Any]] = None
+    if ALLOCATOR_BENCH_OVERLAY_MARKER in text:
+        text, upgrade = remove_known_allocator_bench_overlay(text, overlay)
+        record["overlay_upgrade"] = upgrade
+        if not upgrade.get("removed"):
+            record["error"] = str(upgrade.get("error") or "could not replace stale allocator overlay")
+            return record
     insert_at = crate_root_overlay_insertion_index(text)
+    next_text = text[:insert_at] + overlay + "\n" + text[insert_at:]
+    if not allocator_overlay_at_crate_root(next_text, overlay):
+        record["error"] = "current allocator overlay could not be installed at the crate root"
+        return record
     if mutation_journal is not None:
         mutation_journal.snapshot(bench_rs)
-    bench_rs.write_text(text[:insert_at] + overlay + "\n" + text[insert_at:], encoding="utf-8")
-    record.update({"changed": True, "prepared": True})
+    bench_rs.write_text(next_text, encoding="utf-8")
+    record.update(
+        {
+            "changed": next_text != original_text,
+            "prepared": True,
+            "exact_overlay_verified": True,
+            "upgraded_existing_overlay": bool(upgrade),
+        }
+    )
     return record
 
 
@@ -2576,6 +3071,15 @@ def success_record(args: argparse.Namespace, command: List[str], rows: List[Dict
         record["allocator_feature"] = args.allocator_routing_record.get("allocator_feature")
     if getattr(args, "dependency_env_record", None):
         record["dependency_env"] = args.dependency_env_record
+    scudo_execution = getattr(args, "_external_scudo_execution_record", None)
+    if isinstance(scudo_execution, dict):
+        record["scudo_execution_probe"] = scudo_execution
+    scudo_env = getattr(args, "_external_scudo_env_record", None)
+    if isinstance(scudo_env, dict):
+        record["scudo_subprocess_env"] = scudo_env
+    scudo_guard = getattr(args, "_external_scudo_guard_probe", None)
+    if isinstance(scudo_guard, dict):
+        record["scudo_runtime_guard_probe"] = scudo_guard
     return record
 
 
@@ -2624,6 +3128,15 @@ def failure_record(
         record["allocator_feature"] = args.allocator_routing_record.get("allocator_feature")
     if getattr(args, "dependency_env_record", None):
         record["dependency_env"] = args.dependency_env_record
+    scudo_execution = getattr(args, "_external_scudo_execution_record", None)
+    if isinstance(scudo_execution, dict):
+        record["scudo_execution_probe"] = scudo_execution
+    scudo_env = getattr(args, "_external_scudo_env_record", None)
+    if isinstance(scudo_env, dict):
+        record["scudo_subprocess_env"] = scudo_env
+    scudo_guard = getattr(args, "_external_scudo_guard_probe", None)
+    if isinstance(scudo_guard, dict):
+        record["scudo_runtime_guard_probe"] = scudo_guard
     return record
 
 
@@ -2804,41 +3317,90 @@ def run(args: argparse.Namespace) -> int:
         emit(failure_record(args, command, "missing child cargo bench command"))
         return 2
     requested_targets = parse_cargo_bench_targets_arg(args.cargo_bench_targets, command)
+    real_workload_dir = Path(args.real_workload_dir).expanduser().resolve() if args.real_workload_dir else Path.cwd().resolve()
+    requested_scudo_sources = scudo_request_sources(args, command)
+    args._external_scudo_request_sources = requested_scudo_sources
+    if command_requests_scudo_feature(command) and allocator_feature(args.allocator) != "bench_scudo":
+        emit(
+            failure_record(
+                args,
+                command,
+                "bench_scudo cargo feature conflicts with the non-Scudo allocator selector",
+                extra={
+                    "scudo_request_sources": requested_scudo_sources,
+                    "measurement_eligible": False,
+                    "child_started": False,
+                },
+            )
+        )
+        return 2
+    if requested_scudo_sources:
+        scudo_execution = prepare_scudo_execution(args, command, real_workload_dir)
+        if not scudo_execution.get("ok"):
+            emit(
+                failure_record(
+                    args,
+                    command,
+                    "no executable Scudo runtime route is available; child timing was not started",
+                    extra={
+                        "scudo_execution_probe": scudo_execution,
+                        "measurement_eligible": False,
+                        "child_started": False,
+                    },
+                )
+            )
+            return 2
+        if not args.allocator_feature_routing:
+            emit(
+                failure_record(
+                    args,
+                    command,
+                    "bench_scudo requires allocator feature routing so the fail-closed runtime identity guard is installed; child timing was not started",
+                    extra={
+                        "scudo_execution_probe": scudo_execution,
+                        "allocator_feature_routing_required": True,
+                        "measurement_eligible": False,
+                        "child_started": False,
+                    },
+                )
+            )
+            return 2
     if args.dry_run:
         allocator_semantics = allocator_semantics_record(args)
-        emit(
-            {
-                "schema_version": 1,
-                "source": "paper-external-cargo-bench-json",
-                "success": True,
-                "dry_run": True,
-                "benchmark_owned_json": True,
-                "measurement_source": "libtest_or_criterion_bench_timing",
-                "command": command,
-                "dataset": args.dataset,
-                "benchmark": args.benchmark,
-                "allocator": args.allocator,
-                "variant_feature": args.variant_feature,
-                "run_index": args.run_index,
-                "bench_name_filter": args.bench_name_filter or None,
-                "cargo_bench_targets": requested_targets,
-                "multi_target": bool(args.cargo_bench_targets),
-                "criterion_dir": str(Path(args.criterion_dir)),
-                "allocator_feature_routing_requested": bool(args.allocator_feature_routing),
-                "allocator_feature": allocator_feature(args.allocator) if args.allocator_feature_routing else None,
-                "allocator_semantics": allocator_semantics,
-                "claim_grade": False,
-                "claim_grade_blockers": unique_strings(
-                    [
-                        "cargo-bench JSON wrapper dry-run is not timing evidence",
-                        *allocator_semantics.get("claim_grade_blockers", []),
-                    ]
-                ),
-                "generated_at": now_iso(),
-            }
-        )
+        record = {
+            "schema_version": 1,
+            "source": "paper-external-cargo-bench-json",
+            "success": True,
+            "dry_run": True,
+            "benchmark_owned_json": True,
+            "measurement_source": "libtest_or_criterion_bench_timing",
+            "command": command,
+            "dataset": args.dataset,
+            "benchmark": args.benchmark,
+            "allocator": args.allocator,
+            "variant_feature": args.variant_feature,
+            "run_index": args.run_index,
+            "bench_name_filter": args.bench_name_filter or None,
+            "cargo_bench_targets": requested_targets,
+            "multi_target": bool(args.cargo_bench_targets),
+            "criterion_dir": str(Path(args.criterion_dir)),
+            "allocator_feature_routing_requested": bool(args.allocator_feature_routing),
+            "allocator_feature": allocator_feature(args.allocator) if args.allocator_feature_routing else None,
+            "allocator_semantics": allocator_semantics,
+            "claim_grade": False,
+            "claim_grade_blockers": unique_strings(
+                [
+                    "cargo-bench JSON wrapper dry-run is not timing evidence",
+                    *allocator_semantics.get("claim_grade_blockers", []),
+                ]
+            ),
+            "generated_at": now_iso(),
+        }
+        scudo_execution = getattr(args, "_external_scudo_execution_record", None)
+        if isinstance(scudo_execution, dict):
+            record["scudo_execution_probe"] = scudo_execution
+        emit(record)
         return 0
-    real_workload_dir = Path(args.real_workload_dir).expanduser().resolve() if args.real_workload_dir else Path.cwd().resolve()
     mutation_journal = FileMutationJournal(real_workload_dir) if args.allocator_feature_routing else None
 
     def finish(record: Dict[str, Any], code: int) -> int:
@@ -2869,8 +3431,27 @@ def run(args: argparse.Namespace) -> int:
     env.setdefault("UNIALLOC_PAPER_RUN_INDEX", str(args.run_index))
     max_output_bytes = positive_int_value(getattr(args, "max_output_bytes", None), 16 * 1024 * 1024)
     evidence_dir = resolve_evidence_dir(str(getattr(args, "evidence_dir", "") or ""), args)
+    if requested_scudo_sources and evidence_dir is None:
+        evidence_dir = Path(tempfile.mkdtemp(prefix="paper-external-cargo-scudo-evidence-"))
     all_evidence: List[Dict[str, Any]] = []
     args.dependency_env_record = configure_dependency_env(args, env)
+    if requested_scudo_sources:
+        scudo_env_record = apply_scudo_subprocess_env(args, env)
+        args._external_scudo_env_record = scudo_env_record
+        if not scudo_env_record.get("ok"):
+            return finish(
+                failure_record(
+                    args,
+                    command,
+                    "Scudo runtime environment could not be applied; child timing was not started",
+                    extra={
+                        "scudo_subprocess_env": scudo_env_record,
+                        "measurement_eligible": False,
+                        "child_started": False,
+                    },
+                ),
+                2,
+            )
     polars_csv_fixture = maybe_prepare_polars_csv_fixture(args, env, requested_targets=requested_targets)
     if polars_csv_fixture is not None:
         args.dependency_env_record["polars_csv_fixture"] = polars_csv_fixture
@@ -2899,6 +3480,27 @@ def run(args: argparse.Namespace) -> int:
                             "allocator_routing": routing_record,
                             "cargo_bench_target": target or None,
                             "cargo_bench_targets": requested_targets,
+                            "target_records": target_records,
+                        },
+                    ),
+                    2,
+                )
+        scudo_guard_probe: Optional[Dict[str, Any]] = None
+        if requested_scudo_sources:
+            scudo_guard_probe = scudo_runtime_guard_source_probe(real_workload_dir, target_command)
+            args._external_scudo_guard_probe = scudo_guard_probe
+            if not scudo_guard_probe.get("ok"):
+                return finish(
+                    failure_record(
+                        args,
+                        target_command,
+                        "selected Scudo benchmark has no verifiable runtime identity guard; child timing was not started",
+                        extra={
+                            "cargo_bench_target": target or None,
+                            "cargo_bench_targets": requested_targets,
+                            "scudo_runtime_guard_probe": scudo_guard_probe,
+                            "measurement_eligible": False,
+                            "child_started": False,
                             "target_records": target_records,
                         },
                     ),
@@ -2966,6 +3568,40 @@ def run(args: argparse.Namespace) -> int:
             sys.stderr.write(child_stderr)
             if not child_stderr.endswith("\n"):
                 sys.stderr.write("\n")
+        verified_scudo_execution: Optional[Dict[str, Any]] = None
+        if requested_scudo_sources and not child_timed_out and child_returncode == 0:
+            verified_scudo_execution = verify_scudo_runtime_identity(args, child_stderr)
+            if not verified_scudo_execution.get("runtime_verified"):
+                failure = failure_record(
+                    args,
+                    target_command,
+                    "Scudo child exited successfully without the required runtime identity marker; timing was rejected",
+                    child_returncode=child_returncode,
+                    extra={
+                        "cargo_bench_target": target or None,
+                        "cargo_bench_targets": requested_targets,
+                        "scudo_execution_probe": verified_scudo_execution,
+                        "required_runtime_identity_marker": SCUDO_RUNTIME_IDENTITY_MARKER,
+                        "measurement_eligible": False,
+                        "max_output_bytes": max_output_bytes,
+                        "stdout_bytes": child_result.get("stdout_bytes"),
+                        "stderr_bytes": child_result.get("stderr_bytes"),
+                        "stdout_retained_bytes": child_result.get("stdout_retained_bytes"),
+                        "stderr_retained_bytes": child_result.get("stderr_retained_bytes"),
+                        "stdout_truncated": child_result.get("stdout_truncated"),
+                        "stderr_truncated": child_result.get("stderr_truncated"),
+                        "partial_bench_row_count": len(all_rows),
+                        "partial_bench_rows": all_rows,
+                        "target_records": target_records,
+                    },
+                )
+                append_evidence(failure, all_evidence)
+                if evidence_dir is not None:
+                    failure["raw_evidence_dir"] = str(evidence_dir)
+                return finish(failure, 1)
+            if routing_record is not None:
+                routing_record["allocator_semantics"] = allocator_semantics_record(args)
+                routing_record["scudo_execution_probe"] = verified_scudo_execution
         criterion_rows = parse_criterion_estimates(
             criterion_dir,
             started_at=started_at,
@@ -3000,6 +3636,11 @@ def run(args: argparse.Namespace) -> int:
             target_record["allocator_routing"] = routing_record
         if reproducibility_flags is not None:
             target_record["reproducibility_flags"] = reproducibility_flags
+        if verified_scudo_execution is not None:
+            target_record["scudo_execution_probe"] = verified_scudo_execution
+            target_record["allocator_semantics"] = allocator_semantics_record(args)
+        if scudo_guard_probe is not None:
+            target_record["scudo_runtime_guard_probe"] = scudo_guard_probe
         target_records.append(target_record)
         if child_timed_out:
             failure = failure_record(
@@ -3106,6 +3747,11 @@ def run(args: argparse.Namespace) -> int:
     if evidence_dir is not None:
         record["raw_evidence_dir"] = str(evidence_dir)
     apply_success_claim_grade_contract(record, args, requested_targets=requested_targets)
+    if requested_scudo_sources:
+        _paper_workload_driver.attach_scudo_timing_binding(
+            record,
+            evidence_dir=evidence_dir,
+        )
     return finish(record, 0)
 
 
@@ -3181,6 +3827,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--real-workload-dir",
         help="Checkout root to patch for allocator feature routing; default is current working directory",
+    )
+    parser.add_argument(
+        "--scudo-mode",
+        choices=_paper_workload_driver.SCUDO_MODES,
+        default=os.environ.get("UNIALLOC_SCUDO_MODE", _paper_workload_driver.SCUDO_DEFAULT_MODE),
+        help=(
+            "Canonical Scudo execution route: rust-sanitizer uses rustc support, "
+            "ld-preload uses a standalone runtime, and auto selects an available route"
+        ),
+    )
+    parser.add_argument(
+        "--scudo-runtime-library",
+        default=os.environ.get("UNIALLOC_SCUDO_RUNTIME_LIBRARY")
+        or os.environ.get("SCUDO_RUNTIME_LIBRARY")
+        or os.environ.get("SCUDO_STANDALONE_LIBRARY"),
+        help="Path or directory containing libclang_rt.scudo_standalone-*.so",
     )
     parser.add_argument("command", nargs=argparse.REMAINDER, help="Child cargo bench command after --")
     args = parser.parse_args(argv)

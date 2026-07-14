@@ -98,14 +98,14 @@ class RedisBenchmarkJsonClaimContractTests(unittest.TestCase):
             args_for("scudo", self.accepted_source_contract()),
             allocator_semantics={
                 "claim_grade_blockers": [
-                    "RRedis bench_scudo currently routes to std::alloc::System",
+                    "Scudo server runtime identity has not been verified before workload timing",
                 ]
             },
             benchmark_path="/tmp/redis-benchmark",
         )
 
         self.assertFalse(contract["claim_grade"], contract)
-        self.assertIn("bench_scudo", " ".join(contract["claim_grade_blockers"]))
+        self.assertIn("runtime identity", " ".join(contract["claim_grade_blockers"]))
 
     def test_missing_accepted_source_contract_keeps_runtime_claim_fail_closed(self) -> None:
         contract = wrapper.current_source_claim_contract(

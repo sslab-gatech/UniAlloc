@@ -1,6 +1,9 @@
 #![cfg(feature = "stats")]
 #![feature(test)]
 
+#[cfg(feature = "bench_scudo")]
+compile_error!("compiler semantic benchmarks are UniAlloc-only and cannot produce Scudo timing");
+
 extern crate test;
 
 use std::collections::{BTreeMap, VecDeque};

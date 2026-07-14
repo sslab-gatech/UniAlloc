@@ -16,6 +16,7 @@ import csv
 import datetime as _dt
 import fnmatch
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -110,6 +111,32 @@ REPOSITORY_SOURCE_INCLUDED_IGNORED_GLOBS = {
 }
 
 
+def _load_paper_workload_driver_helper() -> Tuple[Optional[Any], Optional[str]]:
+    """Load the canonical local allocator runner without depending on sys.path shape."""
+
+    try:
+        import paper_workload_driver as helper
+
+        return helper, None
+    except Exception as direct_exc:
+        helper_path = Path(__file__).resolve().with_name("paper_workload_driver.py")
+        try:
+            spec = importlib.util.spec_from_file_location(
+                "_unialloc_evaluate_paper_workload_driver",
+                helper_path,
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError(f"could not create module spec for {helper_path}")
+            helper = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(helper)
+            return helper, None
+        except Exception as fallback_exc:
+            return None, f"direct import failed: {direct_exc}; local import failed: {fallback_exc}"
+
+
+_PAPER_WORKLOAD_DRIVER, _PAPER_WORKLOAD_DRIVER_IMPORT_ERROR = _load_paper_workload_driver_helper()
+
+
 def rpolars_default_claim_matrix_sample_audit_path() -> Path:
     """Single default sample-audit source shared by R-Polars parity and matrix audits."""
 
@@ -165,8 +192,19 @@ CMAKE_BIN_GLOBS = (
     "evaluation/raw/local-cmake-pip-*/cmake/data/bin/cmake",
 )
 
-SCUDO_SANITIZER_RUSTFLAGS = "-Z sanitizer=scudo"
+SCUDO_SANITIZER_RUSTFLAGS = "-Zsanitizer=scudo"
+SCUDO_RUNTIME_ENV_NAMES = (
+    "UNIALLOC_SCUDO_RUNTIME_LIBRARY",
+    "SCUDO_RUNTIME_LIBRARY",
+    "SCUDO_STANDALONE_LIBRARY",
+)
+SCUDO_SANITIZER_REMOVED_ENV_NAMES = (
+    *SCUDO_RUNTIME_ENV_NAMES,
+    "LD_PRELOAD",
+    "CARGO_ENCODED_RUSTFLAGS",
+)
 _SCUDO_TOOLCHAIN_PROBE_CACHE: Optional[Dict[str, Any]] = None
+_SCUDO_EXECUTION_PROBE_CACHE: Optional[Dict[str, Any]] = None
 
 VARIANT_FEATURE_TO_DATASET = {
     "type_isolation": "type_isolation",
@@ -1067,10 +1105,21 @@ def allocator_feature_support(allocator: str) -> Dict[str, Any]:
     matching = [feature for feature, mapped in FEATURE_TO_ALLOCATOR.items() if mapped == allocator]
     blockers: List[str] = []
     notes: List[str] = []
+    execution_probe: Optional[Dict[str, Any]] = None
     if matching:
         notes.append("run-local has a feature mapping for this allocator column")
-        if allocator == "scudo" and not scudo_toolchain_available():
-            blockers.append("bench_scudo is mapped, but the active Rust toolchain/target does not accept the scudo sanitizer runtime")
+        if allocator == "scudo":
+            execution_probe = scudo_execution_probe()
+            if execution_probe.get("ok"):
+                notes.append(
+                    "bench_scudo has an available execution route via "
+                    f"{execution_probe.get('selected_mode')}; runtime identity remains gated by the benchmark constructor"
+                )
+            else:
+                blockers.append(
+                    "bench_scudo is mapped, but neither the Rust Scudo sanitizer route nor a "
+                    "Scudo standalone runtime for LD_PRELOAD is available"
+                )
     elif allocator == "ptmalloc" and platform.system() != "Linux":
         blockers.append(
             f"bench_ptmalloc maps to {FEATURE_TO_ALLOCATOR.get('bench_ptmalloc')} on {platform.system()}; Linux ptmalloc evidence requires a Linux/glibc run"
@@ -1081,13 +1130,16 @@ def allocator_feature_support(allocator: str) -> Dict[str, Any]:
         blockers.append("the paper's default column is platform-specific; Linux default allocator is modeled as ptmalloc in this runner")
     else:
         blockers.append("no run-local feature mapping for this allocator column")
-    return {
+    result = {
         "allocator": allocator,
         "run_local_features": matching,
         "supported_by_run_local_mapping": bool(matching),
         "claim_grade_mapping_blockers": unique_strings(blockers),
         "notes": unique_strings(notes),
     }
+    if execution_probe is not None:
+        result["scudo_execution_probe"] = execution_probe
+    return result
 
 
 def paper_workload_support(benchmark: str, category: Optional[str]) -> Dict[str, Any]:
@@ -1364,13 +1416,12 @@ def finite_number(value: Any) -> Optional[float]:
 
 
 def normalize_sample_allocator(value: Any) -> str:
-    raw = str(value or "").strip()
+    raw = str(value or "").strip().lower()
     aliases = {
         "bench_ourself": "unialloc",
         "ourself": "unialloc",
         "uni_alloc": "unialloc",
         "uni-alloc": "unialloc",
-        "UniAlloc": "unialloc",
         "bench_jemalloc": "jemalloc",
         "bench_ptmalloc": "ptmalloc",
         "bench_mimalloc": "mimalloc",
@@ -1911,6 +1962,664 @@ def source_contract_claim_grade_blockers(candidate: Dict[str, Any]) -> List[str]
     return unique_strings(blockers)
 
 
+SCUDO_ATTESTED_RECORD_SOURCES = {
+    "paper-workload-driver",
+    "paper-external-cargo-bench-json",
+    "paper-external-redis-load-json",
+    "paper-external-redis-benchmark-json",
+}
+
+
+def scudo_record_subprocess_env(record: Dict[str, Any]) -> Dict[str, Any]:
+    merged: Dict[str, Any] = {}
+    direct = record.get("subprocess_env_delta")
+    if isinstance(direct, dict):
+        merged.update(direct)
+    effective = record.get("subprocess_env_effective")
+    if isinstance(effective, dict):
+        merged.update(effective)
+    wrapped = record.get("scudo_subprocess_env")
+    if isinstance(wrapped, dict):
+        delta = wrapped.get("subprocess_env_delta")
+        if isinstance(delta, dict):
+            merged.update(delta)
+        effective = wrapped.get("subprocess_env_effective")
+        if isinstance(effective, dict):
+            merged.update(effective)
+    return merged
+
+
+def scudo_record_removed_env(record: Dict[str, Any]) -> Tuple[set[str], Dict[str, Any]]:
+    removed = record.get("subprocess_env_removed")
+    absence = record.get("subprocess_env_effective_absence")
+    wrapped = record.get("scudo_subprocess_env")
+    if isinstance(wrapped, dict):
+        if not isinstance(removed, list):
+            removed = wrapped.get("subprocess_env_removed")
+        if not isinstance(absence, dict):
+            absence = wrapped.get("subprocess_env_effective_absence")
+    removed_names = {
+        str(name).strip() for name in removed if str(name).strip()
+    } if isinstance(removed, list) else set()
+    return removed_names, absence if isinstance(absence, dict) else {}
+
+
+def scudo_sanitizer_rustflags_present(value: Any) -> bool:
+    """Recognize only an exact rustc Scudo sanitizer flag token sequence."""
+
+    try:
+        tokens = shlex.split(str(value or ""))
+    except ValueError:
+        return False
+    return any(
+        token == "-Zsanitizer=scudo"
+        or (token == "-Z" and index + 1 < len(tokens) and tokens[index + 1] == "sanitizer=scudo")
+        for index, token in enumerate(tokens)
+    )
+
+
+def scudo_local_sanitizer_route_blockers(
+    execution: Dict[str, Any],
+    record: Dict[str, Any],
+) -> List[str]:
+    blockers: List[str] = []
+    recorded_probe = execution.get("toolchain_probe")
+    recorded_probe = recorded_probe if isinstance(recorded_probe, dict) else {}
+    provenance = recorded_probe.get("rust_toolchain_provenance")
+    provenance = provenance if isinstance(provenance, dict) else {}
+    has_effective_toolchain = "effective_toolchain" in provenance
+    effective_toolchain = str(provenance.get("effective_toolchain") or "").strip()
+    recorded_probe_cwd = str(recorded_probe.get("probe_cwd") or "").strip()
+    recorded_rustc_version = str(recorded_probe.get("rustc_verbose_version") or "").strip()
+    if recorded_probe.get("ok") is not True:
+        blockers.append("recorded scudo rust-sanitizer toolchain probe did not succeed")
+    if not has_effective_toolchain:
+        blockers.append("scudo rust-sanitizer sample lacks effective toolchain provenance")
+    if not recorded_probe_cwd or not recorded_rustc_version:
+        blockers.append("scudo rust-sanitizer sample lacks resolved rustc identity provenance")
+    elif _PAPER_WORKLOAD_DRIVER is None or not hasattr(
+        _PAPER_WORKLOAD_DRIVER,
+        "scudo_toolchain_probe",
+    ):
+        blockers.append("canonical rust-sanitizer toolchain revalidation is unavailable")
+    else:
+        try:
+            current_probe = _PAPER_WORKLOAD_DRIVER.scudo_toolchain_probe(
+                argparse.Namespace(
+                    rust_toolchain=effective_toolchain or "system",
+                    scudo_probe_cwd=recorded_probe_cwd or str(ROOT),
+                )
+            )
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+            blockers.append(f"rust-sanitizer toolchain revalidation failed: {exc}")
+        else:
+            if not isinstance(current_probe, dict) or current_probe.get("ok") is not True:
+                blockers.append("recorded rust-sanitizer route is unavailable under the recorded toolchain")
+            else:
+                current_provenance = current_probe.get("rust_toolchain_provenance")
+                current_provenance = (
+                    current_provenance if isinstance(current_provenance, dict) else {}
+                )
+                if (
+                    "effective_toolchain" not in current_provenance
+                    or str(current_provenance.get("effective_toolchain") or "").strip()
+                    != effective_toolchain
+                ):
+                    blockers.append(
+                        "rust-sanitizer toolchain revalidation resolved a different effective toolchain"
+                    )
+                if (
+                    str(current_probe.get("probe_cwd") or "").strip()
+                    != recorded_probe_cwd
+                    or str(current_probe.get("rustc_verbose_version") or "").strip()
+                    != recorded_rustc_version
+                ):
+                    blockers.append(
+                        "rust-sanitizer toolchain revalidation resolved a different rustc identity"
+                    )
+
+    removed, effective_absence = scudo_record_removed_env(record)
+    required_removed = set(SCUDO_SANITIZER_REMOVED_ENV_NAMES)
+    if not required_removed.issubset(removed) or not all(
+        effective_absence.get(name) is True for name in required_removed
+    ):
+        blockers.append(
+            "scudo rust-sanitizer sample does not prove LD_PRELOAD and standalone-runtime variables were absent"
+        )
+    return blockers
+
+
+def scudo_plan_stdout_json_objects(sample: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """Read one digest-bound plan stdout artifact and return its JSON records."""
+
+    blockers: List[str] = []
+    stdout_text = str(sample.get("stdout") or "").strip()
+    evidence = sample.get("evidence")
+    evidence = evidence if isinstance(evidence, list) else []
+    stdout_entries = [
+        entry
+        for entry in evidence
+        if isinstance(entry, dict)
+        and str(entry.get("kind") or entry.get("role") or "").strip().lower() == "stdout"
+    ]
+    if not stdout_text or len(stdout_entries) != 1:
+        return [], ["Scudo plan sample lacks one digest-bound stdout evidence artifact"]
+
+    entry = stdout_entries[0]
+    entry_path_text = str(entry.get("path") or entry.get("file") or "").strip()
+    digest = str(entry.get("sha256") or "").strip().lower()
+    if entry_path_text != stdout_text or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        return [], ["Scudo plan stdout evidence path or SHA-256 is not bound to the plan record"]
+
+    path = Path(stdout_text).expanduser()
+    if not path.is_absolute():
+        path = ROOT / path
+    try:
+        stdout_bytes = path.read_bytes()
+    except OSError as exc:
+        return [], [f"Scudo plan stdout evidence is unavailable: {exc}"]
+    if hashlib.sha256(stdout_bytes).hexdigest() != digest:
+        return [], ["Scudo plan stdout evidence SHA-256 does not match the local artifact"]
+
+    objects: List[Dict[str, Any]] = []
+    for raw in stdout_bytes.decode("utf-8", errors="replace").splitlines():
+        try:
+            value = json.loads(raw.strip())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            objects.append(value)
+    if not objects:
+        blockers.append("Scudo plan stdout evidence contains no JSON record")
+    return objects, blockers
+
+
+def scudo_same_timing(left: Dict[str, Any], right: Dict[str, Any]) -> bool:
+    left_seconds = sample_successful_timing_value(left)
+    right_seconds = sample_successful_timing_value(right)
+    return bool(
+        left_seconds is not None
+        and right_seconds is not None
+        and left_seconds == right_seconds
+    )
+
+
+def scudo_matching_record_identity(left: Dict[str, Any], right: Dict[str, Any]) -> bool:
+    for key in ("dataset", "benchmark"):
+        if (
+            not isinstance(left.get(key), str)
+            or not isinstance(right.get(key), str)
+            or left[key].strip() != right[key].strip()
+        ):
+            return False
+    left_has_run = "run_index" in left
+    right_has_run = "run_index" in right
+    left_run = scudo_normalized_run_index(left.get("run_index")) if left_has_run else None
+    right_run = scudo_normalized_run_index(right.get("run_index")) if right_has_run else None
+    if left_has_run != right_has_run:
+        if not (
+            left_has_run
+            and left_run is not None
+            and str(right.get("source") or "").strip() == "paper-workload-driver"
+        ):
+            return False
+        # The canonical Collections producer predates plan-level run ordinals.
+        # Its timing-binding digest owns execution identity, so the outer
+        # ordinal may label the run while replay de-dupe prevents repetitions.
+    elif left_has_run and (left_run is None or right_run is None or left_run != right_run):
+        return False
+    if ("variant_feature" in left) != ("variant_feature" in right):
+        return False
+    if "variant_feature" in left and not scudo_strict_json_equal(
+        left.get("variant_feature"), right.get("variant_feature")
+    ):
+        return False
+    return True
+
+
+def scudo_normalized_run_index(value: Any) -> Optional[int]:
+    """Normalize only canonical positive integer plan ordinals."""
+
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*", value):
+        return int(value)
+    return None
+
+
+def scudo_strict_json_equal(left: Any, right: Any) -> bool:
+    """Compare JSON values without Python's bool/int equality coercion."""
+
+    try:
+        return json.dumps(
+            left,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ) == json.dumps(
+            right,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+    except (TypeError, ValueError):
+        return False
+
+
+def scudo_paper_workload_timing_blockers(record: Dict[str, Any]) -> List[str]:
+    """Recompute canonical Collections timing from digest-bound libtest stdout."""
+
+    if str(record.get("benchmark") or "").strip() != "Collections":
+        return ["Scudo paper-workload-driver record is relabeled outside its Collections contract"]
+    evidence = record.get("evidence")
+    evidence = evidence if isinstance(evidence, list) else []
+    stdout_entries = [
+        entry
+        for entry in evidence
+        if isinstance(entry, dict) and entry.get("kind") == "scudo_benchmark_stdout"
+    ]
+    if len(stdout_entries) != 1:
+        return ["Scudo paper-workload-driver record lacks one digest-bound benchmark stdout"]
+    entry = stdout_entries[0]
+    path_text = str(entry.get("path") or "").strip()
+    digest = str(entry.get("sha256") or "").strip().lower()
+    if (
+        not path_text
+        or path_text != str(record.get("stdout") or "").strip()
+        or not re.fullmatch(r"[0-9a-f]{64}", digest)
+        or digest != str(record.get("stdout_sha256") or "").strip().lower()
+    ):
+        return ["Scudo benchmark stdout path and SHA-256 are not bound to the wrapper record"]
+    path = Path(path_text).expanduser()
+    if not path.is_absolute():
+        path = ROOT / path
+    try:
+        stdout_bytes = path.read_bytes()
+    except OSError as exc:
+        return [f"Scudo benchmark stdout evidence is unavailable: {exc}"]
+    if hashlib.sha256(stdout_bytes).hexdigest() != digest:
+        return ["Scudo benchmark stdout evidence SHA-256 does not match the local artifact"]
+
+    expected_names = record.get("benchmarks")
+    if not isinstance(expected_names, list) or not expected_names:
+        return ["Scudo paper-workload-driver record lacks selected benchmark identities"]
+    expected = [str(name).strip() for name in expected_names if str(name).strip()]
+    rows: List[Dict[str, Any]] = []
+    for raw in stdout_bytes.decode("utf-8", errors="replace").splitlines():
+        match = BENCH_LINE.match(raw.strip())
+        if not match:
+            continue
+        ns_text = match.group("ns").replace(",", "")
+        rows.append(
+            {
+                "benchmark": match.group("name"),
+                "ns_per_iter": float(ns_text) if "." in ns_text else int(ns_text),
+            }
+        )
+    bench_filter = str(record.get("bench_filter") or "").strip()
+    command = record.get("command")
+    if not isinstance(command, list) or not all(isinstance(item, str) for item in command):
+        return ["Scudo paper-workload-driver record lacks its exact benchmark command"]
+    separators = [index for index, item in enumerate(command) if item == "--"]
+    if bench_filter:
+        if len(separators) != 1 or command[separators[0] + 1 :] != [bench_filter]:
+            return ["Scudo paper-workload-driver bench filter does not match its libtest command"]
+    elif separators:
+        return ["Scudo paper-workload-driver command contains unrecorded libtest arguments"]
+    timing_rows = [
+        row
+        for row in rows
+        if not str(row.get("benchmark") or "").startswith(
+            ("aaa_semantic_auto_metadata_", "zzz_semantic_auto_metadata_")
+        )
+    ]
+    if bench_filter and any(
+        bench_filter not in str(row.get("benchmark") or "") for row in timing_rows
+    ):
+        return ["Scudo digest-bound stdout contains rows outside its recorded libtest filter"]
+    if {row["benchmark"] for row in timing_rows} != set(expected) or len(timing_rows) != len(expected):
+        return [
+            "Scudo wrapper selected benchmark set does not match its digest-bound command/filter output"
+        ]
+    selected = timing_rows
+    if len(selected) != len(expected) or {row["benchmark"] for row in selected} != set(expected):
+        return ["Scudo wrapper benchmark identities do not match digest-bound libtest stdout"]
+    raw_ns = geomean(float(row["ns_per_iter"]) for row in selected)
+    recorded_ns = finite_number(record.get("ns_per_iter"))
+    recorded_seconds = sample_successful_timing_value(record)
+    if (
+        raw_ns is None
+        or recorded_ns is None
+        or recorded_seconds is None
+        or not math.isclose(raw_ns, recorded_ns, rel_tol=1e-12, abs_tol=1e-12)
+        or not math.isclose(raw_ns / 1_000_000_000.0, recorded_seconds, rel_tol=1e-12, abs_tol=1e-15)
+    ):
+        return ["Scudo wrapper timing does not match digest-bound libtest stdout"]
+    return []
+
+
+def scudo_wrapper_timing_binding_blockers(record: Dict[str, Any]) -> List[str]:
+    """Verify the final wrapper-owned timing identity against one local artifact."""
+
+    if _PAPER_WORKLOAD_DRIVER is None or not hasattr(
+        _PAPER_WORKLOAD_DRIVER,
+        "scudo_timing_binding_payload",
+    ):
+        return ["canonical Scudo timing-binding verifier is unavailable"]
+    binding = record.get("scudo_timing_binding")
+    if not isinstance(binding, dict):
+        return ["Scudo wrapper record lacks a digest-bound timing identity"]
+    evidence = record.get("evidence")
+    evidence = evidence if isinstance(evidence, list) else []
+    entries = [
+        entry
+        for entry in evidence
+        if isinstance(entry, dict) and entry.get("kind") == "scudo_timing_binding_json"
+    ]
+    if len(entries) != 1 or not scudo_strict_json_equal(entries[0], binding):
+        return ["Scudo wrapper timing binding is missing or ambiguous in raw evidence"]
+    path_text = str(binding.get("path") or "").strip()
+    digest = str(binding.get("sha256") or "").strip().lower()
+    if not path_text or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        return ["Scudo wrapper timing binding lacks path or SHA-256"]
+    path = Path(path_text).expanduser()
+    if not path.is_absolute():
+        path = ROOT / path
+    try:
+        binding_bytes = path.read_bytes()
+    except OSError as exc:
+        return [f"Scudo wrapper timing binding is unavailable: {exc}"]
+    if hashlib.sha256(binding_bytes).hexdigest() != digest:
+        return ["Scudo wrapper timing-binding SHA-256 does not match the local artifact"]
+    try:
+        observed = json.loads(binding_bytes)
+        expected = _PAPER_WORKLOAD_DRIVER.scudo_timing_binding_payload(record)
+    except (json.JSONDecodeError, OSError, TypeError, ValueError) as exc:
+        return [f"Scudo wrapper timing binding could not be verified: {exc}"]
+    if not scudo_strict_json_equal(observed, expected):
+        return ["Scudo wrapper timing or measurement identity differs from its digest-bound artifact"]
+    return []
+
+
+def scudo_attested_record_timing_blockers(record: Dict[str, Any]) -> List[str]:
+    source = str(record.get("source") or "").strip()
+    if source == "paper-workload-driver":
+        return unique_strings(
+            [
+                *scudo_paper_workload_timing_blockers(record),
+                *scudo_wrapper_timing_binding_blockers(record),
+            ]
+        )
+    return scudo_wrapper_timing_binding_blockers(record)
+
+
+def scudo_attested_records_for_sample(
+    sample: Dict[str, Any],
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """Resolve only allowlisted timing-to-attestation ownership shapes."""
+
+    source = str(sample.get("source") or "").strip()
+    if source in SCUDO_ATTESTED_RECORD_SOURCES:
+        direct_blockers = scudo_attested_record_timing_blockers(sample)
+        return ([sample] if not direct_blockers else []), direct_blockers
+    if source != "paper-performance-plan-run":
+        return [], []
+
+    blockers: List[str] = []
+    if (
+        sample.get("success") is not True
+        or sample.get("exit_code") != 0
+        or sample.get("measurement_source") != "stdout_json"
+        or sample.get("stdout_truncated") is not False
+    ):
+        blockers.append(
+            "Scudo plan wrapper must prove successful exit, complete stdout, and stdout_json timing"
+        )
+        return [], blockers
+
+    metadata = sample.get("metric_metadata")
+    if not isinstance(metadata, dict):
+        return [], ["Scudo plan wrapper lacks metric_metadata parsed from stdout"]
+    objects, stdout_blockers = scudo_plan_stdout_json_objects(sample)
+    blockers.extend(stdout_blockers)
+    if blockers:
+        return [], blockers
+    if not scudo_strict_json_equal(objects[-1], metadata):
+        return [], ["Scudo plan metric_metadata is not the final digest-bound stdout JSON record"]
+    if not scudo_same_timing(sample, metadata):
+        return [], ["Scudo plan timing does not equal its digest-bound metric JSON timing"]
+    if not scudo_matching_record_identity(sample, metadata):
+        return [], ["Scudo plan dataset or benchmark identity differs from its metric JSON"]
+    if normalize_sample_allocator(metadata.get("allocator") or metadata.get("feature")) != "scudo":
+        return [], ["Scudo plan metric JSON names a different allocator"]
+
+    metadata_source = str(metadata.get("source") or "").strip()
+    if metadata_source in SCUDO_ATTESTED_RECORD_SOURCES:
+        timing_blockers = scudo_attested_record_timing_blockers(metadata)
+        return ([metadata] if not timing_blockers else []), timing_blockers
+    if metadata_source != "paper-external-workload-adapter":
+        return [], ["Scudo plan metric JSON is not an allowlisted allocator wrapper record"]
+
+    child = metadata.get("child_record")
+    if not isinstance(child, dict):
+        return [], ["Scudo external adapter metric lacks its allocator-wrapper child record"]
+    if str(child.get("source") or "").strip() not in SCUDO_ATTESTED_RECORD_SOURCES:
+        return [], ["Scudo external adapter child is not an allowlisted allocator wrapper record"]
+    if len(objects) < 2 or not scudo_strict_json_equal(objects[-2], child):
+        return [], ["Scudo external adapter child is not the preceding digest-bound stdout JSON record"]
+    if metadata.get("success") is not True or not scudo_same_timing(metadata, child):
+        return [], ["Scudo external adapter timing does not equal its successful child timing"]
+    if not scudo_matching_record_identity(metadata, child):
+        return [], ["Scudo external adapter dataset or benchmark identity differs from its child"]
+    if normalize_sample_allocator(child.get("allocator") or child.get("feature")) != "scudo":
+        return [], ["Scudo external adapter child names a different allocator"]
+    timing_blockers = scudo_attested_record_timing_blockers(child)
+    return ([child] if not timing_blockers else []), timing_blockers
+
+
+def scudo_local_runtime_authenticity_blockers(
+    runtime: str,
+    identity: Dict[str, Any],
+    runtime_probe: Dict[str, Any],
+) -> List[str]:
+    """Re-hash and re-authenticate imported standalone-runtime evidence."""
+
+    blockers: List[str] = []
+    path = Path(runtime)
+    try:
+        current_identity = (
+            _PAPER_WORKLOAD_DRIVER.scudo_runtime_library_identity(path)
+            if _PAPER_WORKLOAD_DRIVER is not None
+            else None
+        )
+    except (OSError, RuntimeError, ValueError) as exc:
+        current_identity = None
+        blockers.append(f"recorded Scudo runtime is unavailable for local revalidation: {exc}")
+    if not isinstance(current_identity, dict):
+        if not blockers:
+            blockers.append("canonical Scudo runtime identity revalidation is unavailable")
+        return blockers
+
+    for key in ("realpath", "sha256", "size_bytes", "platform", "architecture"):
+        if current_identity.get(key) != identity.get(key):
+            blockers.append(f"recorded Scudo runtime identity {key} does not match the local artifact")
+
+    recorded_authenticity = runtime_probe.get("runtime_authenticity")
+    recorded_authenticity = recorded_authenticity if isinstance(recorded_authenticity, dict) else {}
+    if (
+        runtime_probe.get("runtime_authenticity_verified") is not True
+        or recorded_authenticity.get("ok") is not True
+        or recorded_authenticity.get("runtime_authenticity_verified") is not True
+    ):
+        blockers.append("Scudo sample lacks trusted standalone-runtime authenticity provenance")
+        return blockers
+    if _PAPER_WORKLOAD_DRIVER is None or not hasattr(
+        _PAPER_WORKLOAD_DRIVER,
+        "scudo_runtime_authenticity_probe",
+    ):
+        blockers.append("canonical Scudo runtime authenticity revalidation is unavailable")
+        return blockers
+    try:
+        current_authenticity = _PAPER_WORKLOAD_DRIVER.scudo_runtime_authenticity_probe(path)
+    except (OSError, RuntimeError, ValueError) as exc:
+        blockers.append(f"Scudo runtime authenticity revalidation failed: {exc}")
+        return blockers
+    if (
+        not isinstance(current_authenticity, dict)
+        or current_authenticity.get("ok") is not True
+        or current_authenticity.get("runtime_authenticity_verified") is not True
+    ):
+        blockers.append("recorded standalone runtime failed current Scudo authenticity verification")
+        return blockers
+    current_auth_identity = current_authenticity.get("runtime_library_identity")
+    if not isinstance(current_auth_identity, dict) or current_auth_identity != current_identity:
+        blockers.append("Scudo authenticity result is not bound to the locally re-hashed runtime")
+    recorded_auth_identity = recorded_authenticity.get("runtime_library_identity")
+    if not isinstance(recorded_auth_identity, dict) or recorded_auth_identity != identity:
+        blockers.append("recorded Scudo authenticity result is not bound to its runtime identity")
+    if recorded_authenticity.get("verification_scheme") != current_authenticity.get("verification_scheme"):
+        blockers.append("recorded Scudo authenticity scheme does not match the canonical verifier")
+    return blockers
+
+
+def scudo_runtime_marker_evidence_blockers(record: Dict[str, Any]) -> List[str]:
+    """Require a digest-bound stderr artifact containing the exact marker line."""
+
+    entries: List[Dict[str, Any]] = []
+    for key in ("evidence", "raw_evidence"):
+        values = record.get(key)
+        if isinstance(values, list):
+            entries.extend(value for value in values if isinstance(value, dict))
+    direct_fields = (
+        ("stderr", "stderr_sha256", "run_stderr"),
+        ("server_stderr_path", "server_stderr_sha256", "server_stderr"),
+        ("redis_benchmark_stderr_path", "redis_benchmark_stderr_sha256", "redis_benchmark_stderr"),
+    )
+    for path_key, digest_key, kind in direct_fields:
+        path_value = str(record.get(path_key) or "").strip()
+        digest_value = str(record.get(digest_key) or "").strip()
+        if path_value or digest_value:
+            entries.append({"path": path_value, "sha256": digest_value, "kind": kind})
+
+    saw_stderr_entry = False
+    for entry in entries:
+        kind = str(entry.get("kind") or entry.get("role") or "").strip().lower()
+        path_text = str(entry.get("path") or entry.get("file") or "").strip()
+        if "stderr" not in kind and "stderr" not in Path(path_text).name.lower():
+            continue
+        saw_stderr_entry = True
+        digest = str(entry.get("sha256") or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", digest) or not path_text:
+            continue
+        path = Path(path_text).expanduser()
+        if not path.is_absolute():
+            path = ROOT / path
+        try:
+            stderr_bytes = path.read_bytes()
+            if hashlib.sha256(stderr_bytes).hexdigest() != digest:
+                continue
+            stderr_text = stderr_bytes.decode("utf-8", errors="replace")
+        except OSError:
+            continue
+        marker_present = bool(
+            _PAPER_WORKLOAD_DRIVER is not None
+            and hasattr(_PAPER_WORKLOAD_DRIVER, "scudo_runtime_identity_marker_present")
+            and _PAPER_WORKLOAD_DRIVER.scudo_runtime_identity_marker_present(stderr_text)
+        )
+        if marker_present:
+            return []
+    if saw_stderr_entry:
+        return ["Scudo stderr evidence is missing, hash-mismatched, or lacks the exact runtime marker"]
+    return ["Scudo sample lacks digest-bound child stderr evidence for the exact runtime marker"]
+
+
+def scudo_sample_identity_blockers(sample: Dict[str, Any]) -> List[str]:
+    """Reject Scudo labels until one wrapper record proves the full runtime route."""
+
+    allocator = normalize_sample_allocator(sample.get("allocator") or sample.get("feature")).lower()
+    if allocator != "scudo":
+        return []
+
+    blockers: List[str] = []
+    attested_records, ownership_blockers = scudo_attested_records_for_sample(sample)
+    blockers.extend(ownership_blockers)
+    complete_records: List[Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]] = []
+    for candidate in attested_records:
+        semantics = candidate.get("allocator_semantics")
+        execution = candidate.get("scudo_execution_probe")
+        env = scudo_record_subprocess_env(candidate)
+        if not isinstance(semantics, dict) or not isinstance(execution, dict):
+            continue
+        if (
+            semantics.get("paper_allocator_equivalent") is True
+            and semantics.get("runtime_identity_verified") is True
+            and semantics.get("runtime_authenticity_verified") is True
+            and execution.get("ok") is True
+            and execution.get("runtime_verified") is True
+            and execution.get("runtime_authenticity_verified") is True
+            and execution.get("paper_allocator_equivalent") is True
+            and execution.get("selected_mode") in {"rust-sanitizer", "ld-preload"}
+        ):
+            complete_records.append((candidate, semantics, execution, env))
+    if not complete_records:
+        blockers.append(
+            "scudo sample lacks one recognized wrapper record containing verified semantics, execution, authenticity, and child environment"
+        )
+        return unique_strings(blockers)
+
+    verified_record, verified_semantics, verified_execution, verified_env = complete_records[0]
+    blockers.extend(scudo_runtime_marker_evidence_blockers(verified_record))
+    mode = verified_execution.get("selected_mode")
+    if mode == "ld-preload":
+        runtime = str(verified_execution.get("runtime_library") or "").strip()
+        runtime_probe = verified_execution.get("runtime_probe")
+        runtime_probe = runtime_probe if isinstance(runtime_probe, dict) else {}
+        identity = runtime_probe.get("runtime_library_identity")
+        identity = identity if isinstance(identity, dict) else {}
+        identity_realpath = str(identity.get("realpath") or "").strip()
+        identity_sha256 = str(identity.get("sha256") or "").strip().lower()
+        identity_size = identity.get("size_bytes")
+        immutable_identity = bool(
+            runtime
+            and runtime_probe.get("ok") is True
+            and identity_realpath == runtime
+            and re.fullmatch(r"[0-9a-f]{64}", identity_sha256)
+            and isinstance(identity_size, int)
+            and not isinstance(identity_size, bool)
+            and identity_size > 0
+        )
+        if not immutable_identity:
+            blockers.append("scudo LD_PRELOAD sample lacks immutable standalone-runtime identity provenance")
+        else:
+            blockers.extend(
+                scudo_local_runtime_authenticity_blockers(
+                    runtime,
+                    identity,
+                    runtime_probe,
+                )
+            )
+        if not (
+            str(verified_env.get("UNIALLOC_SCUDO_RUNTIME_LIBRARY") or "").strip() == runtime
+            and runtime
+            in {
+                entry
+                for entry in re.split(r"[\s:]+", str(verified_env.get("LD_PRELOAD") or ""))
+                if entry
+            }
+        ):
+            blockers.append("scudo LD_PRELOAD sample lacks the recorded runtime path in its child environment")
+        semantics_identity = verified_semantics.get("scudo_runtime_library_identity")
+        if semantics_identity != identity:
+            blockers.append("Scudo allocator semantics are not bound to the execution runtime identity")
+    else:
+        if not scudo_sanitizer_rustflags_present(verified_env.get("RUSTFLAGS")):
+            blockers.append("scudo rust-sanitizer sample lacks the sanitizer RUSTFLAGS child environment")
+        blockers.extend(scudo_local_sanitizer_route_blockers(verified_execution, verified_record))
+    return unique_strings(blockers)
+
+
 def sample_claim_grade_blockers(sample: Dict[str, Any], samples_path: Optional[Path] = None) -> List[str]:
     candidates = sample_metadata_candidates(sample)
     blockers: List[str] = []
@@ -1942,6 +2651,7 @@ def sample_claim_grade_blockers(sample: Dict[str, Any], samples_path: Optional[P
         if note and blockers:
             blockers.append(note)
         blockers.extend(source_contract_claim_grade_blockers(candidate))
+    blockers.extend(scudo_sample_identity_blockers(sample))
     if not benchmark_owned_json:
         blockers.append("sample does not prove benchmark_owned_json=true timing")
     blockers.extend(rpolars_sample_claim_grade_blockers(sample))
@@ -2053,8 +2763,39 @@ def is_unfolded_roxipng_plan_fragment(sample: Dict[str, Any]) -> bool:
     )
 
 
+def scudo_sample_execution_evidence_identity(
+    sample: Dict[str, Any],
+) -> Optional[Tuple[str, ...]]:
+    """Return one stable identity for the raw execution behind a Scudo row.
+
+    Every accepted ownership shape resolves to its nested allocator wrapper's
+    canonical timing-binding digest.  The outer plan stdout proves structure;
+    it cannot turn one child execution into extra runs by adding irrelevant
+    output.  Paths are deliberately excluded: copying the same evidence
+    artifact to a new path must not create a second execution.
+    """
+
+    allocator = normalize_sample_allocator(sample.get("allocator") or sample.get("feature"))
+    if allocator != "scudo":
+        return None
+    attested_records, blockers = scudo_attested_records_for_sample(sample)
+    if blockers or not attested_records:
+        return None
+    digests: List[str] = []
+    for record in attested_records:
+        binding = record.get("scudo_timing_binding")
+        if not isinstance(binding, dict):
+            return None
+        digest = str(binding.get("sha256") or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            return None
+        digests.append(digest)
+    return ("scudo-timing-binding-sha256", *sorted(digests))
+
+
 def build_sample_groups(samples: List[Dict[str, Any]]) -> Dict[Tuple[str, str, str], List[Dict[str, Any]]]:
     groups: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = {}
+    scudo_evidence_seen: Dict[Tuple[str, str, str], Set[Tuple[str, ...]]] = {}
     for sample in samples:
         if is_unfolded_roxipng_plan_fragment(sample):
             continue
@@ -2065,6 +2806,18 @@ def build_sample_groups(samples: List[Dict[str, Any]]) -> Dict[Tuple[str, str, s
         allocator = normalize_sample_allocator(sample.get("allocator") or sample.get("feature"))
         if not dataset or not benchmark or not allocator:
             continue
+        if allocator == "scudo" and scudo_sample_identity_blockers(sample):
+            # A non-equivalent Scudo label is unusable even for diagnostic
+            # ratios: omit the timing instead of publishing System as Scudo.
+            continue
+        if allocator == "scudo":
+            execution_identity = scudo_sample_execution_evidence_identity(sample)
+            if execution_identity is None:
+                continue
+            key = (dataset, benchmark, allocator)
+            if execution_identity in scudo_evidence_seen.setdefault(key, set()):
+                continue
+            scudo_evidence_seen[key].add(execution_identity)
         if sample_time_value(sample) is None:
             continue
         groups.setdefault((dataset, benchmark, allocator), []).append(sample)
@@ -2556,6 +3309,7 @@ def build_paper_performance_samples_audit(
     nonfinite_timing_count = 0
     failed_sample_count = 0
     template_record_count = 0
+    scudo_evidence_seen: Dict[Tuple[str, str, str], Set[Tuple[str, ...]]] = {}
     for index, sample in enumerate(samples, start=1):
         audited = audit_paper_performance_sample_record(sample, index, samples_path)
         unfolded_roxipng_fragment = is_unfolded_roxipng_plan_fragment(sample)
@@ -2566,6 +3320,26 @@ def build_paper_performance_samples_audit(
                     "unfolded R-Oxipng plan fragment requires specialized surface folding before generic import",
                 ]
             )
+        key = sample_cell_key(sample)
+        claim_grade_usable = sample_is_claim_grade_usable(sample, samples_path)
+        allocator = normalize_sample_allocator(sample.get("allocator") or sample.get("feature"))
+        if key is not None and allocator == "scudo" and claim_grade_usable:
+            execution_identity = scudo_sample_execution_evidence_identity(sample)
+            if execution_identity is None:
+                audited["issues"] = unique_strings(
+                    [*audited.get("issues", []), "Scudo sample lacks a stable execution evidence identity"]
+                )
+                claim_grade_usable = False
+            elif execution_identity in scudo_evidence_seen.setdefault(key, set()):
+                audited["issues"] = unique_strings(
+                    [
+                        *audited.get("issues", []),
+                        "duplicate Scudo execution evidence replay does not count as another run",
+                    ]
+                )
+                claim_grade_usable = False
+            else:
+                scudo_evidence_seen[key].add(execution_identity)
         audited_samples.append(audited)
         if audited.get("issues"):
             invalid_samples.append(audited)
@@ -2577,11 +3351,10 @@ def build_paper_performance_samples_audit(
             template_record_count += 1
         if unfolded_roxipng_fragment:
             continue
-        key = sample_cell_key(sample)
         if key is None:
             continue
         raw_counts[key] = raw_counts.get(key, 0) + 1
-        if sample_is_claim_grade_usable(sample, samples_path):
+        if claim_grade_usable:
             usable_counts[key] = usable_counts.get(key, 0) + 1
 
     missing_raw_cells: List[Dict[str, Any]] = []
@@ -8995,56 +9768,85 @@ def rustc_toolchain_command_prefix() -> List[str]:
     return command
 
 
+def scudo_execution_probe() -> Dict[str, Any]:
+    """Resolve a real Scudo execution route through the canonical workload driver.
+
+    The repository-pinned Rust toolchain may reject ``-Z sanitizer=scudo`` while
+    compiler-rt still provides a standalone Scudo runtime.  The workload driver
+    owns both probes and the selection policy; this framework records and reuses
+    that decision instead of treating the rustc sanitizer probe as the only
+    valid route.
+    """
+
+    global _SCUDO_EXECUTION_PROBE_CACHE
+    if _SCUDO_EXECUTION_PROBE_CACHE is not None:
+        return copy.deepcopy(_SCUDO_EXECUTION_PROBE_CACHE)
+    if _PAPER_WORKLOAD_DRIVER is None:
+        result = {
+            "ok": False,
+            "requested_mode": os.environ.get("UNIALLOC_SCUDO_MODE", "auto"),
+            "selected_mode": None,
+            "paper_allocator_equivalent": False,
+            "blockers": [
+                "canonical Scudo execution probe is unavailable: "
+                + str(_PAPER_WORKLOAD_DRIVER_IMPORT_ERROR or "unknown import error")
+            ],
+            "probe_source": "evaluation/scripts/paper_workload_driver.py",
+        }
+    else:
+        args = argparse.Namespace(
+            scudo_mode=os.environ.get("UNIALLOC_SCUDO_MODE", "auto"),
+            scudo_runtime_library=os.environ.get("UNIALLOC_SCUDO_RUNTIME_LIBRARY"),
+        )
+        try:
+            result = dict(_PAPER_WORKLOAD_DRIVER.scudo_execution_probe(args))
+        except Exception as exc:
+            result = {
+                "ok": False,
+                "requested_mode": args.scudo_mode,
+                "selected_mode": None,
+                "paper_allocator_equivalent": False,
+                "blockers": [f"canonical Scudo execution probe failed: {exc}"],
+            }
+        result["probe_source"] = "evaluation/scripts/paper_workload_driver.py"
+    _SCUDO_EXECUTION_PROBE_CACHE = copy.deepcopy(result)
+    return copy.deepcopy(result)
+
+
 def scudo_toolchain_probe() -> Dict[str, Any]:
+    """Compatibility view of the rustc half of the full execution probe."""
+
     global _SCUDO_TOOLCHAIN_PROBE_CACHE
     if _SCUDO_TOOLCHAIN_PROBE_CACHE is not None:
-        return dict(_SCUDO_TOOLCHAIN_PROBE_CACHE)
-    command = [
-        *rustc_toolchain_command_prefix(),
-        "-",
-        "--crate-name",
-        "___unialloc_scudo_probe",
-        "--print=cfg",
-        "-Z",
-        "sanitizer=scudo",
-    ]
-    try:
-        proc = subprocess.run(
-            command,
-            input="fn main() {}\n",
-            cwd=str(ROOT),
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=20,
-        )
+        return copy.deepcopy(_SCUDO_TOOLCHAIN_PROBE_CACHE)
+    execution = scudo_execution_probe()
+    result = execution.get("toolchain_probe")
+    if not isinstance(result, dict):
         result = {
-            "command": command,
-            "ok": proc.returncode == 0,
-            "exit_code": proc.returncode,
-            "rustflags": SCUDO_SANITIZER_RUSTFLAGS,
-            "stdout_tail": proc.stdout[-2000:],
-            "stderr_tail": proc.stderr[-4000:],
-        }
-    except subprocess.TimeoutExpired as exc:
-        result = {
-            "command": command,
             "ok": False,
-            "exit_code": None,
-            "timed_out": True,
             "rustflags": SCUDO_SANITIZER_RUSTFLAGS,
-            "stdout_tail": subprocess_text(exc.stdout)[-2000:],
-            "stderr_tail": subprocess_text(exc.stderr)[-4000:],
+            "stderr_tail": "Scudo toolchain probe unavailable",
         }
-    _SCUDO_TOOLCHAIN_PROBE_CACHE = dict(result)
-    return result
+    _SCUDO_TOOLCHAIN_PROBE_CACHE = copy.deepcopy(result)
+    return copy.deepcopy(result)
 
 
 def local_collections_dependency_env(cell: Dict[str, Any]) -> Dict[str, str]:
     allocator = str(cell.get("allocator") or "")
     env: Dict[str, str] = {}
     if allocator == "scudo":
-        env["RUSTFLAGS"] = append_env_flags(os.environ.get("RUSTFLAGS"), SCUDO_SANITIZER_RUSTFLAGS)
+        probe = scudo_execution_probe()
+        if probe.get("selected_mode") == "rust-sanitizer" and probe.get("ok"):
+            env["RUSTFLAGS"] = append_env_flags(
+                os.environ.get("RUSTFLAGS"),
+                SCUDO_SANITIZER_RUSTFLAGS,
+            )
+        elif probe.get("selected_mode") == "ld-preload" and probe.get("ok"):
+            runtime = str(probe.get("runtime_library") or "").strip()
+            if runtime:
+                runtime_path = Path(runtime)
+                env["UNIALLOC_SCUDO_RUNTIME_LIBRARY"] = str(runtime_path)
+                env["LD_PRELOAD"] = prepend_env_path(os.environ.get("LD_PRELOAD"), runtime_path)
         return env
     if allocator == "tcmalloc":
         probe = tcmalloc_library_probe()
@@ -9060,13 +9862,102 @@ def local_collections_dependency_env(cell: Dict[str, Any]) -> Dict[str, str]:
     return env
 
 
+def local_collections_dependency_env_removed(cell: Dict[str, Any]) -> List[str]:
+    if str(cell.get("allocator") or "") != "scudo":
+        return []
+    probe = scudo_execution_probe()
+    if probe.get("ok") and probe.get("selected_mode") == "rust-sanitizer":
+        return list(SCUDO_SANITIZER_REMOVED_ENV_NAMES)
+    return []
+
+
 def tcmalloc_library_available() -> bool:
     probe = tcmalloc_library_probe()
     return bool(probe.get("ctypes_find_library_tcmalloc") or probe.get("configured_library_dir"))
 
 
 def scudo_toolchain_available() -> bool:
-    return bool(scudo_toolchain_probe().get("ok"))
+    """Compatibility alias for callers that historically meant runnable Scudo."""
+
+    return scudo_execution_available()
+
+
+def scudo_execution_available() -> bool:
+    probe = scudo_execution_probe()
+    mode = probe.get("selected_mode")
+    if not probe.get("ok") or mode not in {"rust-sanitizer", "ld-preload"}:
+        return False
+    if mode == "rust-sanitizer":
+        toolchain = probe.get("toolchain_probe")
+        return isinstance(toolchain, dict) and toolchain.get("ok") is True
+    runtime = probe.get("runtime_probe")
+    return bool(
+        probe.get("runtime_library")
+        and isinstance(runtime, dict)
+        and runtime.get("ok") is True
+        and runtime.get("runtime_authenticity_verified") is True
+        and isinstance(runtime.get("runtime_authenticity"), dict)
+        and runtime["runtime_authenticity"].get("ok") is True
+    )
+
+
+def scudo_allocator_semantics(
+    probe: Optional[Dict[str, Any]] = None,
+    *,
+    runtime_verified: bool = False,
+    verification_status: str = "planned",
+) -> Dict[str, Any]:
+    execution = probe or scudo_execution_probe()
+    if _PAPER_WORKLOAD_DRIVER is not None and hasattr(
+        _PAPER_WORKLOAD_DRIVER,
+        "scudo_allocator_semantics",
+    ):
+        return dict(
+            _PAPER_WORKLOAD_DRIVER.scudo_allocator_semantics(
+                execution,
+                runtime_verified=runtime_verified,
+                verification_status=verification_status,
+            )
+        )
+    return {
+        "requested_allocator": "scudo",
+        "allocator_feature": "bench_scudo",
+        "implementation_kind": "verified_external_scudo_runtime" if runtime_verified else "planned_scudo_runtime_route",
+        "scudo_runtime_mode": execution.get("selected_mode"),
+        "scudo_runtime_library": execution.get("runtime_library"),
+        "runtime_identity_verified": runtime_verified,
+        "runtime_identity_status": verification_status,
+        "paper_allocator_equivalent": runtime_verified,
+        "equivalence_reason": execution.get("equivalence_reason"),
+    }
+
+
+def scudo_execution_runtime_record(
+    execution: Dict[str, Any],
+    *,
+    runtime_verified: bool,
+    verification_status: str,
+) -> Dict[str, Any]:
+    if _PAPER_WORKLOAD_DRIVER is not None and hasattr(
+        _PAPER_WORKLOAD_DRIVER,
+        "scudo_execution_runtime_record",
+    ):
+        return dict(
+            _PAPER_WORKLOAD_DRIVER.scudo_execution_runtime_record(
+                execution,
+                runtime_verified=runtime_verified,
+                verification_status=verification_status,
+            )
+        )
+    record = dict(execution)
+    record.update(
+        {
+            "execution_state": verification_status,
+            "runtime_verified": runtime_verified,
+            "paper_allocator_equivalent": runtime_verified,
+        }
+    )
+    return record
 
 
 def local_collections_driver_support(
@@ -9085,8 +9976,12 @@ def local_collections_driver_support(
         return False, "ptmalloc paper evidence requires a Linux/glibc host"
     if allocator == "tcmalloc" and not tcmalloc_library_available():
         return False, "tcmalloc link library was not found on this host"
-    if allocator == "scudo" and not scudo_toolchain_available():
-        return False, "scudo sanitizer runtime is not supported by the active Rust toolchain/target"
+    if allocator == "scudo" and not scudo_execution_available():
+        return (
+            False,
+            "no verified Scudo execution route is available: rustc rejected the sanitizer route "
+            "and no standalone runtime was found for LD_PRELOAD",
+        )
     return True, None
 
 
@@ -9350,10 +10245,16 @@ def build_collections_allocator_preflight_audit(
             record["build_dependency_probe"] = {"cmake": cmake_binary_probe()}
             record["package_probe"] = {"homebrew_gperftools": homebrew_package_probe("gperftools")}
         elif allocator == "scudo":
+            execution_probe = scudo_execution_probe()
             record["library_probe"] = {
                 "ctypes_find_library_scudo": ctypes.util.find_library("scudo"),
                 "in_tree_feature": feature,
-                "scudo_toolchain_probe": scudo_toolchain_probe(),
+                "scudo_execution_probe": execution_probe,
+                "selected_execution_mode": execution_probe.get("selected_mode"),
+                "runtime_library": execution_probe.get("runtime_library"),
+                "paper_allocator_equivalent": execution_probe.get("paper_allocator_equivalent") is True,
+                "scudo_toolchain_probe": execution_probe.get("toolchain_probe"),
+                "scudo_runtime_probe": execution_probe.get("runtime_probe"),
             }
         elif allocator == "ptmalloc":
             record["library_probe"] = {
@@ -9393,8 +10294,11 @@ def build_collections_allocator_preflight_audit(
             blockers.append(f"Cargo feature {feature} is not declared")
         if allocator == "scudo" and not feature:
             blockers.append("scudo has no in-tree Collections feature mapping")
-        if allocator == "scudo" and not scudo_toolchain_available():
-            blockers.append("scudo sanitizer runtime is not supported by the active Rust toolchain/target")
+        if allocator == "scudo" and not scudo_execution_available():
+            blockers.append(
+                "no verified Scudo execution route is available through either the Rust sanitizer "
+                "or a standalone compiler-rt runtime loaded with LD_PRELOAD"
+            )
         if allocator == "snmalloc" and not (record.get("build_dependency_probe", {}).get("cmake", {}).get("configured_cmake_bin")):
             blockers.append("snmalloc fresh build requires cmake")
         if allocator == "ptmalloc" and platform.system() != "Linux" and not allow_host_allocator_mismatch:
@@ -9466,7 +10370,11 @@ def build_collections_allocator_preflight_audit(
             "This audit explains local Collections allocator feasibility; it is not performance evidence.",
             "ptmalloc paper evidence requires Linux/glibc host provenance unless a run is explicitly marked as a non-claim smoke run.",
             "tcmalloc must resolve and link libtcmalloc before local std_bench cells can be treated as runnable.",
-            "scudo has an in-tree bench feature but remains blocked unless the active Rust toolchain/target accepts the scudo sanitizer runtime or an external wrapper supplies provenance.",
+            (
+                "scudo is runnable when the canonical execution probe selects either the Rust "
+                "sanitizer route or a concrete compiler-rt standalone runtime for LD_PRELOAD; "
+                "the selected mode and runtime path are recorded above."
+            ),
         ],
     }
 
@@ -9530,13 +10438,24 @@ def paper_performance_cell_capability(
     )
     if supported:
         dependency_env = local_collections_dependency_env(cell)
-        return {
+        capability = {
             "kind": "local_collections_driver",
             "locally_runnable": True,
             "claim_grade_blocker": None,
             "reason": "in-tree std_bench Collections driver is available for this allocator/dataset cell",
             **({"dependency_env": dependency_env} if dependency_env else {}),
         }
+        if allocator == "scudo":
+            capability["scudo_execution_probe"] = scudo_execution_probe()
+            capability["allocator_semantics"] = scudo_allocator_semantics(
+                capability["scudo_execution_probe"],
+                runtime_verified=False,
+                verification_status="planned",
+            )
+            capability["runtime_identity_requirement"] = (
+                "benchmark must emit the exact Scudo runtime identity marker before timing is accepted"
+            )
+        return capability
     if benchmark != "Collections":
         adapter_record = external_adapter_config_record_for_cell(cell, external_config_audit)
         if adapter_record and adapter_record.get("claim_grade_runner_ready") is True:
@@ -9621,10 +10540,11 @@ def paper_performance_cell_capability(
         }
     if allocator == "scudo":
         return {
-            "kind": "toolchain_blocked_allocator",
+            "kind": "allocator_runtime_blocked",
             "locally_runnable": False,
-            "claim_grade_blocker": "scudo sanitizer runtime/toolchain support required",
-            "reason": reason or "scudo sanitizer runtime is not supported by the active Rust toolchain/target",
+            "claim_grade_blocker": "a verified Scudo sanitizer or standalone-runtime execution route is required",
+            "reason": reason or "no verified Scudo execution route is available on this host",
+            "scudo_execution_probe": scudo_execution_probe(),
         }
     if allocator == "tcmalloc" and "tcmalloc" in str(reason or ""):
         return {
@@ -9874,10 +10794,10 @@ def blocked_collections_cell_remediation(capability: Dict[str, Any]) -> List[str
             "prove the wrapper selects the requested allocator for the Collections row",
             "run the full Collections row with repeated finite samples and raw evidence digests",
         ]
-    if kind == "toolchain_blocked_allocator":
+    if kind in {"allocator_runtime_blocked", "toolchain_blocked_allocator"}:
         return [
-            "run the Collections cell with a Rust toolchain/target that accepts the scudo sanitizer runtime",
-            "record the sanitizer/toolchain probe and allocator-selection flags in provenance",
+            "provide either a Rust Scudo sanitizer route or a compiler-rt Scudo standalone runtime",
+            "record the selected execution mode, runtime path, and allocator-selection environment in provenance",
             "run the full Collections row with repeated finite samples and raw evidence digests",
         ]
     return [
@@ -9910,9 +10830,9 @@ def blocked_collections_cell_required_evidence(capability: Dict[str, Any]) -> Li
             "allocator wrapper or feature implementation evidence",
             *common,
         ]
-    if kind == "toolchain_blocked_allocator":
+    if kind in {"allocator_runtime_blocked", "toolchain_blocked_allocator"}:
         return [
-            "passing scudo sanitizer toolchain/runtime probe artifact",
+            "passing Scudo execution probe with sanitizer or standalone-runtime provenance",
             *common,
         ]
     return common
@@ -9980,7 +10900,8 @@ def paper_workload_wrapper_manifest_rule(
     elif (
         docker_collections_driver
         and str(contract.get("benchmark") or "") == "Collections"
-        and str(capability.get("kind") or "") in {"host_blocked_allocator", "toolchain_blocked_allocator"}
+        and str(capability.get("kind") or "")
+        in {"host_blocked_allocator", "allocator_runtime_blocked", "toolchain_blocked_allocator"}
     ):
         command_template = paper_collections_docker_driver_command(
             cell,
@@ -9991,7 +10912,7 @@ def paper_workload_wrapper_manifest_rule(
             timeout=int(contract.get("timeout") or 1800),
         )
         template_note = (
-            "This rule delegates a host/toolchain-blocked Collections cell to "
+            "This rule delegates a host/runtime-blocked Collections cell to "
             "paper_collections_docker_driver.py. It remains fail-closed until "
             "audit dry-run proves Docker image, glibc, Python, Cargo, and the "
             "repo-pinned Rust toolchain are available."
@@ -23034,7 +23955,6 @@ def build_redis_load_json_validation_summary(results: Dict[str, Dict[str, Any]])
     success_semantics = success.get("allocator_semantics") if isinstance(success.get("allocator_semantics"), dict) else {}
     ptmalloc_semantics = ptmalloc.get("allocator_semantics") if isinstance(ptmalloc.get("allocator_semantics"), dict) else {}
     scudo_semantics = scudo.get("allocator_semantics") if isinstance(scudo.get("allocator_semantics"), dict) else {}
-    scudo_blockers = scudo_semantics.get("claim_grade_blockers") if isinstance(scudo_semantics.get("claim_grade_blockers"), list) else []
     return {
         "redis_load_success_ok": (
             results.get("redis_load_success", {}).get("returncode") == 0
@@ -23063,19 +23983,25 @@ def build_redis_load_json_validation_summary(results: Dict[str, Dict[str, Any]])
                 for blocker in (success.get("claim_grade_blockers") or [])
             )
         ),
-        "redis_load_system_allocator_semantics_ok": (
+        "redis_load_ptmalloc_allocator_semantics_ok": (
             results.get("redis_load_ptmalloc_semantics", {}).get("returncode") == 0
             and ptmalloc.get("success") is True
             and ptmalloc_semantics.get("requested_allocator") == "ptmalloc"
             and ptmalloc_semantics.get("allocator_feature") == "bench_ptmalloc"
             and ptmalloc_semantics.get("implementation_kind") == "std_alloc_system_fallback"
-            and results.get("redis_load_scudo_semantics", {}).get("returncode") == 0
-            and scudo.get("success") is True
+        ),
+        "redis_load_scudo_fallback_refused_before_timing": (
+            results.get("redis_load_scudo_semantics", {}).get("returncode") in {78, 86}
+            and scudo.get("success") is False
             and scudo_semantics.get("requested_allocator") == "scudo"
             and scudo_semantics.get("allocator_feature") == "bench_scudo"
-            and scudo_semantics.get("implementation_kind") == "std_alloc_system_fallback"
             and scudo_semantics.get("paper_allocator_equivalent") is False
-            and any("bench_scudo" in str(blocker) and "std::alloc::System" in str(blocker) for blocker in scudo_blockers)
+            and finite_number(scudo.get("seconds")) is None
+            and finite_number(scudo.get("operations_per_second")) is None
+            and (
+                "Scudo execution unavailable" in str(scudo.get("error") or "")
+                or "runtime identity marker" in str(scudo.get("error") or "")
+            )
         ),
         "startup_timeout_refused": (
             results.get("startup_timeout_refused", {}).get("returncode") != 0
@@ -23421,6 +24347,7 @@ def validate_paper_external_redis_load_json_wrapper(args: argparse.Namespace) ->
         "notes": [
             "Synthetic fixture only; this validates Redis/RESP load timing JSON and is not workload timing evidence.",
             "The positive fixture proves a child Redis-compatible server can be launched, probed with PING, driven with SET/GET operations, measured, and terminated with finite JSON timing.",
+            "The Scudo fixture proves a server without the runtime identity guard is rejected before warmup or measured operations, even when a standalone runtime route is discoverable.",
             "The negative fixture proves readiness failures produce machine-readable failure JSON instead of synthetic timing.",
             "The early-exit fixture proves a child server build/runtime failure is surfaced immediately with stderr tail and exit code instead of waiting for the full startup timeout.",
             "The RRedis runner fixture proves old upstream target-specific dependencies can be prepared for the active host triple before delegating to a Redis JSON timing bridge.",
@@ -23585,9 +24512,11 @@ def build_redis_benchmark_json_validation_summary(results: Dict[str, Dict[str, A
 
     text_success = last_json("redis_benchmark_text_success")
     csv_success = last_json("redis_benchmark_csv_success")
+    scudo_refused = last_json("redis_benchmark_scudo_refused")
     missing = last_json("redis_benchmark_missing_binary")
     startup = last_json("redis_benchmark_startup_failure")
-    scudo_semantics = csv_success.get("allocator_semantics") if isinstance(csv_success.get("allocator_semantics"), dict) else {}
+    csv_semantics = csv_success.get("allocator_semantics") if isinstance(csv_success.get("allocator_semantics"), dict) else {}
+    scudo_semantics = scudo_refused.get("allocator_semantics") if isinstance(scudo_refused.get("allocator_semantics"), dict) else {}
     text_context = text_success.get("paper_context") if isinstance(text_success.get("paper_context"), dict) else {}
     csv_context = csv_success.get("paper_context") if isinstance(csv_success.get("paper_context"), dict) else {}
     text_rows = text_success.get("redis_benchmark_rows") if isinstance(text_success.get("redis_benchmark_rows"), list) else []
@@ -23634,13 +24563,21 @@ def build_redis_benchmark_json_validation_summary(results: Dict[str, Dict[str, A
         ),
         "redis_benchmark_allocator_semantics_ok": (
             csv_success.get("claim_grade") is False
+            and csv_semantics.get("requested_allocator") == "unialloc"
+            and csv_semantics.get("allocator_feature") == "bench_ourself"
+            and csv_semantics.get("paper_allocator_equivalent") is True
+        ),
+        "redis_benchmark_scudo_fallback_refused_before_timing": (
+            results.get("redis_benchmark_scudo_refused", {}).get("returncode") in {78, 86}
+            and scudo_refused.get("success") is False
             and scudo_semantics.get("requested_allocator") == "scudo"
             and scudo_semantics.get("allocator_feature") == "bench_scudo"
-            and scudo_semantics.get("implementation_kind") == "std_alloc_system_fallback"
             and scudo_semantics.get("paper_allocator_equivalent") is False
-            and any(
-                "bench_scudo" in str(blocker) and "std::alloc::System" in str(blocker)
-                for blocker in (scudo_semantics.get("claim_grade_blockers") or [])
+            and finite_number(scudo_refused.get("seconds")) is None
+            and finite_number(scudo_refused.get("operations_per_second")) is None
+            and (
+                "Scudo execution unavailable" in str(scudo_refused.get("error") or "")
+                or "runtime identity marker" in str(scudo_refused.get("error") or "")
             )
         ),
         "redis_benchmark_missing_binary_reported": (
@@ -23808,6 +24745,7 @@ def validate_paper_external_redis_benchmark_json_wrapper(args: argparse.Namespac
 
     text_port = reserve_local_port()
     csv_port = reserve_local_port()
+    scudo_port = reserve_local_port()
     closed_port = reserve_local_port()
     results = {
         "redis_benchmark_text_success": run_adapter_validation_case(
@@ -23833,7 +24771,7 @@ def validate_paper_external_redis_benchmark_json_wrapper(args: argparse.Namespac
             [
                 sys.executable,
                 str(wrapper),
-                *common_args_for_allocator("scudo"),
+                *common_args_for_allocator("unialloc"),
                 "--redis-benchmark-bin",
                 str(csv_benchmark),
                 "--csv",
@@ -23845,6 +24783,25 @@ def validate_paper_external_redis_benchmark_json_wrapper(args: argparse.Namespac
                 sys.executable,
                 str(server_script),
                 str(csv_port),
+            ],
+        ),
+        "redis_benchmark_scudo_refused": run_adapter_validation_case(
+            "redis_benchmark_scudo_refused",
+            [
+                sys.executable,
+                str(wrapper),
+                *common_args_for_allocator("scudo"),
+                "--redis-benchmark-bin",
+                str(csv_benchmark),
+                "--csv",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(scudo_port),
+                "--",
+                sys.executable,
+                str(server_script),
+                str(scudo_port),
             ],
         ),
         "redis_benchmark_missing_binary": run_adapter_validation_case(
@@ -23884,6 +24841,7 @@ def validate_paper_external_redis_benchmark_json_wrapper(args: argparse.Namespac
         "notes": [
             "Synthetic fixture only; this validates redis-benchmark text/CSV parsing and is not workload timing evidence.",
             "The positive fixtures prove a Redis-compatible child server can be launched, probed with PING, measured through a redis-benchmark-compatible client, parsed, and terminated with finite JSON timing.",
+            "The Scudo fixture proves a server without the runtime identity guard is rejected before redis-benchmark timing, even when a standalone runtime route is discoverable.",
             "The missing-binary fixture proves absent redis-benchmark tooling emits machine-readable failure JSON instead of synthetic timing.",
             "The startup-failure fixture proves the bridge refuses to run redis-benchmark until the child server is RESP-ready.",
         ],
@@ -25185,7 +26143,7 @@ def build_paper_performance_plan_skeleton(
             elif (
                 docker_collections_driver
                 and str(cell_capability.get("kind") or "")
-                in {"host_blocked_allocator", "toolchain_blocked_allocator"}
+                in {"host_blocked_allocator", "allocator_runtime_blocked", "toolchain_blocked_allocator"}
             ):
                 placeholder_reason = None
                 command = paper_collections_docker_driver_command(
@@ -25421,7 +26379,12 @@ def build_paper_performance_plan_skeleton(
             "With --wrapper-manifest, non-local cells can be wired from an audited wrapper manifest; template_only manifest rules still fail the self-audit.",
             "Exact-checkout external adapters promoted by audit-paper-external-workload-configs are wired directly as runner-ready workload commands; they still require repeated finite timing samples and import validation.",
             "With --collections-driver, only locally supported in-tree Collections cells are wired to a std_bench driver; unsupported allocators and macro/external paper rows still fail safely until real harnesses are provided.",
-            "With --docker-collections-driver, host/toolchain-blocked Collections cells can be routed through a Linux/glibc Docker driver; use audit-paper-performance-plan --dry-run-probe to fail closed on image/toolchain readiness before running timings.",
+            (
+                "With --docker-collections-driver, host/runtime-blocked Collections cells can be "
+                "routed through a Linux/glibc Docker driver; use audit-paper-performance-plan "
+                "--dry-run-probe to fail closed on image and allocator-runtime readiness before "
+                "running timings."
+            ),
             "With --local-collections-only, the plan intentionally contains only locally runnable Collections cells and is not claim-grade complete.",
             "Semantic UniAlloc Collections cells can carry --collections-compiler-site-replay-type-mapping so local timing uses compiler-assigned type IDs instead of layout-derived smoke IDs.",
             "Runner output must emit JSON with a finite seconds value unless measurement/time_field are changed.",
@@ -26590,15 +27553,51 @@ def command_for_bench(args: argparse.Namespace, allocator_feature: str) -> List[
     return cargo_cmd
 
 
+def feature_enables(feature: str, requested: str) -> bool:
+    return requested in {part.strip() for part in str(feature).split(",") if part.strip()}
+
+
 def run_local(args: argparse.Namespace) -> int:
     if not shutil.which("cargo"):
         print("cargo not found; run doctor for details", file=sys.stderr)
         return 2
+    features = args.features or [
+        "bench_ourself",
+        "bench_jemalloc",
+        "bench_mimalloc",
+        "bench_tcmalloc",
+        "bench_snmalloc",
+    ]
+    scudo_probe: Optional[Dict[str, Any]] = None
+    scudo_env: Dict[str, str] = {}
+    scudo_env_remove: List[str] = []
+    scudo_semantics: Optional[Dict[str, Any]] = None
+    if any(feature_enables(feature, "bench_scudo") for feature in features):
+        scudo_probe = scudo_execution_probe()
+        if not scudo_execution_available():
+            print(
+                json.dumps(
+                    {
+                        "ok": False,
+                        "error": "refusing to run bench_scudo without a verified Scudo execution route",
+                        "scudo_execution_probe": scudo_probe,
+                    },
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+            )
+            return 2
+        scudo_env = local_collections_dependency_env({"allocator": "scudo"})
+        scudo_env_remove = local_collections_dependency_env_removed({"allocator": "scudo"})
+        scudo_semantics = scudo_allocator_semantics(
+            scudo_probe,
+            runtime_verified=False,
+            verification_status="planned",
+        )
     RAW.mkdir(parents=True, exist_ok=True)
     run_id = args.run_id or _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     out_dir = RAW / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
-    features = args.features or ["bench_ourself", "bench_jemalloc", "bench_mimalloc", "bench_tcmalloc", "bench_snmalloc"]
     records: List[Dict[str, Any]] = []
 
     def write_run_summary(*, include_metadata: bool) -> None:
@@ -26625,7 +27624,30 @@ def run_local(args: argparse.Namespace) -> int:
         cmd = command_for_bench(args, feature)
         for i in range(args.runs):
             started_source_fingerprint = repository_source_fingerprint()
-            rec = run_one(cmd, out_dir, f"{feature}-run{i+1}", feature, i + 1, args.timeout, args.bench_filter)
+            if feature_enables(feature, "bench_scudo"):
+                rec = run_one(
+                    cmd,
+                    out_dir,
+                    f"{feature}-run{i+1}",
+                    feature,
+                    i + 1,
+                    args.timeout,
+                    args.bench_filter,
+                    env_overrides=scudo_env,
+                    env_remove=scudo_env_remove,
+                    scudo_execution=scudo_probe,
+                    allocator_semantics=scudo_semantics,
+                )
+            else:
+                rec = run_one(
+                    cmd,
+                    out_dir,
+                    f"{feature}-run{i+1}",
+                    feature,
+                    i + 1,
+                    args.timeout,
+                    args.bench_filter,
+                )
             rec = evidence_source_bound_payload_if_stable(
                 rec,
                 started=started_source_fingerprint,
@@ -26648,11 +27670,20 @@ def run_one(
     run_index: int,
     timeout: int,
     bench_filter: Optional[str],
+    *,
+    env_overrides: Optional[Dict[str, str]] = None,
+    env_remove: Optional[List[str]] = None,
+    scudo_execution: Optional[Dict[str, Any]] = None,
+    allocator_semantics: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     stdout = out_dir / f"{label}.stdout.txt"
     stderr = out_dir / f"{label}.stderr.txt"
     env = os.environ.copy()
     env.setdefault("GLIBC_TUNABLES", "glibc.pthread.rseq=0")
+    for name in env_remove or []:
+        env.pop(name, None)
+    if env_overrides:
+        env.update(env_overrides)
     if "stats" in {part.strip() for part in feature.split(",")}:
         # Local timing collectors should not pay the per-type coverage-row
         # lock/probe cost unless a dedicated C002 coverage collector manages
@@ -26673,8 +27704,34 @@ def run_one(
     wall = time.perf_counter() - start
     bench_results = parse_bench_stdout(stdout)
     diagnostics = parse_bench_diagnostics(stdout, stderr)
-    return {
+    if scudo_execution is not None:
+        stderr_text = stderr.read_text(encoding="utf-8", errors="replace") if stderr.exists() else ""
+        marker_present = bool(
+            _PAPER_WORKLOAD_DRIVER is not None
+            and hasattr(_PAPER_WORKLOAD_DRIVER, "scudo_runtime_identity_marker_present")
+            and _PAPER_WORKLOAD_DRIVER.scudo_runtime_identity_marker_present(stderr_text)
+        )
+        marker_verified = exit_code == 0 and marker_present
+        verification_status = "verified" if marker_verified else "verification-failed"
+        scudo_execution = scudo_execution_runtime_record(
+            scudo_execution,
+            runtime_verified=marker_verified,
+            verification_status=verification_status,
+        )
+        runtime_verified = scudo_execution.get("runtime_verified") is True
+        allocator_semantics = scudo_allocator_semantics(
+            scudo_execution,
+            runtime_verified=runtime_verified,
+            verification_status=verification_status,
+        )
+        if not runtime_verified:
+            bench_results = []
+            if exit_code == 0:
+                exit_code = 1
+                error = "Scudo benchmark exited without the required runtime identity marker"
+    record = {
         "schema_version": 1,
+        "source": "evaluate-run-local",
         "label": label,
         "feature": feature,
         "run_index": run_index,
@@ -26688,8 +27745,46 @@ def run_one(
         "exit_code": exit_code,
         "stdout": str(stdout),
         "stderr": str(stderr),
+        "stdout_sha256": file_sha256(stdout),
+        "stderr_sha256": file_sha256(stderr),
+        "evidence": [
+            {
+                "kind": "run_stdout",
+                "path": str(stdout),
+                "sha256": file_sha256(stdout),
+                "bytes": stdout.stat().st_size,
+            },
+            {
+                "kind": "run_stderr",
+                "path": str(stderr),
+                "sha256": file_sha256(stderr),
+                "bytes": stderr.stat().st_size,
+            },
+        ],
         "error": error,
     }
+    if scudo_execution is not None:
+        record["scudo_execution_probe"] = copy.deepcopy(scudo_execution)
+    if allocator_semantics is not None:
+        semantics = copy.deepcopy(allocator_semantics)
+        record["allocator_semantics"] = semantics
+        record["paper_allocator_equivalent"] = semantics.get("paper_allocator_equivalent") is True
+    if env_overrides:
+        record["subprocess_env_delta"] = dict(env_overrides)
+    if env_remove:
+        removed = sorted(set(env_remove))
+        record["subprocess_env_removed"] = removed
+        record["subprocess_env_effective_absence"] = {
+            name: name not in env for name in removed
+        }
+    if (
+        scudo_execution is not None
+        and scudo_execution.get("runtime_verified") is True
+        and _PAPER_WORKLOAD_DRIVER is not None
+        and hasattr(_PAPER_WORKLOAD_DRIVER, "attach_scudo_timing_binding")
+    ):
+        _PAPER_WORKLOAD_DRIVER.attach_scudo_timing_binding(record, evidence_dir=out_dir)
+    return record
 
 
 def parse_bench_stdout(path: Path) -> List[Dict[str, Any]]:
@@ -27187,6 +28282,9 @@ fn run_generated_probe(rounds: usize) -> usize {
 
 extern crate test;
 
+#[cfg(feature = "bench_scudo")]
+compile_error!("compiler semantic benchmarks are UniAlloc-only and cannot produce Scudo timing");
+
 {maybe_vec_import}use test::Bencher;
 use unialloc::alloc_api::{{
 {api_imports}
@@ -27602,6 +28700,9 @@ def compiler_proto_root_source(module_dir_name: str, type_id_basis: str, *, exac
 extern crate test;
 #[macro_use]
 extern crate alloc;
+
+#[cfg(feature = "bench_scudo")]
+compile_error!("compiler semantic benchmarks are UniAlloc-only and cannot produce Scudo timing");
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "bench_jemalloc")] {
@@ -65630,6 +66731,34 @@ def load_current_summary() -> Optional[Dict[str, Any]]:
     return merged if found else None
 
 
+def local_run_record_has_allocator_identity(record: Dict[str, Any]) -> bool:
+    feature = str(record.get("feature") or "")
+    if not feature_enables(feature, "bench_scudo"):
+        return True
+    semantics = record.get("allocator_semantics")
+    execution = record.get("scudo_execution_probe")
+    return bool(
+        record.get("paper_allocator_equivalent") is True
+        and isinstance(semantics, dict)
+        and semantics.get("paper_allocator_equivalent") is True
+        and semantics.get("runtime_identity_verified") is True
+        and isinstance(execution, dict)
+        and execution.get("runtime_verified") is True
+        and execution.get("paper_allocator_equivalent") is True
+    )
+
+
+def local_feature_has_allocator_identity(feature: str, records: List[Dict[str, Any]]) -> bool:
+    if not feature_enables(feature, "bench_scudo"):
+        return True
+    return any(
+        str(record.get("feature") or "") == feature
+        and record.get("exit_code") == 0
+        and local_run_record_has_allocator_identity(record)
+        for record in records
+    )
+
+
 def summarize(args: argparse.Namespace) -> int:
     if args.source == "paper":
         return import_paper(argparse.Namespace(paper_dir=args.paper_dir))
@@ -65645,13 +66774,17 @@ def summarize(args: argparse.Namespace) -> int:
     feature_summaries = {}
     for feature, recs in grouped.items():
         sorted_recs = sorted(recs, key=lambda r: r["run_index"])
-        usable = [r for r in sorted_recs[1:] if r["exit_code"] == 0]
+        identity_valid = [r for r in sorted_recs if local_run_record_has_allocator_identity(r)]
+        usable = [r for r in identity_valid[1:] if r["exit_code"] == 0]
         feature_summaries[feature] = {
             "runs": len(sorted_recs),
             "successful_runs_after_warmup": len(usable),
             "wall_seconds_geomean_after_warmup": geomean([r["wall_seconds"] for r in usable]),
-            "wall_seconds_all": [r["wall_seconds"] for r in sorted_recs],
+            "wall_seconds_all": [r["wall_seconds"] for r in identity_valid],
             "failures": [r for r in sorted_recs if r["exit_code"] != 0],
+            "allocator_identity_rejected_runs": [
+                r for r in sorted_recs if not local_run_record_has_allocator_identity(r)
+            ],
         }
     baseline = feature_summaries.get("bench_ourself", {}).get("wall_seconds_geomean_after_warmup")
     normalized = {}
@@ -65693,7 +66826,7 @@ def summarize(args: argparse.Namespace) -> int:
 def summarize_benchmark_results(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     by_feature: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
     for rec in records:
-        if rec.get("exit_code") != 0:
+        if rec.get("exit_code") != 0 or not local_run_record_has_allocator_identity(rec):
             continue
         feature = rec.get("feature")
         for bench in rec.get("bench_results", []):
@@ -65733,7 +66866,12 @@ def build_local_current_datasets(
 
     datasets: Dict[str, Any] = {}
 
-    columns = [alloc for feature, alloc in FEATURE_TO_ALLOCATOR.items() if feature in benchmark_summaries]
+    eligible_features = {
+        feature
+        for feature in benchmark_summaries
+        if local_feature_has_allocator_identity(feature, records)
+    }
+    columns = [alloc for feature, alloc in FEATURE_TO_ALLOCATOR.items() if feature in eligible_features]
     rows: List[Dict[str, Any]] = []
     for idx, bench in enumerate(sorted(ourself), start=1):
         base_ns = ourself[bench].get("ns_per_iter_geomean_after_warmup")
@@ -65741,6 +66879,8 @@ def build_local_current_datasets(
             continue
         values: Dict[str, float] = {}
         for feature, alloc in FEATURE_TO_ALLOCATOR.items():
+            if feature not in eligible_features:
+                continue
             other = benchmark_summaries.get(feature, {}).get(bench, {})
             other_ns = other.get("ns_per_iter_geomean_after_warmup")
             if other_ns:
@@ -65766,7 +66906,7 @@ def build_local_current_datasets(
         variant_columns = [
             alloc
             for feature, alloc in FEATURE_TO_ALLOCATOR.items()
-            if feature in benchmark_summaries
+            if feature in eligible_features
         ]
         common_benches = sorted(set(ourself).intersection(variant))
         for idx, bench in enumerate(common_benches, start=1):
@@ -65775,6 +66915,8 @@ def build_local_current_datasets(
                 continue
             values: Dict[str, float] = {}
             for feature, alloc in FEATURE_TO_ALLOCATOR.items():
+                if feature not in eligible_features:
+                    continue
                 other = benchmark_summaries.get(feature, {}).get(bench, {})
                 other_ns = other.get("ns_per_iter_geomean_after_warmup")
                 if other_ns:
@@ -68803,6 +69945,7 @@ def overclaim_missing_requirements(category: str, detail: Dict[str, Any]) -> Lis
                     "host_blocked_allocator",
                     "missing_allocator_dependency",
                     "unsupported_allocator",
+                    "allocator_runtime_blocked",
                     "toolchain_blocked_allocator",
                 ):
                     if counts.get(kind):
@@ -70656,7 +71799,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--docker-collections-driver",
         action="store_true",
         help=(
-            "Route host/toolchain-blocked Collections cells such as ptmalloc/scudo through "
+            "Route host/runtime-blocked Collections cells such as ptmalloc/scudo through "
             "evaluation/scripts/paper_collections_docker_driver.py; validate with --dry-run-probe before running"
         ),
     )
@@ -71817,7 +72960,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--docker-collections-driver",
         action="store_true",
         help=(
-            "Route host/toolchain-blocked Collections wrapper rules through "
+            "Route host/runtime-blocked Collections wrapper rules through "
             "evaluation/scripts/paper_collections_docker_driver.py instead of paper_blocked_workload.py"
         ),
     )

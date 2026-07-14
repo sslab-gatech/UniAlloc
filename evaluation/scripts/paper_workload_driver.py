@@ -10,6 +10,7 @@ timing.
 from __future__ import annotations
 
 import argparse
+import copy
 import ctypes.util
 import glob
 import hashlib
@@ -22,6 +23,7 @@ import signal
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -87,13 +89,19 @@ CMAKE_BIN_GLOBS = (
     "evaluation/raw/local-cmake-pip-*/cmake/data/bin/cmake",
 )
 
-SCUDO_SANITIZER_RUSTFLAGS = "-Z sanitizer=scudo"
+SCUDO_SANITIZER_RUSTFLAGS = "-Zsanitizer=scudo"
 SCUDO_DEFAULT_MODE = "auto"
 SCUDO_MODES = ("auto", "rust-sanitizer", "ld-preload")
+SCUDO_RUNTIME_IDENTITY_MARKER = "unialloc: verified Scudo runtime identity\n"
 SCUDO_RUNTIME_LIBRARY_ENVS = (
     "UNIALLOC_SCUDO_RUNTIME_LIBRARY",
     "SCUDO_RUNTIME_LIBRARY",
     "SCUDO_STANDALONE_LIBRARY",
+)
+SCUDO_SANITIZER_CONFLICTING_ENV_NAMES = (
+    *SCUDO_RUNTIME_LIBRARY_ENVS,
+    "LD_PRELOAD",
+    "CARGO_ENCODED_RUSTFLAGS",
 )
 SCUDO_RUNTIME_LIBRARY_GLOBS = (
     "/usr/lib/llvm-*/lib/clang/*/lib/linux/libclang_rt.scudo_standalone-*.so",
@@ -101,6 +109,18 @@ SCUDO_RUNTIME_LIBRARY_GLOBS = (
     "evaluation/deps/scudo/lib/libclang_rt.scudo_standalone-*.so",
     "evaluation/raw/local-scudo-*/**/libclang_rt.scudo_standalone-*.so",
 )
+SCUDO_TRUSTED_SYSTEM_RUNTIME_RE = re.compile(
+    r"^/usr/lib/(?:llvm-[0-9]+/lib/clang/[0-9.]+|clang/[0-9.]+)/lib/linux/"
+    r"libclang_rt\.scudo_standalone-(?P<arch>[A-Za-z0-9_+-]+)\.so$"
+)
+SCUDO_DPKG_PACKAGE_RE = re.compile(
+    r"^(?:libclang-rt-[0-9]+-dev|compiler-rt(?:-[0-9]+)?(?:-dev)?)(?::[A-Za-z0-9_-]+)?$"
+)
+SCUDO_BEHAVIOR_REQUIRED_PATTERNS = (
+    re.compile(r"^Stats: SizeClassAllocator", re.MULTILINE),
+    re.compile(r"^Stats: MapAllocator: allocated [1-9][0-9]* times", re.MULTILINE),
+)
+_SCUDO_RUNTIME_AUTHENTICITY_CACHE: Dict[Tuple[str, int, int, str], Dict[str, Any]] = {}
 
 BENCH_LIST_CACHE_SCHEMA = 1
 INTERRUPTED_OUTPUT_TAIL_BYTES = 64 * 1024
@@ -658,11 +678,28 @@ def resolve_scudo_runtime_library(value: Optional[str]) -> Optional[Path]:
     if path.is_dir():
         candidates = sorted(
             path.glob("**/libclang_rt.scudo_standalone-*.so"),
-            key=lambda item: (path_mtime(item), str(item)),
-            reverse=True,
+            key=scudo_runtime_candidate_order,
         )
         return candidates[0] if candidates else None
     return None
+
+
+def scudo_runtime_candidate_order(path: Path) -> Tuple[int, float, str]:
+    resolved_text = str(path.resolve(strict=False))
+    path_match = SCUDO_TRUSTED_SYSTEM_RUNTIME_RE.fullmatch(resolved_text)
+    system_tier = 0 if path_match else 1
+    host_arch = {"amd64": "x86_64", "arm64": "aarch64"}.get(
+        platform.machine().lower(), platform.machine().lower()
+    )
+    runtime_arch = (
+        {"amd64": "x86_64", "arm64": "aarch64"}.get(
+            path_match.group("arch").lower(), path_match.group("arch").lower()
+        )
+        if path_match
+        else ""
+    )
+    arch_tier = 0 if runtime_arch == host_arch else 1
+    return (system_tier * 2 + arch_tier, -path_mtime(path), resolved_text)
 
 
 def discover_scudo_runtime_library() -> Optional[Path]:
@@ -672,11 +709,343 @@ def discover_scudo_runtime_library() -> Optional[Path]:
             candidates.extend(Path(path) for path in glob.glob(pattern, recursive=True))
         else:
             candidates.extend(ROOT.glob(pattern))
-    for path in sorted(candidates, key=lambda item: (path_mtime(item), str(item)), reverse=True):
+    # Prefer packaged system compiler-rt runtimes over mutable repository/raw
+    # artifacts. Authenticity verification below remains authoritative; this
+    # ordering also prevents a recently-created local lookalike from shadowing
+    # a valid system Scudo runtime during auto-discovery.
+    for path in sorted(candidates, key=scudo_runtime_candidate_order):
         resolved = resolve_scudo_runtime_library(str(path))
         if resolved:
             return resolved
     return None
+
+
+def scudo_runtime_library_identity(path: Path) -> Dict[str, Any]:
+    """Return immutable identity evidence for a discovered Scudo runtime."""
+
+    realpath = path.resolve(strict=True)
+    stat = realpath.stat()
+    hasher = hashlib.sha256()
+    with realpath.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return {
+        "path": str(path),
+        "realpath": str(realpath),
+        "size_bytes": stat.st_size,
+        "sha256": hasher.hexdigest(),
+        "platform": platform.system(),
+        "architecture": platform.machine(),
+    }
+
+
+def file_digest(path: Path, algorithm: str) -> str:
+    hasher = hashlib.new(algorithm)
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def scudo_runtime_dpkg_provenance(path: Path) -> Dict[str, Any]:
+    """Verify that ``path`` is an intact compiler-rt file owned by dpkg.
+
+    Symbol names alone are forgeable. The package database is the local trust
+    anchor on Debian-family hosts: the runtime path must be canonical, owned by
+    a compiler-rt package, match that package's md5sums entry, and pass dpkg's
+    package verification.
+    """
+
+    realpath = path.resolve(strict=True)
+    blockers: List[str] = []
+    path_match = SCUDO_TRUSTED_SYSTEM_RUNTIME_RE.fullmatch(str(realpath))
+    host_arch = platform.machine().lower()
+    runtime_arch = path_match.group("arch").lower() if path_match else ""
+    arch_aliases = {
+        "amd64": "x86_64",
+        "arm64": "aarch64",
+    }
+    normalized_host_arch = arch_aliases.get(host_arch, host_arch)
+    normalized_runtime_arch = arch_aliases.get(runtime_arch, runtime_arch)
+    if path_match is None:
+        blockers.append("runtime is outside the canonical system compiler-rt Scudo path")
+    elif normalized_runtime_arch != normalized_host_arch:
+        blockers.append(
+            f"runtime architecture {runtime_arch} does not match host architecture {host_arch}"
+        )
+
+    dpkg_query = shutil.which("dpkg-query")
+    dpkg = shutil.which("dpkg")
+    if not dpkg_query or not dpkg:
+        blockers.append("dpkg package verification tools are unavailable")
+        return {
+            "ok": False,
+            "trust_anchor": "debian-dpkg",
+            "runtime_path": str(realpath),
+            "runtime_architecture": runtime_arch or None,
+            "host_architecture": host_arch,
+            "blockers": blockers,
+        }
+
+    owner_proc = subprocess.run(
+        [dpkg_query, "-S", str(realpath)],
+        cwd=str(ROOT),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=20,
+    )
+    owners: List[str] = []
+    if owner_proc.returncode == 0:
+        suffix = ": " + str(realpath)
+        for line in owner_proc.stdout.splitlines():
+            if line.endswith(suffix):
+                owners.append(line[: -len(suffix)].strip())
+    trusted_owners = [owner for owner in owners if SCUDO_DPKG_PACKAGE_RE.fullmatch(owner)]
+    if len(trusted_owners) != 1:
+        blockers.append("runtime is not uniquely owned by a trusted compiler-rt dpkg package")
+        return {
+            "ok": False,
+            "trust_anchor": "debian-dpkg",
+            "runtime_path": str(realpath),
+            "runtime_architecture": runtime_arch or None,
+            "host_architecture": host_arch,
+            "owner_query_exit_code": owner_proc.returncode,
+            "owner_query_stdout_tail": owner_proc.stdout[-2000:],
+            "owner_query_stderr_tail": owner_proc.stderr[-2000:],
+            "owners": owners,
+            "trusted_owners": trusted_owners,
+            "blockers": blockers,
+        }
+
+    package = trusted_owners[0]
+    status_proc = subprocess.run(
+        [dpkg_query, "-W", "-f=${Status}\t${Version}\t${Architecture}\n", package],
+        cwd=str(ROOT),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=20,
+    )
+    status_fields = status_proc.stdout.strip().split("\t") if status_proc.returncode == 0 else []
+    installed_status = status_fields[0] if len(status_fields) >= 1 else ""
+    package_version = status_fields[1] if len(status_fields) >= 2 else ""
+    package_arch = status_fields[2] if len(status_fields) >= 3 else ""
+    if installed_status != "install ok installed":
+        blockers.append("compiler-rt package is not in the installed-ok state")
+
+    md5sums_path = Path("/var/lib/dpkg/info") / f"{package}.md5sums"
+    relative_path = str(realpath).lstrip("/")
+    expected_md5 = ""
+    if md5sums_path.is_file():
+        for raw_line in md5sums_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            fields = raw_line.strip().split(None, 1)
+            if len(fields) == 2 and fields[1].lstrip("./") == relative_path:
+                expected_md5 = fields[0].lower()
+                break
+    if not expected_md5:
+        blockers.append("compiler-rt package md5sums does not attest the runtime file")
+    actual_md5 = file_digest(realpath, "md5")
+    if expected_md5 and actual_md5 != expected_md5:
+        blockers.append("runtime content does not match the compiler-rt package md5sums entry")
+
+    verify_proc = subprocess.run(
+        [dpkg, "-V", package],
+        cwd=str(ROOT),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=60,
+    )
+    if verify_proc.returncode != 0 or verify_proc.stdout.strip() or verify_proc.stderr.strip():
+        blockers.append("dpkg reported a modified or unverifiable compiler-rt package")
+
+    return {
+        "ok": not blockers,
+        "trust_anchor": "debian-dpkg",
+        "runtime_path": str(realpath),
+        "runtime_architecture": runtime_arch or None,
+        "host_architecture": host_arch,
+        "owner_query_exit_code": owner_proc.returncode,
+        "owners": owners,
+        "trusted_owner": package,
+        "package_status": installed_status,
+        "package_version": package_version or None,
+        "package_architecture": package_arch or None,
+        "md5sums_path": str(md5sums_path),
+        "expected_md5": expected_md5 or None,
+        "actual_md5": actual_md5,
+        "dpkg_verify_exit_code": verify_proc.returncode,
+        "dpkg_verify_stdout": verify_proc.stdout,
+        "dpkg_verify_stderr": verify_proc.stderr,
+        "blockers": blockers,
+    }
+
+
+def scudo_runtime_behavioral_probe(path: Path) -> Dict[str, Any]:
+    """Exercise allocator entry points and require genuine Scudo stats output."""
+
+    realpath = path.resolve(strict=True)
+    compiler = shutil.which("cc") or shutil.which("clang")
+    if not compiler:
+        return {
+            "ok": False,
+            "runtime_path": str(realpath),
+            "blockers": ["a C compiler is required for the Scudo behavioral probe"],
+        }
+    source = r"""
+#include <dlfcn.h>
+#include <stdlib.h>
+#include <string.h>
+typedef void (*stats_fn)(void);
+int main(void) {
+  stats_fn stats = (stats_fn)dlsym(RTLD_DEFAULT, "__scudo_print_stats");
+  if (!stats) return 3;
+  void *p = malloc(1048576);
+  if (!p) return 2;
+  memset(p, 0x5a, 1048576);
+  free(p);
+  stats();
+  return 0;
+}
+""".lstrip()
+    source_sha256 = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    with tempfile.TemporaryDirectory(prefix="unialloc-scudo-probe-") as td:
+        temp_dir = Path(td)
+        source_path = temp_dir / "probe.c"
+        binary_path = temp_dir / "probe"
+        source_path.write_text(source, encoding="utf-8")
+        compile_cmd = [compiler, str(source_path), "-O0", "-ldl", "-o", str(binary_path)]
+        compile_proc = subprocess.run(
+            compile_cmd,
+            cwd=str(temp_dir),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+        )
+        if compile_proc.returncode != 0:
+            return {
+                "ok": False,
+                "runtime_path": str(realpath),
+                "compiler": compiler,
+                "source_sha256": source_sha256,
+                "compile_exit_code": compile_proc.returncode,
+                "compile_stdout_tail": compile_proc.stdout[-2000:],
+                "compile_stderr_tail": compile_proc.stderr[-4000:],
+                "blockers": ["failed to compile the Scudo behavioral probe"],
+            }
+        env = os.environ.copy()
+        for name in (
+            "LD_PRELOAD",
+            "UNIALLOC_SCUDO_RUNTIME_LIBRARY",
+            "SCUDO_RUNTIME_LIBRARY",
+            "SCUDO_STANDALONE_LIBRARY",
+            "SCUDO_OPTIONS",
+        ):
+            env.pop(name, None)
+        env["LD_PRELOAD"] = str(realpath)
+        run_proc = subprocess.run(
+            [str(binary_path)],
+            cwd=str(temp_dir),
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=30,
+        )
+    combined = run_proc.stdout + "\n" + run_proc.stderr
+    required_stats_present = [bool(pattern.search(combined)) for pattern in SCUDO_BEHAVIOR_REQUIRED_PATTERNS]
+    blockers = []
+    if run_proc.returncode != 0:
+        blockers.append(f"Scudo behavioral probe exited with status {run_proc.returncode}")
+    if not all(required_stats_present):
+        blockers.append("runtime did not emit the required Scudo allocator statistics")
+    return {
+        "ok": not blockers,
+        "runtime_path": str(realpath),
+        "compiler": compiler,
+        "source_sha256": source_sha256,
+        "compile_exit_code": compile_proc.returncode,
+        "run_exit_code": run_proc.returncode,
+        "required_stats_present": required_stats_present,
+        "stdout_sha256": hashlib.sha256(run_proc.stdout.encode("utf-8")).hexdigest(),
+        "stderr_sha256": hashlib.sha256(run_proc.stderr.encode("utf-8")).hexdigest(),
+        "stdout_tail": run_proc.stdout[-2000:],
+        "stderr_tail": run_proc.stderr[-4000:],
+        "blockers": blockers,
+    }
+
+
+def scudo_runtime_authenticity_probe(path: Path) -> Dict[str, Any]:
+    """Authenticate a standalone Scudo artifact before it can be executed."""
+
+    try:
+        identity = scudo_runtime_library_identity(path)
+        realpath = Path(str(identity["realpath"]))
+        stat = realpath.stat()
+    except OSError as exc:
+        return {
+            "ok": False,
+            "runtime_authenticity_verified": False,
+            "blockers": [f"failed to identify Scudo runtime: {exc}"],
+        }
+    cache_key = (
+        str(realpath),
+        int(identity["size_bytes"]),
+        int(stat.st_mtime_ns),
+        str(identity["sha256"]),
+    )
+    cached = _SCUDO_RUNTIME_AUTHENTICITY_CACHE.get(cache_key)
+    if isinstance(cached, dict):
+        return copy.deepcopy(cached)
+
+    try:
+        package = scudo_runtime_dpkg_provenance(realpath)
+    except (OSError, subprocess.SubprocessError) as exc:
+        package = {
+            "ok": False,
+            "trust_anchor": "debian-dpkg",
+            "runtime_path": str(realpath),
+            "blockers": [f"compiler-rt package verification failed: {exc}"],
+        }
+    behavior: Dict[str, Any]
+    if package.get("ok") is True:
+        try:
+            behavior = scudo_runtime_behavioral_probe(realpath)
+        except (OSError, subprocess.SubprocessError) as exc:
+            behavior = {
+                "ok": False,
+                "runtime_path": str(realpath),
+                "blockers": [f"Scudo behavioral verification failed: {exc}"],
+            }
+    else:
+        behavior = {
+            "ok": False,
+            "runtime_path": str(realpath),
+            "skipped": True,
+            "blockers": ["behavioral probe skipped because package authenticity failed"],
+        }
+    blockers = list(
+        dict.fromkeys(
+            [
+                *(str(item) for item in package.get("blockers", []) if str(item).strip()),
+                *(str(item) for item in behavior.get("blockers", []) if str(item).strip()),
+            ]
+        )
+    )
+    verified = package.get("ok") is True and behavior.get("ok") is True
+    result = {
+        "ok": verified,
+        "runtime_authenticity_verified": verified,
+        "verification_scheme": "dpkg-compiler-rt-content-and-scudo-stats-v1",
+        "runtime_library_identity": identity,
+        "package_provenance": package,
+        "behavioral_probe": behavior,
+        "blockers": blockers,
+    }
+    _SCUDO_RUNTIME_AUTHENTICITY_CACHE[cache_key] = copy.deepcopy(result)
+    return result
 
 
 def scudo_runtime_probe(args: Optional[argparse.Namespace] = None) -> Dict[str, Any]:
@@ -689,18 +1058,51 @@ def scudo_runtime_probe(args: Optional[argparse.Namespace] = None) -> Dict[str, 
             if value:
                 explicit = value
                 break
+    explicit_requested = bool(str(explicit or "").strip())
     explicit_resolved = resolve_scudo_runtime_library(explicit)
-    discovered = discover_scudo_runtime_library()
-    resolved = explicit_resolved or discovered
+    # An explicit path is a contract, not a hint. A missing/untrusted explicit
+    # artifact must fail instead of silently evaluating a different discovered
+    # runtime.
+    discovered = None if explicit_requested else discover_scudo_runtime_library()
+    resolved = explicit_resolved if explicit_requested else discovered
+    identity = None
+    identity_error = None
+    authenticity: Optional[Dict[str, Any]] = None
+    if resolved:
+        try:
+            identity = scudo_runtime_library_identity(resolved)
+            authenticity = scudo_runtime_authenticity_probe(resolved)
+        except OSError as exc:
+            identity_error = str(exc)
+    authenticity_verified = bool(
+        isinstance(authenticity, dict)
+        and authenticity.get("ok") is True
+        and authenticity.get("runtime_authenticity_verified") is True
+    )
     return {
-        "ok": bool(resolved),
+        "ok": identity is not None and authenticity_verified,
+        "identity_ok": identity is not None,
+        "runtime_authenticity_verified": authenticity_verified,
         "configured_runtime_library": str(resolved) if resolved else None,
         "configured_runtime_library_input": explicit,
+        "configured_runtime_library_input_resolved": bool(explicit_resolved),
         "configured_runtime_library_source": (
             "explicit" if explicit_resolved else "repo_or_system_auto_discovery" if discovered else None
         ),
+        "runtime_library_identity": identity,
+        "runtime_library_identity_error": identity_error,
+        "runtime_authenticity": authenticity,
+        "host_platform": platform.system(),
+        "host_architecture": platform.machine(),
         "library_globs": list(SCUDO_RUNTIME_LIBRARY_GLOBS),
         "runtime_env_names": list(SCUDO_RUNTIME_LIBRARY_ENVS),
+        "blockers": (
+            ["explicit Scudo runtime library path could not be resolved"]
+            if explicit_requested and explicit_resolved is None
+            else list(authenticity.get("blockers", []))
+            if isinstance(authenticity, dict)
+            else []
+        ),
     }
 
 
@@ -821,6 +1223,73 @@ def rust_toolchain_arg(toolchain: Optional[str] = None) -> List[str]:
     return [f"+{effective}"] if effective else []
 
 
+def explicit_cargo_rust_toolchain(command: Iterable[Any]) -> str:
+    """Return the rustup override from an actual `cargo +toolchain ...` command."""
+
+    tokens = [str(token) for token in command]
+    if len(tokens) >= 2 and Path(tokens[0]).name == "cargo" and tokens[1].startswith("+"):
+        return tokens[1][1:].strip()
+    return ""
+
+
+def scudo_child_probe_args(
+    args: argparse.Namespace,
+    *,
+    command: Iterable[Any],
+    cwd: Path,
+) -> argparse.Namespace:
+    """Bind a Scudo compiler probe to the delegated Cargo command and cwd."""
+
+    command_toolchain = explicit_cargo_rust_toolchain(command)
+    requested = (
+        command_toolchain
+        or str(getattr(args, "rust_toolchain", "") or "").strip()
+        or str(os.environ.get(RUST_TOOLCHAIN_ENV) or "").strip()
+        or str(os.environ.get("RUSTUP_TOOLCHAIN") or "").strip()
+        or "system"
+    )
+    return argparse.Namespace(
+        scudo_mode=str(getattr(args, "scudo_mode", "auto") or "auto"),
+        scudo_runtime_library=str(getattr(args, "scudo_runtime_library", "") or "") or None,
+        rust_toolchain=requested,
+        scudo_probe_cwd=str(Path(cwd).expanduser().resolve()),
+        scudo_command_toolchain=command_toolchain or None,
+    )
+
+
+def align_scudo_child_toolchain_env(
+    env: Dict[str, str],
+    probe_args: argparse.Namespace,
+) -> Dict[str, Any]:
+    """Make delegated Cargo resolve the same rustc identity as the Scudo probe."""
+
+    provenance = rust_toolchain_provenance(probe_args)
+    effective = str(provenance.get("effective_toolchain") or "").strip()
+    removed: List[str] = []
+    if provenance.get("uses_system_toolchain") is True:
+        for name in (RUST_TOOLCHAIN_ENV, "RUSTUP_TOOLCHAIN"):
+            if name in env:
+                removed.append(name)
+            env.pop(name, None)
+    else:
+        env[RUST_TOOLCHAIN_ENV] = effective
+        env["RUSTUP_TOOLCHAIN"] = effective
+    return {
+        "rust_toolchain_provenance": provenance,
+        "probe_cwd": str(getattr(probe_args, "scudo_probe_cwd", "") or ""),
+        "command_toolchain": getattr(probe_args, "scudo_command_toolchain", None),
+        "subprocess_env_removed": removed,
+        "subprocess_env_effective": {
+            name: env[name]
+            for name in (RUST_TOOLCHAIN_ENV, "RUSTUP_TOOLCHAIN")
+            if name in env
+        },
+        "subprocess_env_effective_absence": {
+            name: name not in env for name in (RUST_TOOLCHAIN_ENV, "RUSTUP_TOOLCHAIN")
+        },
+    }
+
+
 def toolchain_claim_grade_blockers(provenance: Dict[str, Any]) -> List[str]:
     if provenance.get("paper_exact_toolchain") is not True:
         return [
@@ -895,6 +1364,11 @@ def paper_toolchain_workspace_probe(
 def scudo_toolchain_probe(args: Optional[argparse.Namespace] = None) -> Dict[str, Any]:
     rustc = shutil.which("rustc") or "rustc"
     provenance = rust_toolchain_provenance(args)
+    probe_cwd = Path(str(getattr(args, "scudo_probe_cwd", ROOT) or ROOT)).expanduser().resolve()
+    probe_env = os.environ.copy()
+    if provenance.get("uses_system_toolchain") is True:
+        probe_env.pop(RUST_TOOLCHAIN_ENV, None)
+        probe_env.pop("RUSTUP_TOOLCHAIN", None)
     cmd = [
         rustc,
         *rust_toolchain_arg(provenance.get("effective_toolchain")),
@@ -906,10 +1380,20 @@ def scudo_toolchain_probe(args: Optional[argparse.Namespace] = None) -> Dict[str
         "sanitizer=scudo",
     ]
     try:
+        version_proc = subprocess.run(
+            [rustc, *rust_toolchain_arg(provenance.get("effective_toolchain")), "--version", "--verbose"],
+            cwd=str(probe_cwd),
+            env=probe_env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=20,
+        )
         proc = subprocess.run(
             cmd,
             input="fn main() {}\n",
-            cwd=str(ROOT),
+            cwd=str(probe_cwd),
+            env=probe_env,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -917,8 +1401,11 @@ def scudo_toolchain_probe(args: Optional[argparse.Namespace] = None) -> Dict[str
         )
         return {
             "command": cmd,
-            "ok": proc.returncode == 0,
+            "ok": proc.returncode == 0 and version_proc.returncode == 0,
             "exit_code": proc.returncode,
+            "probe_cwd": str(probe_cwd),
+            "rustc_verbose_version": version_proc.stdout.strip(),
+            "rustc_version_exit_code": version_proc.returncode,
             "rust_toolchain_provenance": provenance,
             "rustflags": SCUDO_SANITIZER_RUSTFLAGS,
             "stdout_tail": proc.stdout[-2000:],
@@ -930,6 +1417,7 @@ def scudo_toolchain_probe(args: Optional[argparse.Namespace] = None) -> Dict[str
             "ok": False,
             "exit_code": None,
             "timed_out": True,
+            "probe_cwd": str(probe_cwd),
             "rust_toolchain_provenance": provenance,
             "rustflags": SCUDO_SANITIZER_RUSTFLAGS,
             "stdout_tail": subprocess_text(exc.stdout)[-2000:],
@@ -942,6 +1430,248 @@ def scudo_requested_mode(args: argparse.Namespace) -> str:
     return mode if mode in SCUDO_MODES else SCUDO_DEFAULT_MODE
 
 
+def scudo_runtime_identity_marker_present(stderr_text: Any) -> bool:
+    """Require the benchmark constructor's exact, newline-terminated marker."""
+
+    return SCUDO_RUNTIME_IDENTITY_MARKER in subprocess_text(stderr_text).splitlines(keepends=True)
+
+
+def retain_scudo_stderr_evidence(stderr_text: str, *, label: str) -> Dict[str, Any]:
+    evidence_dir = Path(tempfile.mkdtemp(prefix="unialloc-scudo-evidence-"))
+    safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "-", label).strip("-.") or "benchmark"
+    path = evidence_dir / f"{safe_label}.stderr.txt"
+    path.write_text(stderr_text, encoding="utf-8")
+    return {
+        "kind": "scudo_benchmark_stderr",
+        "path": str(path),
+        "sha256": file_digest(path, "sha256"),
+        "bytes": path.stat().st_size,
+    }
+
+
+def retain_scudo_stdout_evidence(stdout_text: str, *, label: str) -> Dict[str, Any]:
+    evidence_dir = Path(tempfile.mkdtemp(prefix="unialloc-scudo-evidence-"))
+    safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "-", label).strip("-.") or "benchmark"
+    path = evidence_dir / f"{safe_label}.stdout.txt"
+    path.write_text(stdout_text, encoding="utf-8")
+    return {
+        "kind": "scudo_benchmark_stdout",
+        "path": str(path),
+        "sha256": file_digest(path, "sha256"),
+        "bytes": path.stat().st_size,
+    }
+
+
+SCUDO_TIMING_BINDING_FIELDS = (
+    "source",
+    "dataset",
+    "benchmark",
+    "allocator",
+    "variant_feature",
+    "run_index",
+    "command",
+    "server_command",
+    "server_cwd",
+    "bench_filter",
+    "claim_grade",
+    "claim_grade_scope",
+    "semantic_harness",
+    "semantic_policy",
+    "allocator_semantics",
+    "scudo_execution_probe",
+    "scudo_toolchain_alignment",
+    "subprocess_env_delta",
+    "subprocess_env_effective",
+    "subprocess_env_removed",
+    "subprocess_env_effective_absence",
+    "success",
+    "exit_code",
+    "child_returncode",
+    "measurement_source",
+    "measurement_sources",
+    "seconds",
+    "time_seconds",
+    "wall_seconds",
+    "elapsed_seconds",
+    "ns_per_iter",
+    "time_ns",
+    "nanoseconds",
+    "ms",
+    "milliseconds",
+    "benchmarks",
+    "bench_results",
+    "bench_rows",
+    "parsed_bench_rows",
+    "operation_count",
+    "successful_operations",
+    "failed_operations",
+    "operations_per_second",
+    "redis_benchmark_rows",
+)
+
+
+def scudo_timing_binding_payload(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Canonical wrapper-owned timing identity bound to its existing raw evidence."""
+
+    fields = {
+        key: copy.deepcopy(record[key])
+        for key in SCUDO_TIMING_BINDING_FIELDS
+        if key in record
+    }
+    raw_evidence = sorted(
+        [
+            {
+                key: entry.get(key)
+                for key in ("kind", "path", "sha256", "bytes")
+                if key in entry
+            }
+            for entry in (record.get("evidence") or [])
+            if isinstance(entry, dict)
+            and entry.get("kind") != "scudo_timing_binding_json"
+        ],
+        key=lambda item: (
+            str(item.get("kind") or ""),
+            str(item.get("path") or ""),
+            str(item.get("sha256") or ""),
+        ),
+    )
+    return {
+        "schema_version": 1,
+        "source": "unialloc-scudo-timing-binding",
+        "producer_source": record.get("source"),
+        "fields": fields,
+        "raw_evidence": raw_evidence,
+    }
+
+
+def attach_scudo_timing_binding(
+    record: Dict[str, Any],
+    *,
+    evidence_dir: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """Persist and attach the canonical timing binding as the wrapper's final step."""
+
+    directory = evidence_dir or Path(tempfile.mkdtemp(prefix="unialloc-scudo-timing-binding-"))
+    directory.mkdir(parents=True, exist_ok=True)
+    safe_label = re.sub(
+        r"[^A-Za-z0-9_.-]+",
+        "-",
+        "-".join(
+            str(record.get(key) or "")
+            for key in ("source", "dataset", "benchmark", "run_index")
+        ),
+    ).strip("-.") or "scudo-timing"
+    path = directory / f"{safe_label}.scudo-timing.json"
+    payload = scudo_timing_binding_payload(record)
+    path.write_text(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    entry = {
+        "kind": "scudo_timing_binding_json",
+        "path": str(path),
+        "sha256": file_digest(path, "sha256"),
+        "bytes": path.stat().st_size,
+    }
+    evidence = [
+        item for item in (record.get("evidence") or []) if isinstance(item, dict)
+    ]
+    evidence.append(entry)
+    record["evidence"] = evidence
+    record["raw_evidence"] = copy.deepcopy(evidence)
+    record["scudo_timing_binding"] = copy.deepcopy(entry)
+    return record
+
+
+def scudo_execution_route_authenticity_verified(execution: Dict[str, Any]) -> bool:
+    mode = execution.get("selected_mode")
+    if mode == "rust-sanitizer":
+        toolchain = execution.get("toolchain_probe")
+        return isinstance(toolchain, dict) and toolchain.get("ok") is True
+    if mode == "ld-preload":
+        runtime = execution.get("runtime_probe")
+        return bool(
+            isinstance(runtime, dict)
+            and runtime.get("ok") is True
+            and runtime.get("runtime_authenticity_verified") is True
+            and isinstance(runtime.get("runtime_authenticity"), dict)
+            and runtime["runtime_authenticity"].get("ok") is True
+            and runtime["runtime_authenticity"].get("runtime_authenticity_verified") is True
+        )
+    return False
+
+
+def scudo_allocator_semantics(
+    execution: Dict[str, Any],
+    *,
+    runtime_verified: bool,
+    verification_status: str,
+) -> Dict[str, Any]:
+    runtime_probe = execution.get("runtime_probe")
+    runtime_probe = runtime_probe if isinstance(runtime_probe, dict) else {}
+    toolchain_probe = execution.get("toolchain_probe")
+    toolchain_probe = toolchain_probe if isinstance(toolchain_probe, dict) else {}
+    route_authenticity_verified = scudo_execution_route_authenticity_verified(execution)
+    effective_runtime_verified = bool(runtime_verified and route_authenticity_verified)
+    return {
+        "requested_allocator": "scudo",
+        "allocator_feature": ALLOCATOR_FEATURES["scudo"],
+        "implementation_kind": (
+            "verified_external_scudo_runtime"
+            if effective_runtime_verified
+            else "planned_scudo_runtime_route"
+            if verification_status == "planned"
+            else "unverified_scudo_runtime_route"
+        ),
+        "paper_allocator_equivalent": effective_runtime_verified,
+        "runtime_identity_verified": effective_runtime_verified,
+        "runtime_authenticity_verified": route_authenticity_verified,
+        "runtime_identity_status": verification_status,
+        "runtime_identity_marker": SCUDO_RUNTIME_IDENTITY_MARKER,
+        "scudo_runtime_mode": execution.get("selected_mode"),
+        "scudo_runtime_library": execution.get("runtime_library"),
+        "scudo_runtime_library_identity": runtime_probe.get("runtime_library_identity"),
+        "scudo_runtime_authenticity": runtime_probe.get("runtime_authenticity"),
+        "runtime_provenance": {
+            "selected_mode": execution.get("selected_mode"),
+            "runtime_library": execution.get("runtime_library"),
+            "runtime_library_identity": runtime_probe.get("runtime_library_identity"),
+            "runtime_authenticity_verified": route_authenticity_verified,
+            "runtime_authenticity": runtime_probe.get("runtime_authenticity"),
+            "rust_toolchain_provenance": toolchain_probe.get("rust_toolchain_provenance"),
+        },
+    }
+
+
+def scudo_execution_runtime_record(
+    execution: Dict[str, Any],
+    *,
+    runtime_verified: bool,
+    verification_status: str,
+) -> Dict[str, Any]:
+    route_authenticity_verified = scudo_execution_route_authenticity_verified(execution)
+    effective_runtime_verified = bool(runtime_verified and route_authenticity_verified)
+    record = dict(execution)
+    record.update(
+        {
+            "execution_state": verification_status,
+            "runtime_verified": effective_runtime_verified,
+            "runtime_authenticity_verified": route_authenticity_verified,
+            "paper_allocator_equivalent": effective_runtime_verified,
+            "equivalence_reason": (
+                "trusted Scudo artifact and benchmark runtime identity marker were both verified"
+                if effective_runtime_verified
+                else "benchmark marker was present but the selected Scudo artifact was not authenticated"
+                if runtime_verified
+                else "execution route is planned; benchmark runtime identity marker has not been verified"
+                if verification_status == "planned"
+                else "benchmark did not emit the exact Scudo runtime identity marker on stderr"
+            ),
+        }
+    )
+    return record
+
+
 def scudo_execution_probe(args: argparse.Namespace) -> Dict[str, Any]:
     cached = getattr(args, "_scudo_execution_probe", None)
     if isinstance(cached, dict):
@@ -950,6 +1680,15 @@ def scudo_execution_probe(args: argparse.Namespace) -> Dict[str, Any]:
     requested = scudo_requested_mode(args)
     toolchain = scudo_toolchain_probe(args)
     runtime = scudo_runtime_probe(args)
+    runtime_authentic = bool(
+        runtime.get("ok") is True
+        and runtime.get("runtime_authenticity_verified") is True
+        and isinstance(runtime.get("runtime_authenticity"), dict)
+        and runtime["runtime_authenticity"].get("ok") is True
+    )
+    explicit_runtime_requested = bool(
+        str(runtime.get("configured_runtime_library_input") or "").strip()
+    )
     selected_mode: Optional[str] = None
     blockers: List[str] = []
 
@@ -959,23 +1698,35 @@ def scudo_execution_probe(args: argparse.Namespace) -> Dict[str, Any]:
         else:
             blockers.append("requested rust-sanitizer mode but rustc rejected -Z sanitizer=scudo")
     elif requested == "ld-preload":
-        if runtime.get("ok"):
+        if runtime_authentic:
             selected_mode = "ld-preload"
         else:
-            blockers.append("requested ld-preload mode but no Scudo standalone runtime library was found")
+            blockers.append("requested ld-preload mode but no authenticated Scudo standalone runtime was found")
     else:
-        if toolchain.get("ok"):
+        if explicit_runtime_requested and runtime_authentic:
+            selected_mode = "ld-preload"
+        elif explicit_runtime_requested:
+            blockers.append(
+                "explicit Scudo runtime library was requested but did not pass resolution and authenticity checks"
+            )
+        elif toolchain.get("ok"):
             selected_mode = "rust-sanitizer"
-        elif runtime.get("ok"):
+        elif runtime_authentic:
             selected_mode = "ld-preload"
         else:
             blockers.extend(
                 [
                     "rustc rejected -Z sanitizer=scudo",
-                    "no Scudo standalone runtime library was found for LD_PRELOAD",
+                    "no authenticated Scudo standalone runtime was found for LD_PRELOAD",
                 ]
             )
 
+    runtime_identity = runtime.get("runtime_library_identity")
+    runtime_realpath = (
+        runtime_identity.get("realpath")
+        if isinstance(runtime_identity, dict)
+        else None
+    )
     result = {
         "ok": bool(selected_mode),
         "requested_mode": requested,
@@ -983,15 +1734,23 @@ def scudo_execution_probe(args: argparse.Namespace) -> Dict[str, Any]:
         "rust_sanitizer_rustflags": SCUDO_SANITIZER_RUSTFLAGS,
         "toolchain_probe": toolchain,
         "runtime_probe": runtime,
-        "runtime_library": runtime.get("configured_runtime_library") if selected_mode == "ld-preload" else None,
-        "paper_allocator_equivalent": bool(selected_mode),
-        "equivalence_reason": (
-            "Rust Scudo sanitizer runtime selected"
-            if selected_mode == "rust-sanitizer"
-            else "bench_scudo uses System allocator and LD_PRELOAD routes malloc/free to Scudo standalone runtime"
+        "runtime_library": (
+            runtime_realpath or runtime.get("configured_runtime_library")
             if selected_mode == "ld-preload"
             else None
         ),
+        "execution_state": "planned",
+        "runtime_verified": False,
+        "runtime_authenticity_verified": (
+            runtime_authentic if selected_mode == "ld-preload" else bool(toolchain.get("ok"))
+        ),
+        "paper_allocator_equivalent": False,
+        "equivalence_reason": (
+            "execution route selected; exact benchmark stderr identity marker is still required"
+            if selected_mode
+            else None
+        ),
+        "runtime_identity_marker_required": SCUDO_RUNTIME_IDENTITY_MARKER,
         "blockers": blockers,
     }
     setattr(args, "_scudo_execution_probe", result)
@@ -1000,6 +1759,9 @@ def scudo_execution_probe(args: argparse.Namespace) -> Dict[str, Any]:
 
 def cargo_subprocess_env(args: argparse.Namespace) -> Dict[str, str]:
     env = os.environ.copy()
+    if rust_toolchain_provenance(args).get("uses_system_toolchain") is True:
+        env.pop(RUST_TOOLCHAIN_ENV, None)
+        env.pop("RUSTUP_TOOLCHAIN", None)
     env.setdefault("GLIBC_TUNABLES", "glibc.pthread.rseq=0")
     # Paper timing runs do not need semantic coverage counters: counting every
     # measured allocation would charge evidence instrumentation to the allocator
@@ -1038,6 +1800,8 @@ def cargo_subprocess_env(args: argparse.Namespace) -> Dict[str, str]:
         scudo = scudo_execution_probe(args)
         mode = scudo.get("selected_mode")
         if mode == "rust-sanitizer":
+            for name in SCUDO_SANITIZER_CONFLICTING_ENV_NAMES:
+                env.pop(name, None)
             env["RUSTFLAGS"] = append_env_flags(env.get("RUSTFLAGS"), SCUDO_SANITIZER_RUSTFLAGS)
         elif mode == "ld-preload":
             runtime = scudo.get("runtime_library")
@@ -1614,9 +2378,9 @@ def validate_args(args: argparse.Namespace) -> Optional[int]:
                 scudo_execution_probe=probe,
                 hint=(
                     "run on a Rust toolchain/target that accepts '-Z sanitizer=scudo', "
-                    "or install/provide a Scudo standalone runtime such as "
-                    "libclang_rt.scudo_standalone-<arch>.so via --scudo-runtime-library "
-                    "or UNIALLOC_SCUDO_RUNTIME_LIBRARY"
+                    "or use the host-architecture Scudo standalone runtime from an installed "
+                    "compiler-rt package; standalone authentication currently uses the "
+                    "Debian/Ubuntu dpkg trust path"
                 ),
             )
     if args.allocator == "ptmalloc" and platform.system() != "Linux" and not args.allow_host_allocator_mismatch:
@@ -1725,7 +2489,7 @@ def run(args: argparse.Namespace) -> int:
         "claim_grade_scope": "collections-full" if not args.bench_filter else "collections-subset",
         "claim_grade": (
             False
-            if semantic_selection.get("required") or toolchain_blockers
+            if args.allocator == "scudo" or semantic_selection.get("required") or toolchain_blockers
             else not bool(args.bench_filter)
         ),
         "compiler_site_replay": compiler_site_replay_record(compiler_site_replay),
@@ -1754,6 +2518,12 @@ def run(args: argparse.Namespace) -> int:
         },
         "subprocess_env_delta": env_delta_for_record(env),
     }
+    if toolchain_provenance.get("uses_system_toolchain") is True:
+        metadata["subprocess_env_removed"] = [RUST_TOOLCHAIN_ENV, "RUSTUP_TOOLCHAIN"]
+        metadata["subprocess_env_effective_absence"] = {
+            RUST_TOOLCHAIN_ENV: RUST_TOOLCHAIN_ENV not in env,
+            "RUSTUP_TOOLCHAIN": "RUSTUP_TOOLCHAIN" not in env,
+        }
     if build_cmd is not None:
         metadata.update(
             {
@@ -1765,14 +2535,45 @@ def run(args: argparse.Namespace) -> int:
     if args.allocator == "tcmalloc":
         metadata["tcmalloc_library_probe"] = tcmalloc_library_probe(args)
     if args.allocator == "scudo":
-        metadata["scudo_execution_probe"] = scudo_execution_probe(args)
+        planned_execution = scudo_execution_runtime_record(
+            scudo_execution_probe(args),
+            runtime_verified=False,
+            verification_status="planned",
+        )
+        metadata["scudo_execution_probe"] = planned_execution
         metadata["scudo_toolchain_probe"] = metadata["scudo_execution_probe"].get("toolchain_probe")
         metadata["scudo_runtime_probe"] = metadata["scudo_execution_probe"].get("runtime_probe")
         metadata["scudo_runtime_mode"] = metadata["scudo_execution_probe"].get("selected_mode")
+        metadata["subprocess_env_effective"] = {
+            key: env[key]
+            for key in (
+                "UNIALLOC_SCUDO_RUNTIME_LIBRARY",
+                "LD_PRELOAD",
+                "RUSTFLAGS",
+            )
+            if key in env
+        }
+        if metadata["scudo_runtime_mode"] == "rust-sanitizer":
+            removed = list(SCUDO_SANITIZER_CONFLICTING_ENV_NAMES)
+            metadata["subprocess_env_removed"] = sorted(
+                set(metadata.get("subprocess_env_removed", [])) | set(removed)
+            )
+            absence = dict(metadata.get("subprocess_env_effective_absence", {}))
+            absence.update({name: name not in env for name in removed})
+            metadata["subprocess_env_effective_absence"] = absence
+        metadata["allocator_semantics"] = scudo_allocator_semantics(
+            planned_execution,
+            runtime_verified=False,
+            verification_status="planned",
+        )
     if args.dry_run:
         dry_run_blockers = ["dry-run is not timing evidence", *toolchain_blockers]
         if args.bench_filter:
             dry_run_blockers.append("filtered Collections subset is not claim-grade full-row evidence")
+        if args.allocator == "scudo":
+            dry_run_blockers.append(
+                "Scudo execution route is planned; runtime identity marker has not been observed"
+            )
         print(
             json.dumps(
                 {
@@ -1922,6 +2723,66 @@ def run(args: argparse.Namespace) -> int:
             stderr_tail=stderr_text[-4000:],
             **bench_failure_details(stdout_text),
         )
+    if args.allocator == "scudo":
+        planned_execution = scudo_execution_probe(args)
+        if not scudo_runtime_identity_marker_present(stderr_text):
+            failed_execution = scudo_execution_runtime_record(
+                planned_execution,
+                runtime_verified=False,
+                verification_status="verification-failed",
+            )
+            return emit_error(
+                "Scudo benchmark exited successfully without the required runtime identity marker",
+                code=1,
+                command=cmd,
+                stdout_tail=stdout_text[-4000:],
+                stderr_tail=stderr_text[-4000:],
+                scudo_execution_probe=failed_execution,
+                allocator_semantics=scudo_allocator_semantics(
+                    failed_execution,
+                    runtime_verified=False,
+                    verification_status="verification-failed",
+                ),
+            )
+        verified_execution = scudo_execution_runtime_record(
+            planned_execution,
+            runtime_verified=True,
+            verification_status="runtime-verified",
+        )
+        if verified_execution.get("runtime_verified") is not True:
+            return emit_error(
+                "Scudo benchmark marker was present but the runtime artifact was not authenticated",
+                code=1,
+                command=cmd,
+                stdout_tail=stdout_text[-4000:],
+                stderr_tail=stderr_text[-4000:],
+                scudo_execution_probe=verified_execution,
+                allocator_semantics=scudo_allocator_semantics(
+                    verified_execution,
+                    runtime_verified=False,
+                    verification_status="verification-failed",
+                ),
+            )
+        metadata["scudo_execution_probe"] = verified_execution
+        metadata["allocator_semantics"] = scudo_allocator_semantics(
+            verified_execution,
+            runtime_verified=True,
+            verification_status="runtime-verified",
+        )
+        stderr_evidence = retain_scudo_stderr_evidence(
+            stderr_text,
+            label=f"{args.dataset}-{args.benchmark}-{args.allocator}",
+        )
+        stdout_evidence = retain_scudo_stdout_evidence(
+            stdout_text,
+            label=f"{args.dataset}-{args.benchmark}-{args.allocator}",
+        )
+        metadata["stdout"] = stdout_evidence["path"]
+        metadata["stdout_sha256"] = stdout_evidence["sha256"]
+        metadata["stderr"] = stderr_evidence["path"]
+        metadata["stderr_sha256"] = stderr_evidence["sha256"]
+        metadata["evidence"] = [stdout_evidence, stderr_evidence]
+        metadata["raw_evidence"] = [stdout_evidence, stderr_evidence]
     parsed_rows = parse_bench_rows(stdout_text)
     semantic_events = parse_semantic_events(stdout_text)
     selected = select_timing_rows(parsed_rows, args)
@@ -1965,40 +2826,49 @@ def run(args: argparse.Namespace) -> int:
         claim_grade_blockers.append("filtered Collections subset is not claim-grade full-row evidence")
     claim_grade_blockers.extend(toolchain_blockers)
     claim_grade_blockers.extend(semantic_policy.get("blockers", []))
+    scudo_allocator_equivalent = (
+        args.allocator != "scudo"
+        or metadata.get("allocator_semantics", {}).get("paper_allocator_equivalent") is True
+    )
+    if not scudo_allocator_equivalent:
+        claim_grade_blockers.append("Scudo runtime identity was not verified by the benchmark")
     final_claim_grade = (
         not bool(args.bench_filter)
         and bool(semantic_policy.get("ready"))
+        and scudo_allocator_equivalent
         and not claim_grade_blockers
     )
 
-    print(
-        json.dumps(
-            {
-                **metadata,
-                "dry_run": False,
-                "claim_grade": final_claim_grade,
-                "claim_grade_blockers": claim_grade_blockers,
-                "semantic_policy": semantic_policy,
-                "seconds": ns_per_iter / 1_000_000_000.0,
-                "ns_per_iter": ns_per_iter,
-                "parsed_bench_rows": len(rows),
-                "parsed_bench_rows_total": len(parsed_rows),
-                "benchmarks": [row["benchmark"] for row in rows],
-                "excluded_harness_benchmarks": [
-                    row["benchmark"] for row in excluded_harness_rows
-                ],
-                "semantic_event_count": len(semantic_events),
-                "semantic_events": semantic_events,
-                "wall_seconds": elapsed,
-                **(
-                    {"total_wall_seconds": time.perf_counter() - total_start}
-                    if build_cmd is not None
-                    else {}
-                ),
-            },
-            sort_keys=True,
-        )
-    )
+    final_record = {
+        **metadata,
+        "dry_run": False,
+        "claim_grade": final_claim_grade,
+        "claim_grade_blockers": claim_grade_blockers,
+        "semantic_policy": semantic_policy,
+        "seconds": ns_per_iter / 1_000_000_000.0,
+        "ns_per_iter": ns_per_iter,
+        "parsed_bench_rows": len(rows),
+        "parsed_bench_rows_total": len(parsed_rows),
+        "benchmarks": [row["benchmark"] for row in rows],
+        "excluded_harness_benchmarks": [
+            row["benchmark"] for row in excluded_harness_rows
+        ],
+        "semantic_event_count": len(semantic_events),
+        "semantic_events": semantic_events,
+        "wall_seconds": elapsed,
+        **(
+            {"total_wall_seconds": time.perf_counter() - total_start}
+            if build_cmd is not None
+            else {}
+        ),
+    }
+    if args.allocator == "scudo":
+        # Bind the wrapper-owned selection contract (command/filter/selected
+        # rows) to the same raw stdout/stderr evidence before emitting timing.
+        # This prevents a valid full-row execution from being relabeled as a
+        # filtered subset after the fact.
+        attach_scudo_timing_binding(final_record)
+    print(json.dumps(final_record, sort_keys=True))
     return 0
 
 

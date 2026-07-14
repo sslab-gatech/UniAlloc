@@ -1,4 +1,4 @@
-#![cfg(not(target_os = "android"))]
+#![cfg(any(not(target_os = "android"), feature = "bench_scudo"))]
 #![cfg_attr(not(unialloc_btree_extract_if_range), feature(btree_drain_filter))]
 #![cfg_attr(not(unialloc_has_stable_map_first_last), feature(map_first_last))]
 #![feature(iter_next_chunk)]
@@ -9,6 +9,9 @@
 extern crate test;
 #[macro_use]
 extern crate alloc;
+
+#[cfg(feature = "bench_scudo")]
+mod scudo_runtime;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "bench_jemalloc")] {
@@ -27,6 +30,8 @@ cfg_if::cfg_if! {
         #[global_allocator]
         static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
     } else if #[cfg(feature = "bench_scudo")] {
+        // The scudo_runtime constructor verifies System's allocation ABI is
+        // actually interposed by Scudo before this benchmark can execute.
         use std::alloc::System;
         #[global_allocator]
         static SCUDO_SYSTEM: System = System;
