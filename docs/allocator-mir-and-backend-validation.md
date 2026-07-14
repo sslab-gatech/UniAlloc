@@ -1430,6 +1430,7 @@ dev-dependencies:
 
 ```sh
 cargo +nightly-2026-06-11 run \
+  --locked \
   -Z build-std=core,alloc,panic_abort \
   --manifest-path tools/pac-nostd-contract/Cargo.toml \
   --target arm64e-apple-darwin \

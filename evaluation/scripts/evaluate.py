@@ -29620,6 +29620,43 @@ def run_arm64e_std_runtime_preflight(
     )
 
 
+def pac_nostd_probe_runner_contract() -> Dict[str, Any]:
+    """Return the checked-in no_std PAC runner and its reproducible lockfile."""
+
+    crate_dir = ROOT / "tools" / "pac-nostd-contract"
+    paths = {
+        "manifest": crate_dir / "Cargo.toml",
+        "lockfile": crate_dir / "Cargo.lock",
+        "source": ROOT / "unialloc" / "examples" / "pac_metadata_probe_nostd.rs",
+        "build_rs": crate_dir / "build.rs",
+    }
+    missing = [str(path) for path in paths.values() if not path.is_file()]
+    if missing:
+        raise FileNotFoundError(f"PAC no_std runner contract is incomplete: {', '.join(missing)}")
+    return {
+        "kind": "checked-in-contract",
+        "crate_dir": str(crate_dir),
+        **{name: str(path) for name, path in paths.items()},
+        "sha256": {name: file_sha256(path) for name, path in paths.items()},
+    }
+
+
+def pac_nostd_contract_features(features: str) -> str:
+    """Validate features exposed by the isolated PAC no_std contract."""
+
+    requested = unique_strings(item.strip() for item in str(features or "").split(",") if item.strip())
+    supported = {"pac", "stats"}
+    unsupported = sorted(set(requested) - supported)
+    if unsupported:
+        raise ValueError(
+            "PAC no_std runner supports only pac,stats; unsupported features: "
+            + ",".join(unsupported)
+        )
+    if "pac" not in requested:
+        raise ValueError("PAC no_std runner requires the pac feature")
+    return ",".join(requested)
+
+
 def collect_pac_metadata_direct_probe(args: argparse.Namespace) -> int:
     """Run a real allocator/PAC metadata-auth side-cache probe."""
 
@@ -29627,16 +29664,22 @@ def collect_pac_metadata_direct_probe(args: argparse.Namespace) -> int:
     out_dir = Path(args.output_dir).expanduser() if args.output_dir else RAW / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     timeout = max(1, int(getattr(args, "timeout", 120) or 120))
-    toolchain = str(getattr(args, "toolchain", "nightly") or "nightly")
+    toolchain = str(getattr(args, "toolchain", "") or rust_toolchain() or "nightly")
     features = str(getattr(args, "features", "pac,stats") or "pac,stats")
     target = str(getattr(args, "target", "") or "").strip()
     build_std = bool(getattr(args, "build_std", False))
-    build_std_crates = str(getattr(args, "build_std_crates", "std,panic_abort") or "std,panic_abort")
     runtime = str(getattr(args, "runtime", "std") or "std")
     if runtime not in {"std", "nostd"}:
         raise ValueError(f"unsupported PAC metadata probe runtime: {runtime}")
-    example = "pac_metadata_probe_nostd" if runtime == "nostd" else "pac_metadata_probe"
+    if runtime == "nostd":
+        features = pac_nostd_contract_features(features)
+    requested_build_std_crates = str(getattr(args, "build_std_crates", "") or "").strip()
+    build_std_crates = requested_build_std_crates or (
+        "core,alloc,panic_abort" if runtime == "nostd" else "std,panic_abort"
+    )
     cargo = shutil.which("cargo") or "cargo"
+    cargo_target_dir = out_dir / "cargo-target"
+    nostd_runner: Optional[Dict[str, Any]] = None
     cmd = [cargo, rust_toolchain_arg(toolchain), "run"]
     if build_std:
         # `arm64e-apple-darwin` is visible to current rustc, but rustup does not
@@ -29644,18 +29687,31 @@ def collect_pac_metadata_direct_probe(args: argparse.Namespace) -> int:
         # build-from-source choice explicit in the command line and audit record
         # instead of silently treating target-list visibility as buildability.
         cmd.extend(["-Z", f"build-std={build_std_crates}"])
-    cmd.extend(["-q", "-p", "unialloc"])
+    if runtime == "nostd":
+        nostd_runner = pac_nostd_probe_runner_contract()
+        cmd.extend(
+            [
+                "-q",
+                "--locked",
+                "--manifest-path",
+                nostd_runner["manifest"],
+                "--features",
+                features,
+            ]
+        )
+    else:
+        cmd.extend(["-q", "-p", "unialloc"])
     if target:
         cmd.extend(["--target", target])
-    cmd.extend(
-        [
-            "--example",
-            example,
-            "--features",
-            features,
-        ]
-    )
-    cargo_target_dir = out_dir / "cargo-target"
+    if runtime != "nostd":
+        cmd.extend(
+            [
+                "--example",
+                "pac_metadata_probe",
+                "--features",
+                features,
+            ]
+        )
     arm64e_std_preflight: Optional[Dict[str, Any]] = None
     skip_allocator_probe_due_to_preflight = False
     if target == "arm64e-apple-darwin" and runtime == "std" and build_std:
@@ -29748,6 +29804,7 @@ def collect_pac_metadata_direct_probe(args: argparse.Namespace) -> int:
         "cargo_target_dir": str(cargo_target_dir),
         "cargo_target_cleanup": cargo_target_cleanup,
         "arm64e_std_runtime_preflight": arm64e_std_preflight,
+        "nostd_runner": nostd_runner,
         "event": event,
         "summary": summary,
         "blockers": blockers,
@@ -72596,7 +72653,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     p.add_argument("--run-id")
     p.add_argument("--output-dir", help="Output directory; default is evaluation/raw/<run-id>")
-    p.add_argument("--toolchain", default="nightly")
+    p.add_argument(
+        "--toolchain",
+        help="Rustup toolchain; defaults to UNIALLOC_RUST_TOOLCHAIN or the repository rust-toolchain pin",
+    )
     p.add_argument("--features", default="pac,stats")
     p.add_argument("--target", help="Optional Rust target triple for a real target-specific allocator probe")
     p.add_argument(
@@ -72619,8 +72679,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     p.add_argument(
         "--build-std-crates",
-        default="std,panic_abort",
-        help="Comma-separated crate list passed to cargo -Z build-std when --build-std is set",
+        help=(
+            "Comma-separated crate list passed to cargo -Z build-std when --build-std is set; "
+            "defaults to std,panic_abort for std and core,alloc,panic_abort for no_std"
+        ),
     )
     p.add_argument("--timeout", type=int, default=120)
     p.add_argument(

@@ -7817,7 +7817,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             audit["blockers"],
         )
 
-    def test_pac_direct_probe_build_std_records_explicit_build_from_source_attempt(self) -> None:
+    def test_pac_direct_probe_build_std_defaults_to_std_runtime_crates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             results = pathlib.Path(tmpdir) / "results"
             with temporary_eval_results_and_raw(results) as raw:
@@ -7854,7 +7854,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                     features="pac,stats",
                     target="arm64e-apple-darwin",
                     build_std=True,
-                    build_std_crates="std,panic_abort",
+                    build_std_crates=None,
                     timeout=60,
                     no_update_results=True,
                 )
@@ -7886,8 +7886,16 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
 
                 def fake_platform_run(out_dir, label, cmd, timeout, *, extra_env=None):
                     self.assertEqual(label, "pac-metadata-direct-probe")
-                    self.assertIn("pac_metadata_probe_nostd", cmd)
-                    self.assertEqual(cmd[cmd.index("--example") + 1], "pac_metadata_probe_nostd")
+                    self.assertIn(evaluate.rust_toolchain_arg(evaluate.rust_toolchain()), cmd)
+                    self.assertNotIn("--example", cmd)
+                    self.assertNotIn("-p", cmd)
+                    self.assertIn("--locked", cmd)
+                    self.assertEqual(
+                        pathlib.Path(cmd[cmd.index("--manifest-path") + 1]),
+                        evaluate.ROOT / "tools" / "pac-nostd-contract" / "Cargo.toml",
+                    )
+                    self.assertEqual(cmd[cmd.index("--features") + 1], "pac,stats")
+                    self.assertIn("build-std=core,alloc,panic_abort", cmd)
                     target_dir = pathlib.Path((extra_env or {})["CARGO_TARGET_DIR"])
                     target_dir.mkdir(parents=True, exist_ok=True)
                     (target_dir / "partial.o").write_bytes(b"z" * 19)
@@ -7935,12 +7943,12 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                 args = types.SimpleNamespace(
                     run_id="pac-arm64e-nostd-unit",
                     output_dir=None,
-                    toolchain="nightly",
+                    toolchain=None,
                     features="pac,stats",
                     target="arm64e-apple-darwin",
                     runtime="nostd",
                     build_std=True,
-                    build_std_crates="std,panic_abort",
+                    build_std_crates=None,
                     timeout=60,
                     no_update_results=True,
                 )
@@ -7965,6 +7973,23 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         self.assertIn("did not validate the full allocator type-cache side-cache", joined)
         self.assertIn("observed no typed-cache inserts", joined)
         self.assertEqual(audit["summary"]["cargo_target_removed_bytes"], 19)
+        self.assertEqual(audit["build_std_crates"], "core,alloc,panic_abort")
+        self.assertEqual(audit["nostd_runner"]["kind"], "checked-in-contract")
+        self.assertTrue(audit["nostd_runner"]["lockfile"].endswith("Cargo.lock"))
+
+    def test_pac_nostd_runner_contract_disables_default_features_and_is_locked(self) -> None:
+        contract = evaluate.pac_nostd_probe_runner_contract()
+        manifest = pathlib.Path(contract["manifest"]).read_text(encoding="utf-8")
+
+        self.assertEqual(contract["kind"], "checked-in-contract")
+        self.assertIn("default-features = false", manifest)
+        self.assertTrue(pathlib.Path(contract["lockfile"]).is_file())
+        self.assertEqual(set(contract["sha256"]), {"manifest", "lockfile", "source", "build_rs"})
+        self.assertTrue(all(len(digest) == 64 for digest in contract["sha256"].values()))
+
+    def test_pac_nostd_runner_rejects_features_outside_its_contract(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsupported features: type_isolation"):
+            evaluate.pac_nostd_contract_features("pac,stats,type_isolation")
 
     def test_pac_direct_probe_signal_exit_is_explicit_blocker(self) -> None:
         blockers = evaluate.pac_metadata_direct_probe_blockers(
