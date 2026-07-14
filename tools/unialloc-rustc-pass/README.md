@@ -124,6 +124,20 @@ and Drop scopes and observes their exact lifetime hint:
 uv run python -m unittest tools/unialloc-rustc-pass/test_mir_lifetime_profile.py
 ```
 
+On a Linux host with an unreserved 2 MiB HugeTLB page, the following gate builds
+the real `lifetime_hugepage` UniAlloc rlib and proves that three exact profile
+rows drive an actual global-allocator HugeTLB mapping and matching release:
+
+```sh
+uv run python -m unittest -v \
+  tools/unialloc-rustc-pass/test_mir_lifetime_hugepage_integration.py
+```
+
+The test skips when the host has no configured 2 MiB pool and hard-fails on
+profile misses, mapping fallback, accounting mismatch, or incomplete release.
+It is a single-`Vec` mechanism gate; classifier accuracy and application
+performance require separate workload evidence.
+
 ## Run through the real Cargo bench target
 
 The evaluation wrapper builds the pass, runs `cargo clean -p unialloc` to avoid a

@@ -4,20 +4,20 @@
 
 **GO as a qualifier and paper mechanism point. Production-workload benefit remains a follow-on claim.**
 
-UniAlloc now has an exact, fail-closed rustc profile transport for semantic
-allocation and Drop scopes, plus a production allocator path that consumes the
-same lifetime class and reclaims complete 2 MiB extents at a phase boundary.
-The compiler transport and allocator consumption paths are execution-tested
-separately in this evidence package. The integrated allocator oracle experiment
-cut peak HugeTLB demand by 50% and steady effective resident memory by 49.52%.
-Whole-process PMU measurements reduced L2 dTLB misses by 96.07%. The paired
-dependent-touch result was a 3.04% improvement with a 95% bootstrap interval of
+UniAlloc now carries an exact, fail-closed rustc profile through actual MIR
+semantic scopes into the production allocator, where the lifetime class selects
+a real 2 MiB HugeTLB payload extent and complete-extent release. A synthetic
+single-binary gate executes this compiler-to-allocator chain with three exact
+profile matches, zero misses, one HugeTLB mapping, zero fallback, and one
+matching unmap. The broader allocator oracle experiment cut peak HugeTLB demand
+by 50% and steady effective resident memory by 49.52%. Whole-process PMU
+measurements reduced L2 dTLB misses by 96.07%. The paired dependent-touch result
+was a 3.04% improvement with a 95% bootstrap interval of
 `[-4.07%, +9.57%]`, so the direct latency result remains inconclusive.
 
-The presentable result is a compatible compiler/runtime placement contract with
-measured allocator-side reclamation and translation effects. A single-binary
-compiler-profile-to-HugeTLB gate and a trained classifier on real Rust
-applications are the next evidence gates.
+The presentable result is an end-to-end compiler/runtime placement mechanism
+with measured allocator-side reclamation and translation effects. A trained
+classifier on real Rust applications is the next evidence gate.
 
 ## Claim, mechanism, evidence, boundary, next experiment
 
@@ -25,9 +25,9 @@ applications are the next evidence gates.
 |---|---|
 | Claim | Rust semantic identity can make a lifetime hint actionable for HugeTLB payload placement while preserving conservative fallback and exact reuse boundaries. |
 | Mechanism | Exact `(callsite, type_id, module_id)` profile lookup selects `Unknown`, `Ephemeral`, or `LongLived`; 2 MiB extents are bucketed by lifetime/size/alignment; 32 × 64 KiB regions preserve exact `(type, module, flags, lifetime, placement)` identity. |
-| Evidence | 180/180 production-path matrix samples passed; peak HugeTLB demand fell from 512 to 256 pages; steady effective resident memory fell by 49.52%; L2 dTLB misses fell by 96.07%; every arena mapping and identity region was released. |
-| Boundary | Labels are manual oracle or injected-error labels. Compiler profile transport and production payload consumption are separately execution-tested. A single binary connecting both paths, plus real-workload classifier coverage, accuracy, throughput, and memory benefit, remain open. |
-| Next experiment | Connect the profiled compiler rewrite to the production HugeTLB allocator in one binary, then generate profiles from conservative MIR ownership/drop/escape proofs plus allocation-context training and run application workloads with per-site accuracy, coverage, and end-to-end performance. |
+| Evidence | A single-binary gate passed with 3 exact profile matches, 0 misses, 1 HugeTLB map, and 1 unmap; 180/180 production-path matrix samples passed; peak HugeTLB demand fell from 512 to 256 pages; steady effective resident memory fell by 49.52%; L2 dTLB misses fell by 96.07%; every arena mapping and identity region was released. |
+| Boundary | The compiler-to-HugeTLB gate is a synthetic single-`Vec` mechanism test. Performance-matrix labels are manual oracle or injected-error labels. Real-workload classifier coverage, accuracy, throughput, and memory benefit remain open. |
+| Next experiment | Generate profiles from conservative MIR ownership/drop/escape proofs plus allocation-context training, then run application workloads with per-site accuracy, coverage, and end-to-end performance. |
 
 ## Implemented path
 
@@ -61,6 +61,25 @@ profile, performs the actual MIR rewrite against a dependency-free runtime stub,
 executes the binary, and observes only the requested long-lived hint. Ownership
 transfer rewrites preserve the existing metadata instead of consuming a new
 profile row.
+
+### Compiler-to-HugeTLB integration gate
+
+The host-gated regression builds the real `lifetime_hugepage` UniAlloc rlib,
+collects the exact `Vec::with_capacity`, `Vec::shrink_to_fit`, and implicit Drop
+identities, writes a long-lived profile, applies the actual MIR rewrite, and
+executes a binary with `UniAlloc` as its global allocator:
+
+```bash
+uv run python -m unittest -v \
+  tools/unialloc-rustc-pass/test_mir_lifetime_hugepage_integration.py
+```
+
+The test requires a configured Linux 2 MiB HugeTLB pool. It hard-gates three
+profile matches, zero misses, three applied rewrites, one real HugeTLB extent,
+zero fallback, matched routed allocation/release, one `munmap`, and restoration
+of the persistent pool. This is the end-to-end mechanism proof. Its one-`Vec`
+synthetic workload supplies no classifier-quality or application-performance
+claim.
 
 ### Payload allocator
 
@@ -256,6 +275,20 @@ This is a measured isolation-versus-granularity tradeoff.
 
 ## Relationship to prior work
 
+The closest systems use the following evaluation and placement configurations:
+
+| System | Placement geometry / lifetime signal | Published evaluation shape | Implication for this experiment |
+|---|---|---|---|
+| [LLAMA, ASPLOS 2020](https://colinraffel.com/publications/asplos2020learning.pdf) | 2 MiB pages split into 8 KiB blocks and 128 B lines; context-predicted classes span `≤10 ms`, `100 ms`, `1 s`, `10 s`, and longer orders of magnitude | production-server traces and code bases; its motivating image-service run reports 448 s, about 110 M allocations, and a 628 MB average live set | use explicit misprediction sweeps, time-varying live sets, fragmentation, and allocator overhead; avoid claiming lifetime-aware hugepage placement itself as new |
+| [TEMERAIRE, OSDI 2021](https://www.usenix.org/system/files/osdi21-hunter.pdf) | 2 MiB hugepages; small spans use a fullness-aware filler, intermediate/large spans use regions or the huge cache, and reusable tails are donated | eight applications, dedicated-server experiments, 2,000 Redis trials of 1 M requests, and randomized 1% fleet cohorts | report application throughput, RAM, TLB behavior, release policy, and whole-process scope separately |
+| [Warehouse-scale TCMalloc, ASPLOS 2024](https://people.csail.mit.edu/delimitrou/papers/2024.asplos.memory.pdf) | default 8 KiB TCMalloc pages packed into hugepages; span capacity is the lifetime proxy with published threshold `C=16` | fleet telemetry plus nine named application/benchmark rows; reports throughput, memory, CPI, dTLB walks, hugepage coverage, and dTLB MPKI | compare against lifetime-only segregation, quantify identity granularity, and keep allocator-side proxy baselines visible |
+
+UniAlloc's 2 MiB extent size therefore follows the common x86 hugepage unit.
+The 64 KiB identity region is an experimental semantic-isolation granularity,
+and the 0.1%/1%/5%/shuffled error sweep follows the classifier-sensitivity
+question emphasized by LLAMA. The 1 GiB two-wave matrix is a mechanism stress;
+the cited work sets the next bar at real application and fleet-shaped evidence.
+
 - [LLAMA, ASPLOS 2020](https://colinraffel.com/publications/asplos2020learning.pdf)
   already establishes allocation-context lifetime prediction and lifetime-aware
   2 MiB placement, including error recovery.
@@ -336,11 +369,10 @@ safety boundary immediately.
 
 A concise defense statement is:
 
-> UniAlloc demonstrates a Rust semantic contract whose compiler transport and
-> HugeTLB payload consumer agree on an exact lifetime-bearing identity. Oracle
-> labels establish allocator-side placement and reclamation; the error curve
-> quantifies the classifier quality required for application benefit. A
-> single-binary compiler-to-HugeTLB run is the final integration gate.
+> UniAlloc demonstrates an end-to-end Rust semantic contract whose exact
+> lifetime profile controls a real HugeTLB payload mapping and release. Oracle
+> labels establish the allocator-side memory mechanism; the error curve
+> quantifies the classifier quality required for application benefit.
 
 ## Remaining engineering risks
 
