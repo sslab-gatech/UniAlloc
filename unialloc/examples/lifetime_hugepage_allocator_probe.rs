@@ -142,6 +142,7 @@ mod probe {
         require_hugetlb: bool,
         require_thp: bool,
         require_no_thp: bool,
+        disable_process_thp: bool,
     }
 
     impl Default for Config {
@@ -167,6 +168,7 @@ mod probe {
                 require_hugetlb: false,
                 require_thp: false,
                 require_no_thp: false,
+                disable_process_thp: false,
             }
         }
     }
@@ -263,6 +265,7 @@ mod probe {
                     "--require-hugetlb" => config.require_hugetlb = true,
                     "--require-thp" => config.require_thp = true,
                     "--require-no-thp" => config.require_no_thp = true,
+                    "--disable-process-thp" => config.disable_process_thp = true,
                     _ => return Err(format!("unknown argument {arg}")),
                 }
             }
@@ -285,6 +288,35 @@ mod probe {
                 return Err("invalid workload geometry or rate".to_string());
             }
             Ok(config)
+        }
+    }
+
+    fn process_thp_disabled(disable: bool) -> Result<bool, String> {
+        #[cfg(target_os = "linux")]
+        unsafe {
+            const PR_SET_THP_DISABLE: libc::c_int = 41;
+            const PR_GET_THP_DISABLE: libc::c_int = 42;
+            if disable && libc::prctl(PR_SET_THP_DISABLE, 1, 0, 0, 0) != 0 {
+                return Err(format!(
+                    "PR_SET_THP_DISABLE failed: {}",
+                    std::io::Error::last_os_error()
+                ));
+            }
+            let status = libc::prctl(PR_GET_THP_DISABLE, 0, 0, 0, 0);
+            if status < 0 {
+                return Err(format!(
+                    "PR_GET_THP_DISABLE failed: {}",
+                    std::io::Error::last_os_error()
+                ));
+            }
+            Ok(status == 1)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            if disable {
+                return Err("--disable-process-thp requires Linux".to_string());
+            }
+            Ok(false)
         }
     }
 
@@ -980,6 +1012,7 @@ mod probe {
 
     pub fn run() -> Result<(), String> {
         let config = Config::parse()?;
+        let process_thp_disabled = process_thp_disabled(config.disable_process_thp)?;
         let layout = Layout::from_size_align(config.slot_bytes, 64)
             .map_err(|_| "unsupported slot layout".to_string())?;
         let long_objects = ((config.objects as f64) * config.long_fraction).round() as usize;
@@ -1317,6 +1350,7 @@ mod probe {
             && runtime_prediction_matches
             && byte_epoch_accounting_consistent
             && thp_backing_gate_passed
+            && (!config.disable_process_thp || process_thp_disabled)
             && (!hugetlb_required
                 || (final_stats.hugetlb_extent_mappings != 0
                     && final_stats.hugetlb_fallback_extent_mappings == 0));
@@ -1372,11 +1406,13 @@ mod probe {
         }
 
         println!(
-            "{{\"source\":\"lifetime_hugepage_allocator_probe\",\"passed\":{},\"accounting_consistent\":{},\"policy\":\"{}\",\"backend\":\"{}\",\"identity_mode\":\"{}\",\"types_per_truth\":{},\"objects\":{},\"total_allocations\":{},\"wave_allocations\":{},\"slot_bytes\":{},\"arena_slot_bytes\":{},\"long_objects\":{},\"ephemeral_objects\":{},\"false_long\":{},\"false_short\":{},\"false_long_rate\":{:.6},\"false_short_rate\":{:.6},\"confidence_threshold\":{},\"correct_confidence\":{},\"error_confidence\":{},\"confidence_overlap_rate\":{:.6},\"unknown_rate\":{:.6},\"prediction_trace_digest\":\"{:016x}\",\"static_classified\":{},\"static_unknown\":{},\"static_unknown_long\":{},\"static_unknown_short\":{},\"static_tp_objects\":{},\"static_tp_bytes\":{},\"static_tn_objects\":{},\"static_tn_bytes\":{},\"static_fp_objects\":{},\"static_fp_bytes\":{},\"static_fn_objects\":{},\"static_fn_bytes\":{},\"classification_coverage\":{:.9},\"classification_success_rate\":{:.9},\"classification_failure_rate\":{:.9},\"classification_precision\":{:.9},\"classification_recall\":{:.9},\"effective_placement_tp_objects\":{},\"effective_placement_tp_bytes\":{},\"effective_placement_tn_objects\":{},\"effective_placement_tn_bytes\":{},\"effective_placement_fp_objects\":{},\"effective_placement_fp_bytes\":{},\"effective_placement_fn_objects\":{},\"effective_placement_fn_bytes\":{},\"placement_success_rate\":{:.9},\"placement_failure_rate\":{:.9},\"placement_precision\":{:.9},\"placement_recall\":{:.9},\"placement_metric_semantics\":\"policy-intent\",\"policy_intent_placement_success_rate\":{:.9},\"policy_intent_placement_failure_rate\":{:.9},\"policy_intent_placement_precision\":{:.9},\"policy_intent_placement_recall\":{:.9},\"ephemeral_waves\":{},\"allocation_ns\":{},\"allocation_ns_per_object\":{:.6},\"ephemeral_release_ns\":{},\"first_epoch_advance_ns\":{},\"epoch_advance_ns\":{},\"retained_byte_epochs\":{},\"hugetlb_byte_epochs\":{},\"ordinary_byte_epochs\":{},\"thp_backend_vma_byte_epochs\":{},\"byte_epoch_accounting_consistent\":{},\"wave_evidence_sampling_ns\":{},\"wave_ns\":{},\"touch_ns\":{},\"touches\":{},\"ns_per_touch\":{:.6},\"teardown_ns\":{},\"checksum\":{},\"peak_rss_kib\":{},\"peak_anon_kib\":{},\"peak_hugetlb_kib\":{},\"steady_rss_kib\":{},\"steady_anon_kib\":{},\"steady_hugetlb_kib\":{},\"routed_allocations\":{},\"routed_deallocations\":{},\"unknown_bypasses\":{},\"unsupported_layout_bypasses\":{},\"allocation_fallbacks\":{},\"slot_reuse_hits\":{},\"slot_bump_allocations\":{},\"identity_region_assignments\":{},\"identity_region_releases\":{},\"ordinary_extent_mappings\":{},\"hugetlb_extent_mappings\":{},\"hugetlb_fallback_extent_mappings\":{},\"mapping_failures\":{},\"nohugepage_advice_failures\":{},\"extent_unmaps\":{},\"extent_unmap_failures\":{},{},{},{},{},{},{},{},\"own_mappings_released\":{}}}",
+            "{{\"source\":\"lifetime_hugepage_allocator_probe\",\"passed\":{},\"accounting_consistent\":{},\"policy\":\"{}\",\"backend\":\"{}\",\"process_thp_disable_requested\":{},\"process_thp_disabled\":{},\"identity_mode\":\"{}\",\"types_per_truth\":{},\"objects\":{},\"total_allocations\":{},\"wave_allocations\":{},\"slot_bytes\":{},\"arena_slot_bytes\":{},\"long_objects\":{},\"ephemeral_objects\":{},\"false_long\":{},\"false_short\":{},\"false_long_rate\":{:.6},\"false_short_rate\":{:.6},\"confidence_threshold\":{},\"correct_confidence\":{},\"error_confidence\":{},\"confidence_overlap_rate\":{:.6},\"unknown_rate\":{:.6},\"prediction_trace_digest\":\"{:016x}\",\"static_classified\":{},\"static_unknown\":{},\"static_unknown_long\":{},\"static_unknown_short\":{},\"static_tp_objects\":{},\"static_tp_bytes\":{},\"static_tn_objects\":{},\"static_tn_bytes\":{},\"static_fp_objects\":{},\"static_fp_bytes\":{},\"static_fn_objects\":{},\"static_fn_bytes\":{},\"classification_coverage\":{:.9},\"classification_success_rate\":{:.9},\"classification_failure_rate\":{:.9},\"classification_precision\":{:.9},\"classification_recall\":{:.9},\"effective_placement_tp_objects\":{},\"effective_placement_tp_bytes\":{},\"effective_placement_tn_objects\":{},\"effective_placement_tn_bytes\":{},\"effective_placement_fp_objects\":{},\"effective_placement_fp_bytes\":{},\"effective_placement_fn_objects\":{},\"effective_placement_fn_bytes\":{},\"placement_success_rate\":{:.9},\"placement_failure_rate\":{:.9},\"placement_precision\":{:.9},\"placement_recall\":{:.9},\"placement_metric_semantics\":\"policy-intent\",\"policy_intent_placement_success_rate\":{:.9},\"policy_intent_placement_failure_rate\":{:.9},\"policy_intent_placement_precision\":{:.9},\"policy_intent_placement_recall\":{:.9},\"ephemeral_waves\":{},\"allocation_ns\":{},\"allocation_ns_per_object\":{:.6},\"ephemeral_release_ns\":{},\"first_epoch_advance_ns\":{},\"epoch_advance_ns\":{},\"retained_byte_epochs\":{},\"hugetlb_byte_epochs\":{},\"ordinary_byte_epochs\":{},\"thp_backend_vma_byte_epochs\":{},\"byte_epoch_accounting_consistent\":{},\"wave_evidence_sampling_ns\":{},\"wave_ns\":{},\"touch_ns\":{},\"touches\":{},\"ns_per_touch\":{:.6},\"teardown_ns\":{},\"checksum\":{},\"peak_rss_kib\":{},\"peak_anon_kib\":{},\"peak_hugetlb_kib\":{},\"steady_rss_kib\":{},\"steady_anon_kib\":{},\"steady_hugetlb_kib\":{},\"routed_allocations\":{},\"routed_deallocations\":{},\"unknown_bypasses\":{},\"unsupported_layout_bypasses\":{},\"allocation_fallbacks\":{},\"slot_reuse_hits\":{},\"slot_bump_allocations\":{},\"identity_region_assignments\":{},\"identity_region_releases\":{},\"ordinary_extent_mappings\":{},\"hugetlb_extent_mappings\":{},\"hugetlb_fallback_extent_mappings\":{},\"mapping_failures\":{},\"nohugepage_advice_failures\":{},\"extent_unmaps\":{},\"extent_unmap_failures\":{},{},{},{},{},{},{},{},\"own_mappings_released\":{}}}",
             passed,
             stats_consistent(peak) && stats_consistent(steady) && stats_consistent(final_stats),
             config.policy.as_str(),
             config.policy.backend_name(),
+            config.disable_process_thp,
+            process_thp_disabled,
             config.identity_mode.as_str(),
             config.types_per_truth,
             config.objects,
