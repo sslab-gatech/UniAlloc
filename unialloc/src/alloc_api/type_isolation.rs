@@ -6,7 +6,9 @@
 //! the existing allocator fast path. Unmodified `GlobalAlloc` callers are
 //! counted as fallback allocations unless an explicit scoped-metadata or
 //! evaluation-only layout auto-metadata mode is active, so the coverage
-//! denominator remains honest by default.
+//! denominator remains honest by default. Release builds that call semantic
+//! allocation APIs must enable the `type_isolation` feature; raw-only release
+//! builds leave semantic lifecycle synchronization out of their hot path.
 
 use alloc::boxed::Box as AllocBox;
 use alloc::ffi::CString as AllocCString;
@@ -2727,10 +2729,23 @@ static GLOBAL_ADDRESS_GENERATION_HISTORY_PINS: [[AtomicU16;
     [const { [const { AtomicU16::new(0) }; GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS] };
         GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT];
 static GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT: AtomicUsize = AtomicUsize::new(0);
+// Raw-only processes cannot have semantic retained or released generations to
+// arbitrate. Keep that common path out of the sharded lifecycle tables until a
+// semantic allocation path activates the process-wide, sticky contract.
+// Semantic-feature and development builds start active so their concurrency
+// contract covers raw allocations that precede the first semantic operation.
+const GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL: bool =
+    cfg!(any(debug_assertions, feature = "type_isolation"));
+static GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE: AtomicBool =
+    AtomicBool::new(GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL);
 #[cfg(test)]
 static TEST_STRICT_ALLOCATION_PUBLICATIONS: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_SEMANTIC_ALLOCATION_PUBLICATIONS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES: AtomicUsize = AtomicUsize::new(0);
 
 static GLOBAL_RETAINED_OWNERSHIP_ARBITRATION: [Mutex<()>;
     GLOBAL_RETAINED_OWNERSHIP_ARBITRATION_SHARD_COUNT] = [
@@ -2743,6 +2758,27 @@ static GLOBAL_RETAINED_OWNERSHIP_ARBITRATION: [Mutex<()>;
     Mutex::new(()),
     Mutex::new(()),
 ];
+
+#[inline]
+pub(crate) fn global_address_lifecycle_tracking_active() -> bool {
+    GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.load(Ordering::Acquire)
+}
+
+#[inline]
+fn activate_global_address_lifecycle_tracking() {
+    if !cfg!(any(debug_assertions, feature = "type_isolation")) {
+        semantic_lifecycle_feature_required();
+    }
+    if !GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.load(Ordering::Relaxed) {
+        GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.store(true, Ordering::Release);
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn semantic_lifecycle_feature_required() -> ! {
+    panic!("semantic allocation APIs require the type_isolation feature")
+}
 
 #[thread_local]
 static mut MEMORY_TAGS: [TaggedAllocation; MEMORY_TAG_FAST_SLOTS] =
@@ -10049,6 +10085,8 @@ fn global_address_lifecycle_observation(ptr: *mut u8) -> GlobalAddressLifecycleO
             epoch: 0,
         };
     }
+    #[cfg(test)]
+    TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.fetch_add(1, Ordering::Relaxed);
     let ptr_key = ptr as usize;
     let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
     let table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
@@ -10105,6 +10143,7 @@ fn transition_global_address_lifecycle(
     if ptr.is_null() {
         return Err(AddressLifecycleTransitionError::Conflict);
     }
+    activate_global_address_lifecycle_tracking();
     let ptr_key = ptr as usize;
     let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
     let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
@@ -10765,6 +10804,9 @@ fn publish_authoritative_allocation_return(ptr: *mut u8, accept_existing_live: b
 /// Validate a pointer returned by the raw backend before it is exposed.
 #[inline]
 pub(crate) fn accept_raw_allocation_return(ptr: *mut u8) {
+    if !global_address_lifecycle_tracking_active() {
+        return;
+    }
     publish_authoritative_allocation_return(ptr, false);
 }
 
@@ -10772,6 +10814,7 @@ pub(crate) fn accept_raw_allocation_return(ptr: *mut u8) {
 /// record just published by the nested raw allocation hook.
 #[inline]
 fn publish_semantic_allocation_return(ptr: *mut u8) {
+    activate_global_address_lifecycle_tracking();
     publish_authoritative_allocation_return(ptr, true);
 }
 
@@ -10809,6 +10852,18 @@ fn begin_global_raw_reclaim_from_lifecycle_observation(
     ptr: *mut u8,
     observation: GlobalAddressLifecycleObservation,
 ) -> GlobalRawReclaimAdmission {
+    #[cfg(test)]
+    TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.fetch_add(1, Ordering::Relaxed);
+    if !global_address_lifecycle_tracking_active() {
+        debug_assert_eq!(
+            observation,
+            GlobalAddressLifecycleObservation {
+                snapshot: GlobalAddressLifecycleSnapshot::Absent,
+                epoch: 0,
+            }
+        );
+        return GlobalRawReclaimAdmission::Untracked(ptr);
+    }
     #[cfg(test)]
     pause_before_cross_domain_dealloc_arbitration_for_test();
     let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
@@ -10902,6 +10957,18 @@ pub(crate) fn observe_global_reclaim(ptr: *mut u8) -> GlobalReclaimObservation {
             _history_lease: None,
         };
     }
+    if !global_address_lifecycle_tracking_active() {
+        return GlobalReclaimObservation {
+            ptr: ptr as usize,
+            lifecycle: GlobalAddressLifecycleObservation {
+                snapshot: GlobalAddressLifecycleSnapshot::Absent,
+                epoch: 0,
+            },
+            _history_lease: None,
+        };
+    }
+    #[cfg(test)]
+    TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.fetch_add(1, Ordering::Relaxed);
     let ptr_key = ptr as usize;
     let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
     let table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
@@ -12212,6 +12279,7 @@ impl RustAllocator {
         if layout.size() == 0 {
             return semantic_zero_size_ptr(layout);
         }
+        activate_global_address_lifecycle_tracking();
         let ptr = if let Some(ptr) = self.try_alloc_lifetime_arena(layout, metadata) {
             ptr
         } else if let Some(ptr) = pop_compiler_type_metadata_cache(layout, metadata) {
@@ -12444,6 +12512,7 @@ impl RustAllocator {
         if layout_derived_raw_only_fast_path(metadata) {
             return self.alloc_raw(layout);
         }
+        activate_global_address_lifecycle_tracking();
         if compiler_type_isolated_recovery_fast_path(metadata) {
             return self.alloc_with_compiler_type_metadata_fast(
                 layout,
@@ -12500,6 +12569,7 @@ impl RustAllocator {
         if layout_derived_raw_only_fast_path(metadata) {
             return self.alloc_raw(layout);
         }
+        activate_global_address_lifecycle_tracking();
         if compiler_type_isolated_recovery_fast_path(metadata) {
             return self.alloc_with_compiler_type_metadata_fast(layout, metadata, false);
         }
@@ -12571,6 +12641,7 @@ impl RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return true;
         }
+        activate_global_address_lifecycle_tracking();
         self.dealloc_with_metadata_inner_from_observation(
             layout,
             metadata,
@@ -13105,6 +13176,7 @@ unsafe impl SemanticAlloc for RustAllocator {
             }
             return semantic_zero_size_ptr(new_layout);
         }
+        activate_global_address_lifecycle_tracking();
         let observation = observe_global_reclaim(ptr);
         let old_recovery = lookup_auto_allocation_record(ptr, old_layout, false);
         #[cfg(test)]
@@ -15282,6 +15354,24 @@ mod tests {
                 clear_delayed_free_for_test();
             }
             semantic_stats_recording_disable();
+        }
+    }
+
+    struct LifecycleTrackingOverride {
+        previous: bool,
+    }
+
+    impl LifecycleTrackingOverride {
+        fn inactive() -> Self {
+            Self {
+                previous: GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.swap(false, Ordering::AcqRel),
+            }
+        }
+    }
+
+    impl Drop for LifecycleTrackingOverride {
+        fn drop(&mut self) {
+            GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.store(self.previous, Ordering::Release);
         }
     }
 
@@ -32274,6 +32364,120 @@ mod tests {
             clear_type_cache_for_test();
             clear_auto_allocation_records();
         }
+    }
+
+    #[test]
+    fn raw_allocator_skips_inactive_semantic_lifecycle_tables() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let strict_before = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let probes_before = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
+
+        let ptr = unsafe { alloc.alloc_raw(layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            alloc.dealloc_raw(ptr, layout);
+        }
+
+        assert_eq!(
+            TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed),
+            strict_before,
+            "raw allocation should not publish into an inactive semantic lifecycle"
+        );
+        assert_eq!(
+            TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed),
+            probes_before,
+            "raw allocation and deallocation should not probe inactive semantic lifecycle tables"
+        );
+    }
+
+    #[test]
+    fn global_allocator_inactive_lifecycle_fast_paths_preserve_realloc_contract() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let probes_before = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
+        let admissions_before = TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.load(Ordering::Relaxed);
+
+        let released = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!released.is_null());
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, released, layout);
+        }
+
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            for offset in 0..layout.size() {
+                ptr.add(offset).write((offset as u8).wrapping_mul(17));
+            }
+        }
+
+        let same_class_size = 63;
+        let same_class = unsafe { GlobalAlloc::realloc(&alloc, ptr, layout, same_class_size) };
+        assert_eq!(same_class, ptr);
+        unsafe {
+            for offset in 0..same_class_size {
+                assert_eq!(
+                    same_class.add(offset).read(),
+                    (offset as u8).wrapping_mul(17)
+                );
+            }
+        }
+
+        let same_class_layout = Layout::from_size_align(same_class_size, layout.align()).unwrap();
+        let moved_size = 192;
+        let moved =
+            unsafe { GlobalAlloc::realloc(&alloc, same_class, same_class_layout, moved_size) };
+        assert!(!moved.is_null());
+        unsafe {
+            for offset in 0..same_class_size {
+                assert_eq!(moved.add(offset).read(), (offset as u8).wrapping_mul(17));
+            }
+        }
+        let moved_layout = Layout::from_size_align(moved_size, layout.align()).unwrap();
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, moved, moved_layout);
+        }
+
+        let zeroed = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!zeroed.is_null());
+        let zero = unsafe { GlobalAlloc::realloc(&alloc, zeroed, layout, 0) };
+        assert!(!zero.is_null());
+        assert_eq!(zero as usize, layout.align());
+
+        assert_eq!(
+            TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed),
+            probes_before,
+            "inactive GlobalAlloc operations should not probe lifecycle tables"
+        );
+        assert_eq!(
+            TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.load(Ordering::Relaxed),
+            admissions_before,
+            "inactive GlobalAlloc operations should not enter lifecycle admission"
+        );
     }
 
     #[test]
