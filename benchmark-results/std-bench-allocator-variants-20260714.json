@@ -14,60 +14,60 @@
       "all_benchmark_count": 8,
       "allocator": "ptmalloc",
       "feature": "bench_ptmalloc",
-      "geomean_median_ratio_vs_unialloc": 0.8123278798848139,
+      "geomean_median_ratio_vs_unialloc": 0.979072109571116,
       "label": "ptmalloc",
       "robust_benchmark_count": 8,
-      "robust_geomean_median_ratio_vs_unialloc": 0.8123278798848139,
+      "robust_geomean_median_ratio_vs_unialloc": 0.979072109571116,
       "variant": "bench_ptmalloc"
     },
     {
       "all_benchmark_count": 8,
       "allocator": "jemalloc",
       "feature": "bench_jemalloc",
-      "geomean_median_ratio_vs_unialloc": 0.8155772765676346,
+      "geomean_median_ratio_vs_unialloc": 0.9442262204775398,
       "label": "jemalloc",
       "robust_benchmark_count": 8,
-      "robust_geomean_median_ratio_vs_unialloc": 0.8155772765676346,
+      "robust_geomean_median_ratio_vs_unialloc": 0.9442262204775398,
       "variant": "bench_jemalloc"
     },
     {
       "all_benchmark_count": 8,
       "allocator": "mimalloc",
       "feature": "bench_mimalloc",
-      "geomean_median_ratio_vs_unialloc": 0.772159175260127,
+      "geomean_median_ratio_vs_unialloc": 0.9144037475909831,
       "label": "mimalloc",
       "robust_benchmark_count": 8,
-      "robust_geomean_median_ratio_vs_unialloc": 0.772159175260127,
+      "robust_geomean_median_ratio_vs_unialloc": 0.9144037475909831,
       "variant": "bench_mimalloc"
     },
     {
       "all_benchmark_count": 8,
       "allocator": "tcmalloc",
       "feature": "bench_tcmalloc",
-      "geomean_median_ratio_vs_unialloc": 0.7640646212784711,
+      "geomean_median_ratio_vs_unialloc": 0.9064712955342012,
       "label": "TCMalloc",
       "robust_benchmark_count": 8,
-      "robust_geomean_median_ratio_vs_unialloc": 0.7640646212784711,
+      "robust_geomean_median_ratio_vs_unialloc": 0.9064712955342012,
       "variant": "bench_tcmalloc"
     },
     {
       "all_benchmark_count": 8,
       "allocator": "snmalloc",
       "feature": "bench_snmalloc",
-      "geomean_median_ratio_vs_unialloc": 0.7932436267249454,
+      "geomean_median_ratio_vs_unialloc": 0.940721594855314,
       "label": "snmalloc",
       "robust_benchmark_count": 8,
-      "robust_geomean_median_ratio_vs_unialloc": 0.7932436267249454,
+      "robust_geomean_median_ratio_vs_unialloc": 0.940721594855314,
       "variant": "bench_snmalloc"
     },
     {
       "all_benchmark_count": 8,
       "allocator": "scudo",
       "feature": "bench_scudo",
-      "geomean_median_ratio_vs_unialloc": 0.8967793175890892,
+      "geomean_median_ratio_vs_unialloc": 1.0553683851723767,
       "label": "Scudo",
       "robust_benchmark_count": 8,
-      "robust_geomean_median_ratio_vs_unialloc": 0.8967793175890892,
+      "robust_geomean_median_ratio_vs_unialloc": 1.0553683851723767,
       "variant": "bench_scudo"
     }
   ],
@@ -116,21 +116,21 @@
       "allocator": "unialloc",
       "benchmark": "binary_heap::bench_from_vec",
       "feature": "bench_ourself",
-      "mad_ns_per_iter": 12110.26000000001,
-      "max_ns_per_iter": 426501.65,
+      "mad_ns_per_iter": 152.10000000000582,
+      "max_ns_per_iter": 109620.35,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 414391.39,
+      "median_ns_per_iter": 109468.25,
       "median_ratio_vs_unialloc": 1.0,
-      "min_ns_per_iter": 345319.45,
+      "min_ns_per_iter": 109290.48,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        345319.45,
-        414391.39,
-        426501.65
+        109620.35,
+        109290.48,
+        109468.25
       ],
       "samples": 3,
       "variant": "bench_ourself"
@@ -139,21 +139,21 @@
       "allocator": "ptmalloc",
       "benchmark": "binary_heap::bench_from_vec",
       "feature": "bench_ptmalloc",
-      "mad_ns_per_iter": 61.220000000001164,
-      "max_ns_per_iter": 110180.67,
+      "mad_ns_per_iter": 162.86999999999534,
+      "max_ns_per_iter": 111310.9,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 109313.11,
-      "median_ratio_vs_unialloc": 0.26379194316754506,
-      "min_ns_per_iter": 109251.89,
+      "median_ns_per_iter": 109913.92,
+      "median_ratio_vs_unialloc": 1.004071226131778,
+      "min_ns_per_iter": 109751.05,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        110180.67,
-        109251.89,
-        109313.11
+        111310.9,
+        109751.05,
+        109913.92
       ],
       "samples": 3,
       "variant": "bench_ptmalloc"
@@ -162,21 +162,21 @@
       "allocator": "jemalloc",
       "benchmark": "binary_heap::bench_from_vec",
       "feature": "bench_jemalloc",
-      "mad_ns_per_iter": 73.34999999999127,
-      "max_ns_per_iter": 110067.0,
+      "mad_ns_per_iter": 766.5500000000029,
+      "max_ns_per_iter": 113915.48,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 109764.4,
-      "median_ratio_vs_unialloc": 0.264880986064889,
-      "min_ns_per_iter": 109691.05,
+      "median_ns_per_iter": 109961.38,
+      "median_ratio_vs_unialloc": 1.004504776499122,
+      "min_ns_per_iter": 109194.83,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        109764.4,
-        109691.05,
-        110067.0
+        109194.83,
+        109961.38,
+        113915.48
       ],
       "samples": 3,
       "variant": "bench_jemalloc"
@@ -185,21 +185,21 @@
       "allocator": "mimalloc",
       "benchmark": "binary_heap::bench_from_vec",
       "feature": "bench_mimalloc",
-      "mad_ns_per_iter": 357.52999999999884,
-      "max_ns_per_iter": 113373.76,
+      "mad_ns_per_iter": 76.81000000001222,
+      "max_ns_per_iter": 109523.82,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 109458.7,
-      "median_ratio_vs_unialloc": 0.26414327768730905,
-      "min_ns_per_iter": 109101.17,
+      "median_ns_per_iter": 109149.46,
+      "median_ratio_vs_unialloc": 0.9970878314031695,
+      "min_ns_per_iter": 109072.65,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        109101.17,
-        109458.7,
-        113373.76
+        109072.65,
+        109149.46,
+        109523.82
       ],
       "samples": 3,
       "variant": "bench_mimalloc"
@@ -208,21 +208,21 @@
       "allocator": "tcmalloc",
       "benchmark": "binary_heap::bench_from_vec",
       "feature": "bench_tcmalloc",
-      "mad_ns_per_iter": 86.36000000000058,
-      "max_ns_per_iter": 109780.19,
+      "mad_ns_per_iter": 35.69000000000233,
+      "max_ns_per_iter": 109642.39,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 109298.45,
-      "median_ratio_vs_unialloc": 0.2637565659846359,
-      "min_ns_per_iter": 109212.09,
+      "median_ns_per_iter": 109606.7,
+      "median_ratio_vs_unialloc": 1.0012647502814742,
+      "min_ns_per_iter": 109536.85,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        109212.09,
-        109298.45,
-        109780.19
+        109606.7,
+        109642.39,
+        109536.85
       ],
       "samples": 3,
       "variant": "bench_tcmalloc"
@@ -231,21 +231,21 @@
       "allocator": "snmalloc",
       "benchmark": "binary_heap::bench_from_vec",
       "feature": "bench_snmalloc",
-      "mad_ns_per_iter": 34.679999999993015,
-      "max_ns_per_iter": 109261.79,
+      "mad_ns_per_iter": 19.789999999993597,
+      "max_ns_per_iter": 109605.32,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 109227.11,
-      "median_ratio_vs_unialloc": 0.26358440989809173,
-      "min_ns_per_iter": 109103.4,
+      "median_ns_per_iter": 109234.9,
+      "median_ratio_vs_unialloc": 0.9978683316852146,
+      "min_ns_per_iter": 109215.11,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        109103.4,
-        109227.11,
-        109261.79
+        109605.32,
+        109234.9,
+        109215.11
       ],
       "samples": 3,
       "variant": "bench_snmalloc"
@@ -254,21 +254,21 @@
       "allocator": "scudo",
       "benchmark": "binary_heap::bench_from_vec",
       "feature": "bench_scudo",
-      "mad_ns_per_iter": 270.70999999999185,
-      "max_ns_per_iter": 110852.19,
+      "mad_ns_per_iter": 212.0799999999872,
+      "max_ns_per_iter": 109650.15,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 109593.09,
-      "median_ratio_vs_unialloc": 0.2644675846184931,
-      "min_ns_per_iter": 109322.38,
+      "median_ns_per_iter": 109438.07,
+      "median_ratio_vs_unialloc": 0.9997243036222833,
+      "min_ns_per_iter": 109183.08,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        110852.19,
-        109322.38,
-        109593.09
+        109438.07,
+        109183.08,
+        109650.15
       ],
       "samples": 3,
       "variant": "bench_scudo"
@@ -277,21 +277,21 @@
       "allocator": "unialloc",
       "benchmark": "btree::map::from_iter_rand_10_000",
       "feature": "bench_ourself",
-      "mad_ns_per_iter": 150.91999999999825,
-      "max_ns_per_iter": 129515.23,
+      "mad_ns_per_iter": 680.9100000000035,
+      "max_ns_per_iter": 130648.34,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 129024.17,
+      "median_ns_per_iter": 129967.43,
       "median_ratio_vs_unialloc": 1.0,
-      "min_ns_per_iter": 128873.25,
+      "min_ns_per_iter": 129205.8,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        129515.23,
-        129024.17,
-        128873.25
+        130648.34,
+        129967.43,
+        129205.8
       ],
       "samples": 3,
       "variant": "bench_ourself"
@@ -300,21 +300,21 @@
       "allocator": "ptmalloc",
       "benchmark": "btree::map::from_iter_rand_10_000",
       "feature": "bench_ptmalloc",
-      "mad_ns_per_iter": 81.13000000000466,
-      "max_ns_per_iter": 155476.72,
+      "mad_ns_per_iter": 1080.7799999999988,
+      "max_ns_per_iter": 153988.98,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 151798.13,
-      "median_ratio_vs_unialloc": 1.1765092540413165,
-      "min_ns_per_iter": 151717.0,
+      "median_ns_per_iter": 152908.2,
+      "median_ratio_vs_unialloc": 1.176511684504341,
+      "min_ns_per_iter": 150749.75,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        151798.13,
-        155476.72,
-        151717.0
+        152908.2,
+        153988.98,
+        150749.75
       ],
       "samples": 3,
       "variant": "bench_ptmalloc"
@@ -323,21 +323,21 @@
       "allocator": "jemalloc",
       "benchmark": "btree::map::from_iter_rand_10_000",
       "feature": "bench_jemalloc",
-      "mad_ns_per_iter": 525.7700000000041,
-      "max_ns_per_iter": 128480.0,
+      "mad_ns_per_iter": 1578.3399999999965,
+      "max_ns_per_iter": 130202.58,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 127954.23,
-      "median_ratio_vs_unialloc": 0.9917074452019339,
-      "min_ns_per_iter": 127328.67,
+      "median_ns_per_iter": 128204.75,
+      "median_ratio_vs_unialloc": 0.9864375251553409,
+      "min_ns_per_iter": 126626.41,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        128480.0,
-        127954.23,
-        127328.67
+        130202.58,
+        128204.75,
+        126626.41
       ],
       "samples": 3,
       "variant": "bench_jemalloc"
@@ -346,21 +346,21 @@
       "allocator": "mimalloc",
       "benchmark": "btree::map::from_iter_rand_10_000",
       "feature": "bench_mimalloc",
-      "mad_ns_per_iter": 525.5500000000029,
-      "max_ns_per_iter": 120831.44,
+      "mad_ns_per_iter": 944.5699999999924,
+      "max_ns_per_iter": 121930.68,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 120305.89,
-      "median_ratio_vs_unialloc": 0.9324290944867152,
-      "min_ns_per_iter": 119635.11,
+      "median_ns_per_iter": 120647.67,
+      "median_ratio_vs_unialloc": 0.9282915727424941,
+      "min_ns_per_iter": 119703.1,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        119635.11,
-        120305.89,
-        120831.44
+        119703.1,
+        121930.68,
+        120647.67
       ],
       "samples": 3,
       "variant": "bench_mimalloc"
@@ -369,21 +369,21 @@
       "allocator": "tcmalloc",
       "benchmark": "btree::map::from_iter_rand_10_000",
       "feature": "bench_tcmalloc",
-      "mad_ns_per_iter": 21.5,
-      "max_ns_per_iter": 122122.03,
+      "mad_ns_per_iter": 161.57000000000698,
+      "max_ns_per_iter": 122057.63,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 122100.53,
-      "median_ratio_vs_unialloc": 0.9463384263584103,
-      "min_ns_per_iter": 119408.43,
+      "median_ns_per_iter": 121896.06,
+      "median_ratio_vs_unialloc": 0.937896979266267,
+      "min_ns_per_iter": 119984.3,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        122100.53,
-        119408.43,
-        122122.03
+        119984.3,
+        122057.63,
+        121896.06
       ],
       "samples": 3,
       "variant": "bench_tcmalloc"
@@ -392,21 +392,21 @@
       "allocator": "snmalloc",
       "benchmark": "btree::map::from_iter_rand_10_000",
       "feature": "bench_snmalloc",
-      "mad_ns_per_iter": 551.8000000000029,
-      "max_ns_per_iter": 120142.87,
+      "mad_ns_per_iter": 126.86999999999534,
+      "max_ns_per_iter": 121188.83,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 119227.47,
-      "median_ratio_vs_unialloc": 0.9240708155688969,
-      "min_ns_per_iter": 118675.67,
+      "median_ns_per_iter": 120113.7,
+      "median_ratio_vs_unialloc": 0.9241830818690498,
+      "min_ns_per_iter": 119986.83,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        120142.87,
-        118675.67,
-        119227.47
+        121188.83,
+        119986.83,
+        120113.7
       ],
       "samples": 3,
       "variant": "bench_snmalloc"
@@ -415,21 +415,21 @@
       "allocator": "scudo",
       "benchmark": "btree::map::from_iter_rand_10_000",
       "feature": "bench_scudo",
-      "mad_ns_per_iter": 843.2900000000081,
-      "max_ns_per_iter": 142240.45,
+      "mad_ns_per_iter": 961.1499999999942,
+      "max_ns_per_iter": 142380.5,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 141397.16,
-      "median_ratio_vs_unialloc": 1.0958966835438664,
-      "min_ns_per_iter": 139209.55,
+      "median_ns_per_iter": 140263.0,
+      "median_ratio_vs_unialloc": 1.0792165390975264,
+      "min_ns_per_iter": 139301.85,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        141397.16,
-        139209.55,
-        142240.45
+        142380.5,
+        140263.0,
+        139301.85
       ],
       "samples": 3,
       "variant": "bench_scudo"
@@ -438,21 +438,21 @@
       "allocator": "unialloc",
       "benchmark": "btree::set::clone_10k_and_remove_half",
       "feature": "bench_ourself",
-      "mad_ns_per_iter": 717.7599999999948,
-      "max_ns_per_iter": 126015.14,
+      "mad_ns_per_iter": 508.02999999999884,
+      "max_ns_per_iter": 122396.94,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 122480.79,
+      "median_ns_per_iter": 121888.91,
       "median_ratio_vs_unialloc": 1.0,
-      "min_ns_per_iter": 121763.03,
+      "min_ns_per_iter": 120979.05,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        126015.14,
-        122480.79,
-        121763.03
+        122396.94,
+        121888.91,
+        120979.05
       ],
       "samples": 3,
       "variant": "bench_ourself"
@@ -461,21 +461,21 @@
       "allocator": "ptmalloc",
       "benchmark": "btree::set::clone_10k_and_remove_half",
       "feature": "bench_ptmalloc",
-      "mad_ns_per_iter": 675.2099999999919,
-      "max_ns_per_iter": 121172.34,
+      "mad_ns_per_iter": 258.7399999999907,
+      "max_ns_per_iter": 122066.51,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 119923.29,
-      "median_ratio_vs_unialloc": 0.979119174525246,
-      "min_ns_per_iter": 119248.08,
+      "median_ns_per_iter": 121693.01,
+      "median_ratio_vs_unialloc": 0.9983927988198433,
+      "min_ns_per_iter": 121434.27,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        121172.34,
-        119923.29,
-        119248.08
+        122066.51,
+        121434.27,
+        121693.01
       ],
       "samples": 3,
       "variant": "bench_ptmalloc"
@@ -484,21 +484,21 @@
       "allocator": "jemalloc",
       "benchmark": "btree::set::clone_10k_and_remove_half",
       "feature": "bench_jemalloc",
-      "mad_ns_per_iter": 583.859999999986,
-      "max_ns_per_iter": 138772.43,
+      "mad_ns_per_iter": 56.670000000012806,
+      "max_ns_per_iter": 139770.46,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 138188.57,
-      "median_ratio_vs_unialloc": 1.128246886715868,
-      "min_ns_per_iter": 133498.24,
+      "median_ns_per_iter": 134755.03,
+      "median_ratio_vs_unialloc": 1.1055561166311192,
+      "min_ns_per_iter": 134698.36,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        138772.43,
-        138188.57,
-        133498.24
+        139770.46,
+        134755.03,
+        134698.36
       ],
       "samples": 3,
       "variant": "bench_jemalloc"
@@ -507,21 +507,21 @@
       "allocator": "mimalloc",
       "benchmark": "btree::set::clone_10k_and_remove_half",
       "feature": "bench_mimalloc",
-      "mad_ns_per_iter": 466.77999999999884,
-      "max_ns_per_iter": 117150.8,
+      "mad_ns_per_iter": 2333.189999999988,
+      "max_ns_per_iter": 121884.21,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 116413.73,
-      "median_ratio_vs_unialloc": 0.9504652117283046,
-      "min_ns_per_iter": 115946.95,
+      "median_ns_per_iter": 117774.15,
+      "median_ratio_vs_unialloc": 0.9662417196117349,
+      "min_ns_per_iter": 115440.96,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        116413.73,
-        115946.95,
-        117150.8
+        115440.96,
+        117774.15,
+        121884.21
       ],
       "samples": 3,
       "variant": "bench_mimalloc"
@@ -530,21 +530,21 @@
       "allocator": "tcmalloc",
       "benchmark": "btree::set::clone_10k_and_remove_half",
       "feature": "bench_tcmalloc",
-      "mad_ns_per_iter": 1123.729999999996,
-      "max_ns_per_iter": 121415.94,
+      "mad_ns_per_iter": 3034.62999999999,
+      "max_ns_per_iter": 127845.01,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 120292.21,
-      "median_ratio_vs_unialloc": 0.9821312387028204,
-      "min_ns_per_iter": 118073.38,
+      "median_ns_per_iter": 123691.45,
+      "median_ratio_vs_unialloc": 1.0147883839473173,
+      "min_ns_per_iter": 120656.82,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        118073.38,
-        121415.94,
-        120292.21
+        120656.82,
+        127845.01,
+        123691.45
       ],
       "samples": 3,
       "variant": "bench_tcmalloc"
@@ -553,21 +553,21 @@
       "allocator": "snmalloc",
       "benchmark": "btree::set::clone_10k_and_remove_half",
       "feature": "bench_snmalloc",
-      "mad_ns_per_iter": 1708.5199999999895,
-      "max_ns_per_iter": 132642.13,
+      "mad_ns_per_iter": 532.7200000000012,
+      "max_ns_per_iter": 132925.6,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 129703.29,
-      "median_ratio_vs_unialloc": 1.0589684308861822,
-      "min_ns_per_iter": 127994.77,
+      "median_ns_per_iter": 132150.84,
+      "median_ratio_vs_unialloc": 1.0841908423005833,
+      "min_ns_per_iter": 131618.12,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        132642.13,
-        127994.77,
-        129703.29
+        132150.84,
+        131618.12,
+        132925.6
       ],
       "samples": 3,
       "variant": "bench_snmalloc"
@@ -576,21 +576,21 @@
       "allocator": "scudo",
       "benchmark": "btree::set::clone_10k_and_remove_half",
       "feature": "bench_scudo",
-      "mad_ns_per_iter": 818.929999999993,
-      "max_ns_per_iter": 187895.36,
+      "mad_ns_per_iter": 134.89999999999418,
+      "max_ns_per_iter": 188275.84,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 187076.43,
-      "median_ratio_vs_unialloc": 1.5273940509364774,
-      "min_ns_per_iter": 181204.46,
+      "median_ns_per_iter": 184101.09,
+      "median_ratio_vs_unialloc": 1.510400659091955,
+      "min_ns_per_iter": 183966.19,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        187895.36,
-        187076.43,
-        181204.46
+        183966.19,
+        188275.84,
+        184101.09
       ],
       "samples": 3,
       "variant": "bench_scudo"
@@ -599,21 +599,21 @@
       "allocator": "unialloc",
       "benchmark": "slice::random_inserts",
       "feature": "bench_ourself",
-      "mad_ns_per_iter": 12.459999999999809,
-      "max_ns_per_iter": 1886.12,
+      "mad_ns_per_iter": 0.4700000000000273,
+      "max_ns_per_iter": 1735.15,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1726.1,
+      "median_ns_per_iter": 1734.68,
       "median_ratio_vs_unialloc": 1.0,
-      "min_ns_per_iter": 1713.64,
+      "min_ns_per_iter": 1730.3,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1886.12,
-        1713.64,
-        1726.1
+        1730.3,
+        1735.15,
+        1734.68
       ],
       "samples": 3,
       "variant": "bench_ourself"
@@ -622,21 +622,21 @@
       "allocator": "ptmalloc",
       "benchmark": "slice::random_inserts",
       "feature": "bench_ptmalloc",
-      "mad_ns_per_iter": 2.8900000000001,
-      "max_ns_per_iter": 1750.3,
+      "mad_ns_per_iter": 6.210000000000036,
+      "max_ns_per_iter": 1808.81,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1693.48,
-      "median_ratio_vs_unialloc": 0.9811019060309368,
-      "min_ns_per_iter": 1690.59,
+      "median_ns_per_iter": 1697.89,
+      "median_ratio_vs_unialloc": 0.9787914773906427,
+      "min_ns_per_iter": 1691.68,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1690.59,
-        1693.48,
-        1750.3
+        1697.89,
+        1691.68,
+        1808.81
       ],
       "samples": 3,
       "variant": "bench_ptmalloc"
@@ -645,21 +645,21 @@
       "allocator": "jemalloc",
       "benchmark": "slice::random_inserts",
       "feature": "bench_jemalloc",
-      "mad_ns_per_iter": 23.960000000000036,
-      "max_ns_per_iter": 1786.25,
+      "mad_ns_per_iter": 0.21000000000003638,
+      "max_ns_per_iter": 1693.6,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1762.29,
-      "median_ratio_vs_unialloc": 1.0209663403047333,
-      "min_ns_per_iter": 1737.52,
+      "median_ns_per_iter": 1679.16,
+      "median_ratio_vs_unialloc": 0.9679940968939517,
+      "min_ns_per_iter": 1678.95,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1786.25,
-        1737.52,
-        1762.29
+        1693.6,
+        1679.16,
+        1678.95
       ],
       "samples": 3,
       "variant": "bench_jemalloc"
@@ -668,21 +668,21 @@
       "allocator": "mimalloc",
       "benchmark": "slice::random_inserts",
       "feature": "bench_mimalloc",
-      "mad_ns_per_iter": 0.7699999999999818,
-      "max_ns_per_iter": 1738.34,
+      "mad_ns_per_iter": 4.75,
+      "max_ns_per_iter": 1703.73,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1696.5,
-      "median_ratio_vs_unialloc": 0.9828515149759575,
-      "min_ns_per_iter": 1695.73,
+      "median_ns_per_iter": 1685.12,
+      "median_ratio_vs_unialloc": 0.9714298890861714,
+      "min_ns_per_iter": 1680.37,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1738.34,
-        1696.5,
-        1695.73
+        1703.73,
+        1680.37,
+        1685.12
       ],
       "samples": 3,
       "variant": "bench_mimalloc"
@@ -691,21 +691,21 @@
       "allocator": "tcmalloc",
       "benchmark": "slice::random_inserts",
       "feature": "bench_tcmalloc",
-      "mad_ns_per_iter": 20.700000000000045,
-      "max_ns_per_iter": 1900.56,
+      "mad_ns_per_iter": 1.5399999999999636,
+      "max_ns_per_iter": 1665.28,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1668.22,
-      "median_ratio_vs_unialloc": 0.9664677596894734,
-      "min_ns_per_iter": 1647.52,
+      "median_ns_per_iter": 1653.22,
+      "median_ratio_vs_unialloc": 0.9530403302049946,
+      "min_ns_per_iter": 1651.68,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1900.56,
-        1647.52,
-        1668.22
+        1653.22,
+        1651.68,
+        1665.28
       ],
       "samples": 3,
       "variant": "bench_tcmalloc"
@@ -714,21 +714,21 @@
       "allocator": "snmalloc",
       "benchmark": "slice::random_inserts",
       "feature": "bench_snmalloc",
-      "mad_ns_per_iter": 10.25,
-      "max_ns_per_iter": 1716.28,
+      "mad_ns_per_iter": 4.470000000000027,
+      "max_ns_per_iter": 1689.85,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1677.28,
-      "median_ratio_vs_unialloc": 0.9717165865245351,
-      "min_ns_per_iter": 1667.03,
+      "median_ns_per_iter": 1675.94,
+      "median_ratio_vs_unialloc": 0.9661378467498328,
+      "min_ns_per_iter": 1671.47,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1677.28,
-        1667.03,
-        1716.28
+        1671.47,
+        1689.85,
+        1675.94
       ],
       "samples": 3,
       "variant": "bench_snmalloc"
@@ -737,21 +737,21 @@
       "allocator": "scudo",
       "benchmark": "slice::random_inserts",
       "feature": "bench_scudo",
-      "mad_ns_per_iter": 14.730000000000018,
-      "max_ns_per_iter": 1837.16,
+      "mad_ns_per_iter": 6.5300000000002,
+      "max_ns_per_iter": 1827.52,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1822.43,
-      "median_ratio_vs_unialloc": 1.055807890620474,
-      "min_ns_per_iter": 1805.37,
+      "median_ns_per_iter": 1782.13,
+      "median_ratio_vs_unialloc": 1.0273537482417507,
+      "min_ns_per_iter": 1775.6,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1837.16,
-        1822.43,
-        1805.37
+        1775.6,
+        1827.52,
+        1782.13
       ],
       "samples": 3,
       "variant": "bench_scudo"
@@ -760,21 +760,21 @@
       "allocator": "unialloc",
       "benchmark": "string::bench_push_char_one_byte",
       "feature": "bench_ourself",
-      "mad_ns_per_iter": 35.07999999999993,
-      "max_ns_per_iter": 11477.58,
+      "mad_ns_per_iter": 27.6200000000008,
+      "max_ns_per_iter": 11426.71,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 11442.5,
+      "median_ns_per_iter": 11347.35,
       "median_ratio_vs_unialloc": 1.0,
-      "min_ns_per_iter": 11336.3,
+      "min_ns_per_iter": 11319.73,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        11442.5,
-        11336.3,
-        11477.58
+        11347.35,
+        11426.71,
+        11319.73
       ],
       "samples": 3,
       "variant": "bench_ourself"
@@ -783,21 +783,21 @@
       "allocator": "ptmalloc",
       "benchmark": "string::bench_push_char_one_byte",
       "feature": "bench_ptmalloc",
-      "mad_ns_per_iter": 48.70000000000073,
-      "max_ns_per_iter": 11118.23,
+      "mad_ns_per_iter": 2.399999999999636,
+      "max_ns_per_iter": 10963.85,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 11053.04,
-      "median_ratio_vs_unialloc": 0.9659637317019882,
-      "min_ns_per_iter": 11004.34,
+      "median_ns_per_iter": 10943.56,
+      "median_ratio_vs_unialloc": 0.9644154802663176,
+      "min_ns_per_iter": 10941.16,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        11004.34,
-        11118.23,
-        11053.04
+        10963.85,
+        10941.16,
+        10943.56
       ],
       "samples": 3,
       "variant": "bench_ptmalloc"
@@ -806,21 +806,21 @@
       "allocator": "jemalloc",
       "benchmark": "string::bench_push_char_one_byte",
       "feature": "bench_jemalloc",
-      "mad_ns_per_iter": 7.610000000000582,
-      "max_ns_per_iter": 11173.94,
+      "mad_ns_per_iter": 1.430000000000291,
+      "max_ns_per_iter": 11169.66,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 11149.49,
-      "median_ratio_vs_unialloc": 0.9743928337338869,
-      "min_ns_per_iter": 11141.88,
+      "median_ns_per_iter": 11147.82,
+      "median_ratio_vs_unialloc": 0.9824161588388478,
+      "min_ns_per_iter": 11146.39,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        11141.88,
-        11149.49,
-        11173.94
+        11169.66,
+        11146.39,
+        11147.82
       ],
       "samples": 3,
       "variant": "bench_jemalloc"
@@ -829,21 +829,21 @@
       "allocator": "mimalloc",
       "benchmark": "string::bench_push_char_one_byte",
       "feature": "bench_mimalloc",
-      "mad_ns_per_iter": 52.19000000000051,
-      "max_ns_per_iter": 11132.76,
+      "mad_ns_per_iter": 37.88999999999942,
+      "max_ns_per_iter": 11186.15,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 11080.57,
-      "median_ratio_vs_unialloc": 0.9683696744592527,
-      "min_ns_per_iter": 11022.98,
+      "median_ns_per_iter": 11148.26,
+      "median_ratio_vs_unialloc": 0.9824549344119993,
+      "min_ns_per_iter": 11032.82,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        11132.76,
-        11022.98,
-        11080.57
+        11186.15,
+        11148.26,
+        11032.82
       ],
       "samples": 3,
       "variant": "bench_mimalloc"
@@ -852,21 +852,21 @@
       "allocator": "tcmalloc",
       "benchmark": "string::bench_push_char_one_byte",
       "feature": "bench_tcmalloc",
-      "mad_ns_per_iter": 1.2900000000008731,
-      "max_ns_per_iter": 11036.9,
+      "mad_ns_per_iter": 3.4400000000005093,
+      "max_ns_per_iter": 11010.17,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 11003.12,
-      "median_ratio_vs_unialloc": 0.9616010487218702,
-      "min_ns_per_iter": 11001.83,
+      "median_ns_per_iter": 11006.73,
+      "median_ratio_vs_unialloc": 0.9699824188026278,
+      "min_ns_per_iter": 10998.24,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        11001.83,
-        11003.12,
-        11036.9
+        11010.17,
+        11006.73,
+        10998.24
       ],
       "samples": 3,
       "variant": "bench_tcmalloc"
@@ -875,21 +875,21 @@
       "allocator": "snmalloc",
       "benchmark": "string::bench_push_char_one_byte",
       "feature": "bench_snmalloc",
-      "mad_ns_per_iter": 16.659999999999854,
-      "max_ns_per_iter": 11189.42,
+      "mad_ns_per_iter": 2.0900000000001455,
+      "max_ns_per_iter": 11543.23,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 11090.99,
-      "median_ratio_vs_unialloc": 0.9692803146165611,
-      "min_ns_per_iter": 11074.33,
+      "median_ns_per_iter": 11104.59,
+      "median_ratio_vs_unialloc": 0.9786064587767188,
+      "min_ns_per_iter": 11102.5,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        11189.42,
-        11074.33,
-        11090.99
+        11102.5,
+        11543.23,
+        11104.59
       ],
       "samples": 3,
       "variant": "bench_snmalloc"
@@ -898,21 +898,21 @@
       "allocator": "scudo",
       "benchmark": "string::bench_push_char_one_byte",
       "feature": "bench_scudo",
-      "mad_ns_per_iter": 4.289999999999054,
-      "max_ns_per_iter": 11311.76,
+      "mad_ns_per_iter": 45.17999999999847,
+      "max_ns_per_iter": 11365.11,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 11292.14,
-      "median_ratio_vs_unialloc": 0.986859514966135,
-      "min_ns_per_iter": 11287.85,
+      "median_ns_per_iter": 11301.72,
+      "median_ratio_vs_unialloc": 0.9959787968115903,
+      "min_ns_per_iter": 11256.54,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        11287.85,
-        11311.76,
-        11292.14
+        11365.11,
+        11256.54,
+        11301.72
       ],
       "samples": 3,
       "variant": "bench_scudo"
@@ -921,205 +921,205 @@
       "allocator": "unialloc",
       "benchmark": "vec::bench_from_elem_1000",
       "feature": "bench_ourself",
-      "mad_ns_per_iter": 0.3299999999999841,
-      "max_ns_per_iter": 152.03,
-      "measured_rounds": [
-        1,
-        2,
-        3
-      ],
-      "median_ns_per_iter": 151.42,
-      "median_ratio_vs_unialloc": 1.0,
-      "min_ns_per_iter": 151.09,
-      "robustness_selected": true,
-      "sample_ns_per_iter": [
-        151.42,
-        151.09,
-        152.03
-      ],
-      "samples": 3,
-      "variant": "bench_ourself"
-    },
-    {
-      "allocator": "ptmalloc",
-      "benchmark": "vec::bench_from_elem_1000",
-      "feature": "bench_ptmalloc",
-      "mad_ns_per_iter": 0.1599999999999966,
-      "max_ns_per_iter": 149.65,
-      "measured_rounds": [
-        1,
-        2,
-        3
-      ],
-      "median_ns_per_iter": 149.37,
-      "median_ratio_vs_unialloc": 0.9864614978206314,
-      "min_ns_per_iter": 149.21,
-      "robustness_selected": true,
-      "sample_ns_per_iter": [
-        149.37,
-        149.65,
-        149.21
-      ],
-      "samples": 3,
-      "variant": "bench_ptmalloc"
-    },
-    {
-      "allocator": "jemalloc",
-      "benchmark": "vec::bench_from_elem_1000",
-      "feature": "bench_jemalloc",
-      "mad_ns_per_iter": 0.10999999999998522,
-      "max_ns_per_iter": 137.69,
-      "measured_rounds": [
-        1,
-        2,
-        3
-      ],
-      "median_ns_per_iter": 137.58,
-      "median_ratio_vs_unialloc": 0.9085985999207504,
-      "min_ns_per_iter": 136.08,
-      "robustness_selected": true,
-      "sample_ns_per_iter": [
-        136.08,
-        137.69,
-        137.58
-      ],
-      "samples": 3,
-      "variant": "bench_jemalloc"
-    },
-    {
-      "allocator": "mimalloc",
-      "benchmark": "vec::bench_from_elem_1000",
-      "feature": "bench_mimalloc",
-      "mad_ns_per_iter": 0.18000000000000682,
-      "max_ns_per_iter": 134.02,
-      "measured_rounds": [
-        1,
-        2,
-        3
-      ],
-      "median_ns_per_iter": 133.84,
-      "median_ratio_vs_unialloc": 0.8838990886276583,
-      "min_ns_per_iter": 133.59,
-      "robustness_selected": true,
-      "sample_ns_per_iter": [
-        133.84,
-        134.02,
-        133.59
-      ],
-      "samples": 3,
-      "variant": "bench_mimalloc"
-    },
-    {
-      "allocator": "tcmalloc",
-      "benchmark": "vec::bench_from_elem_1000",
-      "feature": "bench_tcmalloc",
-      "mad_ns_per_iter": 0.03999999999999204,
-      "max_ns_per_iter": 132.88,
-      "measured_rounds": [
-        1,
-        2,
-        3
-      ],
-      "median_ns_per_iter": 132.84,
-      "median_ratio_vs_unialloc": 0.8772949412230882,
-      "min_ns_per_iter": 132.64,
-      "robustness_selected": true,
-      "sample_ns_per_iter": [
-        132.64,
-        132.84,
-        132.88
-      ],
-      "samples": 3,
-      "variant": "bench_tcmalloc"
-    },
-    {
-      "allocator": "snmalloc",
-      "benchmark": "vec::bench_from_elem_1000",
-      "feature": "bench_snmalloc",
-      "mad_ns_per_iter": 0.009999999999990905,
-      "max_ns_per_iter": 134.89,
-      "measured_rounds": [
-        1,
-        2,
-        3
-      ],
-      "median_ns_per_iter": 134.87,
-      "median_ratio_vs_unialloc": 0.8907013604543654,
-      "min_ns_per_iter": 134.86,
-      "robustness_selected": true,
-      "sample_ns_per_iter": [
-        134.87,
-        134.86,
-        134.89
-      ],
-      "samples": 3,
-      "variant": "bench_snmalloc"
-    },
-    {
-      "allocator": "scudo",
-      "benchmark": "vec::bench_from_elem_1000",
-      "feature": "bench_scudo",
-      "mad_ns_per_iter": 0.01999999999998181,
-      "max_ns_per_iter": 153.61,
-      "measured_rounds": [
-        1,
-        2,
-        3
-      ],
-      "median_ns_per_iter": 153.32,
-      "median_ratio_vs_unialloc": 1.0125478800686831,
-      "min_ns_per_iter": 153.3,
-      "robustness_selected": true,
-      "sample_ns_per_iter": [
-        153.3,
-        153.32,
-        153.61
-      ],
-      "samples": 3,
-      "variant": "bench_scudo"
-    },
-    {
-      "allocator": "unialloc",
-      "benchmark": "vec::bench_extend_1000_1000",
-      "feature": "bench_ourself",
-      "mad_ns_per_iter": 1.419999999999959,
-      "max_ns_per_iter": 668.71,
-      "measured_rounds": [
-        1,
-        2,
-        3
-      ],
-      "median_ns_per_iter": 638.3,
-      "median_ratio_vs_unialloc": 1.0,
-      "min_ns_per_iter": 636.88,
-      "robustness_selected": true,
-      "sample_ns_per_iter": [
-        638.3,
-        636.88,
-        668.71
-      ],
-      "samples": 3,
-      "variant": "bench_ourself"
-    },
-    {
-      "allocator": "ptmalloc",
-      "benchmark": "vec::bench_extend_1000_1000",
-      "feature": "bench_ptmalloc",
       "mad_ns_per_iter": 0.0,
-      "max_ns_per_iter": 470.16,
+      "max_ns_per_iter": 151.22,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 469.87,
-      "median_ratio_vs_unialloc": 0.7361272129092904,
-      "min_ns_per_iter": 469.87,
+      "median_ns_per_iter": 150.08,
+      "median_ratio_vs_unialloc": 1.0,
+      "min_ns_per_iter": 150.08,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        469.87,
-        470.16,
-        469.87
+        151.22,
+        150.08,
+        150.08
+      ],
+      "samples": 3,
+      "variant": "bench_ourself"
+    },
+    {
+      "allocator": "ptmalloc",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_ptmalloc",
+      "mad_ns_per_iter": 0.28000000000000114,
+      "max_ns_per_iter": 154.19,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 153.08,
+      "median_ratio_vs_unialloc": 1.0199893390191899,
+      "min_ns_per_iter": 152.8,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        152.8,
+        154.19,
+        153.08
+      ],
+      "samples": 3,
+      "variant": "bench_ptmalloc"
+    },
+    {
+      "allocator": "jemalloc",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_jemalloc",
+      "mad_ns_per_iter": 0.47999999999998977,
+      "max_ns_per_iter": 138.03,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 137.55,
+      "median_ratio_vs_unialloc": 0.9165111940298507,
+      "min_ns_per_iter": 134.19,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        134.19,
+        138.03,
+        137.55
+      ],
+      "samples": 3,
+      "variant": "bench_jemalloc"
+    },
+    {
+      "allocator": "mimalloc",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_mimalloc",
+      "mad_ns_per_iter": 0.2599999999999909,
+      "max_ns_per_iter": 138.32,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 134.1,
+      "median_ratio_vs_unialloc": 0.8935234541577824,
+      "min_ns_per_iter": 133.84,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        134.1,
+        138.32,
+        133.84
+      ],
+      "samples": 3,
+      "variant": "bench_mimalloc"
+    },
+    {
+      "allocator": "tcmalloc",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_tcmalloc",
+      "mad_ns_per_iter": 0.010000000000019327,
+      "max_ns_per_iter": 132.93,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 132.92,
+      "median_ratio_vs_unialloc": 0.8856609808102344,
+      "min_ns_per_iter": 132.86,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        132.92,
+        132.93,
+        132.86
+      ],
+      "samples": 3,
+      "variant": "bench_tcmalloc"
+    },
+    {
+      "allocator": "snmalloc",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_snmalloc",
+      "mad_ns_per_iter": 0.07999999999998408,
+      "max_ns_per_iter": 135.75,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 134.91,
+      "median_ratio_vs_unialloc": 0.8989205756929637,
+      "min_ns_per_iter": 134.83,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        134.91,
+        135.75,
+        134.83
+      ],
+      "samples": 3,
+      "variant": "bench_snmalloc"
+    },
+    {
+      "allocator": "scudo",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_scudo",
+      "mad_ns_per_iter": 0.020000000000010232,
+      "max_ns_per_iter": 154.15,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 153.34,
+      "median_ratio_vs_unialloc": 1.0217217484008527,
+      "min_ns_per_iter": 153.32,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        154.15,
+        153.34,
+        153.32
+      ],
+      "samples": 3,
+      "variant": "bench_scudo"
+    },
+    {
+      "allocator": "unialloc",
+      "benchmark": "vec::bench_extend_1000_1000",
+      "feature": "bench_ourself",
+      "mad_ns_per_iter": 1.0399999999999636,
+      "max_ns_per_iter": 642.53,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 640.28,
+      "median_ratio_vs_unialloc": 1.0,
+      "min_ns_per_iter": 639.24,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        640.28,
+        642.53,
+        639.24
+      ],
+      "samples": 3,
+      "variant": "bench_ourself"
+    },
+    {
+      "allocator": "ptmalloc",
+      "benchmark": "vec::bench_extend_1000_1000",
+      "feature": "bench_ptmalloc",
+      "mad_ns_per_iter": 1.2200000000000273,
+      "max_ns_per_iter": 539.03,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 518.61,
+      "median_ratio_vs_unialloc": 0.8099737614793528,
+      "min_ns_per_iter": 517.39,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        539.03,
+        517.39,
+        518.61
       ],
       "samples": 3,
       "variant": "bench_ptmalloc"
@@ -1128,21 +1128,21 @@
       "allocator": "jemalloc",
       "benchmark": "vec::bench_extend_1000_1000",
       "feature": "bench_jemalloc",
-      "mad_ns_per_iter": 37.07000000000005,
-      "max_ns_per_iter": 523.72,
+      "mad_ns_per_iter": 3.759999999999991,
+      "max_ns_per_iter": 440.39,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 486.65,
-      "median_ratio_vs_unialloc": 0.7624157919473602,
-      "min_ns_per_iter": 425.09,
+      "median_ns_per_iter": 436.63,
+      "median_ratio_vs_unialloc": 0.6819360279877554,
+      "min_ns_per_iter": 416.38,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        425.09,
-        486.65,
-        523.72
+        440.39,
+        436.63,
+        416.38
       ],
       "samples": 3,
       "variant": "bench_jemalloc"
@@ -1151,21 +1151,21 @@
       "allocator": "mimalloc",
       "benchmark": "vec::bench_extend_1000_1000",
       "feature": "bench_mimalloc",
-      "mad_ns_per_iter": 1.5199999999999818,
-      "max_ns_per_iter": 443.38,
+      "mad_ns_per_iter": 0.6199999999999477,
+      "max_ns_per_iter": 438.84,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 439.45,
-      "median_ratio_vs_unialloc": 0.6884693717687608,
-      "min_ns_per_iter": 437.93,
+      "median_ns_per_iter": 438.22,
+      "median_ratio_vs_unialloc": 0.6844193165490099,
+      "min_ns_per_iter": 436.71,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        443.38,
-        437.93,
-        439.45
+        436.71,
+        438.84,
+        438.22
       ],
       "samples": 3,
       "variant": "bench_mimalloc"
@@ -1174,21 +1174,21 @@
       "allocator": "tcmalloc",
       "benchmark": "vec::bench_extend_1000_1000",
       "feature": "bench_tcmalloc",
-      "mad_ns_per_iter": 2.0500000000000114,
-      "max_ns_per_iter": 419.26,
+      "mad_ns_per_iter": 1.490000000000009,
+      "max_ns_per_iter": 422.68,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 414.42,
-      "median_ratio_vs_unialloc": 0.6492558358138807,
-      "min_ns_per_iter": 412.37,
+      "median_ns_per_iter": 416.12,
+      "median_ratio_vs_unialloc": 0.6499031673642781,
+      "min_ns_per_iter": 414.63,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        414.42,
-        419.26,
-        412.37
+        422.68,
+        416.12,
+        414.63
       ],
       "samples": 3,
       "variant": "bench_tcmalloc"
@@ -1197,21 +1197,21 @@
       "allocator": "snmalloc",
       "benchmark": "vec::bench_extend_1000_1000",
       "feature": "bench_snmalloc",
-      "mad_ns_per_iter": 0.09000000000003183,
-      "max_ns_per_iter": 500.17,
+      "mad_ns_per_iter": 1.3799999999999955,
+      "max_ns_per_iter": 497.23,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 500.08,
-      "median_ratio_vs_unialloc": 0.7834560551464829,
-      "min_ns_per_iter": 495.94,
+      "median_ns_per_iter": 495.11,
+      "median_ratio_vs_unialloc": 0.7732710689073531,
+      "min_ns_per_iter": 493.73,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        495.94,
-        500.17,
-        500.08
+        495.11,
+        493.73,
+        497.23
       ],
       "samples": 3,
       "variant": "bench_snmalloc"
@@ -1220,21 +1220,21 @@
       "allocator": "scudo",
       "benchmark": "vec::bench_extend_1000_1000",
       "feature": "bench_scudo",
-      "mad_ns_per_iter": 2.339999999999975,
-      "max_ns_per_iter": 506.19,
+      "mad_ns_per_iter": 5.039999999999964,
+      "max_ns_per_iter": 521.09,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 503.85,
-      "median_ratio_vs_unialloc": 0.7893623687921041,
-      "min_ns_per_iter": 492.25,
+      "median_ns_per_iter": 507.64,
+      "median_ratio_vs_unialloc": 0.7928406322234023,
+      "min_ns_per_iter": 502.6,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        492.25,
-        506.19,
-        503.85
+        521.09,
+        502.6,
+        507.64
       ],
       "samples": 3,
       "variant": "bench_scudo"
@@ -1243,21 +1243,21 @@
       "allocator": "unialloc",
       "benchmark": "vec_deque::bench_grow_1025",
       "feature": "bench_ourself",
-      "mad_ns_per_iter": 2.240000000000009,
-      "max_ns_per_iter": 1208.29,
+      "mad_ns_per_iter": 5.100000000000136,
+      "max_ns_per_iter": 1193.65,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1192.04,
+      "median_ns_per_iter": 1187.67,
       "median_ratio_vs_unialloc": 1.0,
-      "min_ns_per_iter": 1189.8,
+      "min_ns_per_iter": 1182.57,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1189.8,
-        1192.04,
-        1208.29
+        1187.67,
+        1182.57,
+        1193.65
       ],
       "samples": 3,
       "variant": "bench_ourself"
@@ -1266,21 +1266,21 @@
       "allocator": "ptmalloc",
       "benchmark": "vec_deque::bench_grow_1025",
       "feature": "bench_ptmalloc",
-      "mad_ns_per_iter": 0.8099999999999454,
-      "max_ns_per_iter": 1081.6,
+      "mad_ns_per_iter": 0.42000000000007276,
+      "max_ns_per_iter": 1092.93,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1080.79,
-      "median_ratio_vs_unialloc": 0.9066725948793665,
-      "min_ns_per_iter": 1075.8,
+      "median_ns_per_iter": 1090.26,
+      "median_ratio_vs_unialloc": 0.917982267801662,
+      "min_ns_per_iter": 1089.84,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1075.8,
-        1080.79,
-        1081.6
+        1092.93,
+        1090.26,
+        1089.84
       ],
       "samples": 3,
       "variant": "bench_ptmalloc"
@@ -1289,21 +1289,21 @@
       "allocator": "jemalloc",
       "benchmark": "vec_deque::bench_grow_1025",
       "feature": "bench_jemalloc",
-      "mad_ns_per_iter": 0.43000000000006366,
-      "max_ns_per_iter": 1176.28,
+      "mad_ns_per_iter": 4.680000000000064,
+      "max_ns_per_iter": 1177.77,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1142.52,
-      "median_ratio_vs_unialloc": 0.9584577698734942,
-      "min_ns_per_iter": 1142.09,
+      "median_ns_per_iter": 1152.53,
+      "median_ratio_vs_unialloc": 0.9704126567144071,
+      "min_ns_per_iter": 1147.85,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1142.52,
-        1176.28,
-        1142.09
+        1177.77,
+        1147.85,
+        1152.53
       ],
       "samples": 3,
       "variant": "bench_jemalloc"
@@ -1312,21 +1312,21 @@
       "allocator": "mimalloc",
       "benchmark": "vec_deque::bench_grow_1025",
       "feature": "bench_mimalloc",
-      "mad_ns_per_iter": 1.3999999999998636,
-      "max_ns_per_iter": 1114.11,
+      "mad_ns_per_iter": 0.2400000000000091,
+      "max_ns_per_iter": 1126.4,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1111.06,
-      "median_ratio_vs_unialloc": 0.9320660380524143,
-      "min_ns_per_iter": 1109.66,
+      "median_ns_per_iter": 1112.1,
+      "median_ratio_vs_unialloc": 0.9363712142261738,
+      "min_ns_per_iter": 1111.86,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1109.66,
-        1114.11,
-        1111.06
+        1112.1,
+        1111.86,
+        1126.4
       ],
       "samples": 3,
       "variant": "bench_mimalloc"
@@ -1335,21 +1335,21 @@
       "allocator": "tcmalloc",
       "benchmark": "vec_deque::bench_grow_1025",
       "feature": "bench_tcmalloc",
-      "mad_ns_per_iter": 1.3299999999999272,
-      "max_ns_per_iter": 1081.18,
+      "mad_ns_per_iter": 4.899999999999864,
+      "max_ns_per_iter": 1072.62,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1067.01,
-      "median_ratio_vs_unialloc": 0.8951125801147612,
-      "min_ns_per_iter": 1065.68,
+      "median_ns_per_iter": 1067.72,
+      "median_ratio_vs_unialloc": 0.8990039320686722,
+      "min_ns_per_iter": 1060.8,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1067.01,
-        1065.68,
-        1081.18
+        1060.8,
+        1067.72,
+        1072.62
       ],
       "samples": 3,
       "variant": "bench_tcmalloc"
@@ -1358,21 +1358,21 @@
       "allocator": "snmalloc",
       "benchmark": "vec_deque::bench_grow_1025",
       "feature": "bench_snmalloc",
-      "mad_ns_per_iter": 1.599999999999909,
-      "max_ns_per_iter": 1154.17,
+      "mad_ns_per_iter": 4.7999999999999545,
+      "max_ns_per_iter": 1115.41,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1102.3,
-      "median_ratio_vs_unialloc": 0.9247172913660615,
-      "min_ns_per_iter": 1100.7,
+      "median_ns_per_iter": 1108.53,
+      "median_ratio_vs_unialloc": 0.9333653287529363,
+      "min_ns_per_iter": 1103.73,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1154.17,
-        1100.7,
-        1102.3
+        1115.41,
+        1103.73,
+        1108.53
       ],
       "samples": 3,
       "variant": "bench_snmalloc"
@@ -1381,21 +1381,21 @@
       "allocator": "scudo",
       "benchmark": "vec_deque::bench_grow_1025",
       "feature": "bench_scudo",
-      "mad_ns_per_iter": 9.539999999999964,
-      "max_ns_per_iter": 1367.86,
+      "mad_ns_per_iter": 6.289999999999964,
+      "max_ns_per_iter": 1434.97,
       "measured_rounds": [
         1,
         2,
         3
       ],
-      "median_ns_per_iter": 1352.54,
-      "median_ratio_vs_unialloc": 1.134643132780779,
-      "min_ns_per_iter": 1343.0,
+      "median_ns_per_iter": 1353.19,
+      "median_ratio_vs_unialloc": 1.1393653119132419,
+      "min_ns_per_iter": 1346.9,
       "robustness_selected": true,
       "sample_ns_per_iter": [
-        1343.0,
-        1352.54,
-        1367.86
+        1353.19,
+        1434.97,
+        1346.9
       ],
       "samples": 3,
       "variant": "bench_scudo"
@@ -1403,17 +1403,17 @@
   ],
   "claim_grade": false,
   "diagnostic_label": "current-toolchain allocation-heavy std_bench subset; non-paper-exact",
-  "generated_utc": "2026-07-14T22:06:03.531197+00:00",
+  "generated_utc": "2026-07-14T22:42:24.438974+00:00",
   "input_artifacts": {
     "records": {
-      "bytes": 580091,
+      "bytes": 583803,
       "path": "evaluation/raw/std-bench-allocator-variants-20260714/records.jsonl",
-      "sha256": "9d053ffa083d06a6f2411f34df0e9b400a79ffc8f0315f9b9a600479f34a86fc"
+      "sha256": "28ce5813488eaa9eeb11259cdc38aa50261411da5cac349b02e18b5293ea4d55"
     },
     "summary": {
-      "bytes": 41461,
+      "bytes": 41467,
       "path": "evaluation/raw/std-bench-allocator-variants-20260714/summary.json",
-      "sha256": "45798ca59f28870cb282f28385409e747013db66129966953b29c30cfd406f64"
+      "sha256": "ac19c3bde053b2f99d0da7865c80d4a23f09e913559aedc64a8e790f0b3e8592"
     }
   },
   "methodology": {

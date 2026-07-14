@@ -1,24 +1,24 @@
 {
   "generated_artifacts": [
     {
-      "bytes": 38634,
+      "bytes": 38640,
       "path": "benchmark-results/std-bench-allocator-variants-20260714.json",
-      "sha256": "60f6b9be7dbd4c3d8b3f2310802c7e3d20c0f7c401364e57c1fe0959d48a437f"
+      "sha256": "cdc331c2d80d4d2e588f5adfdbe4e609b38f914fd3656bb2fe1d2b35eb426f17"
     },
     {
-      "bytes": 35004,
+      "bytes": 35888,
       "path": "docs/figures/std-bench-allocator-variants-20260714/std-bench-allocator-variants.csv",
-      "sha256": "8b2a6f662d36a5dad7add20223d21b6349517086baa2fbb50928715f97a0a40b"
+      "sha256": "3e7eac9fa5f4878e9686d28635424b16e9ede79ae861388a9dab3de20cf7176f"
     },
     {
-      "bytes": 53282,
+      "bytes": 53038,
       "path": "docs/figures/std-bench-allocator-variants-20260714/allocator-variant-microbench.svg",
-      "sha256": "29abd8c2a7af2a79c3bd080e82fa3903d2835387df6cdbe1e8a88c1c8454cb53"
+      "sha256": "5fb67a1506b9764c3f5c00b634c702067ebacaa4d4030ecbfef4e6d0f26036ac"
     },
     {
-      "bytes": 302583,
+      "bytes": 298977,
       "path": "docs/figures/std-bench-allocator-variants-20260714/allocator-variant-microbench.png",
-      "sha256": "9e3407e25fef8f08bd81426b6da494503df5b47389119a85cbdf9c63c6709867"
+      "sha256": "4a8bcf6a9e7cc1dd3b4fe69c8cfd71d299f139d73ea21c22dbbccf92d2a5af67"
     }
   ],
   "generator": {
@@ -44,14 +44,14 @@
   "source": "rust-std-bench-allocator-feature-variant-artifacts",
   "source_artifacts": [
     {
-      "bytes": 41461,
+      "bytes": 41467,
       "path": "evaluation/raw/std-bench-allocator-variants-20260714/summary.json",
-      "sha256": "45798ca59f28870cb282f28385409e747013db66129966953b29c30cfd406f64"
+      "sha256": "ac19c3bde053b2f99d0da7865c80d4a23f09e913559aedc64a8e790f0b3e8592"
     },
     {
-      "bytes": 580091,
+      "bytes": 583803,
       "path": "evaluation/raw/std-bench-allocator-variants-20260714/records.jsonl",
-      "sha256": "9d053ffa083d06a6f2411f34df0e9b400a79ffc8f0315f9b9a600479f34a86fc"
+      "sha256": "28ce5813488eaa9eeb11259cdc38aa50261411da5cac349b02e18b5293ea4d55"
     }
   ]
 }
