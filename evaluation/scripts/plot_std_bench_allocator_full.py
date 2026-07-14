@@ -114,6 +114,7 @@ ALLOCATOR_LABELS = {
 class ProcessRecord:
     allocator: str
     feature: str
+    binary_sha256: str
     benchmark: str
     phase: str
     round: int
@@ -123,6 +124,7 @@ class ProcessRecord:
     stdout_path: str | None
     stderr_path: str | None
     timeout_seconds: float | None
+    scudo_runtime_library: str | None
 
 
 @dataclass(frozen=True)
@@ -279,6 +281,20 @@ def parse_record(
             f"record {index} feature mismatch for {allocator}: {feature!r} != "
             f"{expected_feature!r}"
         )
+    binary_sha256 = raw.get("binary_sha256")
+    if not isinstance(binary_sha256, str) or not binary_sha256:
+        raise ValueError(f"record {index} has no binary identity")
+    if raw.get("glibc_tunables_present") is not False:
+        raise ValueError(f"record {index} violated the clean glibc environment")
+    expected_markers = 1 if allocator == "scudo" else 0
+    if raw.get("scudo_identity_marker_count") != expected_markers:
+        raise ValueError(f"record {index} has the wrong Scudo marker count")
+    scudo_runtime = raw.get("scudo_runtime_library")
+    if allocator == "scudo":
+        if not isinstance(scudo_runtime, str) or not scudo_runtime:
+            raise ValueError(f"record {index} has no authenticated Scudo runtime")
+    elif scudo_runtime is not None:
+        raise ValueError(f"record {index} unexpectedly names a Scudo runtime")
     phase = raw.get("phase")
     if phase not in {"warmup", "measured"}:
         raise ValueError(f"record {index} has invalid phase {phase!r}")
@@ -297,6 +313,12 @@ def parse_record(
     if valid:
         if timed_out or status not in {None, "valid"}:
             raise ValueError(f"record {index} has inconsistent valid state")
+        if raw.get("exit_code") != 0 or raw.get("time_exit_status") != 0:
+            raise ValueError(f"record {index} has a nonzero valid exit status")
+        if raw.get("reported_benchmark") != benchmark:
+            raise ValueError(f"record {index} did not report its exact benchmark")
+        if raw.get("time_parse_error") is not None:
+            raise ValueError(f"record {index} has a GNU time parse error")
         ns_per_iter = finite_nonnegative(
             raw.get("ns_per_iter"), field=f"record {index} ns_per_iter"
         )
@@ -309,6 +331,10 @@ def parse_record(
             raise ValueError(
                 f"record {index} is invalid without an authenticated timeout state"
             )
+        if raw.get("reported_benchmark") not in (None, benchmark):
+            raise ValueError(f"timeout record {index} reported a different benchmark")
+        if int(raw.get("benchmark_line_count", 0)) > 1:
+            raise ValueError(f"timeout record {index} reported multiple benchmarks")
         ns_per_iter = (
             finite_nonnegative(
                 raw.get("ns_per_iter"),
@@ -326,6 +352,7 @@ def parse_record(
     return ProcessRecord(
         allocator=str(allocator),
         feature=feature,
+        binary_sha256=binary_sha256,
         benchmark=str(benchmark),
         phase=str(phase),
         round=round_value,
@@ -336,6 +363,9 @@ def parse_record(
         stderr_path=stderr_path,
         timeout_seconds=optional_positive(
             raw.get("timeout_seconds"), field=f"record {index} timeout_seconds"
+        ),
+        scudo_runtime_library=(
+            str(scudo_runtime) if scudo_runtime is not None else None
         ),
     )
 
@@ -427,6 +457,8 @@ def reconstruct_cells(
 ) -> tuple[Cell, ...]:
     grouped: dict[tuple[str, str], list[ProcessRecord]] = defaultdict(list)
     evidence_paths: set[str] = set()
+    binary_identities: dict[str, set[str]] = defaultdict(set)
+    scudo_runtimes: set[str] = set()
     for index, raw in enumerate(raw_records, start=1):
         record = parse_record(
             raw,
@@ -434,6 +466,9 @@ def reconstruct_cells(
             allocators=set(allocators),
             benchmarks=set(benchmarks),
         )
+        binary_identities[record.allocator].add(record.binary_sha256)
+        if record.scudo_runtime_library is not None:
+            scudo_runtimes.add(record.scudo_runtime_library)
         for evidence in (record.stdout_path, record.stderr_path):
             if evidence is None:
                 continue
@@ -441,6 +476,14 @@ def reconstruct_cells(
                 raise ValueError(f"process evidence path is reused: {evidence}")
             evidence_paths.add(evidence)
         grouped[(record.allocator, record.benchmark)].append(record)
+    for allocator in allocators:
+        identities = binary_identities[allocator]
+        if len(identities) != 1:
+            raise ValueError(
+                f"allocator {allocator} records use multiple binary identities"
+            )
+    if len(scudo_runtimes) != 1:
+        raise ValueError("Scudo records use multiple runtime identities")
     expected = {(allocator, benchmark) for allocator in allocators for benchmark in benchmarks}
     if set(grouped) != expected:
         missing = sorted(expected - set(grouped))

@@ -46,6 +46,14 @@ def process_record(
         "cpu": 20,
         "numa_node": 0,
         "stdout_path": f"runs/{phase}/{round_index}/{allocator}/{benchmark}.stdout",
+        "stderr_path": f"runs/{phase}/{round_index}/{allocator}/{benchmark}.stderr",
+        "binary_sha256": f"{allocator}-binary-sha256",
+        "glibc_tunables_present": False,
+        "scudo_identity_marker_count": 1 if allocator == "scudo" else 0,
+        "scudo_runtime_library": "/tmp/libscudo.so" if allocator == "scudo" else None,
+        "reported_benchmark": benchmark if valid else None,
+        "exit_code": 0 if valid else -15,
+        "time_exit_status": 0 if valid else None,
     }
     if ns_per_iter is not None:
         record["ns_per_iter"] = ns_per_iter
@@ -53,6 +61,14 @@ def process_record(
 
 
 class FullCampaignTest(unittest.TestCase):
+    def test_campaign_output_directory_has_an_exclusive_process_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            with campaign.exclusive_campaign_lock(output):
+                with self.assertRaisesRegex(RuntimeError, "already active"):
+                    with campaign.exclusive_campaign_lock(output):
+                        self.fail("a second campaign acquired the same output lock")
+
     def test_inventory_requires_the_complete_canonical_surface(self) -> None:
         inventory = [f"family::bench_{index:03d}" for index in range(468)]
         self.assertEqual(
@@ -261,6 +277,57 @@ class FullCampaignTest(unittest.TestCase):
             records_path.write_text(json.dumps(bad) + "\n")
             with self.assertRaisesRegex(RuntimeError, "invalid"):
                 campaign.load_completed_records(output)
+
+    def test_resumed_records_revalidate_runtime_and_binary_identity(self) -> None:
+        record = process_record(
+            benchmark="vec::ok",
+            allocator="scudo",
+            phase="measured",
+            round_index=1,
+            ns_per_iter=123.0,
+        )
+        scudo = next(item for item in campaign.VARIANTS if item.allocator == "scudo")
+        campaign.validate_process_record_identity(
+            record,
+            variant=scudo,
+            binary_sha256="scudo-binary-sha256",
+            cpu=20,
+            numa_node=0,
+            timeout_seconds=30,
+            scudo_runtime=Path("/tmp/libscudo.so"),
+        )
+
+        bad_marker = dict(record)
+        bad_marker["scudo_identity_marker_count"] = 0
+        with self.assertRaisesRegex(RuntimeError, "Scudo marker"):
+            campaign.validate_process_record_identity(
+                bad_marker,
+                variant=scudo,
+                binary_sha256="scudo-binary-sha256",
+                cpu=20,
+                numa_node=0,
+                timeout_seconds=30,
+                scudo_runtime=Path("/tmp/libscudo.so"),
+            )
+
+        timeout = process_record(
+            benchmark="vec::slow",
+            allocator="scudo",
+            phase="warmup",
+            round_index=0,
+            timed_out=True,
+        )
+        timeout["timeout_seconds"] = 10
+        with self.assertRaisesRegex(RuntimeError, "timeout bound"):
+            campaign.validate_process_record_identity(
+                timeout,
+                variant=scudo,
+                binary_sha256="scudo-binary-sha256",
+                cpu=20,
+                numa_node=0,
+                timeout_seconds=30,
+                scudo_runtime=Path("/tmp/libscudo.so"),
+            )
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -23,11 +24,12 @@ import os
 import statistics
 import sys
 import threading
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 
 SCRIPT_PATH = Path(__file__).resolve()
@@ -771,6 +773,54 @@ def validate_timeout_identity(record: Mapping[str, Any], allocator: str) -> bool
     )
 
 
+def validate_process_record_identity(
+    record: Mapping[str, Any],
+    *,
+    variant: Any,
+    binary_sha256: str,
+    cpu: int,
+    numa_node: int,
+    timeout_seconds: int,
+    scudo_runtime: Path | None,
+) -> None:
+    """Re-authenticate a fresh or resumed process record against this campaign."""
+
+    key = record_key(record)
+    kind = record_kind(record)
+    if record.get("feature") != variant.feature:
+        raise RuntimeError(f"process record has the wrong feature: {key}")
+    if record.get("binary_sha256") != binary_sha256:
+        raise RuntimeError(f"process record has a different binary identity: {key}")
+    if record.get("cpu") != cpu or record.get("numa_node") != numa_node:
+        raise RuntimeError(f"process record has different CPU/NUMA placement: {key}")
+    if record.get("timeout_seconds") != timeout_seconds:
+        raise RuntimeError(f"process record has a different timeout bound: {key}")
+    if record.get("glibc_tunables_present") is not False:
+        raise RuntimeError(f"process record violated the clean glibc environment: {key}")
+
+    expected_markers = 1 if variant.allocator == "scudo" else 0
+    if record.get("scudo_identity_marker_count") != expected_markers:
+        raise RuntimeError(f"process record has the wrong Scudo marker count: {key}")
+    if variant.allocator == "scudo":
+        if scudo_runtime is None or record.get("scudo_runtime_library") != str(
+            scudo_runtime
+        ):
+            raise RuntimeError(f"process record has a different Scudo runtime: {key}")
+
+    if kind == "timeout":
+        if not validate_timeout_identity(record, variant.allocator):
+            raise RuntimeError(f"timeout record failed runtime identity checks: {key}")
+        return
+
+    if record.get("exit_code") != 0 or record.get("time_exit_status") != 0:
+        raise RuntimeError(f"valid process record has a nonzero exit status: {key}")
+    if record.get("reported_benchmark") != record.get("benchmark"):
+        raise RuntimeError(f"valid process record did not report its exact leaf: {key}")
+    if record.get("time_parse_error") is not None:
+        raise RuntimeError(f"valid process record has a GNU time parse error: {key}")
+    finite_nonnegative(record.get("ns_per_iter"), field=f"{key} ns_per_iter")
+
+
 def annotate_process_record(
     record: dict[str, Any], *, allocator: str, output_dir: Path
 ) -> dict[str, Any]:
@@ -790,6 +840,33 @@ def annotate_process_record(
 def variant_order(benchmark_index: int, round_index: int) -> tuple[Any, ...]:
     rotation = (benchmark_index + round_index) % len(VARIANTS)
     return VARIANTS[rotation:] + VARIANTS[:rotation]
+
+
+@contextmanager
+def exclusive_campaign_lock(output_dir: Path) -> Iterator[None]:
+    """Hold a nonblocking inter-process lock for one campaign output tree."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = output_dir / ".campaign.lock"
+    handle = lock_path.open("a+", encoding="utf-8")
+    try:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise RuntimeError(
+                f"another campaign is already active for {output_dir}"
+            ) from error
+        handle.seek(0)
+        handle.truncate()
+        handle.write(f"pid={os.getpid()}\nstarted_utc={base.utc_now()}\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+        yield
+    finally:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -824,7 +901,13 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
     output_dir = args.output_dir.expanduser()
     if not output_dir.is_absolute():
         output_dir = (source_root / output_dir).resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    with exclusive_campaign_lock(output_dir):
+        return _run_campaign_locked(args, source_root, output_dir)
+
+
+def _run_campaign_locked(
+    args: argparse.Namespace, source_root: Path, output_dir: Path
+) -> dict[str, Any]:
     head = base.validate_clean_source(source_root)
     tcmalloc_lib_dir = base.validate_tcmalloc_dir(args.tcmalloc_lib_dir)
     tcmalloc_identity = base.tcmalloc_runtime_identity(tcmalloc_lib_dir)
@@ -966,18 +1049,15 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
     for key, record in completed.items():
         _, _, allocator, benchmark = key
         variant = variants_by_allocator[allocator]
-        if record.get("feature") != variant.feature:
-            raise RuntimeError(f"resumed record has the wrong feature: {key}")
-        if record.get("binary_sha256") != builds[allocator]["binary_sha256"]:
-            raise RuntimeError(f"resumed record has a different binary identity: {key}")
-        if record.get("cpu") != lane_cpu[benchmark]:
-            raise RuntimeError(f"resumed record has the wrong fixed CPU lane: {key}")
-        if record.get("numa_node") != args.numa_node:
-            raise RuntimeError(f"resumed record has different NUMA placement: {key}")
-        if allocator == "scudo" and record.get("scudo_runtime_library") != str(
-            scudo_runtime
-        ):
-            raise RuntimeError(f"resumed Scudo record has a different runtime: {key}")
+        validate_process_record_identity(
+            record,
+            variant=variant,
+            binary_sha256=str(builds[allocator]["binary_sha256"]),
+            cpu=lane_cpu[benchmark],
+            numa_node=args.numa_node,
+            timeout_seconds=args.timeout_seconds,
+            scudo_runtime=scudo_runtime,
+        )
     for benchmark in benchmarks:
         for variant in VARIANTS:
             classify_cell_history(
@@ -1054,6 +1134,15 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
                 },
             )
             raise RuntimeError(f"full campaign failed closed at {key}")
+        validate_process_record_identity(
+            record,
+            variant=variant,
+            binary_sha256=str(builds[variant.allocator]["binary_sha256"]),
+            cpu=lane.cpu,
+            numa_node=args.numa_node,
+            timeout_seconds=args.timeout_seconds,
+            scudo_runtime=scudo_runtime,
+        )
         persist(record)
 
     def current_state(allocator: str, benchmark: str) -> CellState:

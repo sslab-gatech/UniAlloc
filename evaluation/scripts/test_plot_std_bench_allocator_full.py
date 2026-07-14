@@ -140,6 +140,17 @@ class FullStdBenchPlotterTests(unittest.TestCase):
                     "timeout_seconds": 10,
                     "cpu": 20,
                     "numa_node": 0,
+                    "binary_sha256": f"{allocator}-binary-sha256",
+                    "glibc_tunables_present": False,
+                    "scudo_identity_marker_count": 1 if allocator == "scudo" else 0,
+                    "scudo_runtime_library": (
+                        "/tmp/libscudo.so" if allocator == "scudo" else None
+                    ),
+                    "reported_benchmark": (
+                        benchmark if timeout != ("warmup", 0) else None
+                    ),
+                    "exit_code": 0 if timeout != ("warmup", 0) else -15,
+                    "time_exit_status": 0 if timeout != ("warmup", 0) else None,
                     "stdout_path": f"runs/warmup/{allocator}/{benchmark}.stdout",
                 }
                 if warmup["valid"]:
@@ -433,6 +444,9 @@ class FullStdBenchPlotterTests(unittest.TestCase):
                     "timed_out": False,
                     "status": "valid",
                     "ns_per_iter": 300.0,
+                    "exit_code": 0,
+                    "time_exit_status": 0,
+                    "reported_benchmark": "btree::bench_099",
                     "stdout_path": "runs/measured/1/scudo/btree::bench_099.stdout",
                 }
             )
@@ -441,6 +455,21 @@ class FullStdBenchPlotterTests(unittest.TestCase):
         completed = self.run_plotter(check=False)
         self.assertNotEqual(0, completed.returncode)
         self.assertIn("after terminal timeout", completed.stderr)
+        self.assertFalse(self.result.exists())
+
+    def test_fails_closed_on_lost_scudo_runtime_identity(self) -> None:
+        def corrupt(records: list[dict[str, object]]) -> None:
+            record = next(
+                item
+                for item in records
+                if item["allocator"] == "scudo" and item["valid"] is True
+            )
+            record["scudo_identity_marker_count"] = 0
+
+        self.write_fixture(records_transform=corrupt)
+        completed = self.run_plotter(check=False)
+        self.assertNotEqual(0, completed.returncode)
+        self.assertIn("Scudo marker", completed.stderr)
         self.assertFalse(self.result.exists())
 
     def test_fails_closed_on_summary_selection_drift(self) -> None:
