@@ -15,6 +15,13 @@ cargo run --release -p unialloc \
 cargo run --release -p unialloc \
   --example page_run_backend_bench \
   --no-default-features --features bitmap_page_allocator
+
+# Run the direct segment-tree correctness and invariant suite.
+cargo test -p unialloc --lib bitmap_alloc::tests
+
+# Exercise the SegmentPageAllocator directly, without page-heap or arena cost.
+cargo run --release -p unialloc \
+  --example segment_tree_page_allocator_bench -- all
 ```
 
 ## Data structure
@@ -41,15 +48,43 @@ pages, giving approximately 0.75 bytes of tree metadata per page.
 The unit tests cover:
 
 - adjacent frees becoming one larger allocatable run;
-- fragmented runs crossing tree-child boundaries;
+- aligned fragmented runs crossing leaf and tree-child boundaries;
+- partial tail leaves remaining unavailable;
+- cross-leaf partial-free rejection;
+- search-cursor rewind across the eight-leaf fast-scan boundary;
 - earliest-run selection and over-page alignment after conflict skipping;
 - double-free and foreign-range rejection;
 - 10,000 deterministic randomized allocate/free operations checked against a
-  naive occupancy bitmap.
+  naive occupancy bitmap, including recursive prefix/suffix/max-free invariant
+  validation every 127 operations.
 
 The feature is wired into `BuddySystemAllocator`, so object-page backing and
 large fixed-heap allocations exercise the same tree through the existing
 `GlobalBackend` boundary.
+
+## Direct segment-tree benchmark
+
+`segment_tree_page_allocator_bench` owns a 4,096-page aligned range and calls
+`SegmentPageAllocator` directly. Setup, fragmentation, and warmup occur before
+timing. Each operation count includes the individual allocate/free updates.
+Five CPU-8 process runs, each containing seven trials, produced:
+
+| Isolated mode | Exercised path | Median of five process medians |
+|---|---|---:|
+| `leaf` | leaf-local 8-page allocate/free | 36.007 ns/op |
+| `cross` | aligned 12-page hole spanning pages 60-71 | 187.106 ns/op |
+| `long` | 130-page root-free allocate/free | 76.330 ns/op |
+| `update` | two 64-page frees merging into a 128-page allocation | 47.967 ns/op |
+
+The `cross` mode forces the summary-tree fallback because neither leaf contains
+the complete run. The `update` mode checks the core bitmap property: clearing
+adjacent bits and pulling ancestor summaries makes the 128-page run immediately
+allocatable, with no explicit neighbor-splice pass.
+
+All 180 benchmark-output records, 20 process medians, commands, affinity,
+binary hash, and four aggregates are stored in
+`benchmark-results/segment-tree-direct-benchmark.jsonl` (SHA-256
+`e14393b6a1c6974784a94086c452fd8d3cefe762b6f06425cde96bf218205911`).
 
 ## Performance result
 

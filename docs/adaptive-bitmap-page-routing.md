@@ -25,21 +25,29 @@ signals start a thread-local bitmap lease:
 1. A free-list deallocation that joins both neighbours publishes a bridge
    generation. Four or more bridges observed as one burst route the next request
    when that request spans at least 16 pages.
-2. A failed `try_lock` on the global free-list radix lock publishes a contention
-   generation. Every thread that observes the generation starts a lease.
+2. One sampled failed `try_lock` on the global free-list radix lock publishes a
+   contention generation. The probe runs once per eight radix accesses, and
+   every thread that observes the generation starts a lease.
 
-Each activation leases 1,048,576 page-run allocations to the hosted bitmap.
-The long lease keeps a coalescing phase on one ownership path. A 64-K allocation
-lease repeatedly crossed backend boundaries in the guarded coalescing workload;
-the resulting mixed-owner probes and arena churn raised the median from roughly
-45 ns/op to more than 700 ns/op. The 1-M lease covered the measured phase and
-restored a stable bitmap-rate result.
+Each activation leases 65,536 page-run allocations to the hosted bitmap. Every
+bitmap-routed request of at least 16 pages refreshes that lease. Large coalescing
+demand therefore stays on one ownership path, while a later quiet 8-page phase
+with stable routing generations returns to the exact free list after at most one
+short lease. A plain 64-K lease without refresh repeatedly crossed backend
+boundaries in the guarded workload; large-run refresh preserves its bitmap-rate
+result without retaining a fixed 1-M tail.
 
 The 16-page bridge-request gate separates the measured exact 8-page reuse case
 from the 32-page coalescing demand. Contention remains sufficient for 8-page
 runs, since the four-thread 8-page workload strongly favours bitmap arenas.
 Sparse bridge generations are consumed without accumulating across unrelated
 allocation observations.
+
+The allocation hot path reads one shared routing generation. The separate
+contention generation is loaded only after that routing generation changes, and
+an active lease performs no global generation load. A newly initialized thread
+snapshots historical generations, so old process-wide activity does not seed a
+fresh lease.
 
 Direct Rust TLS stores the lease state on supported hosted targets. arm64e uses
 the free-list route while its direct-TLS support remains conservative.
@@ -77,6 +85,14 @@ RUSTFLAGS='-C target-cpu=native' \
   cargo run --locked --release -p unialloc \
     --example hosted_page_run_backend_bench \
     --features adaptive_bitmap_page_allocator,stats -- fragmented
+
+# Route-decision-only cost and exact -> coalesce -> exact transition shape.
+cargo run --locked --release -p unialloc \
+  --example hosted_page_run_backend_bench \
+  --features adaptive_bitmap_page_allocator,stats -- route
+cargo run --locked --release -p unialloc \
+  --example hosted_page_run_backend_bench \
+  --features adaptive_bitmap_page_allocator,stats -- phase
 ```
 
 The diagnostic build recorded these route decisions on the benchmark host:
@@ -86,14 +102,21 @@ The diagnostic build recorded these route decisions on the benchmark host:
 | Same 8-page reuse | 1,402,000 | 0 | no bridge or contention activation |
 | Fragmented exact 8-page reuse | 365,568 | 0 | bridge bursts consumed by the 16-page gate |
 | Guarded coalesce/refill | 1,024 | 799,744 | one bridge activation on 32-page demand |
-| Four-thread 8-page contention | 3 | 1,399,997 | two radix-lock contention signals |
+| Four-thread 8-page contention | 100,084 | 1,299,916 | median of seven processes; 92.85% bitmap routed |
 
-Timing comparisons use builds without `stats`; counter atomics are diagnostic
-instrumentation.
+The backend three-way timing comparisons below use builds with `stats` disabled;
+counter atomics are diagnostic instrumentation. The route-decision-only median
+was 1.036 ns/op with `stats` enabled; this includes the benchmark's `black_box`
+boundary.
+
+The full route-diagnostics capture contains 350 raw benchmark-output records,
+35 normalized process records, and five aggregate records in
+`benchmark-results/adaptive-page-run-route-stats.jsonl` (SHA-256
+`d7d6727e0271c98766c7c0ceb268de90945341ec130628b344b18e07717b41f5`).
 
 ## Backend A/B motivation
 
-The current `22558d7` backends were measured in five counterbalanced process
+At `22558d7`, the two backends were measured in five counterbalanced process
 pairs, with seven trials per process, fat LTO, `-C target-cpu=native`, CPU 8 for
 single-thread work, and CPUs 8-11 for the four-thread work. Each cell is the
 median of five process medians.
@@ -117,31 +140,53 @@ also preserves the SHA-256 hashes of both complete raw captures.
 
 ## Adaptive three-way A/B
 
-The implemented policy was then compared with both backends using five rotated,
+The optimized policy was compared with both backends using five rotated,
 counterbalanced process triples and isolated workload processes. Timing builds
 used default features and omitted `stats`. The measured source commit was
-`8ac14ff`, rebased on dev `1308d2b`; the later evidence-only amend preserves the
-same allocator and benchmark binary.
+`9ed7cac`, based on dev `8d369c3`.
 
 | Workload | Free list | Bitmap | Adaptive | Adaptive result |
 |---|---:|---:|---:|---|
-| Same 8-page reuse | 20.418 ns/op | 25.178 ns/op | 22.160 ns/op | +8.53% vs free list; 11.99% faster than bitmap |
-| Fragmented exact reuse | 36.705 ns/op | 45.631 ns/op | 38.840 ns/op | +5.82% vs free list; 14.88% faster than bitmap |
-| Guarded coalesce/refill | 65.795 ns/op | 42.461 ns/op | 43.693 ns/op | 33.59% faster than free list; within 2.90% of bitmap |
-| Four-thread contention | 106.251 ns/op | 34.875 ns/op | 21.487 ns/op | 79.78% faster than free list; 38.39% faster than bitmap |
+| Same 8-page reuse | 20.392 ns/op | 25.311 ns/op | 21.610 ns/op | +5.97% vs free list; 14.62% faster than bitmap |
+| Fragmented exact reuse | 36.686 ns/op | 46.034 ns/op | 38.149 ns/op | +3.99% vs free list; 17.13% faster than bitmap |
+| Guarded coalesce/refill | 69.948 ns/op | 42.471 ns/op | 43.701 ns/op | 37.52% faster than free list; within 2.90% of bitmap |
+| Four-thread contention | 100.935 ns/op | 34.919 ns/op | 21.445 ns/op | 78.75% faster than free list; 38.59% faster than bitmap |
 
 Adaptive beat the free list in all five coalescing and contention triples. The
 free list beat adaptive in all five exact-reuse triples. Adaptive beat the pure
-bitmap in every exact and contention triple; coalescing stayed close to pure
-bitmap with a 2/5 adaptive win count. The result gives the adaptive feature a
-balanced opt-in profile: a 5.8-8.5% exact-path dispatch cost buys near-bitmap
-coalescing and a large contention gain.
+bitmap in every exact and contention triple; pure bitmap won all five
+coalescing triples by 1.24-3.14%. Relative to the pre-optimization A/B, the
+exact-route premiums fell from 8.53% to 5.97% and from 5.82% to 3.99%, a roughly
+30% reduction in each premium. Coalescing remains within 2.90% of bitmap and
+contention remains the fastest measured route.
 
 All 540 captured benchmark-output records (420 timing trials, 60 backend
 headers, and 60 in-process summaries), 60 normalized process medians, four
 aggregate records, binary hashes, commands, ordering, and affinity metadata are stored in
 `benchmark-results/hosted-page-run-adaptive-threeway-ab.jsonl` (SHA-256
-`0f9fb2fc5a466c0ada57a064deb94703f91fc60f0c734201a70293c1c948fc91`).
+`193a9a1e8442204fc343c71af09554c41f5970984ae39e08439256ee72f09edd`).
+
+## Phase-transition A/B
+
+The `phase` selector measures exact reuse, runs guarded coalescing with ten
+warmup cycles followed by two timed cycles, and then records twelve
+100-K-allocation exact buckets. Five counterbalanced process pairs compared the
+original fixed 1-M lease with the 64-K lease plus large-run refresh, with
+`stats` enabled for route counts.
+
+| Phase measure | Fixed 1-M lease | 64-K + large-run refresh |
+|---|---:|---:|
+| Bitmap allocations after the trigger | 1,048,576 | 78,399 |
+| Late exact buckets 04-11 | 25.882 ns/op | 22.150 ns/op |
+| Late exact premium over each pre-trigger baseline | 20.01% | 1.30% |
+| Warmed coalescing-phase median | 691.661 ns/op | 698.034 ns/op |
+
+Large-run refresh reduced retained bitmap allocations by 92.52% and late exact
+cost by 14.42%, while the warmed coalescing phase moved by 0.92%. The full 160
+raw phase records, ten normalized processes, aggregates, commands, and binary
+hashes are stored in
+`benchmark-results/adaptive-page-run-phase-lease-ab.jsonl` (SHA-256
+`5e9546a42ca3364ab8a994e75a1ab03c802ad8e7c26524d0b194a3eb6b6e665f`).
 
 ## Fixed-heap boundary
 
@@ -164,10 +209,14 @@ opposite contention result both support a separate fixed-heap design.
 
 ## Current boundaries
 
-- The bridge threshold, 16-page demand gate, and 1-M lease are empirically tuned
-  against four microbenchmarks on one Linux/x86-64 host.
-- A phase that activates bitmap routing and immediately changes to quiet exact
-  reuse can retain bitmap routing for the remaining lease.
+- The bridge threshold, 16-page demand gate, 64-K lease, refresh rule, and
+  eight-access contention sampling interval are empirically tuned against five
+  microbenchmarks on one Linux/x86-64 host.
+- A stable-generation phase that changes to quiet exact reuse can retain bitmap
+  routing for at most the remaining short lease. A generation published during
+  that lease is observed afterward and can start one additional lease.
+- Sampling can miss contention bursts shorter than eight radix accesses; it
+  preserves exclusion and changes only the routing hint.
 - Mixed live owners require owner-directory probes for free-list deallocations.
 - The policy reacts to radix-lock contention shared by page-run metadata and
   higher allocator layers; the signal intentionally represents observed global
