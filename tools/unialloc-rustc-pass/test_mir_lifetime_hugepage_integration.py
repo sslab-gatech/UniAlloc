@@ -202,7 +202,12 @@ fn main() {
         return completed
 
     def run_pass(
-        self, label: str, *, profile: Path | None = None, actual_rewrite: bool = False
+        self,
+        label: str,
+        *,
+        profile: Path | None = None,
+        confidence_threshold: int | None = None,
+        actual_rewrite: bool = False,
     ) -> dict[str, object]:
         audit = self.tmp / f"{label}.json"
         command = [
@@ -215,6 +220,13 @@ fn main() {
             command.append("--unialloc-actual-semantic-scope-rewrite")
         if profile is not None:
             command.extend(["--unialloc-lifetime-profile", str(profile)])
+        if confidence_threshold is not None:
+            command.extend(
+                [
+                    "--unialloc-lifetime-confidence-threshold",
+                    str(confidence_threshold),
+                ]
+            )
         command.extend(
             [
                 "--",
@@ -277,8 +289,11 @@ fn main() {
         return rows[0]
 
     @staticmethod
-    def profile_line(row: dict[str, object]) -> str:
-        return f"{row['callsite']} {row['type_id']} {row['module_id']} long-lived"
+    def profile_line(row: dict[str, object], confidence: int) -> str:
+        return (
+            f"{row['callsite']} {row['type_id']} {row['module_id']} "
+            f"long-lived {confidence}"
+        )
 
     def wait_for_pool_restore(self, free_before: int) -> dict[str, int]:
         deadline = time.monotonic() + 2.0
@@ -318,13 +333,18 @@ fn main() {
         profile = self.tmp / "exact-long-lived.profile"
         profile.write_text(
             "\n".join(
-                ["unialloc-lifetime-profile-v1"]
-                + [self.profile_line(row) for row in profiled_rows]
+                ["unialloc-lifetime-profile-v2"]
+                + [self.profile_line(row, 95) for row in profiled_rows]
                 + [""]
             ),
             encoding="utf-8",
         )
-        actual = self.run_pass("actual", profile=profile, actual_rewrite=True)
+        actual = self.run_pass(
+            "actual",
+            profile=profile,
+            confidence_threshold=80,
+            actual_rewrite=True,
+        )
 
         rows_by_callsite = {
             row.get("callsite"): row
@@ -341,6 +361,7 @@ fn main() {
             self.assertIsNotNone(row, callsite)
             assert row is not None
             self.assertEqual(row["lifetime_hint"], 2, row)
+            self.assertEqual(row["lifetime_hint_confidence"], 95, row)
             self.assertEqual(row["lifetime_hint_basis"], "profile_exact_match", row)
             self.assertEqual(row["rewrite_status"], expected_status, row)
 
@@ -352,6 +373,8 @@ fn main() {
         )
         self.assertEqual(compiler_pass["lifetime_profile_match_count"], 3)
         self.assertEqual(compiler_pass["lifetime_profile_miss_count"], 0)
+        self.assertEqual(compiler_pass["lifetime_profile_confidence_threshold"], 80)
+        self.assertEqual(compiler_pass["lifetime_profile_abstention_count"], 0)
         self.assertRegex(str(compiler_pass["lifetime_profile_digest"]), r"^[0-9a-f]{16}$")
 
         pool_before = hugepage_pool()

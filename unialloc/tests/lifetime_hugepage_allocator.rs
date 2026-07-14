@@ -2,7 +2,7 @@
 
 use core::alloc::{GlobalAlloc, Layout};
 use unialloc::{
-    delayed_free_snapshot, lifetime_hugepage_configure,
+    delayed_free_snapshot, lifetime_hugepage_advance_epoch, lifetime_hugepage_configure,
     lifetime_hugepage_phase_flush_current_thread, lifetime_hugepage_stats_reset,
     lifetime_hugepage_stats_snapshot, with_semantic_metadata, AllocationMetadata,
     LifetimeHugepagePolicy, SemanticAlloc, UniAlloc, FLAG_DELAYED_FREE, LIFETIME_HINT_EPHEMERAL,
@@ -157,6 +157,7 @@ fn tiered_policy_and_cross_thread_free_preserve_backend_provenance() {
         mapped.hugetlb_extent_mappings + mapped.hugetlb_fallback_extent_mappings,
         1
     );
+    assert_eq!(lifetime_hugepage_advance_epoch(), 2);
 
     let ptr_addr = ptr as usize;
     std::thread::spawn(move || unsafe {
@@ -169,6 +170,7 @@ fn tiered_policy_and_cross_thread_free_preserve_backend_provenance() {
 
     let released = lifetime_hugepage_stats_snapshot();
     assert_eq!(released.live_objects, 0);
+    assert_eq!(released.predictor_true_positive_objects, 1);
     assert!(released.all_mappings_released);
 
     assert!(lifetime_hugepage_configure(
@@ -393,6 +395,209 @@ fn identity_region_is_reassigned_only_after_its_last_live_slot() {
         released.identity_region_assignments,
         released.identity_region_releases
     );
+    assert!(released.all_mappings_released);
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[test]
+fn runtime_epoch_oracle_reports_predictor_and_placement_confusion() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let layout = Layout::from_size_align(4096, 64).unwrap();
+    let predicted_long_actual_long = metadata(0xA11C_3000, LIFETIME_HINT_LONG_LIVED);
+    let predicted_short_actual_short = metadata(0xA11C_3001, LIFETIME_HINT_EPHEMERAL);
+    let predicted_long_actual_short = metadata(0xA11C_3002, LIFETIME_HINT_LONG_LIVED);
+    let predicted_short_actual_long = metadata(0xA11C_3003, LIFETIME_HINT_EPHEMERAL);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::LongLivedHugepage
+    ));
+
+    unsafe {
+        let tp = alloc.alloc_with_metadata(layout, predicted_long_actual_long);
+        let tn = alloc.alloc_with_metadata(layout, predicted_short_actual_short);
+        let fp = alloc.alloc_with_metadata(layout, predicted_long_actual_short);
+        let fn_ptr = alloc.alloc_with_metadata(layout, predicted_short_actual_long);
+        assert!(!tp.is_null() && !tn.is_null() && !fp.is_null() && !fn_ptr.is_null());
+
+        alloc.dealloc_with_metadata(tn, layout, predicted_short_actual_short);
+        alloc.dealloc_with_metadata(fp, layout, predicted_long_actual_short);
+        let same_epoch = lifetime_hugepage_stats_snapshot();
+        assert_eq!(same_epoch.runtime_validated_objects, 2);
+        assert_eq!(same_epoch.predictor_true_negative_objects, 1);
+        assert_eq!(same_epoch.predictor_false_positive_objects, 1);
+        assert_eq!(same_epoch.predictor_true_positive_objects, 0);
+        assert_eq!(same_epoch.predictor_false_negative_objects, 0);
+
+        assert_eq!(lifetime_hugepage_advance_epoch(), 2);
+        assert_eq!((tp as *const u8).read(), 0);
+        assert_eq!((fn_ptr as *const u8).read(), 0);
+        alloc.dealloc_with_metadata(tp, layout, predicted_long_actual_long);
+        alloc.dealloc_with_metadata(fn_ptr, layout, predicted_short_actual_long);
+    }
+
+    let final_stats = lifetime_hugepage_stats_snapshot();
+    assert_eq!(final_stats.runtime_validated_objects, 4);
+    assert_eq!(final_stats.runtime_validated_bytes, 4 * layout.size());
+    assert_eq!(final_stats.predictor_true_positive_objects, 1);
+    assert_eq!(final_stats.predictor_true_negative_objects, 1);
+    assert_eq!(final_stats.predictor_false_positive_objects, 1);
+    assert_eq!(final_stats.predictor_false_negative_objects, 1);
+    if final_stats.hugetlb_extent_mappings != 0 {
+        assert_eq!(final_stats.placement_true_positive_objects, 1);
+        assert_eq!(final_stats.placement_true_negative_objects, 1);
+        assert_eq!(final_stats.placement_false_positive_objects, 1);
+        assert_eq!(final_stats.placement_false_negative_objects, 1);
+    } else {
+        assert_eq!(final_stats.placement_true_positive_objects, 0);
+        assert_eq!(final_stats.placement_true_negative_objects, 2);
+        assert_eq!(final_stats.placement_false_positive_objects, 0);
+        assert_eq!(final_stats.placement_false_negative_objects, 2);
+    }
+    assert_eq!(final_stats.phase_advances, 1);
+    assert!(final_stats.all_mappings_released);
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[test]
+fn epoch_cohort_policy_separates_live_extents_without_early_reclamation() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let layout = Layout::from_size_align(4096, 64).unwrap();
+    let long = metadata(0xA11C_3010, LIFETIME_HINT_LONG_LIVED);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::EpochCohortHugepage
+    ));
+
+    unsafe {
+        let first_epoch = alloc.alloc_with_metadata(layout, long);
+        assert!(!first_epoch.is_null());
+        first_epoch.write(0x31);
+        assert_eq!(lifetime_hugepage_advance_epoch(), 2);
+        let second_epoch = alloc.alloc_with_metadata(layout, long);
+        assert!(!second_epoch.is_null());
+        second_epoch.write(0x32);
+
+        let mixed_cohort_snapshot = lifetime_hugepage_stats_snapshot();
+        let empty_region_bytes = 31 * unialloc::LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES;
+        assert_eq!(
+            mixed_cohort_snapshot.cohort_pinned_unassigned_region_bytes,
+            empty_region_bytes
+        );
+        assert_eq!(
+            mixed_cohort_snapshot.reusable_unassigned_region_bytes,
+            empty_region_bytes
+        );
+
+        let first_extent = (first_epoch as usize) & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+        let second_extent = (second_epoch as usize) & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+        assert_ne!(first_extent, second_extent);
+
+        alloc.dealloc_with_metadata(first_epoch, layout, long);
+        let after_first = lifetime_hugepage_stats_snapshot();
+        assert_eq!(after_first.current_extents, 1);
+        assert_eq!(second_epoch.read(), 0x32);
+        assert_eq!(after_first.predictor_true_positive_objects, 1);
+
+        alloc.dealloc_with_metadata(second_epoch, layout, long);
+    }
+
+    let released = lifetime_hugepage_stats_snapshot();
+    assert_eq!(released.epoch_cohort_extent_mappings, 2);
+    assert_eq!(released.predictor_false_positive_objects, 1);
+    assert!(released.all_mappings_released);
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[test]
+fn unknown_and_delayed_objects_keep_runtime_validation_coverage_honest() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let layout = Layout::from_size_align(1024, 16).unwrap();
+    let classified = metadata(0xA11C_3020, LIFETIME_HINT_EPHEMERAL);
+    let delayed = metadata(0xA11C_3021, LIFETIME_HINT_EPHEMERAL).with_flags(FLAG_DELAYED_FREE);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::SegregatedOrdinary
+    ));
+
+    unsafe {
+        let unknown = alloc.alloc_with_metadata(layout, AllocationMetadata::unknown());
+        let known = alloc.alloc_with_metadata(layout, classified);
+        let retained = alloc.alloc_with_metadata(layout, delayed);
+        assert!(!unknown.is_null() && !known.is_null() && !retained.is_null());
+        alloc.dealloc_with_metadata(unknown, layout, AllocationMetadata::unknown());
+        alloc.dealloc_with_metadata(known, layout, classified);
+        alloc.dealloc_with_metadata(retained, layout, delayed);
+    }
+    let retained_count = delayed_free_snapshot().occupied_slots;
+    assert!(retained_count > 0);
+    assert_eq!(
+        lifetime_hugepage_phase_flush_current_thread(),
+        retained_count
+    );
+
+    let snapshot = lifetime_hugepage_stats_snapshot();
+    assert_eq!(snapshot.unknown_bypasses, 1);
+    assert_eq!(snapshot.unknown_bypass_requested_bytes, layout.size());
+    assert_eq!(snapshot.runtime_validated_objects, 1);
+    assert_eq!(snapshot.runtime_validation_excluded_objects, 1);
+    assert_eq!(snapshot.runtime_delayed_free_excluded_objects, 1);
+    assert_eq!(snapshot.runtime_mixed_epoch_excluded_objects, 0);
+    assert_eq!(snapshot.predictor_true_negative_objects, 1);
+    assert!(snapshot.all_mappings_released);
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[test]
+fn runtime_oracle_preserves_non_cohort_region_reuse_and_excludes_mixed_epochs() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let layout = Layout::from_size_align(1024, 16).unwrap();
+    let long = metadata(0xA11C_3030, LIFETIME_HINT_LONG_LIVED);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::LongLivedHugepage
+    ));
+
+    unsafe {
+        let first_epoch = alloc.alloc_with_metadata(layout, long);
+        assert!(!first_epoch.is_null());
+        assert_eq!(lifetime_hugepage_advance_epoch(), 2);
+        let second_epoch = alloc.alloc_with_metadata(layout, long);
+        assert!(!second_epoch.is_null());
+
+        let first_region = (first_epoch as usize) & !(LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES - 1);
+        let second_region =
+            (second_epoch as usize) & !(LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES - 1);
+        assert_eq!(first_region, second_region);
+        assert_eq!(
+            lifetime_hugepage_stats_snapshot().current_identity_regions,
+            1
+        );
+
+        alloc.dealloc_with_metadata(first_epoch, layout, long);
+        alloc.dealloc_with_metadata(second_epoch, layout, long);
+    }
+
+    let released = lifetime_hugepage_stats_snapshot();
+    assert_eq!(released.runtime_validated_objects, 0);
+    assert_eq!(released.runtime_validation_excluded_objects, 2);
+    assert_eq!(released.runtime_delayed_free_excluded_objects, 0);
+    assert_eq!(released.runtime_mixed_epoch_excluded_objects, 2);
     assert!(released.all_mappings_released);
     assert!(lifetime_hugepage_configure(
         LifetimeHugepagePolicy::Disabled
