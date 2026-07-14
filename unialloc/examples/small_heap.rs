@@ -3,19 +3,20 @@ use std::alloc::{GlobalAlloc, Layout};
 use std::mem::{size_of, MaybeUninit};
 use std::process;
 
-#[cfg(feature = "fixed_heap")]
+#[cfg(all(feature = "fixed_heap", feature = "type_isolation", feature = "stats"))]
 use unialloc::alloc_api::{__unialloc_alloc_with_metadata, __unialloc_dealloc_with_metadata};
 #[cfg(feature = "fixed_heap")]
 use unialloc::{
     __unialloc_constrained_boot_sample_abi_version, __unialloc_constrained_boot_sample_checked,
     __unialloc_constrained_boot_sample_size, fixed_heap_ready, semantic_stats_reset,
-    semantic_type_stats_snapshot, unialloc_alloc, unialloc_dealloc, unialloc_fixed_heap_ready,
-    unialloc_fixed_heap_try_extend, unialloc_fixed_heap_try_init, unialloc_realloc,
-    SemanticTypeStatsSnapshot, UniAlloc, UniallocConstrainedBootSample,
-    CONSTRAINED_BOOT_SAMPLE_ABI_VERSION, FLAG_TYPE_ISOLATED,
+    unialloc_alloc, unialloc_dealloc, unialloc_fixed_heap_ready, unialloc_fixed_heap_try_extend,
+    unialloc_fixed_heap_try_init, unialloc_realloc, UniAlloc, UniallocConstrainedBootSample,
+    CONSTRAINED_BOOT_SAMPLE_ABI_VERSION,
 };
 #[cfg(not(feature = "fixed_heap"))]
 use unialloc::{fixed_heap_ready, UniAlloc};
+#[cfg(all(feature = "fixed_heap", feature = "type_isolation", feature = "stats"))]
+use unialloc::{semantic_type_stats_snapshot, SemanticTypeStatsSnapshot, FLAG_TYPE_ISOLATED};
 
 // In fixed-heap mode the heap must be explicitly registered before the first
 // UniAlloc allocation.  Making UniAlloc the process global allocator would let
@@ -27,11 +28,11 @@ static A: UniAlloc = UniAlloc;
 
 const SMALL_HEAP_PAGE_SIZE: usize = unialloc::PAGE_SIZE;
 const HEAP_SIZE: usize = 50 * SMALL_HEAP_PAGE_SIZE;
-#[cfg(feature = "fixed_heap")]
+#[cfg(all(feature = "fixed_heap", feature = "type_isolation", feature = "stats"))]
 const SEMANTIC_PROBE_TYPE_ID: u64 = 0x534d_414c_4c48_4541;
-#[cfg(feature = "fixed_heap")]
+#[cfg(all(feature = "fixed_heap", feature = "type_isolation", feature = "stats"))]
 const SEMANTIC_PROBE_MODULE_ID: u64 = 0x534d_414c_4c48_504d;
-#[cfg(feature = "fixed_heap")]
+#[cfg(all(feature = "fixed_heap", feature = "type_isolation", feature = "stats"))]
 const SEMANTIC_PROBE_CALLSITE: u64 = 0x534d_414c_4c48_4353;
 
 #[cfg(feature = "fixed_heap")]
@@ -83,7 +84,7 @@ struct SemanticCAbiReport {
     probe_allocated_bytes: usize,
 }
 
-#[cfg(not(feature = "fixed_heap"))]
+#[cfg(not(all(feature = "fixed_heap", feature = "type_isolation", feature = "stats")))]
 fn run_semantic_c_abi_workload() -> SemanticCAbiReport {
     SemanticCAbiReport {
         allocation_ok: false,
@@ -177,12 +178,12 @@ unsafe fn run_allocation_batch(
     })
 }
 
-#[cfg(feature = "fixed_heap")]
+#[cfg(all(feature = "fixed_heap", feature = "type_isolation", feature = "stats"))]
 fn empty_semantic_type_stats_row() -> SemanticTypeStatsSnapshot {
     SemanticTypeStatsSnapshot::empty()
 }
 
-#[cfg(feature = "fixed_heap")]
+#[cfg(all(feature = "fixed_heap", feature = "type_isolation", feature = "stats"))]
 unsafe fn run_semantic_c_abi_workload() -> Result<SemanticCAbiReport, String> {
     let size = 96usize;
     let align = 16usize;
@@ -502,9 +503,9 @@ fn run() -> Result<String, String> {
     }
     let after_extend = unsafe { run_allocation_batch("after_extend", 1023, 1024)? };
     let c_abi = unsafe { run_c_abi_workload()? };
-    #[cfg(feature = "fixed_heap")]
+    #[cfg(all(feature = "fixed_heap", feature = "type_isolation", feature = "stats"))]
     let semantic_c_abi = unsafe { run_semantic_c_abi_workload()? };
-    #[cfg(not(feature = "fixed_heap"))]
+    #[cfg(not(all(feature = "fixed_heap", feature = "type_isolation", feature = "stats")))]
     let semantic_c_abi = run_semantic_c_abi_workload();
     #[cfg(feature = "fixed_heap")]
     let boot_platform = constrained_boot_platform();

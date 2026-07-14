@@ -3856,7 +3856,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             )
             (module_dir / "Makefile").write_text(
                 "UNIALLOC_RLIB := target/libunialloc.rlib\n"
-                "UNIALLOC_FEATURES := fixed_heap,allow_mem_leak,stats\n"
+                "UNIALLOC_FEATURES := fixed_heap,allow_mem_leak,stats,type_isolation\n"
                 "cargo build -p unialloc --lib --no-default-features --features $(UNIALLOC_FEATURES)\n"
                 "make RUSTFLAGS_MODULE='--extern unialloc=$(UNIALLOC_RLIB) -Ldependency=target/deps'\n",
                 encoding="utf-8",
@@ -3982,18 +3982,18 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
     def test_rust_for_linux_makefile_feature_parser_ignores_comments(self) -> None:
         makefile = """
         # stats appears here but must not satisfy the feature gate.
-        UNIALLOC_FEATURES ?= fixed_heap,allow_mem_leak # stats
+        UNIALLOC_FEATURES ?= fixed_heap,allow_mem_leak,type_isolation # stats
         cargo rustc --features $(UNIALLOC_FEATURES)
         """
         self.assertEqual(
             evaluate.makefile_unialloc_feature_set(makefile),
-            {"fixed_heap", "allow_mem_leak"},
+            {"fixed_heap", "allow_mem_leak", "type_isolation"},
         )
         self.assertFalse(evaluate.makefile_enables_unialloc_rfl_features(makefile))
 
         continued = """
         UNIALLOC_FEATURES ?= fixed_heap,\\
-          allow_mem_leak,stats
+          allow_mem_leak,stats,type_isolation
         """
         self.assertTrue(evaluate.makefile_enables_unialloc_rfl_features(continued))
 
@@ -4019,7 +4019,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         source = (ROOT / "evaluation" / "scripts" / "evaluate.py").read_text(encoding="utf-8")
         self.assertEqual(
             evaluate.CONSTRAINED_PLATFORM_UNIALLOC_STATICLIB_FEATURES,
-            "fixed_heap,allow_mem_leak,stats",
+            "fixed_heap,allow_mem_leak,stats,type_isolation",
         )
         self.assertIn("constrained}-unialloc-staticlib-build", source)
         self.assertIn("constrained}-unialloc-integration-audit.json", source)

@@ -234,6 +234,20 @@ fn checked_realloc_layout(layout: Layout, new_size: usize) -> Option<Layout> {
 }
 
 #[inline]
+fn begin_reallocation_reclaim_from_observation(
+    observation: GlobalReclaimObservation,
+) -> GlobalRawReclaimAdmission {
+    if global_address_lifecycle_tracking_active() {
+        begin_global_tracked_reclaim_from_observation(observation)
+    } else {
+        // Stats-only raw reallocations enter the semantic slow path solely for
+        // accounting. An inactive lifecycle proves that no semantic generation
+        // exists, so they retain the raw untracked admission contract.
+        begin_global_raw_reclaim_from_observation(observation)
+    }
+}
+
+#[inline]
 fn fallback_realloc_should_record_dealloc(
     old_ptr: *mut u8,
     old_layout: Layout,
@@ -790,7 +804,7 @@ impl RustAllocator {
         if let Some((metadata, _)) = release_metadata {
             verify_memory_tagged_reallocation_source(ptr, old_layout, metadata);
         }
-        let admission = begin_global_tracked_reclaim_from_observation(reclaim_observation);
+        let admission = begin_reallocation_reclaim_from_observation(reclaim_observation);
         let selected_metadata = if let Some(metadata) = active_metadata {
             let record_recovery = active_allocation_metadata_requires_recovery_record(metadata);
             Some((metadata, record_recovery, !record_recovery))
@@ -1146,10 +1160,10 @@ unsafe impl GlobalAlloc for RustAllocator {
         if let Some(metadata) = preflight_metadata {
             verify_memory_tagged_reallocation_source(ptr, layout, metadata);
         }
-        // Slow realloc paths always retain durable T ownership. This protects
-        // the old generation while counters, compiler streams, replacement
-        // allocation, and payload copy are performed.
-        let admission = begin_global_tracked_reclaim_from_observation(reclaim_observation);
+        // Semantic-active slow realloc paths retain durable T ownership while
+        // counters, compiler streams, replacement allocation, and payload copy
+        // are performed. Stats-only raw paths keep their inactive lifecycle.
+        let admission = begin_reallocation_reclaim_from_observation(reclaim_observation);
         if new_size == 0 {
             let release_metadata = match (active_metadata, old_recovery) {
                 (Some(active_metadata), AutoAllocationRecordLookup::Exact(recorded_metadata))

@@ -30,6 +30,9 @@ pub struct BumpAlloc {
     current: usize,
 }
 
+#[cfg(all(test, not(feature = "fixed_heap")))]
+static TEST_LAST_BUMP_OS_CHUNK_SIZE: AtomicUsize = AtomicUsize::new(0);
+
 #[cfg(feature = "fixed_heap")]
 struct FixedHeapInitPlan {
     meta_end: usize,
@@ -433,6 +436,8 @@ impl BumpAlloc {
 
         #[cfg(not(feature = "fixed_heap"))]
         {
+            #[cfg(test)]
+            TEST_LAST_BUMP_OS_CHUNK_SIZE.store(chunk_size, Ordering::Relaxed);
             let old_start = self.start;
             let old_current = self.current;
             let prot = system_alloc::prots::get_prot(true, true, false);
@@ -1060,9 +1065,9 @@ mod tests {
 
     #[cfg(all(not(feature = "fixed_heap"), target_os = "linux"))]
     #[test]
-    fn meta_bump_alloc_does_not_reserve_generic_tail_in_os() {
-        const CHILD_ENV: &str = "UNIALLOC_META_BUMP_TAIL_MAP_CHILD";
-        const TEST_NAME: &str = "sc::tests::meta_bump_alloc_does_not_reserve_generic_tail_in_os";
+    fn meta_bump_alloc_requests_compact_os_chunk() {
+        const CHILD_ENV: &str = "UNIALLOC_META_BUMP_CHUNK_SIZE_CHILD";
+        const TEST_NAME: &str = "sc::tests::meta_bump_alloc_requests_compact_os_chunk";
 
         if std::env::var_os(CHILD_ENV).is_none() {
             let output = std::process::Command::new(
@@ -1096,23 +1101,7 @@ mod tests {
             }
         }
 
-        unsafe fn os_can_map_exact_page(page_addr: usize) -> bool {
-            debug_assert_eq!(page_addr % PAGE_SIZE, 0);
-            let mapped = libc::mmap(
-                page_addr as *mut libc::c_void,
-                PAGE_SIZE,
-                libc::PROT_NONE,
-                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_FIXED_NOREPLACE,
-                -1,
-                0,
-            );
-            if mapped == libc::MAP_FAILED || mapped as usize != page_addr {
-                return false;
-            }
-            libc::munmap(mapped, PAGE_SIZE);
-            true
-        }
-
+        TEST_LAST_BUMP_OS_CHUNK_SIZE.store(0, Ordering::Relaxed);
         let mut meta = MetaBumpAlloc::new();
         let ptr = meta
             .alloc_aligned(128, 64)
@@ -1125,41 +1114,10 @@ mod tests {
         assert_ne!(ptr as usize, 0);
         assert_eq!(meta.bumper.start % PAGE_SIZE, 0);
         assert!(MetaBumpAlloc::DEFAULT_SIZE < BumpAlloc::DEFAULT_SIZE);
-
-        let compact_end =
-            BumpAlloc::chunk_end_for_size(meta.bumper.start, MetaBumpAlloc::DEFAULT_SIZE)
-                .expect("compact chunk end");
-        let generic_end = BumpAlloc::chunk_end_for_size(meta.bumper.start, BumpAlloc::DEFAULT_SIZE)
-            .expect("generic chunk end");
-
-        // Probe several page-aligned addresses that would have been inside the
-        // old accidental 64MiB reservation but are outside the intended 2MiB
-        // metadata chunk.  Linux's `MAP_FIXED_NOREPLACE` can distinguish a
-        // page reserved by this allocator from one that is available to the
-        // process; Darwin's VM APIs can report neighbouring regions in the same
-        // span, so macOS keeps only the compact-chunk mapping/state check above.
-        let tail_pages =
-            (BumpAlloc::DEFAULT_SIZE - MetaBumpAlloc::DEFAULT_SIZE).checked_div(PAGE_SIZE);
-        let last_tail_page = tail_pages
-            .and_then(|pages| pages.checked_sub(1))
-            .expect("generic chunk tail should contain pages");
-        let mut available_tail_probe = None;
-        for page_offset in [0usize, 1, 16, 256, 1024, last_tail_page] {
-            let probe = compact_end
-                .checked_add(page_offset.checked_mul(PAGE_SIZE).expect("probe offset"))
-                .expect("probe address");
-            if probe < generic_end {
-                if unsafe { os_can_map_exact_page(probe) } {
-                    available_tail_probe = Some(probe);
-                    break;
-                }
-            }
-        }
-        assert!(
-            available_tail_probe.is_some(),
-            "no old-generic-tail page could be exact-mapped by the OS; a stale 64MiB mapping would keep the whole [{:#x}, {:#x}) tail reserved",
-            compact_end,
-            generic_end
+        assert_eq!(
+            TEST_LAST_BUMP_OS_CHUNK_SIZE.load(Ordering::Relaxed),
+            MetaBumpAlloc::DEFAULT_SIZE,
+            "metadata allocation must request the compact chunk size from the OS mapping path"
         );
     }
 

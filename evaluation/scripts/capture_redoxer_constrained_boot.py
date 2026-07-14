@@ -219,7 +219,10 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--docker-image", default="redoxos/redoxer:latest")
     p.add_argument("--docker-platform", default="linux/amd64")
     p.add_argument("--target", default="x86_64-unknown-redox")
-    p.add_argument("--features", default="fixed_heap,allow_mem_leak,stats")
+    p.add_argument(
+        "--features",
+        default="fixed_heap,allow_mem_leak,stats,type_isolation",
+    )
     p.add_argument("--timeout", type=int, default=420)
     p.add_argument("--keep-target-dirs", action="store_true", help="Keep redoxer target/tmp dirs for debugging")
     return p.parse_args(argv)
