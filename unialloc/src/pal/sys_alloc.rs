@@ -238,6 +238,32 @@ pub struct HugePageMmapResult {
     pub backing: HugePageMmapBacking,
 }
 
+/// One 2 MiB-aligned anonymous mapping submitted to Linux THP policy.
+///
+/// A successful `MADV_HUGEPAGE` call only makes the VMA eligible for THP. It
+/// does not prove that the kernel has installed a PMD-sized mapping, so this
+/// result deliberately reports advice state separately from actual backing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TransparentHugePageMmapResult {
+    pub ptr: *mut u8,
+    pub advice_succeeded: bool,
+}
+
+impl TransparentHugePageMmapResult {
+    #[inline]
+    pub const fn failed() -> Self {
+        Self {
+            ptr: core::ptr::null_mut(),
+            advice_succeeded: false,
+        }
+    }
+
+    #[inline]
+    pub fn is_success(self) -> bool {
+        !mmap_failed(self.ptr)
+    }
+}
+
 impl HugePageMmapResult {
     #[inline]
     pub const fn failed() -> Self {
@@ -533,7 +559,11 @@ fn hugepage_observation_recording_allowed() -> bool {
 }
 
 #[cfg(target_os = "linux")]
-unsafe fn advise_transparent_hugepage(ptr: *mut u8, size: usize) -> bool {
+/// # Safety
+///
+/// `ptr..ptr + size` must describe a live anonymous mapping owned by the
+/// caller for the duration of the syscall.
+pub unsafe fn advise_transparent_hugepage(ptr: *mut u8, size: usize) -> bool {
     if ptr.is_null() || size == 0 {
         return false;
     }
@@ -541,7 +571,10 @@ unsafe fn advise_transparent_hugepage(ptr: *mut u8, size: usize) -> bool {
 }
 
 #[cfg(not(target_os = "linux"))]
-unsafe fn advise_transparent_hugepage(_ptr: *mut u8, _size: usize) -> bool {
+/// # Safety
+///
+/// The same mapping validity contract applies on every target.
+pub unsafe fn advise_transparent_hugepage(_ptr: *mut u8, _size: usize) -> bool {
     false
 }
 
@@ -551,6 +584,84 @@ fn hugepage_aligned_fallback_layout(req: usize) -> Option<Layout> {
         return None;
     }
     Layout::from_size_align(req, HUGEPAGE_FALLBACK_ALIGNMENT).ok()
+}
+
+/// Map ordinary anonymous memory aligned to the Linux PMD THP size and make
+/// the VMA THP-eligible. Advice success remains distinct from actual THP
+/// backing; callers that require point-in-time confirmation can use
+/// [`collapse_transparent_hugepage`].
+///
+/// # Safety
+///
+/// The returned mapping must be released exactly once with its full `req`
+/// length. `req` and `prot` must describe a valid anonymous mapping request.
+#[cfg(target_os = "linux")]
+pub unsafe fn mmap_transparent_hugepage(
+    req: usize,
+    prot: prots::Prot,
+) -> TransparentHugePageMmapResult {
+    let Some(layout) = hugepage_aligned_fallback_layout(req) else {
+        return TransparentHugePageMmapResult::failed();
+    };
+    let ptr = normalize_mmap_result(mmap_over_page_aligned(layout, prot));
+    if ptr.is_null() || ptr as usize % HUGEPAGE_FALLBACK_ALIGNMENT != 0 {
+        if !ptr.is_null() {
+            munmap(ptr, req);
+        }
+        return TransparentHugePageMmapResult::failed();
+    }
+    TransparentHugePageMmapResult {
+        ptr,
+        advice_succeeded: advise_transparent_hugepage(ptr, req),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+/// # Safety
+///
+/// The caller must uphold the same mapping request contract on every target.
+pub unsafe fn mmap_transparent_hugepage(
+    _req: usize,
+    _prot: prots::Prot,
+) -> TransparentHugePageMmapResult {
+    TransparentHugePageMmapResult::failed()
+}
+
+/// Ask Linux to synchronously collapse an aligned anonymous range.
+///
+/// `Ok(())` confirms that this range was collapsed at this point in time.
+/// Linux may split a THP later, so callers must not treat this as a permanent
+/// backing guarantee.
+///
+/// # Safety
+///
+/// `ptr..ptr + size` must remain a live, writable anonymous mapping while the
+/// synchronous collapse executes. Both address and size must be 2 MiB-aligned.
+#[cfg(target_os = "linux")]
+pub unsafe fn collapse_transparent_hugepage(ptr: *mut u8, size: usize) -> Result<(), isize> {
+    // `MADV_COLLAPSE` is Linux UAPI value 25. Defining it locally keeps this
+    // PAL buildable for libc targets which have not exported the newer name.
+    const MADV_COLLAPSE: libc::c_int = 25;
+    if ptr.is_null()
+        || size == 0
+        || ptr as usize % HUGEPAGE_FALLBACK_ALIGNMENT != 0
+        || size % HUGEPAGE_FALLBACK_ALIGNMENT != 0
+    {
+        return Err(libc::EINVAL as isize);
+    }
+    if libc::madvise(ptr as *mut libc::c_void, size, MADV_COLLAPSE) == 0 {
+        Ok(())
+    } else {
+        Err(*libc::__errno_location() as isize)
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+/// # Safety
+///
+/// The caller must uphold the same live-mapping contract on every target.
+pub unsafe fn collapse_transparent_hugepage(_ptr: *mut u8, _size: usize) -> Result<(), isize> {
+    Err(0)
 }
 
 #[cfg(unix)]
@@ -1493,6 +1604,38 @@ mod tests {
             assert_eq!(stats.hugetlb_mmap_skips, 0);
 
             munmap(result.ptr, req);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn mmap_transparent_hugepage_is_aligned_without_claiming_actual_backing() {
+        let req = hugepage_fallback_alignment();
+        let prot = prots::get_prot(true, true, false);
+        unsafe {
+            let result = mmap_transparent_hugepage(req, prot);
+            assert!(result.is_success());
+            assert_eq!(result.ptr as usize % req, 0);
+            result.ptr.write(0xA5);
+            result.ptr.add(req - 1).write(0x5A);
+            // `advice_succeeded` intentionally carries no actual-backing
+            // interpretation; smaps or successful collapse supplies proof.
+            munmap(result.ptr, req);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn collapse_transparent_hugepage_rejects_invalid_ranges() {
+        unsafe {
+            assert_eq!(
+                collapse_transparent_hugepage(core::ptr::null_mut(), hugepage_fallback_alignment()),
+                Err(libc::EINVAL as isize)
+            );
+            assert_eq!(
+                collapse_transparent_hugepage(1usize as *mut u8, hugepage_fallback_alignment()),
+                Err(libc::EINVAL as isize)
+            );
         }
     }
 

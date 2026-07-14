@@ -41,6 +41,30 @@ const LIFETIME_CLASS_COUNT: usize = 2;
 const BUCKET_COUNT: usize = LIFETIME_CLASS_COUNT * TOTAL_SIZE_CLASS * ALIGN_CLASS_COUNT;
 const NONE: usize = usize::MAX;
 const TOMBSTONE: usize = usize::MAX - 1;
+// Preregistered feasibility threshold for the first runtime-validation
+// experiment. It is an evaluation parameter, not a claimed universal optimum.
+const THP_PROMOTION_MIN_LIVE_BYTES: usize = LIFETIME_HUGEPAGE_EXTENT_BYTES / 2;
+
+/// Physical page backend used for placements selected by the lifetime policy.
+///
+/// Placement policy and backing mechanism are configured independently so the
+/// same lifetime experiment can compare explicit HugeTLB against Linux THP.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum LifetimePageBackend {
+    ExplicitHugeTLB = 0,
+    TransparentHugepage = 1,
+}
+
+impl LifetimePageBackend {
+    #[inline]
+    fn from_usize(value: usize) -> Self {
+        match value {
+            1 => Self::TransparentHugepage,
+            _ => Self::ExplicitHugeTLB,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -68,8 +92,12 @@ impl LifetimeHugepagePolicy {
     }
 
     #[inline]
-    fn requested_backing(self, class: LifetimePlacementClass) -> Option<RequestedBacking> {
-        match (self, class) {
+    fn requested_backing(
+        self,
+        class: LifetimePlacementClass,
+        backend: LifetimePageBackend,
+    ) -> Option<RequestedBacking> {
+        let requested = match (self, class) {
             (Self::Disabled, _) | (_, LifetimePlacementClass::Unknown) => None,
             (Self::SegregatedOrdinary, _) => Some(RequestedBacking::Ordinary),
             (
@@ -80,7 +108,15 @@ impl LifetimeHugepagePolicy {
                 Self::LongLivedHugepage | Self::EpochCohortHugepage,
                 LifetimePlacementClass::LongLived,
             )
-            | (Self::SegregatedHugepage, _) => Some(RequestedBacking::Hugepage),
+            | (Self::SegregatedHugepage, _) => Some(RequestedBacking::LargePage),
+        };
+        if backend == LifetimePageBackend::TransparentHugepage
+            && self == Self::EpochCohortHugepage
+            && requested == Some(RequestedBacking::LargePage)
+        {
+            Some(RequestedBacking::EpochCandidate)
+        } else {
+            requested
         }
     }
 
@@ -94,7 +130,8 @@ impl LifetimeHugepagePolicy {
 #[repr(u8)]
 enum RequestedBacking {
     Ordinary = 1,
-    Hugepage = 2,
+    LargePage = 2,
+    EpochCandidate = 3,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -102,21 +139,78 @@ enum RequestedBacking {
 enum ActualBacking {
     Unmapped = 0,
     Ordinary = 1,
-    Hugepage = 2,
-    HugepageFallback = 3,
+    Hugetlb = 2,
+    HugetlbFallback = 3,
+    /// `MADV_HUGEPAGE` failed; the aligned anonymous mapping remains usable.
+    ThpAdviceFailed = 4,
+    /// The VMA accepted `MADV_HUGEPAGE`; actual THP backing is unverified.
+    ThpAdvisedUnverified = 5,
+    /// Delayed candidate held under `MADV_NOHUGEPAGE` until runtime validation.
+    ThpCandidateNoHugepage = 6,
+    /// Delayed candidate whose initial `MADV_NOHUGEPAGE` failed. Its actual
+    /// page size remains unverified until the promotion transition runs.
+    ThpCandidateNoHugepageAdviceFailed = 7,
+    /// `MADV_COLLAPSE` succeeded for this range at a phase boundary. Linux may
+    /// split the THP later, so this is a point-in-time observation.
+    ThpCollapseSucceededPointInTime = 8,
 }
 
 impl ActualBacking {
     #[inline]
     fn is_hugetlb(self) -> bool {
-        self == Self::Hugepage
+        self == Self::Hugetlb
     }
+
+    #[inline]
+    fn is_thp_mapping(self) -> bool {
+        matches!(
+            self,
+            Self::ThpAdviceFailed
+                | Self::ThpAdvisedUnverified
+                | Self::ThpCandidateNoHugepage
+                | Self::ThpCandidateNoHugepageAdviceFailed
+                | Self::ThpCollapseSucceededPointInTime
+        )
+    }
+
+    #[inline]
+    fn is_thp_confirmed_at_collapse(self) -> bool {
+        self == Self::ThpCollapseSucceededPointInTime
+    }
+
+    #[inline]
+    fn is_large_page_confirmed(self) -> bool {
+        self.is_hugetlb() || self.is_thp_confirmed_at_collapse()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ThpAdviceOutcome {
+    NotAttempted,
+    Succeeded,
+    Failed,
+}
+
+#[derive(Clone, Copy)]
+struct ExtentMapping {
+    base: *mut u8,
+    backing: ActualBacking,
+    nohugepage_advice_ok: bool,
+    thp_advice: ThpAdviceOutcome,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ThpPromotionEligibility {
+    Ineligible,
+    LowOccupancy,
+    Eligible,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
 pub struct LifetimeHugepageStatsSnapshot {
     pub policy: LifetimeHugepagePolicy,
+    pub backend: LifetimePageBackend,
     pub extent_bytes: usize,
     /// Current process-wide allocation epoch. Epoch 1 is the initial phase.
     pub current_epoch: usize,
@@ -135,6 +229,26 @@ pub struct LifetimeHugepageStatsSnapshot {
     pub ordinary_extent_mappings: usize,
     pub hugetlb_extent_mappings: usize,
     pub hugetlb_fallback_extent_mappings: usize,
+    /// Anonymous aligned mappings owned by the THP backend. This counts VMAs,
+    /// not confirmed PMD mappings.
+    pub thp_extent_mappings: usize,
+    /// THP mappings initially held under `MADV_NOHUGEPAGE` for epoch survival
+    /// and occupancy validation.
+    pub thp_candidate_extent_mappings: usize,
+    pub thp_advice_attempts: usize,
+    pub thp_advice_successes: usize,
+    pub thp_advice_errors: usize,
+    /// Surviving candidate observations that met the 50% live-slot threshold.
+    pub thp_collapse_eligible_extents: usize,
+    pub thp_collapse_low_occupancy_skips: usize,
+    pub thp_collapse_attempts: usize,
+    /// Point-in-time successful `MADV_COLLAPSE` operations. Later splitting is
+    /// possible and requires external smaps/perf validation for steady state.
+    pub thp_collapse_successes: usize,
+    pub thp_collapse_errors: usize,
+    /// Most recent Linux errno returned by `MADV_COLLAPSE`, or zero when no
+    /// collapse failure has been observed since the last statistics reset.
+    pub thp_collapse_last_error_code: isize,
     pub mapping_failures: usize,
     pub nohugepage_advice_failures: usize,
     pub extent_unmaps: usize,
@@ -145,6 +259,10 @@ pub struct LifetimeHugepageStatsSnapshot {
     pub peak_ordinary_extents: usize,
     pub current_hugetlb_extents: usize,
     pub peak_hugetlb_extents: usize,
+    pub current_thp_extents: usize,
+    pub peak_thp_extents: usize,
+    pub current_thp_collapse_confirmed_extents: usize,
+    pub peak_thp_collapse_confirmed_extents: usize,
     pub live_objects: usize,
     pub live_ephemeral_objects: usize,
     pub live_long_lived_objects: usize,
@@ -172,9 +290,9 @@ pub struct LifetimeHugepageStatsSnapshot {
     pub predictor_false_positive_bytes: usize,
     pub predictor_false_negative_objects: usize,
     pub predictor_false_negative_bytes: usize,
-    /// Actual-placement confusion matrix. "Positive" means the extent was
-    /// backed by HugeTLB after mapping/fallback; byte fields measure rounded
-    /// arena slot bytes.
+    /// Actual-placement confusion matrix. "Positive" means explicit HugeTLB
+    /// or a point-in-time successful THP collapse; advice-only THP remains
+    /// unverified. Byte fields measure rounded arena slot bytes.
     pub placement_true_positive_objects: usize,
     pub placement_true_positive_bytes: usize,
     pub placement_true_negative_objects: usize,
@@ -395,6 +513,29 @@ impl Extent {
     }
 }
 
+#[inline]
+fn thp_promotion_eligibility(extent: &Extent, current_epoch: usize) -> ThpPromotionEligibility {
+    if !extent.in_use()
+        || extent.live == 0
+        || extent.cohort_epoch == 0
+        || extent.cohort_epoch >= current_epoch
+        || extent.backing.is_thp_confirmed_at_collapse()
+        || !matches!(
+            extent.backing,
+            ActualBacking::ThpCandidateNoHugepage
+                | ActualBacking::ThpCandidateNoHugepageAdviceFailed
+                | ActualBacking::ThpAdvisedUnverified
+        )
+    {
+        return ThpPromotionEligibility::Ineligible;
+    }
+    if extent.live.saturating_mul(extent.slot_size) < THP_PROMOTION_MIN_LIVE_BYTES {
+        ThpPromotionEligibility::LowOccupancy
+    } else {
+        ThpPromotionEligibility::Eligible
+    }
+}
+
 struct LifetimeArenaState {
     extents: [Extent; MAX_EXTENTS],
     lookup: [usize; EXTENT_LOOKUP_SLOTS],
@@ -417,6 +558,17 @@ struct LifetimeArenaState {
     ordinary_extent_mappings: usize,
     hugetlb_extent_mappings: usize,
     hugetlb_fallback_extent_mappings: usize,
+    thp_extent_mappings: usize,
+    thp_candidate_extent_mappings: usize,
+    thp_advice_attempts: usize,
+    thp_advice_successes: usize,
+    thp_advice_errors: usize,
+    thp_collapse_eligible_extents: usize,
+    thp_collapse_low_occupancy_skips: usize,
+    thp_collapse_attempts: usize,
+    thp_collapse_successes: usize,
+    thp_collapse_errors: usize,
+    thp_collapse_last_error_code: isize,
     mapping_failures: usize,
     nohugepage_advice_failures: usize,
     extent_unmaps: usize,
@@ -427,6 +579,10 @@ struct LifetimeArenaState {
     peak_ordinary_extents: usize,
     current_hugetlb_extents: usize,
     peak_hugetlb_extents: usize,
+    current_thp_extents: usize,
+    peak_thp_extents: usize,
+    current_thp_collapse_confirmed_extents: usize,
+    peak_thp_collapse_confirmed_extents: usize,
     live_objects: usize,
     live_ephemeral_objects: usize,
     live_long_lived_objects: usize,
@@ -469,6 +625,17 @@ impl LifetimeArenaState {
             ordinary_extent_mappings: 0,
             hugetlb_extent_mappings: 0,
             hugetlb_fallback_extent_mappings: 0,
+            thp_extent_mappings: 0,
+            thp_candidate_extent_mappings: 0,
+            thp_advice_attempts: 0,
+            thp_advice_successes: 0,
+            thp_advice_errors: 0,
+            thp_collapse_eligible_extents: 0,
+            thp_collapse_low_occupancy_skips: 0,
+            thp_collapse_attempts: 0,
+            thp_collapse_successes: 0,
+            thp_collapse_errors: 0,
+            thp_collapse_last_error_code: 0,
             mapping_failures: 0,
             nohugepage_advice_failures: 0,
             extent_unmaps: 0,
@@ -479,6 +646,10 @@ impl LifetimeArenaState {
             peak_ordinary_extents: 0,
             current_hugetlb_extents: 0,
             peak_hugetlb_extents: 0,
+            current_thp_extents: 0,
+            peak_thp_extents: 0,
+            current_thp_collapse_confirmed_extents: 0,
+            peak_thp_collapse_confirmed_extents: 0,
             live_objects: 0,
             live_ephemeral_objects: 0,
             live_long_lived_objects: 0,
@@ -516,6 +687,17 @@ impl LifetimeArenaState {
         self.ordinary_extent_mappings = 0;
         self.hugetlb_extent_mappings = 0;
         self.hugetlb_fallback_extent_mappings = 0;
+        self.thp_extent_mappings = 0;
+        self.thp_candidate_extent_mappings = 0;
+        self.thp_advice_attempts = 0;
+        self.thp_advice_successes = 0;
+        self.thp_advice_errors = 0;
+        self.thp_collapse_eligible_extents = 0;
+        self.thp_collapse_low_occupancy_skips = 0;
+        self.thp_collapse_attempts = 0;
+        self.thp_collapse_successes = 0;
+        self.thp_collapse_errors = 0;
+        self.thp_collapse_last_error_code = 0;
         self.mapping_failures = 0;
         self.nohugepage_advice_failures = 0;
         self.extent_unmaps = 0;
@@ -533,6 +715,8 @@ impl LifetimeArenaState {
         self.peak_extents = self.current_extents;
         self.peak_ordinary_extents = self.current_ordinary_extents;
         self.peak_hugetlb_extents = self.current_hugetlb_extents;
+        self.peak_thp_extents = self.current_thp_extents;
+        self.peak_thp_collapse_confirmed_extents = self.current_thp_collapse_confirmed_extents;
         self.peak_identity_regions = self.current_identity_regions;
     }
 
@@ -569,6 +753,7 @@ impl LifetimeArenaState {
         let retained_slack_bytes = retained_bytes.saturating_sub(self.live_slot_bytes);
         LifetimeHugepageStatsSnapshot {
             policy: lifetime_hugepage_policy(),
+            backend: lifetime_hugepage_backend(),
             extent_bytes: LIFETIME_HUGEPAGE_EXTENT_BYTES,
             current_epoch: self.current_epoch,
             phase_advances: self.phase_advances,
@@ -586,6 +771,17 @@ impl LifetimeArenaState {
             ordinary_extent_mappings: self.ordinary_extent_mappings,
             hugetlb_extent_mappings: self.hugetlb_extent_mappings,
             hugetlb_fallback_extent_mappings: self.hugetlb_fallback_extent_mappings,
+            thp_extent_mappings: self.thp_extent_mappings,
+            thp_candidate_extent_mappings: self.thp_candidate_extent_mappings,
+            thp_advice_attempts: self.thp_advice_attempts,
+            thp_advice_successes: self.thp_advice_successes,
+            thp_advice_errors: self.thp_advice_errors,
+            thp_collapse_eligible_extents: self.thp_collapse_eligible_extents,
+            thp_collapse_low_occupancy_skips: self.thp_collapse_low_occupancy_skips,
+            thp_collapse_attempts: self.thp_collapse_attempts,
+            thp_collapse_successes: self.thp_collapse_successes,
+            thp_collapse_errors: self.thp_collapse_errors,
+            thp_collapse_last_error_code: self.thp_collapse_last_error_code,
             mapping_failures: self.mapping_failures,
             nohugepage_advice_failures: self.nohugepage_advice_failures,
             extent_unmaps: self.extent_unmaps,
@@ -596,6 +792,10 @@ impl LifetimeArenaState {
             peak_ordinary_extents: self.peak_ordinary_extents,
             current_hugetlb_extents: self.current_hugetlb_extents,
             peak_hugetlb_extents: self.peak_hugetlb_extents,
+            current_thp_extents: self.current_thp_extents,
+            peak_thp_extents: self.peak_thp_extents,
+            current_thp_collapse_confirmed_extents: self.current_thp_collapse_confirmed_extents,
+            peak_thp_collapse_confirmed_extents: self.peak_thp_collapse_confirmed_extents,
             live_objects: self.live_objects,
             live_ephemeral_objects: self.live_ephemeral_objects,
             live_long_lived_objects: self.live_long_lived_objects,
@@ -844,8 +1044,20 @@ impl LifetimeArenaState {
             self.current_hugetlb_extents = self.current_hugetlb_extents.saturating_add(1);
             self.peak_hugetlb_extents =
                 core::cmp::max(self.peak_hugetlb_extents, self.current_hugetlb_extents);
+        } else if backing.is_thp_mapping() {
+            self.thp_extent_mappings = self.thp_extent_mappings.saturating_add(1);
+            if matches!(
+                backing,
+                ActualBacking::ThpCandidateNoHugepage
+                    | ActualBacking::ThpCandidateNoHugepageAdviceFailed
+            ) {
+                self.thp_candidate_extent_mappings =
+                    self.thp_candidate_extent_mappings.saturating_add(1);
+            }
+            self.current_thp_extents = self.current_thp_extents.saturating_add(1);
+            self.peak_thp_extents = core::cmp::max(self.peak_thp_extents, self.current_thp_extents);
         } else {
-            if backing == ActualBacking::HugepageFallback {
+            if backing == ActualBacking::HugetlbFallback {
                 self.hugetlb_fallback_extent_mappings =
                     self.hugetlb_fallback_extent_mappings.saturating_add(1);
             } else {
@@ -863,6 +1075,13 @@ impl LifetimeArenaState {
         ACTIVE_EXTENTS.fetch_sub(1, Ordering::Release);
         if backing.is_hugetlb() {
             self.current_hugetlb_extents = self.current_hugetlb_extents.saturating_sub(1);
+        } else if backing.is_thp_mapping() {
+            self.current_thp_extents = self.current_thp_extents.saturating_sub(1);
+            if backing.is_thp_confirmed_at_collapse() {
+                self.current_thp_collapse_confirmed_extents = self
+                    .current_thp_collapse_confirmed_extents
+                    .saturating_sub(1);
+            }
         } else {
             self.current_ordinary_extents = self.current_ordinary_extents.saturating_sub(1);
         }
@@ -871,11 +1090,81 @@ impl LifetimeArenaState {
         }
     }
 
+    /// Promote prior-epoch THP candidates at a caller-provided quiescent phase
+    /// boundary. This runs while the arena lock is held and MADV_COLLAPSE may
+    /// perform synchronous kernel work, so callers must treat epoch advance as
+    /// a potentially blocking control-plane operation.
+    unsafe fn promote_surviving_thp_candidates(&mut self) {
+        let mut idx = 0usize;
+        while idx < self.next_unused_descriptor {
+            match thp_promotion_eligibility(&self.extents[idx], self.current_epoch) {
+                ThpPromotionEligibility::Ineligible => {
+                    idx += 1;
+                    continue;
+                }
+                ThpPromotionEligibility::LowOccupancy => {
+                    self.thp_collapse_low_occupancy_skips =
+                        self.thp_collapse_low_occupancy_skips.saturating_add(1);
+                    idx += 1;
+                    continue;
+                }
+                ThpPromotionEligibility::Eligible => {}
+            }
+            self.thp_collapse_eligible_extents =
+                self.thp_collapse_eligible_extents.saturating_add(1);
+
+            let extent_base = self.extents[idx].base;
+            let extent_backing = self.extents[idx].backing;
+            if matches!(
+                extent_backing,
+                ActualBacking::ThpCandidateNoHugepage
+                    | ActualBacking::ThpCandidateNoHugepageAdviceFailed
+            ) {
+                self.thp_advice_attempts = self.thp_advice_attempts.saturating_add(1);
+                if sys_alloc::advise_transparent_hugepage(
+                    extent_base as *mut u8,
+                    LIFETIME_HUGEPAGE_EXTENT_BYTES,
+                ) {
+                    self.thp_advice_successes = self.thp_advice_successes.saturating_add(1);
+                    self.extents[idx].backing = ActualBacking::ThpAdvisedUnverified;
+                } else {
+                    self.thp_advice_errors = self.thp_advice_errors.saturating_add(1);
+                    idx += 1;
+                    continue;
+                }
+            }
+
+            self.thp_collapse_attempts = self.thp_collapse_attempts.saturating_add(1);
+            match sys_alloc::collapse_transparent_hugepage(
+                extent_base as *mut u8,
+                LIFETIME_HUGEPAGE_EXTENT_BYTES,
+            ) {
+                Ok(()) => {
+                    self.thp_collapse_successes = self.thp_collapse_successes.saturating_add(1);
+                    self.extents[idx].backing = ActualBacking::ThpCollapseSucceededPointInTime;
+                    self.current_thp_collapse_confirmed_extents = self
+                        .current_thp_collapse_confirmed_extents
+                        .saturating_add(1);
+                    self.peak_thp_collapse_confirmed_extents = core::cmp::max(
+                        self.peak_thp_collapse_confirmed_extents,
+                        self.current_thp_collapse_confirmed_extents,
+                    );
+                }
+                Err(code) => {
+                    self.thp_collapse_errors = self.thp_collapse_errors.saturating_add(1);
+                    self.thp_collapse_last_error_code = code;
+                }
+            }
+            idx += 1;
+        }
+    }
+
     unsafe fn create_extent(
         &mut self,
         geometry: SlotGeometry,
         class: LifetimePlacementClass,
         requested: RequestedBacking,
+        backend: LifetimePageBackend,
         birth_epoch: usize,
         epoch_cohort: bool,
     ) -> Option<usize> {
@@ -886,7 +1175,7 @@ impl LifetimeArenaState {
                 return None;
             }
         };
-        let (base, backing, nohugepage_advice_ok) = match map_extent(requested) {
+        let mapping = match map_extent(requested, backend) {
             Some(mapping) => mapping,
             None => {
                 self.release_descriptor(idx);
@@ -894,11 +1183,22 @@ impl LifetimeArenaState {
                 return None;
             }
         };
-        if !nohugepage_advice_ok {
+        if !mapping.nohugepage_advice_ok {
             self.nohugepage_advice_failures = self.nohugepage_advice_failures.saturating_add(1);
         }
+        match mapping.thp_advice {
+            ThpAdviceOutcome::NotAttempted => {}
+            ThpAdviceOutcome::Succeeded => {
+                self.thp_advice_attempts = self.thp_advice_attempts.saturating_add(1);
+                self.thp_advice_successes = self.thp_advice_successes.saturating_add(1);
+            }
+            ThpAdviceOutcome::Failed => {
+                self.thp_advice_attempts = self.thp_advice_attempts.saturating_add(1);
+                self.thp_advice_errors = self.thp_advice_errors.saturating_add(1);
+            }
+        }
         self.extents[idx] = Extent {
-            base: base as usize,
+            base: mapping.base as usize,
             slot_size: geometry.slot_size,
             region_capacity: geometry.region_capacity,
             live: 0,
@@ -906,14 +1206,14 @@ impl LifetimeArenaState {
             regions: [IdentityRegion::empty(); IDENTITY_REGIONS_PER_EXTENT],
             lifetime_class: class,
             cohort_epoch: if epoch_cohort { birth_epoch } else { 0 },
-            backing,
+            backing: mapping.backing,
             available_prev: NONE,
             available_next: NONE,
             on_available_list: false,
             next_free_descriptor: NONE,
         };
         if !self.insert_lookup(idx) {
-            let _ = unmap_extent(base);
+            let _ = unmap_extent(mapping.base);
             self.release_descriptor(idx);
             self.mapping_failures = self.mapping_failures.saturating_add(1);
             return None;
@@ -922,7 +1222,7 @@ impl LifetimeArenaState {
         if epoch_cohort {
             self.epoch_cohort_extent_mappings = self.epoch_cohort_extent_mappings.saturating_add(1);
         }
-        self.note_mapped_extent(backing);
+        self.note_mapped_extent(mapping.backing);
         Some(idx)
     }
 
@@ -1043,8 +1343,11 @@ impl LifetimeArenaState {
             actual_long,
             bytes,
         );
-        self.placement_confusion
-            .record(actual_backing.is_hugetlb(), actual_long, bytes);
+        self.placement_confusion.record(
+            actual_backing.is_large_page_confirmed(),
+            actual_long,
+            bytes,
+        );
     }
 
     unsafe fn deallocate(&mut self, ptr: *mut u8) -> bool {
@@ -1133,6 +1436,7 @@ impl LifetimeArenaState {
 }
 
 static POLICY: AtomicUsize = AtomicUsize::new(LifetimeHugepagePolicy::Disabled as usize);
+static BACKEND: AtomicUsize = AtomicUsize::new(LifetimePageBackend::ExplicitHugeTLB as usize);
 static ACTIVE_EXTENTS: AtomicUsize = AtomicUsize::new(0);
 static ARENA: Mutex<LifetimeArenaState> = Mutex::new(LifetimeArenaState::new());
 #[thread_local]
@@ -1205,7 +1509,10 @@ fn slot_geometry(layout: Layout, class: LifetimePlacementClass) -> Option<SlotGe
     })
 }
 
-unsafe fn map_extent(requested: RequestedBacking) -> Option<(*mut u8, ActualBacking, bool)> {
+unsafe fn map_extent(
+    requested: RequestedBacking,
+    backend: LifetimePageBackend,
+) -> Option<ExtentMapping> {
     let layout = Layout::from_size_align(
         LIFETIME_HUGEPAGE_EXTENT_BYTES,
         LIFETIME_HUGEPAGE_EXTENT_BYTES,
@@ -1220,26 +1527,89 @@ unsafe fn map_extent(requested: RequestedBacking) -> Option<(*mut u8, ActualBack
                 }
                 return None;
             }
-            Some((ptr, ActualBacking::Ordinary, advise_no_hugepage(ptr)))
+            Some(ExtentMapping {
+                base: ptr,
+                backing: ActualBacking::Ordinary,
+                nohugepage_advice_ok: advise_no_hugepage(ptr),
+                thp_advice: ThpAdviceOutcome::NotAttempted,
+            })
         }
-        RequestedBacking::Hugepage => {
-            let mapped = sys_alloc::mmap_huge_with_backing(
-                LIFETIME_HUGEPAGE_EXTENT_BYTES,
-                prots::PROT_READ_WRITE,
-            );
-            if !mapped.is_success() || mapped.ptr as usize % LIFETIME_HUGEPAGE_EXTENT_BYTES != 0 {
-                if mapped.is_success() {
-                    sys_alloc::munmap(mapped.ptr, LIFETIME_HUGEPAGE_EXTENT_BYTES);
+        RequestedBacking::EpochCandidate => {
+            if backend != LifetimePageBackend::TransparentHugepage || !cfg!(target_os = "linux") {
+                return None;
+            }
+            let ptr = sys_alloc::mmap_over_page_aligned(layout, prots::PROT_READ_WRITE);
+            if ptr.is_null() || ptr as usize % LIFETIME_HUGEPAGE_EXTENT_BYTES != 0 {
+                if !ptr.is_null() {
+                    sys_alloc::munmap(ptr, LIFETIME_HUGEPAGE_EXTENT_BYTES);
                 }
                 return None;
             }
-            let backing = if mapped.backing == HugePageMmapBacking::HugePage {
-                ActualBacking::Hugepage
-            } else {
-                ActualBacking::HugepageFallback
-            };
-            Some((mapped.ptr, backing, true))
+            let nohugepage_advice_ok = advise_no_hugepage(ptr);
+            Some(ExtentMapping {
+                base: ptr,
+                backing: if nohugepage_advice_ok {
+                    ActualBacking::ThpCandidateNoHugepage
+                } else {
+                    ActualBacking::ThpCandidateNoHugepageAdviceFailed
+                },
+                nohugepage_advice_ok,
+                thp_advice: ThpAdviceOutcome::NotAttempted,
+            })
         }
+        RequestedBacking::LargePage => match backend {
+            LifetimePageBackend::ExplicitHugeTLB => {
+                let mapped = sys_alloc::mmap_huge_with_backing(
+                    LIFETIME_HUGEPAGE_EXTENT_BYTES,
+                    prots::PROT_READ_WRITE,
+                );
+                if !mapped.is_success() || mapped.ptr as usize % LIFETIME_HUGEPAGE_EXTENT_BYTES != 0
+                {
+                    if mapped.is_success() {
+                        sys_alloc::munmap(mapped.ptr, LIFETIME_HUGEPAGE_EXTENT_BYTES);
+                    }
+                    return None;
+                }
+                let backing = if mapped.backing == HugePageMmapBacking::HugePage {
+                    ActualBacking::Hugetlb
+                } else {
+                    ActualBacking::HugetlbFallback
+                };
+                Some(ExtentMapping {
+                    base: mapped.ptr,
+                    backing,
+                    nohugepage_advice_ok: true,
+                    thp_advice: ThpAdviceOutcome::NotAttempted,
+                })
+            }
+            LifetimePageBackend::TransparentHugepage => {
+                let mapped = sys_alloc::mmap_transparent_hugepage(
+                    LIFETIME_HUGEPAGE_EXTENT_BYTES,
+                    prots::PROT_READ_WRITE,
+                );
+                if !mapped.is_success() || mapped.ptr as usize % LIFETIME_HUGEPAGE_EXTENT_BYTES != 0
+                {
+                    if mapped.is_success() {
+                        sys_alloc::munmap(mapped.ptr, LIFETIME_HUGEPAGE_EXTENT_BYTES);
+                    }
+                    return None;
+                }
+                Some(ExtentMapping {
+                    base: mapped.ptr,
+                    backing: if mapped.advice_succeeded {
+                        ActualBacking::ThpAdvisedUnverified
+                    } else {
+                        ActualBacking::ThpAdviceFailed
+                    },
+                    nohugepage_advice_ok: true,
+                    thp_advice: if mapped.advice_succeeded {
+                        ThpAdviceOutcome::Succeeded
+                    } else {
+                        ThpAdviceOutcome::Failed
+                    },
+                })
+            }
+        },
     }
 }
 
@@ -1272,13 +1642,27 @@ pub fn lifetime_hugepage_policy() -> LifetimeHugepagePolicy {
     LifetimeHugepagePolicy::from_usize(POLICY.load(Ordering::Acquire))
 }
 
+pub fn lifetime_hugepage_backend() -> LifetimePageBackend {
+    LifetimePageBackend::from_usize(BACKEND.load(Ordering::Acquire))
+}
+
 /// Select the placement policy before the process creates routed objects.
 /// Changing policy while arena mappings remain live is rejected.
 pub fn lifetime_hugepage_configure(policy: LifetimeHugepagePolicy) -> bool {
+    lifetime_hugepage_configure_with_backend(policy, LifetimePageBackend::ExplicitHugeTLB)
+}
+
+/// Select placement policy and physical page backend as orthogonal controls.
+/// Changing either control while arena mappings remain live is rejected.
+pub fn lifetime_hugepage_configure_with_backend(
+    policy: LifetimeHugepagePolicy,
+    backend: LifetimePageBackend,
+) -> bool {
     let state = ARENA.lock();
     if state.live_objects != 0 || state.current_extents != 0 {
         return false;
     }
+    BACKEND.store(backend as usize, Ordering::Release);
     POLICY.store(policy as usize, Ordering::Release);
     true
 }
@@ -1302,6 +1686,11 @@ pub fn lifetime_hugepage_advance_epoch() -> usize {
     state.phase_advances = state.phase_advances.saturating_add(1);
     if lifetime_hugepage_policy() == LifetimeHugepagePolicy::EpochCohortHugepage {
         state.detach_available_epoch_cohorts();
+        if lifetime_hugepage_backend() == LifetimePageBackend::TransparentHugepage {
+            // The caller-provided phase barrier makes this synchronous kernel
+            // promotion safe with respect to allocator payload access.
+            unsafe { state.promote_surviving_thp_candidates() };
+        }
     }
     state.current_epoch
 }
@@ -1340,7 +1729,8 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
     let class = lifetime_placement_class(metadata.lifetime_hint);
     let mut state = ARENA.lock();
     let policy = lifetime_hugepage_policy();
-    let requested_backing = match policy.requested_backing(class) {
+    let backend = lifetime_hugepage_backend();
+    let requested_backing = match policy.requested_backing(class, backend) {
         Some(backing) => backing,
         None => {
             if class == LifetimePlacementClass::Unknown {
@@ -1371,6 +1761,7 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
             geometry,
             class,
             requested_backing,
+            backend,
             birth_epoch,
             epoch_cohort,
         ) {
@@ -1422,4 +1813,103 @@ pub(crate) unsafe fn try_deallocate(ptr: *mut u8) -> bool {
         return false;
     }
     ARENA.lock().deallocate(ptr)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn page_backend_changes_backing_without_changing_lifetime_selection() {
+        assert_eq!(
+            LifetimeHugepagePolicy::LongLivedHugepage.requested_backing(
+                LifetimePlacementClass::Ephemeral,
+                LifetimePageBackend::ExplicitHugeTLB,
+            ),
+            Some(RequestedBacking::Ordinary)
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::LongLivedHugepage.requested_backing(
+                LifetimePlacementClass::LongLived,
+                LifetimePageBackend::ExplicitHugeTLB,
+            ),
+            Some(RequestedBacking::LargePage)
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::LongLivedHugepage.requested_backing(
+                LifetimePlacementClass::LongLived,
+                LifetimePageBackend::TransparentHugepage,
+            ),
+            Some(RequestedBacking::LargePage)
+        );
+    }
+
+    #[test]
+    fn epoch_thp_delays_only_selected_largepage_placements() {
+        assert_eq!(
+            LifetimeHugepagePolicy::EpochCohortHugepage.requested_backing(
+                LifetimePlacementClass::LongLived,
+                LifetimePageBackend::TransparentHugepage,
+            ),
+            Some(RequestedBacking::EpochCandidate)
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::EpochCohortHugepage.requested_backing(
+                LifetimePlacementClass::Ephemeral,
+                LifetimePageBackend::TransparentHugepage,
+            ),
+            Some(RequestedBacking::Ordinary)
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::EpochCohortHugepage.requested_backing(
+                LifetimePlacementClass::LongLived,
+                LifetimePageBackend::ExplicitHugeTLB,
+            ),
+            Some(RequestedBacking::LargePage)
+        );
+    }
+
+    #[test]
+    fn advice_only_backing_never_counts_as_confirmed_largepage() {
+        assert!(!ActualBacking::ThpAdvisedUnverified.is_large_page_confirmed());
+        assert!(!ActualBacking::ThpAdviceFailed.is_large_page_confirmed());
+        assert!(ActualBacking::ThpCollapseSucceededPointInTime.is_large_page_confirmed());
+        assert!(ActualBacking::Hugetlb.is_large_page_confirmed());
+    }
+
+    #[test]
+    fn epoch_promotion_skips_candidates_below_preregistered_density() {
+        let extent = Extent {
+            base: LIFETIME_HUGEPAGE_EXTENT_BYTES,
+            slot_size: size_of::<usize>(),
+            region_capacity: LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES / size_of::<usize>(),
+            live: 1,
+            bucket: 0,
+            regions: [IdentityRegion::empty(); IDENTITY_REGIONS_PER_EXTENT],
+            lifetime_class: LifetimePlacementClass::LongLived,
+            cohort_epoch: 1,
+            backing: ActualBacking::ThpCandidateNoHugepage,
+            available_prev: NONE,
+            available_next: NONE,
+            on_available_list: false,
+            next_free_descriptor: NONE,
+        };
+
+        assert_eq!(
+            thp_promotion_eligibility(&extent, 2),
+            ThpPromotionEligibility::LowOccupancy
+        );
+
+        let mut dense_survivor = extent;
+        dense_survivor.live = THP_PROMOTION_MIN_LIVE_BYTES / dense_survivor.slot_size;
+        assert_eq!(
+            thp_promotion_eligibility(&dense_survivor, 2),
+            ThpPromotionEligibility::Eligible
+        );
+        dense_survivor.cohort_epoch = 2;
+        assert_eq!(
+            thp_promotion_eligibility(&dense_survivor, 2),
+            ThpPromotionEligibility::Ineligible
+        );
+    }
 }
