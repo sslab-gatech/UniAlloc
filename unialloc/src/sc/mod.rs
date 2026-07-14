@@ -40,6 +40,10 @@ struct FixedHeapInitPlan {
     page_bump_end: usize,
     rd_tree: usize,
     page_count: usize,
+    #[cfg(feature = "bitmap_page_allocator")]
+    bitmap_nodes: *mut crate::bitmap_alloc::RunNode,
+    #[cfg(feature = "bitmap_page_allocator")]
+    bitmap_nodes_len: usize,
 }
 
 #[inline]
@@ -179,7 +183,16 @@ impl BumpAlloc {
 
     #[allow(unused_unsafe, unused_variables)]
     pub unsafe fn try_extend(&mut self, size: usize, page_size: usize) -> bool {
-        #[cfg(feature = "fixed_heap")]
+        #[cfg(all(feature = "fixed_heap", feature = "bitmap_page_allocator"))]
+        {
+            // The bitmap tree owns caller-provided metadata sized for the
+            // initial fixed range. Growing the address range requires a
+            // transactional radix/tree metadata replacement. Reject growth
+            // before mutating either root until that protocol is available.
+            let _ = (size, page_size);
+            false
+        }
+        #[cfg(all(feature = "fixed_heap", not(feature = "bitmap_page_allocator")))]
         {
             if size == 0
                 || page_size == 0
@@ -269,12 +282,22 @@ impl BumpAlloc {
         let rd_tree_bytes = page_count.checked_mul(core::mem::size_of::<i64>())?;
         let rd_tree_layout =
             Layout::from_size_align(rd_tree_bytes, core::mem::align_of::<i64>()).ok()?;
-        let total_metadata = [tcache_layout, zone_layout, page_bump_layout, rd_tree_layout]
-            .iter()
-            .try_fold(0usize, |acc, layout| {
-                acc.checked_add(layout.size())?
-                    .checked_add(layout.align().saturating_sub(1))
-            })?;
+        #[cfg(feature = "bitmap_page_allocator")]
+        let bitmap_layout = crate::bitmap_alloc::SegmentPageAllocator::required_layout(page_count)?;
+        #[cfg(not(feature = "bitmap_page_allocator"))]
+        let bitmap_layout = Layout::from_size_align(0, 1).ok()?;
+        let total_metadata = [
+            tcache_layout,
+            zone_layout,
+            page_bump_layout,
+            rd_tree_layout,
+            bitmap_layout,
+        ]
+        .iter()
+        .try_fold(0usize, |acc, layout| {
+            acc.checked_add(layout.size())?
+                .checked_add(layout.align().saturating_sub(1))
+        })?;
         let meta_pages = total_metadata
             .checked_add(page_size - 1)
             .map(|bytes| bytes / page_size)
@@ -303,6 +326,10 @@ impl BumpAlloc {
         let rd_tree = scratch
             .alloc_aligned(rd_tree_layout.size(), rd_tree_layout.align())
             .ok()? as usize;
+        #[cfg(feature = "bitmap_page_allocator")]
+        let bitmap_nodes = scratch
+            .alloc_aligned(bitmap_layout.size(), bitmap_layout.align())
+            .ok()? as *mut crate::bitmap_alloc::RunNode;
 
         Some(FixedHeapInitPlan {
             meta_end,
@@ -313,6 +340,11 @@ impl BumpAlloc {
             page_bump_end,
             rd_tree,
             page_count,
+            #[cfg(feature = "bitmap_page_allocator")]
+            bitmap_nodes,
+            #[cfg(feature = "bitmap_page_allocator")]
+            bitmap_nodes_len: bitmap_layout.size()
+                / core::mem::size_of::<crate::bitmap_alloc::RunNode>(),
         })
     }
 
@@ -324,6 +356,30 @@ impl BumpAlloc {
                 Some(plan) => plan,
                 None => return false,
             };
+            #[cfg(feature = "bitmap_page_allocator")]
+            {
+                let managed_pages = match end
+                    .checked_sub(plan.meta_end)
+                    .and_then(|bytes| bytes.checked_div(page_size))
+                    .filter(|pages| *pages != 0)
+                {
+                    Some(pages) => pages,
+                    None => return false,
+                };
+                if crate::bitmap_alloc::PAGE_RUN_BITMAP
+                    .lock()
+                    .initialize(
+                        plan.meta_end,
+                        managed_pages,
+                        page_size,
+                        plan.bitmap_nodes,
+                        plan.bitmap_nodes_len,
+                    )
+                    .is_err()
+                {
+                    return false;
+                }
+            }
             self.start = start;
             self.current = plan.meta_bump_current;
 

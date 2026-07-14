@@ -3613,6 +3613,23 @@ unsafe impl GlobalAlloc for BuddySystemAllocator {
         if layout.size() == 0 || layout.size() > isize::MAX as usize {
             return core::ptr::null_mut::<u8>();
         }
+        #[cfg(feature = "bitmap_page_allocator")]
+        {
+            crate::bitmap_alloc::PAGE_RUN_BITMAP
+                .lock()
+                .allocate_bytes(layout.size(), layout.align())
+                .unwrap_or(null_mut())
+        }
+        #[cfg(all(feature = "hosted_bitmap_page_allocator", not(feature = "fixed_heap")))]
+        {
+            crate::hosted_bitmap_alloc::HOSTED_PAGE_RUN_BITMAP
+                .allocate_layout(layout)
+                .unwrap_or(null_mut())
+        }
+        #[cfg(not(any(
+            feature = "bitmap_page_allocator",
+            feature = "hosted_bitmap_page_allocator"
+        )))]
         if layout.align() > crate::PAGE_SIZE {
             if layout.align() % crate::PAGE_SIZE != 0 {
                 return core::ptr::null_mut::<u8>();
@@ -3621,11 +3638,35 @@ unsafe impl GlobalAlloc for BuddySystemAllocator {
                 .alloc_aligned(layout.size(), layout.align())
                 .unwrap_or(null_mut());
         }
+        #[cfg(not(any(
+            feature = "bitmap_page_allocator",
+            feature = "hosted_bitmap_page_allocator"
+        )))]
         FREELIST.alloc(layout.size()).unwrap_or(null_mut())
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if !ptr.is_null() && layout.size() != 0 {
+            #[cfg(feature = "bitmap_page_allocator")]
+            {
+                let result = crate::bitmap_alloc::PAGE_RUN_BITMAP
+                    .lock()
+                    .deallocate_bytes(ptr, layout.size());
+                debug_assert!(result.is_ok(), "bitmap page-run deallocation rejected");
+            }
+            #[cfg(all(feature = "hosted_bitmap_page_allocator", not(feature = "fixed_heap")))]
+            {
+                let result = crate::hosted_bitmap_alloc::HOSTED_PAGE_RUN_BITMAP
+                    .deallocate_layout(ptr, layout);
+                debug_assert!(
+                    result.is_ok(),
+                    "hosted bitmap page-run deallocation rejected"
+                );
+            }
+            #[cfg(not(any(
+                feature = "bitmap_page_allocator",
+                feature = "hosted_bitmap_page_allocator"
+            )))]
             FREELIST.free(ptr, layout.size())
         }
     }
