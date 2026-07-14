@@ -7,11 +7,11 @@ pub mod type_isolation;
 
 #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
 pub use lifetime_hugepage::{
-    lifetime_hugepage_advance_epoch, lifetime_hugepage_configure,
-    lifetime_hugepage_phase_flush_current_thread, lifetime_hugepage_policy,
-    lifetime_hugepage_stats_reset, lifetime_hugepage_stats_snapshot, LifetimeHugepagePolicy,
-    LifetimeHugepageStatsSnapshot, LIFETIME_HUGEPAGE_EXTENT_BYTES,
-    LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
+    lifetime_hugepage_advance_epoch, lifetime_hugepage_backend, lifetime_hugepage_configure,
+    lifetime_hugepage_configure_with_backend, lifetime_hugepage_phase_flush_current_thread,
+    lifetime_hugepage_policy, lifetime_hugepage_stats_reset, lifetime_hugepage_stats_snapshot,
+    LifetimeHugepagePolicy, LifetimeHugepageStatsSnapshot, LifetimePageBackend,
+    LIFETIME_HUGEPAGE_EXTENT_BYTES, LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
 };
 
 pub use type_isolation::{

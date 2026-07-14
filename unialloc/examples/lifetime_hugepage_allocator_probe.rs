@@ -8,8 +8,9 @@ mod probe {
     use std::time::Instant;
     use unialloc::{
         lifetime_hugepage_advance_epoch, lifetime_hugepage_configure,
-        lifetime_hugepage_stats_reset, lifetime_hugepage_stats_snapshot, AllocationMetadata,
-        LifetimeHugepagePolicy, LifetimeHugepageStatsSnapshot, SemanticAlloc, UniAlloc,
+        lifetime_hugepage_configure_with_backend, lifetime_hugepage_stats_reset,
+        lifetime_hugepage_stats_snapshot, AllocationMetadata, LifetimeHugepagePolicy,
+        LifetimeHugepageStatsSnapshot, LifetimePageBackend, SemanticAlloc, UniAlloc,
         LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LONG_LIVED,
     };
 
@@ -21,6 +22,9 @@ mod probe {
         AllHugeSegregated,
         LongHuge,
         EpochCohort,
+        AllThpSegregated,
+        LongThp,
+        EpochCohortThp,
     }
 
     #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -55,6 +59,9 @@ mod probe {
                 "all-huge-segregated" => Ok(Self::AllHugeSegregated),
                 "long-huge" => Ok(Self::LongHuge),
                 "epoch-cohort" => Ok(Self::EpochCohort),
+                "all-thp-segregated" => Ok(Self::AllThpSegregated),
+                "long-thp" => Ok(Self::LongThp),
+                "epoch-cohort-thp" => Ok(Self::EpochCohortThp),
                 _ => Err(format!("unknown --policy {value}")),
             }
         }
@@ -67,6 +74,9 @@ mod probe {
                 Self::AllHugeSegregated => "all-huge-segregated",
                 Self::LongHuge => "long-huge",
                 Self::EpochCohort => "epoch-cohort",
+                Self::AllThpSegregated => "all-thp-segregated",
+                Self::LongThp => "long-thp",
+                Self::EpochCohortThp => "epoch-cohort-thp",
             }
         }
 
@@ -75,10 +85,39 @@ mod probe {
                 Self::RawDefault => LifetimeHugepagePolicy::Disabled,
                 Self::PolicyOff => LifetimeHugepagePolicy::Disabled,
                 Self::OrdinarySegregated => LifetimeHugepagePolicy::SegregatedOrdinary,
-                Self::AllHugeSegregated => LifetimeHugepagePolicy::SegregatedHugepage,
-                Self::LongHuge => LifetimeHugepagePolicy::LongLivedHugepage,
-                Self::EpochCohort => LifetimeHugepagePolicy::EpochCohortHugepage,
+                Self::AllHugeSegregated | Self::AllThpSegregated => {
+                    LifetimeHugepagePolicy::SegregatedHugepage
+                }
+                Self::LongHuge | Self::LongThp => LifetimeHugepagePolicy::LongLivedHugepage,
+                Self::EpochCohort | Self::EpochCohortThp => {
+                    LifetimeHugepagePolicy::EpochCohortHugepage
+                }
             }
+        }
+
+        fn backend(self) -> LifetimePageBackend {
+            match self {
+                Self::AllThpSegregated | Self::LongThp | Self::EpochCohortThp => {
+                    LifetimePageBackend::TransparentHugepage
+                }
+                _ => LifetimePageBackend::ExplicitHugeTLB,
+            }
+        }
+
+        fn backend_name(self) -> &'static str {
+            match self {
+                Self::RawDefault => "system-default",
+                Self::AllThpSegregated | Self::LongThp | Self::EpochCohortThp => "thp",
+                Self::PolicyOff | Self::OrdinarySegregated => "ordinary-no-thp",
+                Self::AllHugeSegregated | Self::LongHuge | Self::EpochCohort => "hugetlb",
+            }
+        }
+
+        fn runtime_confirmed_placement_available(self) -> bool {
+            matches!(
+                self,
+                Self::AllHugeSegregated | Self::LongHuge | Self::EpochCohort | Self::EpochCohortThp
+            )
         }
     }
 
@@ -101,6 +140,8 @@ mod probe {
         measured_passes: usize,
         seed: u64,
         require_hugetlb: bool,
+        require_thp: bool,
+        require_no_thp: bool,
     }
 
     impl Default for Config {
@@ -124,6 +165,8 @@ mod probe {
                 measured_passes: 8,
                 seed: 0x2026_0714,
                 require_hugetlb: false,
+                require_thp: false,
+                require_no_thp: false,
             }
         }
     }
@@ -218,6 +261,8 @@ mod probe {
                             .map_err(|_| "invalid --seed".to_string())?
                     }
                     "--require-hugetlb" => config.require_hugetlb = true,
+                    "--require-thp" => config.require_thp = true,
+                    "--require-no-thp" => config.require_no_thp = true,
                     _ => return Err(format!("unknown argument {arg}")),
                 }
             }
@@ -235,6 +280,7 @@ mod probe {
                 || !(0.0..=1.0).contains(&config.unknown_rate)
                 || config.ephemeral_waves == 0
                 || config.measured_passes == 0
+                || (config.require_thp && config.require_no_thp)
             {
                 return Err("invalid workload geometry or rate".to_string());
             }
@@ -351,7 +397,7 @@ mod probe {
                         .saturating_add(predictions.unknown_long),
                 }
             }
-            PolicyName::AllHugeSegregated => PlacementCounts {
+            PolicyName::AllHugeSegregated | PolicyName::AllThpSegregated => PlacementCounts {
                 true_positive: predictions
                     .true_positive
                     .saturating_add(predictions.false_negative),
@@ -361,7 +407,10 @@ mod probe {
                     .saturating_add(predictions.false_positive),
                 false_negative: predictions.unknown_long,
             },
-            PolicyName::LongHuge | PolicyName::EpochCohort => PlacementCounts {
+            PolicyName::LongHuge
+            | PolicyName::EpochCohort
+            | PolicyName::LongThp
+            | PolicyName::EpochCohortThp => PlacementCounts {
                 true_positive: predictions.true_positive,
                 true_negative: predictions
                     .true_negative
@@ -486,25 +535,229 @@ mod probe {
         prediction
     }
 
-    fn current_memory_kib() -> (usize, usize, usize) {
-        let mut rss = 0usize;
-        let mut anon_huge = 0usize;
-        let mut hugetlb = 0usize;
+    #[derive(Clone, Copy, Default)]
+    struct ProcessMemoryKib {
+        rss: usize,
+        rss_anon: usize,
+        anonymous: usize,
+        anon_hugepages: usize,
+        hugetlb: usize,
+        smaps_rollup_available: bool,
+        smaps_rollup_parse_success: bool,
+    }
+
+    impl ProcessMemoryKib {
+        fn effective_resident(self) -> usize {
+            self.rss.saturating_add(self.hugetlb)
+        }
+    }
+
+    fn parse_kib_line(line: &str, prefix: &str) -> Option<usize> {
+        line.strip_prefix(prefix)?
+            .split_whitespace()
+            .next()?
+            .parse()
+            .ok()
+    }
+
+    fn current_memory_kib() -> ProcessMemoryKib {
+        let mut memory = ProcessMemoryKib::default();
         if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
             for line in status.lines() {
-                let parse = |prefix: &str| -> Option<usize> {
-                    line.strip_prefix(prefix)?
-                        .split_whitespace()
-                        .next()?
-                        .parse()
-                        .ok()
-                };
-                rss = parse("VmRSS:").unwrap_or(rss);
-                anon_huge = parse("RssAnon:").unwrap_or(anon_huge);
-                hugetlb = parse("HugetlbPages:").unwrap_or(hugetlb);
+                memory.rss = parse_kib_line(line, "VmRSS:").unwrap_or(memory.rss);
+                memory.rss_anon = parse_kib_line(line, "RssAnon:").unwrap_or(memory.rss_anon);
+                memory.hugetlb = parse_kib_line(line, "HugetlbPages:").unwrap_or(memory.hugetlb);
             }
         }
-        (rss, anon_huge, hugetlb)
+        // AnonHugePages is the proof of anonymous THP backing. RssAnon only
+        // reports anonymous residency and is deliberately kept separate.
+        if let Ok(rollup) = std::fs::read_to_string("/proc/self/smaps_rollup") {
+            memory.smaps_rollup_available = true;
+            let mut anonymous_parsed = false;
+            let mut anon_hugepages_parsed = false;
+            for line in rollup.lines() {
+                if let Some(value) = parse_kib_line(line, "Anonymous:") {
+                    memory.anonymous = value;
+                    anonymous_parsed = true;
+                }
+                if let Some(value) = parse_kib_line(line, "AnonHugePages:") {
+                    memory.anon_hugepages = value;
+                    anon_hugepages_parsed = true;
+                }
+            }
+            memory.smaps_rollup_parse_success = anonymous_parsed && anon_hugepages_parsed;
+        }
+        memory
+    }
+
+    #[derive(Clone, Copy, Default)]
+    struct ThpVmstat {
+        fault_alloc: usize,
+        fault_fallback: usize,
+        fault_fallback_charge: usize,
+        collapse_alloc: usize,
+        collapse_alloc_failed: usize,
+        split_page: usize,
+        split_page_failed: usize,
+        split_pmd: usize,
+    }
+
+    impl ThpVmstat {
+        fn read() -> Self {
+            let mut snapshot = Self::default();
+            if let Ok(vmstat) = std::fs::read_to_string("/proc/vmstat") {
+                for line in vmstat.lines() {
+                    let mut fields = line.split_whitespace();
+                    let Some(name) = fields.next() else { continue };
+                    let Some(value) = fields.next().and_then(|raw| raw.parse::<usize>().ok())
+                    else {
+                        continue;
+                    };
+                    match name {
+                        "thp_fault_alloc" => snapshot.fault_alloc = value,
+                        "thp_fault_fallback" => snapshot.fault_fallback = value,
+                        "thp_fault_fallback_charge" => snapshot.fault_fallback_charge = value,
+                        "thp_collapse_alloc" => snapshot.collapse_alloc = value,
+                        "thp_collapse_alloc_failed" => snapshot.collapse_alloc_failed = value,
+                        "thp_split_page" => snapshot.split_page = value,
+                        "thp_split_page_failed" => snapshot.split_page_failed = value,
+                        "thp_split_pmd" => snapshot.split_pmd = value,
+                        _ => {}
+                    }
+                }
+            }
+            snapshot
+        }
+
+        fn delta(self, before: Self) -> Self {
+            Self {
+                fault_alloc: self.fault_alloc.saturating_sub(before.fault_alloc),
+                fault_fallback: self.fault_fallback.saturating_sub(before.fault_fallback),
+                fault_fallback_charge: self
+                    .fault_fallback_charge
+                    .saturating_sub(before.fault_fallback_charge),
+                collapse_alloc: self.collapse_alloc.saturating_sub(before.collapse_alloc),
+                collapse_alloc_failed: self
+                    .collapse_alloc_failed
+                    .saturating_sub(before.collapse_alloc_failed),
+                split_page: self.split_page.saturating_sub(before.split_page),
+                split_page_failed: self
+                    .split_page_failed
+                    .saturating_sub(before.split_page_failed),
+                split_pmd: self.split_pmd.saturating_sub(before.split_pmd),
+            }
+        }
+    }
+
+    fn thp_enabled_mode() -> &'static str {
+        let Ok(enabled) = std::fs::read_to_string("/sys/kernel/mm/transparent_hugepage/enabled")
+        else {
+            return "unknown";
+        };
+        if enabled.contains("[always]") {
+            "always"
+        } else if enabled.contains("[madvise]") {
+            "madvise"
+        } else if enabled.contains("[never]") {
+            "never"
+        } else {
+            "unknown"
+        }
+    }
+
+    fn thp_evidence_json(
+        baseline: ProcessMemoryKib,
+        peak: ProcessMemoryKib,
+        post_epoch: ProcessMemoryKib,
+        steady: ProcessMemoryKib,
+        wave_peak: ProcessMemoryKib,
+        wave_peak_observed: bool,
+        wave_max_anon_hugepages: usize,
+        wave_smaps_rollup_available: bool,
+        wave_smaps_rollup_parse_success: bool,
+        final_memory: ProcessMemoryKib,
+        vmstat: ThpVmstat,
+        require_thp: bool,
+        require_no_thp: bool,
+    ) -> String {
+        let smaps_rollup_available = baseline.smaps_rollup_available
+            && peak.smaps_rollup_available
+            && post_epoch.smaps_rollup_available
+            && steady.smaps_rollup_available
+            && (!wave_peak_observed || wave_smaps_rollup_available)
+            && final_memory.smaps_rollup_available;
+        let smaps_rollup_parse_success = baseline.smaps_rollup_parse_success
+            && peak.smaps_rollup_parse_success
+            && post_epoch.smaps_rollup_parse_success
+            && steady.smaps_rollup_parse_success
+            && (!wave_peak_observed || wave_smaps_rollup_parse_success)
+            && final_memory.smaps_rollup_parse_success;
+        let max_anon_hugepages = peak
+            .anon_hugepages
+            .max(post_epoch.anon_hugepages)
+            .max(steady.anon_hugepages)
+            .max(wave_max_anon_hugepages);
+        let observed = smaps_rollup_parse_success && max_anon_hugepages > baseline.anon_hugepages;
+        let backing_requirement = if require_thp {
+            observed
+        } else if require_no_thp {
+            !observed
+        } else {
+            true
+        };
+        let gate_passed = (!require_thp && !require_no_thp)
+            || (smaps_rollup_available && smaps_rollup_parse_success && backing_requirement);
+        let delta = max_anon_hugepages.saturating_sub(baseline.anon_hugepages);
+        let peak_delta_anonymous = peak.anonymous.saturating_sub(baseline.anonymous);
+        let coverage = ratio(delta, peak_delta_anonymous);
+        let peak_effective_resident = peak.effective_resident();
+        let post_epoch_effective_resident = post_epoch.effective_resident();
+        let steady_effective_resident = steady.effective_resident();
+        let max_effective_resident = peak_effective_resident
+            .max(post_epoch_effective_resident)
+            .max(steady_effective_resident)
+            .max(wave_peak.effective_resident());
+        format!(
+            "\"thp_enabled_mode\":\"{}\",\"smaps_rollup_available\":{},\"smaps_rollup_parse_success\":{},\"thp_required\":{},\"no_thp_required\":{},\"thp_actual_backing_observed\":{},\"thp_backing_gate_passed\":{},\"baseline_anon_hugepages_kib\":{},\"peak_anon_hugepages_kib\":{},\"post_epoch_anon_hugepages_kib\":{},\"steady_anon_hugepages_kib\":{},\"wave_peak_anon_hugepages_kib\":{},\"wave_max_anon_hugepages_kib\":{},\"final_anon_hugepages_kib\":{},\"max_anon_hugepages_delta_kib\":{},\"peak_anonymous_kib\":{},\"peak_process_thp_delta_coverage\":{:.9},\"post_epoch_rss_kib\":{},\"post_epoch_anon_kib\":{},\"post_epoch_hugetlb_kib\":{},\"wave_peak_observed\":{},\"wave_peak_rss_kib\":{},\"wave_peak_anon_kib\":{},\"wave_peak_hugetlb_kib\":{},\"wave_peak_effective_resident_kib\":{},\"peak_effective_resident_kib\":{},\"post_epoch_effective_resident_kib\":{},\"steady_effective_resident_kib\":{},\"max_effective_resident_kib\":{},\"overall_max_effective_resident_kib\":{},\"vmstat_scope\":\"system-wide-delta\",\"vmstat_thp_fault_alloc_delta\":{},\"vmstat_thp_fault_fallback_delta\":{},\"vmstat_thp_fault_fallback_charge_delta\":{},\"vmstat_thp_collapse_alloc_delta\":{},\"vmstat_thp_collapse_alloc_failed_delta\":{},\"vmstat_thp_split_page_delta\":{},\"vmstat_thp_split_page_failed_delta\":{},\"vmstat_thp_split_pmd_delta\":{}",
+            thp_enabled_mode(),
+            smaps_rollup_available,
+            smaps_rollup_parse_success,
+            require_thp,
+            require_no_thp,
+            observed,
+            gate_passed,
+            baseline.anon_hugepages,
+            peak.anon_hugepages,
+            post_epoch.anon_hugepages,
+            steady.anon_hugepages,
+            wave_peak.anon_hugepages,
+            wave_max_anon_hugepages,
+            final_memory.anon_hugepages,
+            delta,
+            peak.anonymous,
+            coverage,
+            post_epoch.rss,
+            post_epoch.rss_anon,
+            post_epoch.hugetlb,
+            wave_peak_observed,
+            wave_peak.rss,
+            wave_peak.rss_anon,
+            wave_peak.hugetlb,
+            wave_peak.effective_resident(),
+            peak_effective_resident,
+            post_epoch_effective_resident,
+            steady_effective_resident,
+            max_effective_resident,
+            max_effective_resident,
+            vmstat.fault_alloc,
+            vmstat.fault_fallback,
+            vmstat.fault_fallback_charge,
+            vmstat.collapse_alloc,
+            vmstat.collapse_alloc_failed,
+            vmstat.split_page,
+            vmstat.split_page_failed,
+            vmstat.split_pmd,
+        )
     }
 
     unsafe fn allocate_one(
@@ -542,10 +795,12 @@ mod probe {
 
     fn stats_json(prefix: &str, stats: LifetimeHugepageStatsSnapshot) -> String {
         format!(
-            "\"{prefix}_current_extents\":{},\"{prefix}_hugetlb_extents\":{},\"{prefix}_ordinary_extents\":{},\"{prefix}_identity_regions\":{},\"{prefix}_live_objects\":{},\"{prefix}_live_ephemeral_objects\":{},\"{prefix}_live_long_lived_objects\":{},\"{prefix}_live_slot_bytes\":{},\"{prefix}_retained_bytes\":{},\"{prefix}_reusable_unassigned_region_bytes\":{},\"{prefix}_cohort_pinned_unassigned_region_bytes\":{},\"{prefix}_assigned_region_slack_bytes\":{},\"{prefix}_retained_slack_bytes\":{},\"{prefix}_stranded_bytes\":{}",
+            "\"{prefix}_current_extents\":{},\"{prefix}_hugetlb_extents\":{},\"{prefix}_ordinary_extents\":{},\"{prefix}_thp_extents\":{},\"{prefix}_thp_collapse_confirmed_extents\":{},\"{prefix}_identity_regions\":{},\"{prefix}_live_objects\":{},\"{prefix}_live_ephemeral_objects\":{},\"{prefix}_live_long_lived_objects\":{},\"{prefix}_live_slot_bytes\":{},\"{prefix}_retained_bytes\":{},\"{prefix}_reusable_unassigned_region_bytes\":{},\"{prefix}_cohort_pinned_unassigned_region_bytes\":{},\"{prefix}_assigned_region_slack_bytes\":{},\"{prefix}_retained_slack_bytes\":{},\"{prefix}_stranded_bytes\":{}",
             stats.current_extents,
             stats.current_hugetlb_extents,
             stats.current_ordinary_extents,
+            stats.current_thp_extents,
+            stats.current_thp_collapse_confirmed_extents,
             stats.current_identity_regions,
             stats.live_objects,
             stats.live_ephemeral_objects,
@@ -594,6 +849,53 @@ mod probe {
         )
     }
 
+    fn thp_stats_json(stats: LifetimeHugepageStatsSnapshot) -> String {
+        format!(
+            "\"thp_extent_mappings\":{},\"thp_candidate_extent_mappings\":{},\"thp_advice_attempts\":{},\"thp_advice_successes\":{},\"thp_advice_failures\":{},\"thp_collapse_eligible_extents\":{},\"thp_collapse_low_occupancy_skips\":{},\"thp_collapse_attempts\":{},\"thp_collapse_successes\":{},\"thp_collapse_failures\":{},\"thp_collapse_last_error_code\":{},\"lifetime_peak_thp_extents\":{},\"lifetime_peak_thp_collapse_confirmed_extents\":{}",
+            stats.thp_extent_mappings,
+            stats.thp_candidate_extent_mappings,
+            stats.thp_advice_attempts,
+            stats.thp_advice_successes,
+            stats.thp_advice_errors,
+            stats.thp_collapse_eligible_extents,
+            stats.thp_collapse_low_occupancy_skips,
+            stats.thp_collapse_attempts,
+            stats.thp_collapse_successes,
+            stats.thp_collapse_errors,
+            stats.thp_collapse_last_error_code,
+            stats.peak_thp_extents,
+            stats.peak_thp_collapse_confirmed_extents,
+        )
+    }
+
+    fn runtime_confirmed_placement_json(
+        policy: PolicyName,
+        stats: LifetimeHugepageStatsSnapshot,
+    ) -> String {
+        if !policy.runtime_confirmed_placement_available() {
+            return "\"runtime_confirmed_placement_available\":false,\"runtime_confirmed_placement_basis\":null,\"runtime_confirmed_placement_success_rate\":null,\"runtime_confirmed_placement_failure_rate\":null,\"runtime_confirmed_placement_precision\":null,\"runtime_confirmed_placement_recall\":null".to_string();
+        }
+        let success = stats
+            .placement_true_positive_objects
+            .saturating_add(stats.placement_true_negative_objects);
+        let failure = stats
+            .placement_false_positive_objects
+            .saturating_add(stats.placement_false_negative_objects);
+        let precision_denominator = stats
+            .placement_true_positive_objects
+            .saturating_add(stats.placement_false_positive_objects);
+        let recall_denominator = stats
+            .placement_true_positive_objects
+            .saturating_add(stats.placement_false_negative_objects);
+        format!(
+            "\"runtime_confirmed_placement_available\":true,\"runtime_confirmed_placement_basis\":\"hugetlb-or-epoch-collapse\",\"runtime_confirmed_placement_success_rate\":{:.9},\"runtime_confirmed_placement_failure_rate\":{:.9},\"runtime_confirmed_placement_precision\":{:.9},\"runtime_confirmed_placement_recall\":{:.9}",
+            ratio(success, stats.runtime_validated_objects),
+            ratio(failure, stats.runtime_validated_objects),
+            ratio(stats.placement_true_positive_objects, precision_denominator),
+            ratio(stats.placement_true_positive_objects, recall_denominator),
+        )
+    }
+
     fn ratio(numerator: usize, denominator: usize) -> f64 {
         if denominator == 0 {
             0.0
@@ -611,6 +913,7 @@ mod probe {
             == stats
                 .current_hugetlb_extents
                 .saturating_add(stats.current_ordinary_extents)
+                .saturating_add(stats.current_thp_extents)
             && stats.live_objects
                 == stats
                     .live_ephemeral_objects
@@ -685,10 +988,16 @@ mod probe {
             return Err("both truth classes need objects".to_string());
         }
 
-        if !lifetime_hugepage_stats_reset() || !lifetime_hugepage_configure(config.policy.runtime())
+        if !lifetime_hugepage_stats_reset()
+            || !lifetime_hugepage_configure_with_backend(
+                config.policy.runtime(),
+                config.policy.backend(),
+            )
         {
             return Err("lifetime arena was already active".to_string());
         }
+        let baseline_memory = current_memory_kib();
+        let baseline_vmstat = ThpVmstat::read();
 
         let alloc = UniAlloc::new();
         let mut rng = XorShift64::new(config.seed);
@@ -754,7 +1063,7 @@ mod probe {
         } else {
             peak.live_slot_bytes / peak.live_objects
         };
-        let (peak_rss_kib, peak_anon_kib, peak_hugetlb_kib) = current_memory_kib();
+        let peak_memory = current_memory_kib();
 
         let ephemeral_release_start = Instant::now();
         unsafe { release_all(&alloc, layout, &mut ephemeral) };
@@ -767,20 +1076,36 @@ mod probe {
         let mut ordinary_byte_epochs = first_boundary
             .current_ordinary_extents
             .saturating_mul(unialloc::LIFETIME_HUGEPAGE_EXTENT_BYTES);
-        let epoch_advance_start = Instant::now();
+        let mut thp_backend_vma_byte_epochs = first_boundary
+            .current_thp_extents
+            .saturating_mul(unialloc::LIFETIME_HUGEPAGE_EXTENT_BYTES);
         let mut epoch_advances = 0usize;
-        if !matches!(
+        let first_epoch_advance_ns = if !matches!(
             config.policy,
             PolicyName::RawDefault | PolicyName::PolicyOff
         ) {
+            let epoch_advance_start = Instant::now();
             lifetime_hugepage_advance_epoch();
             epoch_advances += 1;
-        }
-        let mut epoch_advance_ns = epoch_advance_start.elapsed().as_nanos();
+            epoch_advance_start.elapsed().as_nanos()
+        } else {
+            0
+        };
+        let mut epoch_advance_ns = first_epoch_advance_ns;
+        // Runtime-survival THP promotion happens synchronously at an epoch
+        // boundary. Sample immediately so later reclaim/splitting cannot erase
+        // the point at which the process held anonymous THP backing.
+        let post_epoch_memory = current_memory_kib();
 
         // Additional waves exercise production free-list and complete-extent
         // release behavior without changing the persistent long set.
         let mut wave_allocations = 0usize;
+        let mut wave_peak_memory = ProcessMemoryKib::default();
+        let mut wave_peak_observed = false;
+        let mut wave_max_anon_hugepages = 0usize;
+        let mut wave_smaps_rollup_available = true;
+        let mut wave_smaps_rollup_parse_success = true;
+        let mut wave_evidence_sampling_ns = 0u128;
         let wave_start = Instant::now();
         for wave in 1..config.ephemeral_waves {
             for wave_ordinal in 0..ephemeral_objects {
@@ -804,6 +1129,21 @@ mod probe {
                 });
             }
             wave_allocations += ephemeral_objects;
+            // Capture transient resident and THP peaks while the wave is live;
+            // release-side snapshots cannot recover this evidence.
+            let evidence_start = Instant::now();
+            let wave_memory = current_memory_kib();
+            wave_smaps_rollup_available &= wave_memory.smaps_rollup_available;
+            wave_smaps_rollup_parse_success &= wave_memory.smaps_rollup_parse_success;
+            wave_max_anon_hugepages = wave_max_anon_hugepages.max(wave_memory.anon_hugepages);
+            if !wave_peak_observed
+                || wave_memory.effective_resident() > wave_peak_memory.effective_resident()
+            {
+                wave_peak_memory = wave_memory;
+                wave_peak_observed = true;
+            }
+            wave_evidence_sampling_ns =
+                wave_evidence_sampling_ns.saturating_add(evidence_start.elapsed().as_nanos());
             unsafe { release_all(&alloc, layout, &mut ephemeral) };
             let boundary = lifetime_hugepage_stats_snapshot();
             retained_byte_epochs = retained_byte_epochs.saturating_add(boundary.retained_bytes);
@@ -817,20 +1157,31 @@ mod probe {
                     .current_ordinary_extents
                     .saturating_mul(unialloc::LIFETIME_HUGEPAGE_EXTENT_BYTES),
             );
-            let advance_start = Instant::now();
-            if !matches!(
+            thp_backend_vma_byte_epochs = thp_backend_vma_byte_epochs.saturating_add(
+                boundary
+                    .current_thp_extents
+                    .saturating_mul(unialloc::LIFETIME_HUGEPAGE_EXTENT_BYTES),
+            );
+            let advance_ns = if !matches!(
                 config.policy,
                 PolicyName::RawDefault | PolicyName::PolicyOff
             ) {
+                let advance_start = Instant::now();
                 lifetime_hugepage_advance_epoch();
                 epoch_advances += 1;
-            }
-            epoch_advance_ns = epoch_advance_ns.saturating_add(advance_start.elapsed().as_nanos());
+                advance_start.elapsed().as_nanos()
+            } else {
+                0
+            };
+            epoch_advance_ns = epoch_advance_ns.saturating_add(advance_ns);
             black_box(wave);
         }
-        let wave_ns = wave_start.elapsed().as_nanos();
+        let wave_ns = wave_start
+            .elapsed()
+            .as_nanos()
+            .saturating_sub(wave_evidence_sampling_ns);
         let steady = lifetime_hugepage_stats_snapshot();
-        let (steady_rss_kib, steady_anon_kib, steady_hugetlb_kib) = current_memory_kib();
+        let steady_memory = current_memory_kib();
 
         let mut chain: Vec<*mut u8> = long.iter().map(|entry| entry.ptr).collect();
         rng.shuffle(&mut chain);
@@ -866,6 +1217,40 @@ mod probe {
         unsafe { release_all(&alloc, layout, &mut long) };
         let teardown_ns = teardown_start.elapsed().as_nanos();
         let final_stats = lifetime_hugepage_stats_snapshot();
+        let final_memory = current_memory_kib();
+        let vmstat_delta = ThpVmstat::read().delta(baseline_vmstat);
+        let max_anon_hugepages = peak_memory
+            .anon_hugepages
+            .max(post_epoch_memory.anon_hugepages)
+            .max(steady_memory.anon_hugepages)
+            .max(wave_max_anon_hugepages);
+        let smaps_rollup_available = baseline_memory.smaps_rollup_available
+            && peak_memory.smaps_rollup_available
+            && post_epoch_memory.smaps_rollup_available
+            && steady_memory.smaps_rollup_available
+            && (!wave_peak_observed || wave_smaps_rollup_available)
+            && final_memory.smaps_rollup_available;
+        let smaps_rollup_parse_success = baseline_memory.smaps_rollup_parse_success
+            && peak_memory.smaps_rollup_parse_success
+            && post_epoch_memory.smaps_rollup_parse_success
+            && steady_memory.smaps_rollup_parse_success
+            && (!wave_peak_observed || wave_smaps_rollup_parse_success)
+            && final_memory.smaps_rollup_parse_success;
+        let thp_actual_backing_observed =
+            smaps_rollup_parse_success && max_anon_hugepages > baseline_memory.anon_hugepages;
+        let thp_backing_requirement = if config.require_thp {
+            thp_actual_backing_observed
+        } else if config.require_no_thp {
+            !thp_actual_backing_observed
+        } else {
+            true
+        };
+        let thp_backing_gate_passed = (!config.require_thp && !config.require_no_thp)
+            || (smaps_rollup_available && smaps_rollup_parse_success && thp_backing_requirement);
+        let byte_epoch_accounting_consistent = retained_byte_epochs
+            == hugetlb_byte_epochs
+                .saturating_add(ordinary_byte_epochs)
+                .saturating_add(thp_backend_vma_byte_epochs);
         let total_allocations = config.objects.saturating_add(wave_allocations);
         let runtime_confusion_matches_static = final_stats.predictor_true_positive_objects
             == predictions.true_positive
@@ -909,6 +1294,9 @@ mod probe {
                 PolicyName::RawDefault | PolicyName::PolicyOff | PolicyName::OrdinarySegregated => {
                     false
                 }
+                PolicyName::AllThpSegregated | PolicyName::LongThp | PolicyName::EpochCohortThp => {
+                    false
+                }
             };
         let passed = final_stats.all_mappings_released
             && stats_consistent(peak)
@@ -927,6 +1315,8 @@ mod probe {
             && final_stats.nohugepage_advice_failures == 0
             && static_confusion_closed
             && runtime_prediction_matches
+            && byte_epoch_accounting_consistent
+            && thp_backing_gate_passed
             && (!hugetlb_required
                 || (final_stats.hugetlb_extent_mappings != 0
                     && final_stats.hugetlb_fallback_extent_mappings == 0));
@@ -953,25 +1343,25 @@ mod probe {
                 .saturating_add(effective_placement.true_negative)
                 .saturating_add(effective_placement.false_positive)
                 .saturating_add(effective_placement.false_negative);
-        let placement_success_rate = ratio(
+        let policy_intent_placement_success_rate = ratio(
             effective_placement
                 .true_positive
                 .saturating_add(effective_placement.true_negative),
             total_allocations,
         );
-        let placement_failure_rate = ratio(
+        let policy_intent_placement_failure_rate = ratio(
             effective_placement
                 .false_positive
                 .saturating_add(effective_placement.false_negative),
             total_allocations,
         );
-        let placement_precision = ratio(
+        let policy_intent_placement_precision = ratio(
             effective_placement.true_positive,
             effective_placement
                 .true_positive
                 .saturating_add(effective_placement.false_positive),
         );
-        let placement_recall = ratio(
+        let policy_intent_placement_recall = ratio(
             effective_placement.true_positive,
             effective_placement
                 .true_positive
@@ -982,10 +1372,11 @@ mod probe {
         }
 
         println!(
-            "{{\"source\":\"lifetime_hugepage_allocator_probe\",\"passed\":{},\"accounting_consistent\":{},\"policy\":\"{}\",\"identity_mode\":\"{}\",\"types_per_truth\":{},\"objects\":{},\"total_allocations\":{},\"wave_allocations\":{},\"slot_bytes\":{},\"arena_slot_bytes\":{},\"long_objects\":{},\"ephemeral_objects\":{},\"false_long\":{},\"false_short\":{},\"false_long_rate\":{:.6},\"false_short_rate\":{:.6},\"confidence_threshold\":{},\"correct_confidence\":{},\"error_confidence\":{},\"confidence_overlap_rate\":{:.6},\"unknown_rate\":{:.6},\"prediction_trace_digest\":\"{:016x}\",\"static_classified\":{},\"static_unknown\":{},\"static_unknown_long\":{},\"static_unknown_short\":{},\"static_tp_objects\":{},\"static_tp_bytes\":{},\"static_tn_objects\":{},\"static_tn_bytes\":{},\"static_fp_objects\":{},\"static_fp_bytes\":{},\"static_fn_objects\":{},\"static_fn_bytes\":{},\"classification_coverage\":{:.9},\"classification_success_rate\":{:.9},\"classification_failure_rate\":{:.9},\"classification_precision\":{:.9},\"classification_recall\":{:.9},\"effective_placement_tp_objects\":{},\"effective_placement_tp_bytes\":{},\"effective_placement_tn_objects\":{},\"effective_placement_tn_bytes\":{},\"effective_placement_fp_objects\":{},\"effective_placement_fp_bytes\":{},\"effective_placement_fn_objects\":{},\"effective_placement_fn_bytes\":{},\"placement_success_rate\":{:.9},\"placement_failure_rate\":{:.9},\"placement_precision\":{:.9},\"placement_recall\":{:.9},\"ephemeral_waves\":{},\"allocation_ns\":{},\"allocation_ns_per_object\":{:.6},\"ephemeral_release_ns\":{},\"epoch_advance_ns\":{},\"retained_byte_epochs\":{},\"hugetlb_byte_epochs\":{},\"ordinary_byte_epochs\":{},\"wave_ns\":{},\"touch_ns\":{},\"touches\":{},\"ns_per_touch\":{:.6},\"teardown_ns\":{},\"checksum\":{},\"peak_rss_kib\":{},\"peak_anon_kib\":{},\"peak_hugetlb_kib\":{},\"steady_rss_kib\":{},\"steady_anon_kib\":{},\"steady_hugetlb_kib\":{},\"routed_allocations\":{},\"routed_deallocations\":{},\"unknown_bypasses\":{},\"unsupported_layout_bypasses\":{},\"allocation_fallbacks\":{},\"slot_reuse_hits\":{},\"slot_bump_allocations\":{},\"identity_region_assignments\":{},\"identity_region_releases\":{},\"ordinary_extent_mappings\":{},\"hugetlb_extent_mappings\":{},\"hugetlb_fallback_extent_mappings\":{},\"mapping_failures\":{},\"nohugepage_advice_failures\":{},\"extent_unmaps\":{},\"extent_unmap_failures\":{},{},{},{},{},\"own_mappings_released\":{}}}",
+            "{{\"source\":\"lifetime_hugepage_allocator_probe\",\"passed\":{},\"accounting_consistent\":{},\"policy\":\"{}\",\"backend\":\"{}\",\"identity_mode\":\"{}\",\"types_per_truth\":{},\"objects\":{},\"total_allocations\":{},\"wave_allocations\":{},\"slot_bytes\":{},\"arena_slot_bytes\":{},\"long_objects\":{},\"ephemeral_objects\":{},\"false_long\":{},\"false_short\":{},\"false_long_rate\":{:.6},\"false_short_rate\":{:.6},\"confidence_threshold\":{},\"correct_confidence\":{},\"error_confidence\":{},\"confidence_overlap_rate\":{:.6},\"unknown_rate\":{:.6},\"prediction_trace_digest\":\"{:016x}\",\"static_classified\":{},\"static_unknown\":{},\"static_unknown_long\":{},\"static_unknown_short\":{},\"static_tp_objects\":{},\"static_tp_bytes\":{},\"static_tn_objects\":{},\"static_tn_bytes\":{},\"static_fp_objects\":{},\"static_fp_bytes\":{},\"static_fn_objects\":{},\"static_fn_bytes\":{},\"classification_coverage\":{:.9},\"classification_success_rate\":{:.9},\"classification_failure_rate\":{:.9},\"classification_precision\":{:.9},\"classification_recall\":{:.9},\"effective_placement_tp_objects\":{},\"effective_placement_tp_bytes\":{},\"effective_placement_tn_objects\":{},\"effective_placement_tn_bytes\":{},\"effective_placement_fp_objects\":{},\"effective_placement_fp_bytes\":{},\"effective_placement_fn_objects\":{},\"effective_placement_fn_bytes\":{},\"placement_success_rate\":{:.9},\"placement_failure_rate\":{:.9},\"placement_precision\":{:.9},\"placement_recall\":{:.9},\"placement_metric_semantics\":\"policy-intent\",\"policy_intent_placement_success_rate\":{:.9},\"policy_intent_placement_failure_rate\":{:.9},\"policy_intent_placement_precision\":{:.9},\"policy_intent_placement_recall\":{:.9},\"ephemeral_waves\":{},\"allocation_ns\":{},\"allocation_ns_per_object\":{:.6},\"ephemeral_release_ns\":{},\"first_epoch_advance_ns\":{},\"epoch_advance_ns\":{},\"retained_byte_epochs\":{},\"hugetlb_byte_epochs\":{},\"ordinary_byte_epochs\":{},\"thp_backend_vma_byte_epochs\":{},\"byte_epoch_accounting_consistent\":{},\"wave_evidence_sampling_ns\":{},\"wave_ns\":{},\"touch_ns\":{},\"touches\":{},\"ns_per_touch\":{:.6},\"teardown_ns\":{},\"checksum\":{},\"peak_rss_kib\":{},\"peak_anon_kib\":{},\"peak_hugetlb_kib\":{},\"steady_rss_kib\":{},\"steady_anon_kib\":{},\"steady_hugetlb_kib\":{},\"routed_allocations\":{},\"routed_deallocations\":{},\"unknown_bypasses\":{},\"unsupported_layout_bypasses\":{},\"allocation_fallbacks\":{},\"slot_reuse_hits\":{},\"slot_bump_allocations\":{},\"identity_region_assignments\":{},\"identity_region_releases\":{},\"ordinary_extent_mappings\":{},\"hugetlb_extent_mappings\":{},\"hugetlb_fallback_extent_mappings\":{},\"mapping_failures\":{},\"nohugepage_advice_failures\":{},\"extent_unmaps\":{},\"extent_unmap_failures\":{},{},{},{},{},{},{},{},\"own_mappings_released\":{}}}",
             passed,
             stats_consistent(peak) && stats_consistent(steady) && stats_consistent(final_stats),
             config.policy.as_str(),
+            config.policy.backend_name(),
             config.identity_mode.as_str(),
             config.types_per_truth,
             config.objects,
@@ -1038,30 +1429,38 @@ mod probe {
             effective_placement
                 .false_negative
                 .saturating_mul(config.slot_bytes),
-            placement_success_rate,
-            placement_failure_rate,
-            placement_precision,
-            placement_recall,
+            policy_intent_placement_success_rate,
+            policy_intent_placement_failure_rate,
+            policy_intent_placement_precision,
+            policy_intent_placement_recall,
+            policy_intent_placement_success_rate,
+            policy_intent_placement_failure_rate,
+            policy_intent_placement_precision,
+            policy_intent_placement_recall,
             config.ephemeral_waves,
             allocation_ns,
             allocation_ns as f64 / config.objects as f64,
             ephemeral_release_ns,
+            first_epoch_advance_ns,
             epoch_advance_ns,
             retained_byte_epochs,
             hugetlb_byte_epochs,
             ordinary_byte_epochs,
+            thp_backend_vma_byte_epochs,
+            byte_epoch_accounting_consistent,
+            wave_evidence_sampling_ns,
             wave_ns,
             touch_ns,
             total_touches,
             touch_ns as f64 / total_touches as f64,
             teardown_ns,
             checksum,
-            peak_rss_kib,
-            peak_anon_kib,
-            peak_hugetlb_kib,
-            steady_rss_kib,
-            steady_anon_kib,
-            steady_hugetlb_kib,
+            peak_memory.rss,
+            peak_memory.rss_anon,
+            peak_memory.hugetlb,
+            steady_memory.rss,
+            steady_memory.rss_anon,
+            steady_memory.hugetlb,
             final_stats.routed_allocations,
             final_stats.routed_deallocations,
             final_stats.unknown_bypasses,
@@ -1078,6 +1477,23 @@ mod probe {
             final_stats.nohugepage_advice_failures,
             final_stats.extent_unmaps,
             final_stats.extent_unmap_failures,
+            thp_evidence_json(
+                baseline_memory,
+                peak_memory,
+                post_epoch_memory,
+                steady_memory,
+                wave_peak_memory,
+                wave_peak_observed,
+                wave_max_anon_hugepages,
+                wave_smaps_rollup_available,
+                wave_smaps_rollup_parse_success,
+                final_memory,
+                vmstat_delta,
+                config.require_thp,
+                config.require_no_thp,
+            ),
+            thp_stats_json(final_stats),
+            runtime_confirmed_placement_json(config.policy, final_stats),
             validation_json(final_stats),
             stats_json("peak", peak),
             stats_json("steady", steady),

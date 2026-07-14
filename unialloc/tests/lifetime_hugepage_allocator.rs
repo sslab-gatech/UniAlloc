@@ -3,11 +3,11 @@
 use core::alloc::{GlobalAlloc, Layout};
 use unialloc::{
     delayed_free_snapshot, lifetime_hugepage_advance_epoch, lifetime_hugepage_configure,
-    lifetime_hugepage_phase_flush_current_thread, lifetime_hugepage_stats_reset,
-    lifetime_hugepage_stats_snapshot, with_semantic_metadata, AllocationMetadata,
-    LifetimeHugepagePolicy, SemanticAlloc, UniAlloc, FLAG_DELAYED_FREE, LIFETIME_HINT_EPHEMERAL,
-    LIFETIME_HINT_LONG_LIVED, LIFETIME_HUGEPAGE_EXTENT_BYTES,
-    LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
+    lifetime_hugepage_configure_with_backend, lifetime_hugepage_phase_flush_current_thread,
+    lifetime_hugepage_stats_reset, lifetime_hugepage_stats_snapshot, with_semantic_metadata,
+    AllocationMetadata, LifetimeHugepagePolicy, LifetimePageBackend, SemanticAlloc, UniAlloc,
+    FLAG_DELAYED_FREE, LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LONG_LIVED,
+    LIFETIME_HUGEPAGE_EXTENT_BYTES, LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
 };
 
 static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -599,6 +599,154 @@ fn runtime_oracle_preserves_non_cohort_region_reuse_and_excludes_mixed_epochs() 
     assert_eq!(released.runtime_delayed_free_excluded_objects, 0);
     assert_eq!(released.runtime_mixed_epoch_excluded_objects, 2);
     assert!(released.all_mappings_released);
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn thp_backend_counts_advice_separately_from_epoch_confirmed_collapse() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let layout = Layout::from_size_align(4096, 64).unwrap();
+    let eager_long = metadata(0xA11C_4000, LIFETIME_HINT_LONG_LIVED);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_configure_with_backend(
+        LifetimeHugepagePolicy::LongLivedHugepage,
+        LifetimePageBackend::TransparentHugepage,
+    ));
+
+    unsafe {
+        let ptr = alloc.alloc_with_metadata(layout, eager_long);
+        assert!(!ptr.is_null());
+        ptr.write(0x41);
+
+        let eager = lifetime_hugepage_stats_snapshot();
+        assert_eq!(eager.backend, LifetimePageBackend::TransparentHugepage);
+        assert_eq!(eager.current_extents, 1);
+        assert_eq!(eager.current_thp_extents, 1);
+        assert_eq!(eager.current_ordinary_extents, 0);
+        assert_eq!(eager.current_hugetlb_extents, 0);
+        assert_eq!(eager.thp_extent_mappings, 1);
+        assert_eq!(eager.thp_candidate_extent_mappings, 0);
+        assert_eq!(eager.thp_advice_attempts, 1);
+        assert_eq!(
+            eager.thp_advice_successes + eager.thp_advice_errors,
+            eager.thp_advice_attempts
+        );
+        assert_eq!(eager.thp_collapse_attempts, 0);
+        assert_eq!(eager.current_thp_collapse_confirmed_extents, 0);
+
+        alloc.dealloc_with_metadata(ptr, layout, eager_long);
+    }
+
+    let eager_released = lifetime_hugepage_stats_snapshot();
+    assert_eq!(eager_released.current_extents, 0);
+    assert_eq!(eager_released.current_thp_extents, 0);
+    assert_eq!(eager_released.extent_unmaps, 1);
+    assert!(eager_released.all_mappings_released);
+    // Advice success is VMA intent. Without collapse/smaps evidence the
+    // allocator conservatively records this same-epoch release as ordinary.
+    assert_eq!(eager_released.placement_true_negative_objects, 1);
+    assert_eq!(eager_released.placement_false_positive_objects, 0);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_configure_with_backend(
+        LifetimeHugepagePolicy::EpochCohortHugepage,
+        LifetimePageBackend::TransparentHugepage,
+    ));
+
+    const OBJECTS_PER_EXTENT: usize = LIFETIME_HUGEPAGE_EXTENT_BYTES / 4096;
+    let epoch_long = metadata(0xA11C_4001, LIFETIME_HINT_LONG_LIVED);
+    let mut ptrs = Vec::with_capacity(OBJECTS_PER_EXTENT);
+    unsafe {
+        for index in 0..OBJECTS_PER_EXTENT {
+            let ptr = alloc.alloc_with_metadata(layout, epoch_long);
+            assert!(!ptr.is_null());
+            // Initializing every routed object gives MADV_COLLAPSE a normal
+            // resident workload without adding allocator-side prefaulting.
+            ptr.write((index & 0xff) as u8);
+            ptrs.push(ptr);
+        }
+    }
+
+    let candidate = lifetime_hugepage_stats_snapshot();
+    assert_eq!(candidate.current_extents, 1);
+    assert_eq!(candidate.current_thp_extents, 1);
+    assert_eq!(candidate.current_ordinary_extents, 0);
+    assert_eq!(candidate.current_hugetlb_extents, 0);
+    assert_eq!(candidate.thp_extent_mappings, 1);
+    assert_eq!(candidate.thp_candidate_extent_mappings, 1);
+    assert_eq!(candidate.thp_advice_attempts, 0);
+    assert_eq!(candidate.thp_collapse_attempts, 0);
+    assert_eq!(candidate.current_thp_collapse_confirmed_extents, 0);
+
+    assert_eq!(lifetime_hugepage_advance_epoch(), 2);
+    let promoted = lifetime_hugepage_stats_snapshot();
+    assert_eq!(promoted.thp_collapse_eligible_extents, 1);
+    assert_eq!(promoted.thp_collapse_low_occupancy_skips, 0);
+    assert_eq!(promoted.thp_advice_attempts, 1);
+    assert_eq!(
+        promoted.thp_advice_successes + promoted.thp_advice_errors,
+        promoted.thp_advice_attempts
+    );
+    if promoted.thp_advice_successes == 1 {
+        assert_eq!(promoted.thp_collapse_attempts, 1);
+        assert_eq!(
+            promoted.thp_collapse_successes + promoted.thp_collapse_errors,
+            promoted.thp_collapse_attempts,
+            "MADV_COLLAPSE must end in either point-in-time success or an explicit error count"
+        );
+        if promoted.thp_collapse_errors == 1 {
+            assert_ne!(
+                promoted.thp_collapse_last_error_code, 0,
+                "a collapse error must retain its Linux errno"
+            );
+        } else {
+            assert_eq!(promoted.thp_collapse_last_error_code, 0);
+        }
+    } else {
+        assert_eq!(promoted.thp_advice_errors, 1);
+        assert_eq!(promoted.thp_collapse_attempts, 0);
+    }
+    assert_eq!(
+        promoted.current_thp_collapse_confirmed_extents,
+        promoted.thp_collapse_successes
+    );
+
+    unsafe {
+        assert_eq!(ptrs[0].read(), 0);
+        assert_eq!(ptrs[OBJECTS_PER_EXTENT - 1].read(), 0xff);
+        for ptr in ptrs {
+            alloc.dealloc_with_metadata(ptr, layout, epoch_long);
+        }
+    }
+
+    let epoch_released = lifetime_hugepage_stats_snapshot();
+    assert_eq!(epoch_released.current_extents, 0);
+    assert_eq!(epoch_released.current_thp_extents, 0);
+    assert_eq!(epoch_released.current_thp_collapse_confirmed_extents, 0);
+    assert_eq!(epoch_released.extent_unmaps, 1);
+    assert_eq!(
+        epoch_released.thp_collapse_successes + epoch_released.thp_collapse_errors,
+        epoch_released.thp_collapse_attempts
+    );
+    if epoch_released.thp_collapse_successes == 1 {
+        assert_eq!(
+            epoch_released.placement_true_positive_objects,
+            OBJECTS_PER_EXTENT
+        );
+        assert_eq!(epoch_released.placement_false_negative_objects, 0);
+    } else {
+        assert_eq!(epoch_released.placement_true_positive_objects, 0);
+        assert_eq!(
+            epoch_released.placement_false_negative_objects,
+            OBJECTS_PER_EXTENT
+        );
+    }
+    assert!(epoch_released.all_mappings_released);
     assert!(lifetime_hugepage_configure(
         LifetimeHugepagePolicy::Disabled
     ));

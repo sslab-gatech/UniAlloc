@@ -1,0 +1,1790 @@
+{
+  "allow_zero_thp_coverage": false,
+  "case_summaries": {
+    "all-thp": {
+      "all_smaps_rollup_available": true,
+      "all_smaps_rollup_parse_success": true,
+      "evidence_failures": [],
+      "expected_backing": "thp",
+      "median_allocator_lifecycle_excluding_first_epoch_ns_per_allocation": 606.763632774353,
+      "median_allocator_lifecycle_ns_per_allocation": 606.7641201019287,
+      "median_allocator_thp_coverage": 1.0,
+      "median_anon_huge_delta_kib": 1052672.0,
+      "median_classification_coverage": 1.0,
+      "median_classification_failure_rate": 0.049897194,
+      "median_epoch_advance_ns": 697.5,
+      "median_epoch_advance_ns_per_allocation": 0.0013303756713867188,
+      "median_first_epoch_advance_ns": 230.0,
+      "median_first_epoch_advance_ns_per_allocation": 0.000438690185546875,
+      "median_lifecycle_including_epoch_ns_per_allocation": 606.7641201019287,
+      "median_max_effective_resident_kib": 1068880.0,
+      "median_ns_per_touch": 96.9396895,
+      "median_observed_lifecycle_ns_per_allocation": 606.763632774353,
+      "median_peak_hugetlb_kib": 0.0,
+      "median_peak_rss_kib": 1068780.0,
+      "median_placement_failure_rate": 0.75,
+      "median_policy_intent_placement_failure_rate": 0.75,
+      "median_process_thp_delta_coverage": 0.987356399,
+      "median_runtime_confirmed_placement_failure_rate": null,
+      "median_runtime_confirmed_placement_precision": null,
+      "median_runtime_confirmed_placement_recall": null,
+      "median_runtime_confirmed_placement_success_rate": null,
+      "median_steady_allocator_thp_coverage": 1.0,
+      "median_steady_effective_resident_kib": 975706.0,
+      "median_steady_retained_bytes": 982515712.0,
+      "median_steady_retained_slack_bytes": 445644800.0,
+      "median_steady_thp_backend_vma_coverage": 1.0,
+      "median_thp_advice_attempts": 604.5,
+      "median_thp_advice_failures": 0.0,
+      "median_thp_backend_vma_byte_epochs": 2947547136.0,
+      "median_thp_collapse_attempts": 0.0,
+      "median_thp_collapse_failures": 0.0,
+      "median_thp_collapse_success_rate": null,
+      "median_thp_collapse_successes": 0.0,
+      "median_vmstat_thp_alloc_delta": 604.5,
+      "median_vmstat_thp_collapse_failed_delta": 0.0,
+      "median_vmstat_thp_fault_fallback_delta": 0.0,
+      "median_wave_evidence_sampling_ns": 1040936.0,
+      "min_allocator_thp_coverage": 1.0,
+      "min_steady_allocator_thp_coverage": 1.0,
+      "min_steady_thp_backend_vma_coverage": 1.0,
+      "min_thp_collapse_success_rate": null,
+      "observed_lifecycle_metric_semantics": "excluding-first-epoch-advance",
+      "placement_metric_semantics": "policy-intent",
+      "runtime_confirmed_placement_available": false,
+      "samples": 10,
+      "thp_collapse_last_error_codes": [],
+      "thp_enabled_modes": [
+        "madvise"
+      ]
+    },
+    "confidence-epoch-thp": {
+      "all_smaps_rollup_available": true,
+      "all_smaps_rollup_parse_success": true,
+      "evidence_failures": [],
+      "expected_backing": "thp",
+      "median_allocator_lifecycle_excluding_first_epoch_ns_per_allocation": 2348.0394134521484,
+      "median_allocator_lifecycle_ns_per_allocation": 2642.119770050049,
+      "median_allocator_thp_coverage": 0.9865470852017937,
+      "median_anon_huge_delta_kib": 450560.0,
+      "median_classification_coverage": 0.8601264955,
+      "median_classification_failure_rate": 0.005822236,
+      "median_epoch_advance_ns": 155045869.5,
+      "median_epoch_advance_ns_per_allocation": 295.7265272140503,
+      "median_first_epoch_advance_ns": 155039695.5,
+      "median_first_epoch_advance_ns_per_allocation": 295.7147512435913,
+      "median_lifecycle_including_epoch_ns_per_allocation": 2642.119770050049,
+      "median_max_effective_resident_kib": 1154264.0,
+      "median_ns_per_touch": 87.624787,
+      "median_observed_lifecycle_ns_per_allocation": 2348.0394134521484,
+      "median_peak_hugetlb_kib": 0.0,
+      "median_peak_rss_kib": 1072816.0,
+      "median_placement_failure_rate": 0.039936066000000006,
+      "median_policy_intent_placement_failure_rate": 0.039936066000000006,
+      "median_process_thp_delta_coverage": 0.4240285345,
+      "median_runtime_confirmed_placement_failure_rate": 0.001506481,
+      "median_runtime_confirmed_placement_precision": 1.0,
+      "median_runtime_confirmed_placement_recall": 0.9939768840000001,
+      "median_runtime_confirmed_placement_success_rate": 0.9984935189999999,
+      "median_steady_allocator_thp_coverage": 1.0,
+      "median_steady_effective_resident_kib": 702630.0,
+      "median_steady_retained_bytes": 545259520.0,
+      "median_steady_retained_slack_bytes": 83269632.0,
+      "median_steady_thp_backend_vma_coverage": 0.995475113122172,
+      "median_thp_advice_attempts": 220.0,
+      "median_thp_advice_failures": 0.0,
+      "median_thp_backend_vma_byte_epochs": 1390411776.0,
+      "median_thp_collapse_attempts": 220.0,
+      "median_thp_collapse_failures": 0.0,
+      "median_thp_collapse_success_rate": 1.0,
+      "median_thp_collapse_successes": 220.0,
+      "median_vmstat_thp_alloc_delta": 220.0,
+      "median_vmstat_thp_collapse_failed_delta": 0.0,
+      "median_vmstat_thp_fault_fallback_delta": 0.0,
+      "median_wave_evidence_sampling_ns": 24191174.0,
+      "min_allocator_thp_coverage": 0.9865470852017937,
+      "min_steady_allocator_thp_coverage": 1.0,
+      "min_steady_thp_backend_vma_coverage": 0.995475113122172,
+      "min_thp_collapse_success_rate": 1.0,
+      "observed_lifecycle_metric_semantics": "excluding-first-epoch-advance",
+      "placement_metric_semantics": "policy-intent",
+      "runtime_confirmed_placement_available": true,
+      "samples": 10,
+      "thp_collapse_last_error_codes": [],
+      "thp_enabled_modes": [
+        "madvise"
+      ]
+    },
+    "confidence-thp": {
+      "all_smaps_rollup_available": true,
+      "all_smaps_rollup_parse_success": true,
+      "evidence_failures": [],
+      "expected_backing": "thp",
+      "median_allocator_lifecycle_excluding_first_epoch_ns_per_allocation": 1823.3759202957153,
+      "median_allocator_lifecycle_ns_per_allocation": 1823.3762645721436,
+      "median_allocator_thp_coverage": 1.0,
+      "median_anon_huge_delta_kib": 452608.0,
+      "median_classification_coverage": 0.8601264955,
+      "median_classification_failure_rate": 0.005822236,
+      "median_epoch_advance_ns": 772.0,
+      "median_epoch_advance_ns_per_allocation": 0.00147247314453125,
+      "median_first_epoch_advance_ns": 230.5,
+      "median_first_epoch_advance_ns_per_allocation": 0.00043964385986328125,
+      "median_lifecycle_including_epoch_ns_per_allocation": 1823.3762645721436,
+      "median_max_effective_resident_kib": 1067796.0,
+      "median_ns_per_touch": 109.10401949999999,
+      "median_observed_lifecycle_ns_per_allocation": 1823.3759202957153,
+      "median_peak_hugetlb_kib": 0.0,
+      "median_peak_rss_kib": 1066904.0,
+      "median_placement_failure_rate": 0.039936066000000006,
+      "median_policy_intent_placement_failure_rate": 0.039936066000000006,
+      "median_process_thp_delta_coverage": 0.42530751899999997,
+      "median_runtime_confirmed_placement_failure_rate": null,
+      "median_runtime_confirmed_placement_precision": null,
+      "median_runtime_confirmed_placement_recall": null,
+      "median_runtime_confirmed_placement_success_rate": null,
+      "median_steady_allocator_thp_coverage": 1.0,
+      "median_steady_effective_resident_kib": 696064.0,
+      "median_steady_retained_bytes": 545259520.0,
+      "median_steady_retained_slack_bytes": 83269632.0,
+      "median_steady_thp_backend_vma_coverage": 1.0,
+      "median_thp_advice_attempts": 221.0,
+      "median_thp_advice_failures": 0.0,
+      "median_thp_backend_vma_byte_epochs": 1390411776.0,
+      "median_thp_collapse_attempts": 0.0,
+      "median_thp_collapse_failures": 0.0,
+      "median_thp_collapse_success_rate": null,
+      "median_thp_collapse_successes": 0.0,
+      "median_vmstat_thp_alloc_delta": 221.0,
+      "median_vmstat_thp_collapse_failed_delta": 0.0,
+      "median_vmstat_thp_fault_fallback_delta": 0.0,
+      "median_wave_evidence_sampling_ns": 20909307.0,
+      "min_allocator_thp_coverage": 1.0,
+      "min_steady_allocator_thp_coverage": 1.0,
+      "min_steady_thp_backend_vma_coverage": 1.0,
+      "min_thp_collapse_success_rate": null,
+      "observed_lifecycle_metric_semantics": "excluding-first-epoch-advance",
+      "placement_metric_semantics": "policy-intent",
+      "runtime_confirmed_placement_available": false,
+      "samples": 10,
+      "thp_collapse_last_error_codes": [],
+      "thp_enabled_modes": [
+        "madvise"
+      ]
+    },
+    "explicit-hugetlb": {
+      "all_smaps_rollup_available": true,
+      "all_smaps_rollup_parse_success": true,
+      "evidence_failures": [],
+      "expected_backing": "hugetlb",
+      "median_allocator_lifecycle_excluding_first_epoch_ns_per_allocation": 1280.479214668274,
+      "median_allocator_lifecycle_ns_per_allocation": 1280.4796056747437,
+      "median_allocator_thp_coverage": 0.0,
+      "median_anon_huge_delta_kib": 0.0,
+      "median_classification_coverage": 1.0,
+      "median_classification_failure_rate": 0.049897194,
+      "median_epoch_advance_ns": 485.5,
+      "median_epoch_advance_ns_per_allocation": 0.0009260177612304688,
+      "median_first_epoch_advance_ns": 185.5,
+      "median_first_epoch_advance_ns_per_allocation": 0.00035381317138671875,
+      "median_lifecycle_including_epoch_ns_per_allocation": 1280.4796056747437,
+      "median_max_effective_resident_kib": 1067026.0,
+      "median_ns_per_touch": 93.231807,
+      "median_observed_lifecycle_ns_per_allocation": 1280.479214668274,
+      "median_peak_hugetlb_kib": 526336.0,
+      "median_peak_rss_kib": 540290.0,
+      "median_placement_failure_rate": 0.049897194,
+      "median_policy_intent_placement_failure_rate": 0.049897194,
+      "median_process_thp_delta_coverage": 0.0,
+      "median_runtime_confirmed_placement_failure_rate": 0.049897194,
+      "median_runtime_confirmed_placement_precision": 0.8638780580000001,
+      "median_runtime_confirmed_placement_recall": 0.9501647950000001,
+      "median_runtime_confirmed_placement_success_rate": 0.950102806,
+      "median_steady_allocator_thp_coverage": 0.0,
+      "median_steady_effective_resident_kib": 975476.0,
+      "median_steady_retained_bytes": 982515712.0,
+      "median_steady_retained_slack_bytes": 445644800.0,
+      "median_steady_thp_backend_vma_coverage": 0.0,
+      "median_thp_advice_attempts": 0.0,
+      "median_thp_advice_failures": 0.0,
+      "median_thp_backend_vma_byte_epochs": 0.0,
+      "median_thp_collapse_attempts": 0.0,
+      "median_thp_collapse_failures": 0.0,
+      "median_thp_collapse_success_rate": null,
+      "median_thp_collapse_successes": 0.0,
+      "median_vmstat_thp_alloc_delta": 0.0,
+      "median_vmstat_thp_collapse_failed_delta": 0.0,
+      "median_vmstat_thp_fault_fallback_delta": 0.0,
+      "median_wave_evidence_sampling_ns": 18883894.5,
+      "min_allocator_thp_coverage": 0.0,
+      "min_steady_allocator_thp_coverage": 0.0,
+      "min_steady_thp_backend_vma_coverage": 0.0,
+      "min_thp_collapse_success_rate": null,
+      "observed_lifecycle_metric_semantics": "excluding-first-epoch-advance",
+      "placement_metric_semantics": "policy-intent",
+      "runtime_confirmed_placement_available": true,
+      "samples": 10,
+      "thp_collapse_last_error_codes": [],
+      "thp_enabled_modes": [
+        "madvise"
+      ]
+    },
+    "ordinary-no-thp": {
+      "all_smaps_rollup_available": true,
+      "all_smaps_rollup_parse_success": true,
+      "evidence_failures": [],
+      "expected_backing": "ordinary-no-thp",
+      "median_allocator_lifecycle_excluding_first_epoch_ns_per_allocation": 1742.915020942688,
+      "median_allocator_lifecycle_ns_per_allocation": 1742.9155187606812,
+      "median_allocator_thp_coverage": 0.0,
+      "median_anon_huge_delta_kib": 0.0,
+      "median_classification_coverage": 1.0,
+      "median_classification_failure_rate": 0.049897194,
+      "median_epoch_advance_ns": 682.0,
+      "median_epoch_advance_ns_per_allocation": 0.001300811767578125,
+      "median_first_epoch_advance_ns": 235.5,
+      "median_first_epoch_advance_ns_per_allocation": 0.00044918060302734375,
+      "median_lifecycle_including_epoch_ns_per_allocation": 1742.9155187606812,
+      "median_max_effective_resident_kib": 1065534.0,
+      "median_ns_per_touch": 103.024897,
+      "median_observed_lifecycle_ns_per_allocation": 1742.915020942688,
+      "median_peak_hugetlb_kib": 0.0,
+      "median_peak_rss_kib": 1064762.0,
+      "median_placement_failure_rate": 0.25,
+      "median_policy_intent_placement_failure_rate": 0.25,
+      "median_process_thp_delta_coverage": 0.0,
+      "median_runtime_confirmed_placement_failure_rate": null,
+      "median_runtime_confirmed_placement_precision": null,
+      "median_runtime_confirmed_placement_recall": null,
+      "median_runtime_confirmed_placement_success_rate": null,
+      "median_steady_allocator_thp_coverage": 0.0,
+      "median_steady_effective_resident_kib": 974304.0,
+      "median_steady_retained_bytes": 982515712.0,
+      "median_steady_retained_slack_bytes": 445644800.0,
+      "median_steady_thp_backend_vma_coverage": 0.0,
+      "median_thp_advice_attempts": 0.0,
+      "median_thp_advice_failures": 0.0,
+      "median_thp_backend_vma_byte_epochs": 0.0,
+      "median_thp_collapse_attempts": 0.0,
+      "median_thp_collapse_failures": 0.0,
+      "median_thp_collapse_success_rate": null,
+      "median_thp_collapse_successes": 0.0,
+      "median_vmstat_thp_alloc_delta": 0.0,
+      "median_vmstat_thp_collapse_failed_delta": 0.0,
+      "median_vmstat_thp_fault_fallback_delta": 0.0,
+      "median_wave_evidence_sampling_ns": 36294863.0,
+      "min_allocator_thp_coverage": 0.0,
+      "min_steady_allocator_thp_coverage": 0.0,
+      "min_steady_thp_backend_vma_coverage": 0.0,
+      "min_thp_collapse_success_rate": null,
+      "observed_lifecycle_metric_semantics": "excluding-first-epoch-advance",
+      "placement_metric_semantics": "policy-intent",
+      "runtime_confirmed_placement_available": false,
+      "samples": 10,
+      "thp_collapse_last_error_codes": [],
+      "thp_enabled_modes": [
+        "madvise"
+      ]
+    },
+    "static-epoch-thp": {
+      "all_smaps_rollup_available": true,
+      "all_smaps_rollup_parse_success": true,
+      "evidence_failures": [],
+      "expected_backing": "thp",
+      "median_allocator_lifecycle_excluding_first_epoch_ns_per_allocation": 2426.334363937378,
+      "median_allocator_lifecycle_ns_per_allocation": 2744.3262453079224,
+      "median_allocator_thp_coverage": 0.9481481481481482,
+      "median_anon_huge_delta_kib": 524288.0,
+      "median_classification_coverage": 1.0,
+      "median_classification_failure_rate": 0.049897194,
+      "median_epoch_advance_ns": 170366819.5,
+      "median_epoch_advance_ns_per_allocation": 324.94892024993896,
+      "median_first_epoch_advance_ns": 170358106.5,
+      "median_first_epoch_advance_ns_per_allocation": 324.93230152130127,
+      "median_lifecycle_including_epoch_ns_per_allocation": 2744.3262453079224,
+      "median_max_effective_resident_kib": 1505520.0,
+      "median_ns_per_touch": 92.925149,
+      "median_observed_lifecycle_ns_per_allocation": 2426.334363937378,
+      "median_peak_hugetlb_kib": 0.0,
+      "median_peak_rss_kib": 1072148.0,
+      "median_placement_failure_rate": 0.049897194,
+      "median_policy_intent_placement_failure_rate": 0.049897194,
+      "median_process_thp_delta_coverage": 0.493653819,
+      "median_runtime_confirmed_placement_failure_rate": 0.012634277499999999,
+      "median_runtime_confirmed_placement_precision": 1.0,
+      "median_runtime_confirmed_placement_recall": 0.9494628905,
+      "median_runtime_confirmed_placement_success_rate": 0.9873657225000001,
+      "median_steady_allocator_thp_coverage": 1.0,
+      "median_steady_effective_resident_kib": 981242.0,
+      "median_steady_retained_bytes": 982515712.0,
+      "median_steady_retained_slack_bytes": 445644800.0,
+      "median_steady_thp_backend_vma_coverage": 0.9961089494163424,
+      "median_thp_advice_attempts": 256.0,
+      "median_thp_advice_failures": 0.0,
+      "median_thp_backend_vma_byte_epochs": 1616904192.0,
+      "median_thp_collapse_attempts": 256.0,
+      "median_thp_collapse_failures": 0.0,
+      "median_thp_collapse_success_rate": 1.0,
+      "median_thp_collapse_successes": 256.0,
+      "median_vmstat_thp_alloc_delta": 256.0,
+      "median_vmstat_thp_collapse_failed_delta": 0.0,
+      "median_vmstat_thp_fault_fallback_delta": 0.0,
+      "median_wave_evidence_sampling_ns": 33391860.5,
+      "min_allocator_thp_coverage": 0.9446494464944649,
+      "min_steady_allocator_thp_coverage": 1.0,
+      "min_steady_thp_backend_vma_coverage": 0.9961089494163424,
+      "min_thp_collapse_success_rate": 1.0,
+      "observed_lifecycle_metric_semantics": "excluding-first-epoch-advance",
+      "placement_metric_semantics": "policy-intent",
+      "runtime_confirmed_placement_available": true,
+      "samples": 10,
+      "thp_collapse_last_error_codes": [],
+      "thp_enabled_modes": [
+        "madvise"
+      ]
+    },
+    "static-long-thp": {
+      "all_smaps_rollup_available": true,
+      "all_smaps_rollup_parse_success": true,
+      "evidence_failures": [],
+      "expected_backing": "thp",
+      "median_allocator_lifecycle_excluding_first_epoch_ns_per_allocation": 1251.4183082580566,
+      "median_allocator_lifecycle_ns_per_allocation": 1251.4187564849854,
+      "median_allocator_thp_coverage": 1.0,
+      "median_anon_huge_delta_kib": 526336.0,
+      "median_classification_coverage": 1.0,
+      "median_classification_failure_rate": 0.049897194,
+      "median_epoch_advance_ns": 571.5,
+      "median_epoch_advance_ns_per_allocation": 0.0010900497436523438,
+      "median_first_epoch_advance_ns": 230.0,
+      "median_first_epoch_advance_ns_per_allocation": 0.000438690185546875,
+      "median_lifecycle_including_epoch_ns_per_allocation": 1251.4187564849854,
+      "median_max_effective_resident_kib": 1067054.0,
+      "median_ns_per_touch": 97.745667,
+      "median_observed_lifecycle_ns_per_allocation": 1251.4183082580566,
+      "median_peak_hugetlb_kib": 0.0,
+      "median_peak_rss_kib": 1066568.0,
+      "median_placement_failure_rate": 0.049897194,
+      "median_policy_intent_placement_failure_rate": 0.049897194,
+      "median_process_thp_delta_coverage": 0.494733419,
+      "median_runtime_confirmed_placement_failure_rate": null,
+      "median_runtime_confirmed_placement_precision": null,
+      "median_runtime_confirmed_placement_recall": null,
+      "median_runtime_confirmed_placement_success_rate": null,
+      "median_steady_allocator_thp_coverage": 1.0,
+      "median_steady_effective_resident_kib": 975500.0,
+      "median_steady_retained_bytes": 982515712.0,
+      "median_steady_retained_slack_bytes": 445644800.0,
+      "median_steady_thp_backend_vma_coverage": 1.0,
+      "median_thp_advice_attempts": 257.0,
+      "median_thp_advice_failures": 0.0,
+      "median_thp_backend_vma_byte_epochs": 1616904192.0,
+      "median_thp_collapse_attempts": 0.0,
+      "median_thp_collapse_failures": 0.0,
+      "median_thp_collapse_success_rate": null,
+      "median_thp_collapse_successes": 0.0,
+      "median_vmstat_thp_alloc_delta": 257.0,
+      "median_vmstat_thp_collapse_failed_delta": 0.0,
+      "median_vmstat_thp_fault_fallback_delta": 0.0,
+      "median_wave_evidence_sampling_ns": 18398613.5,
+      "min_allocator_thp_coverage": 1.0,
+      "min_steady_allocator_thp_coverage": 1.0,
+      "min_steady_thp_backend_vma_coverage": 1.0,
+      "min_thp_collapse_success_rate": null,
+      "observed_lifecycle_metric_semantics": "excluding-first-epoch-advance",
+      "placement_metric_semantics": "policy-intent",
+      "runtime_confirmed_placement_available": false,
+      "samples": 10,
+      "thp_collapse_last_error_codes": [],
+      "thp_enabled_modes": [
+        "madvise"
+      ]
+    },
+    "system-default": {
+      "all_smaps_rollup_available": true,
+      "all_smaps_rollup_parse_success": true,
+      "evidence_failures": [],
+      "expected_backing": "system-default",
+      "median_allocator_lifecycle_excluding_first_epoch_ns_per_allocation": 1300.766209602356,
+      "median_allocator_lifecycle_ns_per_allocation": 1300.766209602356,
+      "median_allocator_thp_coverage": 0.0,
+      "median_anon_huge_delta_kib": 0.0,
+      "median_classification_coverage": 1.0,
+      "median_classification_failure_rate": 0.049897194,
+      "median_epoch_advance_ns": 0.0,
+      "median_epoch_advance_ns_per_allocation": 0.0,
+      "median_first_epoch_advance_ns": 0.0,
+      "median_first_epoch_advance_ns_per_allocation": 0.0,
+      "median_lifecycle_including_epoch_ns_per_allocation": 1300.766209602356,
+      "median_max_effective_resident_kib": 1068210.0,
+      "median_ns_per_touch": 106.62809,
+      "median_observed_lifecycle_ns_per_allocation": 1300.766209602356,
+      "median_peak_hugetlb_kib": 0.0,
+      "median_peak_rss_kib": 1068188.0,
+      "median_placement_failure_rate": 0.25,
+      "median_policy_intent_placement_failure_rate": 0.25,
+      "median_process_thp_delta_coverage": 0.0,
+      "median_runtime_confirmed_placement_failure_rate": null,
+      "median_runtime_confirmed_placement_precision": null,
+      "median_runtime_confirmed_placement_recall": null,
+      "median_runtime_confirmed_placement_success_rate": null,
+      "median_steady_allocator_thp_coverage": 0.0,
+      "median_steady_effective_resident_kib": 1068210.0,
+      "median_steady_retained_bytes": 0.0,
+      "median_steady_retained_slack_bytes": 0.0,
+      "median_steady_thp_backend_vma_coverage": 0.0,
+      "median_thp_advice_attempts": 0.0,
+      "median_thp_advice_failures": 0.0,
+      "median_thp_backend_vma_byte_epochs": 0.0,
+      "median_thp_collapse_attempts": 0.0,
+      "median_thp_collapse_failures": 0.0,
+      "median_thp_collapse_success_rate": null,
+      "median_thp_collapse_successes": 0.0,
+      "median_vmstat_thp_alloc_delta": 0.0,
+      "median_vmstat_thp_collapse_failed_delta": 0.0,
+      "median_vmstat_thp_fault_fallback_delta": 0.0,
+      "median_wave_evidence_sampling_ns": 31985895.0,
+      "min_allocator_thp_coverage": 0.0,
+      "min_steady_allocator_thp_coverage": 0.0,
+      "min_steady_thp_backend_vma_coverage": 0.0,
+      "min_thp_collapse_success_rate": null,
+      "observed_lifecycle_metric_semantics": "excluding-first-epoch-advance",
+      "placement_metric_semantics": "policy-intent",
+      "runtime_confirmed_placement_available": false,
+      "samples": 10,
+      "thp_collapse_last_error_codes": [],
+      "thp_enabled_modes": [
+        "madvise"
+      ]
+    }
+  },
+  "claim_boundary": "synthetic paired trace; vmstat deltas are system-wide and only smaps_rollup AnonHugePages establishes process THP backing; the epoch-cohort arms combine static classification with delayed runtime collapse, and a canonical-bucket epoch-only control remains future work",
+  "claim_grade": false,
+  "comparisons": {
+    "all-thp_vs_explicit-hugetlb": {
+      "allocator_lifecycle": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          0.5109445320015944,
+          0.5288369982269132
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.47937945858093917,
+        "improvement": 0.5206205414190608,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          0.51098289755687,
+          0.5289303089631225
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 0.4793792602061545,
+        "improvement": 0.5206207397938455,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          0.5108222731246712,
+          0.5289915636411044
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.47937945858093917,
+        "improvement": 0.5206205414190608,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "anon_huge_delta_kib": 1052672.0,
+      "classification_failure_rate_delta": 0.0,
+      "max_effective_resident": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.0018690337538780355,
+          -0.001538597366291805
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.0017045548719823,
+        "improvement": -0.001704554871982289,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": 0.700102806,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.00028189377398257776,
+          -0.0001966247199738369
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 1.0002391229867655,
+        "improvement": -0.00023912298676553867,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "touch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.12551015536757637,
+          0.1050528277598749
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 1.008576951184293,
+        "improvement": -0.008576951184293025,
+        "pairs": 10,
+        "target": "all-thp"
+      }
+    },
+    "all-thp_vs_ordinary-no-thp": {
+      "allocator_lifecycle": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.6453325295747371,
+          0.6555750555474008
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.34954202128294326,
+        "improvement": 0.6504579787170568,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.6454054424545921,
+          0.6556164507971249
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 0.349541866190495,
+        "improvement": 0.650458133809505,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.6451537022228653,
+          0.6555821088800331
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.34954202128294326,
+        "improvement": 0.6504579787170568,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "anon_huge_delta_kib": 1052672.0,
+      "classification_failure_rate_delta": 0.0,
+      "max_effective_resident": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.003383600927312269,
+          -0.003063793706507889
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.003222394372654,
+        "improvement": -0.003222394372653925,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": 0.5,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.0018639442396397587,
+          -0.0012365471095794334
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 1.0015792050270205,
+        "improvement": -0.0015792050270204694,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "touch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.014324303375741865,
+          0.14957706906468238
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 0.9166599244701897,
+        "improvement": 0.08334007552981026,
+        "pairs": 10,
+        "target": "all-thp"
+      }
+    },
+    "all-thp_vs_system-default": {
+      "allocator_lifecycle": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.5240534504510987,
+          0.535701670051257
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.4701612789682821,
+        "improvement": 0.5298387210317179,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.5240288849698045,
+          0.5356086759931775
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 0.47016095225039933,
+        "improvement": 0.5298390477496007,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.5240462661034813,
+          0.5357038241627015
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.4701612789682821,
+        "improvement": 0.5298387210317179,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "anon_huge_delta_kib": 1052672.0,
+      "classification_failure_rate_delta": 0.0,
+      "max_effective_resident": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -0.0006631866335624625,
+          -0.000586770663696834
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.0006231064197588,
+        "improvement": -0.0006231064197588232,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": 0.5,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.0773091833303724,
+          0.09069898012110056
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 0.9156269060484564,
+        "improvement": 0.08437309395154358,
+        "pairs": 10,
+        "target": "all-thp"
+      },
+      "touch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.023824336291992654,
+          0.21882775922318798
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 0.874165992670881,
+        "improvement": 0.12583400732911898,
+        "pairs": 10,
+        "target": "all-thp"
+      }
+    },
+    "confidence-epoch-thp_vs_explicit-hugetlb": {
+      "allocator_lifecycle": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -1.1101230383148835,
+          -1.040160171191181
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 2.0700203822891003,
+        "improvement": -1.0700203822891003,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.8690639727378529,
+          -0.8242578369947318
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 1.8432707927890772,
+        "improvement": -0.8432707927890772,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -1.1108848648320104,
+          -1.039719906079859
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 2.0700203822891003,
+        "improvement": -1.0700203822891003,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "anon_huge_delta_kib": 450560.0,
+      "classification_failure_rate_delta": -0.044074958,
+      "max_effective_resident": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.08664999515601535,
+          -0.07768853729520386
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.0821612876438769,
+        "improvement": -0.08216128764387687,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": -0.009961127999999993,
+      "runtime_confirmed_placement_failure_rate_delta": -0.048390713,
+      "steady_effective_resident": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          0.27263719604005343,
+          0.2886355020101684
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 0.7192433051544692,
+        "improvement": 0.2807566948455308,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "touch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.02076548147024515,
+          0.1223762083642993
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 0.9504127043126344,
+        "improvement": 0.04958729568736564,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      }
+    },
+    "confidence-epoch-thp_vs_ordinary-no-thp": {
+      "allocator_lifecycle": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.5318161351824895,
+          -0.4892652120018277
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 1.5093661098122673,
+        "improvement": -0.5093661098122673,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.35418946802777374,
+          -0.33445302995868786
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 1.344030429119627,
+        "improvement": -0.344030429119627,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.5316273281669519,
+          -0.4891605435616828
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 1.5093661098122673,
+        "improvement": -0.5093661098122673,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "anon_huge_delta_kib": 450560.0,
+      "classification_failure_rate_delta": -0.044074958,
+      "max_effective_resident": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.08837630485060566,
+          -0.0793488247771188
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.0838010397449278,
+        "improvement": -0.08380103974492781,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": -0.210063934,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.27154209750605696,
+          0.2875866189367787
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 0.720206919767876,
+        "improvement": 0.279793080232124,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "touch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.0936955762783912,
+          0.19087232745382898
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 0.8637964973597106,
+        "improvement": 0.13620350264028935,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      }
+    },
+    "confidence-epoch-thp_vs_system-default": {
+      "allocator_lifecycle": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -1.061005763767354,
+          -1.0013271350995168
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 2.0302151312625165,
+        "improvement": -1.0302151312625165,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -0.8206000105969913,
+          -0.7934874987608691
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 1.8078252922756184,
+        "improvement": -0.8078252922756184,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -1.0603509935362196,
+          -1.0017474531642936
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 2.0302151312625165,
+        "improvement": -1.0302151312625165,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "anon_huge_delta_kib": 450560.0,
+      "classification_failure_rate_delta": -0.044074958,
+      "max_effective_resident": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -0.08543946083316323,
+          -0.07661318598354883
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.0809929774431428,
+        "improvement": -0.08099297744314282,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": -0.210063934,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.33704758933074375,
+          0.345990933293178
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 0.6584010833611096,
+        "improvement": 0.3415989166388904,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      },
+      "touch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.09024807288395986,
+          0.24918906314370626
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 0.8237531743481797,
+        "improvement": 0.17624682565182026,
+        "pairs": 10,
+        "target": "confidence-epoch-thp"
+      }
+    },
+    "confidence-thp_vs_explicit-hugetlb": {
+      "allocator_lifecycle": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.45259649940435187,
+          -0.41937962378676197
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 1.435690962330917,
+        "improvement": -0.4356909623309171,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.4521925124192472,
+          -0.4194517374044362
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 1.4356910322896161,
+        "improvement": -0.43569103228961614,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.4524951299836937,
+          -0.4192482385623191
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 1.435690962330917,
+        "improvement": -0.4356909623309171,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "anon_huge_delta_kib": 452608.0,
+      "classification_failure_rate_delta": -0.044074958,
+      "max_effective_resident": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.0012932265035630053,
+          -0.00017677351614864278
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.0007310693613691,
+        "improvement": -0.0007310693613691299,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": -0.009961127999999993,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          0.27919917348641254,
+          0.29496831441255755
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 0.712605242189862,
+        "improvement": 0.287394757810138,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "touch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.19951524889501449,
+          -0.021855272265464798
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 1.1041748356057999,
+        "improvement": -0.10417483560579988,
+        "pairs": 10,
+        "target": "confidence-thp"
+      }
+    },
+    "confidence-thp_vs_ordinary-no-thp": {
+      "allocator_lifecycle": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.05501331930304487,
+          -0.03784871978996507
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 1.046841519651957,
+        "improvement": -0.04684151965195693,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.055065448886527424,
+          -0.03781472206343506
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 1.046841539376692,
+        "improvement": -0.04684153937669211,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.055187961877171565,
+          -0.0380356559131767
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 1.046841519651957,
+        "improvement": -0.04684151965195693,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "anon_huge_delta_kib": 452608.0,
+      "classification_failure_rate_delta": -0.044074958,
+      "max_effective_resident": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.0027447282259178696,
+          -0.0017303258223670959
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.002247433781635,
+        "improvement": -0.0022474337816349443,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": -0.210063934,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.27827532160997603,
+          0.2941349030239987
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 0.7135599633809294,
+        "improvement": 0.2864400366190706,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "touch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.07626883193662004,
+          0.0644471680367934
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 1.0035454609782672,
+        "improvement": -0.0035454609782672453,
+        "pairs": 10,
+        "target": "confidence-thp"
+      }
+    },
+    "confidence-thp_vs_system-default": {
+      "allocator_lifecycle": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -0.4184984955027773,
+          -0.3964623856877163
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 1.4080834857856943,
+        "improvement": -0.4080834857856943,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -0.4183992071363143,
+          -0.3964740254695951
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 1.408083158600483,
+        "improvement": -0.40808315860048294,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -0.41820804186890714,
+          -0.3966210514727977
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 1.4080834857856943,
+        "improvement": -0.4080834857856943,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "anon_huge_delta_kib": 452608.0,
+      "classification_failure_rate_delta": -0.044074958,
+      "max_effective_resident": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -0.00015705197495541334,
+          0.0008630730329926006
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 0.9996506718920863,
+        "improvement": 0.0003493281079136601,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": -0.210063934,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.34299573667685146,
+          0.35213563248629465
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 0.6523245473461124,
+        "improvement": 0.34767545265388755,
+        "pairs": 10,
+        "target": "confidence-thp"
+      },
+      "touch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -0.049707936258772456,
+          0.14003317286388084
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 0.9570237453038702,
+        "improvement": 0.042976254696129756,
+        "pairs": 10,
+        "target": "confidence-thp"
+      }
+    },
+    "static-epoch-thp_vs_explicit-hugetlb": {
+      "allocator_lifecycle": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -1.1958426109415377,
+          -1.132799285263114
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 2.163990035145166,
+        "improvement": -1.163990035145166,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.9222043263243827,
+          -0.8827317380723336
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 1.9016615254294271,
+        "improvement": -0.9016615254294271,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -1.1959923738520573,
+          -1.1328632224601765
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 2.163990035145166,
+        "improvement": -1.163990035145166,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "anon_huge_delta_kib": 524288.0,
+      "classification_failure_rate_delta": 0.0,
+      "max_effective_resident": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.4199805710759863,
+          -0.40658545715473204
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.4128808511093356,
+        "improvement": -0.4128808511093356,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": 0.0,
+      "runtime_confirmed_placement_failure_rate_delta": -0.0372629165,
+      "steady_effective_resident": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.006071832942843081,
+          -0.005032135694462703
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 1.0055938950874033,
+        "improvement": -0.005593895087403267,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "touch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.06672295327362288,
+          0.10807824377755093
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 0.9688674613938902,
+        "improvement": 0.03113253860610976,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      }
+    },
+    "static-epoch-thp_vs_ordinary-no-thp": {
+      "allocator_lifecycle": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.6023729385258516,
+          -0.55725139113932
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 1.5778845701063262,
+        "improvement": -0.5778845701063262,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.39545095738844394,
+          -0.37776685161081947
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 1.386606333731272,
+        "improvement": -0.38660633373127196,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.602932189738111,
+          -0.5569819245953933
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 1.5778845701063262,
+        "improvement": -0.5778845701063262,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "anon_huge_delta_kib": 524288.0,
+      "classification_failure_rate_delta": 0.0,
+      "max_effective_resident": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.42227895469927246,
+          -0.40876162508938907
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.4150217282323616,
+        "improvement": -0.4150217282323616,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": -0.200102806,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.00732733755641557,
+          -0.006528939431152958
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 1.0069411512460835,
+        "improvement": -0.006941151246083521,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "touch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.031718545478553684,
+          0.19451762841439268
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 0.8805693734524627,
+        "improvement": 0.11943062654753733,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      }
+    },
+    "static-epoch-thp_vs_system-default": {
+      "allocator_lifecycle": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -1.158633672878815,
+          -1.0885215937251926
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 2.1223778040265886,
+        "improvement": -1.1223778040265886,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -0.8790712355873678,
+          -0.8512340226199246
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 1.8650931900336052,
+        "improvement": -0.8650931900336052,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -1.1580173540063599,
+          -1.0878378268585824
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 2.1223778040265886,
+        "improvement": -1.1223778040265886,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "anon_huge_delta_kib": 524288.0,
+      "classification_failure_rate_delta": 0.0,
+      "max_effective_resident": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          -0.41843641450049884,
+          -0.4051462656764231
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.4113554933557177,
+        "improvement": -0.41135549335571775,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": -0.200102806,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.0726346925706477,
+          0.08581119323747732
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 0.9205287073261961,
+        "improvement": 0.07947129267380393,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      },
+      "touch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.0823760206830928,
+          0.2381964973489914
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 0.8397485042280594,
+        "improvement": 0.16025149577194064,
+        "pairs": 10,
+        "target": "static-epoch-thp"
+      }
+    },
+    "static-long-thp_vs_explicit-hugetlb": {
+      "allocator_lifecycle": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          0.010961146448291714,
+          0.022349489959650137
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.983061032390666,
+        "improvement": 0.016938967609334,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          0.010881553371920538,
+          0.022472130425438275
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 0.9830609912803013,
+        "improvement": 0.016939008719698667,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          0.01098157489049778,
+          0.022551730747639942
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.983061032390666,
+        "improvement": 0.016938967609334,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "anon_huge_delta_kib": 526336.0,
+      "classification_failure_rate_delta": 0.0,
+      "max_effective_resident": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -3.261894675854471e-05,
+          2.9245035556901833e-05
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.0000003765338816,
+        "improvement": -3.765338816297259e-07,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": 0.0,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -3.4316414386781346e-05,
+          3.2592389111796294e-05
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 0.9999988687640744,
+        "improvement": 1.1312359255999382e-06,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "touch": {
+        "baseline": "explicit-hugetlb",
+        "bootstrap_95pct": [
+          -0.06855204975815377,
+          0.05026066065015378
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 1.0072917942011748,
+        "improvement": -0.007291794201174762,
+        "pairs": 10,
+        "target": "static-long-thp"
+      }
+    },
+    "static-long-thp_vs_ordinary-no-thp": {
+      "allocator_lifecycle": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.2771308074179616,
+          0.28951614143936066
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.7168040560676482,
+        "improvement": 0.2831959439323518,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.2771390233384028,
+          0.2896524541331613
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 0.7168040046693342,
+        "improvement": 0.28319599533066575,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.2771729156234274,
+          0.28965145103958934
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.7168040560676482,
+        "improvement": 0.2831959439323518,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "anon_huge_delta_kib": 526336.0,
+      "classification_failure_rate_delta": 0.0,
+      "max_effective_resident": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.0017023686611326028,
+          -0.0012928157425773357
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 1.0015156337669724,
+        "improvement": -0.0015156337669723907,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": -0.200102806,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          -0.0016228447000565804,
+          -0.0009964395128247983
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 1.0013386289209303,
+        "improvement": -0.0013386289209302848,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "touch": {
+        "baseline": "ordinary-no-thp",
+        "bootstrap_95pct": [
+          0.023867559368143,
+          0.13646439958773127
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 0.9154918907354368,
+        "improvement": 0.0845081092645632,
+        "pairs": 10,
+        "target": "static-long-thp"
+      }
+    },
+    "static-long-thp_vs_system-default": {
+      "allocator_lifecycle": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.025215144917331678,
+          0.04656315040561387
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.9641573580580053,
+        "improvement": 0.03584264194199471,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "allocator_lifecycle_excluding_first_epoch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.024941929969255816,
+          0.04679735246686079
+        ],
+        "field": "allocator_lifecycle_excluding_first_epoch_ns_per_allocation",
+        "geomean_ratio": 0.9641570467228863,
+        "improvement": 0.03584295327711373,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "allocator_lifecycle_including_epoch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.025309312078420465,
+          0.046594930169545745
+        ],
+        "field": "allocator_lifecycle_ns_per_allocation",
+        "geomean_ratio": 0.9641573580580053,
+        "improvement": 0.03584264194199471,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "anon_huge_delta_kib": 526336.0,
+      "classification_failure_rate_delta": 0.0,
+      "max_effective_resident": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.0009155844133029722,
+          0.0012252785916679887
+        ],
+        "field": "max_effective_resident_kib",
+        "geomean_ratio": 0.9989207679265677,
+        "improvement": 0.0010792320734323013,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "placement_metric_semantics": "policy-intent",
+      "policy_intent_placement_failure_rate_delta": -0.200102806,
+      "runtime_confirmed_placement_failure_rate_delta": null,
+      "steady_effective_resident": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.07749250580450506,
+          0.09085399378601833
+        ],
+        "field": "steady_effective_resident_kib",
+        "geomean_ratio": 0.9154069754083404,
+        "improvement": 0.08459302459165963,
+        "pairs": 10,
+        "target": "static-long-thp"
+      },
+      "touch": {
+        "baseline": "system-default",
+        "bootstrap_95pct": [
+          0.05578131975242118,
+          0.1893632568576894
+        ],
+        "field": "ns_per_touch",
+        "geomean_ratio": 0.8730521058935098,
+        "improvement": 0.1269478941064902,
+        "pairs": 10,
+        "target": "static-long-thp"
+      }
+    }
+  },
+  "confidence_overlap_rate": 0.1,
+  "confidence_threshold": 80,
+  "correct_confidence": 90,
+  "ephemeral_waves": 3,
+  "error_confidence": 60,
+  "evidence_contract": {
+    "actual_thp_backing": "/proc/self/smaps_rollup AnonHugePages delta",
+    "advice_is_backing_proof": false,
+    "candidate_vma_coverage": "reported separately for every THP-backend VMA",
+    "corroboration": "/proc/vmstat THP counter delta (system-wide)",
+    "default_min_steady_thp_coverage": 0.95,
+    "eager_thp_coverage_denominator": "steady THP-backend extents",
+    "epoch_thp_coverage_denominator": "steady MADV_COLLAPSE-confirmed extents",
+    "formal_host_thp_mode": "madvise",
+    "placement_rate": "policy-intent unless runtime_confirmed_placement_available",
+    "resident_metric": "max(VmRSS + HugetlbPages) across initial/post-epoch/steady/wave peaks"
+  },
+  "false_long_rate": 0.05,
+  "false_short_rate": 0.05,
+  "invariants_passed": true,
+  "long_fraction": 0.5,
+  "min_steady_thp_coverage": 0.95,
+  "objects": 262144,
+  "paired_prediction_traces": [
+    {
+      "digests": {
+        "confidence-epoch-thp": "62b7eb3ca310425d",
+        "confidence-thp": "62b7eb3ca310425d",
+        "explicit-hugetlb": "62b7eb3ca310425d",
+        "static-epoch-thp": "62b7eb3ca310425d",
+        "static-long-thp": "62b7eb3ca310425d"
+      },
+      "matched": true,
+      "repeat": 0
+    },
+    {
+      "digests": {
+        "confidence-epoch-thp": "2b664a5f74a6abbb",
+        "confidence-thp": "2b664a5f74a6abbb",
+        "explicit-hugetlb": "2b664a5f74a6abbb",
+        "static-epoch-thp": "2b664a5f74a6abbb",
+        "static-long-thp": "2b664a5f74a6abbb"
+      },
+      "matched": true,
+      "repeat": 1
+    },
+    {
+      "digests": {
+        "confidence-epoch-thp": "12cffb231beadf91",
+        "confidence-thp": "12cffb231beadf91",
+        "explicit-hugetlb": "12cffb231beadf91",
+        "static-epoch-thp": "12cffb231beadf91",
+        "static-long-thp": "12cffb231beadf91"
+      },
+      "matched": true,
+      "repeat": 2
+    },
+    {
+      "digests": {
+        "confidence-epoch-thp": "392af50c2a7a3e97",
+        "confidence-thp": "392af50c2a7a3e97",
+        "explicit-hugetlb": "392af50c2a7a3e97",
+        "static-epoch-thp": "392af50c2a7a3e97",
+        "static-long-thp": "392af50c2a7a3e97"
+      },
+      "matched": true,
+      "repeat": 3
+    },
+    {
+      "digests": {
+        "confidence-epoch-thp": "86d265adad2dfdb9",
+        "confidence-thp": "86d265adad2dfdb9",
+        "explicit-hugetlb": "86d265adad2dfdb9",
+        "static-epoch-thp": "86d265adad2dfdb9",
+        "static-long-thp": "86d265adad2dfdb9"
+      },
+      "matched": true,
+      "repeat": 4
+    },
+    {
+      "digests": {
+        "confidence-epoch-thp": "86c8d8ed3e229729",
+        "confidence-thp": "86c8d8ed3e229729",
+        "explicit-hugetlb": "86c8d8ed3e229729",
+        "static-epoch-thp": "86c8d8ed3e229729",
+        "static-long-thp": "86c8d8ed3e229729"
+      },
+      "matched": true,
+      "repeat": 5
+    },
+    {
+      "digests": {
+        "confidence-epoch-thp": "ae439cf17e899ed3",
+        "confidence-thp": "ae439cf17e899ed3",
+        "explicit-hugetlb": "ae439cf17e899ed3",
+        "static-epoch-thp": "ae439cf17e899ed3",
+        "static-long-thp": "ae439cf17e899ed3"
+      },
+      "matched": true,
+      "repeat": 6
+    },
+    {
+      "digests": {
+        "confidence-epoch-thp": "01dd7b83d9b2168d",
+        "confidence-thp": "01dd7b83d9b2168d",
+        "explicit-hugetlb": "01dd7b83d9b2168d",
+        "static-epoch-thp": "01dd7b83d9b2168d",
+        "static-long-thp": "01dd7b83d9b2168d"
+      },
+      "matched": true,
+      "repeat": 7
+    },
+    {
+      "digests": {
+        "confidence-epoch-thp": "c0b5c1799c0fa08d",
+        "confidence-thp": "c0b5c1799c0fa08d",
+        "explicit-hugetlb": "c0b5c1799c0fa08d",
+        "static-epoch-thp": "c0b5c1799c0fa08d",
+        "static-long-thp": "c0b5c1799c0fa08d"
+      },
+      "matched": true,
+      "repeat": 8
+    },
+    {
+      "digests": {
+        "confidence-epoch-thp": "8bf32330be3a7b2f",
+        "confidence-thp": "8bf32330be3a7b2f",
+        "explicit-hugetlb": "8bf32330be3a7b2f",
+        "static-epoch-thp": "8bf32330be3a7b2f",
+        "static-long-thp": "8bf32330be3a7b2f"
+      },
+      "matched": true,
+      "repeat": 9
+    }
+  ],
+  "repeats": 10,
+  "run_id": "lifetime-thp-final-20260714",
+  "schema_version": 2,
+  "slot_bytes": 4096,
+  "unknown_rate": 0.0
+}

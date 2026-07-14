@@ -1,0 +1,233 @@
+{
+  "artifacts": [
+    {
+      "bytes": 663,
+      "path": "host-after.txt",
+      "sha256": "39c32ba8f45d19d2df3eb6634b849dc85f49604be65ed4fa4666ad22de717a3f"
+    },
+    {
+      "bytes": 1781,
+      "path": "host-before.txt",
+      "sha256": "f9552ecc12bedcb15787dac77f45e0a1bb11b93afa80c47799d2d8a7d57f77ea"
+    },
+    {
+      "bytes": 477,
+      "path": "runner-manifest.json",
+      "sha256": "b66a8cf9013af9185c382e911fb64f0c27b743624d42d28df0de45792d03d4dc"
+    },
+    {
+      "bytes": 692165,
+      "path": "samples.jsonl",
+      "sha256": "7845d3cfdf802f8bed152158df04201f2395ae5f77a84448dbfe28c6183c3a49"
+    },
+    {
+      "bytes": 66963,
+      "path": "summary.json",
+      "sha256": "0fafe8b09b3be9354743bba6c8872a3fdcd70e0d1717d4cd96050399c78ac7ff"
+    },
+    {
+      "bytes": 3053,
+      "path": "verification.txt",
+      "sha256": "4c53297e069ff20245e958f2ca2899442d4125372ad6541c8ab8dff9d3f1f781"
+    }
+  ],
+  "branch": "exp/lifetime-thp-20260714",
+  "claim_boundary": "synthetic paired trace; vmstat deltas are system-wide and only smaps_rollup AnonHugePages establishes process THP backing; the epoch-cohort arms combine static classification with delayed runtime collapse, and a canonical-bucket epoch-only control remains future work",
+  "claim_grade": false,
+  "command": "PYTHONHASHSEED=0 python3 evaluation/scripts/lifetime_thp_allocator_experiment.py --run-id lifetime-thp-final-20260714 --objects 262144 --slot-bytes 4096 --types-per-truth 8 --long-fraction 0.5 --false-long-rate 0.05 --false-short-rate 0.05 --confidence-threshold 80 --correct-confidence 90 --error-confidence 60 --confidence-overlap-rate 0.10 --unknown-rate 0.0 --ephemeral-waves 3 --warmup-passes 4 --passes 64 --repeats 10 --numa-node 0 --cpu 15 --seed 20260714 --timeout 900",
+  "dev_baseline_commit": "18bfc47b5711591a9573b762840c0fb9fbf8d5b2",
+  "evidence_grade": "production-allocator-path-synthetic-paired-feasibility",
+  "host": {
+    "background_load_caveat": "unrelated host work was present; cases were pinned, randomized, paired by seed, and bootstrapped",
+    "cpu": "AMD EPYC 9354 32-Core Processor, 2 sockets, 64 cores, 128 logical CPUs",
+    "kernel": "Linux 6.8.0-111-generic x86_64",
+    "numa_cpu": 15,
+    "numa_memory_node": 0,
+    "persistent_hugetlb_bytes": 8589934592,
+    "persistent_hugetlb_pages": 4096,
+    "pmd_bytes": 2097152,
+    "thp_defrag": "madvise",
+    "thp_enabled": "madvise"
+  },
+  "invariants": {
+    "all_80_probe_rows_passed": true,
+    "all_byte_epoch_accounts_closed": true,
+    "all_evidence_failures_empty": true,
+    "all_prediction_trace_pairs_matched": true,
+    "all_smaps_rollup_parsed": true,
+    "hugetlb_pool_free_after": 4096,
+    "hugetlb_pool_free_before": 4096,
+    "max_hugetlb_fallbacks": 0,
+    "max_mapping_failures": 0,
+    "max_thp_collapse_failures": 0,
+    "summary_invariants_passed": true
+  },
+  "key_results": {
+    "backing": {
+      "confidence_epoch_collapse_attempts_median": 220.0,
+      "confidence_epoch_collapse_success_rate_min": 1.0,
+      "eager_min_steady_coverage": 1.0,
+      "epoch_min_confirmed_steady_coverage": 1.0,
+      "static_epoch_collapse_attempts_median": 256.0,
+      "static_epoch_collapse_success_rate_min": 1.0
+    },
+    "confidence_epoch_thp_vs_ordinary_no_thp": {
+      "allocator_lifecycle": {
+        "bootstrap_95pct": [
+          -0.5318161351824895,
+          -0.4892652120018277
+        ],
+        "geomean_improvement": -0.5093661098122673
+      },
+      "max_effective_resident": {
+        "bootstrap_95pct": [
+          -0.08837630485060566,
+          -0.0793488247771188
+        ],
+        "geomean_improvement": -0.08380103974492781
+      },
+      "steady_effective_resident": {
+        "bootstrap_95pct": [
+          0.27154209750605696,
+          0.2875866189367787
+        ],
+        "geomean_improvement": 0.279793080232124
+      },
+      "touch": {
+        "bootstrap_95pct": [
+          0.0936955762783912,
+          0.19087232745382898
+        ],
+        "geomean_improvement": 0.13620350264028935
+      }
+    },
+    "runtime_validation": {
+      "confidence_classification_failure": 0.005822236,
+      "confidence_coverage": 0.8601264955,
+      "confidence_failure_reduction": 0.7412538756587674,
+      "confidence_runtime_confirmed_failure": 0.001506481,
+      "confidence_runtime_precision": 1.0,
+      "static_classification_failure": 0.049897194,
+      "static_failure_reduction": 0.7467938277250621,
+      "static_runtime_confirmed_failure": 0.012634277499999999,
+      "static_runtime_precision": 1.0
+    },
+    "static_long_thp_vs_explicit_hugetlb": {
+      "allocator_lifecycle": {
+        "bootstrap_95pct": [
+          0.010961146448291714,
+          0.022349489959650137
+        ],
+        "geomean_improvement": 0.016938967609334
+      },
+      "touch": {
+        "bootstrap_95pct": [
+          -0.06855204975815377,
+          0.05026066065015378
+        ],
+        "geomean_improvement": -0.007291794201174762
+      }
+    },
+    "static_long_thp_vs_ordinary_no_thp": {
+      "allocator_lifecycle": {
+        "bootstrap_95pct": [
+          0.2771308074179616,
+          0.28951614143936066
+        ],
+        "geomean_improvement": 0.2831959439323518
+      },
+      "steady_effective_resident": {
+        "bootstrap_95pct": [
+          -0.0016228447000565804,
+          -0.0009964395128247983
+        ],
+        "geomean_improvement": -0.0013386289209302848
+      },
+      "touch": {
+        "bootstrap_95pct": [
+          0.023867559368143,
+          0.13646439958773127
+        ],
+        "geomean_improvement": 0.0845081092645632
+      }
+    },
+    "static_long_thp_vs_system_default": {
+      "allocator_lifecycle": {
+        "bootstrap_95pct": [
+          0.025215144917331678,
+          0.04656315040561387
+        ],
+        "geomean_improvement": 0.03584264194199471
+      },
+      "max_effective_resident": {
+        "bootstrap_95pct": [
+          0.0009155844133029722,
+          0.0012252785916679887
+        ],
+        "geomean_improvement": 0.0010792320734323013
+      },
+      "steady_effective_resident": {
+        "bootstrap_95pct": [
+          0.07749250580450506,
+          0.09085399378601833
+        ],
+        "geomean_improvement": 0.08459302459165963
+      },
+      "touch": {
+        "bootstrap_95pct": [
+          0.05578131975242118,
+          0.1893632568576894
+        ],
+        "geomean_improvement": 0.1269478941064902
+      }
+    },
+    "thp_footprint": {
+      "all_thp_median_anon_huge_delta_kib": 1052672.0,
+      "long_only_reduction": 0.5,
+      "static_long_median_anon_huge_delta_kib": 526336.0
+    }
+  },
+  "matrix": {
+    "cases": 8,
+    "confidence_overlap_rate": 0.1,
+    "confidence_threshold": 80,
+    "ephemeral_waves": 3,
+    "false_long_rate": 0.05,
+    "false_short_rate": 0.05,
+    "fresh_process_per_sample": true,
+    "measured_passes": 64,
+    "objects": 262144,
+    "paired_repeat_seed": true,
+    "randomized_case_order": true,
+    "repeats_per_case": 10,
+    "samples": 80,
+    "slot_bytes": 4096,
+    "types_per_truth": 8,
+    "warmup_passes": 4
+  },
+  "primary_sources": [
+    {
+      "name": "Linux Transparent Hugepage documentation",
+      "url": "https://docs.kernel.org/admin-guide/mm/transhuge.html"
+    },
+    {
+      "name": "Linux HugeTLB documentation",
+      "url": "https://docs.kernel.org/admin-guide/mm/hugetlbpage.html"
+    },
+    {
+      "name": "LLAMA ASPLOS 2020",
+      "url": "https://colinraffel.com/publications/asplos2020learning.pdf"
+    },
+    {
+      "name": "TEMERAIRE OSDI 2021",
+      "url": "https://www.usenix.org/system/files/osdi21-hunter.pdf"
+    },
+    {
+      "name": "TCMalloc warehouse-scale ASPLOS 2024",
+      "url": "https://people.csail.mit.edu/delimitrou/papers/2024.asplos.memory.pdf"
+    }
+  ],
+  "run_id": "lifetime-thp-final-20260714",
+  "schema_version": 1,
+  "source_commit": "8953cd000c71f781a7bb7337d4c35b189668cc3b"
+}
