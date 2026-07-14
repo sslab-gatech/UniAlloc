@@ -1,0 +1,9 @@
+4505056721;;cycles;4.31%;809406549;62.00;;
+2398651980;;instructions;0.44%;809458520;62.00;0.53;insn per cycle
+4888;;page-faults;0.01%;1294574262;100.00;;
+7072716;;ls_l1_d_tlb_miss.all;0.41%;808945871;62.00;;
+56279;;ls_l1_d_tlb_miss.all_l2_miss;2.78%;808688362;62.00;;
+6648190;;ls_l1_d_tlb_miss.tlb_reload_2m_l2_hit;0.34%;808781120;62.00;;
+12562;;ls_l1_d_tlb_miss.tlb_reload_2m_l2_miss;5.62%;809017912;62.00;;
+256877;;ls_l1_d_tlb_miss.tlb_reload_4k_l2_hit;6.03%;809133497;62.00;;
+30839;;ls_l1_d_tlb_miss.tlb_reload_4k_l2_miss;3.45%;809439479;62.00;;
