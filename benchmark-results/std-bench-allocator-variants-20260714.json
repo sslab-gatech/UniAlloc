@@ -1,0 +1,1491 @@
+{
+  "aggregates": [
+    {
+      "all_benchmark_count": 8,
+      "allocator": "unialloc",
+      "feature": "bench_ourself",
+      "geomean_median_ratio_vs_unialloc": 1.0,
+      "label": "UniAlloc",
+      "robust_benchmark_count": 8,
+      "robust_geomean_median_ratio_vs_unialloc": 1.0,
+      "variant": "bench_ourself"
+    },
+    {
+      "all_benchmark_count": 8,
+      "allocator": "ptmalloc",
+      "feature": "bench_ptmalloc",
+      "geomean_median_ratio_vs_unialloc": 0.8123278798848139,
+      "label": "ptmalloc",
+      "robust_benchmark_count": 8,
+      "robust_geomean_median_ratio_vs_unialloc": 0.8123278798848139,
+      "variant": "bench_ptmalloc"
+    },
+    {
+      "all_benchmark_count": 8,
+      "allocator": "jemalloc",
+      "feature": "bench_jemalloc",
+      "geomean_median_ratio_vs_unialloc": 0.8155772765676346,
+      "label": "jemalloc",
+      "robust_benchmark_count": 8,
+      "robust_geomean_median_ratio_vs_unialloc": 0.8155772765676346,
+      "variant": "bench_jemalloc"
+    },
+    {
+      "all_benchmark_count": 8,
+      "allocator": "mimalloc",
+      "feature": "bench_mimalloc",
+      "geomean_median_ratio_vs_unialloc": 0.772159175260127,
+      "label": "mimalloc",
+      "robust_benchmark_count": 8,
+      "robust_geomean_median_ratio_vs_unialloc": 0.772159175260127,
+      "variant": "bench_mimalloc"
+    },
+    {
+      "all_benchmark_count": 8,
+      "allocator": "tcmalloc",
+      "feature": "bench_tcmalloc",
+      "geomean_median_ratio_vs_unialloc": 0.7640646212784711,
+      "label": "TCMalloc",
+      "robust_benchmark_count": 8,
+      "robust_geomean_median_ratio_vs_unialloc": 0.7640646212784711,
+      "variant": "bench_tcmalloc"
+    },
+    {
+      "all_benchmark_count": 8,
+      "allocator": "snmalloc",
+      "feature": "bench_snmalloc",
+      "geomean_median_ratio_vs_unialloc": 0.7932436267249454,
+      "label": "snmalloc",
+      "robust_benchmark_count": 8,
+      "robust_geomean_median_ratio_vs_unialloc": 0.7932436267249454,
+      "variant": "bench_snmalloc"
+    },
+    {
+      "all_benchmark_count": 8,
+      "allocator": "scudo",
+      "feature": "bench_scudo",
+      "geomean_median_ratio_vs_unialloc": 0.8967793175890892,
+      "label": "Scudo",
+      "robust_benchmark_count": 8,
+      "robust_geomean_median_ratio_vs_unialloc": 0.8967793175890892,
+      "variant": "bench_scudo"
+    }
+  ],
+  "benchmarks": [
+    {
+      "id": "binary_heap::bench_from_vec",
+      "robustness_selected": true
+    },
+    {
+      "id": "btree::map::from_iter_rand_10_000",
+      "robustness_selected": true
+    },
+    {
+      "id": "btree::set::clone_10k_and_remove_half",
+      "robustness_selected": true
+    },
+    {
+      "id": "slice::random_inserts",
+      "robustness_selected": true
+    },
+    {
+      "id": "string::bench_push_char_one_byte",
+      "robustness_selected": true
+    },
+    {
+      "id": "vec::bench_from_elem_1000",
+      "robustness_selected": true
+    },
+    {
+      "id": "vec::bench_extend_1000_1000",
+      "robustness_selected": true
+    },
+    {
+      "id": "vec_deque::bench_grow_1025",
+      "robustness_selected": true
+    }
+  ],
+  "boundaries": [
+    "The result is a current-toolchain diagnostic over the selected std_bench leaves.",
+    "Each cell has exactly three measured fresh-process observations; min/max ranges are descriptive, not confidence intervals.",
+    "Ratios are computed after taking each cell median, so raw samples are never pooled across benchmarks.",
+    "The robustness subset follows the raw campaign summary and remains separate from the complete heatmap."
+  ],
+  "cells": [
+    {
+      "allocator": "unialloc",
+      "benchmark": "binary_heap::bench_from_vec",
+      "feature": "bench_ourself",
+      "mad_ns_per_iter": 12110.26000000001,
+      "max_ns_per_iter": 426501.65,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 414391.39,
+      "median_ratio_vs_unialloc": 1.0,
+      "min_ns_per_iter": 345319.45,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        345319.45,
+        414391.39,
+        426501.65
+      ],
+      "samples": 3,
+      "variant": "bench_ourself"
+    },
+    {
+      "allocator": "ptmalloc",
+      "benchmark": "binary_heap::bench_from_vec",
+      "feature": "bench_ptmalloc",
+      "mad_ns_per_iter": 61.220000000001164,
+      "max_ns_per_iter": 110180.67,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 109313.11,
+      "median_ratio_vs_unialloc": 0.26379194316754506,
+      "min_ns_per_iter": 109251.89,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        110180.67,
+        109251.89,
+        109313.11
+      ],
+      "samples": 3,
+      "variant": "bench_ptmalloc"
+    },
+    {
+      "allocator": "jemalloc",
+      "benchmark": "binary_heap::bench_from_vec",
+      "feature": "bench_jemalloc",
+      "mad_ns_per_iter": 73.34999999999127,
+      "max_ns_per_iter": 110067.0,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 109764.4,
+      "median_ratio_vs_unialloc": 0.264880986064889,
+      "min_ns_per_iter": 109691.05,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        109764.4,
+        109691.05,
+        110067.0
+      ],
+      "samples": 3,
+      "variant": "bench_jemalloc"
+    },
+    {
+      "allocator": "mimalloc",
+      "benchmark": "binary_heap::bench_from_vec",
+      "feature": "bench_mimalloc",
+      "mad_ns_per_iter": 357.52999999999884,
+      "max_ns_per_iter": 113373.76,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 109458.7,
+      "median_ratio_vs_unialloc": 0.26414327768730905,
+      "min_ns_per_iter": 109101.17,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        109101.17,
+        109458.7,
+        113373.76
+      ],
+      "samples": 3,
+      "variant": "bench_mimalloc"
+    },
+    {
+      "allocator": "tcmalloc",
+      "benchmark": "binary_heap::bench_from_vec",
+      "feature": "bench_tcmalloc",
+      "mad_ns_per_iter": 86.36000000000058,
+      "max_ns_per_iter": 109780.19,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 109298.45,
+      "median_ratio_vs_unialloc": 0.2637565659846359,
+      "min_ns_per_iter": 109212.09,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        109212.09,
+        109298.45,
+        109780.19
+      ],
+      "samples": 3,
+      "variant": "bench_tcmalloc"
+    },
+    {
+      "allocator": "snmalloc",
+      "benchmark": "binary_heap::bench_from_vec",
+      "feature": "bench_snmalloc",
+      "mad_ns_per_iter": 34.679999999993015,
+      "max_ns_per_iter": 109261.79,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 109227.11,
+      "median_ratio_vs_unialloc": 0.26358440989809173,
+      "min_ns_per_iter": 109103.4,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        109103.4,
+        109227.11,
+        109261.79
+      ],
+      "samples": 3,
+      "variant": "bench_snmalloc"
+    },
+    {
+      "allocator": "scudo",
+      "benchmark": "binary_heap::bench_from_vec",
+      "feature": "bench_scudo",
+      "mad_ns_per_iter": 270.70999999999185,
+      "max_ns_per_iter": 110852.19,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 109593.09,
+      "median_ratio_vs_unialloc": 0.2644675846184931,
+      "min_ns_per_iter": 109322.38,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        110852.19,
+        109322.38,
+        109593.09
+      ],
+      "samples": 3,
+      "variant": "bench_scudo"
+    },
+    {
+      "allocator": "unialloc",
+      "benchmark": "btree::map::from_iter_rand_10_000",
+      "feature": "bench_ourself",
+      "mad_ns_per_iter": 150.91999999999825,
+      "max_ns_per_iter": 129515.23,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 129024.17,
+      "median_ratio_vs_unialloc": 1.0,
+      "min_ns_per_iter": 128873.25,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        129515.23,
+        129024.17,
+        128873.25
+      ],
+      "samples": 3,
+      "variant": "bench_ourself"
+    },
+    {
+      "allocator": "ptmalloc",
+      "benchmark": "btree::map::from_iter_rand_10_000",
+      "feature": "bench_ptmalloc",
+      "mad_ns_per_iter": 81.13000000000466,
+      "max_ns_per_iter": 155476.72,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 151798.13,
+      "median_ratio_vs_unialloc": 1.1765092540413165,
+      "min_ns_per_iter": 151717.0,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        151798.13,
+        155476.72,
+        151717.0
+      ],
+      "samples": 3,
+      "variant": "bench_ptmalloc"
+    },
+    {
+      "allocator": "jemalloc",
+      "benchmark": "btree::map::from_iter_rand_10_000",
+      "feature": "bench_jemalloc",
+      "mad_ns_per_iter": 525.7700000000041,
+      "max_ns_per_iter": 128480.0,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 127954.23,
+      "median_ratio_vs_unialloc": 0.9917074452019339,
+      "min_ns_per_iter": 127328.67,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        128480.0,
+        127954.23,
+        127328.67
+      ],
+      "samples": 3,
+      "variant": "bench_jemalloc"
+    },
+    {
+      "allocator": "mimalloc",
+      "benchmark": "btree::map::from_iter_rand_10_000",
+      "feature": "bench_mimalloc",
+      "mad_ns_per_iter": 525.5500000000029,
+      "max_ns_per_iter": 120831.44,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 120305.89,
+      "median_ratio_vs_unialloc": 0.9324290944867152,
+      "min_ns_per_iter": 119635.11,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        119635.11,
+        120305.89,
+        120831.44
+      ],
+      "samples": 3,
+      "variant": "bench_mimalloc"
+    },
+    {
+      "allocator": "tcmalloc",
+      "benchmark": "btree::map::from_iter_rand_10_000",
+      "feature": "bench_tcmalloc",
+      "mad_ns_per_iter": 21.5,
+      "max_ns_per_iter": 122122.03,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 122100.53,
+      "median_ratio_vs_unialloc": 0.9463384263584103,
+      "min_ns_per_iter": 119408.43,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        122100.53,
+        119408.43,
+        122122.03
+      ],
+      "samples": 3,
+      "variant": "bench_tcmalloc"
+    },
+    {
+      "allocator": "snmalloc",
+      "benchmark": "btree::map::from_iter_rand_10_000",
+      "feature": "bench_snmalloc",
+      "mad_ns_per_iter": 551.8000000000029,
+      "max_ns_per_iter": 120142.87,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 119227.47,
+      "median_ratio_vs_unialloc": 0.9240708155688969,
+      "min_ns_per_iter": 118675.67,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        120142.87,
+        118675.67,
+        119227.47
+      ],
+      "samples": 3,
+      "variant": "bench_snmalloc"
+    },
+    {
+      "allocator": "scudo",
+      "benchmark": "btree::map::from_iter_rand_10_000",
+      "feature": "bench_scudo",
+      "mad_ns_per_iter": 843.2900000000081,
+      "max_ns_per_iter": 142240.45,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 141397.16,
+      "median_ratio_vs_unialloc": 1.0958966835438664,
+      "min_ns_per_iter": 139209.55,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        141397.16,
+        139209.55,
+        142240.45
+      ],
+      "samples": 3,
+      "variant": "bench_scudo"
+    },
+    {
+      "allocator": "unialloc",
+      "benchmark": "btree::set::clone_10k_and_remove_half",
+      "feature": "bench_ourself",
+      "mad_ns_per_iter": 717.7599999999948,
+      "max_ns_per_iter": 126015.14,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 122480.79,
+      "median_ratio_vs_unialloc": 1.0,
+      "min_ns_per_iter": 121763.03,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        126015.14,
+        122480.79,
+        121763.03
+      ],
+      "samples": 3,
+      "variant": "bench_ourself"
+    },
+    {
+      "allocator": "ptmalloc",
+      "benchmark": "btree::set::clone_10k_and_remove_half",
+      "feature": "bench_ptmalloc",
+      "mad_ns_per_iter": 675.2099999999919,
+      "max_ns_per_iter": 121172.34,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 119923.29,
+      "median_ratio_vs_unialloc": 0.979119174525246,
+      "min_ns_per_iter": 119248.08,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        121172.34,
+        119923.29,
+        119248.08
+      ],
+      "samples": 3,
+      "variant": "bench_ptmalloc"
+    },
+    {
+      "allocator": "jemalloc",
+      "benchmark": "btree::set::clone_10k_and_remove_half",
+      "feature": "bench_jemalloc",
+      "mad_ns_per_iter": 583.859999999986,
+      "max_ns_per_iter": 138772.43,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 138188.57,
+      "median_ratio_vs_unialloc": 1.128246886715868,
+      "min_ns_per_iter": 133498.24,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        138772.43,
+        138188.57,
+        133498.24
+      ],
+      "samples": 3,
+      "variant": "bench_jemalloc"
+    },
+    {
+      "allocator": "mimalloc",
+      "benchmark": "btree::set::clone_10k_and_remove_half",
+      "feature": "bench_mimalloc",
+      "mad_ns_per_iter": 466.77999999999884,
+      "max_ns_per_iter": 117150.8,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 116413.73,
+      "median_ratio_vs_unialloc": 0.9504652117283046,
+      "min_ns_per_iter": 115946.95,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        116413.73,
+        115946.95,
+        117150.8
+      ],
+      "samples": 3,
+      "variant": "bench_mimalloc"
+    },
+    {
+      "allocator": "tcmalloc",
+      "benchmark": "btree::set::clone_10k_and_remove_half",
+      "feature": "bench_tcmalloc",
+      "mad_ns_per_iter": 1123.729999999996,
+      "max_ns_per_iter": 121415.94,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 120292.21,
+      "median_ratio_vs_unialloc": 0.9821312387028204,
+      "min_ns_per_iter": 118073.38,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        118073.38,
+        121415.94,
+        120292.21
+      ],
+      "samples": 3,
+      "variant": "bench_tcmalloc"
+    },
+    {
+      "allocator": "snmalloc",
+      "benchmark": "btree::set::clone_10k_and_remove_half",
+      "feature": "bench_snmalloc",
+      "mad_ns_per_iter": 1708.5199999999895,
+      "max_ns_per_iter": 132642.13,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 129703.29,
+      "median_ratio_vs_unialloc": 1.0589684308861822,
+      "min_ns_per_iter": 127994.77,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        132642.13,
+        127994.77,
+        129703.29
+      ],
+      "samples": 3,
+      "variant": "bench_snmalloc"
+    },
+    {
+      "allocator": "scudo",
+      "benchmark": "btree::set::clone_10k_and_remove_half",
+      "feature": "bench_scudo",
+      "mad_ns_per_iter": 818.929999999993,
+      "max_ns_per_iter": 187895.36,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 187076.43,
+      "median_ratio_vs_unialloc": 1.5273940509364774,
+      "min_ns_per_iter": 181204.46,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        187895.36,
+        187076.43,
+        181204.46
+      ],
+      "samples": 3,
+      "variant": "bench_scudo"
+    },
+    {
+      "allocator": "unialloc",
+      "benchmark": "slice::random_inserts",
+      "feature": "bench_ourself",
+      "mad_ns_per_iter": 12.459999999999809,
+      "max_ns_per_iter": 1886.12,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1726.1,
+      "median_ratio_vs_unialloc": 1.0,
+      "min_ns_per_iter": 1713.64,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1886.12,
+        1713.64,
+        1726.1
+      ],
+      "samples": 3,
+      "variant": "bench_ourself"
+    },
+    {
+      "allocator": "ptmalloc",
+      "benchmark": "slice::random_inserts",
+      "feature": "bench_ptmalloc",
+      "mad_ns_per_iter": 2.8900000000001,
+      "max_ns_per_iter": 1750.3,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1693.48,
+      "median_ratio_vs_unialloc": 0.9811019060309368,
+      "min_ns_per_iter": 1690.59,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1690.59,
+        1693.48,
+        1750.3
+      ],
+      "samples": 3,
+      "variant": "bench_ptmalloc"
+    },
+    {
+      "allocator": "jemalloc",
+      "benchmark": "slice::random_inserts",
+      "feature": "bench_jemalloc",
+      "mad_ns_per_iter": 23.960000000000036,
+      "max_ns_per_iter": 1786.25,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1762.29,
+      "median_ratio_vs_unialloc": 1.0209663403047333,
+      "min_ns_per_iter": 1737.52,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1786.25,
+        1737.52,
+        1762.29
+      ],
+      "samples": 3,
+      "variant": "bench_jemalloc"
+    },
+    {
+      "allocator": "mimalloc",
+      "benchmark": "slice::random_inserts",
+      "feature": "bench_mimalloc",
+      "mad_ns_per_iter": 0.7699999999999818,
+      "max_ns_per_iter": 1738.34,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1696.5,
+      "median_ratio_vs_unialloc": 0.9828515149759575,
+      "min_ns_per_iter": 1695.73,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1738.34,
+        1696.5,
+        1695.73
+      ],
+      "samples": 3,
+      "variant": "bench_mimalloc"
+    },
+    {
+      "allocator": "tcmalloc",
+      "benchmark": "slice::random_inserts",
+      "feature": "bench_tcmalloc",
+      "mad_ns_per_iter": 20.700000000000045,
+      "max_ns_per_iter": 1900.56,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1668.22,
+      "median_ratio_vs_unialloc": 0.9664677596894734,
+      "min_ns_per_iter": 1647.52,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1900.56,
+        1647.52,
+        1668.22
+      ],
+      "samples": 3,
+      "variant": "bench_tcmalloc"
+    },
+    {
+      "allocator": "snmalloc",
+      "benchmark": "slice::random_inserts",
+      "feature": "bench_snmalloc",
+      "mad_ns_per_iter": 10.25,
+      "max_ns_per_iter": 1716.28,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1677.28,
+      "median_ratio_vs_unialloc": 0.9717165865245351,
+      "min_ns_per_iter": 1667.03,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1677.28,
+        1667.03,
+        1716.28
+      ],
+      "samples": 3,
+      "variant": "bench_snmalloc"
+    },
+    {
+      "allocator": "scudo",
+      "benchmark": "slice::random_inserts",
+      "feature": "bench_scudo",
+      "mad_ns_per_iter": 14.730000000000018,
+      "max_ns_per_iter": 1837.16,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1822.43,
+      "median_ratio_vs_unialloc": 1.055807890620474,
+      "min_ns_per_iter": 1805.37,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1837.16,
+        1822.43,
+        1805.37
+      ],
+      "samples": 3,
+      "variant": "bench_scudo"
+    },
+    {
+      "allocator": "unialloc",
+      "benchmark": "string::bench_push_char_one_byte",
+      "feature": "bench_ourself",
+      "mad_ns_per_iter": 35.07999999999993,
+      "max_ns_per_iter": 11477.58,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 11442.5,
+      "median_ratio_vs_unialloc": 1.0,
+      "min_ns_per_iter": 11336.3,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        11442.5,
+        11336.3,
+        11477.58
+      ],
+      "samples": 3,
+      "variant": "bench_ourself"
+    },
+    {
+      "allocator": "ptmalloc",
+      "benchmark": "string::bench_push_char_one_byte",
+      "feature": "bench_ptmalloc",
+      "mad_ns_per_iter": 48.70000000000073,
+      "max_ns_per_iter": 11118.23,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 11053.04,
+      "median_ratio_vs_unialloc": 0.9659637317019882,
+      "min_ns_per_iter": 11004.34,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        11004.34,
+        11118.23,
+        11053.04
+      ],
+      "samples": 3,
+      "variant": "bench_ptmalloc"
+    },
+    {
+      "allocator": "jemalloc",
+      "benchmark": "string::bench_push_char_one_byte",
+      "feature": "bench_jemalloc",
+      "mad_ns_per_iter": 7.610000000000582,
+      "max_ns_per_iter": 11173.94,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 11149.49,
+      "median_ratio_vs_unialloc": 0.9743928337338869,
+      "min_ns_per_iter": 11141.88,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        11141.88,
+        11149.49,
+        11173.94
+      ],
+      "samples": 3,
+      "variant": "bench_jemalloc"
+    },
+    {
+      "allocator": "mimalloc",
+      "benchmark": "string::bench_push_char_one_byte",
+      "feature": "bench_mimalloc",
+      "mad_ns_per_iter": 52.19000000000051,
+      "max_ns_per_iter": 11132.76,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 11080.57,
+      "median_ratio_vs_unialloc": 0.9683696744592527,
+      "min_ns_per_iter": 11022.98,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        11132.76,
+        11022.98,
+        11080.57
+      ],
+      "samples": 3,
+      "variant": "bench_mimalloc"
+    },
+    {
+      "allocator": "tcmalloc",
+      "benchmark": "string::bench_push_char_one_byte",
+      "feature": "bench_tcmalloc",
+      "mad_ns_per_iter": 1.2900000000008731,
+      "max_ns_per_iter": 11036.9,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 11003.12,
+      "median_ratio_vs_unialloc": 0.9616010487218702,
+      "min_ns_per_iter": 11001.83,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        11001.83,
+        11003.12,
+        11036.9
+      ],
+      "samples": 3,
+      "variant": "bench_tcmalloc"
+    },
+    {
+      "allocator": "snmalloc",
+      "benchmark": "string::bench_push_char_one_byte",
+      "feature": "bench_snmalloc",
+      "mad_ns_per_iter": 16.659999999999854,
+      "max_ns_per_iter": 11189.42,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 11090.99,
+      "median_ratio_vs_unialloc": 0.9692803146165611,
+      "min_ns_per_iter": 11074.33,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        11189.42,
+        11074.33,
+        11090.99
+      ],
+      "samples": 3,
+      "variant": "bench_snmalloc"
+    },
+    {
+      "allocator": "scudo",
+      "benchmark": "string::bench_push_char_one_byte",
+      "feature": "bench_scudo",
+      "mad_ns_per_iter": 4.289999999999054,
+      "max_ns_per_iter": 11311.76,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 11292.14,
+      "median_ratio_vs_unialloc": 0.986859514966135,
+      "min_ns_per_iter": 11287.85,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        11287.85,
+        11311.76,
+        11292.14
+      ],
+      "samples": 3,
+      "variant": "bench_scudo"
+    },
+    {
+      "allocator": "unialloc",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_ourself",
+      "mad_ns_per_iter": 0.3299999999999841,
+      "max_ns_per_iter": 152.03,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 151.42,
+      "median_ratio_vs_unialloc": 1.0,
+      "min_ns_per_iter": 151.09,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        151.42,
+        151.09,
+        152.03
+      ],
+      "samples": 3,
+      "variant": "bench_ourself"
+    },
+    {
+      "allocator": "ptmalloc",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_ptmalloc",
+      "mad_ns_per_iter": 0.1599999999999966,
+      "max_ns_per_iter": 149.65,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 149.37,
+      "median_ratio_vs_unialloc": 0.9864614978206314,
+      "min_ns_per_iter": 149.21,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        149.37,
+        149.65,
+        149.21
+      ],
+      "samples": 3,
+      "variant": "bench_ptmalloc"
+    },
+    {
+      "allocator": "jemalloc",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_jemalloc",
+      "mad_ns_per_iter": 0.10999999999998522,
+      "max_ns_per_iter": 137.69,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 137.58,
+      "median_ratio_vs_unialloc": 0.9085985999207504,
+      "min_ns_per_iter": 136.08,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        136.08,
+        137.69,
+        137.58
+      ],
+      "samples": 3,
+      "variant": "bench_jemalloc"
+    },
+    {
+      "allocator": "mimalloc",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_mimalloc",
+      "mad_ns_per_iter": 0.18000000000000682,
+      "max_ns_per_iter": 134.02,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 133.84,
+      "median_ratio_vs_unialloc": 0.8838990886276583,
+      "min_ns_per_iter": 133.59,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        133.84,
+        134.02,
+        133.59
+      ],
+      "samples": 3,
+      "variant": "bench_mimalloc"
+    },
+    {
+      "allocator": "tcmalloc",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_tcmalloc",
+      "mad_ns_per_iter": 0.03999999999999204,
+      "max_ns_per_iter": 132.88,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 132.84,
+      "median_ratio_vs_unialloc": 0.8772949412230882,
+      "min_ns_per_iter": 132.64,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        132.64,
+        132.84,
+        132.88
+      ],
+      "samples": 3,
+      "variant": "bench_tcmalloc"
+    },
+    {
+      "allocator": "snmalloc",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_snmalloc",
+      "mad_ns_per_iter": 0.009999999999990905,
+      "max_ns_per_iter": 134.89,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 134.87,
+      "median_ratio_vs_unialloc": 0.8907013604543654,
+      "min_ns_per_iter": 134.86,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        134.87,
+        134.86,
+        134.89
+      ],
+      "samples": 3,
+      "variant": "bench_snmalloc"
+    },
+    {
+      "allocator": "scudo",
+      "benchmark": "vec::bench_from_elem_1000",
+      "feature": "bench_scudo",
+      "mad_ns_per_iter": 0.01999999999998181,
+      "max_ns_per_iter": 153.61,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 153.32,
+      "median_ratio_vs_unialloc": 1.0125478800686831,
+      "min_ns_per_iter": 153.3,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        153.3,
+        153.32,
+        153.61
+      ],
+      "samples": 3,
+      "variant": "bench_scudo"
+    },
+    {
+      "allocator": "unialloc",
+      "benchmark": "vec::bench_extend_1000_1000",
+      "feature": "bench_ourself",
+      "mad_ns_per_iter": 1.419999999999959,
+      "max_ns_per_iter": 668.71,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 638.3,
+      "median_ratio_vs_unialloc": 1.0,
+      "min_ns_per_iter": 636.88,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        638.3,
+        636.88,
+        668.71
+      ],
+      "samples": 3,
+      "variant": "bench_ourself"
+    },
+    {
+      "allocator": "ptmalloc",
+      "benchmark": "vec::bench_extend_1000_1000",
+      "feature": "bench_ptmalloc",
+      "mad_ns_per_iter": 0.0,
+      "max_ns_per_iter": 470.16,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 469.87,
+      "median_ratio_vs_unialloc": 0.7361272129092904,
+      "min_ns_per_iter": 469.87,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        469.87,
+        470.16,
+        469.87
+      ],
+      "samples": 3,
+      "variant": "bench_ptmalloc"
+    },
+    {
+      "allocator": "jemalloc",
+      "benchmark": "vec::bench_extend_1000_1000",
+      "feature": "bench_jemalloc",
+      "mad_ns_per_iter": 37.07000000000005,
+      "max_ns_per_iter": 523.72,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 486.65,
+      "median_ratio_vs_unialloc": 0.7624157919473602,
+      "min_ns_per_iter": 425.09,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        425.09,
+        486.65,
+        523.72
+      ],
+      "samples": 3,
+      "variant": "bench_jemalloc"
+    },
+    {
+      "allocator": "mimalloc",
+      "benchmark": "vec::bench_extend_1000_1000",
+      "feature": "bench_mimalloc",
+      "mad_ns_per_iter": 1.5199999999999818,
+      "max_ns_per_iter": 443.38,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 439.45,
+      "median_ratio_vs_unialloc": 0.6884693717687608,
+      "min_ns_per_iter": 437.93,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        443.38,
+        437.93,
+        439.45
+      ],
+      "samples": 3,
+      "variant": "bench_mimalloc"
+    },
+    {
+      "allocator": "tcmalloc",
+      "benchmark": "vec::bench_extend_1000_1000",
+      "feature": "bench_tcmalloc",
+      "mad_ns_per_iter": 2.0500000000000114,
+      "max_ns_per_iter": 419.26,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 414.42,
+      "median_ratio_vs_unialloc": 0.6492558358138807,
+      "min_ns_per_iter": 412.37,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        414.42,
+        419.26,
+        412.37
+      ],
+      "samples": 3,
+      "variant": "bench_tcmalloc"
+    },
+    {
+      "allocator": "snmalloc",
+      "benchmark": "vec::bench_extend_1000_1000",
+      "feature": "bench_snmalloc",
+      "mad_ns_per_iter": 0.09000000000003183,
+      "max_ns_per_iter": 500.17,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 500.08,
+      "median_ratio_vs_unialloc": 0.7834560551464829,
+      "min_ns_per_iter": 495.94,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        495.94,
+        500.17,
+        500.08
+      ],
+      "samples": 3,
+      "variant": "bench_snmalloc"
+    },
+    {
+      "allocator": "scudo",
+      "benchmark": "vec::bench_extend_1000_1000",
+      "feature": "bench_scudo",
+      "mad_ns_per_iter": 2.339999999999975,
+      "max_ns_per_iter": 506.19,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 503.85,
+      "median_ratio_vs_unialloc": 0.7893623687921041,
+      "min_ns_per_iter": 492.25,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        492.25,
+        506.19,
+        503.85
+      ],
+      "samples": 3,
+      "variant": "bench_scudo"
+    },
+    {
+      "allocator": "unialloc",
+      "benchmark": "vec_deque::bench_grow_1025",
+      "feature": "bench_ourself",
+      "mad_ns_per_iter": 2.240000000000009,
+      "max_ns_per_iter": 1208.29,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1192.04,
+      "median_ratio_vs_unialloc": 1.0,
+      "min_ns_per_iter": 1189.8,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1189.8,
+        1192.04,
+        1208.29
+      ],
+      "samples": 3,
+      "variant": "bench_ourself"
+    },
+    {
+      "allocator": "ptmalloc",
+      "benchmark": "vec_deque::bench_grow_1025",
+      "feature": "bench_ptmalloc",
+      "mad_ns_per_iter": 0.8099999999999454,
+      "max_ns_per_iter": 1081.6,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1080.79,
+      "median_ratio_vs_unialloc": 0.9066725948793665,
+      "min_ns_per_iter": 1075.8,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1075.8,
+        1080.79,
+        1081.6
+      ],
+      "samples": 3,
+      "variant": "bench_ptmalloc"
+    },
+    {
+      "allocator": "jemalloc",
+      "benchmark": "vec_deque::bench_grow_1025",
+      "feature": "bench_jemalloc",
+      "mad_ns_per_iter": 0.43000000000006366,
+      "max_ns_per_iter": 1176.28,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1142.52,
+      "median_ratio_vs_unialloc": 0.9584577698734942,
+      "min_ns_per_iter": 1142.09,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1142.52,
+        1176.28,
+        1142.09
+      ],
+      "samples": 3,
+      "variant": "bench_jemalloc"
+    },
+    {
+      "allocator": "mimalloc",
+      "benchmark": "vec_deque::bench_grow_1025",
+      "feature": "bench_mimalloc",
+      "mad_ns_per_iter": 1.3999999999998636,
+      "max_ns_per_iter": 1114.11,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1111.06,
+      "median_ratio_vs_unialloc": 0.9320660380524143,
+      "min_ns_per_iter": 1109.66,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1109.66,
+        1114.11,
+        1111.06
+      ],
+      "samples": 3,
+      "variant": "bench_mimalloc"
+    },
+    {
+      "allocator": "tcmalloc",
+      "benchmark": "vec_deque::bench_grow_1025",
+      "feature": "bench_tcmalloc",
+      "mad_ns_per_iter": 1.3299999999999272,
+      "max_ns_per_iter": 1081.18,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1067.01,
+      "median_ratio_vs_unialloc": 0.8951125801147612,
+      "min_ns_per_iter": 1065.68,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1067.01,
+        1065.68,
+        1081.18
+      ],
+      "samples": 3,
+      "variant": "bench_tcmalloc"
+    },
+    {
+      "allocator": "snmalloc",
+      "benchmark": "vec_deque::bench_grow_1025",
+      "feature": "bench_snmalloc",
+      "mad_ns_per_iter": 1.599999999999909,
+      "max_ns_per_iter": 1154.17,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1102.3,
+      "median_ratio_vs_unialloc": 0.9247172913660615,
+      "min_ns_per_iter": 1100.7,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1154.17,
+        1100.7,
+        1102.3
+      ],
+      "samples": 3,
+      "variant": "bench_snmalloc"
+    },
+    {
+      "allocator": "scudo",
+      "benchmark": "vec_deque::bench_grow_1025",
+      "feature": "bench_scudo",
+      "mad_ns_per_iter": 9.539999999999964,
+      "max_ns_per_iter": 1367.86,
+      "measured_rounds": [
+        1,
+        2,
+        3
+      ],
+      "median_ns_per_iter": 1352.54,
+      "median_ratio_vs_unialloc": 1.134643132780779,
+      "min_ns_per_iter": 1343.0,
+      "robustness_selected": true,
+      "sample_ns_per_iter": [
+        1343.0,
+        1352.54,
+        1367.86
+      ],
+      "samples": 3,
+      "variant": "bench_scudo"
+    }
+  ],
+  "claim_grade": false,
+  "diagnostic_label": "current-toolchain allocation-heavy std_bench subset; non-paper-exact",
+  "generated_utc": "2026-07-14T22:06:03.531197+00:00",
+  "input_artifacts": {
+    "records": {
+      "bytes": 580091,
+      "path": "evaluation/raw/std-bench-allocator-variants-20260714/records.jsonl",
+      "sha256": "9d053ffa083d06a6f2411f34df0e9b400a79ffc8f0315f9b9a600479f34a86fc"
+    },
+    "summary": {
+      "bytes": 41461,
+      "path": "evaluation/raw/std-bench-allocator-variants-20260714/summary.json",
+      "sha256": "45798ca59f28870cb282f28385409e747013db66129966953b29c30cfd406f64"
+    }
+  },
+  "methodology": {
+    "aggregate_statistic": "geometric mean of per-benchmark cell-median ratios versus UniAlloc",
+    "cell_statistic": "median ns/iter of exactly 3 measured fresh-process samples",
+    "direction": "lower is faster",
+    "dispersion": "median absolute deviation (MAD), minimum, and maximum of the same 3 samples",
+    "measured_fresh_processes_per_cell": 3,
+    "reference_allocator": "unialloc",
+    "reference_feature": "bench_ourself",
+    "warmup_fresh_processes_per_cell": 1
+  },
+  "robustness_selection": {
+    "rule": "all benchmark cells",
+    "selected_benchmarks": [
+      "binary_heap::bench_from_vec",
+      "btree::map::from_iter_rand_10_000",
+      "btree::set::clone_10k_and_remove_half",
+      "slice::random_inserts",
+      "string::bench_push_char_one_byte",
+      "vec::bench_from_elem_1000",
+      "vec::bench_extend_1000_1000",
+      "vec_deque::bench_grow_1025"
+    ],
+    "selected_count": 8,
+    "threshold_ns_per_iter": null
+  },
+  "schema_version": 1,
+  "source": "rust-std-bench-allocator-feature-variant-medians",
+  "success": true,
+  "variants": [
+    {
+      "allocator": "unialloc",
+      "feature": "bench_ourself",
+      "id": "bench_ourself",
+      "label": "UniAlloc"
+    },
+    {
+      "allocator": "ptmalloc",
+      "feature": "bench_ptmalloc",
+      "id": "bench_ptmalloc",
+      "label": "ptmalloc"
+    },
+    {
+      "allocator": "jemalloc",
+      "feature": "bench_jemalloc",
+      "id": "bench_jemalloc",
+      "label": "jemalloc"
+    },
+    {
+      "allocator": "mimalloc",
+      "feature": "bench_mimalloc",
+      "id": "bench_mimalloc",
+      "label": "mimalloc"
+    },
+    {
+      "allocator": "tcmalloc",
+      "feature": "bench_tcmalloc",
+      "id": "bench_tcmalloc",
+      "label": "TCMalloc"
+    },
+    {
+      "allocator": "snmalloc",
+      "feature": "bench_snmalloc",
+      "id": "bench_snmalloc",
+      "label": "snmalloc"
+    },
+    {
+      "allocator": "scudo",
+      "feature": "bench_scudo",
+      "id": "bench_scudo",
+      "label": "Scudo"
+    }
+  ]
+}

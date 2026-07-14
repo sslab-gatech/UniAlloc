@@ -1,0 +1,57 @@
+{
+  "generated_artifacts": [
+    {
+      "bytes": 38634,
+      "path": "benchmark-results/std-bench-allocator-variants-20260714.json",
+      "sha256": "60f6b9be7dbd4c3d8b3f2310802c7e3d20c0f7c401364e57c1fe0959d48a437f"
+    },
+    {
+      "bytes": 35004,
+      "path": "docs/figures/std-bench-allocator-variants-20260714/std-bench-allocator-variants.csv",
+      "sha256": "8b2a6f662d36a5dad7add20223d21b6349517086baa2fbb50928715f97a0a40b"
+    },
+    {
+      "bytes": 53282,
+      "path": "docs/figures/std-bench-allocator-variants-20260714/allocator-variant-microbench.svg",
+      "sha256": "29abd8c2a7af2a79c3bd080e82fa3903d2835387df6cdbe1e8a88c1c8454cb53"
+    },
+    {
+      "bytes": 302583,
+      "path": "docs/figures/std-bench-allocator-variants-20260714/allocator-variant-microbench.png",
+      "sha256": "9e3407e25fef8f08bd81426b6da494503df5b47389119a85cbdf9c63c6709867"
+    }
+  ],
+  "generator": {
+    "figure_size_inches": {
+      "height": 10,
+      "width": 18
+    },
+    "path": "evaluation/scripts/plot_std_bench_allocator_variants.py",
+    "png_dimensions": {
+      "height": 1500,
+      "width": 2700
+    },
+    "renderer": "Matplotlib 3.11.0",
+    "sha256": "824a21ee747f79fac870c7e75623e5c24bf696a006145dedde563dece0f7dfa9"
+  },
+  "matrix": {
+    "allocator_feature_variants": 7,
+    "benchmarks": 8,
+    "measured_fresh_processes_per_cell": 3,
+    "measured_processes": 168
+  },
+  "schema_version": 1,
+  "source": "rust-std-bench-allocator-feature-variant-artifacts",
+  "source_artifacts": [
+    {
+      "bytes": 41461,
+      "path": "evaluation/raw/std-bench-allocator-variants-20260714/summary.json",
+      "sha256": "45798ca59f28870cb282f28385409e747013db66129966953b29c30cfd406f64"
+    },
+    {
+      "bytes": 580091,
+      "path": "evaluation/raw/std-bench-allocator-variants-20260714/records.jsonl",
+      "sha256": "9d053ffa083d06a6f2411f34df0e9b400a79ffc8f0315f9b9a600479f34a86fc"
+    }
+  ]
+}
