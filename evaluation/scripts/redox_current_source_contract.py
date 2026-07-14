@@ -18,7 +18,7 @@ from typing import Any, Dict, Iterable, Optional, Sequence, Set, Tuple
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULT_TARGET = "x86_64-unknown-redox"
-DEFAULT_FEATURES = "fixed_heap,allow_mem_leak,stats"
+DEFAULT_FEATURES = "fixed_heap,allow_mem_leak,stats,type_isolation"
 # Mirrors the constrained-platform ABI surface audited by evaluate.py.
 REQUIRED_C_ABI_SYMBOLS = (
     "unialloc_fixed_heap_try_init",

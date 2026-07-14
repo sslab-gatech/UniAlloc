@@ -8729,7 +8729,12 @@ fn metadata_record_integrity_auth(
     layout: Layout,
     metadata: AllocationMetadata,
 ) -> u64 {
-    derive_metadata_record_auth(ptr, layout, metadata)
+    let auth = derive_metadata_record_auth(ptr, layout, metadata);
+    #[cfg(all(feature = "pac", not(target_arch = "aarch64")))]
+    if metadata.requests(FLAG_POINTER_AUTH) {
+        record_stats_metadata_pac_software_fallback_sign();
+    }
+    auth
 }
 
 #[cfg(all(feature = "pac", target_arch = "aarch64"))]
@@ -8755,7 +8760,12 @@ fn metadata_record_integrity_auth_valid(
     metadata: AllocationMetadata,
     auth: u64,
 ) -> bool {
-    auth == derive_metadata_record_auth(ptr, layout, metadata)
+    let valid = auth == derive_metadata_record_auth(ptr, layout, metadata);
+    #[cfg(all(feature = "pac", not(target_arch = "aarch64")))]
+    if metadata.requests(FLAG_POINTER_AUTH) {
+        record_stats_metadata_pac_software_fallback_verification(valid);
+    }
+    valid
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -13513,7 +13523,7 @@ fn record_stats_metadata_pac_auth_verification(valid: bool) {
     }
 }
 
-#[cfg(all(feature = "pac", target_arch = "aarch64"))]
+#[cfg(feature = "pac")]
 #[inline]
 fn record_stats_metadata_pac_software_fallback_sign() {
     if semantic_stats_recording_enabled() {
@@ -13521,7 +13531,7 @@ fn record_stats_metadata_pac_software_fallback_sign() {
     }
 }
 
-#[cfg(all(feature = "pac", target_arch = "aarch64"))]
+#[cfg(feature = "pac")]
 #[inline]
 fn record_stats_metadata_pac_software_fallback_verification(valid: bool) {
     if semantic_stats_recording_enabled() {
@@ -16879,17 +16889,18 @@ mod tests {
             1
         );
         let fallback_after = semantic_fallback_attribution_snapshot();
+        let expected_raw_realloc_attribution = usize::from(!cfg!(feature = "quarantine"));
         assert_eq!(
             fallback_after
                 .raw_realloc_no_metadata
                 .saturating_sub(fallback_before.raw_realloc_no_metadata),
-            1
+            expected_raw_realloc_attribution
         );
         assert_eq!(
             fallback_after
                 .raw_realloc_moved_dealloc_no_metadata
                 .saturating_sub(fallback_before.raw_realloc_moved_dealloc_no_metadata),
-            1
+            expected_raw_realloc_attribution
         );
         assert_eq!(
             fallback_after
@@ -30832,6 +30843,43 @@ mod tests {
         semantic_stats_recording_disable();
     }
 
+    #[cfg(all(feature = "stats", feature = "pac", not(target_arch = "aarch64")))]
+    #[test]
+    fn non_aarch64_pointer_auth_records_software_fallback_operations() {
+        let _guard = test_guard();
+        semantic_stats_reset();
+
+        let ptr = crate::PAGE_SIZE as *mut u8;
+        let layout = Layout::from_size_align(4 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let authenticated = AllocationMetadata::for_type(0xA17C_0006)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_POINTER_AUTH);
+        let unrequested = AllocationMetadata::for_type(0xA17C_0007)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_PROTECTION);
+
+        let auth = metadata_record_integrity_auth(ptr, layout, authenticated);
+        assert!(metadata_record_integrity_auth_valid(
+            ptr,
+            layout,
+            authenticated,
+            auth
+        ));
+        let unrequested_auth = metadata_record_integrity_auth(ptr, layout, unrequested);
+        assert!(metadata_record_integrity_auth_valid(
+            ptr,
+            layout,
+            unrequested,
+            unrequested_auth
+        ));
+
+        let snap = semantic_stats_snapshot();
+        assert_eq!(snap.metadata_pac_auth_signs, 0);
+        assert_eq!(snap.metadata_pac_auth_verifications, 0);
+        assert_eq!(snap.metadata_pac_software_fallback_signs, 1);
+        assert_eq!(snap.metadata_pac_software_fallback_verifications, 1);
+        assert_eq!(snap.metadata_pac_software_fallback_failures, 0);
+        semantic_stats_recording_disable();
+    }
+
     #[cfg(all(feature = "pac", target_arch = "aarch64"))]
     #[test]
     fn metadata_pointer_auth_uses_aarch64_pac_or_safe_hash_fallback() {
@@ -32258,6 +32306,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "quarantine"))]
     #[test]
     fn global_allocator_inactive_lifecycle_fast_paths_preserve_realloc_contract() {
         let _guard = test_guard();
@@ -32332,6 +32381,91 @@ mod tests {
             TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.load(Ordering::Relaxed),
             admissions_before,
             "inactive GlobalAlloc operations should not enter lifecycle admission"
+        );
+    }
+
+    #[cfg(all(feature = "stats", not(feature = "quarantine")))]
+    #[test]
+    fn stats_only_global_realloc_keeps_inactive_lifecycle_untracked() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            for offset in 0..layout.size() {
+                ptr.add(offset).write((offset as u8).wrapping_mul(19));
+            }
+        }
+
+        let moved_size = 192;
+        let moved = unsafe { GlobalAlloc::realloc(&alloc, ptr, layout, moved_size) };
+        assert!(!moved.is_null());
+        unsafe {
+            for offset in 0..layout.size() {
+                assert_eq!(moved.add(offset).read(), (offset as u8).wrapping_mul(19));
+            }
+        }
+        assert!(semantic_stats_recording_enabled());
+        assert!(semantic_stats_snapshot().total_allocations >= 2);
+        assert!(
+            !global_address_lifecycle_tracking_active(),
+            "stats-only raw realloc must not activate semantic lifecycle ownership"
+        );
+
+        let moved_layout = Layout::from_size_align(moved_size, layout.align()).unwrap();
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, moved, moved_layout);
+        }
+
+        let aligned_layout = Layout::from_size_align(80, align_of::<usize>()).unwrap();
+        let aligned_ptr = unsafe { GlobalAlloc::alloc(&alloc, aligned_layout) };
+        assert!(!aligned_ptr.is_null());
+        unsafe {
+            for offset in 0..aligned_layout.size() {
+                aligned_ptr
+                    .add(offset)
+                    .write((offset as u8).wrapping_mul(23));
+            }
+        }
+        let grown_layout = Layout::from_size_align(320, 64).unwrap();
+        let grown = unsafe {
+            core::alloc::Allocator::grow(
+                &alloc,
+                core::ptr::NonNull::new(aligned_ptr).unwrap(),
+                aligned_layout,
+                grown_layout,
+            )
+        }
+        .expect("stats-only alignment-changing grow");
+        let grown_ptr = grown.as_ptr() as *mut u8;
+        assert_eq!(grown_ptr as usize % grown_layout.align(), 0);
+        unsafe {
+            for offset in 0..aligned_layout.size() {
+                assert_eq!(
+                    grown_ptr.add(offset).read(),
+                    (offset as u8).wrapping_mul(23)
+                );
+            }
+            core::alloc::Allocator::deallocate(
+                &alloc,
+                core::ptr::NonNull::new(grown_ptr).unwrap(),
+                grown_layout,
+            );
+        }
+        assert!(
+            !global_address_lifecycle_tracking_active(),
+            "stats-only alignment-changing grow must keep semantic lifecycle inactive"
         );
     }
 
@@ -39240,7 +39374,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "stats")]
+    #[cfg(all(feature = "stats", not(feature = "quarantine")))]
     #[test]
     fn generic_allocator_grow_without_metadata_stays_raw_fallback() {
         let _guard = test_guard();
@@ -39939,9 +40073,11 @@ mod tests {
         let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
 
         for index in 0..SEMANTIC_SCOPE_STACK_CAPACITY {
-            let metadata = AllocationMetadata::for_type(0xC002_6000 + index as u64)
-                .with_flags(FLAG_TYPE_ISOLATED)
-                .with_callsite(0xA110_6000 + index as u64);
+            let metadata = conservative_compiler_scope_metadata(
+                AllocationMetadata::for_type(0xC002_6000 + index as u64)
+                    .with_flags(FLAG_TYPE_ISOLATED)
+                    .with_callsite(0xA110_6000 + index as u64),
+            );
             __unialloc_semantic_scope_push(
                 metadata.type_id,
                 metadata.module_id,
@@ -39951,9 +40087,11 @@ mod tests {
             assert_eq!(active_allocation_metadata(), Some(metadata));
         }
 
-        let overflow_metadata = AllocationMetadata::for_type(0xC002_6FFF)
-            .with_flags(FLAG_TYPE_ISOLATED)
-            .with_callsite(0xA110_6FFF);
+        let overflow_metadata = conservative_compiler_scope_metadata(
+            AllocationMetadata::for_type(0xC002_6FFF)
+                .with_flags(FLAG_TYPE_ISOLATED)
+                .with_callsite(0xA110_6FFF),
+        );
         __unialloc_semantic_scope_push(
             overflow_metadata.type_id,
             overflow_metadata.module_id,
@@ -39966,9 +40104,11 @@ mod tests {
             "bounded overflow scopes must still become the active typed scope"
         );
 
-        let second_overflow_metadata = AllocationMetadata::for_type(0xC002_7000)
-            .with_flags(FLAG_TYPE_ISOLATED)
-            .with_callsite(0xA110_7000);
+        let second_overflow_metadata = conservative_compiler_scope_metadata(
+            AllocationMetadata::for_type(0xC002_7000)
+                .with_flags(FLAG_TYPE_ISOLATED)
+                .with_callsite(0xA110_7000),
+        );
         __unialloc_semantic_scope_push(
             second_overflow_metadata.type_id,
             second_overflow_metadata.module_id,
@@ -40097,9 +40237,11 @@ mod tests {
         let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
 
         for index in 0..SEMANTIC_SCOPE_STACK_CAPACITY {
-            let metadata = AllocationMetadata::for_type(0xC002_8000 + index as u64)
-                .with_flags(FLAG_TYPE_ISOLATED)
-                .with_callsite(0xA110_8000 + index as u64);
+            let metadata = conservative_compiler_scope_metadata(
+                AllocationMetadata::for_type(0xC002_8000 + index as u64)
+                    .with_flags(FLAG_TYPE_ISOLATED)
+                    .with_callsite(0xA110_8000 + index as u64),
+            );
             __unialloc_semantic_scope_push(
                 metadata.type_id,
                 metadata.module_id,
@@ -40110,9 +40252,11 @@ mod tests {
 
         let mut last_represented = AllocationMetadata::unknown();
         for index in 0..SEMANTIC_SCOPE_OVERFLOW_STACK_CAPACITY {
-            let metadata = AllocationMetadata::for_type(0xC003_0000 + index as u64)
-                .with_flags(FLAG_TYPE_ISOLATED)
-                .with_callsite(0xA111_0000 + index as u64);
+            let metadata = conservative_compiler_scope_metadata(
+                AllocationMetadata::for_type(0xC003_0000 + index as u64)
+                    .with_flags(FLAG_TYPE_ISOLATED)
+                    .with_callsite(0xA111_0000 + index as u64),
+            );
             __unialloc_semantic_scope_push(
                 metadata.type_id,
                 metadata.module_id,
@@ -40123,9 +40267,11 @@ mod tests {
         }
         assert_eq!(active_allocation_metadata(), Some(last_represented));
 
-        let unrepresented = AllocationMetadata::for_type(0xC003_FFFF)
-            .with_flags(FLAG_TYPE_ISOLATED)
-            .with_callsite(0xA111_FFFF);
+        let unrepresented = conservative_compiler_scope_metadata(
+            AllocationMetadata::for_type(0xC003_FFFF)
+                .with_flags(FLAG_TYPE_ISOLATED)
+                .with_callsite(0xA111_FFFF),
+        );
         __unialloc_semantic_scope_push(
             unrepresented.type_id,
             unrepresented.module_id,

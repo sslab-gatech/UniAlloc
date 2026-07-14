@@ -900,6 +900,8 @@ impl SCAllocator {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
     use super::*;
 
     unsafe fn link_allocation_batch(ptr: *mut u8, count: usize, stride: usize) {
@@ -1567,6 +1569,27 @@ mod tests {
     #[cfg(not(feature = "fixed_heap"))]
     #[test]
     fn deallocate_batch_page_cache_invalidates_recycled_page_mapping() {
+        const CHILD_ENV: &str = "UNIALLOC_RECYCLED_PAGE_MAPPING_CHILD";
+        const TEST_NAME: &str =
+            "sc::efficient_sc::tests::deallocate_batch_page_cache_invalidates_recycled_page_mapping";
+
+        if std::env::var_os(CHILD_ENV).is_none() {
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("current allocator test executable"),
+            )
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .env(CHILD_ENV, "1")
+            .env("RUST_BACKTRACE", "0")
+            .output()
+            .expect("spawn isolated recycled-page mapping test");
+            assert!(
+                output.status.success(),
+                "isolated recycled-page mapping test failed: {}",
+                std::string::String::from_utf8_lossy(&output.stderr)
+            );
+            return;
+        }
+
         let mut alloc = SCAllocator::new(1024, 1);
         let (first_ptr, first_count, first_stride) = alloc
             .allocate_batch_v2(1)

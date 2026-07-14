@@ -61061,9 +61061,13 @@ RUST_FOR_LINUX_UNIALLOC_C_ABI_SYMBOLS = [
     "__unialloc_constrained_boot_sample_checked",
 ]
 
-RUST_FOR_LINUX_UNIALLOC_RLIB_FEATURES = "fixed_heap,allow_mem_leak,stats"
+RUST_FOR_LINUX_UNIALLOC_RLIB_FEATURES = (
+    "fixed_heap,allow_mem_leak,stats,type_isolation"
+)
 
-CONSTRAINED_PLATFORM_UNIALLOC_STATICLIB_FEATURES = "fixed_heap,allow_mem_leak,stats"
+CONSTRAINED_PLATFORM_UNIALLOC_STATICLIB_FEATURES = (
+    "fixed_heap,allow_mem_leak,stats,type_isolation"
+)
 
 
 def makefile_logical_lines(text: str) -> List[str]:
@@ -64252,7 +64256,7 @@ def collect_platform_smoke(args: argparse.Namespace) -> int:
             "rust_target": constrained_rust_target or target_triple,
             "target_installed": constrained_target_installed,
             "rust_toolchain": rust_toolchain(),
-            "features": ["fixed_heap", "allow_mem_leak", "stats"],
+            "features": ["fixed_heap", "allow_mem_leak", "stats", "type_isolation"],
             "no_default_features": True,
             "staticlib_features": CONSTRAINED_PLATFORM_UNIALLOC_STATICLIB_FEATURES,
             "staticlib_no_default_features": True,

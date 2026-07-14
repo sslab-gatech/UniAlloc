@@ -3,10 +3,10 @@ KERN_SRC ?= ~/rust-for-linux
 KERNEL_MAKE_TARGET ?= modules
 UNIALLOC_ROOT ?= ../../..
 # The Rust-for-Linux C007 evidence parser requires positive UniAlloc allocator
-# counters from the kernel module log.  Those counters are compiled behind the
-# `stats` feature, so keep it on for the rlib dependency passed to the final
+# counters and semantic allocation probes from the kernel module log.  Keep
+# `stats` and `type_isolation` on for the rlib dependency passed to the final
 # module instead of relying on symbol presence alone.
-UNIALLOC_FEATURES ?= fixed_heap,allow_mem_leak,stats
+UNIALLOC_FEATURES ?= fixed_heap,allow_mem_leak,stats,type_isolation
 UNIALLOC_TOOLCHAIN ?= $(shell cat $(UNIALLOC_ROOT)/rust-toolchain 2>/dev/null || printf nightly)
 UNIALLOC_CARGO ?= cargo +$(UNIALLOC_TOOLCHAIN)
 UNIALLOC_TARGET_DIR ?= $(UNIALLOC_ROOT)/target/rust-for-linux-unialloc

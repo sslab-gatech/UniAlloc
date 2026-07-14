@@ -96,7 +96,7 @@ docker run --rm -v "$PWD":/work -w /work \
   -e CARGO_TARGET_DIR="/work/$RAW/redoxer-target" \
   redoxos/redoxer \
   redoxer build -p unialloc --example small_heap \
-    --no-default-features --features fixed_heap,allow_mem_leak,stats
+    --no-default-features --features fixed_heap,allow_mem_leak,stats,type_isolation
 
 cp "$RAW/redoxer-target/x86_64-unknown-redox/debug/examples/small_heap" \
   "$RAW/redox-root/small_heap"
