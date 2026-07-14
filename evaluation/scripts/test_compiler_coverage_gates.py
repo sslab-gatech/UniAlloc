@@ -411,6 +411,7 @@ def ready_mir_semantic_scope_compiler_audit(
     coverage: float = 99.91,
     runtime_audit_path: pathlib.Path | None = None,
 ) -> dict:
+    canonical_count = len(evaluate.canonical_std_bench_names())
     runtime_audit_path = runtime_audit_path or (
         evaluate.RESULTS
         / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json"
@@ -431,8 +432,8 @@ def ready_mir_semantic_scope_compiler_audit(
         "blockers": [],
         "summary": {
             "benchmark_surface_status": "pass",
-            "benchmark_surface_expected_count": 430,
-            "benchmark_surface_observed_count": 430,
+            "benchmark_surface_expected_count": canonical_count,
+            "benchmark_surface_observed_count": canonical_count,
             "benchmark_surface_missing_count": 0,
             "claim_requested": True,
             "coverage_percent": coverage,
@@ -453,6 +454,7 @@ def write_ready_mir_semantic_scope_runtime_companion(
     source_fingerprint: dict | None = None,
     artifacts: dict | None = None,
 ) -> pathlib.Path:
+    canonical_count = len(evaluate.canonical_std_bench_names())
     path = audit_path or (
         results / "rustc_driver_mir_semantic_scope_std_bench_runtime_smoke_audit.json"
     )
@@ -499,9 +501,9 @@ def write_ready_mir_semantic_scope_runtime_companion(
             "runtime_full_surface_candidate_validated": True,
             "runtime_surface_full_surface_candidate": True,
             "runtime_surface_status": "full-surface-candidate",
-            "canonical_expected_benchmark_count": 430,
+            "canonical_expected_benchmark_count": canonical_count,
             "canonical_missing_benchmark_count": 0,
-            "selected_benchmark_count": 430,
+            "selected_benchmark_count": canonical_count,
             "lowered_module_typed_allocation_site_event_count": 239,
             "typed_allocation_site_event_count": 239,
             "lowered_module_allocations": 239,
@@ -6551,7 +6553,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             )
         )
         canonical = set(manifest["benchmark_suite"]["expected_benchmarks"])
-        self.assertEqual(len(canonical), 430)
+        self.assertEqual(len(canonical), 468)
 
         catalog = ROOT / "evaluation/config/std_bench_dev_profiles.json"
         quick = evaluate.load_std_bench_dev_profile(catalog)
@@ -6584,11 +6586,22 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             evaluate.COMPILER_EXACT_DYNAMIC_TYPE_ID_BASIS,
             exact_dynamic=True,
         )
+        self.assertIn("feature(iter_next_chunk)", source)
         self.assertIn("feature(portable_simd)", source)
         self.assertIn("not(unialloc_btree_extract_if_range)", source)
         self.assertIn("not(unialloc_has_stable_map_first_last)", source)
+        self.assertIn("fn bench_rng() -> rand_xorshift::XorShiftRng", source)
+        self.assertIn("rand::SeedableRng::from_seed(SEED)", source)
         self.assertNotIn("#![feature(repr_simd)]", source)
         self.assertNotIn("#![feature(btree_drain_filter)]", source)
+
+    def test_generated_slice_macro_adapters_use_qualified_mem_paths(self) -> None:
+        for macro_name in ("sort", "sort_strings", "rotate", "sort_lexicographic"):
+            generated = evaluate.compiler_proto_custom_macro_body("slice", "$name", macro_name)
+            self.assertIsNotNone(generated)
+            body = generated[0]
+            self.assertIn("std::mem::", body)
+            self.assertNotIn(" mem::", body)
 
     def test_load_std_bench_recommended_batch_requests_reads_consecutive_range(self) -> None:
         with tempfile.TemporaryDirectory() as raw_tmp:
@@ -8491,7 +8504,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         self.assertEqual(status["expected_benchmarks"], canonical)
         self.assertEqual(status["expected_benchmark_count"], len(canonical))
 
-    def test_exact_dynamic_surface_rejects_429_name_inventory_self_certification(self) -> None:
+    def test_exact_dynamic_surface_rejects_truncated_inventory_self_certification(self) -> None:
         canonical = evaluate.canonical_std_bench_names()
         truncated = canonical[:-1]
         status = evaluate.exact_dynamic_std_bench_surface_status(
@@ -8505,7 +8518,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         self.assertEqual(status["expected_benchmark_count"], len(canonical))
         self.assertEqual(status["missing_expected_benchmarks"], [canonical[-1]])
         self.assertIn(
-            "built std_bench surface does not match canonical 430-name identity",
+            "built std_bench surface does not match canonical 468-name identity",
             " | ".join(status["blockers"]),
         )
 
@@ -10349,6 +10362,8 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             evaluate.parse_optional_positive_int(0, name="--rounds")
 
     def test_current_mir_semantic_scope_gap_is_primary_over_legacy_replay_wording(self) -> None:
+        canonical_count = len(evaluate.canonical_std_bench_names())
+        observed_count = 117
         observed_source = {
             "kind": "rustc-driver-mir-semantic-scope-selected-runtime",
             "compiler_instrumented": True,
@@ -10360,10 +10375,12 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             "selected_benchmarks": ["bench_0", "bench_1"],
             "runtime_surface": {
                 "status": "slice-or-incomplete",
-                "expected_benchmark_count": 430,
-                "observed_benchmark_count": 117,
-                "missing_expected_benchmark_count": 313,
-                "expected_benchmarks": ["bench_" + str(idx) for idx in range(430)],
+                "expected_benchmark_count": canonical_count,
+                "observed_benchmark_count": observed_count,
+                "missing_expected_benchmark_count": canonical_count - observed_count,
+                "expected_benchmarks": [
+                    "bench_" + str(idx) for idx in range(canonical_count)
+                ],
             },
         }
         compiler_summary = {
@@ -10376,17 +10393,17 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             "event_type_mapping_correlation_status": "pass",
             "type_mapping_status": "pass",
             "type_mapping_valid_record_count": 541,
-            "benchmark_surface_expected_count": 430,
-            "benchmark_surface_observed_count": 117,
-            "benchmark_surface_missing_count": 313,
+            "benchmark_surface_expected_count": canonical_count,
+            "benchmark_surface_observed_count": observed_count,
+            "benchmark_surface_missing_count": canonical_count - observed_count,
         }
         runtime_summary = {
             "runtime_smoke_validated": True,
             "runtime_returncode": 0,
             "runtime_full_surface_candidate_validated": False,
-            "selected_benchmark_count": 117,
-            "canonical_expected_benchmark_count": 430,
-            "canonical_missing_benchmark_count": 313,
+            "selected_benchmark_count": observed_count,
+            "canonical_expected_benchmark_count": canonical_count,
+            "canonical_missing_benchmark_count": canonical_count - observed_count,
             "actual_semantic_scope_rewrite": True,
             "semantic_scope_rewrite_applied_count": 541,
             "semantic_scope_replacement_resolution_status": "resolved_unialloc_semantic_scope_enter_exit",
@@ -10409,7 +10426,8 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         assert gap is not None
         self.assertEqual(gap["id"], "mir_semantic_scope_full_surface_c002_runtime_missing")
         self.assertIn(
-            "real rustc_driver optimized_mir semantic-scope selected runtime covering 117/430",
+            "real rustc_driver optimized_mir semantic-scope selected runtime covering "
+            f"{observed_count}/{canonical_count}",
             gap["description"],
         )
         self.assertIn("legacy replay remains only a preflight/reference basis", gap["description"])
@@ -10428,6 +10446,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
         )
 
     def test_final_mir_semantic_scope_runtime_ready_overrides_legacy_replay(self) -> None:
+        canonical_count = len(evaluate.canonical_std_bench_names())
         observed_source = {
             "kind": "rustc-driver-mir-semantic-scope-final-c002-runtime",
             "compiler_instrumented": True,
@@ -10442,8 +10461,8 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             "event_type_id_basis_status": "pass",
             "event_type_mapping_correlation_status": "pass",
             "benchmark_surface_status": "pass",
-            "benchmark_surface_expected_count": 430,
-            "benchmark_surface_observed_count": 430,
+            "benchmark_surface_expected_count": canonical_count,
+            "benchmark_surface_observed_count": canonical_count,
             "benchmark_surface_missing_count": 0,
         }
         runtime_summary = {
@@ -10823,8 +10842,8 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             "vec::bench_clone_from_01_0010_0100",
             "vec::bench_clone_from_01_0100_0010",
             "vec::bench_clone_from_01_0100_0100",
-            "vec::bench_dedup_new_100",
-            "vec::bench_dedup_new_1000",
+            "vec::bench_dedup_random_100",
+            "vec::bench_dedup_random_1000",
             "slice::rotate_medium_by1",
             "vec::bench_from_iter_0000",
             "linked_list::bench_iter_mut",
@@ -10843,8 +10862,8 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             [
                 "vec::bench_clone_from_01_0010_0010",
                 "vec::bench_clone_from_01_0010_0100",
-                "vec::bench_dedup_new_100",
-                "vec::bench_dedup_new_1000",
+                "vec::bench_dedup_random_100",
+                "vec::bench_dedup_random_1000",
                 "slice::rotate_medium_by1",
                 "vec::bench_clone_from_01_0100_0010",
                 "vec::bench_clone_from_01_0100_0100",
@@ -10923,6 +10942,35 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
 
 
 class StdBenchSourceCorrectnessAuditTests(unittest.TestCase):
+    def test_checked_in_std_bench_preserves_local_upstream_sync_guards(self) -> None:
+        vec_source = (ROOT / "unialloc/benches/vec.rs").read_text(encoding="utf-8")
+        slice_source = (ROOT / "unialloc/benches/slice.rs").read_text(encoding="utf-8")
+        map_source = (ROOT / "unialloc/benches/btree/map.rs").read_text(
+            encoding="utf-8"
+        )
+        set_source = (ROOT / "unialloc/benches/btree/set.rs").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("result.set_len(i + 1);", vec_source)
+        self.assertNotIn("result.set_len(i);", vec_source)
+
+        loop_write = slice_source.index("v.spare_capacity_mut()[i].write(0);")
+        loop_set_len = slice_source.index("v.set_len(1024);", loop_write)
+        self.assertLess(loop_write, loop_set_len)
+        iter_write = slice_source.index("for x in v.spare_capacity_mut()")
+        iter_set_len = slice_source.index("v.set_len(1024);", iter_write)
+        self.assertLess(iter_write, iter_set_len)
+
+        self.assertEqual(map_source.count("fn drain_matching_map"), 2)
+        self.assertIn("map.extract_if(.., pred).count()", map_source)
+        self.assertIn("map.drain_filter(pred).count()", map_source)
+        self.assertIn("for entry in map.range(f(i, j))", map_source)
+        self.assertIn("for entry in map.iter()", map_source)
+        self.assertEqual(set_source.count("fn drain_matching_set"), 2)
+        self.assertIn("set.extract_if(.., pred).count()", set_source)
+        self.assertIn("set.drain_filter(pred).count()", set_source)
+
     def test_bench_in_place_recycle_adapter_audit_rejects_missing_peekable(self) -> None:
         source = """
 fn bench_in_place_recycle(b: &mut Bencher) {

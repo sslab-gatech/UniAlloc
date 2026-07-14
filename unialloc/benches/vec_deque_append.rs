@@ -1,4 +1,43 @@
-use alloc::{collections::VecDeque, time::Instant};
+use std::collections::VecDeque;
+use std::time::Instant;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "bench_jemalloc")] {
+        use jemallocator::Jemalloc;
+        #[global_allocator]
+        static JEMALLOC: Jemalloc = Jemalloc;
+    } else if #[cfg(feature = "bench_mimalloc")] {
+        use mimalloc::MiMalloc;
+        #[global_allocator]
+        static MIMALLOC: MiMalloc = MiMalloc;
+    } else if #[cfg(feature = "bench_tcmalloc")] {
+        use tcmalloc::TCMalloc;
+        #[global_allocator]
+        static TCMALLOC: TCMalloc = TCMalloc;
+    } else if #[cfg(feature = "bench_snmalloc")] {
+        #[global_allocator]
+        static SNMALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;
+    } else if #[cfg(feature = "bench_scudo")] {
+        use std::alloc::System;
+        #[global_allocator]
+        static SCUDO_SYSTEM: System = System;
+    } else if #[cfg(feature = "bench_ptmalloc")] {
+        use std::alloc::System;
+        #[global_allocator]
+        static SYSTEM: System = System;
+    } else {
+        #[cfg(feature = "fixed_heap")]
+        use std::alloc::System;
+        #[cfg(not(feature = "fixed_heap"))]
+        use unialloc::UniAlloc;
+        #[cfg(feature = "fixed_heap")]
+        #[global_allocator]
+        static SYSTEM_FOR_FIXED_HEAP_HARNESS: System = System;
+        #[cfg(not(feature = "fixed_heap"))]
+        #[global_allocator]
+        static OURSELF: UniAlloc = UniAlloc;
+    }
+}
 
 const VECDEQUE_LEN: i32 = 100000;
 const WARMUP_N: usize = 100;

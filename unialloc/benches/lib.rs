@@ -1,6 +1,7 @@
 #![cfg(not(target_os = "android"))]
 #![cfg_attr(not(unialloc_btree_extract_if_range), feature(btree_drain_filter))]
 #![cfg_attr(not(unialloc_has_stable_map_first_last), feature(map_first_last))]
+#![feature(iter_next_chunk)]
 #![feature(portable_simd)]
 #![feature(slice_partition_dedup)]
 #![feature(test)]
@@ -96,6 +97,12 @@ mod str;
 mod string;
 mod vec;
 mod vec_deque;
+
+/// Returns a deterministic RNG so repeated benchmark runs use the same data.
+fn bench_rng() -> rand_xorshift::XorShiftRng {
+    const SEED: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    rand::SeedableRng::from_seed(SEED)
+}
 
 #[cfg(any(
     feature = "stats",

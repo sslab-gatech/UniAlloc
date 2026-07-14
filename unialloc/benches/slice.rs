@@ -1,8 +1,8 @@
-use core::{mem, ptr};
+use std::mem::{size_of, size_of_val};
+use std::ptr;
 
 use rand::distributions::{Alphanumeric, Standard};
-use rand::{thread_rng, Rng, SeedableRng};
-use rand_xorshift::XorShiftRng;
+use rand::Rng;
 use test::{black_box, Bencher};
 
 #[bench]
@@ -152,24 +152,24 @@ fn zero_1kb_mut_iter(b: &mut Bencher) {
 
 #[bench]
 fn random_inserts(b: &mut Bencher) {
-    let mut rng = thread_rng();
+    let mut rng = crate::bench_rng();
     b.iter(|| {
         let mut v = vec![(0, 0); 30];
         for _ in 0..100 {
             let l = v.len();
-            v.insert(rng.gen::<usize>() % (l + 1), (1, 1));
+            v.insert(rng.gen::<u32>() as usize % (l + 1), (1, 1));
         }
     })
 }
 
 #[bench]
 fn random_removes(b: &mut Bencher) {
-    let mut rng = thread_rng();
+    let mut rng = crate::bench_rng();
     b.iter(|| {
         let mut v = vec![(0, 0); 130];
         for _ in 0..100 {
             let l = v.len();
-            v.remove(rng.gen::<usize>() % l);
+            v.remove(rng.gen::<u32>() as usize % l);
         }
     })
 }
@@ -182,52 +182,55 @@ fn gen_descending(len: usize) -> Vec<u64> {
     (0..len as u64).rev().collect()
 }
 
-const SEED: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-
 fn gen_random(len: usize) -> Vec<u64> {
-    let mut rng = XorShiftRng::from_seed(SEED);
+    let mut rng = crate::bench_rng();
     (&mut rng).sample_iter(&Standard).take(len).collect()
 }
 
 fn gen_random_bytes(len: usize) -> Vec<u8> {
-    let mut rng = XorShiftRng::from_seed(SEED);
+    let mut rng = crate::bench_rng();
     (&mut rng).sample_iter(&Standard).take(len).collect()
 }
 
 fn gen_mostly_ascending(len: usize) -> Vec<u64> {
-    let mut rng = XorShiftRng::from_seed(SEED);
+    let mut rng = crate::bench_rng();
     let mut v = gen_ascending(len);
     for _ in (0usize..).take_while(|x| x * x <= len) {
-        let x = rng.gen::<usize>() % len;
-        let y = rng.gen::<usize>() % len;
+        let x = rng.gen::<u32>() as usize % len;
+        let y = rng.gen::<u32>() as usize % len;
         v.swap(x, y);
     }
     v
 }
 
 fn gen_mostly_descending(len: usize) -> Vec<u64> {
-    let mut rng = XorShiftRng::from_seed(SEED);
+    let mut rng = crate::bench_rng();
     let mut v = gen_descending(len);
     for _ in (0usize..).take_while(|x| x * x <= len) {
-        let x = rng.gen::<usize>() % len;
-        let y = rng.gen::<usize>() % len;
+        let x = rng.gen::<u32>() as usize % len;
+        let y = rng.gen::<u32>() as usize % len;
         v.swap(x, y);
     }
     v
 }
 
 fn gen_strings(len: usize) -> Vec<String> {
-    let mut rng = XorShiftRng::from_seed(SEED);
+    let mut rng = crate::bench_rng();
     let mut v = vec![];
     for _ in 0..len {
-        let n = rng.gen::<usize>() % 20 + 1;
-        v.push((&mut rng).sample_iter(&Alphanumeric).take(n).collect());
+        let n = rng.gen::<u32>() % 20 + 1;
+        v.push(
+            (&mut rng)
+                .sample_iter(&Alphanumeric)
+                .take(n as usize)
+                .collect(),
+        );
     }
     v
 }
 
 fn gen_big_random(len: usize) -> Vec<[u64; 16]> {
-    let mut rng = XorShiftRng::from_seed(SEED);
+    let mut rng = crate::bench_rng();
     (&mut rng)
         .sample_iter(&Standard)
         .map(|x| [x; 16])
@@ -241,7 +244,7 @@ macro_rules! sort {
         fn $name(b: &mut Bencher) {
             let v = $gen($len);
             b.iter(|| v.clone().$f());
-            b.bytes = $len * mem::size_of_val(&$gen(1)[0]) as u64;
+            b.bytes = $len * size_of_val(&$gen(1)[0]) as u64;
         }
     };
 }
@@ -253,7 +256,7 @@ macro_rules! sort_strings {
             let v = $gen($len);
             let v = v.iter().map(|s| &**s).collect::<Vec<&str>>();
             b.iter(|| v.clone().$f());
-            b.bytes = $len * mem::size_of::<&str>() as u64;
+            b.bytes = $len * size_of::<&str>() as u64;
         }
     };
 }
@@ -275,7 +278,7 @@ macro_rules! sort_expensive {
                 });
                 black_box(count);
             });
-            b.bytes = $len * mem::size_of_val(&$gen(1)[0]) as u64;
+            b.bytes = $len * size_of_val(&$gen(1)[0]) as u64;
         }
     };
 }
@@ -286,7 +289,7 @@ macro_rules! sort_lexicographic {
         fn $name(b: &mut Bencher) {
             let v = $gen($len);
             b.iter(|| v.clone().$f(|x| x.to_string()));
-            b.bytes = $len * mem::size_of_val(&$gen(1)[0]) as u64;
+            b.bytes = $len * size_of_val(&$gen(1)[0]) as u64;
         }
     };
 }
@@ -394,9 +397,7 @@ macro_rules! reverse {
         fn $name(b: &mut Bencher) {
             // odd length and offset by 1 to be as unaligned as possible
             let n = 0xFFFFF;
-            let mut v: Vec<_> = (0..1 + (n / mem::size_of::<$ty>() as u64))
-                .map($f)
-                .collect();
+            let mut v: Vec<_> = (0..1 + (n / size_of::<$ty>() as u64)).map($f).collect();
             b.iter(|| black_box(&mut v[1..]).reverse());
             b.bytes = n;
         }
@@ -420,7 +421,7 @@ macro_rules! rotate {
     ($name:ident, $gen:expr, $len:expr, $mid:expr) => {
         #[bench]
         fn $name(b: &mut Bencher) {
-            let size = mem::size_of_val(&$gen(1)[0]);
+            let size = size_of_val(&$gen(1)[0]);
             let mut v = $gen($len * 8 / size);
             b.iter(|| black_box(&mut v).rotate_left(($mid * 8 + size - 1) / size));
             b.bytes = (v.len() * size) as u64;
@@ -440,56 +441,67 @@ rotate!(rotate_medium_half, gen_random, 9158, 9158 / 2);
 rotate!(rotate_medium_half_plus_one, gen_random, 9158, 9158 / 2 + 1);
 
 // Intended to use more RAM than the machine has cache
+#[cfg(not(target_os = "emscripten"))] // hits an OOM
 rotate!(rotate_huge_by1, gen_random, 5 * 1024 * 1024, 1);
+#[cfg(not(target_os = "emscripten"))] // hits an OOM
 rotate!(rotate_huge_by9199_u64, gen_random, 5 * 1024 * 1024, 9199);
+#[cfg(not(target_os = "emscripten"))] // hits an OOM
 rotate!(
     rotate_huge_by9199_bytes,
     gen_random_bytes,
     5 * 1024 * 1024,
     9199
 );
+#[cfg(not(target_os = "emscripten"))] // hits an OOM
 rotate!(
     rotate_huge_by9199_strings,
     gen_strings,
     5 * 1024 * 1024,
     9199
 );
+#[cfg(not(target_os = "emscripten"))] // hits an OOM
 rotate!(
     rotate_huge_by9199_big,
     gen_big_random,
     5 * 1024 * 1024,
     9199
 );
+#[cfg(not(target_os = "emscripten"))] // hits an OOM
 rotate!(
     rotate_huge_by1234577_u64,
     gen_random,
     5 * 1024 * 1024,
     1234577
 );
+#[cfg(not(target_os = "emscripten"))] // hits an OOM
 rotate!(
     rotate_huge_by1234577_bytes,
     gen_random_bytes,
     5 * 1024 * 1024,
     1234577
 );
+#[cfg(not(target_os = "emscripten"))] // hits an OOM
 rotate!(
     rotate_huge_by1234577_strings,
     gen_strings,
     5 * 1024 * 1024,
     1234577
 );
+#[cfg(not(target_os = "emscripten"))] // hits an OOM
 rotate!(
     rotate_huge_by1234577_big,
     gen_big_random,
     5 * 1024 * 1024,
     1234577
 );
+#[cfg(not(target_os = "emscripten"))] // hits an OOM
 rotate!(
     rotate_huge_half,
     gen_random,
     5 * 1024 * 1024,
     5 * 1024 * 1024 / 2
 );
+#[cfg(not(target_os = "emscripten"))] // hits an OOM
 rotate!(
     rotate_huge_half_plus_one,
     gen_random,

@@ -39,6 +39,11 @@ path = "benches/lib.rs"
 test = true
 
 [[bench]]
+name = "vec_deque_append_bench"
+path = "benches/vec_deque_append.rs"
+harness = false
+
+[[bench]]
 name = "semantic_std"
 path = "benches/semantic_std.rs"
 test = true

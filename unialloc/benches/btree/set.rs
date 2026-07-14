@@ -1,6 +1,6 @@
-use alloc::collections::BTreeSet;
+use std::collections::BTreeSet;
 
-use rand::{thread_rng, Rng};
+use rand::Rng;
 use test::Bencher;
 
 #[cfg(unialloc_btree_extract_if_range)]
@@ -21,13 +21,13 @@ where
     set.drain_filter(pred).count()
 }
 
-fn random(n: usize) -> BTreeSet<usize> {
-    let mut rng = thread_rng();
+fn random(n: u32) -> BTreeSet<u32> {
+    let mut rng = crate::bench_rng();
     let mut set = BTreeSet::new();
-    while set.len() < n {
+    while set.len() < n as usize {
         set.insert(rng.gen());
     }
-    assert_eq!(set.len(), n);
+    assert_eq!(set.len(), n as usize);
     set
 }
 
@@ -87,10 +87,7 @@ pub fn clone_100_and_clear(b: &mut Bencher) {
 #[bench]
 pub fn clone_100_and_drain_all(b: &mut Bencher) {
     let src = slim_set(100);
-    b.iter(|| {
-        let mut set = src.clone();
-        drain_matching_set(&mut set, |_| true)
-    })
+    b.iter(|| drain_matching_set(&mut src.clone(), |_| true))
 }
 
 #[bench]
@@ -161,10 +158,7 @@ pub fn clone_10k_and_clear(b: &mut Bencher) {
 #[bench]
 pub fn clone_10k_and_drain_all(b: &mut Bencher) {
     let src = slim_set(10_000);
-    b.iter(|| {
-        let mut set = src.clone();
-        drain_matching_set(&mut set, |_| true)
-    })
+    b.iter(|| drain_matching_set(&mut src.clone(), |_| true))
 }
 
 #[bench]

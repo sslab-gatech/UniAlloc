@@ -56,7 +56,7 @@ DEFAULT_MAX_PLAN_OUTPUT_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_PROBE_OUTPUT_BYTES = 64 * 1024
 DEFAULT_STD_BENCH_DEV_OUTPUT_BYTES = 64 * 1024
 STD_BENCH_CANONICAL_NAME_SHA256 = (
-    "241ae2507e28f9004e29f186a9d77c6f9de48a82c2d9feb86d7031cb1d31d786"
+    "425806701392e5032d5f7bbf8af2dba4c14e4ef6c15bb81f8a3271149f5e6695"
 )
 STD_BENCH_DEV_SENTINELS = (
     "aaa_semantic_auto_metadata_enable",
@@ -27296,7 +27296,7 @@ def compiler_proto_custom_macro_body(
                 {compiler_proto_label_expr(module_path, bench_name, "size_probe")},
                 || $gen(1),
             );
-            b.bytes = $len * mem::size_of_val(&size_probe[0]) as u64;
+            b.bytes = $len * std::mem::size_of_val(&size_probe[0]) as u64;
         """
         inferred_type, inference, allocation_semantics = compiler_proto_value_typed(
             "value-inferred::<$gen return Vec<_>>",
@@ -27321,7 +27321,7 @@ def compiler_proto_custom_macro_body(
                     || v.clone().$f(),
                 )
             }});
-            b.bytes = $len * mem::size_of::<&str>() as u64;
+            b.bytes = $len * std::mem::size_of::<&str>() as u64;
         """
         inferred_type, inference, allocation_semantics = compiler_proto_value_typed(
             "multi-scope::<Vec<String>, Vec<&str>>",
@@ -27335,7 +27335,7 @@ def compiler_proto_custom_macro_body(
                 {compiler_proto_label_expr(module_path, bench_name, "size_probe")},
                 || $gen(1),
             );
-            let size = mem::size_of_val(&size_probe[0]);
+            let size = std::mem::size_of_val(&size_probe[0]);
             drop(size_probe);
             let mut v = crate::__unialloc_compiler_proto_value_type_scope(
                 {compiler_proto_label_expr(module_path, bench_name, "setup")},
@@ -27388,7 +27388,7 @@ def compiler_proto_custom_macro_body(
                 {compiler_proto_label_expr(module_path, bench_name, "size_probe")},
                 || $gen(1),
             );
-            b.bytes = $len * mem::size_of_val(&size_probe[0]) as u64;
+            b.bytes = $len * std::mem::size_of_val(&size_probe[0]) as u64;
         """
         inferred_type, inference, allocation_semantics = compiler_proto_value_typed(
             "multi-scope::<Vec<_>, String, Vec<(String, usize)>>",
@@ -27593,6 +27593,7 @@ def compiler_proto_root_source(module_dir_name: str, type_id_basis: str, *, exac
         """#![cfg(not(target_os = "android"))]
 #![cfg_attr(not(unialloc_btree_extract_if_range), feature(btree_drain_filter))]
 #![cfg_attr(not(unialloc_has_stable_map_first_last), feature(map_first_last))]
+#![feature(iter_next_chunk)]
 #![feature(portable_simd)]
 #![feature(slice_partition_dedup)]
 #![feature(test)]
@@ -27638,6 +27639,11 @@ cfg_if::cfg_if! {
 """
         + module_decls
         + r"""
+
+fn bench_rng() -> rand_xorshift::XorShiftRng {
+    const SEED: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    rand::SeedableRng::from_seed(SEED)
+}
 
 const FNV1A_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 	const FNV1A_PRIME: u64 = 0x0000_0100_0000_01b3;
@@ -36022,7 +36028,7 @@ def std_bench_dev_surface_status(
     canonical: Optional[Iterable[Any]] = None,
     required_sentinels: Iterable[Any] = (),
 ) -> Dict[str, Any]:
-    """Fail closed unless a built binary exposes the canonical 430-name surface."""
+    """Fail closed unless a built binary exposes the canonical 468-name surface."""
 
     listed = [str(name).strip() for name in listed_benchmarks if str(name).strip()]
     canonical_names = (
@@ -36065,7 +36071,7 @@ def std_bench_dev_surface_status(
             + ", ".join(duplicate_sentinels)
         )
     if benchmark_names != canonical_names:
-        blockers.append("built std_bench surface does not match canonical 430-name identity")
+        blockers.append("built std_bench surface does not match canonical 468-name identity")
     if digest != STD_BENCH_CANONICAL_NAME_SHA256:
         blockers.append(
             "built std_bench name hash differs from the locked canonical hash: "
@@ -36073,7 +36079,7 @@ def std_bench_dev_surface_status(
         )
     if canonical_digest != STD_BENCH_CANONICAL_NAME_SHA256:
         blockers.append(
-            "canonical manifest name hash differs from the locked 430-name hash: "
+            "canonical manifest name hash differs from the locked 468-name hash: "
             f"observed={canonical_digest} expected={STD_BENCH_CANONICAL_NAME_SHA256}"
         )
     canonical_set = set(canonical_names)
@@ -36320,7 +36326,7 @@ def run_std_bench_dev_loop(args: argparse.Namespace) -> int:
         "claim_grade_blockers": [
             "development test-once execution is diagnostic-only",
             "per-leaf direct execution is not calibrated paper timing",
-            "the final 430-case claim checkpoint was not run",
+            "the final 468-case claim checkpoint was not run",
         ],
         "execution_contract": {
             "build_once_per_batch": True,
@@ -46633,8 +46639,7 @@ STD_BENCH_EXPENSIVE_RECOMMENDATION_COST = 220
 
 STD_BENCH_RECOMMENDATION_FAMILY_PREFIXES: Tuple[Tuple[str, str], ...] = (
     ("vec::bench_clone_from_", "vec::bench_clone_from_*"),
-    ("vec::bench_dedup_new_", "vec::bench_dedup_new_*"),
-    ("vec::bench_dedup_old_", "vec::bench_dedup_old_*"),
+    ("vec::bench_dedup_", "vec::bench_dedup_*"),
     ("vec::bench_clone_", "vec::bench_clone_*"),
     ("vec::bench_from_iter_", "vec::bench_from_iter_*"),
     ("vec::bench_in_place_", "vec::bench_in_place_*"),
@@ -73357,7 +73362,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p = sub.add_parser(
         "run-std-bench-dev-loop",
         help=(
-            "build the real std_bench test binary once, verify its canonical 430-name surface, "
+            "build the real std_bench test binary once, verify its canonical 468-name surface, "
             "then run selected exact leaves in separate bounded processes; always non-claim"
         ),
     )

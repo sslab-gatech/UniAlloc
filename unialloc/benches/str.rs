@@ -2,14 +2,14 @@ use test::{black_box, Bencher};
 
 #[bench]
 fn char_iterator(b: &mut Bencher) {
-    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
 
     b.iter(|| s.chars().count());
 }
 
 #[bench]
 fn char_iterator_for(b: &mut Bencher) {
-    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
 
     b.iter(|| {
         for ch in s.chars() {
@@ -32,14 +32,14 @@ fn char_iterator_ascii(b: &mut Bencher) {
 
 #[bench]
 fn char_iterator_rev(b: &mut Bencher) {
-    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
 
     b.iter(|| s.chars().rev().count());
 }
 
 #[bench]
 fn char_iterator_rev_for(b: &mut Bencher) {
-    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
 
     b.iter(|| {
         for ch in s.chars().rev() {
@@ -50,7 +50,7 @@ fn char_iterator_rev_for(b: &mut Bencher) {
 
 #[bench]
 fn char_indicesator(b: &mut Bencher) {
-    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
     let len = s.chars().count();
 
     b.iter(|| assert_eq!(s.char_indices().count(), len));
@@ -58,7 +58,7 @@ fn char_indicesator(b: &mut Bencher) {
 
 #[bench]
 fn char_indicesator_rev(b: &mut Bencher) {
-    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
     let len = s.chars().count();
 
     b.iter(|| assert_eq!(s.char_indices().rev().count(), len));
@@ -66,7 +66,7 @@ fn char_indicesator_rev(b: &mut Bencher) {
 
 #[bench]
 fn split_unicode_ascii(b: &mut Bencher) {
-    let s = "ประเทศไทยทศViệt NamประเทศไทยทศViệt Nam";
+    let s = "ประเทศไทย中华Việt Namประเทศไทย中华Việt Nam";
 
     b.iter(|| assert_eq!(s.split('V').count(), 3));
 }
@@ -109,7 +109,7 @@ fn split_slice(b: &mut Bencher) {
 
 #[bench]
 fn bench_join(b: &mut Bencher) {
-    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
     let sep = "→";
     let v = vec![s, s, s, s, s, s, s, s, s, s];
     b.iter(|| {
@@ -122,14 +122,13 @@ fn bench_contains_short_short(b: &mut Bencher) {
     let haystack = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
     let needle = "sit";
 
+    b.bytes = haystack.len() as u64;
     b.iter(|| {
-        assert!(haystack.contains(needle));
+        assert!(black_box(haystack).contains(black_box(needle)));
     })
 }
 
-#[bench]
-fn bench_contains_short_long(b: &mut Bencher) {
-    let haystack = "\
+static LONG_HAYSTACK: &str = "\
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse quis lorem sit amet dolor \
 ultricies condimentum. Praesent iaculis purus elit, ac malesuada quam malesuada in. Duis sed orci \
 eros. Suspendisse sit amet magna mollis, mollis nunc luctus, imperdiet mi. Integer fringilla non \
@@ -164,10 +163,48 @@ feugiat. Etiam quis mauris vel risus luctus mattis a a nunc. Nullam orci quam, i
 vehicula in, porttitor ut nibh. Duis sagittis adipiscing nisl vitae congue. Donec mollis risus eu \
 leo suscipit, varius porttitor nulla porta. Pellentesque ut sem nec nisi euismod vehicula. Nulla \
 malesuada sollicitudin quam eu fermentum.";
+
+#[bench]
+fn bench_contains_2b_repeated_long(b: &mut Bencher) {
+    let haystack = LONG_HAYSTACK;
+    let needle = "::";
+
+    b.bytes = haystack.len() as u64;
+    b.iter(|| {
+        assert!(!black_box(haystack).contains(black_box(needle)));
+    })
+}
+
+#[bench]
+fn bench_contains_short_long(b: &mut Bencher) {
+    let haystack = LONG_HAYSTACK;
     let needle = "english";
 
+    b.bytes = haystack.len() as u64;
     b.iter(|| {
-        assert!(!haystack.contains(needle));
+        assert!(!black_box(haystack).contains(black_box(needle)));
+    })
+}
+
+#[bench]
+fn bench_contains_16b_in_long(b: &mut Bencher) {
+    let haystack = LONG_HAYSTACK;
+    let needle = "english language";
+
+    b.bytes = haystack.len() as u64;
+    b.iter(|| {
+        assert!(!black_box(haystack).contains(black_box(needle)));
+    })
+}
+
+#[bench]
+fn bench_contains_32b_in_long(b: &mut Bencher) {
+    let haystack = LONG_HAYSTACK;
+    let needle = "the english language sample text";
+
+    b.bytes = haystack.len() as u64;
+    b.iter(|| {
+        assert!(!black_box(haystack).contains(black_box(needle)));
     })
 }
 
@@ -176,8 +213,20 @@ fn bench_contains_bad_naive(b: &mut Bencher) {
     let haystack = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     let needle = "aaaaaaaab";
 
+    b.bytes = haystack.len() as u64;
     b.iter(|| {
-        assert!(!haystack.contains(needle));
+        assert!(!black_box(haystack).contains(black_box(needle)));
+    })
+}
+
+#[bench]
+fn bench_contains_bad_simd(b: &mut Bencher) {
+    let haystack = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let needle = "aaabaaaa";
+
+    b.bytes = haystack.len() as u64;
+    b.iter(|| {
+        assert!(!black_box(haystack).contains(black_box(needle)));
     })
 }
 
@@ -186,8 +235,9 @@ fn bench_contains_equal(b: &mut Bencher) {
     let haystack = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
     let needle = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
 
+    b.bytes = haystack.len() as u64;
     b.iter(|| {
-        assert!(haystack.contains(needle));
+        assert!(black_box(haystack).contains(black_box(needle)));
     })
 }
 
@@ -219,7 +269,7 @@ macro_rules! make_test {
             make_test_inner!($s, $code, short_ascii,
                 "Mary had a little lamb, Little lamb Mary had a littl lamb, lamb!", $iters);
             make_test_inner!($s, $code, short_mixed,
-                "ศไทยทศViệt Nam; Mary had a little lamb, Little lam!", $iters);
+                "ศไทย中华Việt Nam; Mary had a little lamb, Little lam!", $iters);
             make_test_inner!($s, $code, short_pile_of_poo,
                 "💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩!", $iters);
             make_test_inner!($s, $code, long_lorem_ipsum,"\
@@ -317,3 +367,5 @@ make_test!(rsplitn_space_char, s, s.rsplitn(10, ' ').count());
 
 make_test!(split_space_str, s, s.split(" ").count());
 make_test!(split_ad_str, s, s.split("ad").count());
+
+make_test!(to_lowercase, s, s.to_lowercase());

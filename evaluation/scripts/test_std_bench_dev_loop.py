@@ -147,6 +147,32 @@ def write_fake_std_bench_toolchain(
 
 
 class StdBenchDevLoopTests(unittest.TestCase):
+    def test_manifest_registers_upstream_vec_deque_append_bench(self) -> None:
+        manifest = (ROOT / "unialloc" / "Cargo.toml").read_text(encoding="utf-8")
+        self.assertIn(
+            """[[bench]]
+name = "vec_deque_append_bench"
+path = "benches/vec_deque_append.rs"
+harness = false
+""",
+            manifest,
+        )
+
+        source = (ROOT / "unialloc" / "benches" / "vec_deque_append.rs").read_text(
+            encoding="utf-8"
+        )
+        for feature in (
+            "bench_jemalloc",
+            "bench_mimalloc",
+            "bench_tcmalloc",
+            "bench_snmalloc",
+            "bench_scudo",
+            "bench_ptmalloc",
+        ):
+            self.assertIn(f'feature = "{feature}"', source)
+        self.assertIn("static OURSELF: UniAlloc = UniAlloc", source)
+        self.assertIn("#[global_allocator]", source)
+
     def test_profile_catalog_resolves_short_e2e_family_and_pathology_presets(self) -> None:
         catalog = ROOT / "evaluation/config/std_bench_dev_profiles.json"
         raw_catalog = json.loads(catalog.read_text(encoding="utf-8"))
@@ -272,10 +298,10 @@ class StdBenchDevLoopTests(unittest.TestCase):
             self.assertEqual(summary["status"], "completed")
             self.assertTrue(summary["success"])
             self.assertEqual(summary["build_invocation_count"], 1)
-            self.assertEqual(summary["surface"]["benchmark_count"], 430)
+            self.assertEqual(summary["surface"]["benchmark_count"], 468)
             self.assertEqual(
                 summary["surface"]["benchmark_name_sha256"],
-                "241ae2507e28f9004e29f186a9d77c6f9de48a82c2d9feb86d7031cb1d31d786",
+                "425806701392e5032d5f7bbf8af2dba4c14e4ef6c15bb81f8a3271149f5e6695",
             )
             self.assertEqual(summary["passed_case_count"], 3)
             self.assertFalse(summary["claim_grade"])
@@ -428,9 +454,16 @@ class StdBenchDevLoopTests(unittest.TestCase):
                 stdout_truncated=False,
             )
 
-    def test_surface_gate_locks_exact_canonical_430_identity(self) -> None:
+    def test_surface_gate_locks_exact_canonical_468_identity(self) -> None:
         canonical = evaluate.canonical_std_bench_names()
-        self.assertEqual(len(canonical), 430)
+        self.assertEqual(len(canonical), 468)
+        for evolved_benchmark in (
+            "btree::map::from_iter_rand_100",
+            "str::to_lowercase::long_lorem_ipsum",
+            "vec::bench_flat_map_collect",
+            "vec_deque::bench_into_iter_next_chunk",
+        ):
+            self.assertIn(evolved_benchmark, canonical)
         status = evaluate.std_bench_dev_surface_status(
             [
                 "aaa_semantic_auto_metadata_enable",
@@ -440,10 +473,10 @@ class StdBenchDevLoopTests(unittest.TestCase):
             required_sentinels=evaluate.STD_BENCH_DEV_SENTINELS,
         )
         self.assertTrue(status["ready"], status)
-        self.assertEqual(status["benchmark_count"], 430)
+        self.assertEqual(status["benchmark_count"], 468)
         self.assertEqual(
             status["benchmark_name_sha256"],
-            "241ae2507e28f9004e29f186a9d77c6f9de48a82c2d9feb86d7031cb1d31d786",
+            "425806701392e5032d5f7bbf8af2dba4c14e4ef6c15bb81f8a3271149f5e6695",
         )
 
         missing = evaluate.std_bench_dev_surface_status(canonical[:-1])
