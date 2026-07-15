@@ -9,6 +9,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import eventually_freed_lifetime_experiment as experiment
 
 
+ROOT = Path(__file__).resolve().parents[2]
+
+
 def row(
     arm: str,
     repeat: int,
@@ -28,7 +31,7 @@ def row(
     selective = arm == "selective-thp"
     adaptive = arm == "adaptive-thp"
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "eventually_freed_lifetime_workload",
         "arm": "system" if system else arm,
         "experiment_arm": arm,
@@ -51,6 +54,7 @@ def row(
         "smaps_available": True,
         "steady_pss_kib": pss_kib,
         "steady_private_dirty_kib": pss_kib - 100,
+        "steady_sample_phase": "post_thp_observation",
         "actual_anon_hugepages_delta_kib": anon_huge_kib,
         "long_site": {
             "callsite": 1,
@@ -119,6 +123,22 @@ class EventuallyFreedLifetimeExperimentTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             experiment.parse_probe("{}\n{}\n")
 
+        value["schema_version"] = 1
+        with self.assertRaisesRegex(RuntimeError, "unexpected fixture schema"):
+            experiment.parse_probe(json.dumps(value) + "\n")
+
+    def test_steady_memory_is_sampled_after_thp_observation(self) -> None:
+        source = (
+            ROOT / "evaluation/fixtures/eventually_freed_lifetime_workload.rs"
+        ).read_text(encoding="utf-8")
+        observation = source.index("let observation_elapsed_ms")
+        steady = source.index("let steady_memory = MemorySnapshot::read();")
+        drop_long = source.index("for object in long.drain(..)")
+        self.assertLess(observation, steady)
+        self.assertLess(steady, drop_long)
+        self.assertIn("steady_sample_phase", source)
+        self.assertIn("post_thp_observation", source)
+
     def test_selective_mechanism_gate_requires_observed_thp(self) -> None:
         missing = row(
             "selective-thp",
@@ -180,6 +200,11 @@ class EventuallyFreedLifetimeExperimentTests(unittest.TestCase):
         self.assertTrue(summary["claim_gates"]["mechanism_claim_ready"])
         self.assertTrue(summary["claim_gates"]["performance_claim_ready"])
         self.assertTrue(summary["claim_gates"]["memory_reduction_claim_ready"])
+
+        rows[-1]["steady_sample_phase"] = "pre_thp_observation"
+        invalid = experiment.summarize(rows)
+        self.assertFalse(invalid["claim_gates"]["memory_reduction_claim_ready"])
+        self.assertFalse(invalid["claim_gates"]["post_observation_memory_samples"])
 
     def test_summary_rejects_mismatched_work(self) -> None:
         rows = []

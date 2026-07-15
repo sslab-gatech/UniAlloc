@@ -469,12 +469,12 @@ fn run(config: &Config) -> Result<(), String> {
         }
     }
     let work_elapsed_ns = started.elapsed().as_nanos();
-    let steady_memory = MemorySnapshot::read();
+    let work_end_memory = MemorySnapshot::read();
     let long_address = long
         .first()
         .map(|object| object.pointer as usize)
         .unwrap_or(0);
-    let steady_long_vma = VmaSnapshot::for_address(long_address);
+    let work_end_long_vma = VmaSnapshot::for_address(long_address);
     let pre_drop = if config.arm.uses_unialloc() {
         lifetime_hugepage_stats_snapshot()
     } else {
@@ -486,8 +486,8 @@ fn run(config: &Config) -> Result<(), String> {
     // `work_elapsed_ns`; control arms need no asynchronous THP wait.
     let observation_started = Instant::now();
     let wait_deadline = observation_started + Duration::from_millis(config.thp_deadline_ms);
-    let mut max_memory = steady_memory;
-    let mut max_long_vma = steady_long_vma.clone();
+    let mut max_memory = work_end_memory;
+    let mut max_long_vma = work_end_long_vma.clone();
     while matches!(config.arm, Arm::SelectiveThp | Arm::AdaptiveThp)
         && max_long_vma.anon_hugepages_kib == 0
         && Instant::now() < wait_deadline
@@ -497,6 +497,13 @@ fn run(config: &Config) -> Result<(), String> {
         thread::sleep(Duration::from_millis(10));
     }
     let observation_elapsed_ms = observation_started.elapsed().as_millis();
+    // `steady_*` is the matched memory sample used by the summary. Take it
+    // after the THP observation window so selective rows cannot pair a
+    // pre-collapse PSS value with post-collapse mechanism evidence.
+    let steady_memory = MemorySnapshot::read();
+    let steady_long_vma = VmaSnapshot::for_address(long_address);
+    max_memory = max_memory.max(steady_memory);
+    max_long_vma = max_long_vma.max_backing(steady_long_vma);
 
     unsafe {
         for object in long.drain(..) {
@@ -525,7 +532,7 @@ fn run(config: &Config) -> Result<(), String> {
 
     println!(
         concat!(
-            "{{\"schema_version\":1,\"source\":\"eventually_freed_lifetime_workload\",",
+            "{{\"schema_version\":2,\"source\":\"eventually_freed_lifetime_workload\",",
             "\"arm\":\"{}\",\"work_elapsed_ns\":{},\"checksum\":{},",
             "\"long_objects\":{},\"short_objects_per_wave\":{},\"object_bytes\":{},",
             "\"waves\":{},\"passes_per_wave\":{},\"setup_short_objects\":{},",
@@ -535,6 +542,7 @@ fn run(config: &Config) -> Result<(), String> {
             "\"minor_faults_delta\":{},\"major_faults_delta\":{},\"peak_rss_kib\":{},",
             "\"smaps_available\":{},\"baseline_rss_kib\":{},\"steady_rss_kib\":{},",
             "\"steady_pss_kib\":{},\"steady_private_dirty_kib\":{},",
+            "\"steady_sample_phase\":\"post_thp_observation\",",
             "\"baseline_anon_hugepages_kib\":{},\"steady_anon_hugepages_kib\":{},",
             "\"max_anon_hugepages_kib\":{},\"actual_anon_hugepages_delta_kib\":{},",
             "\"long_vma\":{{\"available\":{},\"anon_hugepages_kib\":{},",
@@ -575,7 +583,10 @@ fn run(config: &Config) -> Result<(), String> {
         final_faults.minor.saturating_sub(baseline_faults.minor),
         final_faults.major.saturating_sub(baseline_faults.major),
         status_kib("VmHWM:"),
-        baseline_memory.available && steady_memory.available && max_memory.available,
+        baseline_memory.available
+            && work_end_memory.available
+            && steady_memory.available
+            && max_memory.available,
         baseline_memory.rss_kib,
         steady_memory.rss_kib,
         steady_memory.pss_kib,

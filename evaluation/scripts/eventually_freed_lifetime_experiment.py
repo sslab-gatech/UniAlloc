@@ -311,6 +311,12 @@ def parse_probe(stdout: str) -> dict[str, Any]:
     row = json.loads(rows[0])
     if row.get("source") != "eventually_freed_lifetime_workload":
         raise RuntimeError(f"unexpected fixture source: {row.get('source')!r}")
+    if row.get("schema_version") != 2:
+        raise RuntimeError(f"unexpected fixture schema: {row.get('schema_version')!r}")
+    if row.get("steady_sample_phase") != "post_thp_observation":
+        raise RuntimeError(
+            f"unexpected steady memory sample phase: {row.get('steady_sample_phase')!r}"
+        )
     return row
 
 
@@ -443,7 +449,17 @@ def row_workload_gate(row: dict[str, Any]) -> bool:
         == int(row["short_site"]["module_id"])
         and int(row["long_site"]["size"]) == int(row["short_site"]["size"])
         and int(row["long_site"]["align"]) == int(row["short_site"]["align"])
-        and int(row["long_site"]["callsite"]) != int(row["short_site"]["callsite"])
+        and int(row["long_site"]["callsite"])
+        != int(row["short_site"]["callsite"])
+    )
+
+
+def row_post_observation_memory_gate(row: dict[str, Any]) -> bool:
+    return (
+        row.get("steady_sample_phase") == "post_thp_observation"
+        and bool(row.get("smaps_available"))
+        and int(row.get("steady_pss_kib", 0)) > 0
+        and int(row.get("steady_private_dirty_kib", -1)) >= 0
     )
 
 
@@ -552,6 +568,10 @@ def summarize(rows: list[dict[str, Any]], *, seed: int = 20260715) -> dict[str, 
             int(row["repeat"]) for row in ordinary
         )
     )
+    memory_rows = [*policy_off, *ordinary, *selective]
+    post_observation_memory_samples = bool(memory_rows) and all(
+        row_post_observation_memory_gate(row) for row in memory_rows
+    )
     checksum_by_repeat: dict[int, set[int]] = {}
     for row in rows:
         checksum_by_repeat.setdefault(int(row["repeat"]), set()).add(int(row["checksum"]))
@@ -594,6 +614,7 @@ def summarize(rows: list[dict[str, Any]], *, seed: int = 20260715) -> dict[str, 
         mechanism_ready
         and matched_work
         and enough_pairs
+        and all(row_post_observation_memory_gate(row) for row in [*ordinary, *selective])
         and float(peak_rss["ci95"][0]) > 0.0
         and float(pss["ci95"][0]) > 0.0
     )
@@ -609,10 +630,11 @@ def summarize(rows: list[dict[str, Any]], *, seed: int = 20260715) -> dict[str, 
         arena_rows_ready
         and matched_work
         and len(arena_paired_repeats) >= 5
+        and all(row_post_observation_memory_gate(row) for row in [*policy_off, *ordinary])
         and float(arena_pss["ci95"][0]) > 0.0
     )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "eventually_freed_lifetime_experiment",
         "arms": arm_summaries,
         "paired_repeats": paired_repeats,
@@ -638,6 +660,7 @@ def summarize(rows: list[dict[str, Any]], *, seed: int = 20260715) -> dict[str, 
             "runtime_adaptive_mechanism_claim_ready": adaptive_mechanism_ready,
             "performance_claim_ready": performance_ready,
             "memory_reduction_claim_ready": memory_ready,
+            "post_observation_memory_samples": post_observation_memory_samples,
             "dedicated_lifetime_arena_steady_pss_reduction_claim_ready": (
                 arena_memory_ready
             ),
