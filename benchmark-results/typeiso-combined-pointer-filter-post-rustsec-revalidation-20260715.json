@@ -1,0 +1,931 @@
+{
+  "binaries": {
+    "baseline": {
+      "path": "/tmp/unialloc-typeiso-post-rustsec-baseline-20260715",
+      "sha256": "1a46586971353cb7ce8e98c933e7df9534bb5ba529bb733fbfb084cd6de19f9d",
+      "size_bytes": 1457400
+    },
+    "build": "release; RUSTFLAGS=-C target-cpu=native; type_isolation enabled; locked offline dependency graph",
+    "one_acquire_candidate": {
+      "path": "/tmp/unialloc-typeiso-post-rustsec-candidate-20260715",
+      "sha256": "001f4ba2b0f4410a744c802913203687b3a5f9a4efbe97f970f66be78fdba0a1",
+      "size_bytes": 1457208
+    },
+    "zero_recheck_candidate": {
+      "path": "/tmp/unialloc-typeiso-post-rustsec-recheck-candidate-20260715",
+      "sha256": "5452ffe6b70111c218a6172faa83533924b04b62f23489e0b64054253554b494",
+      "size_bytes": 1457280
+    }
+  },
+  "generated_at": "2026-07-15T12:00:02-04:00",
+  "kept_zero_recheck": {
+    "n5_confirmation": {
+      "environment": {
+        "baseline_commit": "5d2c028d9925d11f6d015c9ceb6519c34039b321",
+        "baseline_sha256": "1a46586971353cb7ce8e98c933e7df9534bb5ba529bb733fbfb084cd6de19f9d",
+        "candidate_commit": "c6b3358f70480087e49fd626711fe615cf4b2c1e-plus-working-recheck",
+        "candidate_sha256": "5452ffe6b70111c218a6172faa83533924b04b62f23489e0b64054253554b494",
+        "cpu": "22",
+        "finished_at": "2026-07-15T11:56:40-04:00",
+        "frequency_after_khz": "3791652",
+        "frequency_before_khz": "1517216",
+        "governor": "schedutil",
+        "load_after": " 11:56:40 up 69 days,  2:21, 12 users,  load average: 17.46, 9.36, 7.64",
+        "load_before": " 11:56:24 up 69 days,  2:21, 12 users,  load average: 19.15, 9.24, 7.58",
+        "numa_node": "0",
+        "smt_sibling_cpu": "86",
+        "started_at": "2026-07-15T11:56:24-04:00",
+        "tsv_sha256": "f22af353ceb66d04933d7b466a2e69a30f1aad46bb7489244b36ef8ebdc5375d"
+      },
+      "geometric_mean_runtime_delta_percent": {
+        "all_seven": 0.23418604157634526,
+        "common_raw_two": -0.028514307503246794,
+        "feature_on_five": 0.3394593669726609
+      },
+      "paired_candidate_wins_all_scenarios": 18,
+      "paired_rounds_all_scenarios": 35,
+      "raw_artifacts": {
+        "metadata_path": "/tmp/roi-typeiso-post-rustsec-recheck-ab-n5.meta",
+        "metadata_sha256": "d3f9d82eb2f453fe25deb5376531ff9d8bf76fda55106c9b00be43953a4e73ab",
+        "tsv_path": "/tmp/roi-typeiso-post-rustsec-recheck-ab-n5.tsv",
+        "tsv_sha256": "f22af353ceb66d04933d7b466a2e69a30f1aad46bb7489244b36ef8ebdc5375d"
+      },
+      "scenarios": {
+        "conservative_same": {
+          "baseline_ns_per_iter": {
+            "max": 140.41,
+            "median": 129.007,
+            "min": 128.594,
+            "samples": [
+              128.813,
+              129.007,
+              136.171,
+              140.41,
+              128.594
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 139.885,
+            "median": 129.546,
+            "min": 128.596,
+            "samples": [
+              138.167,
+              128.596,
+              129.546,
+              139.885,
+              129.044
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.0041780678567829,
+          "paired_candidate_wins": 3,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.41780678567828744
+        },
+        "conservative_split": {
+          "baseline_ns_per_iter": {
+            "max": 137.689,
+            "median": 136.881,
+            "min": 135.502,
+            "samples": [
+              136.881,
+              136.863,
+              135.502,
+              137.689,
+              137.076
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 145.22,
+            "median": 138.017,
+            "min": 136.036,
+            "samples": [
+              139.182,
+              145.22,
+              137.536,
+              136.036,
+              138.017
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.0082991795793426,
+          "paired_candidate_wins": 1,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.8299179579342564
+        },
+        "conservative_unscoped_drop": {
+          "baseline_ns_per_iter": {
+            "max": 121.008,
+            "median": 119.298,
+            "min": 118.774,
+            "samples": [
+              119.499,
+              119.298,
+              121.008,
+              118.774,
+              118.962
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 120.841,
+            "median": 120.138,
+            "min": 119.467,
+            "samples": [
+              119.962,
+              119.467,
+              120.321,
+              120.841,
+              120.138
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.007041190967158,
+          "paired_candidate_wins": 1,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.704119096715794
+        },
+        "local_same": {
+          "baseline_ns_per_iter": {
+            "max": 89.261,
+            "median": 78.513,
+            "min": 78.106,
+            "samples": [
+              87.754,
+              78.106,
+              78.513,
+              89.261,
+              78.14
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 81.245,
+            "median": 78.548,
+            "min": 78.013,
+            "samples": [
+              78.283,
+              81.245,
+              80.002,
+              78.548,
+              78.013
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.0004457860481704,
+          "paired_candidate_wins": 3,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.044578604817036016
+        },
+        "raw": {
+          "baseline_ns_per_iter": {
+            "max": 18.763,
+            "median": 18.694,
+            "min": 18.658,
+            "samples": [
+              18.658,
+              18.706,
+              18.694,
+              18.763,
+              18.693
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 18.735,
+            "median": 18.696,
+            "min": 18.645,
+            "samples": [
+              18.691,
+              18.735,
+              18.696,
+              18.726,
+              18.645
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.0001069861987806,
+          "paired_candidate_wins": 2,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.010698619878057869
+        },
+        "raw64": {
+          "baseline_ns_per_iter": {
+            "max": 19.244,
+            "median": 19.199,
+            "min": 19.146,
+            "samples": [
+              19.151,
+              19.244,
+              19.199,
+              19.205,
+              19.146
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 19.204,
+            "median": 19.186,
+            "min": 19.157,
+            "samples": [
+              19.157,
+              19.184,
+              19.186,
+              19.202,
+              19.204
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.9993228814000729,
+          "paired_candidate_wins": 3,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.06771185999271401
+        },
+        "raw64_under_global_recovery": {
+          "baseline_ns_per_iter": {
+            "max": 44.988,
+            "median": 21.371,
+            "min": 21.278,
+            "samples": [
+              44.988,
+              21.543,
+              21.371,
+              21.323,
+              21.278
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 21.314,
+            "median": 21.308,
+            "min": 21.261,
+            "samples": [
+              21.261,
+              21.308,
+              21.314,
+              21.309,
+              21.266
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.9970520799213889,
+          "paired_candidate_wins": 5,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.29479200786111104
+        }
+      }
+    },
+    "reason": "All seven n5 medians remain within +0.83%; all-scenario geomean is +0.234%, common raw geomean is -0.029%, and hosted BSS remains 64 KiB below current dev.",
+    "verdict": "keep"
+  },
+  "layout_diagnosis": {
+    "one_acquire_candidate": {
+      "finding": "Removing the second acquire shortened the preceding negative gate by 16 bytes and shifted downstream allocator text by -0x10 beginning at record_recovery_auto_allocation_metadata_eligible. Two independent n5 panels reproduced raw64 above the +1% guardrail.",
+      "record_recovery_auto_allocation_metadata_eligible": {
+        "baseline_address": "0x41590",
+        "candidate_address": "0x41580",
+        "size_bytes": 2158
+      },
+      "rust_allocator_alloc": {
+        "baseline_address": "0x427b0",
+        "candidate_address": "0x427a0",
+        "size_bytes": 415
+      },
+      "semantic_runtime_slow_path_enabled_for_pointer": {
+        "baseline_address": "0x41200",
+        "baseline_size_bytes": 905,
+        "candidate_address": "0x41200",
+        "candidate_size_bytes": 889
+      }
+    },
+    "zero_recheck_candidate": {
+      "finding": "A same-counter acquire recheck after an observed zero restores the established negative-path observation budget and current-dev text layout while keeping one filter array.",
+      "record_recovery_auto_allocation_metadata_eligible": {
+        "baseline_address": "0x41590",
+        "candidate_address": "0x41590",
+        "size_bytes": 2158
+      },
+      "rust_allocator_alloc": {
+        "baseline_address": "0x427b0",
+        "candidate_address": "0x427b0",
+        "size_bytes": 415
+      },
+      "semantic_runtime_slow_path_enabled_for_pointer": {
+        "baseline_address": "0x41200",
+        "baseline_size_bytes": 905,
+        "candidate_address": "0x41200",
+        "candidate_size_bytes": 905
+      }
+    }
+  },
+  "metric_convention": "Negative runtime delta is faster; positive runtime delta is slower. Scenario admission uses n5 medians and a +1.0% per-leaf regression guardrail.",
+  "protocol": {
+    "counterbalanced_order": "AB/BA alternates by round",
+    "cpu": 22,
+    "fresh_process_per_variant": true,
+    "iterations_per_process": 2000000,
+    "numa_node": 0,
+    "repetitions_per_admission_panel": 5,
+    "scenarios": [
+      "raw",
+      "raw64",
+      "raw64_under_global_recovery",
+      "local_same",
+      "conservative_same",
+      "conservative_split",
+      "conservative_unscoped_drop"
+    ],
+    "smt_sibling_cpu": 86,
+    "summary_statistic": "median",
+    "warmup_processes_per_variant_scenario": {
+      "kept_zero_recheck": 2,
+      "rejected_one_acquire_panel_1": 1,
+      "rejected_one_acquire_panel_2": 2
+    }
+  },
+  "rejected_one_acquire_rebase": {
+    "n5_panel_1": {
+      "environment": {
+        "baseline_commit": "5d2c028d9925d11f6d015c9ceb6519c34039b321",
+        "baseline_sha256": "1a46586971353cb7ce8e98c933e7df9534bb5ba529bb733fbfb084cd6de19f9d",
+        "candidate_commit": "c6b3358f70480087e49fd626711fe615cf4b2c1e",
+        "candidate_sha256": "001f4ba2b0f4410a744c802913203687b3a5f9a4efbe97f970f66be78fdba0a1",
+        "cpu": "22",
+        "finished_at": "2026-07-15T11:50:57-04:00",
+        "frequency_after_khz": "3789264",
+        "frequency_before_khz": "1312371",
+        "governor": "schedutil",
+        "kernel": "Linux 6.8.0-111-generic",
+        "load_after": " 11:50:57 up 69 days,  2:15, 12 users,  load average: 1.43, 3.30, 6.28",
+        "load_before": " 11:50:43 up 69 days,  2:15, 12 users,  load average: 1.42, 3.36, 6.33",
+        "numa_node": "0",
+        "rustc": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)",
+        "smt_sibling_cpu": "86",
+        "started_at": "2026-07-15T11:50:43-04:00",
+        "tsv_sha256": "4c5a7680079d232a7a2671d3a26276d1e935e65d9721e19ff955ddcae2eccc66"
+      },
+      "geometric_mean_runtime_delta_percent": {
+        "all_seven": 0.3477248008662226,
+        "common_raw_two": 0.47979967882634256,
+        "feature_on_five": 0.2949434718057864
+      },
+      "paired_candidate_wins_all_scenarios": 15,
+      "paired_rounds_all_scenarios": 35,
+      "raw_artifacts": {
+        "metadata_path": "/tmp/roi-typeiso-post-rustsec-ab-n5.meta",
+        "metadata_sha256": "e6a67bbd11702884b8b1f65708477ca36a09d6ed8006aae835d7f6b5f32046ea",
+        "tsv_path": "/tmp/roi-typeiso-post-rustsec-ab-n5.tsv",
+        "tsv_sha256": "4c5a7680079d232a7a2671d3a26276d1e935e65d9721e19ff955ddcae2eccc66"
+      },
+      "scenarios": {
+        "conservative_same": {
+          "baseline_ns_per_iter": {
+            "max": 148.296,
+            "median": 129.866,
+            "min": 128.61,
+            "samples": [
+              135.155,
+              148.296,
+              129.866,
+              129.286,
+              128.61
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 148.008,
+            "median": 129.544,
+            "min": 129.031,
+            "samples": [
+              129.544,
+              129.461,
+              148.008,
+              131.239,
+              129.031
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.9975205211525726,
+          "paired_candidate_wins": 2,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.24794788474273854
+        },
+        "conservative_split": {
+          "baseline_ns_per_iter": {
+            "max": 151.911,
+            "median": 138.716,
+            "min": 137.082,
+            "samples": [
+              138.716,
+              137.082,
+              137.856,
+              139.348,
+              151.911
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 139.653,
+            "median": 138.183,
+            "min": 136.311,
+            "samples": [
+              136.368,
+              136.311,
+              138.69,
+              138.183,
+              139.653
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.9961576170016435,
+          "paired_candidate_wins": 4,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.3842382998356486
+        },
+        "conservative_unscoped_drop": {
+          "baseline_ns_per_iter": {
+            "max": 121.002,
+            "median": 119.839,
+            "min": 119.064,
+            "samples": [
+              119.098,
+              119.839,
+              121.002,
+              119.064,
+              120.218
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 121.299,
+            "median": 120.476,
+            "min": 119.862,
+            "samples": [
+              120.476,
+              120.131,
+              120.752,
+              119.862,
+              121.299
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.0053154649154281,
+          "paired_candidate_wins": 1,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.5315464915428114
+        },
+        "local_same": {
+          "baseline_ns_per_iter": {
+            "max": 79.019,
+            "median": 78.601,
+            "min": 77.824,
+            "samples": [
+              78.601,
+              77.824,
+              78.667,
+              79.019,
+              77.921
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 82.468,
+            "median": 79.429,
+            "min": 78.034,
+            "samples": [
+              80.737,
+              78.695,
+              79.429,
+              78.034,
+              82.468
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.0105342171219196,
+          "paired_candidate_wins": 1,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 1.0534217121919598
+        },
+        "raw": {
+          "baseline_ns_per_iter": {
+            "max": 20.256,
+            "median": 18.737,
+            "min": 18.712,
+            "samples": [
+              18.96,
+              18.712,
+              18.737,
+              18.719,
+              20.256
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 18.788,
+            "median": 18.696,
+            "min": 18.635,
+            "samples": [
+              18.696,
+              18.635,
+              18.638,
+              18.788,
+              18.715
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.9978118161925603,
+          "paired_candidate_wins": 4,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.2188183807439681
+        },
+        "raw64": {
+          "baseline_ns_per_iter": {
+            "max": 20.456,
+            "median": 19.268,
+            "min": 19.228,
+            "samples": [
+              19.273,
+              19.24,
+              20.456,
+              19.228,
+              19.268
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 20.083,
+            "median": 19.496,
+            "min": 19.411,
+            "samples": [
+              19.431,
+              19.411,
+              19.496,
+              19.496,
+              20.083
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.0118330911355615,
+          "paired_candidate_wins": 1,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 1.1833091135561524
+        },
+        "raw64_under_global_recovery": {
+          "baseline_ns_per_iter": {
+            "max": 22.751,
+            "median": 21.356,
+            "min": 21.333,
+            "samples": [
+              22.751,
+              21.393,
+              21.356,
+              21.337,
+              21.333
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 21.743,
+            "median": 21.469,
+            "min": 21.285,
+            "samples": [
+              21.304,
+              21.518,
+              21.743,
+              21.469,
+              21.285
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.005291253043641,
+          "paired_candidate_wins": 2,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.5291253043641087
+        }
+      }
+    },
+    "n5_panel_2": {
+      "environment": {
+        "cpu": "22",
+        "finished_at": "2026-07-15T11:52:27-04:00",
+        "frequency_after_khz": "3793038",
+        "frequency_before_khz": "3250000",
+        "governor": "schedutil",
+        "load_after": " 11:52:27 up 69 days,  2:17, 12 users,  load average: 4.07, 3.62, 6.12",
+        "load_before": " 11:52:11 up 69 days,  2:16, 12 users,  load average: 2.68, 3.33, 6.06",
+        "numa_node": "0",
+        "smt_sibling_cpu": "86",
+        "started_at": "2026-07-15T11:52:11-04:00",
+        "tsv_sha256": "caa5db43ded02f88d248b9fda3ce937e25c3396a2f9a3295fb65fb5bff67b47a"
+      },
+      "geometric_mean_runtime_delta_percent": {
+        "all_seven": 0.20923046595828776,
+        "common_raw_two": 0.4407773740585874,
+        "feature_on_five": 0.11676123202268851
+      },
+      "paired_candidate_wins_all_scenarios": 17,
+      "paired_rounds_all_scenarios": 35,
+      "raw_artifacts": {
+        "metadata_path": "/tmp/roi-typeiso-post-rustsec-ab-n5-confirm.meta",
+        "metadata_sha256": "063cbbc00cfbd8a8edf8eac96a5d47f142ff49610b878a7b074edbbe06157111",
+        "tsv_path": "/tmp/roi-typeiso-post-rustsec-ab-n5-confirm.tsv",
+        "tsv_sha256": "caa5db43ded02f88d248b9fda3ce937e25c3396a2f9a3295fb65fb5bff67b47a"
+      },
+      "scenarios": {
+        "conservative_same": {
+          "baseline_ns_per_iter": {
+            "max": 130.796,
+            "median": 129.542,
+            "min": 127.569,
+            "samples": [
+              130.796,
+              127.569,
+              129.45,
+              129.542,
+              130.567
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 137.755,
+            "median": 129.065,
+            "min": 128.045,
+            "samples": [
+              128.045,
+              128.904,
+              131.852,
+              137.755,
+              129.065
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.99631779654475,
+          "paired_candidate_wins": 2,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.3682203455250055
+        },
+        "conservative_split": {
+          "baseline_ns_per_iter": {
+            "max": 140.203,
+            "median": 136.354,
+            "min": 136.112,
+            "samples": [
+              137.253,
+              136.118,
+              136.112,
+              140.203,
+              136.354
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 154.896,
+            "median": 138.107,
+            "min": 136.61,
+            "samples": [
+              136.61,
+              138.609,
+              137.615,
+              138.107,
+              154.896
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.01285624184109,
+          "paired_candidate_wins": 2,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 1.2856241841090021
+        },
+        "conservative_unscoped_drop": {
+          "baseline_ns_per_iter": {
+            "max": 120.393,
+            "median": 119.93,
+            "min": 118.975,
+            "samples": [
+              118.975,
+              119.135,
+              120.393,
+              119.93,
+              120.328
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 121.098,
+            "median": 119.763,
+            "min": 119.334,
+            "samples": [
+              119.334,
+              119.701,
+              120.454,
+              121.098,
+              119.763
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.9986075210539481,
+          "paired_candidate_wins": 1,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.13924789460518783
+        },
+        "local_same": {
+          "baseline_ns_per_iter": {
+            "max": 109.068,
+            "median": 78.62,
+            "min": 78.039,
+            "samples": [
+              109.068,
+              78.039,
+              78.836,
+              78.364,
+              78.62
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 92.405,
+            "median": 78.32,
+            "min": 77.974,
+            "samples": [
+              92.405,
+              77.974,
+              78.32,
+              79.607,
+              78.123
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.9961841770541845,
+          "paired_candidate_wins": 4,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.3815822945815506
+        },
+        "raw": {
+          "baseline_ns_per_iter": {
+            "max": 19.428,
+            "median": 18.715,
+            "min": 18.676,
+            "samples": [
+              18.698,
+              18.715,
+              18.676,
+              19.428,
+              18.756
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 18.974,
+            "median": 18.648,
+            "min": 18.621,
+            "samples": [
+              18.628,
+              18.659,
+              18.621,
+              18.974,
+              18.648
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.9964199839700775,
+          "paired_candidate_wins": 5,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.3580016029922528
+        },
+        "raw64": {
+          "baseline_ns_per_iter": {
+            "max": 19.213,
+            "median": 19.182,
+            "min": 19.158,
+            "samples": [
+              19.158,
+              19.162,
+              19.187,
+              19.213,
+              19.182
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 19.624,
+            "median": 19.421,
+            "min": 19.399,
+            "samples": [
+              19.624,
+              19.408,
+              19.399,
+              19.421,
+              19.436
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.0124595975393598,
+          "paired_candidate_wins": 0,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 1.2459597539359768
+        },
+        "raw64_under_global_recovery": {
+          "baseline_ns_per_iter": {
+            "max": 21.537,
+            "median": 21.343,
+            "min": 21.313,
+            "samples": [
+              21.343,
+              21.313,
+              21.327,
+              21.387,
+              21.537
+            ]
+          },
+          "candidate_ns_per_iter": {
+            "max": 44.964,
+            "median": 21.385,
+            "min": 21.285,
+            "samples": [
+              21.385,
+              21.285,
+              44.964,
+              21.291,
+              21.429
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.0019678583142015,
+          "paired_candidate_wins": 3,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.19678583142015427
+        }
+      }
+    },
+    "pooled_n10_diagnostic": {
+      "conservative_same": {
+        "baseline_n10_median_ns_per_iter": 129.704,
+        "candidate_n10_median_ns_per_iter": 129.5025,
+        "runtime_delta_percent": -0.15535372848949347
+      },
+      "conservative_split": {
+        "baseline_n10_median_ns_per_iter": 137.5545,
+        "candidate_n10_median_ns_per_iter": 138.14499999999998,
+        "runtime_delta_percent": 0.42928439273159924
+      },
+      "conservative_unscoped_drop": {
+        "baseline_n10_median_ns_per_iter": 119.8845,
+        "candidate_n10_median_ns_per_iter": 120.29249999999999,
+        "runtime_delta_percent": 0.34032756528157293
+      },
+      "local_same": {
+        "baseline_n10_median_ns_per_iter": 78.6105,
+        "candidate_n10_median_ns_per_iter": 79.062,
+        "runtime_delta_percent": 0.5743507546701832
+      },
+      "raw": {
+        "baseline_n10_median_ns_per_iter": 18.728,
+        "candidate_n10_median_ns_per_iter": 18.6535,
+        "runtime_delta_percent": -0.39780008543357503
+      },
+      "raw64": {
+        "baseline_n10_median_ns_per_iter": 19.2205,
+        "candidate_n10_median_ns_per_iter": 19.433500000000002,
+        "runtime_delta_percent": 1.1081917744075298
+      },
+      "raw64_under_global_recovery": {
+        "baseline_n10_median_ns_per_iter": 21.3495,
+        "candidate_n10_median_ns_per_iter": 21.407,
+        "runtime_delta_percent": 0.26932715051875
+      }
+    },
+    "reason": "raw64 reproduced at +1.183% and +1.246% in two independent n5 panels; pooled n10 is +1.108%.",
+    "verdict": "reject_form"
+  },
+  "remaining_risks": [
+    "The runtime panel is synthetic and single-threaded; cross-domain same-bucket publication contention remains unmeasured.",
+    "The host used schedutil and the kept panel began under elevated system load; counterbalanced ordering, two warmup panels, and n5 medians contain the claim while raw samples preserve the outliers.",
+    "The source-level acquire recheck preserves current-dev text layout; other compiler and linker versions may arrange functions differently.",
+    "External allocator macro workloads were not rerun for this feature-gated, memory-focused bridge."
+  ],
+  "schema_version": 1,
+  "semantic_validation": {
+    "combined_filter_invariant": "A zero combined count proves that neither recovery nor retained authority contributed to the bucket. Publishers increment before record publication; removers decrement after exact record retirement.",
+    "rustsec_evidence_boundary": "The checked-in RustSec bundle remains frozen snapshot evidence with its own implementation digest. This current-head bridge validates the filter semantics, feature matrix, static footprint, compiler probes, and targeted runtime panel without rewriting the frozen bundle.",
+    "zero_recheck": "A second acquire is issued only after the first returns zero. It can turn a racing publication into conservative exact lookup and cannot turn a tracked bucket into an untracked result."
+  },
+  "source": {
+    "baseline_commit": "5d2c028d9925d11f6d015c9ceb6519c34039b321",
+    "candidate_parent_commit": "c6b3358f70480087e49fd626711fe615cf4b2c1e",
+    "candidate_source_diff_sha256": "565ae36fb4358f7d96cdcf336aa2f15e9e827e52f6840583811bccbd7c5ba6f0",
+    "repository": "/home/hanqing/alloc/UniAlloc-roi-typeiso-recheck-20260715",
+    "scope": "Revalidate the combined exact-count semantic pointer filter after the RustSec telemetry commits changed the same compilation unit, then preserve the former two-acquire negative-path budget with a same-counter zero recheck."
+  },
+  "static_memory": {
+    "baseline": {
+      "bss_bytes": 479330,
+      "filter_symbols": [
+        {
+          "bytes": 65536,
+          "name": "GLOBAL_RECOVERY_POINTER_FILTER"
+        },
+        {
+          "bytes": 65536,
+          "name": "GLOBAL_RETAINED_POINTER_FILTER"
+        }
+      ],
+      "text_bytes": 470520,
+      "total_section_bytes": 1831824
+    },
+    "delta": {
+      "bss_bytes": -65536,
+      "text_bytes": 0,
+      "total_section_bytes": -65560
+    },
+    "zero_recheck_candidate": {
+      "bss_bytes": 413794,
+      "filter_symbols": [
+        {
+          "bytes": 65536,
+          "name": "GLOBAL_SEMANTIC_POINTER_FILTER"
+        }
+      ],
+      "text_bytes": 470520,
+      "total_section_bytes": 1766264
+    }
+  },
+  "validation": {
+    "cargo_fmt_check": "passed",
+    "git_diff_check": "passed",
+    "tests": {
+      "fixed_heap_type_isolation_stats": {
+        "command": "cargo test -p unialloc --lib --no-default-features --features fixed_heap,type_isolation,stats -- --test-threads=1",
+        "result": "746 passed"
+      },
+      "type_isolation_reclaim_checks_stats": {
+        "command": "cargo test -p unialloc --lib --features type_isolation,reclaim_checks,stats -- --test-threads=1",
+        "result": "914 passed"
+      },
+      "type_isolation_stats": {
+        "command": "cargo test -p unialloc --lib --features type_isolation,stats -- --test-threads=1",
+        "result": "917 passed"
+      }
+    }
+  }
+}

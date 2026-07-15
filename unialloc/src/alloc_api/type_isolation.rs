@@ -13131,7 +13131,12 @@ fn global_semantic_pointer_maybe_tracked(ptr: *mut u8) -> bool {
         return false;
     }
     let idx = global_semantic_pointer_filter_index(ptr);
-    GLOBAL_SEMANTIC_POINTER_FILTER[idx].load(Ordering::Acquire) != 0
+    let count = &GLOBAL_SEMANTIC_POINTER_FILTER[idx];
+    // Recheck an observed zero once. The former split-domain gate also made
+    // two acquire observations on its common negative path; retaining that
+    // budget gives a concurrent publisher another chance to conservatively
+    // select exact lookup without restoring a second 64 KiB counter array.
+    count.load(Ordering::Acquire) != 0 || count.load(Ordering::Acquire) != 0
 }
 
 #[inline]
