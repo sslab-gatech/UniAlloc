@@ -32,6 +32,12 @@ RUST_PRIOR_RECEIVER_SHORT_BASIS = (
     "automatic_rust_lifetime_prior_receiver_owned_short"
 )
 RUST_PRIOR_RETURN_LONG_BASIS = "automatic_rust_lifetime_prior_return_long"
+RUST_PRIOR_RETURN_LAYOUT_UNKNOWN_BASIS = (
+    "automatic_rust_lifetime_prior_return_long_unjoinable_layout_unknown"
+)
+RUST_PRIOR_RECEIVER_LAYOUT_UNKNOWN_BASIS = (
+    "automatic_rust_lifetime_prior_receiver_owned_short_unjoinable_layout_unknown"
+)
 RUST_PRIOR_CLEANUP_UNKNOWN_BASIS = (
     "automatic_rust_lifetime_prior_cleanup_or_unwind_unknown"
 )
@@ -325,6 +331,12 @@ fn return_box() -> Box<[u8; PAYLOAD_BYTES]> {
     owner
 }
 
+#[inline(never)]
+fn return_generic_box<T>(value: T) -> Box<T> {
+    let owner = Box::new(value);
+    owner
+}
+
 struct Holder(Box<[u8; PAYLOAD_BYTES]>);
 
 #[inline(never)]
@@ -389,6 +401,7 @@ fn main() {
     box_may_unwind_then_forget(false);
     box_in_loop(2);
     drop(return_box());
+    drop(return_generic_box([14_u8; 64]));
     drop(return_owner_through_aggregate());
     drop(return_nonowner_projection_from_pair());
     store_box();
@@ -426,6 +439,28 @@ fn main() {
     let observed = unialloc::observed_hints();
     println!("observed_hints={observed}");
     assert_eq!(observed & 0b1100, 0b1100);
+}
+""",
+            encoding="utf-8",
+        )
+
+        cls.generic_prior_transport_fixture = (
+            cls.tmp / "rust_lifetime_prior_generic_transport.rs"
+        )
+        cls.generic_prior_transport_fixture.write_text(
+            """extern crate unialloc;
+
+#[inline(never)]
+fn returned_generic_owner<T: 'static>(value: T) -> Box<T> {
+    let owner = Box::new(value);
+    owner
+}
+
+fn main() {
+    drop(returned_generic_owner([3_u8; 96]));
+    let observed = unialloc::observed_hints();
+    println!("observed_hints={observed}");
+    assert_eq!(observed, 0);
 }
 """,
             encoding="utf-8",
@@ -917,10 +952,34 @@ fn main() {
         receiver = self.receiver_allocation_row(
             audit, "receiver_owned_reserve_then_release"
         )
-        self.assertEqual(receiver["lifetime_hint"], 1, receiver)
-        self.assertEqual(receiver["lifetime_hint_confidence"], 85, receiver)
+        self.assertEqual(receiver["lifetime_hint"], 0, receiver)
+        self.assertEqual(receiver["lifetime_hint_confidence"], 0, receiver)
         self.assertEqual(
-            receiver["lifetime_hint_basis"], RUST_PRIOR_RECEIVER_SHORT_BASIS, receiver
+            receiver["lifetime_hint_basis"],
+            RUST_PRIOR_RECEIVER_LAYOUT_UNKNOWN_BASIS,
+            receiver,
+        )
+        self.assertFalse(
+            receiver["lifetime_analysis_features"]["runtime_join_key_complete"],
+            receiver,
+        )
+
+        generic_return = self.assert_hint(
+            audit,
+            "return_generic_box",
+            0,
+            0,
+            RUST_PRIOR_RETURN_LAYOUT_UNKNOWN_BASIS,
+        )
+        generic_features = generic_return["lifetime_analysis_features"]
+        self.assertTrue(generic_features["return_sink"], generic_return)
+        self.assertFalse(
+            generic_features["runtime_join_key_complete"], generic_return
+        )
+        self.assertEqual(
+            generic_features["requested_layout_basis"],
+            "dynamic_or_unproven_requested_layout",
+            generic_return,
         )
 
         conditional = self.receiver_allocation_row(audit, "receiver_conditional")
@@ -1011,6 +1070,42 @@ fn main() {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("observed_hints=", completed.stdout)
+
+    def test_rust_lifetime_prior_abstains_before_unjoinable_generic_transport(
+        self,
+    ) -> None:
+        audit = self.run_pass(
+            "rust-prior-generic-layout-abstain",
+            rust_prior=True,
+            actual_rewrite=True,
+            fixture=self.generic_prior_transport_fixture,
+            panic_abort=True,
+        )
+        row = self.assert_hint(
+            audit,
+            "returned_generic_owner",
+            0,
+            0,
+            RUST_PRIOR_RETURN_LAYOUT_UNKNOWN_BASIS,
+        )
+        self.assertEqual(
+            row["rewrite_status"],
+            "actual_semantic_scope_generic_type_rewrite_applied",
+            row,
+        )
+        self.assertFalse(
+            row["lifetime_analysis_features"]["runtime_join_key_complete"], row
+        )
+        completed = subprocess.run(
+            [str(self.tmp / "rust-prior-generic-layout-abstain")],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("observed_hints=0", completed.stdout)
 
 
 if __name__ == "__main__":

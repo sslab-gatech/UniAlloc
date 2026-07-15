@@ -1236,6 +1236,44 @@ fn automatic_rust_lifetime_prior_selection(
     }
 }
 
+fn automatic_rust_lifetime_prior_joinable_layout(features: &SemanticLifetimeFeatureExport) -> bool {
+    // Ownership flow can predict a useful class while the scoped call still
+    // performs dynamic or nested allocations. Route an advisory prior only
+    // when the compiler audit can name the same exact-layout cohort that the
+    // runtime observer will validate. The ownership facts remain exported for
+    // ground-truth analysis when this deployment gate abstains.
+    matches!(features.requested_size_bytes, Some(size) if size > 0)
+        && matches!(
+            features.requested_align_bytes,
+            Some(align) if align.is_power_of_two()
+        )
+}
+
+fn automatic_rust_lifetime_prior_unjoinable_layout_selection(
+    selection: LifetimeHintSelection,
+) -> LifetimeHintSelection {
+    let basis = match selection.basis {
+        "automatic_rust_lifetime_prior_all_path_local_release_short" => {
+            "automatic_rust_lifetime_prior_all_path_local_release_short_unjoinable_layout_unknown"
+        }
+        "automatic_rust_lifetime_prior_receiver_owned_short" => {
+            "automatic_rust_lifetime_prior_receiver_owned_short_unjoinable_layout_unknown"
+        }
+        "automatic_rust_lifetime_prior_return_long" => {
+            "automatic_rust_lifetime_prior_return_long_unjoinable_layout_unknown"
+        }
+        "automatic_rust_lifetime_prior_escape_long" => {
+            "automatic_rust_lifetime_prior_escape_long_unjoinable_layout_unknown"
+        }
+        _ => return selection,
+    };
+    LifetimeHintSelection {
+        hint: 0,
+        confidence: 0,
+        basis,
+    }
+}
+
 fn select_lifetime_hint_with_heap_inference(
     profile: Option<&LifetimeProfile>,
     configured_hint: u16,
@@ -1283,6 +1321,14 @@ fn select_lifetime_hint_with_heap_inference(
             lifetime_features,
         ) {
             let selection = automatic_rust_lifetime_prior_selection(decision);
+            let selection = if selection.hint != 0
+                && !automatic_rust_lifetime_prior_joinable_layout(
+                    lifetime_features.expect("Rust lifetime prior requires feature export"),
+                ) {
+                automatic_rust_lifetime_prior_unjoinable_layout_selection(selection)
+            } else {
+                selection
+            };
             return if selection.hint != 0 && selection.confidence < confidence_threshold {
                 LifetimeHintSelection {
                     hint: 0,
