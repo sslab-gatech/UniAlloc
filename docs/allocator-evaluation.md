@@ -232,8 +232,8 @@ benchmark-specific padding remains an audit control.
 | `linked_list::bench_push_back` | Scudo | warm-up | 30 s |
 
 A censored warm-up produced no timing estimate and skipped its three measured
-processes. Scudo also reported `Can't populate more pages for size class 64.`
-and `Can't populate more pages for size class 96.` for the linked-list case.
+processes. Scudo also reported `Can't populate more pages for size class 64.` for
+the linked-list case.
 The campaign produced 13,080 terminal records and ended as
 `complete_with_timeout_censoring`.
 
