@@ -1,0 +1,18 @@
+panel,group,category,count,denominator_count,requested_bytes,denominator_requested_bytes,share,runtime_sites,threshold_minimum_decisive_outcomes,threshold_minimum_long_requested_byte_share,caveat
+outcomes,fd,Short,62338,62591,1866188,1870950,0.9959578853189756,37,,,completed outcomes only; live objects are right-censored
+outcomes,fd,Long,151,62591,3538,1870950,0.0024124874183189277,37,,,completed outcomes only; live objects are right-censored
+outcomes,fd,Indeterminate,102,62591,1224,1870950,0.0016296272627055008,37,,,completed outcomes only; live objects are right-censored
+outcomes,oxipng,Short,9635,9650,23117862,23119204,0.9984455958549223,21,,,completed outcomes only; live objects are right-censored
+outcomes,oxipng,Long,14,9650,1210,23119204,0.001450777202072539,21,,,completed outcomes only; live objects are right-censored
+outcomes,oxipng,Indeterminate,1,9650,132,23119204,0.00010362694300518135,21,,,completed outcomes only; live objects are right-censored
+outcomes,ripgrep,Short,2266,2266,73430,73430,1.0,117,,,completed outcomes only; live objects are right-censored
+outcomes,ripgrep,Long,0,2266,0,73430,0.0,117,,,completed outcomes only; live objects are right-censored
+outcomes,ripgrep,Indeterminate,0,2266,0,73430,0.0,117,,,completed outcomes only; live objects are right-censored
+mir_feature_association,owner_place_basis=destination_owner_place_unresolved,observed_long_requested_byte_share,,,682,2661,0.2562946260804209,13,,,observational; tiny denominator below 1% of campaign decisive bytes
+mir_feature_association,reachable_cleanup_blocks_count=1,observed_long_requested_byte_share,,,120,576,0.20833333333333334,8,,,observational; tiny denominator below 1% of campaign decisive bytes
+mir_feature_association,reachable_cleanup_blocks_count=2-3,observed_long_requested_byte_share,,,382,4935,0.07740628166160081,42,,,observational; tiny denominator below 1% of campaign decisive bytes
+mir_feature_association,reachable_cleanup_blocks_count=4+,observed_long_requested_byte_share,,,1190,15479,0.07687835131468441,43,,,observational; tiny denominator below 1% of campaign decisive bytes
+mir_feature_association,requested_layout_basis=exact_box_new_payload_layout,observed_long_requested_byte_share,,,2384,164184,0.014520294303951664,58,,,observational; tiny denominator below 1% of campaign decisive bytes
+static_classifier,deployed_duration_output,Actionable,0,175,,,0.0,175,,,abstentions remain unclassified and carry no error label
+static_classifier,deployed_duration_output,Abstain,175,175,,,1.0,175,,,abstentions remain unclassified and carry no error label
+safe_profile_gate,long_dominant_candidate,Eligible Long site,0,175,,,0.0,175,3,0.8,preregistered runtime profile gate; no held-out predictive claim

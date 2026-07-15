@@ -1,0 +1,515 @@
+{
+  "claim_boundary": "The automatic compiler result is exact only for the audited fixture patterns. The ordinary/THP pair uses one inferred binary and matched lifetime geometry. A THP claim additionally requires the recorded actual-backing gate.",
+  "comparisons": {
+    "compiler_hugepage_vs_runtime_adaptive": {
+      "control": "runtime-adaptive",
+      "excluded_blocks": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "included_blocks": [],
+      "metrics": {
+        "allocation_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "max_rss_kib": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "outer_wall_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "touch_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "workload_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        }
+      },
+      "requires_per_block_thp_backing": true,
+      "treatment": "hints-thp"
+    },
+    "compiler_layout_vs_default": {
+      "control": "default",
+      "excluded_blocks": [],
+      "included_blocks": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "metrics": {
+        "allocation_seconds": {
+          "bootstrap_95_high_percent": 29.146529244464947,
+          "bootstrap_95_low_percent": 24.474944878861994,
+          "median_percent": 26.15612193846879,
+          "paired_samples": 5,
+          "semantics": "positive means treatment reduced the lower-is-better metric"
+        },
+        "max_rss_kib": {
+          "bootstrap_95_high_percent": 60.71428571428572,
+          "bootstrap_95_low_percent": 55.172413793103445,
+          "median_percent": 55.172413793103445,
+          "paired_samples": 5,
+          "semantics": "positive means treatment reduced the lower-is-better metric"
+        },
+        "outer_wall_seconds": {
+          "bootstrap_95_high_percent": 12.340608004307851,
+          "bootstrap_95_low_percent": 10.305520985980344,
+          "median_percent": 10.697682728589886,
+          "paired_samples": 5,
+          "semantics": "positive means treatment reduced the lower-is-better metric"
+        },
+        "touch_seconds": {
+          "bootstrap_95_high_percent": 131.21771543358705,
+          "bootstrap_95_low_percent": 48.51401379337141,
+          "median_percent": 127.40605002405836,
+          "paired_samples": 5,
+          "semantics": "positive means treatment reduced the lower-is-better metric"
+        },
+        "workload_seconds": {
+          "bootstrap_95_high_percent": 33.09369813695642,
+          "bootstrap_95_low_percent": 27.771369104667755,
+          "median_percent": 28.696863419294093,
+          "paired_samples": 5,
+          "semantics": "positive means treatment reduced the lower-is-better metric"
+        }
+      },
+      "requires_per_block_thp_backing": false,
+      "treatment": "hints-ordinary"
+    },
+    "full_feature_vs_default": {
+      "control": "default",
+      "excluded_blocks": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "included_blocks": [],
+      "metrics": {
+        "allocation_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "max_rss_kib": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "outer_wall_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "touch_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "workload_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        }
+      },
+      "requires_per_block_thp_backing": true,
+      "treatment": "hints-thp"
+    },
+    "runtime_adaptive_vs_default": {
+      "control": "default",
+      "excluded_blocks": [],
+      "included_blocks": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "metrics": {
+        "allocation_seconds": {
+          "bootstrap_95_high_percent": -0.8303712926943652,
+          "bootstrap_95_low_percent": -3.417935568790176,
+          "median_percent": -2.1380091269396995,
+          "paired_samples": 5,
+          "semantics": "positive means treatment reduced the lower-is-better metric"
+        },
+        "max_rss_kib": {
+          "bootstrap_95_high_percent": 0.0,
+          "bootstrap_95_low_percent": 0.0,
+          "median_percent": 0.0,
+          "paired_samples": 5,
+          "semantics": "positive means treatment reduced the lower-is-better metric"
+        },
+        "outer_wall_seconds": {
+          "bootstrap_95_high_percent": -0.4521159664276686,
+          "bootstrap_95_low_percent": -2.8468439160018066,
+          "median_percent": -0.9409674310337013,
+          "paired_samples": 5,
+          "semantics": "positive means treatment reduced the lower-is-better metric"
+        },
+        "touch_seconds": {
+          "bootstrap_95_high_percent": 1.622724344821802,
+          "bootstrap_95_low_percent": -0.8634955020007773,
+          "median_percent": -0.2275728835263502,
+          "paired_samples": 5,
+          "semantics": "positive means treatment reduced the lower-is-better metric"
+        },
+        "workload_seconds": {
+          "bootstrap_95_high_percent": -0.8204783362630419,
+          "bootstrap_95_low_percent": -3.0901550206870354,
+          "median_percent": -1.8732133915316584,
+          "paired_samples": 5,
+          "semantics": "positive means treatment reduced the lower-is-better metric"
+        }
+      },
+      "requires_per_block_thp_backing": false,
+      "treatment": "runtime-adaptive"
+    },
+    "thp_increment_vs_same_hints": {
+      "control": "hints-ordinary",
+      "excluded_blocks": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "included_blocks": [],
+      "metrics": {
+        "allocation_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "max_rss_kib": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "outer_wall_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "touch_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        },
+        "workload_seconds": {
+          "paired_samples": 0,
+          "status": "unavailable_without_backed_thp_pairs"
+        }
+      },
+      "requires_per_block_thp_backing": true,
+      "treatment": "hints-thp"
+    }
+  },
+  "compiler_audits": {
+    "baseline": {
+      "audit_file_count": 1,
+      "audit_root": "/tmp/unialloc-compiler-lifetime-oracle-20260715-v2/compiler-audits/baseline",
+      "audit_sha256": "d9cce734dd7623e25e2ad671b37fb8c933ebd0314d4ac92bc65b13131601f56e",
+      "basis_counts": {
+        "default_unknown": 5
+      },
+      "bounded_mechanism_coverage": 0.0,
+      "bounded_mechanism_site_count": 0,
+      "bounded_process_long_oracle_site_count": 0,
+      "candidate_allocation_site_count": 5,
+      "eventual_release_fact_site_count": 2,
+      "heap_unknown_site_count": 0,
+      "hint_counts": {
+        "0": 5
+      },
+      "inference_enabled_audit_file_count": 0,
+      "proven_scoped_site_count": 0,
+      "schema_version": 1,
+      "source": "compiler-heap-lifetime-audit-summary"
+    },
+    "inferred": {
+      "audit_file_count": 1,
+      "audit_root": "/tmp/unialloc-compiler-lifetime-oracle-20260715-v2/compiler-audits/inferred",
+      "audit_sha256": "f6ac3581414fc7787e39dd51118ea138df744bfb31bd107ea73279e9d4b882a2",
+      "basis_counts": {
+        "automatic_heap_alias_or_escape_unknown": 3,
+        "automatic_heap_cleanup_or_unwind_unknown": 3,
+        "automatic_heap_exact_box_leak": 1,
+        "automatic_heap_exact_mem_forget": 1,
+        "automatic_heap_nonlinear_control_flow_unknown": 1
+      },
+      "bounded_mechanism_coverage": 0.2222222222222222,
+      "bounded_mechanism_site_count": 2,
+      "bounded_process_long_oracle_site_count": 2,
+      "candidate_allocation_site_count": 9,
+      "eventual_release_fact_site_count": 2,
+      "heap_unknown_site_count": 7,
+      "hint_counts": {
+        "0": 7,
+        "41218": 2
+      },
+      "inference_enabled_audit_file_count": 1,
+      "proven_scoped_site_count": 0,
+      "schema_version": 1,
+      "source": "compiler-heap-lifetime-audit-summary"
+    }
+  },
+  "correctness_checksum": "9781114202548085314",
+  "correctness_hashes_equal": true,
+  "external_baseline_gate": {
+    "fallback_allowed": false,
+    "google_tcmalloc_temeraire_hpaa": "not_measured_in_this_harness_requires_separate_verified_fixed_revision_official_bazel_arm",
+    "gperftools_legacy_eligible_as_google_tcmalloc": false,
+    "required_provenance": [
+      "Temeraire/HPAA implementation identity",
+      "Google TCMalloc git commit",
+      "official Bazel build and link-time malloc target options"
+    ]
+  },
+  "per_arm": {
+    "default": {
+      "max_anon_hugepages_kib": 0,
+      "max_pre_touch_anon_hugepages_kib": 0,
+      "measured_runs": 5,
+      "median_allocation_seconds": 0.04207953,
+      "median_anon_hugepages_kib": 0.0,
+      "median_gnu_wall_seconds": 0.1,
+      "median_max_rss_kib": 46080.0,
+      "median_outer_wall_seconds": 0.104355104,
+      "median_smaps_rss_kib": 46524.0,
+      "median_touch_seconds": 0.0031632,
+      "median_workload_seconds": 0.045283051,
+      "runtime_counter_totals": {
+        "compiler_inferred_arena_lock_acquisitions": 0,
+        "compiler_inferred_bypass_requested_bytes": 0,
+        "compiler_inferred_density_promotion_attempts": 0,
+        "compiler_inferred_density_promotion_errors": 0,
+        "compiler_inferred_density_promotion_successes": 0,
+        "compiler_inferred_direct_long_deallocations": 0,
+        "compiler_inferred_direct_long_requested_bytes": 0,
+        "compiler_inferred_direct_long_routes": 0,
+        "compiler_inferred_direct_long_routes_without_trailer": 0,
+        "compiler_inferred_direct_long_slot_bytes": 0,
+        "compiler_inferred_proven_ephemeral_bypasses": 0,
+        "compiler_inferred_unknown_or_unproven_bypasses": 0,
+        "mapping_failures": 0,
+        "nohugepage_advice_failures": 0,
+        "ordinary_extent_mappings": 0,
+        "routed_allocations": 0,
+        "routed_deallocations": 0,
+        "semantic_fallback_allocations": 35,
+        "semantic_total_allocations": 102435,
+        "semantic_typed_allocations": 102400,
+        "thp_advice_attempts": 0,
+        "thp_advice_errors": 0,
+        "thp_advice_successes": 0,
+        "thp_collapse_attempts": 0,
+        "thp_collapse_successes": 0,
+        "thp_extent_mappings": 0,
+        "unknown_bypasses": 0
+      }
+    },
+    "hints-ordinary": {
+      "max_anon_hugepages_kib": 0,
+      "max_pre_touch_anon_hugepages_kib": 0,
+      "measured_runs": 5,
+      "median_allocation_seconds": 0.033453889,
+      "median_anon_hugepages_kib": 0.0,
+      "median_gnu_wall_seconds": 0.09,
+      "median_max_rss_kib": 29696.0,
+      "median_outer_wall_seconds": 0.094244974,
+      "median_smaps_rss_kib": 30020.0,
+      "median_touch_seconds": 0.001388292,
+      "median_workload_seconds": 0.034879628,
+      "runtime_counter_totals": {
+        "compiler_inferred_arena_lock_acquisitions": 40960,
+        "compiler_inferred_bypass_requested_bytes": 251822080,
+        "compiler_inferred_density_promotion_attempts": 0,
+        "compiler_inferred_density_promotion_errors": 0,
+        "compiler_inferred_density_promotion_successes": 0,
+        "compiler_inferred_direct_long_deallocations": 0,
+        "compiler_inferred_direct_long_requested_bytes": 167772160,
+        "compiler_inferred_direct_long_routes": 40960,
+        "compiler_inferred_direct_long_routes_without_trailer": 40960,
+        "compiler_inferred_direct_long_slot_bytes": 167772160,
+        "compiler_inferred_proven_ephemeral_bypasses": 0,
+        "compiler_inferred_unknown_or_unproven_bypasses": 61445,
+        "mapping_failures": 0,
+        "nohugepage_advice_failures": 0,
+        "ordinary_extent_mappings": 80,
+        "routed_allocations": 40960,
+        "routed_deallocations": 0,
+        "semantic_fallback_allocations": 30,
+        "semantic_total_allocations": 102435,
+        "semantic_typed_allocations": 102405,
+        "thp_advice_attempts": 0,
+        "thp_advice_errors": 0,
+        "thp_advice_successes": 0,
+        "thp_collapse_attempts": 0,
+        "thp_collapse_successes": 0,
+        "thp_extent_mappings": 0,
+        "unknown_bypasses": 0
+      }
+    },
+    "hints-thp": {
+      "max_anon_hugepages_kib": 0,
+      "max_pre_touch_anon_hugepages_kib": 0,
+      "measured_runs": 5,
+      "median_allocation_seconds": 0.033620792,
+      "median_anon_hugepages_kib": 0.0,
+      "median_gnu_wall_seconds": 0.09,
+      "median_max_rss_kib": 28672.0,
+      "median_outer_wall_seconds": 0.093380555,
+      "median_smaps_rss_kib": 29844.0,
+      "median_touch_seconds": 0.001392218,
+      "median_workload_seconds": 0.035046421,
+      "runtime_counter_totals": {
+        "compiler_inferred_arena_lock_acquisitions": 40960,
+        "compiler_inferred_bypass_requested_bytes": 251822080,
+        "compiler_inferred_density_promotion_attempts": 80,
+        "compiler_inferred_density_promotion_errors": 0,
+        "compiler_inferred_density_promotion_successes": 80,
+        "compiler_inferred_direct_long_deallocations": 0,
+        "compiler_inferred_direct_long_requested_bytes": 167772160,
+        "compiler_inferred_direct_long_routes": 40960,
+        "compiler_inferred_direct_long_routes_without_trailer": 40960,
+        "compiler_inferred_direct_long_slot_bytes": 167772160,
+        "compiler_inferred_proven_ephemeral_bypasses": 0,
+        "compiler_inferred_unknown_or_unproven_bypasses": 61445,
+        "mapping_failures": 0,
+        "nohugepage_advice_failures": 0,
+        "ordinary_extent_mappings": 0,
+        "routed_allocations": 40960,
+        "routed_deallocations": 0,
+        "semantic_fallback_allocations": 30,
+        "semantic_total_allocations": 102435,
+        "semantic_typed_allocations": 102405,
+        "thp_advice_attempts": 80,
+        "thp_advice_errors": 0,
+        "thp_advice_successes": 80,
+        "thp_collapse_attempts": 0,
+        "thp_collapse_successes": 0,
+        "thp_extent_mappings": 80,
+        "unknown_bypasses": 0
+      }
+    },
+    "runtime-adaptive": {
+      "max_anon_hugepages_kib": 0,
+      "max_pre_touch_anon_hugepages_kib": 0,
+      "measured_runs": 5,
+      "median_allocation_seconds": 0.042952623,
+      "median_anon_hugepages_kib": 0.0,
+      "median_gnu_wall_seconds": 0.1,
+      "median_max_rss_kib": 46080.0,
+      "median_outer_wall_seconds": 0.10571307,
+      "median_smaps_rss_kib": 46436.0,
+      "median_touch_seconds": 0.003164261,
+      "median_workload_seconds": 0.046147492,
+      "runtime_counter_totals": {
+        "compiler_inferred_arena_lock_acquisitions": 0,
+        "compiler_inferred_bypass_requested_bytes": 0,
+        "compiler_inferred_density_promotion_attempts": 0,
+        "compiler_inferred_density_promotion_errors": 0,
+        "compiler_inferred_density_promotion_successes": 0,
+        "compiler_inferred_direct_long_deallocations": 0,
+        "compiler_inferred_direct_long_requested_bytes": 0,
+        "compiler_inferred_direct_long_routes": 0,
+        "compiler_inferred_direct_long_routes_without_trailer": 0,
+        "compiler_inferred_direct_long_slot_bytes": 0,
+        "compiler_inferred_proven_ephemeral_bypasses": 0,
+        "compiler_inferred_unknown_or_unproven_bypasses": 0,
+        "mapping_failures": 0,
+        "nohugepage_advice_failures": 0,
+        "ordinary_extent_mappings": 15,
+        "routed_allocations": 460,
+        "routed_deallocations": 345,
+        "semantic_fallback_allocations": 35,
+        "semantic_total_allocations": 102435,
+        "semantic_typed_allocations": 102400,
+        "thp_advice_attempts": 0,
+        "thp_advice_errors": 0,
+        "thp_advice_successes": 0,
+        "thp_collapse_attempts": 0,
+        "thp_collapse_successes": 0,
+        "thp_extent_mappings": 0,
+        "unknown_bypasses": 0
+      }
+    }
+  },
+  "run_id": "compiler-heap-lifetime-20260715-023303",
+  "schema_version": 1,
+  "source": "compiler-heap-lifetime-experiment-summary",
+  "thp_gate": {
+    "backed_pair_count": 0,
+    "block_evidence": [
+      {
+        "block": 0,
+        "exclusion_reasons": [
+          "hints-thp sample has no resident AnonHugePages"
+        ],
+        "hints_thp_anon_hugepages_kib": 0,
+        "hints_thp_madvise_hugepage_acceptances": 16,
+        "included_in_thp_effects": false,
+        "ordinary_control_anon_hugepages_kib": 0,
+        "ordinary_control_nohugepage_advice_failures": 0
+      },
+      {
+        "block": 1,
+        "exclusion_reasons": [
+          "hints-thp sample has no resident AnonHugePages"
+        ],
+        "hints_thp_anon_hugepages_kib": 0,
+        "hints_thp_madvise_hugepage_acceptances": 16,
+        "included_in_thp_effects": false,
+        "ordinary_control_anon_hugepages_kib": 0,
+        "ordinary_control_nohugepage_advice_failures": 0
+      },
+      {
+        "block": 2,
+        "exclusion_reasons": [
+          "hints-thp sample has no resident AnonHugePages"
+        ],
+        "hints_thp_anon_hugepages_kib": 0,
+        "hints_thp_madvise_hugepage_acceptances": 16,
+        "included_in_thp_effects": false,
+        "ordinary_control_anon_hugepages_kib": 0,
+        "ordinary_control_nohugepage_advice_failures": 0
+      },
+      {
+        "block": 3,
+        "exclusion_reasons": [
+          "hints-thp sample has no resident AnonHugePages"
+        ],
+        "hints_thp_anon_hugepages_kib": 0,
+        "hints_thp_madvise_hugepage_acceptances": 16,
+        "included_in_thp_effects": false,
+        "ordinary_control_anon_hugepages_kib": 0,
+        "ordinary_control_nohugepage_advice_failures": 0
+      },
+      {
+        "block": 4,
+        "exclusion_reasons": [
+          "hints-thp sample has no resident AnonHugePages"
+        ],
+        "hints_thp_anon_hugepages_kib": 0,
+        "hints_thp_madvise_hugepage_acceptances": 16,
+        "included_in_thp_effects": false,
+        "ordinary_control_anon_hugepages_kib": 0,
+        "ordinary_control_nohugepage_advice_failures": 0
+      }
+    ],
+    "claim_ready": false,
+    "excluded_blocks": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "included_blocks": [],
+    "madvise_acceptance_semantics": "kernel accepted MADV_HUGEPAGE; actual THP backing requires nonzero smaps AnonHugePages",
+    "measured_block_count": 5
+  }
+}

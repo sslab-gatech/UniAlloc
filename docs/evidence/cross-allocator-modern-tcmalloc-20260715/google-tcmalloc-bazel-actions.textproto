@@ -1,0 +1,7410 @@
+Computing main repo mapping:
+WARNING: For repository 'rules_cc', the root module requires module version rules_cc@0.1.5, but got rules_cc@0.2.17 in the resolved dependency graph. Please update the version in your MODULE.bazel or set --check_direct_dependencies=off
+Loading:
+Loading: 0 packages loaded
+WARNING: Build options --compilation_mode, --cxxopt, and --strip have changed, discarding analysis cache (this can be expensive, see https://bazel.build/advanced/performance/iteration-speed).
+Analyzing: 2 targets (5 packages loaded, 6 targets configured)
+INFO: Analyzed 2 targets (112 packages loaded, 1103 targets configured).
+INFO: Found 2 targets...
+targets {
+id: 1
+label: "//:cross_allocator_large_page_workload_google_tcmalloc"
+rule_class_id: 1
+}
+rule_classes {
+id: 1
+name: "cc_binary"
+}
+targets {
+id: 2
+label: "//:cross_allocator_large_page_workload_system"
+rule_class_id: 1
+}
+configuration {
+id: 1
+mnemonic: "k8-fastbuild"
+platform_name: "k8"
+checksum: "a7a71fd16b14112464272f754633480c74c664f2488224c592ebf2dfc7a06b18"
+}
+path_fragments {
+id: 2
+label: "cross_allocator_large_page_workload.c"
+}
+path_fragments {
+id: 4
+label: "external"
+}
+artifacts {
+id: 2
+path_fragment_id: 2
+}
+path_fragments {
+id: 3
+label: "rules_cc++cc_configure_extension+local_config_cc"
+parent_id: 4
+}
+path_fragments {
+id: 1
+label: "builtin_include_directory_paths"
+parent_id: 3
+}
+artifacts {
+id: 1
+path_fragment_id: 1
+}
+dep_set_of_files {
+id: 4
+transitive_dep_set_ids: 2
+direct_artifact_ids: 2
+}
+path_fragments {
+id: 5
+label: "cc_wrapper.sh"
+parent_id: 3
+}
+artifacts {
+id: 3
+path_fragment_id: 5
+}
+path_fragments {
+id: 6
+label: "deps_scanner_wrapper.sh"
+parent_id: 3
+}
+artifacts {
+id: 4
+path_fragment_id: 6
+}
+path_fragments {
+id: 7
+label: "validate_static_library.sh"
+parent_id: 3
+}
+artifacts {
+id: 5
+path_fragment_id: 7
+}
+dep_set_of_files {
+id: 2
+direct_artifact_ids: 1
+direct_artifact_ids: 3
+direct_artifact_ids: 4
+direct_artifact_ids: 5
+}
+dep_set_of_files {
+id: 1
+transitive_dep_set_ids: 2
+direct_artifact_ids: 2
+}
+path_fragments {
+id: 11
+label: "abseil-cpp+"
+parent_id: 4
+}
+path_fragments {
+id: 10
+label: "absl"
+parent_id: 11
+}
+path_fragments {
+id: 9
+label: "base"
+parent_id: 10
+}
+path_fragments {
+id: 8
+label: "config.h"
+parent_id: 9
+}
+artifacts {
+id: 6
+path_fragment_id: 8
+}
+path_fragments {
+id: 12
+label: "options.h"
+parent_id: 9
+}
+artifacts {
+id: 7
+path_fragment_id: 12
+}
+path_fragments {
+id: 13
+label: "policy_checks.h"
+parent_id: 9
+}
+artifacts {
+id: 8
+path_fragment_id: 13
+}
+dep_set_of_files {
+id: 10
+direct_artifact_ids: 6
+direct_artifact_ids: 7
+direct_artifact_ids: 8
+}
+path_fragments {
+id: 16
+label: "attributes.h"
+parent_id: 9
+}
+artifacts {
+id: 10
+path_fragment_id: 16
+}
+path_fragments {
+id: 20
+label: "bazel-out"
+}
+path_fragments {
+id: 21
+label: "const_init.h"
+parent_id: 9
+}
+path_fragments {
+id: 19
+label: "k8-fastbuild"
+parent_id: 20
+}
+artifacts {
+id: 11
+path_fragment_id: 21
+}
+path_fragments {
+id: 18
+label: "bin"
+parent_id: 19
+}
+path_fragments {
+id: 17
+label: "_objs"
+parent_id: 18
+}
+path_fragments {
+id: 15
+label: "cross_allocator_large_page_workload_system"
+parent_id: 17
+}
+path_fragments {
+id: 14
+label: "cross_allocator_large_page_workload.pic.o"
+parent_id: 15
+}
+artifacts {
+id: 9
+path_fragment_id: 14
+}
+path_fragments {
+id: 22
+label: "macros.h"
+parent_id: 9
+}
+artifacts {
+id: 12
+path_fragment_id: 22
+}
+path_fragments {
+id: 23
+label: "optimization.h"
+parent_id: 9
+}
+artifacts {
+id: 13
+path_fragment_id: 23
+}
+path_fragments {
+id: 24
+label: "cross_allocator_large_page_workload.pic.d"
+parent_id: 15
+}
+artifacts {
+id: 14
+path_fragment_id: 24
+}
+path_fragments {
+id: 25
+label: "port.h"
+parent_id: 9
+}
+artifacts {
+id: 15
+path_fragment_id: 25
+}
+path_fragments {
+id: 26
+label: "thread_annotations.h"
+parent_id: 9
+}
+artifacts {
+id: 16
+path_fragment_id: 26
+}
+dep_set_of_files {
+id: 11
+transitive_dep_set_ids: 10
+direct_artifact_ids: 10
+direct_artifact_ids: 11
+direct_artifact_ids: 12
+direct_artifact_ids: 13
+direct_artifact_ids: 15
+direct_artifact_ids: 16
+}
+path_fragments {
+id: 30
+label: "tcmalloc+"
+parent_id: 4
+}
+path_fragments {
+id: 29
+label: "tcmalloc"
+parent_id: 30
+}
+path_fragments {
+id: 28
+label: "internal"
+parent_id: 29
+}
+path_fragments {
+id: 27
+label: "config.h"
+parent_id: 28
+}
+artifacts {
+id: 17
+path_fragment_id: 27
+}
+dep_set_of_files {
+id: 9
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 17
+}
+path_fragments {
+id: 32
+label: "internal"
+parent_id: 9
+}
+path_fragments {
+id: 31
+label: "atomic_hook.h"
+parent_id: 32
+}
+artifacts {
+id: 18
+path_fragment_id: 31
+}
+dep_set_of_files {
+id: 14
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 18
+}
+path_fragments {
+id: 34
+label: "meta"
+parent_id: 10
+}
+path_fragments {
+id: 33
+label: "type_traits.h"
+parent_id: 34
+}
+artifacts {
+id: 19
+path_fragment_id: 33
+}
+dep_set_of_files {
+id: 16
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 19
+}
+path_fragments {
+id: 35
+label: "hide_ptr.h"
+parent_id: 32
+}
+artifacts {
+id: 20
+path_fragment_id: 35
+}
+path_fragments {
+id: 36
+label: "identity.h"
+parent_id: 32
+}
+artifacts {
+id: 21
+path_fragment_id: 36
+}
+path_fragments {
+id: 37
+label: "scheduling_mode.h"
+parent_id: 32
+}
+artifacts {
+id: 22
+path_fragment_id: 37
+}
+dep_set_of_files {
+id: 15
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 16
+direct_artifact_ids: 20
+direct_artifact_ids: 21
+direct_artifact_ids: 22
+}
+path_fragments {
+id: 38
+label: "cycleclock_config.h"
+parent_id: 32
+}
+artifacts {
+id: 23
+path_fragment_id: 38
+}
+path_fragments {
+id: 39
+label: "unscaledcycleclock_config.h"
+parent_id: 32
+}
+artifacts {
+id: 24
+path_fragment_id: 39
+}
+dep_set_of_files {
+id: 17
+transitive_dep_set_ids: 15
+transitive_dep_set_ids: 10
+direct_artifact_ids: 23
+direct_artifact_ids: 24
+}
+path_fragments {
+id: 40
+label: "dynamic_annotations.h"
+parent_id: 9
+}
+artifacts {
+id: 25
+path_fragment_id: 40
+}
+path_fragments {
+id: 41
+label: "dynamic_annotations.h"
+parent_id: 32
+}
+artifacts {
+id: 26
+path_fragment_id: 41
+}
+dep_set_of_files {
+id: 18
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 25
+direct_artifact_ids: 26
+}
+path_fragments {
+id: 42
+label: "log_severity.h"
+parent_id: 9
+}
+artifacts {
+id: 27
+path_fragment_id: 42
+}
+dep_set_of_files {
+id: 19
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 27
+}
+path_fragments {
+id: 43
+label: "nullability.h"
+parent_id: 9
+}
+artifacts {
+id: 28
+path_fragment_id: 43
+}
+dep_set_of_files {
+id: 20
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 28
+}
+path_fragments {
+id: 44
+label: "errno_saver.h"
+parent_id: 32
+}
+artifacts {
+id: 29
+path_fragment_id: 44
+}
+dep_set_of_files {
+id: 22
+transitive_dep_set_ids: 10
+direct_artifact_ids: 29
+}
+path_fragments {
+id: 45
+label: "raw_logging.h"
+parent_id: 32
+}
+artifacts {
+id: 30
+path_fragment_id: 45
+}
+dep_set_of_files {
+id: 21
+transitive_dep_set_ids: 14
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 22
+transitive_dep_set_ids: 19
+direct_artifact_ids: 30
+}
+path_fragments {
+id: 46
+label: "spinlock_wait.h"
+parent_id: 32
+}
+artifacts {
+id: 31
+path_fragment_id: 46
+}
+path_fragments {
+id: 47
+label: "spinlock_akaros.inc"
+parent_id: 32
+}
+artifacts {
+id: 32
+path_fragment_id: 47
+}
+path_fragments {
+id: 48
+label: "spinlock_linux.inc"
+parent_id: 32
+}
+artifacts {
+id: 33
+path_fragment_id: 48
+}
+path_fragments {
+id: 49
+label: "spinlock_posix.inc"
+parent_id: 32
+}
+artifacts {
+id: 34
+path_fragment_id: 49
+}
+path_fragments {
+id: 50
+label: "spinlock_win32.inc"
+parent_id: 32
+}
+artifacts {
+id: 35
+path_fragment_id: 50
+}
+dep_set_of_files {
+id: 23
+transitive_dep_set_ids: 15
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 22
+direct_artifact_ids: 31
+direct_artifact_ids: 32
+direct_artifact_ids: 33
+direct_artifact_ids: 34
+direct_artifact_ids: 35
+}
+path_fragments {
+id: 51
+label: "call_once.h"
+parent_id: 9
+}
+artifacts {
+id: 36
+path_fragment_id: 51
+}
+path_fragments {
+id: 52
+label: "casts.h"
+parent_id: 9
+}
+artifacts {
+id: 37
+path_fragment_id: 52
+}
+path_fragments {
+id: 53
+label: "cycleclock.h"
+parent_id: 32
+}
+artifacts {
+id: 38
+path_fragment_id: 53
+}
+path_fragments {
+id: 54
+label: "low_level_scheduling.h"
+parent_id: 32
+}
+artifacts {
+id: 39
+path_fragment_id: 54
+}
+path_fragments {
+id: 55
+label: "per_thread_tls.h"
+parent_id: 32
+}
+artifacts {
+id: 40
+path_fragment_id: 55
+}
+path_fragments {
+id: 56
+label: "spinlock.h"
+parent_id: 32
+}
+artifacts {
+id: 41
+path_fragment_id: 56
+}
+path_fragments {
+id: 57
+label: "sysinfo.h"
+parent_id: 32
+}
+artifacts {
+id: 42
+path_fragment_id: 57
+}
+path_fragments {
+id: 58
+label: "thread_identity.h"
+parent_id: 32
+}
+artifacts {
+id: 43
+path_fragment_id: 58
+}
+path_fragments {
+id: 59
+label: "tsan_mutex_interface.h"
+parent_id: 32
+}
+artifacts {
+id: 44
+path_fragment_id: 59
+}
+path_fragments {
+id: 60
+label: "unscaledcycleclock.h"
+parent_id: 32
+}
+artifacts {
+id: 45
+path_fragment_id: 60
+}
+dep_set_of_files {
+id: 13
+transitive_dep_set_ids: 14
+transitive_dep_set_ids: 15
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 17
+transitive_dep_set_ids: 18
+transitive_dep_set_ids: 19
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 23
+transitive_dep_set_ids: 16
+direct_artifact_ids: 36
+direct_artifact_ids: 37
+direct_artifact_ids: 38
+direct_artifact_ids: 39
+direct_artifact_ids: 40
+direct_artifact_ids: 41
+direct_artifact_ids: 42
+direct_artifact_ids: 43
+direct_artifact_ids: 44
+direct_artifact_ids: 45
+}
+path_fragments {
+id: 61
+label: "hook_list.h"
+parent_id: 28
+}
+artifacts {
+id: 46
+path_fragment_id: 61
+}
+dep_set_of_files {
+id: 12
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+direct_artifact_ids: 46
+}
+path_fragments {
+id: 62
+label: "endian.h"
+parent_id: 32
+}
+artifacts {
+id: 47
+path_fragment_id: 62
+}
+path_fragments {
+id: 63
+label: "unaligned_access.h"
+parent_id: 32
+}
+artifacts {
+id: 48
+path_fragment_id: 63
+}
+dep_set_of_files {
+id: 27
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 20
+direct_artifact_ids: 47
+direct_artifact_ids: 48
+}
+path_fragments {
+id: 65
+label: "numeric"
+parent_id: 10
+}
+path_fragments {
+id: 64
+label: "bits.h"
+parent_id: 65
+}
+artifacts {
+id: 49
+path_fragment_id: 64
+}
+path_fragments {
+id: 67
+label: "internal"
+parent_id: 65
+}
+path_fragments {
+id: 66
+label: "bits.h"
+parent_id: 67
+}
+artifacts {
+id: 50
+path_fragment_id: 66
+}
+dep_set_of_files {
+id: 26
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 27
+direct_artifact_ids: 49
+direct_artifact_ids: 50
+}
+path_fragments {
+id: 69
+label: "types"
+parent_id: 10
+}
+path_fragments {
+id: 68
+label: "compare.h"
+parent_id: 69
+}
+artifacts {
+id: 51
+path_fragment_id: 68
+}
+dep_set_of_files {
+id: 28
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 16
+direct_artifact_ids: 51
+}
+path_fragments {
+id: 70
+label: "int128.h"
+parent_id: 65
+}
+artifacts {
+id: 52
+path_fragment_id: 70
+}
+path_fragments {
+id: 71
+label: "int128_have_intrinsic.inc"
+parent_id: 65
+}
+artifacts {
+id: 53
+path_fragment_id: 71
+}
+path_fragments {
+id: 72
+label: "int128_no_intrinsic.inc"
+parent_id: 65
+}
+artifacts {
+id: 54
+path_fragment_id: 72
+}
+dep_set_of_files {
+id: 25
+transitive_dep_set_ids: 26
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 28
+direct_artifact_ids: 52
+direct_artifact_ids: 53
+direct_artifact_ids: 54
+}
+path_fragments {
+id: 73
+label: "throw_delegate.h"
+parent_id: 32
+}
+artifacts {
+id: 55
+path_fragment_id: 73
+}
+dep_set_of_files {
+id: 32
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 21
+direct_artifact_ids: 55
+}
+path_fragments {
+id: 75
+label: "strings"
+parent_id: 10
+}
+path_fragments {
+id: 74
+label: "string_view.h"
+parent_id: 75
+}
+artifacts {
+id: 56
+path_fragment_id: 74
+}
+dep_set_of_files {
+id: 31
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 32
+direct_artifact_ids: 56
+}
+path_fragments {
+id: 76
+label: "charset.h"
+parent_id: 75
+}
+artifacts {
+id: 57
+path_fragment_id: 76
+}
+dep_set_of_files {
+id: 30
+transitive_dep_set_ids: 31
+transitive_dep_set_ids: 10
+direct_artifact_ids: 57
+}
+path_fragments {
+id: 78
+label: "internal"
+parent_id: 75
+}
+path_fragments {
+id: 77
+label: "escaping.h"
+parent_id: 78
+}
+artifacts {
+id: 58
+path_fragment_id: 77
+}
+path_fragments {
+id: 79
+label: "ostringstream.h"
+parent_id: 78
+}
+artifacts {
+id: 59
+path_fragment_id: 79
+}
+path_fragments {
+id: 80
+label: "resize_uninitialized.h"
+parent_id: 78
+}
+artifacts {
+id: 60
+path_fragment_id: 80
+}
+path_fragments {
+id: 81
+label: "utf8.h"
+parent_id: 78
+}
+artifacts {
+id: 61
+path_fragment_id: 81
+}
+dep_set_of_files {
+id: 33
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 27
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 16
+direct_artifact_ids: 58
+direct_artifact_ids: 59
+direct_artifact_ids: 60
+direct_artifact_ids: 61
+}
+path_fragments {
+id: 82
+label: "iterator_traits.h"
+parent_id: 32
+}
+artifacts {
+id: 62
+path_fragment_id: 82
+}
+dep_set_of_files {
+id: 34
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 16
+direct_artifact_ids: 62
+}
+path_fragments {
+id: 84
+label: "memory"
+parent_id: 10
+}
+path_fragments {
+id: 83
+label: "memory.h"
+parent_id: 84
+}
+artifacts {
+id: 63
+path_fragment_id: 83
+}
+dep_set_of_files {
+id: 35
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 16
+direct_artifact_ids: 63
+}
+path_fragments {
+id: 85
+label: "ascii.h"
+parent_id: 75
+}
+artifacts {
+id: 64
+path_fragment_id: 85
+}
+path_fragments {
+id: 86
+label: "charconv.h"
+parent_id: 75
+}
+artifacts {
+id: 65
+path_fragment_id: 86
+}
+path_fragments {
+id: 87
+label: "escaping.h"
+parent_id: 75
+}
+artifacts {
+id: 66
+path_fragment_id: 87
+}
+path_fragments {
+id: 88
+label: "has_absl_stringify.h"
+parent_id: 75
+}
+artifacts {
+id: 67
+path_fragment_id: 88
+}
+path_fragments {
+id: 89
+label: "damerau_levenshtein_distance.h"
+parent_id: 78
+}
+artifacts {
+id: 68
+path_fragment_id: 89
+}
+path_fragments {
+id: 90
+label: "string_constant.h"
+parent_id: 78
+}
+artifacts {
+id: 69
+path_fragment_id: 90
+}
+path_fragments {
+id: 91
+label: "match.h"
+parent_id: 75
+}
+artifacts {
+id: 70
+path_fragment_id: 91
+}
+path_fragments {
+id: 92
+label: "numbers.h"
+parent_id: 75
+}
+artifacts {
+id: 71
+path_fragment_id: 92
+}
+path_fragments {
+id: 93
+label: "str_cat.h"
+parent_id: 75
+}
+artifacts {
+id: 72
+path_fragment_id: 93
+}
+path_fragments {
+id: 94
+label: "str_join.h"
+parent_id: 75
+}
+artifacts {
+id: 73
+path_fragment_id: 94
+}
+path_fragments {
+id: 95
+label: "str_replace.h"
+parent_id: 75
+}
+actions {
+target_id: 2
+action_key: "63b6a45978c3d770d78705ed4ee3571ea2c4259255874615f9db4ffe312a2171"
+mnemonic: "CppCompile"
+configuration_id: 1
+arguments: "/usr/bin/gcc"
+arguments: "-U_FORTIFY_SOURCE"
+arguments: "-fstack-protector"
+arguments: "-Wall"
+arguments: "-Wunused-but-set-parameter"
+arguments: "-Wno-free-nonheap-object"
+arguments: "-fno-omit-frame-pointer"
+arguments: "-MD"
+arguments: "-MF"
+arguments: "bazel-out/k8-fastbuild/bin/_objs/cross_allocator_large_page_workload_system/cross_allocator_large_page_workload.pic.d"
+arguments: "-frandom-seed=bazel-out/k8-fastbuild/bin/_objs/cross_allocator_large_page_workload_system/cross_allocator_large_page_workload.pic.o"
+arguments: "-fPIC"
+arguments: "-iquote"
+arguments: "."
+arguments: "-iquote"
+arguments: "bazel-out/k8-fastbuild/bin"
+arguments: "-iquote"
+arguments: "external/rules_cc+"
+arguments: "-iquote"
+arguments: "bazel-out/k8-fastbuild/bin/external/rules_cc+"
+arguments: "-iquote"
+arguments: "external/bazel_tools"
+arguments: "-iquote"
+arguments: "bazel-out/k8-fastbuild/bin/external/bazel_tools"
+arguments: "-std=c11"
+arguments: "-O3"
+arguments: "-DNDEBUG"
+arguments: "-Wall"
+arguments: "-Wextra"
+arguments: "-Werror"
+arguments: "-fno-builtin-malloc"
+arguments: "-c"
+arguments: "cross_allocator_large_page_workload.c"
+arguments: "-o"
+arguments: "bazel-out/k8-fastbuild/bin/_objs/cross_allocator_large_page_workload_system/cross_allocator_large_page_workload.pic.o"
+arguments: "-fno-canonical-system-headers"
+arguments: "-Wno-builtin-macro-redefined"
+arguments: "-D__DATE__=\"redacted\""
+arguments: "-D__TIMESTAMP__=\"redacted\""
+arguments: "-D__TIME__=\"redacted\""
+environment_variables {
+  key: "PATH"
+  value: "/bin:/usr/bin:/usr/local/bin"
+}
+environment_variables {
+  key: "PWD"
+  value: "/proc/self/cwd"
+}
+input_dep_set_ids: 1
+output_ids: 9
+output_ids: 14
+discovers_inputs: true
+primary_output_id: 9
+execution_platform: "@@platforms//host:host"
+}
+artifacts {
+id: 74
+path_fragment_id: 95
+}
+path_fragments {
+id: 96
+label: "str_split.h"
+parent_id: 75
+}
+artifacts {
+id: 75
+path_fragment_id: 96
+}
+path_fragments {
+id: 97
+label: "strip.h"
+parent_id: 75
+}
+artifacts {
+id: 76
+path_fragment_id: 97
+}
+path_fragments {
+id: 98
+label: "substitute.h"
+parent_id: 75
+}
+artifacts {
+id: 77
+path_fragment_id: 98
+}
+path_fragments {
+id: 99
+label: "charconv_bigint.h"
+parent_id: 78
+}
+artifacts {
+id: 78
+path_fragment_id: 99
+}
+path_fragments {
+id: 100
+label: "charconv_parse.h"
+parent_id: 78
+}
+artifacts {
+id: 79
+path_fragment_id: 100
+}
+path_fragments {
+id: 101
+label: "memutil.h"
+parent_id: 78
+}
+artifacts {
+id: 80
+path_fragment_id: 101
+}
+path_fragments {
+id: 102
+label: "stl_type_traits.h"
+parent_id: 78
+}
+artifacts {
+id: 81
+path_fragment_id: 102
+}
+path_fragments {
+id: 103
+label: "str_join_internal.h"
+parent_id: 78
+}
+artifacts {
+id: 82
+path_fragment_id: 103
+}
+path_fragments {
+id: 104
+label: "str_split_internal.h"
+parent_id: 78
+}
+artifacts {
+id: 83
+path_fragment_id: 104
+}
+path_fragments {
+id: 105
+label: "stringify_sink.h"
+parent_id: 78
+}
+artifacts {
+id: 84
+path_fragment_id: 105
+}
+dep_set_of_files {
+id: 29
+transitive_dep_set_ids: 30
+transitive_dep_set_ids: 33
+transitive_dep_set_ids: 31
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 27
+transitive_dep_set_ids: 34
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 32
+transitive_dep_set_ids: 35
+transitive_dep_set_ids: 16
+transitive_dep_set_ids: 26
+transitive_dep_set_ids: 25
+direct_artifact_ids: 64
+direct_artifact_ids: 65
+direct_artifact_ids: 66
+direct_artifact_ids: 67
+direct_artifact_ids: 68
+direct_artifact_ids: 69
+direct_artifact_ids: 70
+direct_artifact_ids: 71
+direct_artifact_ids: 72
+direct_artifact_ids: 73
+direct_artifact_ids: 74
+direct_artifact_ids: 75
+direct_artifact_ids: 56
+direct_artifact_ids: 76
+direct_artifact_ids: 77
+direct_artifact_ids: 78
+direct_artifact_ids: 79
+direct_artifact_ids: 80
+direct_artifact_ids: 81
+direct_artifact_ids: 82
+direct_artifact_ids: 83
+direct_artifact_ids: 84
+}
+path_fragments {
+id: 111
+label: "time"
+parent_id: 10
+}
+path_fragments {
+id: 110
+label: "internal"
+parent_id: 111
+}
+path_fragments {
+id: 109
+label: "cctz"
+parent_id: 110
+}
+path_fragments {
+id: 108
+label: "include"
+parent_id: 109
+}
+path_fragments {
+id: 107
+label: "cctz"
+parent_id: 108
+}
+path_fragments {
+id: 106
+label: "civil_time.h"
+parent_id: 107
+}
+artifacts {
+id: 85
+path_fragment_id: 106
+}
+path_fragments {
+id: 112
+label: "civil_time_detail.h"
+parent_id: 107
+}
+artifacts {
+id: 86
+path_fragment_id: 112
+}
+dep_set_of_files {
+id: 36
+transitive_dep_set_ids: 10
+direct_artifact_ids: 85
+direct_artifact_ids: 86
+}
+path_fragments {
+id: 113
+label: "time_zone.h"
+parent_id: 107
+}
+artifacts {
+id: 87
+path_fragment_id: 113
+}
+path_fragments {
+id: 114
+label: "zone_info_source.h"
+parent_id: 107
+}
+artifacts {
+id: 88
+path_fragment_id: 114
+}
+path_fragments {
+id: 116
+label: "src"
+parent_id: 109
+}
+path_fragments {
+id: 115
+label: "time_zone_fixed.h"
+parent_id: 116
+}
+artifacts {
+id: 89
+path_fragment_id: 115
+}
+path_fragments {
+id: 117
+label: "time_zone_if.h"
+parent_id: 116
+}
+artifacts {
+id: 90
+path_fragment_id: 117
+}
+path_fragments {
+id: 118
+label: "time_zone_impl.h"
+parent_id: 116
+}
+artifacts {
+id: 91
+path_fragment_id: 118
+}
+path_fragments {
+id: 119
+label: "time_zone_info.h"
+parent_id: 116
+}
+artifacts {
+id: 92
+path_fragment_id: 119
+}
+path_fragments {
+id: 120
+label: "time_zone_libc.h"
+parent_id: 116
+}
+artifacts {
+id: 93
+path_fragment_id: 120
+}
+path_fragments {
+id: 121
+label: "time_zone_posix.h"
+parent_id: 116
+}
+artifacts {
+id: 94
+path_fragment_id: 121
+}
+path_fragments {
+id: 122
+label: "tzfile.h"
+parent_id: 116
+}
+artifacts {
+id: 95
+path_fragment_id: 122
+}
+dep_set_of_files {
+id: 37
+transitive_dep_set_ids: 36
+transitive_dep_set_ids: 10
+direct_artifact_ids: 87
+direct_artifact_ids: 88
+direct_artifact_ids: 89
+direct_artifact_ids: 90
+direct_artifact_ids: 91
+direct_artifact_ids: 92
+direct_artifact_ids: 93
+direct_artifact_ids: 94
+direct_artifact_ids: 95
+}
+path_fragments {
+id: 124
+label: "utility"
+parent_id: 10
+}
+path_fragments {
+id: 123
+label: "utility.h"
+parent_id: 124
+}
+artifacts {
+id: 96
+path_fragment_id: 123
+}
+dep_set_of_files {
+id: 39
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 16
+direct_artifact_ids: 96
+}
+path_fragments {
+id: 130
+label: "optional.h"
+parent_id: 69
+}
+artifacts {
+id: 98
+path_fragment_id: 130
+}
+dep_set_of_files {
+id: 38
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 39
+direct_artifact_ids: 98
+}
+path_fragments {
+id: 131
+label: "civil_time.h"
+parent_id: 111
+}
+path_fragments {
+id: 129
+label: "rules_cc+"
+parent_id: 4
+}
+artifacts {
+id: 99
+path_fragment_id: 131
+}
+path_fragments {
+id: 128
+label: "cc"
+parent_id: 129
+}
+path_fragments {
+id: 132
+label: "clock.h"
+parent_id: 111
+}
+path_fragments {
+id: 127
+label: "private"
+parent_id: 128
+}
+artifacts {
+id: 100
+path_fragment_id: 132
+}
+path_fragments {
+id: 126
+label: "toolchain"
+parent_id: 127
+}
+path_fragments {
+id: 133
+label: "time.h"
+parent_id: 111
+}
+path_fragments {
+id: 125
+label: "build_interface_so"
+parent_id: 126
+}
+artifacts {
+id: 101
+path_fragment_id: 133
+}
+artifacts {
+id: 97
+path_fragment_id: 125
+}
+path_fragments {
+id: 134
+label: "get_current_time_chrono.inc"
+parent_id: 110
+}
+path_fragments {
+id: 135
+label: "link_dynamic_library.sh"
+parent_id: 126
+}
+artifacts {
+id: 102
+path_fragment_id: 134
+}
+artifacts {
+id: 103
+path_fragment_id: 135
+}
+path_fragments {
+id: 136
+label: "get_current_time_posix.inc"
+parent_id: 110
+}
+dep_set_of_files {
+id: 41
+transitive_dep_set_ids: 2
+direct_artifact_ids: 97
+direct_artifact_ids: 103
+}
+artifacts {
+id: 104
+path_fragment_id: 136
+}
+dep_set_of_files {
+id: 40
+transitive_dep_set_ids: 41
+direct_artifact_ids: 9
+}
+dep_set_of_files {
+id: 24
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 25
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 31
+transitive_dep_set_ids: 36
+transitive_dep_set_ids: 37
+transitive_dep_set_ids: 38
+direct_artifact_ids: 99
+direct_artifact_ids: 100
+direct_artifact_ids: 101
+direct_artifact_ids: 102
+direct_artifact_ids: 104
+}
+path_fragments {
+id: 137
+label: "cross_allocator_large_page_workload_system"
+parent_id: 18
+}
+path_fragments {
+id: 139
+label: "algorithm"
+parent_id: 10
+}
+artifacts {
+id: 105
+path_fragment_id: 137
+}
+path_fragments {
+id: 138
+label: "algorithm.h"
+parent_id: 139
+}
+actions {
+target_id: 2
+action_key: "d3f5206388a7d525937f4ddec09a330707701d2cad0e7265cc9cf28f1bc27545"
+mnemonic: "CppLink"
+configuration_id: 1
+arguments: "/usr/bin/gcc"
+arguments: "-o"
+arguments: "bazel-out/k8-fastbuild/bin/cross_allocator_large_page_workload_system"
+arguments: "-Wl,-S"
+arguments: "-fuse-ld=gold"
+arguments: "-B/usr/bin"
+arguments: "-Wl,-no-as-needed"
+arguments: "-Wl,-z,relro,-z,now"
+arguments: "-pass-exit-codes"
+arguments: "bazel-out/k8-fastbuild/bin/_objs/cross_allocator_large_page_workload_system/cross_allocator_large_page_workload.pic.o"
+arguments: "-Wl,--push-state,-as-needed"
+arguments: "-lstdc++"
+arguments: "-Wl,--pop-state"
+arguments: "-Wl,--push-state,-as-needed"
+arguments: "-lm"
+arguments: "-Wl,--pop-state"
+environment_variables {
+  key: "PATH"
+  value: "/bin:/usr/bin:/usr/local/bin"
+}
+environment_variables {
+  key: "ZERO_AR_DATE"
+  value: "1"
+}
+environment_variables {
+  key: "PWD"
+  value: "/proc/self/cwd"
+}
+input_dep_set_ids: 40
+output_ids: 105
+primary_output_id: 105
+execution_platform: "@@platforms//host:host"
+}
+artifacts {
+id: 106
+path_fragment_id: 138
+}
+dep_set_of_files {
+id: 43
+transitive_dep_set_ids: 10
+direct_artifact_ids: 106
+}
+path_fragments {
+id: 142
+label: "hash"
+parent_id: 10
+}
+path_fragments {
+id: 141
+label: "internal"
+parent_id: 142
+}
+path_fragments {
+id: 140
+label: "weakly_mixed_integer.h"
+parent_id: 141
+}
+artifacts {
+id: 107
+path_fragment_id: 140
+}
+dep_set_of_files {
+id: 44
+transitive_dep_set_ids: 10
+direct_artifact_ids: 107
+}
+path_fragments {
+id: 143
+label: "span.h"
+parent_id: 69
+}
+artifacts {
+id: 108
+path_fragment_id: 143
+}
+path_fragments {
+id: 145
+label: "internal"
+parent_id: 69
+}
+path_fragments {
+id: 144
+label: "span.h"
+parent_id: 145
+}
+artifacts {
+id: 109
+path_fragment_id: 144
+}
+dep_set_of_files {
+id: 42
+transitive_dep_set_ids: 43
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 32
+transitive_dep_set_ids: 44
+transitive_dep_set_ids: 16
+direct_artifact_ids: 108
+direct_artifact_ids: 109
+}
+path_fragments {
+id: 146
+label: "malloc_hook.h"
+parent_id: 29
+}
+artifacts {
+id: 110
+path_fragment_id: 146
+}
+path_fragments {
+id: 147
+label: "malloc_hook_invoke.h"
+parent_id: 29
+}
+artifacts {
+id: 111
+path_fragment_id: 147
+}
+dep_set_of_files {
+id: 8
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 12
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 24
+transitive_dep_set_ids: 42
+direct_artifact_ids: 110
+direct_artifact_ids: 111
+}
+path_fragments {
+id: 148
+label: "direct_mmap.h"
+parent_id: 32
+}
+artifacts {
+id: 112
+path_fragment_id: 148
+}
+path_fragments {
+id: 149
+label: "low_level_alloc.h"
+parent_id: 32
+}
+artifacts {
+id: 113
+path_fragment_id: 149
+}
+dep_set_of_files {
+id: 45
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 15
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 18
+transitive_dep_set_ids: 21
+direct_artifact_ids: 112
+direct_artifact_ids: 113
+}
+path_fragments {
+id: 151
+label: "functional"
+parent_id: 10
+}
+path_fragments {
+id: 150
+label: "any_invocable.h"
+parent_id: 151
+}
+artifacts {
+id: 114
+path_fragment_id: 150
+}
+path_fragments {
+id: 153
+label: "internal"
+parent_id: 151
+}
+path_fragments {
+id: 152
+label: "any_invocable.h"
+parent_id: 153
+}
+artifacts {
+id: 115
+path_fragment_id: 152
+}
+dep_set_of_files {
+id: 47
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 16
+transitive_dep_set_ids: 39
+direct_artifact_ids: 114
+direct_artifact_ids: 115
+}
+path_fragments {
+id: 154
+label: "function_ref.h"
+parent_id: 151
+}
+artifacts {
+id: 116
+path_fragment_id: 154
+}
+path_fragments {
+id: 155
+label: "function_ref.h"
+parent_id: 153
+}
+artifacts {
+id: 117
+path_fragment_id: 155
+}
+dep_set_of_files {
+id: 46
+transitive_dep_set_ids: 47
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 16
+direct_artifact_ids: 116
+direct_artifact_ids: 117
+}
+path_fragments {
+id: 156
+label: "internal_malloc_extension.h"
+parent_id: 29
+}
+artifacts {
+id: 118
+path_fragment_id: 156
+}
+path_fragments {
+id: 157
+label: "malloc_extension.h"
+parent_id: 29
+}
+artifacts {
+id: 119
+path_fragment_id: 157
+}
+dep_set_of_files {
+id: 7
+transitive_dep_set_ids: 8
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 45
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 24
+transitive_dep_set_ids: 38
+transitive_dep_set_ids: 42
+direct_artifact_ids: 118
+direct_artifact_ids: 119
+}
+path_fragments {
+id: 158
+label: "environment.h"
+parent_id: 28
+}
+artifacts {
+id: 120
+path_fragment_id: 158
+}
+dep_set_of_files {
+id: 48
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 11
+direct_artifact_ids: 120
+}
+path_fragments {
+id: 159
+label: "allocation_guard.h"
+parent_id: 28
+}
+artifacts {
+id: 121
+path_fragment_id: 159
+}
+dep_set_of_files {
+id: 50
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 8
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+direct_artifact_ids: 121
+}
+path_fragments {
+id: 160
+label: "parameter_accessors.h"
+parent_id: 28
+}
+artifacts {
+id: 122
+path_fragment_id: 160
+}
+dep_set_of_files {
+id: 51
+transitive_dep_set_ids: 7
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 24
+direct_artifact_ids: 122
+}
+path_fragments {
+id: 163
+label: "debugging"
+parent_id: 10
+}
+path_fragments {
+id: 162
+label: "internal"
+parent_id: 163
+}
+path_fragments {
+id: 161
+label: "address_is_readable.h"
+parent_id: 162
+}
+artifacts {
+id: 123
+path_fragment_id: 161
+}
+path_fragments {
+id: 164
+label: "addresses.h"
+parent_id: 162
+}
+artifacts {
+id: 124
+path_fragment_id: 164
+}
+path_fragments {
+id: 165
+label: "elf_mem_image.h"
+parent_id: 162
+}
+artifacts {
+id: 125
+path_fragment_id: 165
+}
+path_fragments {
+id: 166
+label: "vdso_support.h"
+parent_id: 162
+}
+artifacts {
+id: 126
+path_fragment_id: 166
+}
+dep_set_of_files {
+id: 53
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 18
+transitive_dep_set_ids: 22
+transitive_dep_set_ids: 21
+direct_artifact_ids: 123
+direct_artifact_ids: 124
+direct_artifact_ids: 125
+direct_artifact_ids: 126
+}
+path_fragments {
+id: 167
+label: "stacktrace.h"
+parent_id: 163
+}
+artifacts {
+id: 127
+path_fragment_id: 167
+}
+path_fragments {
+id: 168
+label: "stacktrace_aarch64-inl.inc"
+parent_id: 162
+}
+artifacts {
+id: 128
+path_fragment_id: 168
+}
+path_fragments {
+id: 169
+label: "stacktrace_arm-inl.inc"
+parent_id: 162
+}
+artifacts {
+id: 129
+path_fragment_id: 169
+}
+path_fragments {
+id: 170
+label: "stacktrace_config.h"
+parent_id: 162
+}
+artifacts {
+id: 130
+path_fragment_id: 170
+}
+path_fragments {
+id: 171
+label: "stacktrace_emscripten-inl.inc"
+parent_id: 162
+}
+artifacts {
+id: 131
+path_fragment_id: 171
+}
+path_fragments {
+id: 172
+label: "stacktrace_generic-inl.inc"
+parent_id: 162
+}
+artifacts {
+id: 132
+path_fragment_id: 172
+}
+path_fragments {
+id: 173
+label: "stacktrace_powerpc-inl.inc"
+parent_id: 162
+}
+artifacts {
+id: 133
+path_fragment_id: 173
+}
+path_fragments {
+id: 174
+label: "stacktrace_riscv-inl.inc"
+parent_id: 162
+}
+artifacts {
+id: 134
+path_fragment_id: 174
+}
+path_fragments {
+id: 175
+label: "stacktrace_unimplemented-inl.inc"
+parent_id: 162
+}
+artifacts {
+id: 135
+path_fragment_id: 175
+}
+path_fragments {
+id: 176
+label: "stacktrace_win32-inl.inc"
+parent_id: 162
+}
+artifacts {
+id: 136
+path_fragment_id: 176
+}
+path_fragments {
+id: 177
+label: "stacktrace_x86-inl.inc"
+parent_id: 162
+}
+artifacts {
+id: 137
+path_fragment_id: 177
+}
+dep_set_of_files {
+id: 52
+transitive_dep_set_ids: 53
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 18
+transitive_dep_set_ids: 45
+transitive_dep_set_ids: 21
+direct_artifact_ids: 127
+direct_artifact_ids: 128
+direct_artifact_ids: 129
+direct_artifact_ids: 130
+direct_artifact_ids: 131
+direct_artifact_ids: 132
+direct_artifact_ids: 133
+direct_artifact_ids: 134
+direct_artifact_ids: 135
+direct_artifact_ids: 136
+direct_artifact_ids: 137
+}
+path_fragments {
+id: 180
+label: "container"
+parent_id: 10
+}
+path_fragments {
+id: 179
+label: "internal"
+parent_id: 180
+}
+path_fragments {
+id: 178
+label: "compressed_tuple.h"
+parent_id: 179
+}
+artifacts {
+id: 138
+path_fragment_id: 178
+}
+dep_set_of_files {
+id: 57
+transitive_dep_set_ids: 39
+direct_artifact_ids: 138
+}
+path_fragments {
+id: 181
+label: "fixed_array.h"
+parent_id: 180
+}
+artifacts {
+id: 139
+path_fragment_id: 181
+}
+dep_set_of_files {
+id: 56
+transitive_dep_set_ids: 57
+transitive_dep_set_ids: 43
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 18
+transitive_dep_set_ids: 34
+transitive_dep_set_ids: 32
+transitive_dep_set_ids: 44
+transitive_dep_set_ids: 35
+direct_artifact_ids: 139
+}
+path_fragments {
+id: 182
+label: "inlined_vector.h"
+parent_id: 179
+}
+artifacts {
+id: 140
+path_fragment_id: 182
+}
+dep_set_of_files {
+id: 59
+transitive_dep_set_ids: 57
+transitive_dep_set_ids: 15
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 35
+transitive_dep_set_ids: 16
+transitive_dep_set_ids: 42
+direct_artifact_ids: 140
+}
+path_fragments {
+id: 183
+label: "inlined_vector.h"
+parent_id: 180
+}
+artifacts {
+id: 141
+path_fragment_id: 183
+}
+dep_set_of_files {
+id: 58
+transitive_dep_set_ids: 59
+transitive_dep_set_ids: 43
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 34
+transitive_dep_set_ids: 32
+transitive_dep_set_ids: 44
+transitive_dep_set_ids: 35
+transitive_dep_set_ids: 16
+direct_artifact_ids: 141
+}
+path_fragments {
+id: 184
+label: "representation.h"
+parent_id: 67
+}
+artifacts {
+id: 142
+path_fragment_id: 184
+}
+dep_set_of_files {
+id: 60
+transitive_dep_set_ids: 10
+direct_artifact_ids: 142
+}
+path_fragments {
+id: 186
+label: "str_format"
+parent_id: 78
+}
+path_fragments {
+id: 185
+label: "arg.h"
+parent_id: 186
+}
+artifacts {
+id: 143
+path_fragment_id: 185
+}
+path_fragments {
+id: 187
+label: "bind.h"
+parent_id: 186
+}
+artifacts {
+id: 144
+path_fragment_id: 187
+}
+path_fragments {
+id: 188
+label: "checker.h"
+parent_id: 186
+}
+artifacts {
+id: 145
+path_fragment_id: 188
+}
+path_fragments {
+id: 189
+label: "constexpr_parser.h"
+parent_id: 186
+}
+artifacts {
+id: 146
+path_fragment_id: 189
+}
+path_fragments {
+id: 190
+label: "extension.h"
+parent_id: 186
+}
+artifacts {
+id: 147
+path_fragment_id: 190
+}
+path_fragments {
+id: 191
+label: "float_conversion.h"
+parent_id: 186
+}
+artifacts {
+id: 148
+path_fragment_id: 191
+}
+path_fragments {
+id: 192
+label: "output.h"
+parent_id: 186
+}
+artifacts {
+id: 149
+path_fragment_id: 192
+}
+path_fragments {
+id: 193
+label: "parser.h"
+parent_id: 186
+}
+artifacts {
+id: 150
+path_fragment_id: 193
+}
+dep_set_of_files {
+id: 55
+transitive_dep_set_ids: 33
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 56
+transitive_dep_set_ids: 58
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 16
+transitive_dep_set_ids: 26
+transitive_dep_set_ids: 25
+transitive_dep_set_ids: 60
+transitive_dep_set_ids: 38
+transitive_dep_set_ids: 42
+transitive_dep_set_ids: 39
+direct_artifact_ids: 143
+direct_artifact_ids: 144
+direct_artifact_ids: 145
+direct_artifact_ids: 146
+direct_artifact_ids: 147
+direct_artifact_ids: 148
+direct_artifact_ids: 149
+direct_artifact_ids: 150
+}
+path_fragments {
+id: 194
+label: "str_format.h"
+parent_id: 75
+}
+artifacts {
+id: 151
+path_fragment_id: 194
+}
+dep_set_of_files {
+id: 54
+transitive_dep_set_ids: 55
+transitive_dep_set_ids: 31
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 42
+direct_artifact_ids: 151
+}
+path_fragments {
+id: 195
+label: "logging.h"
+parent_id: 28
+}
+artifacts {
+id: 152
+path_fragment_id: 195
+}
+dep_set_of_files {
+id: 49
+transitive_dep_set_ids: 50
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 48
+transitive_dep_set_ids: 51
+transitive_dep_set_ids: 7
+transitive_dep_set_ids: 8
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 52
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 54
+transitive_dep_set_ids: 24
+direct_artifact_ids: 152
+}
+path_fragments {
+id: 196
+label: "city.h"
+parent_id: 141
+}
+artifacts {
+id: 153
+path_fragment_id: 196
+}
+dep_set_of_files {
+id: 62
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 27
+direct_artifact_ids: 153
+}
+path_fragments {
+id: 197
+label: "prefetch.h"
+parent_id: 9
+}
+artifacts {
+id: 154
+path_fragment_id: 197
+}
+dep_set_of_files {
+id: 63
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 154
+}
+path_fragments {
+id: 198
+label: "variant.h"
+parent_id: 69
+}
+artifacts {
+id: 155
+path_fragment_id: 198
+}
+dep_set_of_files {
+id: 64
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 39
+direct_artifact_ids: 155
+}
+path_fragments {
+id: 199
+label: "hash.h"
+parent_id: 142
+}
+artifacts {
+id: 156
+path_fragment_id: 199
+}
+path_fragments {
+id: 200
+label: "hash.h"
+parent_id: 141
+}
+artifacts {
+id: 157
+path_fragment_id: 200
+}
+dep_set_of_files {
+id: 61
+transitive_dep_set_ids: 62
+transitive_dep_set_ids: 44
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 27
+transitive_dep_set_ids: 63
+transitive_dep_set_ids: 56
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 16
+transitive_dep_set_ids: 26
+transitive_dep_set_ids: 25
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 38
+transitive_dep_set_ids: 64
+transitive_dep_set_ids: 39
+direct_artifact_ids: 156
+direct_artifact_ids: 157
+}
+path_fragments {
+id: 201
+label: "experiment.h"
+parent_id: 29
+}
+artifacts {
+id: 158
+path_fragment_id: 201
+}
+path_fragments {
+id: 202
+label: "experiment_config.h"
+parent_id: 29
+}
+artifacts {
+id: 159
+path_fragment_id: 202
+}
+dep_set_of_files {
+id: 6
+transitive_dep_set_ids: 7
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 48
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 61
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 38
+direct_artifact_ids: 158
+direct_artifact_ids: 159
+}
+path_fragments {
+id: 203
+label: "no_destructor.h"
+parent_id: 9
+}
+artifacts {
+id: 160
+path_fragment_id: 203
+}
+dep_set_of_files {
+id: 67
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 20
+direct_artifact_ids: 160
+}
+path_fragments {
+id: 204
+label: "strerror.h"
+parent_id: 32
+}
+artifacts {
+id: 161
+path_fragment_id: 204
+}
+dep_set_of_files {
+id: 68
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 22
+direct_artifact_ids: 161
+}
+path_fragments {
+id: 205
+label: "leak_check.h"
+parent_id: 163
+}
+artifacts {
+id: 162
+path_fragment_id: 205
+}
+dep_set_of_files {
+id: 69
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 162
+}
+path_fragments {
+id: 206
+label: "bounded_utf8_length_sequence.h"
+parent_id: 162
+}
+artifacts {
+id: 163
+path_fragment_id: 206
+}
+dep_set_of_files {
+id: 74
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 26
+direct_artifact_ids: 163
+}
+path_fragments {
+id: 207
+label: "utf8_for_code_point.h"
+parent_id: 162
+}
+artifacts {
+id: 164
+path_fragment_id: 207
+}
+dep_set_of_files {
+id: 75
+transitive_dep_set_ids: 10
+direct_artifact_ids: 164
+}
+path_fragments {
+id: 208
+label: "decode_rust_punycode.h"
+parent_id: 162
+}
+artifacts {
+id: 165
+path_fragment_id: 208
+}
+dep_set_of_files {
+id: 73
+transitive_dep_set_ids: 74
+transitive_dep_set_ids: 75
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 20
+direct_artifact_ids: 165
+}
+path_fragments {
+id: 209
+label: "demangle_rust.h"
+parent_id: 162
+}
+artifacts {
+id: 166
+path_fragment_id: 209
+}
+dep_set_of_files {
+id: 72
+transitive_dep_set_ids: 73
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 166
+}
+path_fragments {
+id: 210
+label: "demangle.h"
+parent_id: 162
+}
+artifacts {
+id: 167
+path_fragment_id: 210
+}
+dep_set_of_files {
+id: 71
+transitive_dep_set_ids: 72
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 26
+direct_artifact_ids: 167
+}
+path_fragments {
+id: 211
+label: "symbolize.h"
+parent_id: 162
+}
+artifacts {
+id: 168
+path_fragment_id: 211
+}
+path_fragments {
+id: 212
+label: "symbolize.h"
+parent_id: 163
+}
+artifacts {
+id: 169
+path_fragment_id: 212
+}
+path_fragments {
+id: 213
+label: "symbolize_darwin.inc"
+parent_id: 163
+}
+artifacts {
+id: 170
+path_fragment_id: 213
+}
+path_fragments {
+id: 214
+label: "symbolize_elf.inc"
+parent_id: 163
+}
+artifacts {
+id: 171
+path_fragment_id: 214
+}
+path_fragments {
+id: 215
+label: "symbolize_emscripten.inc"
+parent_id: 163
+}
+artifacts {
+id: 172
+path_fragment_id: 215
+}
+path_fragments {
+id: 216
+label: "symbolize_unimplemented.inc"
+parent_id: 163
+}
+artifacts {
+id: 173
+path_fragment_id: 216
+}
+path_fragments {
+id: 217
+label: "symbolize_win32.inc"
+parent_id: 163
+}
+artifacts {
+id: 174
+path_fragment_id: 217
+}
+dep_set_of_files {
+id: 70
+transitive_dep_set_ids: 53
+transitive_dep_set_ids: 71
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 18
+transitive_dep_set_ids: 45
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 29
+direct_artifact_ids: 168
+direct_artifact_ids: 169
+direct_artifact_ids: 170
+direct_artifact_ids: 171
+direct_artifact_ids: 172
+direct_artifact_ids: 173
+direct_artifact_ids: 174
+}
+path_fragments {
+id: 218
+label: "container_memory.h"
+parent_id: 179
+}
+artifacts {
+id: 175
+path_fragment_id: 218
+}
+dep_set_of_files {
+id: 78
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 61
+transitive_dep_set_ids: 35
+transitive_dep_set_ids: 16
+transitive_dep_set_ids: 39
+direct_artifact_ids: 175
+}
+path_fragments {
+id: 221
+label: "crc"
+parent_id: 10
+}
+path_fragments {
+id: 220
+label: "internal"
+parent_id: 221
+}
+path_fragments {
+id: 219
+label: "cpu_detect.h"
+parent_id: 220
+}
+artifacts {
+id: 176
+path_fragment_id: 219
+}
+dep_set_of_files {
+id: 81
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 38
+direct_artifact_ids: 176
+}
+path_fragments {
+id: 222
+label: "crc.h"
+parent_id: 220
+}
+artifacts {
+id: 177
+path_fragment_id: 222
+}
+path_fragments {
+id: 223
+label: "crc32_x86_arm_combined_simd.h"
+parent_id: 220
+}
+artifacts {
+id: 178
+path_fragment_id: 223
+}
+path_fragments {
+id: 224
+label: "crc_internal.h"
+parent_id: 220
+}
+artifacts {
+id: 179
+path_fragment_id: 224
+}
+dep_set_of_files {
+id: 82
+transitive_dep_set_ids: 81
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 27
+transitive_dep_set_ids: 63
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 35
+transitive_dep_set_ids: 26
+direct_artifact_ids: 177
+direct_artifact_ids: 178
+direct_artifact_ids: 179
+}
+path_fragments {
+id: 225
+label: "non_temporal_arm_intrinsics.h"
+parent_id: 220
+}
+artifacts {
+id: 180
+path_fragment_id: 225
+}
+dep_set_of_files {
+id: 84
+transitive_dep_set_ids: 10
+direct_artifact_ids: 180
+}
+path_fragments {
+id: 226
+label: "non_temporal_memcpy.h"
+parent_id: 220
+}
+artifacts {
+id: 181
+path_fragment_id: 226
+}
+dep_set_of_files {
+id: 83
+transitive_dep_set_ids: 84
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 181
+}
+path_fragments {
+id: 227
+label: "crc32c.h"
+parent_id: 221
+}
+artifacts {
+id: 182
+path_fragment_id: 227
+}
+path_fragments {
+id: 228
+label: "crc32c.h"
+parent_id: 220
+}
+artifacts {
+id: 183
+path_fragment_id: 228
+}
+path_fragments {
+id: 229
+label: "crc_memcpy.h"
+parent_id: 220
+}
+artifacts {
+id: 184
+path_fragment_id: 229
+}
+path_fragments {
+id: 230
+label: "crc32c_inline.h"
+parent_id: 220
+}
+artifacts {
+id: 185
+path_fragment_id: 230
+}
+dep_set_of_files {
+id: 80
+transitive_dep_set_ids: 81
+transitive_dep_set_ids: 82
+transitive_dep_set_ids: 83
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 27
+transitive_dep_set_ids: 63
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 54
+direct_artifact_ids: 182
+direct_artifact_ids: 183
+direct_artifact_ids: 184
+direct_artifact_ids: 185
+}
+path_fragments {
+id: 231
+label: "crc_cord_state.h"
+parent_id: 220
+}
+artifacts {
+id: 186
+path_fragment_id: 231
+}
+dep_set_of_files {
+id: 79
+transitive_dep_set_ids: 80
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 67
+transitive_dep_set_ids: 26
+direct_artifact_ids: 186
+}
+path_fragments {
+id: 232
+label: "cord_data_edge.h"
+parent_id: 78
+}
+artifacts {
+id: 187
+path_fragment_id: 232
+}
+path_fragments {
+id: 233
+label: "cord_internal.h"
+parent_id: 78
+}
+artifacts {
+id: 188
+path_fragment_id: 233
+}
+path_fragments {
+id: 234
+label: "cord_rep_btree.h"
+parent_id: 78
+}
+artifacts {
+id: 189
+path_fragment_id: 234
+}
+path_fragments {
+id: 235
+label: "cord_rep_btree_navigator.h"
+parent_id: 78
+}
+artifacts {
+id: 190
+path_fragment_id: 235
+}
+path_fragments {
+id: 236
+label: "cord_rep_btree_reader.h"
+parent_id: 78
+}
+artifacts {
+id: 191
+path_fragment_id: 236
+}
+path_fragments {
+id: 237
+label: "cord_rep_consume.h"
+parent_id: 78
+}
+artifacts {
+id: 192
+path_fragment_id: 237
+}
+path_fragments {
+id: 238
+label: "cord_rep_crc.h"
+parent_id: 78
+}
+artifacts {
+id: 193
+path_fragment_id: 238
+}
+path_fragments {
+id: 239
+label: "cord_rep_flat.h"
+parent_id: 78
+}
+artifacts {
+id: 194
+path_fragment_id: 239
+}
+dep_set_of_files {
+id: 77
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 27
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 57
+transitive_dep_set_ids: 78
+transitive_dep_set_ids: 58
+transitive_dep_set_ids: 79
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 42
+direct_artifact_ids: 187
+direct_artifact_ids: 188
+direct_artifact_ids: 189
+direct_artifact_ids: 190
+direct_artifact_ids: 191
+direct_artifact_ids: 192
+direct_artifact_ids: 193
+direct_artifact_ids: 194
+}
+path_fragments {
+id: 242
+label: "profiling"
+parent_id: 10
+}
+path_fragments {
+id: 241
+label: "internal"
+parent_id: 242
+}
+path_fragments {
+id: 240
+label: "exponential_biased.h"
+parent_id: 241
+}
+artifacts {
+id: 195
+path_fragment_id: 240
+}
+dep_set_of_files {
+id: 87
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 195
+}
+path_fragments {
+id: 243
+label: "cordz_functions.h"
+parent_id: 78
+}
+artifacts {
+id: 196
+path_fragment_id: 243
+}
+dep_set_of_files {
+id: 86
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 87
+direct_artifact_ids: 196
+}
+path_fragments {
+id: 246
+label: "synchronization"
+parent_id: 10
+}
+path_fragments {
+id: 245
+label: "internal"
+parent_id: 246
+}
+path_fragments {
+id: 244
+label: "graphcycles.h"
+parent_id: 245
+}
+artifacts {
+id: 197
+path_fragment_id: 244
+}
+dep_set_of_files {
+id: 90
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 15
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 45
+transitive_dep_set_ids: 21
+direct_artifact_ids: 197
+}
+path_fragments {
+id: 247
+label: "kernel_timeout.h"
+parent_id: 245
+}
+artifacts {
+id: 198
+path_fragment_id: 247
+}
+dep_set_of_files {
+id: 91
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 24
+direct_artifact_ids: 198
+}
+path_fragments {
+id: 248
+label: "tracing.h"
+parent_id: 32
+}
+artifacts {
+id: 199
+path_fragment_id: 248
+}
+dep_set_of_files {
+id: 92
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 199
+}
+path_fragments {
+id: 249
+label: "barrier.h"
+parent_id: 246
+}
+artifacts {
+id: 200
+path_fragment_id: 249
+}
+path_fragments {
+id: 250
+label: "blocking_counter.h"
+parent_id: 246
+}
+artifacts {
+id: 201
+path_fragment_id: 250
+}
+path_fragments {
+id: 251
+label: "create_thread_identity.h"
+parent_id: 245
+}
+artifacts {
+id: 202
+path_fragment_id: 251
+}
+path_fragments {
+id: 252
+label: "futex.h"
+parent_id: 245
+}
+artifacts {
+id: 203
+path_fragment_id: 252
+}
+path_fragments {
+id: 253
+label: "futex_waiter.h"
+parent_id: 245
+}
+artifacts {
+id: 204
+path_fragment_id: 253
+}
+path_fragments {
+id: 254
+label: "per_thread_sem.h"
+parent_id: 245
+}
+artifacts {
+id: 205
+path_fragment_id: 254
+}
+path_fragments {
+id: 255
+label: "pthread_waiter.h"
+parent_id: 245
+}
+artifacts {
+id: 206
+path_fragment_id: 255
+}
+path_fragments {
+id: 256
+label: "sem_waiter.h"
+parent_id: 245
+}
+artifacts {
+id: 207
+path_fragment_id: 256
+}
+path_fragments {
+id: 257
+label: "stdcpp_waiter.h"
+parent_id: 245
+}
+artifacts {
+id: 208
+path_fragment_id: 257
+}
+path_fragments {
+id: 258
+label: "waiter.h"
+parent_id: 245
+}
+artifacts {
+id: 209
+path_fragment_id: 258
+}
+path_fragments {
+id: 259
+label: "waiter_base.h"
+parent_id: 245
+}
+artifacts {
+id: 210
+path_fragment_id: 259
+}
+path_fragments {
+id: 260
+label: "win32_waiter.h"
+parent_id: 245
+}
+artifacts {
+id: 211
+path_fragment_id: 260
+}
+path_fragments {
+id: 261
+label: "mutex.h"
+parent_id: 246
+}
+artifacts {
+id: 212
+path_fragment_id: 261
+}
+path_fragments {
+id: 262
+label: "notification.h"
+parent_id: 246
+}
+artifacts {
+id: 213
+path_fragment_id: 262
+}
+dep_set_of_files {
+id: 89
+transitive_dep_set_ids: 90
+transitive_dep_set_ids: 91
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 14
+transitive_dep_set_ids: 15
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 18
+transitive_dep_set_ids: 45
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 92
+transitive_dep_set_ids: 52
+transitive_dep_set_ids: 70
+transitive_dep_set_ids: 24
+direct_artifact_ids: 200
+direct_artifact_ids: 201
+direct_artifact_ids: 202
+direct_artifact_ids: 203
+direct_artifact_ids: 204
+direct_artifact_ids: 205
+direct_artifact_ids: 206
+direct_artifact_ids: 207
+direct_artifact_ids: 208
+direct_artifact_ids: 209
+direct_artifact_ids: 210
+direct_artifact_ids: 211
+direct_artifact_ids: 212
+direct_artifact_ids: 213
+}
+path_fragments {
+id: 263
+label: "cordz_handle.h"
+parent_id: 78
+}
+artifacts {
+id: 214
+path_fragment_id: 263
+}
+dep_set_of_files {
+id: 88
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 67
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 89
+direct_artifact_ids: 214
+}
+path_fragments {
+id: 264
+label: "cordz_update_tracker.h"
+parent_id: 78
+}
+artifacts {
+id: 215
+path_fragment_id: 264
+}
+dep_set_of_files {
+id: 94
+transitive_dep_set_ids: 10
+direct_artifact_ids: 215
+}
+path_fragments {
+id: 265
+label: "cordz_statistics.h"
+parent_id: 78
+}
+artifacts {
+id: 216
+path_fragment_id: 265
+}
+dep_set_of_files {
+id: 93
+transitive_dep_set_ids: 94
+transitive_dep_set_ids: 10
+direct_artifact_ids: 216
+}
+path_fragments {
+id: 266
+label: "cordz_info.h"
+parent_id: 78
+}
+artifacts {
+id: 217
+path_fragment_id: 266
+}
+dep_set_of_files {
+id: 85
+transitive_dep_set_ids: 77
+transitive_dep_set_ids: 86
+transitive_dep_set_ids: 88
+transitive_dep_set_ids: 93
+transitive_dep_set_ids: 94
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 58
+transitive_dep_set_ids: 52
+transitive_dep_set_ids: 89
+transitive_dep_set_ids: 24
+transitive_dep_set_ids: 42
+direct_artifact_ids: 217
+}
+path_fragments {
+id: 267
+label: "cordz_update_scope.h"
+parent_id: 78
+}
+artifacts {
+id: 218
+path_fragment_id: 267
+}
+dep_set_of_files {
+id: 95
+transitive_dep_set_ids: 77
+transitive_dep_set_ids: 85
+transitive_dep_set_ids: 94
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 218
+}
+path_fragments {
+id: 268
+label: "cord.h"
+parent_id: 75
+}
+artifacts {
+id: 219
+path_fragment_id: 268
+}
+path_fragments {
+id: 269
+label: "cord_buffer.h"
+parent_id: 75
+}
+artifacts {
+id: 220
+path_fragment_id: 269
+}
+path_fragments {
+id: 270
+label: "cord_analysis.h"
+parent_id: 75
+}
+artifacts {
+id: 221
+path_fragment_id: 270
+}
+dep_set_of_files {
+id: 76
+transitive_dep_set_ids: 77
+transitive_dep_set_ids: 85
+transitive_dep_set_ids: 95
+transitive_dep_set_ids: 94
+transitive_dep_set_ids: 33
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 27
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 58
+transitive_dep_set_ids: 80
+transitive_dep_set_ids: 79
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 44
+transitive_dep_set_ids: 16
+transitive_dep_set_ids: 26
+transitive_dep_set_ids: 28
+transitive_dep_set_ids: 38
+transitive_dep_set_ids: 42
+direct_artifact_ids: 219
+direct_artifact_ids: 220
+direct_artifact_ids: 221
+}
+path_fragments {
+id: 272
+label: "status"
+parent_id: 10
+}
+path_fragments {
+id: 271
+label: "status.h"
+parent_id: 272
+}
+artifacts {
+id: 222
+path_fragment_id: 271
+}
+path_fragments {
+id: 273
+label: "status_payload_printer.h"
+parent_id: 272
+}
+artifacts {
+id: 223
+path_fragment_id: 273
+}
+path_fragments {
+id: 275
+label: "internal"
+parent_id: 272
+}
+path_fragments {
+id: 274
+label: "status_internal.h"
+parent_id: 275
+}
+artifacts {
+id: 224
+path_fragment_id: 274
+}
+dep_set_of_files {
+id: 66
+transitive_dep_set_ids: 14
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 67
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 68
+transitive_dep_set_ids: 58
+transitive_dep_set_ids: 69
+transitive_dep_set_ids: 52
+transitive_dep_set_ids: 70
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 35
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 76
+transitive_dep_set_ids: 54
+transitive_dep_set_ids: 38
+transitive_dep_set_ids: 42
+direct_artifact_ids: 222
+direct_artifact_ids: 223
+direct_artifact_ids: 224
+}
+path_fragments {
+id: 276
+label: "has_ostream_operator.h"
+parent_id: 75
+}
+artifacts {
+id: 225
+path_fragment_id: 276
+}
+dep_set_of_files {
+id: 97
+transitive_dep_set_ids: 10
+direct_artifact_ids: 225
+}
+path_fragments {
+id: 277
+label: "statusor.h"
+parent_id: 272
+}
+artifacts {
+id: 226
+path_fragment_id: 277
+}
+path_fragments {
+id: 278
+label: "statusor_internal.h"
+parent_id: 275
+}
+artifacts {
+id: 227
+path_fragment_id: 278
+}
+dep_set_of_files {
+id: 96
+transitive_dep_set_ids: 66
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 16
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 97
+transitive_dep_set_ids: 54
+transitive_dep_set_ids: 64
+transitive_dep_set_ids: 39
+direct_artifact_ids: 226
+direct_artifact_ids: 227
+}
+path_fragments {
+id: 279
+label: "internal_malloc_tracing_extension.h"
+parent_id: 29
+}
+artifacts {
+id: 228
+path_fragment_id: 279
+}
+path_fragments {
+id: 280
+label: "malloc_tracing_extension.h"
+parent_id: 29
+}
+artifacts {
+id: 229
+path_fragment_id: 280
+}
+dep_set_of_files {
+id: 65
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 66
+transitive_dep_set_ids: 96
+direct_artifact_ids: 228
+direct_artifact_ids: 229
+}
+path_fragments {
+id: 281
+label: "exponential_biased.h"
+parent_id: 28
+}
+artifacts {
+id: 230
+path_fragment_id: 281
+}
+path_fragments {
+id: 283
+label: "selsan"
+parent_id: 29
+}
+path_fragments {
+id: 282
+label: "selsan.h"
+parent_id: 283
+}
+artifacts {
+id: 231
+path_fragment_id: 282
+}
+dep_set_of_files {
+id: 98
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 11
+direct_artifact_ids: 230
+direct_artifact_ids: 231
+}
+path_fragments {
+id: 284
+label: "linked_list.h"
+parent_id: 28
+}
+artifacts {
+id: 232
+path_fragment_id: 284
+}
+dep_set_of_files {
+id: 99
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 11
+direct_artifact_ids: 232
+}
+path_fragments {
+id: 285
+label: "optimization.h"
+parent_id: 28
+}
+artifacts {
+id: 233
+path_fragment_id: 285
+}
+dep_set_of_files {
+id: 101
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 11
+direct_artifact_ids: 233
+}
+path_fragments {
+id: 286
+label: "memory_tag.h"
+parent_id: 28
+}
+artifacts {
+id: 234
+path_fragment_id: 286
+}
+dep_set_of_files {
+id: 100
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 101
+transitive_dep_set_ids: 31
+direct_artifact_ids: 234
+}
+path_fragments {
+id: 287
+label: "cpu_utils.h"
+parent_id: 28
+}
+artifacts {
+id: 235
+path_fragment_id: 287
+}
+dep_set_of_files {
+id: 103
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 11
+direct_artifact_ids: 235
+}
+path_fragments {
+id: 288
+label: "util.h"
+parent_id: 28
+}
+artifacts {
+id: 236
+path_fragment_id: 288
+}
+dep_set_of_files {
+id: 105
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 24
+direct_artifact_ids: 236
+}
+path_fragments {
+id: 289
+label: "sysinfo.h"
+parent_id: 28
+}
+artifacts {
+id: 237
+path_fragment_id: 289
+}
+dep_set_of_files {
+id: 104
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 103
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 105
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 29
+direct_artifact_ids: 237
+}
+path_fragments {
+id: 290
+label: "linux_syscall_support.h"
+parent_id: 28
+}
+artifacts {
+id: 238
+path_fragment_id: 290
+}
+path_fragments {
+id: 291
+label: "percpu.h"
+parent_id: 28
+}
+artifacts {
+id: 239
+path_fragment_id: 291
+}
+path_fragments {
+id: 292
+label: "percpu_rseq_aarch64.S"
+parent_id: 28
+}
+artifacts {
+id: 240
+path_fragment_id: 292
+}
+path_fragments {
+id: 293
+label: "percpu_rseq_x86_64.S"
+parent_id: 28
+}
+artifacts {
+id: 241
+path_fragment_id: 293
+}
+dep_set_of_files {
+id: 102
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 103
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 101
+transitive_dep_set_ids: 104
+transitive_dep_set_ids: 105
+transitive_dep_set_ids: 6
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+direct_artifact_ids: 238
+direct_artifact_ids: 239
+direct_artifact_ids: 240
+direct_artifact_ids: 241
+}
+path_fragments {
+id: 294
+label: "sampled_allocation_recorder.h"
+parent_id: 28
+}
+artifacts {
+id: 242
+path_fragment_id: 294
+}
+dep_set_of_files {
+id: 107
+transitive_dep_set_ids: 50
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 46
+direct_artifact_ids: 242
+}
+path_fragments {
+id: 295
+label: "sampled_allocation.h"
+parent_id: 28
+}
+artifacts {
+id: 243
+path_fragment_id: 295
+}
+dep_set_of_files {
+id: 106
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 107
+direct_artifact_ids: 243
+}
+path_fragments {
+id: 296
+label: "numa.h"
+parent_id: 28
+}
+artifacts {
+id: 244
+path_fragment_id: 296
+}
+dep_set_of_files {
+id: 109
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 103
+transitive_dep_set_ids: 48
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 102
+transitive_dep_set_ids: 104
+transitive_dep_set_ids: 105
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 46
+direct_artifact_ids: 244
+}
+path_fragments {
+id: 297
+label: "page_size.h"
+parent_id: 28
+}
+artifacts {
+id: 245
+path_fragment_id: 297
+}
+dep_set_of_files {
+id: 110
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+direct_artifact_ids: 245
+}
+path_fragments {
+id: 298
+label: "system_allocator.h"
+parent_id: 28
+}
+artifacts {
+id: 246
+path_fragment_id: 298
+}
+dep_set_of_files {
+id: 108
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 48
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 100
+transitive_dep_set_ids: 109
+transitive_dep_set_ids: 101
+transitive_dep_set_ids: 110
+transitive_dep_set_ids: 105
+transitive_dep_set_ids: 6
+transitive_dep_set_ids: 7
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 26
+transitive_dep_set_ids: 54
+transitive_dep_set_ids: 31
+transitive_dep_set_ids: 42
+direct_artifact_ids: 230
+direct_artifact_ids: 246
+}
+path_fragments {
+id: 299
+label: "alloc_at_least.h"
+parent_id: 29
+}
+artifacts {
+id: 247
+path_fragment_id: 299
+}
+dep_set_of_files {
+id: 111
+transitive_dep_set_ids: 11
+direct_artifact_ids: 247
+}
+path_fragments {
+id: 300
+label: "metadata_allocator.h"
+parent_id: 29
+}
+artifacts {
+id: 248
+path_fragment_id: 300
+}
+dep_set_of_files {
+id: 113
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 20
+direct_artifact_ids: 248
+}
+path_fragments {
+id: 301
+label: "size_class_info.h"
+parent_id: 29
+}
+artifacts {
+id: 249
+path_fragment_id: 301
+}
+dep_set_of_files {
+id: 114
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 42
+direct_artifact_ids: 249
+}
+path_fragments {
+id: 302
+label: "atomic_stats_counter.h"
+parent_id: 28
+}
+artifacts {
+id: 250
+path_fragment_id: 302
+}
+dep_set_of_files {
+id: 115
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 11
+direct_artifact_ids: 250
+}
+path_fragments {
+id: 303
+label: "cache_topology.h"
+parent_id: 28
+}
+artifacts {
+id: 251
+path_fragment_id: 303
+}
+dep_set_of_files {
+id: 116
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 103
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 104
+transitive_dep_set_ids: 105
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 29
+direct_artifact_ids: 251
+}
+path_fragments {
+id: 304
+label: "clock.h"
+parent_id: 28
+}
+artifacts {
+id: 252
+path_fragment_id: 304
+}
+dep_set_of_files {
+id: 117
+transitive_dep_set_ids: 9
+direct_artifact_ids: 252
+}
+path_fragments {
+id: 305
+label: "explicitly_constructed.h"
+parent_id: 28
+}
+artifacts {
+id: 253
+path_fragment_id: 305
+}
+dep_set_of_files {
+id: 118
+transitive_dep_set_ids: 9
+direct_artifact_ids: 253
+}
+path_fragments {
+id: 306
+label: "gwp_asan_state.h"
+parent_id: 28
+}
+artifacts {
+id: 254
+path_fragment_id: 306
+}
+dep_set_of_files {
+id: 119
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 7
+transitive_dep_set_ids: 42
+direct_artifact_ids: 254
+}
+path_fragments {
+id: 307
+label: "memory_stats.h"
+parent_id: 28
+}
+artifacts {
+id: 255
+path_fragment_id: 307
+}
+dep_set_of_files {
+id: 120
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 110
+transitive_dep_set_ids: 105
+transitive_dep_set_ids: 29
+direct_artifact_ids: 255
+}
+path_fragments {
+id: 308
+label: "mincore.h"
+parent_id: 28
+}
+artifacts {
+id: 256
+path_fragment_id: 308
+}
+dep_set_of_files {
+id: 121
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 110
+transitive_dep_set_ids: 11
+direct_artifact_ids: 256
+}
+path_fragments {
+id: 311
+label: "cleanup"
+parent_id: 10
+}
+path_fragments {
+id: 310
+label: "internal"
+parent_id: 311
+}
+path_fragments {
+id: 309
+label: "cleanup.h"
+parent_id: 310
+}
+artifacts {
+id: 257
+path_fragment_id: 309
+}
+dep_set_of_files {
+id: 124
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 39
+direct_artifact_ids: 257
+}
+path_fragments {
+id: 312
+label: "cleanup.h"
+parent_id: 311
+}
+artifacts {
+id: 258
+path_fragment_id: 312
+}
+dep_set_of_files {
+id: 123
+transitive_dep_set_ids: 124
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+direct_artifact_ids: 258
+}
+path_fragments {
+id: 313
+label: "pageflags.h"
+parent_id: 28
+}
+artifacts {
+id: 259
+path_fragment_id: 313
+}
+dep_set_of_files {
+id: 122
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 110
+transitive_dep_set_ids: 105
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 123
+transitive_dep_set_ids: 66
+transitive_dep_set_ids: 29
+direct_artifact_ids: 259
+}
+path_fragments {
+id: 314
+label: "prefetch.h"
+parent_id: 28
+}
+artifacts {
+id: 260
+path_fragment_id: 314
+}
+dep_set_of_files {
+id: 126
+transitive_dep_set_ids: 9
+direct_artifact_ids: 260
+}
+path_fragments {
+id: 315
+label: "percpu_tcmalloc.h"
+parent_id: 28
+}
+artifacts {
+id: 261
+path_fragment_id: 315
+}
+dep_set_of_files {
+id: 125
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 121
+transitive_dep_set_ids: 101
+transitive_dep_set_ids: 102
+transitive_dep_set_ids: 126
+transitive_dep_set_ids: 104
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 18
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 26
+direct_artifact_ids: 238
+direct_artifact_ids: 261
+}
+path_fragments {
+id: 316
+label: "range_tracker.h"
+parent_id: 28
+}
+artifacts {
+id: 262
+path_fragment_id: 316
+}
+dep_set_of_files {
+id: 127
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 101
+transitive_dep_set_ids: 26
+direct_artifact_ids: 262
+}
+path_fragments {
+id: 317
+label: "residency.h"
+parent_id: 28
+}
+artifacts {
+id: 263
+path_fragment_id: 317
+}
+dep_set_of_files {
+id: 128
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 110
+transitive_dep_set_ids: 127
+transitive_dep_set_ids: 105
+transitive_dep_set_ids: 66
+direct_artifact_ids: 263
+}
+path_fragments {
+id: 318
+label: "stacktrace_filter.h"
+parent_id: 28
+}
+artifacts {
+id: 264
+path_fragment_id: 318
+}
+dep_set_of_files {
+id: 129
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 61
+transitive_dep_set_ids: 42
+direct_artifact_ids: 264
+}
+path_fragments {
+id: 319
+label: "timeseries_tracker.h"
+parent_id: 28
+}
+artifacts {
+id: 265
+path_fragment_id: 319
+}
+dep_set_of_files {
+id: 130
+transitive_dep_set_ids: 117
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 26
+transitive_dep_set_ids: 25
+transitive_dep_set_ids: 24
+direct_artifact_ids: 265
+}
+path_fragments {
+id: 320
+label: "container.h"
+parent_id: 139
+}
+artifacts {
+id: 266
+path_fragment_id: 320
+}
+dep_set_of_files {
+id: 131
+transitive_dep_set_ids: 43
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 16
+direct_artifact_ids: 266
+}
+path_fragments {
+id: 321
+label: "common.h"
+parent_id: 179
+}
+artifacts {
+id: 267
+path_fragment_id: 321
+}
+dep_set_of_files {
+id: 135
+transitive_dep_set_ids: 16
+transitive_dep_set_ids: 38
+direct_artifact_ids: 267
+}
+path_fragments {
+id: 322
+label: "hash_function_defaults.h"
+parent_id: 179
+}
+artifacts {
+id: 268
+path_fragment_id: 322
+}
+dep_set_of_files {
+id: 134
+transitive_dep_set_ids: 135
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 61
+transitive_dep_set_ids: 16
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 76
+direct_artifact_ids: 268
+}
+path_fragments {
+id: 323
+label: "hash_container_defaults.h"
+parent_id: 180
+}
+artifacts {
+id: 269
+path_fragment_id: 323
+}
+dep_set_of_files {
+id: 133
+transitive_dep_set_ids: 134
+transitive_dep_set_ids: 10
+direct_artifact_ids: 269
+}
+path_fragments {
+id: 324
+label: "common_policy_traits.h"
+parent_id: 179
+}
+artifacts {
+id: 270
+path_fragment_id: 324
+}
+dep_set_of_files {
+id: 137
+transitive_dep_set_ids: 16
+direct_artifact_ids: 270
+}
+path_fragments {
+id: 325
+label: "hash_policy_traits.h"
+parent_id: 179
+}
+artifacts {
+id: 271
+path_fragment_id: 325
+}
+dep_set_of_files {
+id: 139
+transitive_dep_set_ids: 137
+transitive_dep_set_ids: 78
+transitive_dep_set_ids: 16
+direct_artifact_ids: 271
+}
+path_fragments {
+id: 326
+label: "hashtable_control_bytes.h"
+parent_id: 179
+}
+artifacts {
+id: 272
+path_fragment_id: 326
+}
+dep_set_of_files {
+id: 140
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 27
+transitive_dep_set_ids: 26
+direct_artifact_ids: 272
+}
+path_fragments {
+id: 327
+label: "hashtable_debug_hooks.h"
+parent_id: 179
+}
+artifacts {
+id: 273
+path_fragment_id: 327
+}
+dep_set_of_files {
+id: 141
+transitive_dep_set_ids: 10
+direct_artifact_ids: 273
+}
+path_fragments {
+id: 328
+label: "sample_recorder.h"
+parent_id: 241
+}
+artifacts {
+id: 274
+path_fragment_id: 328
+}
+dep_set_of_files {
+id: 143
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 89
+transitive_dep_set_ids: 24
+direct_artifact_ids: 274
+}
+path_fragments {
+id: 329
+label: "hashtablez_sampler.h"
+parent_id: 179
+}
+artifacts {
+id: 275
+path_fragment_id: 329
+}
+dep_set_of_files {
+id: 142
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 67
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 52
+transitive_dep_set_ids: 35
+transitive_dep_set_ids: 87
+transitive_dep_set_ids: 143
+transitive_dep_set_ids: 89
+transitive_dep_set_ids: 24
+transitive_dep_set_ids: 39
+direct_artifact_ids: 275
+}
+path_fragments {
+id: 330
+label: "raw_hash_set_resize_impl.h"
+parent_id: 179
+}
+artifacts {
+id: 276
+path_fragment_id: 330
+}
+dep_set_of_files {
+id: 144
+transitive_dep_set_ids: 10
+direct_artifact_ids: 276
+}
+path_fragments {
+id: 331
+label: "raw_hash_set.h"
+parent_id: 179
+}
+artifacts {
+id: 277
+path_fragment_id: 331
+}
+dep_set_of_files {
+id: 138
+transitive_dep_set_ids: 135
+transitive_dep_set_ids: 137
+transitive_dep_set_ids: 57
+transitive_dep_set_ids: 78
+transitive_dep_set_ids: 134
+transitive_dep_set_ids: 139
+transitive_dep_set_ids: 140
+transitive_dep_set_ids: 141
+transitive_dep_set_ids: 142
+transitive_dep_set_ids: 144
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 18
+transitive_dep_set_ids: 27
+transitive_dep_set_ids: 34
+transitive_dep_set_ids: 63
+transitive_dep_set_ids: 21
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 61
+transitive_dep_set_ids: 44
+transitive_dep_set_ids: 35
+transitive_dep_set_ids: 16
+transitive_dep_set_ids: 26
+transitive_dep_set_ids: 39
+direct_artifact_ids: 277
+}
+path_fragments {
+id: 332
+label: "raw_hash_map.h"
+parent_id: 179
+}
+artifacts {
+id: 278
+path_fragment_id: 332
+}
+dep_set_of_files {
+id: 136
+transitive_dep_set_ids: 137
+transitive_dep_set_ids: 78
+transitive_dep_set_ids: 138
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 32
+transitive_dep_set_ids: 16
+direct_artifact_ids: 278
+}
+path_fragments {
+id: 333
+label: "flat_hash_map.h"
+parent_id: 180
+}
+artifacts {
+id: 279
+path_fragment_id: 333
+}
+dep_set_of_files {
+id: 132
+transitive_dep_set_ids: 78
+transitive_dep_set_ids: 133
+transitive_dep_set_ids: 136
+transitive_dep_set_ids: 131
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 16
+direct_artifact_ids: 279
+}
+path_fragments {
+id: 334
+label: "allocation_sample.h"
+parent_id: 29
+}
+artifacts {
+id: 280
+path_fragment_id: 334
+}
+path_fragments {
+id: 335
+label: "allocation_sampling.h"
+parent_id: 29
+}
+artifacts {
+id: 281
+path_fragment_id: 335
+}
+path_fragments {
+id: 336
+label: "arena.h"
+parent_id: 29
+}
+artifacts {
+id: 282
+path_fragment_id: 336
+}
+path_fragments {
+id: 337
+label: "central_freelist.h"
+parent_id: 29
+}
+artifacts {
+id: 283
+path_fragment_id: 337
+}
+path_fragments {
+id: 338
+label: "common.h"
+parent_id: 29
+}
+artifacts {
+id: 284
+path_fragment_id: 338
+}
+path_fragments {
+id: 339
+label: "cpu_cache.h"
+parent_id: 29
+}
+artifacts {
+id: 285
+path_fragment_id: 339
+}
+path_fragments {
+id: 340
+label: "deallocation_profiler.h"
+parent_id: 29
+}
+artifacts {
+id: 286
+path_fragment_id: 340
+}
+path_fragments {
+id: 341
+label: "error_reporting.h"
+parent_id: 29
+}
+artifacts {
+id: 287
+path_fragment_id: 341
+}
+path_fragments {
+id: 342
+label: "global_stats.h"
+parent_id: 29
+}
+artifacts {
+id: 288
+path_fragment_id: 342
+}
+path_fragments {
+id: 343
+label: "guarded_allocations.h"
+parent_id: 29
+}
+artifacts {
+id: 289
+path_fragment_id: 343
+}
+path_fragments {
+id: 344
+label: "guarded_page_allocator.h"
+parent_id: 29
+}
+artifacts {
+id: 290
+path_fragment_id: 344
+}
+path_fragments {
+id: 345
+label: "hinted_tracker_lists.h"
+parent_id: 29
+}
+artifacts {
+id: 291
+path_fragment_id: 345
+}
+path_fragments {
+id: 346
+label: "huge_address_map.h"
+parent_id: 29
+}
+artifacts {
+id: 292
+path_fragment_id: 346
+}
+path_fragments {
+id: 347
+label: "huge_allocator.h"
+parent_id: 29
+}
+artifacts {
+id: 293
+path_fragment_id: 347
+}
+path_fragments {
+id: 348
+label: "huge_cache.h"
+parent_id: 29
+}
+artifacts {
+id: 294
+path_fragment_id: 348
+}
+path_fragments {
+id: 349
+label: "huge_page_aware_allocator.h"
+parent_id: 29
+}
+artifacts {
+id: 295
+path_fragment_id: 349
+}
+path_fragments {
+id: 350
+label: "huge_page_filler.h"
+parent_id: 29
+}
+artifacts {
+id: 296
+path_fragment_id: 350
+}
+path_fragments {
+id: 351
+label: "huge_page_subrelease.h"
+parent_id: 29
+}
+artifacts {
+id: 297
+path_fragment_id: 351
+}
+path_fragments {
+id: 352
+label: "huge_pages.h"
+parent_id: 29
+}
+artifacts {
+id: 298
+path_fragment_id: 352
+}
+path_fragments {
+id: 353
+label: "huge_region.h"
+parent_id: 29
+}
+artifacts {
+id: 299
+path_fragment_id: 353
+}
+path_fragments {
+id: 354
+label: "metadata_object_allocator.h"
+parent_id: 29
+}
+artifacts {
+id: 300
+path_fragment_id: 354
+}
+path_fragments {
+id: 355
+label: "page_allocator.h"
+parent_id: 29
+}
+artifacts {
+id: 301
+path_fragment_id: 355
+}
+path_fragments {
+id: 356
+label: "page_allocator_interface.h"
+parent_id: 29
+}
+artifacts {
+id: 302
+path_fragment_id: 356
+}
+path_fragments {
+id: 357
+label: "pagemap.h"
+parent_id: 29
+}
+artifacts {
+id: 303
+path_fragment_id: 357
+}
+path_fragments {
+id: 358
+label: "pages.h"
+parent_id: 29
+}
+artifacts {
+id: 304
+path_fragment_id: 358
+}
+path_fragments {
+id: 359
+label: "parameters.h"
+parent_id: 29
+}
+artifacts {
+id: 305
+path_fragment_id: 359
+}
+path_fragments {
+id: 360
+label: "peak_heap_tracker.h"
+parent_id: 29
+}
+artifacts {
+id: 306
+path_fragment_id: 360
+}
+path_fragments {
+id: 361
+label: "sampler.h"
+parent_id: 29
+}
+artifacts {
+id: 307
+path_fragment_id: 361
+}
+path_fragments {
+id: 362
+label: "segv_handler.h"
+parent_id: 29
+}
+artifacts {
+id: 308
+path_fragment_id: 362
+}
+path_fragments {
+id: 363
+label: "sizemap.h"
+parent_id: 29
+}
+artifacts {
+id: 309
+path_fragment_id: 363
+}
+path_fragments {
+id: 364
+label: "span.h"
+parent_id: 29
+}
+artifacts {
+id: 310
+path_fragment_id: 364
+}
+path_fragments {
+id: 365
+label: "span_stats.h"
+parent_id: 29
+}
+artifacts {
+id: 311
+path_fragment_id: 365
+}
+path_fragments {
+id: 366
+label: "stack_trace_table.h"
+parent_id: 29
+}
+artifacts {
+id: 312
+path_fragment_id: 366
+}
+path_fragments {
+id: 367
+label: "static_vars.h"
+parent_id: 29
+}
+artifacts {
+id: 313
+path_fragment_id: 367
+}
+path_fragments {
+id: 368
+label: "stats.h"
+parent_id: 29
+}
+artifacts {
+id: 314
+path_fragment_id: 368
+}
+path_fragments {
+id: 369
+label: "tcmalloc_policy.h"
+parent_id: 29
+}
+artifacts {
+id: 315
+path_fragment_id: 369
+}
+path_fragments {
+id: 370
+label: "thread_cache.h"
+parent_id: 29
+}
+artifacts {
+id: 316
+path_fragment_id: 370
+}
+path_fragments {
+id: 371
+label: "transfer_cache.h"
+parent_id: 29
+}
+artifacts {
+id: 317
+path_fragment_id: 371
+}
+path_fragments {
+id: 372
+label: "transfer_cache_internals.h"
+parent_id: 29
+}
+artifacts {
+id: 318
+path_fragment_id: 372
+}
+path_fragments {
+id: 373
+label: "transfer_cache_stats.h"
+parent_id: 29
+}
+artifacts {
+id: 319
+path_fragment_id: 373
+}
+dep_set_of_files {
+id: 112
+transitive_dep_set_ids: 6
+transitive_dep_set_ids: 7
+transitive_dep_set_ids: 8
+transitive_dep_set_ids: 65
+transitive_dep_set_ids: 113
+transitive_dep_set_ids: 114
+transitive_dep_set_ids: 50
+transitive_dep_set_ids: 115
+transitive_dep_set_ids: 116
+transitive_dep_set_ids: 117
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 103
+transitive_dep_set_ids: 48
+transitive_dep_set_ids: 118
+transitive_dep_set_ids: 119
+transitive_dep_set_ids: 99
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 120
+transitive_dep_set_ids: 100
+transitive_dep_set_ids: 121
+transitive_dep_set_ids: 109
+transitive_dep_set_ids: 101
+transitive_dep_set_ids: 110
+transitive_dep_set_ids: 122
+transitive_dep_set_ids: 51
+transitive_dep_set_ids: 102
+transitive_dep_set_ids: 125
+transitive_dep_set_ids: 126
+transitive_dep_set_ids: 127
+transitive_dep_set_ids: 128
+transitive_dep_set_ids: 106
+transitive_dep_set_ids: 107
+transitive_dep_set_ids: 129
+transitive_dep_set_ids: 104
+transitive_dep_set_ids: 108
+transitive_dep_set_ids: 130
+transitive_dep_set_ids: 105
+transitive_dep_set_ids: 98
+transitive_dep_set_ids: 131
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 18
+transitive_dep_set_ids: 45
+transitive_dep_set_ids: 20
+transitive_dep_set_ids: 56
+transitive_dep_set_ids: 132
+transitive_dep_set_ids: 52
+transitive_dep_set_ids: 46
+transitive_dep_set_ids: 61
+transitive_dep_set_ids: 35
+transitive_dep_set_ids: 26
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 54
+transitive_dep_set_ids: 24
+transitive_dep_set_ids: 38
+transitive_dep_set_ids: 42
+direct_artifact_ids: 230
+direct_artifact_ids: 280
+direct_artifact_ids: 281
+direct_artifact_ids: 282
+direct_artifact_ids: 283
+direct_artifact_ids: 284
+direct_artifact_ids: 285
+direct_artifact_ids: 286
+direct_artifact_ids: 287
+direct_artifact_ids: 288
+direct_artifact_ids: 289
+direct_artifact_ids: 290
+direct_artifact_ids: 291
+direct_artifact_ids: 292
+direct_artifact_ids: 293
+direct_artifact_ids: 294
+direct_artifact_ids: 295
+direct_artifact_ids: 296
+direct_artifact_ids: 297
+direct_artifact_ids: 298
+direct_artifact_ids: 299
+direct_artifact_ids: 300
+direct_artifact_ids: 301
+direct_artifact_ids: 302
+direct_artifact_ids: 303
+direct_artifact_ids: 304
+direct_artifact_ids: 305
+direct_artifact_ids: 306
+direct_artifact_ids: 307
+direct_artifact_ids: 308
+direct_artifact_ids: 309
+direct_artifact_ids: 310
+direct_artifact_ids: 311
+direct_artifact_ids: 312
+direct_artifact_ids: 313
+direct_artifact_ids: 314
+direct_artifact_ids: 315
+direct_artifact_ids: 316
+direct_artifact_ids: 317
+direct_artifact_ids: 318
+direct_artifact_ids: 319
+}
+path_fragments {
+id: 374
+label: "overflow.h"
+parent_id: 28
+}
+artifacts {
+id: 320
+path_fragment_id: 374
+}
+dep_set_of_files {
+id: 145
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 10
+direct_artifact_ids: 320
+}
+path_fragments {
+id: 375
+label: "declarations.h"
+parent_id: 28
+}
+artifacts {
+id: 321
+path_fragment_id: 375
+}
+path_fragments {
+id: 376
+label: "libc_override.h"
+parent_id: 29
+}
+artifacts {
+id: 322
+path_fragment_id: 376
+}
+path_fragments {
+id: 377
+label: "tcmalloc.h"
+parent_id: 29
+}
+artifacts {
+id: 323
+path_fragment_id: 377
+}
+dep_set_of_files {
+id: 5
+transitive_dep_set_ids: 6
+transitive_dep_set_ids: 7
+transitive_dep_set_ids: 65
+transitive_dep_set_ids: 13
+transitive_dep_set_ids: 10
+transitive_dep_set_ids: 11
+transitive_dep_set_ids: 18
+transitive_dep_set_ids: 52
+transitive_dep_set_ids: 70
+transitive_dep_set_ids: 98
+transitive_dep_set_ids: 35
+transitive_dep_set_ids: 66
+transitive_dep_set_ids: 96
+transitive_dep_set_ids: 29
+transitive_dep_set_ids: 54
+transitive_dep_set_ids: 26
+transitive_dep_set_ids: 9
+transitive_dep_set_ids: 99
+transitive_dep_set_ids: 49
+transitive_dep_set_ids: 100
+transitive_dep_set_ids: 101
+transitive_dep_set_ids: 102
+transitive_dep_set_ids: 106
+transitive_dep_set_ids: 108
+transitive_dep_set_ids: 111
+transitive_dep_set_ids: 112
+transitive_dep_set_ids: 8
+transitive_dep_set_ids: 50
+transitive_dep_set_ids: 145
+transitive_dep_set_ids: 110
+transitive_dep_set_ids: 24
+transitive_dep_set_ids: 42
+direct_artifact_ids: 321
+direct_artifact_ids: 322
+direct_artifact_ids: 323
+}
+dep_set_of_files {
+id: 3
+transitive_dep_set_ids: 4
+transitive_dep_set_ids: 5
+}
+path_fragments {
+id: 379
+label: "cross_allocator_large_page_workload_google_tcmalloc"
+parent_id: 17
+}
+path_fragments {
+id: 378
+label: "cross_allocator_large_page_workload.pic.o"
+parent_id: 379
+}
+artifacts {
+id: 324
+path_fragment_id: 378
+}
+path_fragments {
+id: 380
+label: "cross_allocator_large_page_workload.pic.d"
+parent_id: 379
+}
+artifacts {
+id: 325
+path_fragment_id: 380
+}
+actions {
+target_id: 1
+action_key: "e7b91043e6c97ae55ae7cd87b539dd0ae9ec3816d4d646ba0bfa2dd69eecc17c"
+mnemonic: "CppCompile"
+configuration_id: 1
+arguments: "/usr/bin/gcc"
+arguments: "-U_FORTIFY_SOURCE"
+arguments: "-fstack-protector"
+arguments: "-Wall"
+arguments: "-Wunused-but-set-parameter"
+arguments: "-Wno-free-nonheap-object"
+arguments: "-fno-omit-frame-pointer"
+arguments: "-MD"
+arguments: "-MF"
+arguments: "bazel-out/k8-fastbuild/bin/_objs/cross_allocator_large_page_workload_google_tcmalloc/cross_allocator_large_page_workload.pic.d"
+arguments: "-frandom-seed=bazel-out/k8-fastbuild/bin/_objs/cross_allocator_large_page_workload_google_tcmalloc/cross_allocator_large_page_workload.pic.o"
+arguments: "-fPIC"
+arguments: "-iquote"
+arguments: "."
+arguments: "-iquote"
+arguments: "bazel-out/k8-fastbuild/bin"
+arguments: "-iquote"
+arguments: "external/rules_cc+"
+arguments: "-iquote"
+arguments: "bazel-out/k8-fastbuild/bin/external/rules_cc+"
+arguments: "-iquote"
+arguments: "external/bazel_tools"
+arguments: "-iquote"
+arguments: "bazel-out/k8-fastbuild/bin/external/bazel_tools"
+arguments: "-iquote"
+arguments: "external/tcmalloc+"
+arguments: "-iquote"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+"
+arguments: "-iquote"
+arguments: "external/abseil-cpp+"
+arguments: "-iquote"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+"
+arguments: "-std=c11"
+arguments: "-O3"
+arguments: "-DNDEBUG"
+arguments: "-Wall"
+arguments: "-Wextra"
+arguments: "-Werror"
+arguments: "-fno-builtin-malloc"
+arguments: "-c"
+arguments: "cross_allocator_large_page_workload.c"
+arguments: "-o"
+arguments: "bazel-out/k8-fastbuild/bin/_objs/cross_allocator_large_page_workload_google_tcmalloc/cross_allocator_large_page_workload.pic.o"
+arguments: "-fno-canonical-system-headers"
+arguments: "-Wno-builtin-macro-redefined"
+arguments: "-D__DATE__=\"redacted\""
+arguments: "-D__TIMESTAMP__=\"redacted\""
+arguments: "-D__TIME__=\"redacted\""
+environment_variables {
+  key: "PATH"
+  value: "/bin:/usr/bin:/usr/local/bin"
+}
+environment_variables {
+  key: "PWD"
+  value: "/proc/self/cwd"
+}
+input_dep_set_ids: 3
+output_ids: 324
+output_ids: 325
+discovers_inputs: true
+primary_output_id: 324
+execution_platform: "@@platforms//host:host"
+}
+path_fragments {
+id: 386
+label: "external"
+parent_id: 18
+}
+path_fragments {
+id: 385
+label: "tcmalloc+"
+parent_id: 386
+}
+path_fragments {
+id: 384
+label: "tcmalloc"
+parent_id: 385
+}
+path_fragments {
+id: 383
+label: "_objs"
+parent_id: 384
+}
+path_fragments {
+id: 382
+label: "tcmalloc"
+parent_id: 383
+}
+path_fragments {
+id: 381
+label: "tcmalloc.pic.o"
+parent_id: 382
+}
+artifacts {
+id: 326
+path_fragment_id: 381
+}
+path_fragments {
+id: 388
+label: "alloc_at_least"
+parent_id: 383
+}
+path_fragments {
+id: 387
+label: "alloc_at_least.pic.o"
+parent_id: 388
+}
+artifacts {
+id: 327
+path_fragment_id: 387
+}
+path_fragments {
+id: 390
+label: "common_8k_pages"
+parent_id: 383
+}
+path_fragments {
+id: 389
+label: "allocation_sample.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 328
+path_fragment_id: 389
+}
+path_fragments {
+id: 391
+label: "allocation_sampling.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 329
+path_fragment_id: 391
+}
+path_fragments {
+id: 392
+label: "arena.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 330
+path_fragment_id: 392
+}
+path_fragments {
+id: 393
+label: "background.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 331
+path_fragment_id: 393
+}
+path_fragments {
+id: 394
+label: "central_freelist.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 332
+path_fragment_id: 394
+}
+path_fragments {
+id: 395
+label: "common.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 333
+path_fragment_id: 395
+}
+path_fragments {
+id: 396
+label: "cpu_cache.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 334
+path_fragment_id: 396
+}
+path_fragments {
+id: 397
+label: "deallocation_profiler.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 335
+path_fragment_id: 397
+}
+path_fragments {
+id: 398
+label: "error_reporting.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 336
+path_fragment_id: 398
+}
+path_fragments {
+id: 399
+label: "experimental_pow2_size_class.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 337
+path_fragment_id: 399
+}
+path_fragments {
+id: 400
+label: "global_stats.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 338
+path_fragment_id: 400
+}
+path_fragments {
+id: 401
+label: "guarded_page_allocator.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 339
+path_fragment_id: 401
+}
+path_fragments {
+id: 402
+label: "huge_address_map.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 340
+path_fragment_id: 402
+}
+path_fragments {
+id: 403
+label: "huge_allocator.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 341
+path_fragment_id: 403
+}
+path_fragments {
+id: 404
+label: "huge_cache.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 342
+path_fragment_id: 404
+}
+path_fragments {
+id: 405
+label: "huge_page_aware_allocator.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 343
+path_fragment_id: 405
+}
+path_fragments {
+id: 406
+label: "legacy_size_classes.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 344
+path_fragment_id: 406
+}
+path_fragments {
+id: 407
+label: "page_allocator.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 345
+path_fragment_id: 407
+}
+path_fragments {
+id: 408
+label: "page_allocator_interface.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 346
+path_fragment_id: 408
+}
+path_fragments {
+id: 409
+label: "pagemap.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 347
+path_fragment_id: 409
+}
+path_fragments {
+id: 410
+label: "parameters.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 348
+path_fragment_id: 410
+}
+path_fragments {
+id: 411
+label: "peak_heap_tracker.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 349
+path_fragment_id: 411
+}
+path_fragments {
+id: 412
+label: "reuse_size_classes_v2.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 350
+path_fragment_id: 412
+}
+path_fragments {
+id: 413
+label: "sampler.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 351
+path_fragment_id: 413
+}
+path_fragments {
+id: 414
+label: "segv_handler.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 352
+path_fragment_id: 414
+}
+path_fragments {
+id: 415
+label: "size_classes.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 353
+path_fragment_id: 415
+}
+path_fragments {
+id: 416
+label: "sizemap.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 354
+path_fragment_id: 416
+}
+path_fragments {
+id: 417
+label: "span.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 355
+path_fragment_id: 417
+}
+path_fragments {
+id: 418
+label: "stack_trace_table.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 356
+path_fragment_id: 418
+}
+path_fragments {
+id: 419
+label: "static_vars.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 357
+path_fragment_id: 419
+}
+path_fragments {
+id: 420
+label: "stats.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 358
+path_fragment_id: 420
+}
+path_fragments {
+id: 421
+label: "thread_cache.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 359
+path_fragment_id: 421
+}
+path_fragments {
+id: 422
+label: "transfer_cache.pic.o"
+parent_id: 390
+}
+artifacts {
+id: 360
+path_fragment_id: 422
+}
+path_fragments {
+id: 424
+label: "malloc_tracing_extension"
+parent_id: 383
+}
+path_fragments {
+id: 423
+label: "malloc_tracing_extension.pic.o"
+parent_id: 424
+}
+artifacts {
+id: 361
+path_fragment_id: 423
+}
+path_fragments {
+id: 430
+label: "abseil-cpp+"
+parent_id: 386
+}
+path_fragments {
+id: 429
+label: "absl"
+parent_id: 430
+}
+path_fragments {
+id: 428
+label: "status"
+parent_id: 429
+}
+path_fragments {
+id: 427
+label: "_objs"
+parent_id: 428
+}
+path_fragments {
+id: 426
+label: "statusor"
+parent_id: 427
+}
+path_fragments {
+id: 425
+label: "statusor.pic.o"
+parent_id: 426
+}
+artifacts {
+id: 362
+path_fragment_id: 425
+}
+path_fragments {
+id: 434
+label: "internal"
+parent_id: 384
+}
+path_fragments {
+id: 433
+label: "_objs"
+parent_id: 434
+}
+path_fragments {
+id: 432
+label: "cache_topology"
+parent_id: 433
+}
+path_fragments {
+id: 431
+label: "cache_topology.pic.o"
+parent_id: 432
+}
+artifacts {
+id: 363
+path_fragment_id: 431
+}
+path_fragments {
+id: 436
+label: "memory_stats"
+parent_id: 433
+}
+path_fragments {
+id: 435
+label: "memory_stats.pic.o"
+parent_id: 436
+}
+artifacts {
+id: 364
+path_fragment_id: 435
+}
+path_fragments {
+id: 438
+label: "pageflags"
+parent_id: 433
+}
+path_fragments {
+id: 437
+label: "pageflags.pic.o"
+parent_id: 438
+}
+artifacts {
+id: 365
+path_fragment_id: 437
+}
+path_fragments {
+id: 440
+label: "mincore"
+parent_id: 433
+}
+path_fragments {
+id: 439
+label: "mincore.pic.o"
+parent_id: 440
+}
+artifacts {
+id: 366
+path_fragment_id: 439
+}
+path_fragments {
+id: 442
+label: "residency"
+parent_id: 433
+}
+path_fragments {
+id: 441
+label: "residency.pic.o"
+parent_id: 442
+}
+artifacts {
+id: 367
+path_fragment_id: 441
+}
+path_fragments {
+id: 444
+label: "status"
+parent_id: 427
+}
+path_fragments {
+id: 443
+label: "status_internal.pic.o"
+parent_id: 444
+}
+artifacts {
+id: 368
+path_fragment_id: 443
+}
+path_fragments {
+id: 445
+label: "status.pic.o"
+parent_id: 444
+}
+artifacts {
+id: 369
+path_fragment_id: 445
+}
+path_fragments {
+id: 446
+label: "status_payload_printer.pic.o"
+parent_id: 444
+}
+artifacts {
+id: 370
+path_fragment_id: 446
+}
+path_fragments {
+id: 450
+label: "base"
+parent_id: 429
+}
+path_fragments {
+id: 449
+label: "_objs"
+parent_id: 450
+}
+path_fragments {
+id: 448
+label: "strerror"
+parent_id: 449
+}
+path_fragments {
+id: 447
+label: "strerror.pic.o"
+parent_id: 448
+}
+artifacts {
+id: 371
+path_fragment_id: 447
+}
+path_fragments {
+id: 454
+label: "debugging"
+parent_id: 429
+}
+path_fragments {
+id: 453
+label: "_objs"
+parent_id: 454
+}
+path_fragments {
+id: 452
+label: "leak_check"
+parent_id: 453
+}
+path_fragments {
+id: 451
+label: "leak_check.pic.o"
+parent_id: 452
+}
+artifacts {
+id: 372
+path_fragment_id: 451
+}
+path_fragments {
+id: 456
+label: "system_allocator"
+parent_id: 433
+}
+path_fragments {
+id: 455
+label: "system_allocator.pic.o"
+parent_id: 456
+}
+artifacts {
+id: 373
+path_fragment_id: 455
+}
+path_fragments {
+id: 458
+label: "memory_tag"
+parent_id: 433
+}
+path_fragments {
+id: 457
+label: "memory_tag.pic.o"
+parent_id: 458
+}
+artifacts {
+id: 374
+path_fragment_id: 457
+}
+path_fragments {
+id: 460
+label: "numa"
+parent_id: 433
+}
+path_fragments {
+id: 459
+label: "numa.pic.o"
+parent_id: 460
+}
+artifacts {
+id: 375
+path_fragment_id: 459
+}
+path_fragments {
+id: 462
+label: "percpu"
+parent_id: 433
+}
+path_fragments {
+id: 461
+label: "percpu.pic.o"
+parent_id: 462
+}
+artifacts {
+id: 376
+path_fragment_id: 461
+}
+path_fragments {
+id: 463
+label: "percpu_rseq_asm.pic.o"
+parent_id: 462
+}
+artifacts {
+id: 377
+path_fragment_id: 463
+}
+path_fragments {
+id: 464
+label: "percpu_rseq_unsupported.pic.o"
+parent_id: 462
+}
+artifacts {
+id: 378
+path_fragment_id: 464
+}
+path_fragments {
+id: 466
+label: "sysinfo"
+parent_id: 433
+}
+path_fragments {
+id: 465
+label: "sysinfo.pic.o"
+parent_id: 466
+}
+artifacts {
+id: 379
+path_fragment_id: 465
+}
+path_fragments {
+id: 468
+label: "experiment"
+parent_id: 383
+}
+path_fragments {
+id: 467
+label: "experiment.pic.o"
+parent_id: 468
+}
+artifacts {
+id: 380
+path_fragment_id: 467
+}
+path_fragments {
+id: 470
+label: "util"
+parent_id: 433
+}
+path_fragments {
+id: 469
+label: "util.pic.o"
+parent_id: 470
+}
+artifacts {
+id: 381
+path_fragment_id: 469
+}
+path_fragments {
+id: 474
+label: "selsan"
+parent_id: 384
+}
+path_fragments {
+id: 473
+label: "_objs"
+parent_id: 474
+}
+path_fragments {
+id: 472
+label: "selsan"
+parent_id: 473
+}
+path_fragments {
+id: 471
+label: "selsan.pic.o"
+parent_id: 472
+}
+artifacts {
+id: 382
+path_fragment_id: 471
+}
+path_fragments {
+id: 476
+label: "logging"
+parent_id: 433
+}
+path_fragments {
+id: 475
+label: "logging.pic.o"
+parent_id: 476
+}
+artifacts {
+id: 383
+path_fragment_id: 475
+}
+path_fragments {
+id: 478
+label: "environment"
+parent_id: 433
+}
+path_fragments {
+id: 477
+label: "environment.pic.o"
+parent_id: 478
+}
+artifacts {
+id: 384
+path_fragment_id: 477
+}
+path_fragments {
+id: 480
+label: "malloc_extension"
+parent_id: 383
+}
+path_fragments {
+id: 479
+label: "malloc_extension.pic.o"
+parent_id: 480
+}
+artifacts {
+id: 385
+path_fragment_id: 479
+}
+path_fragments {
+id: 484
+label: "container"
+parent_id: 429
+}
+path_fragments {
+id: 483
+label: "_objs"
+parent_id: 484
+}
+path_fragments {
+id: 482
+label: "raw_hash_set"
+parent_id: 483
+}
+path_fragments {
+id: 481
+label: "raw_hash_set.pic.o"
+parent_id: 482
+}
+artifacts {
+id: 386
+path_fragment_id: 481
+}
+path_fragments {
+id: 488
+label: "strings"
+parent_id: 429
+}
+path_fragments {
+id: 487
+label: "_objs"
+parent_id: 488
+}
+path_fragments {
+id: 486
+label: "cord"
+parent_id: 487
+}
+path_fragments {
+id: 485
+label: "cord.pic.o"
+parent_id: 486
+}
+artifacts {
+id: 387
+path_fragment_id: 485
+}
+path_fragments {
+id: 489
+label: "cord_analysis.pic.o"
+parent_id: 486
+}
+artifacts {
+id: 388
+path_fragment_id: 489
+}
+path_fragments {
+id: 491
+label: "cordz_info"
+parent_id: 487
+}
+path_fragments {
+id: 490
+label: "cordz_info.pic.o"
+parent_id: 491
+}
+artifacts {
+id: 389
+path_fragment_id: 490
+}
+path_fragments {
+id: 493
+label: "cord_internal"
+parent_id: 487
+}
+path_fragments {
+id: 492
+label: "cord_internal.pic.o"
+parent_id: 493
+}
+artifacts {
+id: 390
+path_fragment_id: 492
+}
+path_fragments {
+id: 494
+label: "cord_rep_btree.pic.o"
+parent_id: 493
+}
+artifacts {
+id: 391
+path_fragment_id: 494
+}
+path_fragments {
+id: 495
+label: "cord_rep_btree_navigator.pic.o"
+parent_id: 493
+}
+artifacts {
+id: 392
+path_fragment_id: 495
+}
+path_fragments {
+id: 496
+label: "cord_rep_btree_reader.pic.o"
+parent_id: 493
+}
+artifacts {
+id: 393
+path_fragment_id: 496
+}
+path_fragments {
+id: 497
+label: "cord_rep_consume.pic.o"
+parent_id: 493
+}
+artifacts {
+id: 394
+path_fragment_id: 497
+}
+path_fragments {
+id: 498
+label: "cord_rep_crc.pic.o"
+parent_id: 493
+}
+artifacts {
+id: 395
+path_fragment_id: 498
+}
+path_fragments {
+id: 500
+label: "cordz_functions"
+parent_id: 487
+}
+path_fragments {
+id: 499
+label: "cordz_functions.pic.o"
+parent_id: 500
+}
+artifacts {
+id: 396
+path_fragment_id: 499
+}
+path_fragments {
+id: 502
+label: "cordz_handle"
+parent_id: 487
+}
+path_fragments {
+id: 501
+label: "cordz_handle.pic.o"
+parent_id: 502
+}
+artifacts {
+id: 397
+path_fragment_id: 501
+}
+path_fragments {
+id: 506
+label: "crc"
+parent_id: 429
+}
+path_fragments {
+id: 505
+label: "_objs"
+parent_id: 506
+}
+path_fragments {
+id: 504
+label: "crc_cord_state"
+parent_id: 505
+}
+path_fragments {
+id: 503
+label: "crc_cord_state.pic.o"
+parent_id: 504
+}
+artifacts {
+id: 398
+path_fragment_id: 503
+}
+path_fragments {
+id: 508
+label: "crc32c"
+parent_id: 505
+}
+path_fragments {
+id: 507
+label: "crc32c.pic.o"
+parent_id: 508
+}
+artifacts {
+id: 399
+path_fragment_id: 507
+}
+path_fragments {
+id: 509
+label: "crc_memcpy_fallback.pic.o"
+parent_id: 508
+}
+artifacts {
+id: 400
+path_fragment_id: 509
+}
+path_fragments {
+id: 510
+label: "crc_memcpy_x86_arm_combined.pic.o"
+parent_id: 508
+}
+artifacts {
+id: 401
+path_fragment_id: 510
+}
+path_fragments {
+id: 511
+label: "crc_non_temporal_memcpy.pic.o"
+parent_id: 508
+}
+artifacts {
+id: 402
+path_fragment_id: 511
+}
+path_fragments {
+id: 513
+label: "crc_internal"
+parent_id: 505
+}
+path_fragments {
+id: 512
+label: "crc.pic.o"
+parent_id: 513
+}
+artifacts {
+id: 403
+path_fragment_id: 512
+}
+path_fragments {
+id: 514
+label: "crc_x86_arm_combined.pic.o"
+parent_id: 513
+}
+artifacts {
+id: 404
+path_fragment_id: 514
+}
+path_fragments {
+id: 516
+label: "cpu_detect"
+parent_id: 505
+}
+path_fragments {
+id: 515
+label: "cpu_detect.pic.o"
+parent_id: 516
+}
+artifacts {
+id: 405
+path_fragment_id: 515
+}
+path_fragments {
+id: 518
+label: "hashtablez_sampler"
+parent_id: 483
+}
+path_fragments {
+id: 517
+label: "hashtablez_sampler.pic.o"
+parent_id: 518
+}
+artifacts {
+id: 406
+path_fragment_id: 517
+}
+path_fragments {
+id: 519
+label: "hashtablez_sampler_force_weak_definition.pic.o"
+parent_id: 518
+}
+artifacts {
+id: 407
+path_fragment_id: 519
+}
+path_fragments {
+id: 523
+label: "profiling"
+parent_id: 429
+}
+path_fragments {
+id: 522
+label: "_objs"
+parent_id: 523
+}
+path_fragments {
+id: 521
+label: "exponential_biased"
+parent_id: 522
+}
+path_fragments {
+id: 520
+label: "exponential_biased.pic.o"
+parent_id: 521
+}
+artifacts {
+id: 408
+path_fragment_id: 520
+}
+path_fragments {
+id: 527
+label: "synchronization"
+parent_id: 429
+}
+path_fragments {
+id: 526
+label: "_objs"
+parent_id: 527
+}
+path_fragments {
+id: 525
+label: "synchronization"
+parent_id: 526
+}
+path_fragments {
+id: 524
+label: "barrier.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 409
+path_fragment_id: 524
+}
+path_fragments {
+id: 528
+label: "blocking_counter.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 410
+path_fragment_id: 528
+}
+path_fragments {
+id: 529
+label: "create_thread_identity.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 411
+path_fragment_id: 529
+}
+path_fragments {
+id: 530
+label: "futex_waiter.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 412
+path_fragment_id: 530
+}
+path_fragments {
+id: 531
+label: "per_thread_sem.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 413
+path_fragment_id: 531
+}
+path_fragments {
+id: 532
+label: "pthread_waiter.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 414
+path_fragment_id: 532
+}
+path_fragments {
+id: 533
+label: "sem_waiter.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 415
+path_fragment_id: 533
+}
+path_fragments {
+id: 534
+label: "stdcpp_waiter.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 416
+path_fragment_id: 534
+}
+path_fragments {
+id: 535
+label: "waiter_base.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 417
+path_fragment_id: 535
+}
+path_fragments {
+id: 536
+label: "win32_waiter.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 418
+path_fragment_id: 536
+}
+path_fragments {
+id: 537
+label: "mutex.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 419
+path_fragment_id: 537
+}
+path_fragments {
+id: 538
+label: "notification.pic.o"
+parent_id: 525
+}
+artifacts {
+id: 420
+path_fragment_id: 538
+}
+path_fragments {
+id: 540
+label: "graphcycles_internal"
+parent_id: 526
+}
+path_fragments {
+id: 539
+label: "graphcycles.pic.o"
+parent_id: 540
+}
+artifacts {
+id: 421
+path_fragment_id: 539
+}
+path_fragments {
+id: 542
+label: "kernel_timeout_internal"
+parent_id: 526
+}
+path_fragments {
+id: 541
+label: "kernel_timeout.pic.o"
+parent_id: 542
+}
+artifacts {
+id: 422
+path_fragment_id: 541
+}
+path_fragments {
+id: 544
+label: "tracing_internal"
+parent_id: 449
+}
+path_fragments {
+id: 543
+label: "tracing.pic.o"
+parent_id: 544
+}
+artifacts {
+id: 423
+path_fragment_id: 543
+}
+path_fragments {
+id: 546
+label: "symbolize"
+parent_id: 453
+}
+path_fragments {
+id: 545
+label: "symbolize.pic.o"
+parent_id: 546
+}
+artifacts {
+id: 424
+path_fragment_id: 545
+}
+path_fragments {
+id: 548
+label: "demangle_internal"
+parent_id: 453
+}
+path_fragments {
+id: 547
+label: "demangle.pic.o"
+parent_id: 548
+}
+artifacts {
+id: 425
+path_fragment_id: 547
+}
+path_fragments {
+id: 550
+label: "demangle_rust"
+parent_id: 453
+}
+path_fragments {
+id: 549
+label: "demangle_rust.pic.o"
+parent_id: 550
+}
+artifacts {
+id: 426
+path_fragment_id: 549
+}
+path_fragments {
+id: 552
+label: "decode_rust_punycode"
+parent_id: 453
+}
+path_fragments {
+id: 551
+label: "decode_rust_punycode.pic.o"
+parent_id: 552
+}
+artifacts {
+id: 427
+path_fragment_id: 551
+}
+path_fragments {
+id: 554
+label: "utf8_for_code_point"
+parent_id: 453
+}
+path_fragments {
+id: 553
+label: "utf8_for_code_point.pic.o"
+parent_id: 554
+}
+artifacts {
+id: 428
+path_fragment_id: 553
+}
+path_fragments {
+id: 556
+label: "stacktrace"
+parent_id: 453
+}
+path_fragments {
+id: 555
+label: "stacktrace.pic.o"
+parent_id: 556
+}
+artifacts {
+id: 429
+path_fragment_id: 555
+}
+path_fragments {
+id: 558
+label: "debugging_internal"
+parent_id: 453
+}
+path_fragments {
+id: 557
+label: "address_is_readable.pic.o"
+parent_id: 558
+}
+artifacts {
+id: 430
+path_fragment_id: 557
+}
+path_fragments {
+id: 559
+label: "elf_mem_image.pic.o"
+parent_id: 558
+}
+artifacts {
+id: 431
+path_fragment_id: 559
+}
+path_fragments {
+id: 560
+label: "vdso_support.pic.o"
+parent_id: 558
+}
+artifacts {
+id: 432
+path_fragment_id: 560
+}
+path_fragments {
+id: 562
+label: "malloc_internal"
+parent_id: 449
+}
+path_fragments {
+id: 561
+label: "low_level_alloc.pic.o"
+parent_id: 562
+}
+artifacts {
+id: 433
+path_fragment_id: 561
+}
+path_fragments {
+id: 566
+label: "hash"
+parent_id: 429
+}
+path_fragments {
+id: 565
+label: "_objs"
+parent_id: 566
+}
+path_fragments {
+id: 564
+label: "hash"
+parent_id: 565
+}
+path_fragments {
+id: 563
+label: "hash.pic.o"
+parent_id: 564
+}
+artifacts {
+id: 434
+path_fragment_id: 563
+}
+path_fragments {
+id: 568
+label: "city"
+parent_id: 565
+}
+path_fragments {
+id: 567
+label: "city.pic.o"
+parent_id: 568
+}
+artifacts {
+id: 435
+path_fragment_id: 567
+}
+path_fragments {
+id: 570
+label: "str_format_internal"
+parent_id: 487
+}
+path_fragments {
+id: 569
+label: "arg.pic.o"
+parent_id: 570
+}
+artifacts {
+id: 436
+path_fragment_id: 569
+}
+path_fragments {
+id: 571
+label: "bind.pic.o"
+parent_id: 570
+}
+artifacts {
+id: 437
+path_fragment_id: 571
+}
+path_fragments {
+id: 572
+label: "extension.pic.o"
+parent_id: 570
+}
+artifacts {
+id: 438
+path_fragment_id: 572
+}
+path_fragments {
+id: 573
+label: "float_conversion.pic.o"
+parent_id: 570
+}
+artifacts {
+id: 439
+path_fragment_id: 573
+}
+path_fragments {
+id: 574
+label: "output.pic.o"
+parent_id: 570
+}
+artifacts {
+id: 440
+path_fragment_id: 574
+}
+path_fragments {
+id: 575
+label: "parser.pic.o"
+parent_id: 570
+}
+artifacts {
+id: 441
+path_fragment_id: 575
+}
+path_fragments {
+id: 577
+label: "allocation_guard"
+parent_id: 433
+}
+path_fragments {
+id: 576
+label: "allocation_guard.pic.o"
+parent_id: 577
+}
+artifacts {
+id: 442
+path_fragment_id: 576
+}
+path_fragments {
+id: 579
+label: "malloc_hook"
+parent_id: 383
+}
+path_fragments {
+id: 578
+label: "malloc_hook.pic.o"
+parent_id: 579
+}
+artifacts {
+id: 443
+path_fragment_id: 578
+}
+path_fragments {
+id: 581
+label: "hook_list"
+parent_id: 433
+}
+path_fragments {
+id: 580
+label: "hook_list.pic.o"
+parent_id: 581
+}
+artifacts {
+id: 444
+path_fragment_id: 580
+}
+path_fragments {
+id: 583
+label: "page_size"
+parent_id: 433
+}
+path_fragments {
+id: 582
+label: "page_size.pic.o"
+parent_id: 583
+}
+artifacts {
+id: 445
+path_fragment_id: 582
+}
+path_fragments {
+id: 587
+label: "time"
+parent_id: 429
+}
+path_fragments {
+id: 586
+label: "_objs"
+parent_id: 587
+}
+path_fragments {
+id: 585
+label: "time"
+parent_id: 586
+}
+path_fragments {
+id: 584
+label: "civil_time.pic.o"
+parent_id: 585
+}
+artifacts {
+id: 446
+path_fragment_id: 584
+}
+path_fragments {
+id: 588
+label: "clock.pic.o"
+parent_id: 585
+}
+artifacts {
+id: 447
+path_fragment_id: 588
+}
+path_fragments {
+id: 589
+label: "duration.pic.o"
+parent_id: 585
+}
+artifacts {
+id: 448
+path_fragment_id: 589
+}
+path_fragments {
+id: 590
+label: "format.pic.o"
+parent_id: 585
+}
+artifacts {
+id: 449
+path_fragment_id: 590
+}
+path_fragments {
+id: 591
+label: "time.pic.o"
+parent_id: 585
+}
+artifacts {
+id: 450
+path_fragment_id: 591
+}
+path_fragments {
+id: 593
+label: "strings"
+parent_id: 487
+}
+path_fragments {
+id: 592
+label: "ascii.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 451
+path_fragment_id: 592
+}
+path_fragments {
+id: 594
+label: "charconv.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 452
+path_fragment_id: 594
+}
+path_fragments {
+id: 595
+label: "escaping.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 453
+path_fragment_id: 595
+}
+path_fragments {
+id: 596
+label: "charconv_bigint.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 454
+path_fragment_id: 596
+}
+path_fragments {
+id: 597
+label: "charconv_parse.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 455
+path_fragment_id: 597
+}
+path_fragments {
+id: 598
+label: "damerau_levenshtein_distance.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 456
+path_fragment_id: 598
+}
+path_fragments {
+id: 599
+label: "memutil.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 457
+path_fragment_id: 599
+}
+path_fragments {
+id: 600
+label: "stringify_sink.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 458
+path_fragment_id: 600
+}
+path_fragments {
+id: 601
+label: "match.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 459
+path_fragment_id: 601
+}
+path_fragments {
+id: 602
+label: "numbers.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 460
+path_fragment_id: 602
+}
+path_fragments {
+id: 603
+label: "str_cat.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 461
+path_fragment_id: 603
+}
+path_fragments {
+id: 604
+label: "str_replace.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 462
+path_fragment_id: 604
+}
+path_fragments {
+id: 605
+label: "str_split.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 463
+path_fragment_id: 605
+}
+path_fragments {
+id: 606
+label: "substitute.pic.o"
+parent_id: 593
+}
+artifacts {
+id: 464
+path_fragment_id: 606
+}
+path_fragments {
+id: 608
+label: "internal"
+parent_id: 487
+}
+path_fragments {
+id: 607
+label: "escaping.pic.o"
+parent_id: 608
+}
+artifacts {
+id: 465
+path_fragment_id: 607
+}
+path_fragments {
+id: 609
+label: "ostringstream.pic.o"
+parent_id: 608
+}
+artifacts {
+id: 466
+path_fragment_id: 609
+}
+path_fragments {
+id: 610
+label: "utf8.pic.o"
+parent_id: 608
+}
+artifacts {
+id: 467
+path_fragment_id: 610
+}
+path_fragments {
+id: 614
+label: "numeric"
+parent_id: 429
+}
+path_fragments {
+id: 613
+label: "_objs"
+parent_id: 614
+}
+path_fragments {
+id: 612
+label: "int128"
+parent_id: 613
+}
+path_fragments {
+id: 611
+label: "int128.pic.o"
+parent_id: 612
+}
+artifacts {
+id: 468
+path_fragment_id: 611
+}
+path_fragments {
+id: 616
+label: "string_view"
+parent_id: 487
+}
+path_fragments {
+id: 615
+label: "string_view.pic.o"
+parent_id: 616
+}
+artifacts {
+id: 469
+path_fragment_id: 615
+}
+path_fragments {
+id: 618
+label: "base"
+parent_id: 449
+}
+path_fragments {
+id: 617
+label: "cycleclock.pic.o"
+parent_id: 618
+}
+artifacts {
+id: 470
+path_fragment_id: 617
+}
+path_fragments {
+id: 619
+label: "spinlock.pic.o"
+parent_id: 618
+}
+artifacts {
+id: 471
+path_fragment_id: 619
+}
+path_fragments {
+id: 620
+label: "sysinfo.pic.o"
+parent_id: 618
+}
+artifacts {
+id: 472
+path_fragment_id: 620
+}
+path_fragments {
+id: 621
+label: "thread_identity.pic.o"
+parent_id: 618
+}
+artifacts {
+id: 473
+path_fragment_id: 621
+}
+path_fragments {
+id: 622
+label: "unscaledcycleclock.pic.o"
+parent_id: 618
+}
+artifacts {
+id: 474
+path_fragment_id: 622
+}
+path_fragments {
+id: 624
+label: "spinlock_wait"
+parent_id: 449
+}
+path_fragments {
+id: 623
+label: "spinlock_wait.pic.o"
+parent_id: 624
+}
+artifacts {
+id: 475
+path_fragment_id: 623
+}
+path_fragments {
+id: 629
+label: "internal"
+parent_id: 587
+}
+path_fragments {
+id: 628
+label: "cctz"
+parent_id: 629
+}
+path_fragments {
+id: 627
+label: "_objs"
+parent_id: 628
+}
+path_fragments {
+id: 626
+label: "time_zone"
+parent_id: 627
+}
+path_fragments {
+id: 625
+label: "time_zone_fixed.pic.o"
+parent_id: 626
+}
+artifacts {
+id: 476
+path_fragment_id: 625
+}
+path_fragments {
+id: 630
+label: "time_zone_format.pic.o"
+parent_id: 626
+}
+artifacts {
+id: 477
+path_fragment_id: 630
+}
+path_fragments {
+id: 631
+label: "time_zone_if.pic.o"
+parent_id: 626
+}
+artifacts {
+id: 478
+path_fragment_id: 631
+}
+path_fragments {
+id: 632
+label: "time_zone_impl.pic.o"
+parent_id: 626
+}
+artifacts {
+id: 479
+path_fragment_id: 632
+}
+path_fragments {
+id: 633
+label: "time_zone_info.pic.o"
+parent_id: 626
+}
+artifacts {
+id: 480
+path_fragment_id: 633
+}
+path_fragments {
+id: 634
+label: "time_zone_libc.pic.o"
+parent_id: 626
+}
+artifacts {
+id: 481
+path_fragment_id: 634
+}
+path_fragments {
+id: 635
+label: "time_zone_lookup.pic.o"
+parent_id: 626
+}
+artifacts {
+id: 482
+path_fragment_id: 635
+}
+path_fragments {
+id: 636
+label: "time_zone_posix.pic.o"
+parent_id: 626
+}
+artifacts {
+id: 483
+path_fragment_id: 636
+}
+path_fragments {
+id: 637
+label: "zone_info_source.pic.o"
+parent_id: 626
+}
+artifacts {
+id: 484
+path_fragment_id: 637
+}
+path_fragments {
+id: 639
+label: "civil_time"
+parent_id: 627
+}
+path_fragments {
+id: 638
+label: "civil_time_detail.pic.o"
+parent_id: 639
+}
+artifacts {
+id: 485
+path_fragment_id: 638
+}
+path_fragments {
+id: 641
+label: "throw_delegate"
+parent_id: 449
+}
+path_fragments {
+id: 640
+label: "throw_delegate.pic.o"
+parent_id: 641
+}
+artifacts {
+id: 486
+path_fragment_id: 640
+}
+path_fragments {
+id: 643
+label: "raw_logging_internal"
+parent_id: 449
+}
+path_fragments {
+id: 642
+label: "raw_logging.pic.o"
+parent_id: 643
+}
+artifacts {
+id: 487
+path_fragment_id: 642
+}
+path_fragments {
+id: 645
+label: "log_severity"
+parent_id: 449
+}
+path_fragments {
+id: 644
+label: "log_severity.pic.o"
+parent_id: 645
+}
+artifacts {
+id: 488
+path_fragment_id: 644
+}
+dep_set_of_files {
+id: 147
+direct_artifact_ids: 324
+direct_artifact_ids: 326
+direct_artifact_ids: 327
+direct_artifact_ids: 328
+direct_artifact_ids: 329
+direct_artifact_ids: 330
+direct_artifact_ids: 331
+direct_artifact_ids: 332
+direct_artifact_ids: 333
+direct_artifact_ids: 334
+direct_artifact_ids: 335
+direct_artifact_ids: 336
+direct_artifact_ids: 337
+direct_artifact_ids: 338
+direct_artifact_ids: 339
+direct_artifact_ids: 340
+direct_artifact_ids: 341
+direct_artifact_ids: 342
+direct_artifact_ids: 343
+direct_artifact_ids: 344
+direct_artifact_ids: 345
+direct_artifact_ids: 346
+direct_artifact_ids: 347
+direct_artifact_ids: 348
+direct_artifact_ids: 349
+direct_artifact_ids: 350
+direct_artifact_ids: 351
+direct_artifact_ids: 352
+direct_artifact_ids: 353
+direct_artifact_ids: 354
+direct_artifact_ids: 355
+direct_artifact_ids: 356
+direct_artifact_ids: 357
+direct_artifact_ids: 358
+direct_artifact_ids: 359
+direct_artifact_ids: 360
+direct_artifact_ids: 361
+direct_artifact_ids: 362
+direct_artifact_ids: 363
+direct_artifact_ids: 364
+direct_artifact_ids: 365
+direct_artifact_ids: 366
+direct_artifact_ids: 367
+direct_artifact_ids: 368
+direct_artifact_ids: 369
+direct_artifact_ids: 370
+direct_artifact_ids: 371
+direct_artifact_ids: 372
+direct_artifact_ids: 373
+direct_artifact_ids: 374
+direct_artifact_ids: 375
+direct_artifact_ids: 376
+direct_artifact_ids: 377
+direct_artifact_ids: 378
+direct_artifact_ids: 379
+direct_artifact_ids: 380
+direct_artifact_ids: 381
+direct_artifact_ids: 382
+direct_artifact_ids: 383
+direct_artifact_ids: 384
+direct_artifact_ids: 385
+direct_artifact_ids: 386
+direct_artifact_ids: 387
+direct_artifact_ids: 388
+direct_artifact_ids: 389
+direct_artifact_ids: 390
+direct_artifact_ids: 391
+direct_artifact_ids: 392
+direct_artifact_ids: 393
+direct_artifact_ids: 394
+direct_artifact_ids: 395
+direct_artifact_ids: 396
+direct_artifact_ids: 397
+direct_artifact_ids: 398
+direct_artifact_ids: 399
+direct_artifact_ids: 400
+direct_artifact_ids: 401
+direct_artifact_ids: 402
+direct_artifact_ids: 403
+direct_artifact_ids: 404
+direct_artifact_ids: 405
+direct_artifact_ids: 406
+direct_artifact_ids: 407
+direct_artifact_ids: 408
+direct_artifact_ids: 409
+direct_artifact_ids: 410
+direct_artifact_ids: 411
+direct_artifact_ids: 412
+direct_artifact_ids: 413
+direct_artifact_ids: 414
+direct_artifact_ids: 415
+direct_artifact_ids: 416
+direct_artifact_ids: 417
+direct_artifact_ids: 418
+direct_artifact_ids: 419
+direct_artifact_ids: 420
+direct_artifact_ids: 421
+direct_artifact_ids: 422
+direct_artifact_ids: 423
+direct_artifact_ids: 424
+direct_artifact_ids: 425
+direct_artifact_ids: 426
+direct_artifact_ids: 427
+direct_artifact_ids: 428
+direct_artifact_ids: 429
+direct_artifact_ids: 430
+direct_artifact_ids: 431
+direct_artifact_ids: 432
+direct_artifact_ids: 433
+direct_artifact_ids: 434
+direct_artifact_ids: 435
+direct_artifact_ids: 436
+direct_artifact_ids: 437
+direct_artifact_ids: 438
+direct_artifact_ids: 439
+direct_artifact_ids: 440
+direct_artifact_ids: 441
+direct_artifact_ids: 442
+direct_artifact_ids: 443
+direct_artifact_ids: 444
+direct_artifact_ids: 445
+direct_artifact_ids: 446
+direct_artifact_ids: 447
+direct_artifact_ids: 448
+direct_artifact_ids: 449
+direct_artifact_ids: 450
+direct_artifact_ids: 451
+direct_artifact_ids: 452
+direct_artifact_ids: 453
+direct_artifact_ids: 454
+direct_artifact_ids: 455
+direct_artifact_ids: 456
+direct_artifact_ids: 457
+direct_artifact_ids: 458
+direct_artifact_ids: 459
+direct_artifact_ids: 460
+direct_artifact_ids: 461
+direct_artifact_ids: 462
+direct_artifact_ids: 463
+direct_artifact_ids: 464
+direct_artifact_ids: 465
+direct_artifact_ids: 466
+direct_artifact_ids: 467
+direct_artifact_ids: 468
+direct_artifact_ids: 469
+direct_artifact_ids: 470
+direct_artifact_ids: 471
+direct_artifact_ids: 472
+direct_artifact_ids: 473
+direct_artifact_ids: 474
+direct_artifact_ids: 475
+direct_artifact_ids: 476
+direct_artifact_ids: 477
+direct_artifact_ids: 478
+direct_artifact_ids: 479
+direct_artifact_ids: 480
+direct_artifact_ids: 481
+direct_artifact_ids: 482
+direct_artifact_ids: 483
+direct_artifact_ids: 484
+direct_artifact_ids: 485
+direct_artifact_ids: 486
+direct_artifact_ids: 487
+direct_artifact_ids: 488
+}
+dep_set_of_files {
+id: 146
+transitive_dep_set_ids: 147
+transitive_dep_set_ids: 41
+}
+path_fragments {
+id: 646
+label: "cross_allocator_large_page_workload_google_tcmalloc"
+parent_id: 18
+}
+artifacts {
+id: 489
+path_fragment_id: 646
+}
+actions {
+target_id: 1
+action_key: "aaefeb51a1da9be9562acf1a113ea7735b8d8e665112334d7bbf4931b36742f8"
+mnemonic: "CppLink"
+configuration_id: 1
+arguments: "/usr/bin/gcc"
+arguments: "-o"
+arguments: "bazel-out/k8-fastbuild/bin/cross_allocator_large_page_workload_google_tcmalloc"
+arguments: "-Wl,-S"
+arguments: "-fuse-ld=gold"
+arguments: "-B/usr/bin"
+arguments: "-Wl,-no-as-needed"
+arguments: "-Wl,-z,relro,-z,now"
+arguments: "-pass-exit-codes"
+arguments: "bazel-out/k8-fastbuild/bin/_objs/cross_allocator_large_page_workload_google_tcmalloc/cross_allocator_large_page_workload.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/tcmalloc/tcmalloc.pic.o"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/alloc_at_least/alloc_at_least.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/allocation_sample.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/allocation_sampling.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/arena.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/background.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/central_freelist.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/common.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/cpu_cache.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/deallocation_profiler.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/error_reporting.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/experimental_pow2_size_class.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/global_stats.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/guarded_page_allocator.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/huge_address_map.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/huge_allocator.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/huge_cache.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/huge_page_aware_allocator.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/legacy_size_classes.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/page_allocator.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/page_allocator_interface.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/pagemap.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/parameters.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/peak_heap_tracker.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/reuse_size_classes_v2.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/sampler.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/segv_handler.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/size_classes.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/sizemap.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/span.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/stack_trace_table.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/static_vars.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/stats.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/thread_cache.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/common_8k_pages/transfer_cache.pic.o"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/malloc_tracing_extension/malloc_tracing_extension.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/status/_objs/statusor/statusor.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/cache_topology/cache_topology.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/memory_stats/memory_stats.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/pageflags/pageflags.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/mincore/mincore.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/residency/residency.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/status/_objs/status/status_internal.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/status/_objs/status/status.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/status/_objs/status/status_payload_printer.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/strerror/strerror.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/debugging/_objs/leak_check/leak_check.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/system_allocator/system_allocator.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/memory_tag/memory_tag.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/numa/numa.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/percpu/percpu.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/percpu/percpu_rseq_asm.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/percpu/percpu_rseq_unsupported.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/sysinfo/sysinfo.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/experiment/experiment.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/util/util.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/selsan/_objs/selsan/selsan.pic.o"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/logging/logging.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/environment/environment.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/malloc_extension/malloc_extension.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/container/_objs/raw_hash_set/raw_hash_set.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/cord/cord.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/cord/cord_analysis.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/cordz_info/cordz_info.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/cord_internal/cord_internal.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/cord_internal/cord_rep_btree.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/cord_internal/cord_rep_btree_navigator.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/cord_internal/cord_rep_btree_reader.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/cord_internal/cord_rep_consume.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/cord_internal/cord_rep_crc.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/cordz_functions/cordz_functions.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/cordz_handle/cordz_handle.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/crc/_objs/crc_cord_state/crc_cord_state.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/crc/_objs/crc32c/crc32c.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/crc/_objs/crc32c/crc_memcpy_fallback.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/crc/_objs/crc32c/crc_memcpy_x86_arm_combined.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/crc/_objs/crc32c/crc_non_temporal_memcpy.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/crc/_objs/crc_internal/crc.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/crc/_objs/crc_internal/crc_x86_arm_combined.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/crc/_objs/cpu_detect/cpu_detect.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/container/_objs/hashtablez_sampler/hashtablez_sampler.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/container/_objs/hashtablez_sampler/hashtablez_sampler_force_weak_definition.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/profiling/_objs/exponential_biased/exponential_biased.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/barrier.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/blocking_counter.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/create_thread_identity.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/futex_waiter.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/per_thread_sem.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/pthread_waiter.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/sem_waiter.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/stdcpp_waiter.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/waiter_base.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/win32_waiter.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/mutex.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/synchronization/notification.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/graphcycles_internal/graphcycles.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/synchronization/_objs/kernel_timeout_internal/kernel_timeout.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/tracing_internal/tracing.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/debugging/_objs/symbolize/symbolize.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/debugging/_objs/demangle_internal/demangle.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/debugging/_objs/demangle_rust/demangle_rust.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/debugging/_objs/decode_rust_punycode/decode_rust_punycode.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/debugging/_objs/utf8_for_code_point/utf8_for_code_point.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/debugging/_objs/stacktrace/stacktrace.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/debugging/_objs/debugging_internal/address_is_readable.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/debugging/_objs/debugging_internal/elf_mem_image.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/debugging/_objs/debugging_internal/vdso_support.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/malloc_internal/low_level_alloc.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/hash/_objs/hash/hash.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/hash/_objs/city/city.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/str_format_internal/arg.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/str_format_internal/bind.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/str_format_internal/extension.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/str_format_internal/float_conversion.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/str_format_internal/output.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/str_format_internal/parser.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/allocation_guard/allocation_guard.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/malloc_hook/malloc_hook.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/hook_list/hook_list.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/page_size/page_size.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/_objs/time/civil_time.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/_objs/time/clock.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/_objs/time/duration.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/_objs/time/format.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/_objs/time/time.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/ascii.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/charconv.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/escaping.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/charconv_bigint.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/charconv_parse.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/damerau_levenshtein_distance.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/memutil.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/stringify_sink.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/match.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/numbers.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/str_cat.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/str_replace.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/str_split.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/strings/substitute.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/internal/escaping.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/internal/ostringstream.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/internal/utf8.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/numeric/_objs/int128/int128.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/strings/_objs/string_view/string_view.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/base/cycleclock.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/base/spinlock.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/base/sysinfo.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/base/thread_identity.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/base/unscaledcycleclock.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/spinlock_wait/spinlock_wait.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/internal/cctz/_objs/time_zone/time_zone_fixed.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/internal/cctz/_objs/time_zone/time_zone_format.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/internal/cctz/_objs/time_zone/time_zone_if.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/internal/cctz/_objs/time_zone/time_zone_impl.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/internal/cctz/_objs/time_zone/time_zone_info.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/internal/cctz/_objs/time_zone/time_zone_libc.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/internal/cctz/_objs/time_zone/time_zone_lookup.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/internal/cctz/_objs/time_zone/time_zone_posix.pic.o"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/internal/cctz/_objs/time_zone/zone_info_source.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/time/internal/cctz/_objs/civil_time/civil_time_detail.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/throw_delegate/throw_delegate.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/raw_logging_internal/raw_logging.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-Wl,--start-lib"
+arguments: "bazel-out/k8-fastbuild/bin/external/abseil-cpp+/absl/base/_objs/log_severity/log_severity.pic.o"
+arguments: "-Wl,--end-lib"
+arguments: "-pthread"
+arguments: "-pthread"
+arguments: "-pthread"
+arguments: "-Wl,--push-state,-as-needed"
+arguments: "-lstdc++"
+arguments: "-Wl,--pop-state"
+arguments: "-Wl,--push-state,-as-needed"
+arguments: "-lm"
+arguments: "-Wl,--pop-state"
+environment_variables {
+  key: "PATH"
+  value: "/bin:/usr/bin:/usr/local/bin"
+}
+environment_variables {
+  key: "ZERO_AR_DATE"
+  value: "1"
+}
+environment_variables {
+  key: "PWD"
+  value: "/proc/self/cwd"
+}
+input_dep_set_ids: 146
+output_ids: 489
+primary_output_id: 489
+execution_platform: "@@platforms//host:host"
+}
+INFO: Elapsed time: 0.942s, Critical Path: 0.00s
+INFO: 0 processes.
+INFO: Build completed successfully, 0 total actions

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="chart-title chart-description">
+  <title id="chart-title">Rust heap-lifetime inference: runtime truth before placement</title>
+  <desc id="chart-description">3 applications · 100.0% tracked allocation coverage · pressure-relative labels joined to MIR features</desc>
+  <style>text { font-family: Arial, Helvetica, sans-serif; }</style>
+  <rect id="background" x="0" y="0" width="1600" height="900" fill="#FFFFFF"/>
+  <text x="55.0" y="58.0" font-size="32.0" font-weight="700" text-anchor="start" fill="#17202A">Rust heap-lifetime inference: runtime truth before placement</text>
+  <text x="55.0" y="93.0" font-size="17.0" font-weight="400" text-anchor="start" fill="#566573">3 applications · 100.0% tracked allocation coverage · pressure-relative labels joined to MIR features</text>
+  <rect id="outcome-panel" x="45.0" y="125.0" width="1510.0" height="225.0" rx="12" fill="#FAFBFC" stroke="#D5DBDB"/>
+  <text x="70.0" y="163.0" font-size="22.0" font-weight="700" text-anchor="start" fill="#17202A">A · Completed pressure-relative outcomes</text>
+  <text x="1530.0" y="163.0" font-size="14.0" font-weight="400" text-anchor="end" fill="#566573">object share within each application</text>
+  <text x="75.0" y="210.0" font-size="17.0" font-weight="700" text-anchor="start" fill="#17202A">fd</text>
+  <rect class="outcome-short" x="225.00" y="191.00" width="647.37" height="24" fill="#0072B2"><title>fd Short: 99.60% (62,338)</title></rect>
+  <rect class="outcome-long" x="872.37" y="191.00" width="1.57" height="24" fill="#D55E00"><title>fd Long: 0.24% (151)</title></rect>
+  <rect class="outcome-indeterminate" x="873.94" y="191.00" width="1.06" height="24" fill="#999999"><title>fd Indeterminate: 0.16% (102)</title></rect>
+  <rect x="225.00" y="191.00" width="650.00" height="24" fill="none" stroke="#7F8C8D"/>
+  <text x="900.0" y="210.0" font-size="13.5" font-weight="400" text-anchor="start" fill="#17202A">Short 99.60% (62,338) · Long 0.24% (151) · Indeterminate 0.16% (102)</text>
+  <text x="75.0" y="267.5" font-size="17.0" font-weight="700" text-anchor="start" fill="#17202A">oxipng</text>
+  <rect class="outcome-short" x="225.00" y="248.50" width="648.99" height="24" fill="#0072B2"><title>oxipng Short: 99.84% (9,635)</title></rect>
+  <rect class="outcome-long" x="873.99" y="248.50" width="0.94" height="24" fill="#D55E00"><title>oxipng Long: 0.15% (14)</title></rect>
+  <rect class="outcome-indeterminate" x="874.93" y="248.50" width="0.07" height="24" fill="#999999"><title>oxipng Indeterminate: 0.01% (1)</title></rect>
+  <rect x="225.00" y="248.50" width="650.00" height="24" fill="none" stroke="#7F8C8D"/>
+  <text x="900.0" y="267.5" font-size="13.5" font-weight="400" text-anchor="start" fill="#17202A">Short 99.84% (9,635) · Long 0.15% (14) · Indeterminate 0.01% (1)</text>
+  <text x="75.0" y="325.0" font-size="17.0" font-weight="700" text-anchor="start" fill="#17202A">ripgrep</text>
+  <rect class="outcome-short" x="225.00" y="306.00" width="650.00" height="24" fill="#0072B2"><title>ripgrep Short: 100.00% (2,266)</title></rect>
+  <rect x="225.00" y="306.00" width="650.00" height="24" fill="none" stroke="#7F8C8D"/>
+  <text x="900.0" y="325.0" font-size="13.5" font-weight="400" text-anchor="start" fill="#17202A">Short 100.00% (2,266) · Long 0.00% (0) · Indeterminate 0.00% (0)</text>
+  <rect id="feature-panel" x="45.0" y="370.0" width="960.0" height="445.0" rx="12" fill="#FAFBFC" stroke="#D5DBDB"/>
+  <text x="70.0" y="408.0" font-size="22.0" font-weight="700" text-anchor="start" fill="#17202A">B · Selected MIR feature associations</text>
+  <text x="975.0" y="408.0" font-size="14.0" font-weight="400" text-anchor="end" fill="#566573">top 5 observed Long requested-byte shares</text>
+  <line x1="445.00" y1="445.0" x2="445.00" y2="755.0" stroke="#D5DBDB"/>
+  <text x="445.0" y="780.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">0.00%</text>
+  <line x1="692.50" y1="445.0" x2="692.50" y2="755.0" stroke="#D5DBDB"/>
+  <text x="692.5" y="780.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">15.00%</text>
+  <line x1="940.00" y1="445.0" x2="940.00" y2="755.0" stroke="#D5DBDB"/>
+  <text x="940.0" y="780.0" font-size="12.0" font-weight="400" text-anchor="middle" fill="#566573">30.00%</text>
+  <text x="70.0" y="481.0" font-size="14" font-weight="650" fill="#17202A"><title>owner_place_basis=destination_owner_place_unresolved</title>owner place basis: destination owner place unr…</text>
+  <text x="70.0" y="502.0" font-size="12.0" font-weight="400" text-anchor="start" fill="#566573">n=2,661 decisive B · 13 sites †</text>
+  <rect x="445.0" y="471.00" width="495.0" height="24" rx="3" fill="#EAECEE"/>
+  <rect x="445.0" y="471.00" width="422.89" height="24" rx="3" fill="#CC79A7"><title>owner_place_basis=destination_owner_place_unresolved: 25.63% Long bytes; n=2,661 decisive requested bytes</title></rect>
+  <text x="875.9" y="489.0" font-size="13.0" font-weight="700" text-anchor="start" fill="#17202A">25.63%</text>
+  <text x="70.0" y="541.0" font-size="14" font-weight="650" fill="#17202A"><title>reachable_cleanup_blocks_count=1</title>reachable cleanup blocks count: 1</text>
+  <text x="70.0" y="562.0" font-size="12.0" font-weight="400" text-anchor="start" fill="#566573">n=576 decisive B · 8 sites †</text>
+  <rect x="445.0" y="531.00" width="495.0" height="24" rx="3" fill="#EAECEE"/>
+  <rect x="445.0" y="531.00" width="343.75" height="24" rx="3" fill="#CC79A7"><title>reachable_cleanup_blocks_count=1: 20.83% Long bytes; n=576 decisive requested bytes</title></rect>
+  <text x="796.8" y="549.0" font-size="13.0" font-weight="700" text-anchor="start" fill="#17202A">20.83%</text>
+  <text x="70.0" y="601.0" font-size="14" font-weight="650" fill="#17202A"><title>reachable_cleanup_blocks_count=2-3</title>reachable cleanup blocks count: 2-3</text>
+  <text x="70.0" y="622.0" font-size="12.0" font-weight="400" text-anchor="start" fill="#566573">n=4,935 decisive B · 42 sites †</text>
+  <rect x="445.0" y="591.00" width="495.0" height="24" rx="3" fill="#EAECEE"/>
+  <rect x="445.0" y="591.00" width="127.72" height="24" rx="3" fill="#CC79A7"><title>reachable_cleanup_blocks_count=2-3: 7.74% Long bytes; n=4,935 decisive requested bytes</title></rect>
+  <text x="580.7" y="609.0" font-size="13.0" font-weight="700" text-anchor="start" fill="#17202A">7.74%</text>
+  <text x="70.0" y="661.0" font-size="14" font-weight="650" fill="#17202A"><title>reachable_cleanup_blocks_count=4+</title>reachable cleanup blocks count: 4+</text>
+  <text x="70.0" y="682.0" font-size="12.0" font-weight="400" text-anchor="start" fill="#566573">n=15,479 decisive B · 43 sites †</text>
+  <rect x="445.0" y="651.00" width="495.0" height="24" rx="3" fill="#EAECEE"/>
+  <rect x="445.0" y="651.00" width="126.85" height="24" rx="3" fill="#CC79A7"><title>reachable_cleanup_blocks_count=4+: 7.69% Long bytes; n=15,479 decisive requested bytes</title></rect>
+  <text x="579.8" y="669.0" font-size="13.0" font-weight="700" text-anchor="start" fill="#17202A">7.69%</text>
+  <text x="70.0" y="721.0" font-size="14" font-weight="650" fill="#17202A"><title>requested_layout_basis=exact_box_new_payload_layout</title>requested layout basis: exact box new payload…</text>
+  <text x="70.0" y="742.0" font-size="12.0" font-weight="400" text-anchor="start" fill="#566573">n=164,184 decisive B · 58 sites †</text>
+  <rect x="445.0" y="711.00" width="495.0" height="24" rx="3" fill="#EAECEE"/>
+  <rect x="445.0" y="711.00" width="23.96" height="24" rx="3" fill="#CC79A7"><title>requested_layout_basis=exact_box_new_payload_layout: 1.45% Long bytes; n=164,184 decisive requested bytes</title></rect>
+  <text x="477.0" y="729.0" font-size="13.0" font-weight="700" text-anchor="start" fill="#17202A">1.45%</text>
+  <text x="70.0" y="802.0" font-size="12.5" font-weight="400" text-anchor="start" fill="#566573">† decisive-byte denominator &lt;1% of the campaign total</text>
+  <rect id="classifier-panel" x="1025.0" y="370.0" width="530.0" height="445.0" rx="12" fill="#FAFBFC" stroke="#D5DBDB"/>
+  <text x="1050.0" y="408.0" font-size="22.0" font-weight="700" text-anchor="start" fill="#17202A">C · Deployed static classifier</text>
+  <text x="1050.0" y="442.0" font-size="14.0" font-weight="400" text-anchor="start" fill="#566573">Actionable duration output vs abstention</text>
+  <rect x="1065.0" y="462" width="445.0" height="34" rx="4" fill="#B8C2C8"/>
+  <text x="1065.0" y="523.0" font-size="13.5" font-weight="700" text-anchor="start" fill="#009E73">Actionable 0.00% (0)</text>
+  <text x="1510.0" y="523.0" font-size="13.5" font-weight="700" text-anchor="end" fill="#566573">Abstain 100.00% (175)</text>
+  <rect x="1055" y="555" width="470" height="170" rx="10" fill="#F3F6F7" stroke="#D5DBDB"/>
+  <text x="1075.0" y="588.0" font-size="17.0" font-weight="700" text-anchor="start" fill="#17202A">Safe profile gate</text>
+  <text x="1075.0" y="657.0" font-size="58.0" font-weight="700" text-anchor="start" fill="#D55E00">0</text>
+  <text x="1150.0" y="638.0" font-size="19.0" font-weight="700" text-anchor="start" fill="#17202A">eligible Long sites</text>
+  <text x="1150.0" y="665.0" font-size="14.0" font-weight="400" text-anchor="start" fill="#566573">≥3 decisive outcomes</text>
+  <text x="1150.0" y="687.0" font-size="14.0" font-weight="400" text-anchor="start" fill="#566573">≥80.00% Long byte share</text>
+  <text x="1055.0" y="756.0" font-size="13.0" font-weight="400" text-anchor="start" fill="#566573">Unknown and scope-only facts remain abstentions.</text>
+  <text x="1055.0" y="779.0" font-size="13.0" font-weight="400" text-anchor="start" fill="#566573">Abstained sites remain unclassified.</text>
+  <text x="800.0" y="852.0" font-size="13.0" font-weight="400" text-anchor="middle" fill="#566573">Outcome bars use completed objects; live right-censored objects stay outside these denominators.</text>
+  <text x="800.0" y="875.0" font-size="13.0" font-weight="400" text-anchor="middle" fill="#566573">MIR rows are overlapping observational associations; tiny denominators can inflate shares. Held-out prediction and causality remain unevaluated.</text>
+  <metadata>source-sha256=77564f625839055c2f8b24b9281b30c44e7971d9ae80186c7239104521e15b9e; force-track-all-verified=true; selection-conditioned=false</metadata>
+</svg>

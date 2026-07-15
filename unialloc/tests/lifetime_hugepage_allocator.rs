@@ -1,13 +1,20 @@
 #![cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+#![feature(allocator_api)]
 
-use core::alloc::{GlobalAlloc, Layout};
+use core::alloc::{Allocator, GlobalAlloc, Layout};
+use unialloc::alloc_api::FLAG_GUARD_PAGES;
 use unialloc::{
-    delayed_free_snapshot, lifetime_hugepage_advance_epoch, lifetime_hugepage_configure,
+    delayed_free_snapshot, lifetime_hugepage_adaptive_site_force_track_all_disable,
+    lifetime_hugepage_adaptive_site_force_track_all_enable,
+    lifetime_hugepage_adaptive_site_recording_disable,
+    lifetime_hugepage_adaptive_site_recording_enable, lifetime_hugepage_adaptive_site_snapshot,
+    lifetime_hugepage_advance_epoch, lifetime_hugepage_configure,
     lifetime_hugepage_configure_with_backend, lifetime_hugepage_phase_flush_current_thread,
     lifetime_hugepage_stats_reset, lifetime_hugepage_stats_snapshot, with_semantic_metadata,
-    AllocationMetadata, LifetimeHugepagePolicy, LifetimeHugepageStatsSnapshot, LifetimePageBackend,
-    SemanticAlloc, UniAlloc, FLAG_DELAYED_FREE, LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LONG_LIVED,
-    LIFETIME_HUGEPAGE_EXTENT_BYTES, LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
+    AllocationMetadata, LifetimeAdaptiveSiteSnapshot, LifetimeHugepagePolicy,
+    LifetimeHugepageStatsSnapshot, LifetimePageBackend, SemanticAlloc, UniAlloc, FLAG_DELAYED_FREE,
+    LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LONG_LIVED, LIFETIME_HUGEPAGE_EXTENT_BYTES,
+    LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
 };
 
 static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -893,6 +900,337 @@ fn adaptive_runtime_caps_cold_inflight_training() {
     assert_eq!(released.adaptive_live_trailers, 0);
     assert_eq!(released.current_extents, 0);
     assert_runtime_validation_closes(released);
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[test]
+fn adaptive_force_track_all_routes_ordinary_until_guard_and_exports_bypass() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let layout = Layout::from_size_align(64, 16).unwrap();
+    let site = adaptive_metadata(0xADA0_F001, 0xADA0_F101, 0);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_adaptive_site_recording_enable());
+    assert!(!lifetime_hugepage_adaptive_site_force_track_all_enable(
+        0, 128
+    ));
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_enable(
+        2, 128
+    ));
+    assert!(lifetime_hugepage_configure_with_backend(
+        LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+        LifetimePageBackend::TransparentHugepage,
+    ));
+
+    unsafe {
+        for _ in 0..3 {
+            let ptr = alloc.alloc_with_metadata(layout, site);
+            assert!(!ptr.is_null());
+            core::ptr::write_bytes(ptr, 0x5a, layout.size());
+            alloc.dealloc_with_metadata(ptr, layout, site);
+        }
+    }
+
+    let stats = lifetime_hugepage_stats_snapshot();
+    assert!(stats.adaptive_force_track_all);
+    assert_eq!(stats.adaptive_force_track_all_maximum_allocations, 2);
+    assert_eq!(stats.adaptive_force_track_all_maximum_requested_bytes, 128);
+    assert_eq!(stats.adaptive_force_track_all_admitted_allocations, 2);
+    assert_eq!(stats.adaptive_force_track_all_admitted_requested_bytes, 128);
+    assert_eq!(stats.adaptive_force_track_all_guard_bypasses, 1);
+    assert_eq!(stats.adaptive_eligible_allocations, 3);
+    assert_eq!(stats.adaptive_training_allocations, 2);
+    assert_eq!(stats.adaptive_cold_bypassed_allocations, 0);
+    assert_eq!(stats.adaptive_short_bypassed_allocations, 0);
+    assert_eq!(stats.thp_extent_mappings, 0);
+    assert_eq!(stats.thp_advice_attempts, 0);
+    assert_eq!(stats.nohugepage_advice_failures, 0);
+
+    let mut rows = [LifetimeAdaptiveSiteSnapshot::empty(); 1];
+    assert_eq!(lifetime_hugepage_adaptive_site_snapshot(&mut rows), 1);
+    assert_eq!(rows[0].allocation_count, 3);
+    assert_eq!(rows[0].tracked_allocations, 2);
+    assert_eq!(rows[0].bypassed_allocations, 1);
+    assert_eq!(rows[0].short_outcomes, 2);
+
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_disable());
+    assert!(lifetime_hugepage_adaptive_site_recording_disable());
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[test]
+fn adaptive_force_track_counts_unsupported_semantic_pressure_before_local_drop() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let target_layout = Layout::from_size_align(4096, 64).unwrap();
+    let pressure_layout = Layout::from_size_align(16 * 1024 * 1024, 64).unwrap();
+    let target = adaptive_metadata(0xADA0_F002, 0xADA0_F102, 0);
+    let pressure = adaptive_metadata(0xADA0_F003, 0xADA0_F103, 0);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_adaptive_site_recording_enable());
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_enable(
+        16,
+        64 * 1024 * 1024,
+    ));
+    assert!(lifetime_hugepage_configure_with_backend(
+        LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+        LifetimePageBackend::TransparentHugepage,
+    ));
+
+    unsafe {
+        let target_ptr = alloc.alloc_with_metadata(target_layout, target);
+        assert!(!target_ptr.is_null());
+        let pressure_ptr = alloc.alloc_with_metadata(pressure_layout, pressure);
+        assert!(!pressure_ptr.is_null());
+        pressure_ptr.write_volatile(0x5a);
+        alloc.dealloc_with_metadata(pressure_ptr, pressure_layout, pressure);
+        alloc.dealloc_with_metadata(target_ptr, target_layout, target);
+    }
+
+    let stats = lifetime_hugepage_stats_snapshot();
+    assert_eq!(stats.adaptive_force_track_all_pressure_allocations, 2);
+    assert_eq!(
+        stats.adaptive_force_track_all_pressure_requested_bytes,
+        target_layout.size() + pressure_layout.size()
+    );
+    assert_eq!(stats.adaptive_force_track_all_admitted_allocations, 1);
+    assert_eq!(stats.unsupported_layout_bypasses, 1);
+    assert_eq!(stats.adaptive_long_observations, 1);
+    assert_eq!(stats.adaptive_short_observations, 0);
+
+    let mut rows = [LifetimeAdaptiveSiteSnapshot::empty(); 1];
+    assert_eq!(lifetime_hugepage_adaptive_site_snapshot(&mut rows), 1);
+    assert_eq!(rows[0].callsite, target.callsite);
+    assert_eq!(rows[0].long_outcomes, 1);
+    assert!(rows[0].maximum_completed_age_bytes >= 16 * 1024 * 1024);
+
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_disable());
+    assert!(lifetime_hugepage_adaptive_site_recording_disable());
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[test]
+fn adaptive_force_track_counts_raw_and_guard_page_pressure_generations() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let target_layout = Layout::from_size_align(4096, 64).unwrap();
+    let pressure_layout = Layout::from_size_align(16 * 1024 * 1024, 64).unwrap();
+    let target = adaptive_metadata(0xADA0_F004, 0xADA0_F104, 0);
+    let guard_pressure =
+        adaptive_metadata(0xADA0_F005, 0xADA0_F105, 0).with_flags(FLAG_GUARD_PAGES);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_adaptive_site_recording_enable());
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_enable(
+        16,
+        128 * 1024 * 1024,
+    ));
+    assert!(lifetime_hugepage_configure_with_backend(
+        LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+        LifetimePageBackend::TransparentHugepage,
+    ));
+
+    unsafe {
+        let first_target = alloc.alloc_with_metadata(target_layout, target);
+        assert!(!first_target.is_null());
+        let raw = GlobalAlloc::alloc(&alloc, pressure_layout);
+        assert!(!raw.is_null());
+        raw.write_volatile(0x5a);
+        GlobalAlloc::dealloc(&alloc, raw, pressure_layout);
+        alloc.dealloc_with_metadata(first_target, target_layout, target);
+
+        let second_target = alloc.alloc_with_metadata(target_layout, target);
+        assert!(!second_target.is_null());
+        let guarded = alloc.alloc_with_metadata(pressure_layout, guard_pressure);
+        assert!(!guarded.is_null());
+        guarded.write_volatile(0xa5);
+        alloc.dealloc_with_metadata(guarded, pressure_layout, guard_pressure);
+        alloc.dealloc_with_metadata(second_target, target_layout, target);
+    }
+
+    let stats = lifetime_hugepage_stats_snapshot();
+    assert_eq!(stats.adaptive_force_track_all_pressure_allocations, 4);
+    assert_eq!(stats.adaptive_force_track_all_raw_pressure_allocations, 1);
+    assert_eq!(
+        stats.adaptive_force_track_all_raw_pressure_requested_bytes,
+        pressure_layout.size()
+    );
+    assert_eq!(stats.adaptive_long_observations, 2);
+    assert_eq!(stats.adaptive_short_observations, 0);
+
+    let mut rows = [LifetimeAdaptiveSiteSnapshot::empty(); 1];
+    assert_eq!(lifetime_hugepage_adaptive_site_snapshot(&mut rows), 1);
+    assert_eq!(rows[0].long_outcomes, 2);
+    assert!(rows[0].maximum_completed_age_bytes >= 16 * 1024 * 1024);
+
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_disable());
+    assert!(lifetime_hugepage_adaptive_site_recording_disable());
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[test]
+fn adaptive_force_track_counts_alignment_changing_raw_reallocation() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let target_layout = Layout::from_size_align(4096, 64).unwrap();
+    let old_layout = Layout::from_size_align(4096, 64).unwrap();
+    let new_layout = Layout::from_size_align(16 * 1024 * 1024, 4096).unwrap();
+    let target = adaptive_metadata(0xADA0_F006, 0xADA0_F106, 0);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_adaptive_site_recording_enable());
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_enable(
+        16,
+        128 * 1024 * 1024,
+    ));
+    assert!(lifetime_hugepage_configure_with_backend(
+        LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+        LifetimePageBackend::TransparentHugepage,
+    ));
+
+    unsafe {
+        let target_ptr = alloc.alloc_with_metadata(target_layout, target);
+        assert!(!target_ptr.is_null());
+        let old = Allocator::allocate(&alloc, old_layout).unwrap();
+        let old_ptr = core::ptr::NonNull::new_unchecked(old.as_ptr() as *mut u8);
+        let grown = Allocator::grow(&alloc, old_ptr, old_layout, new_layout).unwrap();
+        let grown_ptr = core::ptr::NonNull::new_unchecked(grown.as_ptr() as *mut u8);
+        grown_ptr.as_ptr().write_volatile(0x5a);
+        Allocator::deallocate(&alloc, grown_ptr, new_layout);
+        alloc.dealloc_with_metadata(target_ptr, target_layout, target);
+    }
+
+    let stats = lifetime_hugepage_stats_snapshot();
+    assert_eq!(stats.adaptive_force_track_all_pressure_allocations, 3);
+    assert_eq!(stats.adaptive_force_track_all_raw_pressure_allocations, 1);
+    assert_eq!(
+        stats.adaptive_force_track_all_raw_reallocation_pressure_allocations,
+        1
+    );
+    assert_eq!(
+        stats.adaptive_force_track_all_raw_reallocation_pressure_requested_bytes,
+        new_layout.size()
+    );
+    assert_eq!(stats.adaptive_long_observations, 1);
+    assert_eq!(stats.adaptive_short_observations, 0);
+
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_disable());
+    assert!(lifetime_hugepage_adaptive_site_recording_disable());
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[test]
+fn adaptive_force_track_counts_layout_derived_raw_only_semantic_pressure() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let target_layout = Layout::from_size_align(4096, 64).unwrap();
+    let pressure_layout = Layout::from_size_align(16 * 1024 * 1024, 64).unwrap();
+    let target = adaptive_metadata(0xADA0_F007, 0xADA0_F107, 0);
+    let pressure = adaptive_metadata(0xADA0_F008, 0xADA0_F108, 0).with_placement_hint(0xA770);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_adaptive_site_recording_enable());
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_enable(
+        16,
+        64 * 1024 * 1024,
+    ));
+    assert!(lifetime_hugepage_configure_with_backend(
+        LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+        LifetimePageBackend::TransparentHugepage,
+    ));
+
+    unsafe {
+        let target_ptr = alloc.alloc_with_metadata(target_layout, target);
+        assert!(!target_ptr.is_null());
+        let pressure_ptr = alloc.alloc_with_metadata(pressure_layout, pressure);
+        assert!(!pressure_ptr.is_null());
+        pressure_ptr.write_volatile(0x5a);
+        alloc.dealloc_with_metadata(pressure_ptr, pressure_layout, pressure);
+        alloc.dealloc_with_metadata(target_ptr, target_layout, target);
+    }
+
+    let stats = lifetime_hugepage_stats_snapshot();
+    assert_eq!(stats.adaptive_force_track_all_pressure_allocations, 2);
+    assert_eq!(
+        stats.adaptive_force_track_all_pressure_requested_bytes,
+        target_layout.size() + pressure_layout.size()
+    );
+    assert_eq!(stats.adaptive_force_track_all_admitted_allocations, 1);
+    assert_eq!(stats.adaptive_long_observations, 1);
+    assert_eq!(stats.adaptive_short_observations, 0);
+
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_disable());
+    assert!(lifetime_hugepage_adaptive_site_recording_disable());
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[test]
+fn adaptive_force_track_counts_missing_identity_semantic_pressure() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let target_layout = Layout::from_size_align(4096, 64).unwrap();
+    let pressure_layout = Layout::from_size_align(4096, 64).unwrap();
+    let target = adaptive_metadata(0xADA0_F009, 0xADA0_F109, 0);
+    let pressure_without_callsite = metadata(0xADA0_F00A, 0);
+    const PRESSURE_ALLOCATIONS: usize = (8 * 1024 * 1024) / 4096;
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_adaptive_site_recording_enable());
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_enable(
+        4096,
+        64 * 1024 * 1024,
+    ));
+    assert!(lifetime_hugepage_configure_with_backend(
+        LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
+        LifetimePageBackend::TransparentHugepage,
+    ));
+
+    unsafe {
+        let target_ptr = alloc.alloc_with_metadata(target_layout, target);
+        assert!(!target_ptr.is_null());
+        for _ in 0..PRESSURE_ALLOCATIONS {
+            let pressure_ptr =
+                alloc.alloc_with_metadata(pressure_layout, pressure_without_callsite);
+            assert!(!pressure_ptr.is_null());
+            pressure_ptr.write_volatile(0x5a);
+            alloc.dealloc_with_metadata(pressure_ptr, pressure_layout, pressure_without_callsite);
+        }
+        alloc.dealloc_with_metadata(target_ptr, target_layout, target);
+    }
+
+    let stats = lifetime_hugepage_stats_snapshot();
+    assert_eq!(
+        stats.adaptive_force_track_all_pressure_allocations,
+        PRESSURE_ALLOCATIONS + 1
+    );
+    assert_eq!(
+        stats.adaptive_force_track_all_pressure_requested_bytes,
+        target_layout.size() + PRESSURE_ALLOCATIONS * pressure_layout.size()
+    );
+    assert_eq!(
+        stats.adaptive_missing_identity_bypasses,
+        PRESSURE_ALLOCATIONS
+    );
+    assert_eq!(stats.adaptive_force_track_all_admitted_allocations, 1);
+    assert_eq!(stats.adaptive_long_observations, 1);
+    assert_eq!(stats.adaptive_short_observations, 0);
+
+    assert!(lifetime_hugepage_adaptive_site_force_track_all_disable());
+    assert!(lifetime_hugepage_adaptive_site_recording_disable());
     assert!(lifetime_hugepage_configure(
         LifetimeHugepagePolicy::Disabled
     ));

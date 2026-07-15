@@ -23,6 +23,35 @@ SVG_NAMESPACE = "{http://www.w3.org/2000/svg}"
 def valid_summary() -> dict[str, object]:
     return {
         "schema_version": 1,
+        "measured_repeats": 7,
+        "case_summaries": {
+            "unialloc_lifetime_thp_on": {"samples": 7},
+            "unialloc_lifetime_thp_off": {"samples": 7},
+            "google_tcmalloc_temeraire": {"samples": 7},
+            "snmalloc_default": {"samples": 7},
+        },
+        "google_tcmalloc_temeraire_gate": {
+            "identity_claim_ready": True,
+            "hugepage_mechanism_claim_ready": False,
+            "hpaa_performance_causality_claim_ready": False,
+            "measured_sample_count": 7,
+            "backed_sample_count": 5,
+            "excluded_blocks": [3, 6],
+            "sample_evidence": [
+                {
+                    "block": block,
+                    "physical_hugepage_backing_realized": block not in {3, 6},
+                }
+                for block in range(7)
+            ],
+        },
+        "evidence_contract": {
+            "google_tcmalloc_identity": (
+                "fixed-revision Bazel link-time Temeraire/HPAA"
+            ),
+            "google_tcmalloc_hpaa_performance_causality_claim_ready": False,
+            "gperftools_legacy_claim_role": "historical-only",
+        },
         "slide_data": {
             "toggle_effects": [
                 {
@@ -66,6 +95,15 @@ def valid_summary() -> dict[str, object]:
                     "mode": "off",
                 },
                 {
+                    "label": "Google TCMalloc / Temeraire",
+                    "mechanism": "temeraire-hpaa",
+                    "ns_per_touch": 4.6,
+                    "max_effective_resident_mib": 132.0,
+                    "large_page_backing_mib": 80.0,
+                    "pair": "google-tcmalloc",
+                    "mode": "default",
+                },
+                {
                     "label": "snmalloc default",
                     "mechanism": "allocator default",
                     "ns_per_touch": 5.1,
@@ -79,6 +117,11 @@ def valid_summary() -> dict[str, object]:
                 {
                     "label": "UniAlloc THP on",
                     "anon_thp_mib": 96.0,
+                    "hugetlb_mib": 0.0,
+                },
+                {
+                    "label": "Google TCMalloc / Temeraire",
+                    "anon_thp_mib": 80.0,
                     "hugetlb_mib": 0.0,
                 },
                 {
@@ -149,6 +192,9 @@ class CrossAllocatorLargePageChartTests(unittest.TestCase):
             self.assertIn("dependent-pointer touch execution", incremental)
             self.assertIn("semantic Rust probe", incremental)
             self.assertIn("resident delta excludes unused pool capacity", incremental)
+            self.assertIn("7 measured blocks per arm", incremental)
+            self.assertNotIn("20 paired blocks", incremental)
+            self.assertNotIn("gperftools", incremental.casefold())
             endpoint = (output_dir / "endpoint-frontier.svg").read_text(
                 encoding="utf-8"
             )
@@ -156,6 +202,9 @@ class CrossAllocatorLargePageChartTests(unittest.TestCase):
             self.assertIn("96.0 MiB large-page backing", endpoint)
             self.assertIn("0.0 MiB large-page backing", endpoint)
             self.assertIn('id="pareto-frontier"', endpoint)
+            self.assertIn("Google TCMalloc / Temeraire HPAA", endpoint)
+            self.assertIn("physical backing 5/7 measured samples", endpoint)
+            self.assertIn("matched HPAA-off control", endpoint)
             backing = (output_dir / "actual-backing.svg").read_text(
                 encoding="utf-8"
             )
@@ -165,6 +214,62 @@ class CrossAllocatorLargePageChartTests(unittest.TestCase):
                 "anonymous THP from smaps; explicit HugeTLB from status", backing
             )
             self.assertIn("cross-family comparison is backing-only", backing)
+            self.assertIn("Google TCMalloc / Temeraire HPAA", backing)
+            self.assertIn("physical backing 5/7 measured samples", backing)
+            self.assertIn("matched HPAA-off control", backing)
+
+    def test_gperftools_legacy_is_visible_only_as_historical_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            document = valid_summary()
+            document["case_summaries"]["gperftools_legacy_default"] = {  # type: ignore[index]
+                "samples": 7,
+                "label": "gperftools 2.18.1 legacy default",
+            }
+            document["slide_data"]["endpoints"].append(  # type: ignore[index]
+                {
+                    "label": "gperftools-legacy anon",
+                    "mechanism": "gperftools_legacy",
+                    "ns_per_touch": 5.0,
+                    "max_effective_resident_mib": 130.0,
+                    "large_page_backing_mib": 0.0,
+                    "pair": "gperftools-legacy",
+                    "mode": "off",
+                }
+            )
+            document["slide_data"]["backing"].append(  # type: ignore[index]
+                {
+                    "label": "gperftools-legacy anon",
+                    "anon_thp_mib": 0.0,
+                    "hugetlb_mib": 0.0,
+                }
+            )
+            summary_path = root / "summary.json"
+            summary_path.write_text(json.dumps(document), encoding="utf-8")
+            output_dir = root / "charts"
+
+            result = run_renderer(summary_path, output_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            for filename in ("endpoint-frontier.svg", "actual-backing.svg"):
+                rendered = (output_dir / filename).read_text(encoding="utf-8")
+                self.assertIn("gperftools-legacy anon [historical]", rendered)
+                self.assertIn(
+                    "Historical only: gperftools 2.18.1 legacy default", rendered
+                )
+
+    def test_repeat_count_must_match_per_case_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            document = valid_summary()
+            document["case_summaries"]["snmalloc_default"]["samples"] = 6  # type: ignore[index]
+            summary_path = root / "summary.json"
+            summary_path.write_text(json.dumps(document), encoding="utf-8")
+            output_dir = root / "charts"
+
+            result = run_renderer(summary_path, output_dir)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("measured_repeats", result.stderr)
+            self.assertFalse(output_dir.exists())
 
     def test_csv_preserves_source_fields_and_values(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "applications": [
+    {
+      "app": "ripgrep",
+      "runtime_site_snapshot_files": ["runtime/ripgrep.stderr.bin"],
+      "compiler_audit_roots": ["audits/ripgrep/typeiso_coverage"]
+    },
+    {
+      "app": "fd",
+      "runtime_site_snapshot_files": ["runtime/fd.stderr.bin"],
+      "compiler_audit_roots": ["audits/fd/typeiso_coverage"]
+    },
+    {
+      "app": "oxipng",
+      "runtime_site_snapshot_files": ["runtime/oxipng.stderr.bin"],
+      "compiler_audit_roots": ["audits/oxipng/typeiso_coverage"]
+    }
+  ]
+}

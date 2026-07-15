@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="chart-title chart-description">
+  <title id="chart-title">Actual large-page backing</title>
+  <desc id="chart-description">Process evidence: anonymous THP from smaps; explicit HugeTLB from status</desc>
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #17202A; }
+    .axis { stroke: #566573; stroke-width: 1.5; }
+    .grid { stroke: #D5DBDB; stroke-width: 1; }
+    .small { font-size: 15px; }
+    .label { font-size: 17px; font-weight: 600; }
+  </style>
+  <rect id="background" x="0" y="0" width="1600" height="900" fill="#FFFFFF"/>
+  <text x="70" y="62" font-size="34" font-weight="700">Actual large-page backing</text>
+  <text x="70" y="102" font-size="18" fill="#566573">Process evidence: anonymous THP from smaps; explicit HugeTLB from status</text>
+  <g id="backing-plot">
+    <line class="grid" x1="110.0" y1="670.00" x2="1505.0" y2="670.00"/>
+    <text x="96.0" y="675.00" font-size="14" text-anchor="end" fill="#566573">0</text>
+    <line class="grid" x1="110.0" y1="505.00" x2="1505.0" y2="505.00"/>
+    <text x="96.0" y="510.00" font-size="14" text-anchor="end" fill="#566573">50</text>
+    <line class="grid" x1="110.0" y1="340.00" x2="1505.0" y2="340.00"/>
+    <text x="96.0" y="345.00" font-size="14" text-anchor="end" fill="#566573">100</text>
+    <line class="grid" x1="110.0" y1="175.00" x2="1505.0" y2="175.00"/>
+    <text x="96.0" y="180.00" font-size="14" text-anchor="end" fill="#566573">150</text>
+    <line class="axis" x1="110.0" y1="670.0" x2="1505.0" y2="670.0"/>
+    <text x="0" y="0" font-size="18" font-weight="600" text-anchor="middle" transform="translate(42 422.5) rotate(-90)">Large-page backing (MiB)</text>
+    <rect x="146.62" y="670.00" width="101.14" height="0.00" fill="#0072B2"><title>UniAlloc off anonymous THP: 0.0 MiB</title></rect>
+    <rect x="146.62" y="670.00" width="101.14" height="0.00" fill="#D55E00"><title>UniAlloc off HugeTLB: 0.0 MiB</title></rect>
+    <text x="197.19" y="658.00" font-size="14" font-weight="700" text-anchor="middle">0.0 MiB</text>
+    <text x="197.19" y="700.0" font-size="14" font-weight="700" text-anchor="middle"><title>UniAlloc off</title>UniAlloc off</text>
+    <text x="197.19" y="722.0" font-size="12" text-anchor="middle" fill="#566573">THP 0.0 · HugeTLB 0.0</text>
+    <rect x="320.99" y="452.20" width="101.14" height="217.80" fill="#0072B2"><title>UniAlloc selective THP anonymous THP: 66.0 MiB</title></rect>
+    <rect x="320.99" y="452.20" width="101.14" height="0.00" fill="#D55E00"><title>UniAlloc selective THP HugeTLB: 0.0 MiB</title></rect>
+    <text x="371.56" y="440.20" font-size="14" font-weight="700" text-anchor="middle">66.0 MiB</text>
+    <text x="371.56" y="700.0" font-size="14" font-weight="700" text-anchor="middle"><title>UniAlloc selective THP</title>UniAlloc selective THP</text>
+    <text x="371.56" y="722.0" font-size="12" text-anchor="middle" fill="#566573">THP 66.0 · HugeTLB 0.0</text>
+    <rect x="495.37" y="670.00" width="101.14" height="0.00" fill="#0072B2"><title>Google TCMalloc / Temeraire HPAA anonymous THP: 0.0 MiB</title></rect>
+    <rect x="495.37" y="670.00" width="101.14" height="0.00" fill="#D55E00"><title>Google TCMalloc / Temeraire HPAA HugeTLB: 0.0 MiB</title></rect>
+    <text x="545.94" y="658.00" font-size="14" font-weight="700" text-anchor="middle">0.0 MiB</text>
+    <text x="545.94" y="700.0" font-size="14" font-weight="700" text-anchor="middle"><title>Google TCMalloc / Temeraire HPAA</title>Google TCMalloc / Temer…</text>
+    <text x="545.94" y="722.0" font-size="12" text-anchor="middle" fill="#566573">THP 0.0 · HugeTLB 0.0</text>
+    <rect x="669.74" y="670.00" width="101.14" height="0.00" fill="#0072B2"><title>mimalloc off anonymous THP: 0.0 MiB</title></rect>
+    <rect x="669.74" y="670.00" width="101.14" height="0.00" fill="#D55E00"><title>mimalloc off HugeTLB: 0.0 MiB</title></rect>
+    <text x="720.31" y="658.00" font-size="14" font-weight="700" text-anchor="middle">0.0 MiB</text>
+    <text x="720.31" y="700.0" font-size="14" font-weight="700" text-anchor="middle"><title>mimalloc off</title>mimalloc off</text>
+    <text x="720.31" y="722.0" font-size="12" text-anchor="middle" fill="#566573">THP 0.0 · HugeTLB 0.0</text>
+    <rect x="844.12" y="234.40" width="101.14" height="435.60" fill="#0072B2"><title>mimalloc THP anonymous THP: 132.0 MiB</title></rect>
+    <rect x="844.12" y="234.40" width="101.14" height="0.00" fill="#D55E00"><title>mimalloc THP HugeTLB: 0.0 MiB</title></rect>
+    <text x="894.69" y="222.40" font-size="14" font-weight="700" text-anchor="middle">132.0 MiB</text>
+    <text x="894.69" y="700.0" font-size="14" font-weight="700" text-anchor="middle"><title>mimalloc THP</title>mimalloc THP</text>
+    <text x="894.69" y="722.0" font-size="12" text-anchor="middle" fill="#566573">THP 132.0 · HugeTLB 0.0</text>
+    <rect x="1018.49" y="670.00" width="101.14" height="0.00" fill="#0072B2"><title>jemalloc off anonymous THP: 0.0 MiB</title></rect>
+    <rect x="1018.49" y="670.00" width="101.14" height="0.00" fill="#D55E00"><title>jemalloc off HugeTLB: 0.0 MiB</title></rect>
+    <text x="1069.06" y="658.00" font-size="14" font-weight="700" text-anchor="middle">0.0 MiB</text>
+    <text x="1069.06" y="700.0" font-size="14" font-weight="700" text-anchor="middle"><title>jemalloc off</title>jemalloc off</text>
+    <text x="1069.06" y="722.0" font-size="12" text-anchor="middle" fill="#566573">THP 0.0 · HugeTLB 0.0</text>
+    <rect x="1192.87" y="254.20" width="101.14" height="415.80" fill="#0072B2"><title>jemalloc THP anonymous THP: 126.0 MiB</title></rect>
+    <rect x="1192.87" y="254.20" width="101.14" height="0.00" fill="#D55E00"><title>jemalloc THP HugeTLB: 0.0 MiB</title></rect>
+    <text x="1243.44" y="242.20" font-size="14" font-weight="700" text-anchor="middle">126.0 MiB</text>
+    <text x="1243.44" y="700.0" font-size="14" font-weight="700" text-anchor="middle"><title>jemalloc THP</title>jemalloc THP</text>
+    <text x="1243.44" y="722.0" font-size="12" text-anchor="middle" fill="#566573">THP 126.0 · HugeTLB 0.0</text>
+    <rect x="1367.24" y="670.00" width="101.14" height="0.00" fill="#0072B2"><title>snmalloc default anonymous THP: 0.0 MiB</title></rect>
+    <rect x="1367.24" y="670.00" width="101.14" height="0.00" fill="#D55E00"><title>snmalloc default HugeTLB: 0.0 MiB</title></rect>
+    <text x="1417.81" y="658.00" font-size="14" font-weight="700" text-anchor="middle">0.0 MiB</text>
+    <text x="1417.81" y="700.0" font-size="14" font-weight="700" text-anchor="middle"><title>snmalloc default</title>snmalloc default</text>
+    <text x="1417.81" y="722.0" font-size="12" text-anchor="middle" fill="#566573">THP 0.0 · HugeTLB 0.0</text>
+  </g>
+  <g id="backing-legend">
+    <rect x="590" y="775" width="18" height="18" fill="#0072B2"/>
+    <text x="618" y="790" font-size="16">Anonymous THP</text>
+    <rect x="805" y="775" width="18" height="18" fill="#D55E00"/>
+    <text x="833" y="790" font-size="16">Explicit HugeTLB</text>
+  </g>
+  <text x="800" y="817.0" font-size="13" text-anchor="middle" fill="#566573">Same 512 MiB peak requested payload; cross-family comparison is backing-only.</text>
+  <text x="800" y="838.0" font-size="13" text-anchor="middle" fill="#566573">Google TCMalloc identity: fixed-revision Bazel link-time Temeraire/HPAA; physical backing 0/5 measured samples.</text>
+  <text x="800" y="859.0" font-size="13" text-anchor="middle" fill="#566573">HPAA performance causality requires a matched HPAA-off control.</text>
+</svg>

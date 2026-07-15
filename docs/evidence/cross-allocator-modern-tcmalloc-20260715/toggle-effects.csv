@@ -1,0 +1,5 @@
+label,mechanism,speedup_pct,speedup_ci_low_pct,speedup_ci_high_pct,speedup_conclusion,max_resident_change_pct,max_resident_ci_low_pct,max_resident_ci_high_pct,max_resident_conclusion
+UniAlloc selective THP,selective-thp,33.608757095029475,33.334758891856275,34.00120246745346,improved,1.48648549783712,1.4238191977180792,1.546849554973373,regressed
+mimalloc global THP,process-wide-thp,38.59657228263317,38.33334028456555,38.893368852744494,improved,5.288518814177912,5.287264584337925,5.28917743760795,regressed
+jemalloc allocator THP,allocator-wide-thp,40.23413023914121,34.63257627349,47.84410781089481,improved,3.4368934632635906,2.848085568526515,4.029072298110914,regressed
+snmalloc OS eligibility,os-eligibility,0.3679630315578053,-0.5755063873970956,1.2312717390762562,practically-equivalent,-0.006430772517285188,-0.021629164315062344,0.0099393220309274,practically-equivalent

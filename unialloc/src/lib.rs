@@ -105,8 +105,10 @@ pub use alloc_api::{
     SemanticFallbackAttributionSnapshot, SemanticMetadataValidationSnapshot,
     SemanticOwnershipTransferSnapshot, SemanticScopeDepthSnapshot, SemanticStatsSnapshot,
     SemanticTypeStatsSnapshot, TypeIsolationSideCacheSnapshot, AUTO_LAYOUT_MODULE_ID,
-    FLAG_DELAYED_FREE, FLAG_HUGEPAGE_METADATA, FLAG_TYPE_ISOLATED, LIFETIME_HINT_EPHEMERAL,
-    LIFETIME_HINT_LONG_LIVED, SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION,
+    FLAG_DELAYED_FREE, FLAG_HUGEPAGE_METADATA, FLAG_TYPE_ISOLATED,
+    LIFETIME_HINT_BOUNDED_PROCESS_LONG, LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LOCAL_DROP_FACT,
+    LIFETIME_HINT_LONG_LIVED, LIFETIME_HINT_PROVEN_EPHEMERAL, LIFETIME_HINT_PROVEN_LONG_LIVED,
+    SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION,
     SEMANTIC_METADATA_VALIDATION_SNAPSHOT_ABI_VERSION, SEMANTIC_STATS_SNAPSHOT_ABI_VERSION,
     SEMANTIC_TYPE_STATS_SNAPSHOT_ABI_VERSION,
 };
@@ -117,11 +119,19 @@ pub use alloc_api::{
 };
 #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
 pub use alloc_api::{
+    lifetime_hugepage_adaptive_site_force_track_all_disable,
+    lifetime_hugepage_adaptive_site_force_track_all_enable,
+    lifetime_hugepage_adaptive_site_force_track_all_enabled,
+    lifetime_hugepage_adaptive_site_recording_disable,
+    lifetime_hugepage_adaptive_site_recording_enable,
+    lifetime_hugepage_adaptive_site_recording_enabled, lifetime_hugepage_adaptive_site_snapshot,
     lifetime_hugepage_advance_epoch, lifetime_hugepage_backend, lifetime_hugepage_configure,
     lifetime_hugepage_configure_with_backend, lifetime_hugepage_phase_flush_current_thread,
     lifetime_hugepage_policy, lifetime_hugepage_stats_reset, lifetime_hugepage_stats_snapshot,
-    LifetimeHugepagePolicy, LifetimeHugepageStatsSnapshot, LifetimePageBackend,
-    LIFETIME_HUGEPAGE_EXTENT_BYTES, LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
+    LifetimeAdaptiveSiteSnapshot, LifetimeHugepagePolicy, LifetimeHugepageStatsSnapshot,
+    LifetimePageBackend, LIFETIME_ADAPTIVE_SITE_SNAPSHOT_ABI_VERSION,
+    LIFETIME_ADAPTIVE_SITE_SNAPSHOT_CAPACITY, LIFETIME_HUGEPAGE_EXTENT_BYTES,
+    LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES,
 };
 pub use cache::RustAllocator as UniAlloc;
 pub use pal::arch::*;

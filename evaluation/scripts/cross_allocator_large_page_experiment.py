@@ -17,6 +17,7 @@ import json
 import math
 import os
 import random
+import shutil
 import statistics
 import subprocess
 import sys
@@ -27,13 +28,13 @@ from typing import Any, Iterable, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import lifetime_thp_allocator_experiment as lifetime_thp
+import google_tcmalloc_bazel_probe as google_tcmalloc
 
 
 ROOT = Path(__file__).resolve().parents[2]
 NEUTRAL_SOURCE = ROOT / "evaluation/probes/cross_allocator_large_page_workload.c"
-NEUTRAL_BINARY = ROOT / "target/evaluation/cross_allocator_large_page_workload"
 SEMANTIC_BINARY = ROOT / "target/release/examples/lifetime_hugepage_allocator_probe"
-DEFAULT_TCMALLOC = Path(
+DEFAULT_GPERFTOOLS_LEGACY = Path(
     "/home/hanqing/.local/state/unialloc/runs/"
     "g001-minimal-235549b2-20260711T155042Z/evidence/"
     "pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/"
@@ -116,16 +117,23 @@ CANONICAL_MECHANISM_BY_CASE = {
 }
 
 
-def neutral_cases() -> tuple[NeutralCase, ...]:
+def neutral_cases(include_gperftools_legacy: bool = False) -> tuple[NeutralCase, ...]:
     mimalloc_common = (
         ("MIMALLOC_ALLOW_LARGE_OS_PAGES", "0"),
         ("MIMALLOC_RESERVE_HUGE_OS_PAGES", "0"),
         # Hold purge granularity constant so the THP pair isolates eligibility.
         ("MIMALLOC_MINIMAL_PURGE_SIZE", "2048"),
     )
-    return (
+    cases = (
         NeutralCase(
             "glibc_default", "glibc default", "default", "default", None
+        ),
+        NeutralCase(
+            "google_tcmalloc_temeraire",
+            "Google TCMalloc / Temeraire HPAA",
+            "temeraire-hpaa",
+            "default",
+            None,
         ),
         NeutralCase(
             "mimalloc_thp_off",
@@ -160,22 +168,6 @@ def neutral_cases() -> tuple[NeutralCase, ...]:
             (("MALLOC_CONF", "abort_conf:true,thp:always,metadata_thp:disabled"),),
         ),
         NeutralCase(
-            "gperftools_default",
-            "gperftools TCMalloc default",
-            "default",
-            "default",
-            "tcmalloc",
-            (("TCMALLOC_MEMFS_MALLOC_PATH", ""),),
-        ),
-        NeutralCase(
-            "gperftools_hugetlb",
-            "gperftools explicit HugeTLB",
-            "explicit-hugetlb",
-            "hugetlb",
-            "tcmalloc",
-            (("TCMALLOC_MEMFS_DISABLE_FALLBACK", "1"),),
-        ),
-        NeutralCase(
             "snmalloc_default",
             "snmalloc default eligibility",
             "os-eligibility",
@@ -189,6 +181,26 @@ def neutral_cases() -> tuple[NeutralCase, ...]:
             "no-thp",
             "snmalloc",
             disable_process_thp=True,
+        ),
+    )
+    if not include_gperftools_legacy:
+        return cases
+    return cases + (
+        NeutralCase(
+            "gperftools_legacy_default",
+            "gperftools 2.18.1 legacy default",
+            "legacy-default",
+            "default",
+            "gperftools_legacy",
+            (("TCMALLOC_MEMFS_MALLOC_PATH", ""),),
+        ),
+        NeutralCase(
+            "gperftools_legacy_hugetlb",
+            "gperftools 2.18.1 legacy explicit HugeTLB",
+            "legacy-explicit-hugetlb",
+            "hugetlb",
+            "gperftools_legacy",
+            (("TCMALLOC_MEMFS_DISABLE_FALLBACK", "1"),),
         ),
     )
 
@@ -216,12 +228,44 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--min-neutral-thp-coverage", type=float, default=0.25)
     parser.add_argument("--mimalloc-lib", type=Path, default=DEFAULT_MIMALLOC)
     parser.add_argument("--jemalloc-lib", type=Path, default=DEFAULT_JEMALLOC)
-    parser.add_argument("--tcmalloc-lib", type=Path, default=DEFAULT_TCMALLOC)
+    parser.add_argument(
+        "--google-tcmalloc-build-root",
+        type=Path,
+        default=google_tcmalloc.DEFAULT_BUILD_ROOT,
+    )
+    parser.add_argument(
+        "--google-tcmalloc-binary", type=Path
+    )
+    parser.add_argument(
+        "--google-tcmalloc-control-binary",
+        type=Path,
+    )
+    parser.add_argument(
+        "--google-tcmalloc-provenance",
+        type=Path,
+    )
+    parser.add_argument("--bazel", default=os.environ.get("BAZEL", "bazel"))
+    parser.add_argument(
+        "--gperftools-legacy-lib", type=Path, default=DEFAULT_GPERFTOOLS_LEGACY
+    )
+    parser.add_argument("--include-gperftools-legacy", action="store_true")
     parser.add_argument("--snmalloc-lib", type=Path, default=DEFAULT_SNMALLOC)
-    parser.add_argument("--tcmalloc-memfs-prefix", type=Path, required=True)
+    parser.add_argument("--gperftools-legacy-memfs-prefix", type=Path)
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--skip-warmup", action="store_true")
     args = parser.parse_args(argv)
+    build_root = args.google_tcmalloc_build_root.expanduser().resolve()
+    args.google_tcmalloc_build_root = build_root
+    if args.google_tcmalloc_binary is None:
+        args.google_tcmalloc_binary = (
+            build_root / "bin/cross_allocator_large_page_workload_google_tcmalloc"
+        )
+    if args.google_tcmalloc_control_binary is None:
+        args.google_tcmalloc_control_binary = (
+            build_root / "bin/cross_allocator_large_page_workload_system"
+        )
+    if args.google_tcmalloc_provenance is None:
+        args.google_tcmalloc_provenance = build_root / "provenance.json"
     if (
         args.repeats < 2
         or args.warmup_blocks < 0
@@ -302,9 +346,13 @@ def library_provenance(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
     configured = {
         "mimalloc": (args.mimalloc_lib, "mimalloc core 3.3.2"),
         "jemalloc": (args.jemalloc_lib, "jemalloc 5.3.x system package"),
-        "tcmalloc": (args.tcmalloc_lib, "gperftools TCMalloc 2.18.1"),
         "snmalloc": (args.snmalloc_lib, "snmalloc 0.2.27 vendored build"),
     }
+    if args.include_gperftools_legacy:
+        configured["gperftools_legacy"] = (
+            args.gperftools_legacy_lib,
+            "gperftools-legacy 2.18.1",
+        )
     result: dict[str, dict[str, Any]] = {}
     for key, (path, version) in configured.items():
         resolved = path.expanduser().resolve()
@@ -318,7 +366,260 @@ def library_provenance(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
     return result
 
 
-def validate_memfs_prefix(prefix: Path) -> Path:
+def google_tcmalloc_provenance(args: argparse.Namespace) -> dict[str, Any]:
+    provenance_path = args.google_tcmalloc_provenance.expanduser().resolve()
+    build_root = args.google_tcmalloc_build_root.expanduser().resolve()
+    if not args.skip_build:
+        command = [
+            sys.executable,
+            str(Path(google_tcmalloc.__file__).resolve()),
+            "--build-root",
+            str(build_root),
+            "--provenance",
+            str(provenance_path),
+            "--bazel",
+            args.bazel,
+        ]
+        completed = subprocess.run(command, cwd=ROOT, check=False)
+        if completed.returncode != 0:
+            reason = "Google TCMalloc/Temeraire build helper returned BLOCKED"
+            if provenance_path.is_file():
+                blocked = json.loads(provenance_path.read_text(encoding="utf-8"))
+                details = blocked.get("blocked_reasons", [])
+                if details:
+                    reason += ": " + "; ".join(str(detail) for detail in details)
+            raise RuntimeError(reason)
+    if not provenance_path.is_file():
+        raise RuntimeError(
+            "Google TCMalloc/Temeraire arm BLOCKED: missing verified provenance "
+            f"{provenance_path}"
+        )
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    if not isinstance(provenance, dict):
+        raise RuntimeError(
+            "Google TCMalloc/Temeraire arm BLOCKED: provenance root must be an object"
+        )
+    expected = {
+        "status": "VERIFIED",
+        "claim_eligible": True,
+        "fallback_allowed": False,
+        "allocator_identity": "Google TCMalloc",
+        "repository": google_tcmalloc.GOOGLE_TCMALLOC_REPOSITORY,
+        "commit": google_tcmalloc.GOOGLE_TCMALLOC_COMMIT,
+        "pinned_module_release": google_tcmalloc.GOOGLE_TCMALLOC_MODULE_VERSION,
+        "rules_cc_module_version": google_tcmalloc.RULES_CC_MODULE_VERSION,
+        "bazel_target": google_tcmalloc.BAZEL_TARGET,
+        "bazel_control_target": google_tcmalloc.BAZEL_CONTROL_TARGET,
+        "bazel_targets": list(google_tcmalloc.BAZEL_TARGETS),
+        "malloc_target": google_tcmalloc.MALLOC_TARGET,
+        "hugepage_allocator_identity": "Temeraire / HugePageAwareAllocator (HPAA)",
+        "official_integration": "Bazel cc_binary malloc attribute at link time",
+        "build_options": list(google_tcmalloc.BUILD_OPTIONS),
+        "probe_copts": list(google_tcmalloc.PROBE_COPTS),
+        "implementation_files": list(google_tcmalloc.IMPLEMENTATION_FILES),
+        "source": str(google_tcmalloc.SOURCE.relative_to(ROOT)),
+        "source_sha256": sha256_file(google_tcmalloc.SOURCE),
+    }
+    mismatches = [
+        f"{key}={provenance.get(key)!r}"
+        for key, value in expected.items()
+        if provenance.get(key) != value
+    ]
+    if provenance.get("gperftools_legacy_eligible_as_google_tcmalloc") is not False:
+        mismatches.append("gperftools_legacy_eligible_as_google_tcmalloc")
+    if provenance.get("blocked_reasons") not in ([], None):
+        mismatches.append("blocked_reasons")
+    if provenance.get("build_root") != str(build_root):
+        mismatches.append("build_root")
+
+    checkout = build_root / "google-tcmalloc"
+    workspace = build_root / "probe-workspace"
+    if provenance.get("checkout_path") != str(checkout):
+        mismatches.append("checkout_path")
+    if provenance.get("workspace_path") != str(workspace):
+        mismatches.append("workspace_path")
+    if not (checkout / ".git").is_dir():
+        mismatches.append("checkout_missing")
+    else:
+        observed_commit = subprocess.run(
+            ["git", "-C", str(checkout), "rev-parse", "HEAD"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        ).stdout.strip()
+        if observed_commit != google_tcmalloc.GOOGLE_TCMALLOC_COMMIT:
+            mismatches.append("checkout_commit")
+        observed_status = subprocess.run(
+            ["git", "-C", str(checkout), "status", "--porcelain"],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        ).stdout.strip()
+        if observed_status:
+            mismatches.append("checkout_dirty")
+
+    implementation_hashes = provenance.get("implementation_file_hashes")
+    implementation_by_path = {
+        row.get("path"): row.get("sha256")
+        for row in implementation_hashes
+        if isinstance(row, dict)
+    } if isinstance(implementation_hashes, list) else {}
+    if set(implementation_by_path) != set(google_tcmalloc.IMPLEMENTATION_FILES):
+        mismatches.append("implementation_file_hashes")
+    else:
+        for relative, recorded_hash in implementation_by_path.items():
+            path = checkout / str(relative)
+            if not path.is_file() or sha256_file(path) != recorded_hash:
+                mismatches.append(f"implementation_hash:{relative}")
+
+    workspace_hashes = provenance.get("workspace_files")
+    workspace_by_path = {
+        row.get("path"): row.get("sha256")
+        for row in workspace_hashes
+        if isinstance(row, dict)
+    } if isinstance(workspace_hashes, list) else {}
+    required_workspace_files = {
+        "MODULE.bazel",
+        "BUILD.bazel",
+        google_tcmalloc.SOURCE.name,
+    }
+    if set(workspace_by_path) != required_workspace_files:
+        mismatches.append("workspace_files")
+    else:
+        for relative, recorded_hash in workspace_by_path.items():
+            path = workspace / str(relative)
+            if not path.is_file() or sha256_file(path) != recorded_hash:
+                mismatches.append(f"workspace_hash:{relative}")
+
+    build_command = provenance.get("build_command")
+    if not (
+        isinstance(build_command, list)
+        and len(build_command)
+        == len(google_tcmalloc.BUILD_OPTIONS) + len(google_tcmalloc.BAZEL_TARGETS) + 2
+        and build_command[1] == "build"
+        and build_command[2 : 2 + len(google_tcmalloc.BUILD_OPTIONS)]
+        == list(google_tcmalloc.BUILD_OPTIONS)
+        and build_command[-len(google_tcmalloc.BAZEL_TARGETS) :]
+        == list(google_tcmalloc.BAZEL_TARGETS)
+    ):
+        mismatches.append("build_command")
+    bazel_version = provenance.get("bazel_version")
+    if not isinstance(bazel_version, str) or not bazel_version.startswith("bazel "):
+        mismatches.append("bazel_version")
+    if not isinstance(provenance.get("commit_time"), str) or not isinstance(
+        provenance.get("commit_subject"), str
+    ):
+        mismatches.append("commit_metadata")
+    action_graph = provenance.get("bazel_action_graph")
+    if not isinstance(action_graph, dict):
+        mismatches.append("bazel_action_graph")
+    else:
+        action_graph_path = action_graph.get("path")
+        if not isinstance(action_graph_path, str):
+            mismatches.append("bazel_action_graph:path")
+        else:
+            resolved_action_graph = Path(action_graph_path).expanduser().resolve()
+            if (
+                not resolved_action_graph.is_file()
+                or action_graph.get("sha256") != sha256_file(resolved_action_graph)
+                or action_graph.get("bytes") != resolved_action_graph.stat().st_size
+            ):
+                mismatches.append("bazel_action_graph:evidence")
+        aquery_command = action_graph.get("command")
+        if not (
+            isinstance(aquery_command, list)
+            and len(aquery_command) == 4
+            and aquery_command[1:3] == ["aquery", "--output=textproto"]
+            and all(target in aquery_command[3] for target in google_tcmalloc.BAZEL_TARGETS)
+        ):
+            mismatches.append("bazel_action_graph:command")
+    compiler_identity = provenance.get("host_compiler_identity")
+    if not isinstance(compiler_identity, dict) or not compiler_identity:
+        mismatches.append("host_compiler_identity")
+
+    binary = args.google_tcmalloc_binary.expanduser().resolve()
+    control_binary = args.google_tcmalloc_control_binary.expanduser().resolve()
+    verification = provenance.get("verification")
+    if not isinstance(verification, dict):
+        mismatches.append("verification")
+    else:
+        required_verification = {
+            "binary": str(binary),
+            "binary_sha256": sha256_file(binary) if binary.is_file() else None,
+            "strong_malloc_symbol": True,
+            "hpaa_symbols_present": True,
+            "dynamic_gperftools_dependency": False,
+        }
+        for key, value in required_verification.items():
+            if verification.get(key) != value:
+                mismatches.append(f"verification:{key}")
+        if not isinstance(verification.get("ldd"), list):
+            mismatches.append("verification:ldd")
+        if not isinstance(verification.get("smoke_command"), list) or verification.get(
+            "smoke_checksum"
+        ) is None:
+            mismatches.append("verification:smoke")
+        if not mismatches:
+            try:
+                fresh_verification = google_tcmalloc.verify_binary(binary)
+            except google_tcmalloc.BuildBlocked as error:
+                mismatches.append(f"fresh_binary_verification:{error}")
+            else:
+                if fresh_verification["binary_sha256"] != verification["binary_sha256"]:
+                    mismatches.append("fresh_binary_sha256")
+    control_verification = provenance.get("control_verification")
+    if not isinstance(control_verification, dict):
+        mismatches.append("control_verification")
+    else:
+        required_control_verification = {
+            "binary": str(control_binary),
+            "binary_sha256": (
+                sha256_file(control_binary) if control_binary.is_file() else None
+            ),
+            "strong_malloc_symbol": False,
+            "hpaa_symbols_present": False,
+            "dynamic_gperftools_dependency": False,
+        }
+        for key, value in required_control_verification.items():
+            if control_verification.get(key) != value:
+                mismatches.append(f"control_verification:{key}")
+        if not isinstance(control_verification.get("ldd"), list):
+            mismatches.append("control_verification:ldd")
+        if not isinstance(control_verification.get("smoke_command"), list) or control_verification.get(
+            "smoke_checksum"
+        ) is None:
+            mismatches.append("control_verification:smoke")
+        if (
+            isinstance(verification, dict)
+            and verification.get("smoke_checksum")
+            != control_verification.get("smoke_checksum")
+        ):
+            mismatches.append("control_trace_checksum")
+        if not mismatches:
+            try:
+                fresh_control = google_tcmalloc.verify_control_binary(control_binary)
+            except google_tcmalloc.BuildBlocked as error:
+                mismatches.append(f"fresh_control_verification:{error}")
+            else:
+                if fresh_control["binary_sha256"] != control_verification["binary_sha256"]:
+                    mismatches.append("fresh_control_sha256")
+    if mismatches:
+        raise RuntimeError(
+            "Google TCMalloc/Temeraire arm BLOCKED: invalid fixed-revision Bazel "
+            "provenance: "
+            + ", ".join(mismatches)
+        )
+    provenance["provenance_path"] = str(provenance_path)
+    provenance["binary"] = str(binary)
+    provenance["control_binary"] = str(control_binary)
+    return provenance
+
+
+def validate_memfs_prefix(prefix: Path | None) -> Path | None:
+    if prefix is None:
+        return None
     resolved = prefix.expanduser().resolve()
     if not resolved.parent.is_dir() or not os.access(resolved.parent, os.W_OK):
         raise RuntimeError(f"TCMalloc memfs prefix parent is not writable: {resolved.parent}")
@@ -334,21 +635,10 @@ def validate_memfs_prefix(prefix: Path) -> Path:
     return resolved
 
 
-def build_probes(args: argparse.Namespace) -> list[dict[str, Any]]:
+def build_probes(
+    args: argparse.Namespace, google_tcmalloc_record: dict[str, Any]
+) -> list[dict[str, Any]]:
     commands = [
-        [
-            "cc",
-            "-std=c11",
-            "-O3",
-            "-DNDEBUG",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            "-fno-builtin-malloc",
-            str(NEUTRAL_SOURCE),
-            "-o",
-            str(NEUTRAL_BINARY),
-        ],
         [
             "cargo",
             "build",
@@ -362,20 +652,42 @@ def build_probes(args: argparse.Namespace) -> list[dict[str, Any]]:
         ],
     ]
     if not args.skip_build:
-        NEUTRAL_BINARY.parent.mkdir(parents=True, exist_ok=True)
         for command in commands:
             subprocess.run(command, cwd=ROOT, check=True)
-    for binary in (NEUTRAL_BINARY, SEMANTIC_BINARY):
-        if not binary.is_file():
-            raise RuntimeError(f"missing probe binary: {binary}")
-    return [
+    if not SEMANTIC_BINARY.is_file():
+        raise RuntimeError(f"missing probe binary: {SEMANTIC_BINARY}")
+    builds = [
         {
             "command": command,
-            "binary": str(binary.relative_to(ROOT)),
-            "binary_sha256": sha256_file(binary),
+            "binary": str(SEMANTIC_BINARY.relative_to(ROOT)),
+            "binary_sha256": sha256_file(SEMANTIC_BINARY),
         }
-        for command, binary in zip(commands, (NEUTRAL_BINARY, SEMANTIC_BINARY), strict=True)
+        for command in commands
     ]
+    builds.append(
+        {
+            "command": google_tcmalloc_record.get("build_command"),
+            "binary": google_tcmalloc_record["binary"],
+            "binary_sha256": google_tcmalloc_record["verification"]["binary_sha256"],
+            "allocator": "Google TCMalloc",
+            "hugepage_allocator": "Temeraire / HPAA",
+            "malloc_target": google_tcmalloc_record["malloc_target"],
+            "commit": google_tcmalloc_record["commit"],
+        }
+    )
+    builds.append(
+        {
+            "command": google_tcmalloc_record.get("build_command"),
+            "binary": google_tcmalloc_record["control_binary"],
+            "binary_sha256": google_tcmalloc_record["control_verification"][
+                "binary_sha256"
+            ],
+            "allocator": "System allocator control",
+            "bazel_target": google_tcmalloc_record["bazel_control_target"],
+            "matched_codegen_control_for": "Google TCMalloc / Temeraire HPAA",
+        }
+    )
+    return builds
 
 
 def pinned(command: list[str], args: argparse.Namespace) -> list[str]:
@@ -436,10 +748,21 @@ def semantic_command(
     return pinned(command, args)
 
 
-def neutral_command(args: argparse.Namespace, repeat_seed: int) -> list[str]:
+def neutral_command(
+    case: NeutralCase,
+    args: argparse.Namespace,
+    repeat_seed: int,
+    google_tcmalloc_binary: Path,
+    bazel_control_binary: Path,
+) -> list[str]:
+    binary = (
+        google_tcmalloc_binary
+        if case.name == "google_tcmalloc_temeraire"
+        else bazel_control_binary
+    )
     return pinned(
         [
-            str(NEUTRAL_BINARY),
+            str(binary),
             "--objects",
             str(args.objects),
             "--slot-bytes",
@@ -471,7 +794,7 @@ def clean_allocator_environment() -> dict[str, str]:
 def neutral_environment(
     case: NeutralCase,
     libraries: dict[str, dict[str, Any]],
-    memfs_prefix: Path,
+    memfs_prefix: Path | None,
 ) -> tuple[dict[str, str], dict[str, str]]:
     env = clean_allocator_environment()
     explicit = dict(case.environment)
@@ -479,7 +802,11 @@ def neutral_environment(
         library = Path(libraries[case.library_key]["path"])
         explicit["LD_PRELOAD"] = str(library)
         explicit["UNIALLOC_EVAL_PRELOAD_TOKEN"] = library.name
-    if case.name == "gperftools_hugetlb":
+    if case.name == "gperftools_legacy_hugetlb":
+        if memfs_prefix is None:
+            raise RuntimeError(
+                "gperftools-legacy HugeTLB requested without a hugetlbfs prefix"
+            )
         explicit["TCMALLOC_MEMFS_MALLOC_PATH"] = str(memfs_prefix)
     if case.disable_process_thp:
         explicit["UNIALLOC_EVAL_THP_DISABLE"] = "1"
@@ -591,7 +918,9 @@ def run_block(
     measured: bool,
     args: argparse.Namespace,
     libraries: dict[str, dict[str, Any]],
-    memfs_prefix: Path,
+    memfs_prefix: Path | None,
+    google_tcmalloc_binary: Path,
+    bazel_control_binary: Path,
     logs_dir: Path,
     randomizer: random.Random,
 ) -> list[dict[str, Any]]:
@@ -633,7 +962,7 @@ def run_block(
     if topology_failures:
         raise RuntimeError(f"semantic block {block} failed: {','.join(topology_failures)}")
 
-    neutral_order = list(neutral_cases())
+    neutral_order = list(neutral_cases(args.include_gperftools_legacy))
     randomizer.shuffle(neutral_order)
     neutral_rows: list[dict[str, Any]] = []
     for order_index, case in enumerate(neutral_order):
@@ -641,7 +970,13 @@ def run_block(
         env, explicit_env = neutral_environment(case, libraries, memfs_prefix)
         pool_before = hugepages_free()
         completed = run_process(
-            neutral_command(args, repeat_seed),
+            neutral_command(
+                case,
+                args,
+                repeat_seed,
+                google_tcmalloc_binary,
+                bazel_control_binary,
+            ),
             env=env,
             timeout=args.timeout,
             stdout_path=logs_dir / f"{prefix}.stdout",
@@ -664,7 +999,13 @@ def run_block(
                 "order_index": order_index,
                 "repeat_seed": repeat_seed,
                 "explicit_environment": explicit_env,
-                "command": neutral_command(args, repeat_seed),
+                "command": neutral_command(
+                    case,
+                    args,
+                    repeat_seed,
+                    google_tcmalloc_binary,
+                    bazel_control_binary,
+                ),
                 "hugepages_free_before": pool_before,
                 "hugepages_free_after": pool_after,
                 "evidence_failures": failures,
@@ -794,6 +1135,48 @@ def median_summary(rows: list[dict[str, Any]], family: str) -> dict[str, Any]:
     return result
 
 
+def google_tcmalloc_hugepage_claim_gate(
+    rows: Sequence[dict[str, Any]], min_thp_coverage: float
+) -> dict[str, Any]:
+    evidence = []
+    for row in rows:
+        anon_huge_kib = int(row.get("anon_huge_delta_kib", 0))
+        hugetlb_kib = int(row.get("hugetlb_delta_kib", 0))
+        coverage = float(row.get("peak_thp_coverage", 0.0))
+        realized = hugetlb_kib > 0 or (
+            anon_huge_kib > 0 and coverage >= min_thp_coverage
+        )
+        evidence.append(
+            {
+                "block": int(row["block"]),
+                "anon_huge_kib": anon_huge_kib,
+                "hugetlb_kib": hugetlb_kib,
+                "peak_thp_coverage": coverage,
+                "physical_hugepage_backing_realized": realized,
+            }
+        )
+    excluded = [
+        record["block"]
+        for record in evidence
+        if not record["physical_hugepage_backing_realized"]
+    ]
+    return {
+        "identity_claim_ready": bool(evidence),
+        "hugepage_mechanism_claim_ready": bool(evidence) and not excluded,
+        "hpaa_performance_causality_claim_ready": False,
+        "measured_sample_count": len(evidence),
+        "backed_sample_count": len(evidence) - len(excluded),
+        "excluded_blocks": excluded,
+        "sample_evidence": evidence,
+        "claim_boundary": (
+            "The fixed-revision link proves Google TCMalloc with HPAA code. "
+            "Every measured sample needs physical hugepage backing for a "
+            "Temeraire/hugepage-mechanism endpoint claim. A matched HPAA-off "
+            "control is still required for HPAA performance causality."
+        ),
+    }
+
+
 def summarize(
     rows: list[dict[str, Any]], args: argparse.Namespace
 ) -> dict[str, Any]:
@@ -805,7 +1188,10 @@ def summarize(
         case: median_summary(case_rows, str(case_rows[0]["family"]))
         for case, case_rows in rows_by_case.items()
     }
-    pairs = (
+    google_hugepage_gate = google_tcmalloc_hugepage_claim_gate(
+        rows_by_case["google_tcmalloc_temeraire"], args.min_neutral_thp_coverage
+    )
+    pairs = [
         (
             "unialloc_lifetime_thp",
             "unialloc_lifetime_thp_on",
@@ -828,20 +1214,23 @@ def summarize(
             "allocator-wide-thp",
         ),
         (
-            "gperftools_hugetlb",
-            "gperftools_hugetlb",
-            "gperftools_default",
-            "gperftools HugeTLB",
-            "explicit-hugetlb",
-        ),
-        (
             "snmalloc_os_eligibility",
             "snmalloc_default",
             "snmalloc_os_thp_off",
             "snmalloc OS eligibility",
             "os-eligibility",
         ),
-    )
+    ]
+    if args.include_gperftools_legacy:
+        pairs.append(
+            (
+                "gperftools_legacy_hugetlb",
+                "gperftools_legacy_hugetlb",
+                "gperftools_legacy_default",
+                "gperftools-legacy HugeTLB",
+                "legacy-explicit-hugetlb",
+            )
+        )
     comparisons: dict[str, dict[str, Any]] = {}
     toggle_effects: list[dict[str, Any]] = []
     for index, (name, target, baseline, label, mechanism) in enumerate(pairs):
@@ -879,47 +1268,53 @@ def summarize(
             }
         )
 
-    endpoint_names = (
+    endpoint_names = [
         "glibc_default",
+        "google_tcmalloc_temeraire",
         "mimalloc_thp_off",
         "mimalloc_thp_on",
         "jemalloc_thp_off",
         "jemalloc_thp_on",
-        "gperftools_default",
-        "gperftools_hugetlb",
         "snmalloc_default",
         "snmalloc_os_thp_off",
-    )
+    ]
+    if args.include_gperftools_legacy:
+        endpoint_names.extend(
+            ("gperftools_legacy_default", "gperftools_legacy_hugetlb")
+        )
     pair_for = {
         "mimalloc_thp_off": "mimalloc",
         "mimalloc_thp_on": "mimalloc",
         "jemalloc_thp_off": "jemalloc",
         "jemalloc_thp_on": "jemalloc",
-        "gperftools_default": "gperftools",
-        "gperftools_hugetlb": "gperftools",
+        "google_tcmalloc_temeraire": "google-tcmalloc",
+        "gperftools_legacy_default": "gperftools-legacy",
+        "gperftools_legacy_hugetlb": "gperftools-legacy",
         "snmalloc_default": "snmalloc",
         "snmalloc_os_thp_off": "snmalloc",
         "glibc_default": "glibc",
     }
     mode_for = {
         "glibc_default": "default",
+        "google_tcmalloc_temeraire": "default",
         "mimalloc_thp_off": "off",
         "mimalloc_thp_on": "on",
         "jemalloc_thp_off": "off",
         "jemalloc_thp_on": "on",
-        "gperftools_default": "off",
-        "gperftools_hugetlb": "on",
+        "gperftools_legacy_default": "off",
+        "gperftools_legacy_hugetlb": "on",
         "snmalloc_default": "on",
         "snmalloc_os_thp_off": "off",
     }
     endpoint_label_for = {
         "glibc_default": "glibc",
+        "google_tcmalloc_temeraire": "Google TCMalloc / Temeraire",
         "mimalloc_thp_off": "mimalloc off",
         "mimalloc_thp_on": "mimalloc THP",
         "jemalloc_thp_off": "jemalloc off",
         "jemalloc_thp_on": "jemalloc THP",
-        "gperftools_default": "gperftools anon",
-        "gperftools_hugetlb": "gperftools HugeTLB",
+        "gperftools_legacy_default": "gperftools-legacy anon",
+        "gperftools_legacy_hugetlb": "gperftools-legacy HugeTLB",
         "snmalloc_default": "snmalloc eligible",
         "snmalloc_os_thp_off": "snmalloc disabled",
     }
@@ -944,26 +1339,30 @@ def summarize(
                 "mode": mode_for[case],
             }
         )
-    backing_names = (
+    backing_names = [
         "unialloc_lifetime_thp_off",
         "unialloc_lifetime_thp_on",
+        "google_tcmalloc_temeraire",
         "mimalloc_thp_off",
         "mimalloc_thp_on",
         "jemalloc_thp_off",
         "jemalloc_thp_on",
-        "gperftools_default",
-        "gperftools_hugetlb",
         "snmalloc_default",
-    )
+    ]
+    if args.include_gperftools_legacy:
+        backing_names.extend(
+            ("gperftools_legacy_default", "gperftools_legacy_hugetlb")
+        )
     backing_label_for = {
         "unialloc_lifetime_thp_off": "UniAlloc off",
         "unialloc_lifetime_thp_on": "UniAlloc selective THP",
+        "google_tcmalloc_temeraire": "Google TCMalloc / Temeraire",
         "mimalloc_thp_off": "mimalloc off",
         "mimalloc_thp_on": "mimalloc THP",
         "jemalloc_thp_off": "jemalloc off",
         "jemalloc_thp_on": "jemalloc THP",
-        "gperftools_default": "gperftools anon",
-        "gperftools_hugetlb": "gperftools HugeTLB",
+        "gperftools_legacy_default": "gperftools-legacy anon",
+        "gperftools_legacy_hugetlb": "gperftools-legacy HugeTLB",
         "snmalloc_default": "snmalloc default",
     }
     backing = [
@@ -979,6 +1378,7 @@ def summarize(
         "source": "cross_allocator_large_page_experiment",
         "claim_grade": True,
         "case_summaries": case_summaries,
+        "google_tcmalloc_temeraire_gate": google_hugepage_gate,
         "comparisons": comparisons,
         "slide_data": {
             "toggle_effects": toggle_effects,
@@ -996,6 +1396,13 @@ def summarize(
             "resident_metric": "max(VmRSS + HugetlbPages) across live phases",
             "cross_family_raw_timing_ranking_allowed": False,
             "gperftools_is_google_tcmalloc": False,
+            "google_tcmalloc_identity": "fixed-revision Bazel link-time Temeraire/HPAA",
+            "google_tcmalloc_fallback_allowed": False,
+            "google_tcmalloc_hugepage_claim_ready": google_hugepage_gate[
+                "hugepage_mechanism_claim_ready"
+            ],
+            "google_tcmalloc_hpaa_performance_causality_claim_ready": False,
+            "gperftools_legacy_claim_role": "historical-only",
             "snmalloc_control_kind": "OS eligibility; snmalloc has no public THP toggle",
         },
         "invariants_passed": True,
@@ -1058,9 +1465,50 @@ def main(argv: Sequence[str] | None = None) -> int:
     logs_dir = output_dir / "raw"
     logs_dir.mkdir()
     (output_dir / "host-before.txt").write_text(host_snapshot(), encoding="utf-8")
+    try:
+        google_tcmalloc_record = google_tcmalloc_provenance(args)
+    except (RuntimeError, OSError, json.JSONDecodeError) as error:
+        source_provenance = args.google_tcmalloc_provenance.expanduser().resolve()
+        copied_provenance = None
+        if source_provenance.is_file():
+            copied_provenance = output_dir / "google-tcmalloc-provenance.json"
+            shutil.copy2(source_provenance, copied_provenance)
+        blocked = {
+            "schema_version": 1,
+            "source": "cross_allocator_large_page_experiment",
+            "status": "BLOCKED",
+            "claim_grade": False,
+            "blocked_arm": "google_tcmalloc_temeraire",
+            "reason": str(error),
+            "fallback_allowed": False,
+            "fallback_attempted": False,
+            "gperftools_legacy_eligible_as_google_tcmalloc": False,
+            "google_tcmalloc_commit": google_tcmalloc.GOOGLE_TCMALLOC_COMMIT,
+            "malloc_target": google_tcmalloc.MALLOC_TARGET,
+            "requested_build_root": str(args.google_tcmalloc_build_root),
+            "source_provenance": str(source_provenance),
+            "copied_provenance": (
+                copied_provenance.name if copied_provenance is not None else None
+            ),
+        }
+        (output_dir / "runner-manifest.json").write_text(
+            json.dumps(blocked, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        (output_dir / "host-after.txt").write_text(host_snapshot(), encoding="utf-8")
+        write_manifest(output_dir)
+        print(f"Google TCMalloc/Temeraire arm BLOCKED: {error}", file=sys.stderr)
+        print(output_dir / "runner-manifest.json")
+        return 2
+    google_tcmalloc_binary = Path(google_tcmalloc_record["binary"])
+    bazel_control_binary = Path(google_tcmalloc_record["control_binary"])
     libraries = library_provenance(args)
-    memfs_prefix = validate_memfs_prefix(args.tcmalloc_memfs_prefix)
-    builds = build_probes(args)
+    memfs_prefix = validate_memfs_prefix(args.gperftools_legacy_memfs_prefix)
+    if args.include_gperftools_legacy and memfs_prefix is None:
+        raise RuntimeError(
+            "--include-gperftools-legacy requires "
+            "--gperftools-legacy-memfs-prefix for its historical HugeTLB arm"
+        )
+    builds = build_probes(args, google_tcmalloc_record)
     runner_manifest = {
         "schema_version": 1,
         "argv": [sys.executable, str(Path(__file__).resolve()), *(argv or sys.argv[1:])],
@@ -1081,7 +1529,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "min_semantic_thp_coverage": args.min_semantic_thp_coverage,
         "min_neutral_thp_coverage": args.min_neutral_thp_coverage,
         "libraries": libraries,
-        "tcmalloc_memfs_prefix": str(memfs_prefix),
+        "google_tcmalloc_temeraire": google_tcmalloc_record,
+        "gperftools_legacy_included": args.include_gperftools_legacy,
+        "gperftools_legacy_memfs_prefix": (
+            str(memfs_prefix) if memfs_prefix is not None else None
+        ),
         "probe_builds": builds,
         "neutral_source_sha256": sha256_file(NEUTRAL_SOURCE),
         "semantic_source_sha256": sha256_file(
@@ -1107,6 +1559,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args=args,
                 libraries=libraries,
                 memfs_prefix=memfs_prefix,
+                google_tcmalloc_binary=google_tcmalloc_binary,
+                bazel_control_binary=bazel_control_binary,
                 logs_dir=logs_dir,
                 randomizer=randomizer,
             )

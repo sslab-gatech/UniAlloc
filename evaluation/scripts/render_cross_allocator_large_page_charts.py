@@ -137,7 +137,218 @@ def _require_rows(
     return rows
 
 
-def validate_summary(document: Any) -> dict[str, list[dict[str, Any]]]:
+def _require_bool(value: Any, label: str) -> bool:
+    if not isinstance(value, bool):
+        raise ChartError(f"{label} must be a boolean")
+    return value
+
+
+def _require_positive_integer(value: Any, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ChartError(f"{label} must be a positive integer")
+    return value
+
+
+def _contains_allocator(
+    rows: Sequence[Mapping[str, Any]], allocator: str
+) -> bool:
+    needle = allocator.casefold()
+    return any(
+        needle in str(row.get(field, "")).casefold()
+        for row in rows
+        for field in ("label", "mechanism", "pair")
+    )
+
+
+def _summary_evidence(
+    root: Mapping[str, Any],
+    toggle_effects: Sequence[Mapping[str, Any]],
+    endpoints: Sequence[Mapping[str, Any]],
+    backing: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    repeats = _require_positive_integer(
+        root.get("measured_repeats"), "summary.measured_repeats"
+    )
+    case_summaries = _require_mapping(
+        root.get("case_summaries"), "summary.case_summaries"
+    )
+    if not case_summaries:
+        raise ChartError("summary.case_summaries must be non-empty")
+    for case, raw_case_summary in case_summaries.items():
+        case_label = f"summary.case_summaries.{case}"
+        case_summary = _require_mapping(raw_case_summary, case_label)
+        samples = _require_positive_integer(
+            case_summary.get("samples"), f"{case_label}.samples"
+        )
+        if samples != repeats:
+            raise ChartError(
+                f"{case_label}.samples must equal summary.measured_repeats"
+            )
+
+    all_rows = [*toggle_effects, *endpoints, *backing]
+    google_present = _contains_allocator(all_rows, "google tcmalloc") or any(
+        str(case).casefold() == "google_tcmalloc_temeraire"
+        for case in case_summaries
+    )
+    legacy_present = _contains_allocator(all_rows, "gperftools")
+    evidence_contract = _require_mapping(
+        root.get("evidence_contract"), "summary.evidence_contract"
+    )
+
+    google_note = None
+    google_boundary_note = None
+    if google_present:
+        identity = _require_nonempty_string(
+            evidence_contract.get("google_tcmalloc_identity"),
+            "summary.evidence_contract.google_tcmalloc_identity",
+        )
+        gate = _require_mapping(
+            root.get("google_tcmalloc_temeraire_gate"),
+            "summary.google_tcmalloc_temeraire_gate",
+        )
+        if not _require_bool(
+            gate.get("identity_claim_ready"),
+            "summary.google_tcmalloc_temeraire_gate.identity_claim_ready",
+        ):
+            raise ChartError(
+                "Google TCMalloc rows require a verified allocator identity"
+            )
+        measured = _require_positive_integer(
+            gate.get("measured_sample_count"),
+            "summary.google_tcmalloc_temeraire_gate.measured_sample_count",
+        )
+        backed_raw = gate.get("backed_sample_count")
+        if isinstance(backed_raw, bool) or not isinstance(backed_raw, int):
+            raise ChartError(
+                "summary.google_tcmalloc_temeraire_gate.backed_sample_count "
+                "must be an integer"
+            )
+        if not 0 <= backed_raw <= measured:
+            raise ChartError(
+                "summary.google_tcmalloc_temeraire_gate.backed_sample_count "
+                "must be between zero and measured_sample_count"
+            )
+        if measured != repeats:
+            raise ChartError(
+                "summary.google_tcmalloc_temeraire_gate.measured_sample_count "
+                "must equal summary.measured_repeats"
+            )
+        sample_evidence = gate.get("sample_evidence")
+        if not isinstance(sample_evidence, list) or len(sample_evidence) != measured:
+            raise ChartError(
+                "summary.google_tcmalloc_temeraire_gate.sample_evidence must "
+                "contain one row per measured sample"
+            )
+        sample_blocks: set[int] = set()
+        unbacked_blocks: set[int] = set()
+        for index, raw_sample in enumerate(sample_evidence):
+            sample_label = (
+                "summary.google_tcmalloc_temeraire_gate."
+                f"sample_evidence[{index}]"
+            )
+            sample = _require_mapping(raw_sample, sample_label)
+            block = sample.get("block")
+            if isinstance(block, bool) or not isinstance(block, int) or block < 0:
+                raise ChartError(f"{sample_label}.block must be a non-negative integer")
+            if block in sample_blocks:
+                raise ChartError(
+                    "summary.google_tcmalloc_temeraire_gate.sample_evidence "
+                    "contains a duplicate block"
+                )
+            sample_blocks.add(block)
+            realized = _require_bool(
+                sample.get("physical_hugepage_backing_realized"),
+                f"{sample_label}.physical_hugepage_backing_realized",
+            )
+            if not realized:
+                unbacked_blocks.add(block)
+        if measured - len(unbacked_blocks) != backed_raw:
+            raise ChartError(
+                "summary.google_tcmalloc_temeraire_gate.backed_sample_count "
+                "must match per-sample backing evidence"
+            )
+        excluded = gate.get("excluded_blocks")
+        if (
+            not isinstance(excluded, list)
+            or any(
+                isinstance(block, bool) or not isinstance(block, int)
+                for block in excluded
+            )
+            or set(excluded) != unbacked_blocks
+        ):
+            raise ChartError(
+                "summary.google_tcmalloc_temeraire_gate.excluded_blocks must "
+                "match the unbacked per-sample evidence"
+            )
+        mechanism_ready = _require_bool(
+            gate.get("hugepage_mechanism_claim_ready"),
+            "summary.google_tcmalloc_temeraire_gate."
+            "hugepage_mechanism_claim_ready",
+        )
+        if mechanism_ready != (backed_raw == measured):
+            raise ChartError(
+                "summary.google_tcmalloc_temeraire_gate."
+                "hugepage_mechanism_claim_ready must reflect every sample"
+            )
+        causality_ready = _require_bool(
+            gate.get("hpaa_performance_causality_claim_ready"),
+            "summary.google_tcmalloc_temeraire_gate."
+            "hpaa_performance_causality_claim_ready",
+        )
+        contract_causality_ready = _require_bool(
+            evidence_contract.get(
+                "google_tcmalloc_hpaa_performance_causality_claim_ready"
+            ),
+            "summary.evidence_contract."
+            "google_tcmalloc_hpaa_performance_causality_claim_ready",
+        )
+        if causality_ready or contract_causality_ready:
+            raise ChartError(
+                "HPAA performance causality needs explicit matched HPAA-off "
+                "control evidence"
+            )
+        google_note = (
+            "Google TCMalloc identity: "
+            f"{identity}; physical backing {backed_raw}/{measured} measured samples."
+        )
+        google_boundary_note = (
+            "HPAA performance causality requires a matched HPAA-off control."
+        )
+
+    historical_note = None
+    if legacy_present:
+        role = _require_nonempty_string(
+            evidence_contract.get("gperftools_legacy_claim_role"),
+            "summary.evidence_contract.gperftools_legacy_claim_role",
+        )
+        if role != "historical-only":
+            raise ChartError(
+                "gperftools rows require the historical-only claim role"
+            )
+        legacy_labels = []
+        for case, raw_case_summary in case_summaries.items():
+            if "gperftools" not in str(case).casefold():
+                continue
+            case_summary = _require_mapping(
+                raw_case_summary, f"summary.case_summaries.{case}"
+            )
+            label = case_summary.get("label")
+            if isinstance(label, str) and label.strip():
+                legacy_labels.append(label.strip())
+        historical_identity = (
+            legacy_labels[0] if legacy_labels else "gperftools-legacy"
+        )
+        historical_note = f"Historical only: {historical_identity}."
+
+    return {
+        "repeat_note": f"{repeats} measured blocks per arm",
+        "google_note": google_note,
+        "google_boundary_note": google_boundary_note,
+        "historical_note": historical_note,
+    }
+
+
+def validate_summary(document: Any) -> dict[str, Any]:
     root = _require_mapping(document, "summary")
     slide_data = _require_mapping(root.get("slide_data"), "summary.slide_data")
     toggle_effects = _require_rows(
@@ -185,6 +396,9 @@ def validate_summary(document: Any) -> dict[str, list[dict[str, Any]]]:
         "toggle_effects": toggle_effects,
         "endpoints": endpoints,
         "backing": backing,
+        "evidence": _summary_evidence(
+            root, toggle_effects, endpoints, backing
+        ),
     }
 
 
@@ -258,6 +472,40 @@ def _truncate(value: str, length: int) -> str:
     if len(value) <= length:
         return value
     return value[: max(length - 1, 1)].rstrip() + "…"
+
+
+def _display_label(value: object) -> str:
+    label = str(value)
+    folded = label.casefold()
+    if "google tcmalloc" in folded and "hpaa" not in folded:
+        return label.rstrip() + " HPAA"
+    if "gperftools" in folded and "historical" not in folded:
+        return label.rstrip() + " [historical]"
+    return label
+
+
+def _chart_evidence_notes(
+    rows: Sequence[Mapping[str, Any]], evidence: Mapping[str, Any]
+) -> list[str]:
+    notes: list[str] = []
+    if _contains_allocator(rows, "google tcmalloc"):
+        for field in ("google_note", "google_boundary_note"):
+            note = evidence.get(field)
+            if isinstance(note, str) and note:
+                notes.append(note)
+    if _contains_allocator(rows, "gperftools"):
+        note = evidence.get("historical_note")
+        if isinstance(note, str) and note:
+            notes.append(note)
+    return notes
+
+
+def _footer_lines(lines: Sequence[str], *, start_y: float) -> list[str]:
+    return [
+        f'  <text x="800" y="{start_y + index * 21:.1f}" font-size="13" '
+        f'text-anchor="middle" fill="{MUTED}">{_escape(line)}</text>'
+        for index, line in enumerate(lines)
+    ]
 
 
 def _color_map(mechanisms: Sequence[str]) -> dict[str, str]:
@@ -338,6 +586,7 @@ def _render_effect_panel(
             f'    <text x="{tick_x:.2f}" y="{plot_bottom + 32:.1f}" font-size="13" text-anchor="middle" fill="{MUTED}">{_escape(_format_tick(tick, "%"))}</text>'
         )
     for index, row in enumerate(rows):
+        display_label = _display_label(row["label"])
         center_y = plot_top + (index + 0.5) * row_gap
         point = float(row[point_field])
         low = float(row[low_field])
@@ -349,12 +598,12 @@ def _render_effect_panel(
         body.extend(
             [
                 f'    <line x1="{plot_left:.1f}" y1="{center_y + row_gap * 0.42:.2f}" x2="{plot_right:.1f}" y2="{center_y + row_gap * 0.42:.2f}" stroke="{LIGHT_GRID}"/>',
-                f'    <text x="{x + 20:.1f}" y="{center_y - 3:.2f}" font-size="{font_size:.1f}" font-weight="600"><title>{_escape(row["label"])}</title>{_escape(_truncate(str(row["label"]), 24))}</text>',
+                f'    <text x="{x + 20:.1f}" y="{center_y - 3:.2f}" font-size="{font_size:.1f}" font-weight="600"><title>{_escape(display_label)}</title>{_escape(_truncate(display_label, 24))}</text>',
                 f'    <text x="{x + 20:.1f}" y="{center_y + font_size + 2:.2f}" font-size="{max(font_size - 3, 9):.1f}" fill="{MUTED}">{_escape(_truncate(str(row["mechanism"]), 29))}</text>',
                 f'    <line x1="{low_x:.2f}" y1="{center_y:.2f}" x2="{high_x:.2f}" y2="{center_y:.2f}" stroke="{color}" stroke-width="4" stroke-linecap="round"/>',
                 f'    <line x1="{low_x:.2f}" y1="{center_y - 7:.2f}" x2="{low_x:.2f}" y2="{center_y + 7:.2f}" stroke="{color}" stroke-width="2"/>',
                 f'    <line x1="{high_x:.2f}" y1="{center_y - 7:.2f}" x2="{high_x:.2f}" y2="{center_y + 7:.2f}" stroke="{color}" stroke-width="2"/>',
-                f'    <circle cx="{point_x:.2f}" cy="{center_y:.2f}" r="7" fill="{color}" stroke="#FFFFFF" stroke-width="2"><title>{_escape(row["label"])}: {_escape(_format_percent(point))} [{_escape(_format_percent(low))}, {_escape(_format_percent(high))}]</title></circle>',
+                f'    <circle cx="{point_x:.2f}" cy="{center_y:.2f}" r="7" fill="{color}" stroke="#FFFFFF" stroke-width="2"><title>{_escape(display_label)}: {_escape(_format_percent(point))} [{_escape(_format_percent(low))}, {_escape(_format_percent(high))}]</title></circle>',
             ]
         )
         anchor = "start" if point_x < plot_right - 65 else "end"
@@ -366,7 +615,9 @@ def _render_effect_panel(
     return body
 
 
-def render_incremental_effect(rows: Sequence[Mapping[str, Any]]) -> str:
+def render_incremental_effect(
+    rows: Sequence[Mapping[str, Any]], evidence: Mapping[str, Any]
+) -> str:
     title = "Incremental effect of enabling large-page allocation"
     subtitle = "Paired change within each allocator; points are estimates and whiskers are confidence intervals"
     colors = _color_map([str(row["mechanism"]) for row in rows])
@@ -401,11 +652,14 @@ def render_incremental_effect(rows: Sequence[Mapping[str, Any]]) -> str:
             colors=colors,
         )
     )
+    footer = [
+        "Within-pair deltas only: UniAlloc uses a semantic Rust probe; others "
+        f"share a neutral C probe. {evidence['repeat_note']}; 95% bootstrap CI.",
+        "Zero = matched off/default; resident delta excludes unused pool capacity.",
+        *_chart_evidence_notes(rows, evidence),
+    ]
     body.extend(
-        [
-            f'  <text x="800" y="835" font-size="13" text-anchor="middle" fill="{MUTED}">Within-pair deltas only: UniAlloc uses a semantic Rust probe; others share a neutral C probe. 20 paired blocks; 95% bootstrap CI.</text>',
-            f'  <text x="800" y="859" font-size="13" text-anchor="middle" fill="{MUTED}">gperftools uses explicit pre-reserved HugeTLB; resident delta excludes unused pool capacity. Zero = matched off/default.</text>',
-        ]
+        _footer_lines(footer, start_y=828.0)
     )
     return _svg_document(title, subtitle, body)
 
@@ -456,7 +710,9 @@ def _point_shape(
     return f'<polygon points="{points}" {common}>{tooltip}</polygon>'
 
 
-def render_endpoint_frontier(rows: Sequence[Mapping[str, Any]]) -> str:
+def render_endpoint_frontier(
+    rows: Sequence[Mapping[str, Any]], evidence: Mapping[str, Any]
+) -> str:
     title = "Allocator endpoint frontier"
     subtitle = "Lower-left is better; connected marks are matched modes and bubble area reflects actual large-page backing"
     body = _title_block(title, subtitle)
@@ -581,6 +837,7 @@ def render_endpoint_frontier(rows: Sequence[Mapping[str, Any]]) -> str:
 
     for layout in point_layouts:
         row = layout["row"]
+        display_label = _display_label(row["label"])
         x = float(layout["x"])
         y = float(layout["y"])
         radius = float(layout["radius"])
@@ -590,7 +847,7 @@ def render_endpoint_frontier(rows: Sequence[Mapping[str, Any]]) -> str:
         label_y = float(layout["label_y"])
         anchor = str(layout["anchor"])
         tooltip = (
-            f'{row["label"]}: {float(row["ns_per_touch"]):.2f} ns/touch, '
+            f'{display_label}: {float(row["ns_per_touch"]):.2f} ns/touch, '
             f'{float(row["max_effective_resident_mib"]):.1f} MiB resident, '
             f'{backing:.1f} MiB large-page backing; mode={row["mode"]}, pair={row["pair"]}'
         )
@@ -603,7 +860,7 @@ def render_endpoint_frontier(rows: Sequence[Mapping[str, Any]]) -> str:
         )
         body.extend(
             [
-                f'    <text x="{label_x:.2f}" y="{label_y:.2f}" font-size="14" font-weight="700" text-anchor="{anchor}" fill="{color}">{_escape(_truncate(str(row["label"]), 28))}</text>',
+                f'    <text x="{label_x:.2f}" y="{label_y:.2f}" font-size="14" font-weight="700" text-anchor="{anchor}" fill="{color}"><title>{_escape(display_label)}</title>{_escape(_truncate(display_label, 28))}</text>',
                 f'    <text x="{label_x:.2f}" y="{label_y + 18:.2f}" font-size="12" text-anchor="{anchor}" fill="{MUTED}">{float(row["ns_per_touch"]):.2f} ns/touch · {float(row["max_effective_resident_mib"]):.1f} MiB</text>',
             ]
         )
@@ -636,10 +893,15 @@ def render_endpoint_frontier(rows: Sequence[Mapping[str, Any]]) -> str:
             "  </g>",
         ]
     )
+    body.extend(
+        _footer_lines(_chart_evidence_notes(rows, evidence), start_y=846.0)
+    )
     return _svg_document(title, subtitle, body)
 
 
-def render_actual_backing(rows: Sequence[Mapping[str, Any]]) -> str:
+def render_actual_backing(
+    rows: Sequence[Mapping[str, Any]], evidence: Mapping[str, Any]
+) -> str:
     title = "Actual large-page backing"
     subtitle = "Process evidence: anonymous THP from smaps; explicit HugeTLB from status"
     body = _title_block(title, subtitle)
@@ -667,6 +929,7 @@ def render_actual_backing(rows: Sequence[Mapping[str, Any]]) -> str:
         ]
     )
     for index, row in enumerate(rows):
+        display_label = _display_label(row["label"])
         center = plot_left + (index + 0.5) * slot
         anon = float(row["anon_thp_mib"])
         hugetlb = float(row["hugetlb_mib"])
@@ -678,10 +941,10 @@ def render_actual_backing(rows: Sequence[Mapping[str, Any]]) -> str:
         huge_height = max(0.0, anon_y - total_y)
         body.extend(
             [
-                f'    <rect x="{center - bar_width / 2:.2f}" y="{anon_y:.2f}" width="{bar_width:.2f}" height="{anon_height:.2f}" fill="#0072B2"><title>{_escape(row["label"])} anonymous THP: {anon:.1f} MiB</title></rect>',
-                f'    <rect x="{center - bar_width / 2:.2f}" y="{total_y:.2f}" width="{bar_width:.2f}" height="{huge_height:.2f}" fill="#D55E00"><title>{_escape(row["label"])} HugeTLB: {hugetlb:.1f} MiB</title></rect>',
+                f'    <rect x="{center - bar_width / 2:.2f}" y="{anon_y:.2f}" width="{bar_width:.2f}" height="{anon_height:.2f}" fill="#0072B2"><title>{_escape(display_label)} anonymous THP: {anon:.1f} MiB</title></rect>',
+                f'    <rect x="{center - bar_width / 2:.2f}" y="{total_y:.2f}" width="{bar_width:.2f}" height="{huge_height:.2f}" fill="#D55E00"><title>{_escape(display_label)} HugeTLB: {hugetlb:.1f} MiB</title></rect>',
                 f'    <text x="{center:.2f}" y="{max(total_y - 12, plot_top + 14):.2f}" font-size="14" font-weight="700" text-anchor="middle">{total:.1f} MiB</text>',
-                f'    <text x="{center:.2f}" y="{plot_bottom + 30:.1f}" font-size="14" font-weight="700" text-anchor="middle"><title>{_escape(row["label"])}</title>{_escape(_truncate(str(row["label"]), 24))}</text>',
+                f'    <text x="{center:.2f}" y="{plot_bottom + 30:.1f}" font-size="14" font-weight="700" text-anchor="middle"><title>{_escape(display_label)}</title>{_escape(_truncate(display_label, 24))}</text>',
                 f'    <text x="{center:.2f}" y="{plot_bottom + 52:.1f}" font-size="12" text-anchor="middle" fill="{MUTED}">THP {anon:.1f} · HugeTLB {hugetlb:.1f}</text>',
             ]
         )
@@ -689,14 +952,19 @@ def render_actual_backing(rows: Sequence[Mapping[str, Any]]) -> str:
         [
             "  </g>",
             '  <g id="backing-legend">',
-            '    <rect x="590" y="805" width="18" height="18" fill="#0072B2"/>',
-            '    <text x="618" y="820" font-size="16">Anonymous THP</text>',
-            '    <rect x="805" y="805" width="18" height="18" fill="#D55E00"/>',
-            '    <text x="833" y="820" font-size="16">Explicit HugeTLB</text>',
+            '    <rect x="590" y="775" width="18" height="18" fill="#0072B2"/>',
+            '    <text x="618" y="790" font-size="16">Anonymous THP</text>',
+            '    <rect x="805" y="775" width="18" height="18" fill="#D55E00"/>',
+            '    <text x="833" y="790" font-size="16">Explicit HugeTLB</text>',
             "  </g>",
-            f'  <text x="800" y="860" font-size="14" text-anchor="middle" fill="{MUTED}">Same 512 MiB peak requested payload; cross-family comparison is backing-only.</text>',
         ]
     )
+    footer = [
+        "Same 512 MiB peak requested payload; cross-family comparison is "
+        "backing-only.",
+        *_chart_evidence_notes(rows, evidence),
+    ]
+    body.extend(_footer_lines(footer, start_y=817.0))
     return _svg_document(title, subtitle, body)
 
 
@@ -806,7 +1074,7 @@ def render_all(
     for stem, rows, fields, renderer in renderers:
         svg_path = output_dir / f"{stem}.svg"
         csv_path = output_dir / f"{stem}.csv"
-        _atomic_write_text(svg_path, renderer(rows))
+        _atomic_write_text(svg_path, renderer(rows, data["evidence"]))
         _write_csv(csv_path, rows, fields)
         outputs.extend((svg_path, csv_path))
         if make_png:

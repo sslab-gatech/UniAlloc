@@ -653,6 +653,7 @@ impl RustAllocator {
         #[cfg(not(feature = "quarantine"))]
         {
             let ptr = self.alloc_raw(layout);
+            note_force_track_raw_allocation(ptr, layout.size());
             if !ptr.is_null() && semantic_stats_recording_enabled() {
                 SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), layout.size());
                 semantic_fallback_attribution_record_raw_alloc_no_metadata(layout.size());
@@ -980,6 +981,7 @@ impl RustAllocator {
         #[cfg(not(feature = "quarantine"))]
         let new_ptr = {
             let new_ptr = self.alloc_raw(new_layout);
+            note_force_track_raw_moved_reallocation(ptr, new_ptr, new_layout.size());
             if !new_ptr.is_null() && semantic_stats_recording_enabled() {
                 SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), new_layout.size());
                 semantic_fallback_attribution_record_raw_alloc_no_metadata(new_layout.size());
@@ -1045,6 +1047,34 @@ impl RustAllocator {
     }
 }
 
+#[inline]
+fn note_force_track_raw_allocation(ptr: *mut u8, requested_bytes: usize) {
+    #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+    if !ptr.is_null() {
+        crate::alloc_api::lifetime_hugepage::lifetime_hugepage_force_track_note_raw_allocation(
+            requested_bytes,
+        );
+    }
+    #[cfg(not(all(feature = "lifetime_hugepage", not(feature = "fixed_heap"))))]
+    let _ = (ptr, requested_bytes);
+}
+
+#[inline]
+fn note_force_track_raw_moved_reallocation(
+    old_ptr: *mut u8,
+    new_ptr: *mut u8,
+    requested_bytes: usize,
+) {
+    #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+    if !new_ptr.is_null() && new_ptr != old_ptr {
+        crate::alloc_api::lifetime_hugepage::lifetime_hugepage_force_track_note_raw_moved_reallocation(
+            requested_bytes,
+        );
+    }
+    #[cfg(not(all(feature = "lifetime_hugepage", not(feature = "fixed_heap"))))]
+    let _ = (old_ptr, new_ptr, requested_bytes);
+}
+
 unsafe impl GlobalAlloc for RustAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if layout.size() == 0 {
@@ -1054,7 +1084,9 @@ unsafe impl GlobalAlloc for RustAllocator {
             return self.alloc_raw(layout);
         }
         if !cfg!(feature = "quarantine") && !semantic_allocation_slow_path_enabled() {
-            return self.alloc_raw(layout);
+            let ptr = self.alloc_raw(layout);
+            note_force_track_raw_allocation(ptr, layout.size());
+            return ptr;
         }
         self.alloc_semantic_slow(layout)
     }
@@ -1132,6 +1164,7 @@ unsafe impl GlobalAlloc for RustAllocator {
             #[cfg(not(feature = "quarantine"))]
             {
                 let new_ptr = self.alloc_raw(new_layout);
+                note_force_track_raw_allocation(new_ptr, new_size);
                 if !new_ptr.is_null() && semantic_stats_recording_enabled() {
                     SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), new_size);
                     semantic_fallback_attribution_record_raw_realloc_no_metadata(new_size);
@@ -1145,16 +1178,21 @@ unsafe impl GlobalAlloc for RustAllocator {
             && !semantic_slow_path
             && !global_address_lifecycle_tracking_active()
         {
-            return self.realloc_raw_from_admission(
+            let new_ptr = self.realloc_raw_from_admission(
                 GlobalRawReclaimAdmission::Untracked(ptr),
                 layout,
                 new_layout,
             );
+            note_force_track_raw_moved_reallocation(ptr, new_ptr, new_size);
+            return new_ptr;
         }
         let reclaim_observation = observe_global_reclaim(ptr);
         reject_known_retained_or_released_from_observation(&reclaim_observation);
         if !cfg!(feature = "quarantine") && !semantic_slow_path {
-            return self.realloc_raw_from_observation(reclaim_observation, layout, new_layout);
+            let new_ptr =
+                self.realloc_raw_from_observation(reclaim_observation, layout, new_layout);
+            note_force_track_raw_moved_reallocation(ptr, new_ptr, new_size);
+            return new_ptr;
         }
         let old_recovery = checked_recorded_reallocation_old_metadata(ptr, layout);
         #[cfg(test)]
@@ -1375,6 +1413,7 @@ unsafe impl GlobalAlloc for RustAllocator {
         {
             if semantic_stats_recording_enabled() {
                 let new_ptr = self.realloc_raw_from_admission(admission, layout, new_layout);
+                note_force_track_raw_moved_reallocation(ptr, new_ptr, new_size);
                 if !new_ptr.is_null() {
                     SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), new_size);
                     semantic_fallback_attribution_record_raw_realloc_no_metadata(new_size);
@@ -1386,7 +1425,9 @@ unsafe impl GlobalAlloc for RustAllocator {
                 }
                 return new_ptr;
             }
-            self.realloc_raw_from_admission(admission, layout, new_layout)
+            let new_ptr = self.realloc_raw_from_admission(admission, layout, new_layout);
+            note_force_track_raw_moved_reallocation(ptr, new_ptr, new_size);
+            new_ptr
         }
     }
 }

@@ -16,13 +16,14 @@
 //! allocator whose payload path it is implementing.
 
 use super::type_isolation::{
-    lifetime_placement_class, AllocationMetadata, LifetimePlacementClass, FLAG_DELAYED_FREE,
+    compiler_bounded_lifetime_placement_class, lifetime_placement_class, AllocationMetadata,
+    LifetimePlacementClass, FLAG_DELAYED_FREE,
 };
 use crate::pal::sys_alloc::{self, prots, HugePageMmapBacking};
 use crate::size_class::{get_size_class_tuple, SizeClass, TOTAL_SIZE_CLASS};
 use core::alloc::Layout;
 use core::mem::size_of;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use spin::Mutex;
 
 pub const LIFETIME_HUGEPAGE_EXTENT_BYTES: usize = 2 * 1024 * 1024;
@@ -49,13 +50,21 @@ const THP_PROMOTION_MIN_LIVE_BYTES: usize = LIFETIME_HUGEPAGE_EXTENT_BYTES / 2;
 
 // Marker-free lifetime learning uses allocation pressure instead of attempting
 // to infer application-specific semantic phases. One epoch is one 2 MiB THP's
-// worth of eligible exact-site payload capacity. Both tracked allocations and
-// model-directed base-allocator bypasses advance pressure. Objects released
-// before 2 MiB of later pressure are short, objects surviving at least 8 MiB
-// are long, and the interval between those thresholds is deliberately censored.
+// worth of allocation pressure. Production adaptive mode retains its original
+// eligible-site payload clock. Evaluation force-track mode uses requested bytes
+// from every observed allocation generation, including raw, unsupported, and
+// missing-identity fallbacks. Objects released before 2 MiB of later pressure
+// are short, objects surviving at least 8 MiB are long, and the interval between
+// those thresholds is deliberately censored.
 const ADAPTIVE_EPOCH_BYTES: u64 = LIFETIME_HUGEPAGE_EXTENT_BYTES as u64;
 const ADAPTIVE_LONG_AGE_BYTES: u64 = 4 * ADAPTIVE_EPOCH_BYTES;
 const ADAPTIVE_SITE_SLOTS: usize = 4096;
+const ADAPTIVE_OBSERVATION_SLOTS: usize = 4096;
+const ADAPTIVE_OBSERVATION_PROBE_LIMIT: usize = 16;
+/// Maximum number of exact runtime lifetime sites retained in the fixed table.
+pub const LIFETIME_ADAPTIVE_SITE_SNAPSHOT_CAPACITY: usize = ADAPTIVE_OBSERVATION_SLOTS;
+/// Version of [`LifetimeAdaptiveSiteSnapshot`]'s public field contract.
+pub const LIFETIME_ADAPTIVE_SITE_SNAPSHOT_ABI_VERSION: u32 = 1;
 const ADAPTIVE_SITE_PROBE_LIMIT: usize = 16;
 const ADAPTIVE_MIN_DECISIVE_SAMPLES: u32 = 8;
 const ADAPTIVE_MIN_SAMPLES_AFTER_TRANSITION: u32 = 4;
@@ -112,6 +121,16 @@ pub enum LifetimeHugepagePolicy {
     /// `MADV_NOHUGEPAGE` extents, model-directed bypasses use the base allocator,
     /// and learned-Long sites use eager anonymous `MADV_HUGEPAGE` extents.
     AdaptiveRuntimeHugepage = 5,
+    /// Trust only the bounded process-long compiler oracle. Local-Drop facts,
+    /// legacy hints, and unclassified allocations bypass before the arena lock;
+    /// bounded-long oracle allocations route into density-gated THP candidate
+    /// extents without adaptive state or per-object observation trailers.
+    CompilerInferredHugepage = 6,
+    /// Use the same bounded-oracle admission and slot geometry as
+    /// `CompilerInferredHugepage`, while keeping every routed bounded-long
+    /// extent on ordinary pages with `MADV_NOHUGEPAGE`. This is the matched
+    /// THP-off control for isolating page-backing effects from hint packing.
+    CompilerInferredOrdinary = 7,
 }
 
 impl LifetimeHugepagePolicy {
@@ -123,6 +142,8 @@ impl LifetimeHugepagePolicy {
             3 => Self::SegregatedHugepage,
             4 => Self::EpochCohortHugepage,
             5 => Self::AdaptiveRuntimeHugepage,
+            6 => Self::CompilerInferredHugepage,
+            7 => Self::CompilerInferredOrdinary,
             _ => Self::Disabled,
         }
     }
@@ -141,13 +162,26 @@ impl LifetimeHugepagePolicy {
                 LifetimePlacementClass::Ephemeral,
             ) => Some(RequestedBacking::Ordinary),
             (
-                Self::LongLivedHugepage | Self::EpochCohortHugepage | Self::AdaptiveRuntimeHugepage,
+                Self::CompilerInferredHugepage | Self::CompilerInferredOrdinary,
+                LifetimePlacementClass::Ephemeral,
+            ) => None,
+            (Self::CompilerInferredOrdinary, LifetimePlacementClass::LongLived) => {
+                Some(RequestedBacking::Ordinary)
+            }
+            (
+                Self::LongLivedHugepage
+                | Self::EpochCohortHugepage
+                | Self::AdaptiveRuntimeHugepage
+                | Self::CompilerInferredHugepage,
                 LifetimePlacementClass::LongLived,
             )
             | (Self::SegregatedHugepage, _) => Some(RequestedBacking::LargePage),
         };
         if backend == LifetimePageBackend::TransparentHugepage
-            && self == Self::EpochCohortHugepage
+            && matches!(
+                self,
+                Self::EpochCohortHugepage | Self::CompilerInferredHugepage
+            )
             && requested == Some(RequestedBacking::LargePage)
         {
             Some(RequestedBacking::EpochCandidate)
@@ -372,6 +406,30 @@ pub struct LifetimeHugepageStatsSnapshot {
     pub adaptive_missing_identity_bypasses: usize,
     pub adaptive_site_table_bypasses: usize,
     pub adaptive_prior_conflicts: usize,
+    /// Evaluation-only exact-layout observation export state. These counters
+    /// are maintained in a table separate from the production predictor.
+    pub adaptive_observation_recording: bool,
+    pub adaptive_observation_site_count: usize,
+    pub adaptive_observation_table_bypasses: usize,
+    /// Evaluation-only complete-label mode. It routes every eligible tracked
+    /// allocation through ordinary-page trailer geometry until either hard
+    /// guard is exhausted. Guard bypasses make prevalence claims ineligible.
+    pub adaptive_force_track_all: bool,
+    pub adaptive_force_track_all_maximum_allocations: usize,
+    pub adaptive_force_track_all_maximum_requested_bytes: usize,
+    pub adaptive_force_track_all_admitted_allocations: usize,
+    pub adaptive_force_track_all_admitted_requested_bytes: usize,
+    pub adaptive_force_track_all_guard_bypasses: usize,
+    /// Complete-clock accounting for evaluation force-track mode. Total
+    /// pressure includes exact semantic allocations plus raw/unattributed
+    /// allocations and moved raw reallocations. In-place reallocations create
+    /// no new allocation generation and therefore add no pressure.
+    pub adaptive_force_track_all_pressure_allocations: usize,
+    pub adaptive_force_track_all_pressure_requested_bytes: usize,
+    pub adaptive_force_track_all_raw_pressure_allocations: usize,
+    pub adaptive_force_track_all_raw_pressure_requested_bytes: usize,
+    pub adaptive_force_track_all_raw_reallocation_pressure_allocations: usize,
+    pub adaptive_force_track_all_raw_reallocation_pressure_requested_bytes: usize,
     pub adaptive_live_trailers: usize,
     pub adaptive_trailer_corruptions: usize,
     pub adaptive_short_observations: usize,
@@ -404,6 +462,38 @@ pub struct LifetimeHugepageStatsSnapshot {
     pub adaptive_static_hint_false_negative_bytes: usize,
     pub adaptive_static_hint_abstained_objects: usize,
     pub adaptive_static_hint_abstained_bytes: usize,
+    /// Allocations carrying no bounded process-long oracle (including local
+    /// Drop facts and legacy hints) that returned to the base allocator before
+    /// acquiring the arena lock.
+    pub compiler_inferred_unknown_or_unproven_bypasses: usize,
+    /// Compatibility counter for the retired 0xA101-as-Short interpretation.
+    /// Correct implementations keep this at zero and count local-Drop facts as
+    /// unknown/unproven bypasses.
+    pub compiler_inferred_proven_ephemeral_bypasses: usize,
+    /// Requested bytes covered by compiler-inferred pre-lock bypasses.
+    pub compiler_inferred_bypass_requested_bytes: usize,
+    /// Compiler-inferred allocations that proceeded far enough to acquire the
+    /// arena lock. A bounded-oracle workload should make this equal direct Long
+    /// allocation attempts after the pre-lock admission gate.
+    pub compiler_inferred_arena_lock_acquisitions: usize,
+    /// Successful bounded-long allocations routed directly to the selected long
+    /// cohort (THP candidate or matched ordinary control).
+    pub compiler_inferred_direct_long_routes: usize,
+    /// User-requested and allocator-rounded bytes covered by successful direct
+    /// bounded-long routes. These fields support byte-weighted oracle coverage
+    /// without reconstructing size classes from object counts.
+    pub compiler_inferred_direct_long_requested_bytes: usize,
+    pub compiler_inferred_direct_long_slot_bytes: usize,
+    /// Deallocations observed for proof-tagged process-long allocations. Exact
+    /// mem::forget/Box::leak workloads require this counter to remain zero.
+    pub compiler_inferred_direct_long_deallocations: usize,
+    /// Successful direct routes whose slot geometry contained no adaptive
+    /// observation trailer. This must equal `compiler_inferred_direct_long_routes`.
+    pub compiler_inferred_direct_long_routes_without_trailer: usize,
+    /// Dense bounded-long extents for which THP advice was attempted.
+    pub compiler_inferred_density_promotion_attempts: usize,
+    pub compiler_inferred_density_promotion_successes: usize,
+    pub compiler_inferred_density_promotion_errors: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -769,6 +859,478 @@ enum AdaptiveTransition {
 }
 
 #[derive(Clone, Copy)]
+struct AdaptiveForceTrackAllState {
+    enabled: bool,
+    maximum_allocations: usize,
+    maximum_requested_bytes: usize,
+    admitted_allocations: usize,
+    admitted_requested_bytes: usize,
+    guard_bypasses: usize,
+    pressure_allocations: usize,
+    pressure_requested_bytes: usize,
+    raw_pressure_allocations: usize,
+    raw_pressure_requested_bytes: usize,
+    raw_reallocation_pressure_allocations: usize,
+    raw_reallocation_pressure_requested_bytes: usize,
+}
+
+impl AdaptiveForceTrackAllState {
+    const fn disabled() -> Self {
+        Self {
+            enabled: false,
+            maximum_allocations: 0,
+            maximum_requested_bytes: 0,
+            admitted_allocations: 0,
+            admitted_requested_bytes: 0,
+            guard_bypasses: 0,
+            pressure_allocations: 0,
+            pressure_requested_bytes: 0,
+            raw_pressure_allocations: 0,
+            raw_pressure_requested_bytes: 0,
+            raw_reallocation_pressure_allocations: 0,
+            raw_reallocation_pressure_requested_bytes: 0,
+        }
+    }
+
+    fn enable(&mut self, maximum_allocations: usize, maximum_requested_bytes: usize) -> bool {
+        if maximum_allocations == 0 || maximum_requested_bytes == 0 {
+            return false;
+        }
+        *self = Self {
+            enabled: true,
+            maximum_allocations,
+            maximum_requested_bytes,
+            admitted_allocations: 0,
+            admitted_requested_bytes: 0,
+            guard_bypasses: 0,
+            pressure_allocations: 0,
+            pressure_requested_bytes: 0,
+            raw_pressure_allocations: 0,
+            raw_pressure_requested_bytes: 0,
+            raw_reallocation_pressure_allocations: 0,
+            raw_reallocation_pressure_requested_bytes: 0,
+        };
+        true
+    }
+
+    #[inline]
+    fn allows(self, requested_bytes: usize) -> bool {
+        self.enabled
+            && self.admitted_allocations < self.maximum_allocations
+            && matches!(
+                self.admitted_requested_bytes.checked_add(requested_bytes),
+                Some(total) if total <= self.maximum_requested_bytes
+            )
+    }
+
+    #[inline]
+    fn note_admitted(&mut self, requested_bytes: usize) {
+        debug_assert!(self.allows(requested_bytes));
+        self.admitted_allocations = self.admitted_allocations.saturating_add(1);
+        self.admitted_requested_bytes = self
+            .admitted_requested_bytes
+            .saturating_add(requested_bytes);
+    }
+
+    #[inline]
+    fn note_guard_bypass(&mut self) {
+        self.guard_bypasses = self.guard_bypasses.saturating_add(1);
+    }
+
+    #[inline]
+    fn note_pressure(&mut self, requested_bytes: usize, source: ForcePressureSource) {
+        self.pressure_allocations = self.pressure_allocations.saturating_add(1);
+        self.pressure_requested_bytes = self
+            .pressure_requested_bytes
+            .saturating_add(requested_bytes);
+        match source {
+            ForcePressureSource::SemanticAllocation => {}
+            ForcePressureSource::RawAllocation => {
+                self.raw_pressure_allocations = self.raw_pressure_allocations.saturating_add(1);
+                self.raw_pressure_requested_bytes = self
+                    .raw_pressure_requested_bytes
+                    .saturating_add(requested_bytes);
+            }
+            ForcePressureSource::RawMovedReallocation => {
+                self.raw_reallocation_pressure_allocations =
+                    self.raw_reallocation_pressure_allocations.saturating_add(1);
+                self.raw_reallocation_pressure_requested_bytes = self
+                    .raw_reallocation_pressure_requested_bytes
+                    .saturating_add(requested_bytes);
+            }
+        }
+    }
+
+    fn reset_counters(&mut self) {
+        self.admitted_allocations = 0;
+        self.admitted_requested_bytes = 0;
+        self.guard_bypasses = 0;
+        self.pressure_allocations = 0;
+        self.pressure_requested_bytes = 0;
+        self.raw_pressure_allocations = 0;
+        self.raw_pressure_requested_bytes = 0;
+        self.raw_reallocation_pressure_allocations = 0;
+        self.raw_reallocation_pressure_requested_bytes = 0;
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ForcePressureSource {
+    SemanticAllocation,
+    RawAllocation,
+    RawMovedReallocation,
+}
+
+#[inline]
+fn adaptive_placement_class(
+    prediction: AdaptivePrediction,
+    force_track_all: bool,
+) -> LifetimePlacementClass {
+    if force_track_all {
+        LifetimePlacementClass::Ephemeral
+    } else {
+        prediction.placement_class()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct AdaptiveObservationKey {
+    callsite: u64,
+    type_id: u64,
+    module_id: u64,
+    requested_size: usize,
+    align: usize,
+}
+
+impl AdaptiveObservationKey {
+    const fn empty() -> Self {
+        Self {
+            callsite: 0,
+            type_id: 0,
+            module_id: 0,
+            requested_size: 0,
+            align: 0,
+        }
+    }
+
+    fn from_site(site: AdaptiveSiteKey, requested_size: usize) -> Self {
+        Self {
+            callsite: site.callsite,
+            type_id: site.type_id,
+            module_id: site.module_id,
+            requested_size,
+            align: site.align,
+        }
+    }
+
+    fn fingerprint(self) -> u64 {
+        let mut hash = 0xcbf2_9ce4_8422_2325u64;
+        for value in [
+            self.callsite,
+            self.type_id,
+            self.module_id,
+            self.requested_size as u64,
+            self.align as u64,
+        ] {
+            hash ^= value;
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+        if hash == 0 {
+            1
+        } else {
+            hash
+        }
+    }
+}
+
+/// Evaluation-only runtime ground truth at exact observed layout grain.
+///
+/// The production predictor keeps its established key, including flags,
+/// placement hint, and rounded payload capacity. This export table is separate
+/// and groups evidence by `(callsite, type_id, module_id, requested_size,
+/// align)` solely for compiler/runtime analysis. Allocation counters and bytes
+/// are hotness proxies; memory-access hotness is outside this telemetry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C)]
+pub struct LifetimeAdaptiveSiteSnapshot {
+    pub callsite: u64,
+    pub type_id: u64,
+    pub module_id: u64,
+    pub requested_size: usize,
+    pub align: usize,
+    pub minimum_payload_capacity: usize,
+    pub maximum_payload_capacity: usize,
+    pub allocation_count: usize,
+    pub allocation_requested_bytes: usize,
+    pub allocation_payload_bytes: usize,
+    pub tracked_allocations: usize,
+    pub bypassed_allocations: usize,
+    pub completed_outcomes: usize,
+    pub short_outcomes: usize,
+    pub long_outcomes: usize,
+    pub censored_outcomes: usize,
+    pub short_requested_bytes: usize,
+    pub long_requested_bytes: usize,
+    pub censored_requested_bytes: usize,
+    pub total_completed_age_bytes: u64,
+    pub maximum_completed_age_bytes: u64,
+    pub tracked_inflight: usize,
+    pub inflight_age_lower_bound_bytes: u64,
+    pub first_allocation_pressure: u64,
+    pub last_allocation_pressure: u64,
+    /// True when this observation row saw more than one production predictor
+    /// key. This remains diagnostic and never changes predictor lookup.
+    pub predictor_key_ambiguous: bool,
+    pub predictor_flags_seen: u32,
+    pub predictor_placement_hint_bits_union: u16,
+    /// Latest predictor state: `0 = Cold`, `1 = Short`, `2 = Long`.
+    pub latest_prediction: u8,
+    /// Latest static prior: `0 = Unknown`, `1 = advisory-short`, `2 = advisory-long`.
+    pub latest_static_prior: u8,
+}
+
+impl LifetimeAdaptiveSiteSnapshot {
+    pub const fn empty() -> Self {
+        Self {
+            callsite: 0,
+            type_id: 0,
+            module_id: 0,
+            requested_size: 0,
+            align: 0,
+            minimum_payload_capacity: 0,
+            maximum_payload_capacity: 0,
+            allocation_count: 0,
+            allocation_requested_bytes: 0,
+            allocation_payload_bytes: 0,
+            tracked_allocations: 0,
+            bypassed_allocations: 0,
+            completed_outcomes: 0,
+            short_outcomes: 0,
+            long_outcomes: 0,
+            censored_outcomes: 0,
+            short_requested_bytes: 0,
+            long_requested_bytes: 0,
+            censored_requested_bytes: 0,
+            total_completed_age_bytes: 0,
+            maximum_completed_age_bytes: 0,
+            tracked_inflight: 0,
+            inflight_age_lower_bound_bytes: 0,
+            first_allocation_pressure: 0,
+            last_allocation_pressure: 0,
+            predictor_key_ambiguous: false,
+            predictor_flags_seen: 0,
+            predictor_placement_hint_bits_union: 0,
+            latest_prediction: AdaptivePrediction::Cold as u8,
+            latest_static_prior: LifetimePlacementClass::Unknown as u8,
+        }
+    }
+}
+
+impl Default for LifetimeAdaptiveSiteSnapshot {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+#[derive(Clone, Copy)]
+struct AdaptiveObservationState {
+    key: AdaptiveObservationKey,
+    fingerprint: u64,
+    minimum_payload_capacity: usize,
+    maximum_payload_capacity: usize,
+    allocation_count: usize,
+    allocation_requested_bytes: usize,
+    allocation_payload_bytes: usize,
+    tracked_allocations: usize,
+    bypassed_allocations: usize,
+    short_outcomes: usize,
+    long_outcomes: usize,
+    censored_outcomes: usize,
+    short_requested_bytes: usize,
+    long_requested_bytes: usize,
+    censored_requested_bytes: usize,
+    total_completed_age_bytes: u64,
+    maximum_completed_age_bytes: u64,
+    tracked_inflight: usize,
+    inflight_birth_pressure_sum: u64,
+    first_allocation_pressure: u64,
+    last_allocation_pressure: u64,
+    first_predictor_fingerprint: u64,
+    predictor_key_ambiguous: bool,
+    predictor_flags_seen: u32,
+    predictor_placement_hint_bits_union: u16,
+    latest_prediction: AdaptivePrediction,
+    latest_static_prior: LifetimePlacementClass,
+}
+
+impl AdaptiveObservationState {
+    const fn empty() -> Self {
+        Self {
+            key: AdaptiveObservationKey::empty(),
+            fingerprint: 0,
+            minimum_payload_capacity: 0,
+            maximum_payload_capacity: 0,
+            allocation_count: 0,
+            allocation_requested_bytes: 0,
+            allocation_payload_bytes: 0,
+            tracked_allocations: 0,
+            bypassed_allocations: 0,
+            short_outcomes: 0,
+            long_outcomes: 0,
+            censored_outcomes: 0,
+            short_requested_bytes: 0,
+            long_requested_bytes: 0,
+            censored_requested_bytes: 0,
+            total_completed_age_bytes: 0,
+            maximum_completed_age_bytes: 0,
+            tracked_inflight: 0,
+            inflight_birth_pressure_sum: 0,
+            first_allocation_pressure: 0,
+            last_allocation_pressure: 0,
+            first_predictor_fingerprint: 0,
+            predictor_key_ambiguous: false,
+            predictor_flags_seen: 0,
+            predictor_placement_hint_bits_union: 0,
+            latest_prediction: AdaptivePrediction::Cold,
+            latest_static_prior: LifetimePlacementClass::Unknown,
+        }
+    }
+
+    fn is_empty(self) -> bool {
+        self.fingerprint == 0
+    }
+
+    fn new(key: AdaptiveObservationKey) -> Self {
+        Self {
+            key,
+            fingerprint: key.fingerprint(),
+            ..Self::empty()
+        }
+    }
+
+    fn note_predictor_variant(&mut self, site: AdaptiveSiteKey) {
+        let fingerprint = site.fingerprint();
+        if self.first_predictor_fingerprint == 0 {
+            self.first_predictor_fingerprint = fingerprint;
+        } else if self.first_predictor_fingerprint != fingerprint {
+            // A small exact-layout row can aggregate multiple predictor keys.
+            // Record ambiguity without changing production predictor state.
+            self.predictor_key_ambiguous = true;
+        }
+        self.predictor_flags_seen |= site.flags;
+        self.predictor_placement_hint_bits_union |= site.placement_hint;
+        if self.minimum_payload_capacity == 0 {
+            self.minimum_payload_capacity = site.payload_capacity;
+        } else {
+            self.minimum_payload_capacity =
+                self.minimum_payload_capacity.min(site.payload_capacity);
+        }
+        self.maximum_payload_capacity = self.maximum_payload_capacity.max(site.payload_capacity);
+    }
+
+    fn note_allocation(
+        &mut self,
+        site: AdaptiveSiteKey,
+        pressure: u64,
+        tracked: bool,
+        prediction: AdaptivePrediction,
+        static_prior: LifetimePlacementClass,
+    ) {
+        self.note_predictor_variant(site);
+        self.allocation_count = self.allocation_count.saturating_add(1);
+        self.allocation_requested_bytes = self
+            .allocation_requested_bytes
+            .saturating_add(self.key.requested_size);
+        self.allocation_payload_bytes = self
+            .allocation_payload_bytes
+            .saturating_add(site.payload_capacity);
+        if tracked {
+            self.tracked_allocations = self.tracked_allocations.saturating_add(1);
+            self.tracked_inflight = self.tracked_inflight.saturating_add(1);
+            self.inflight_birth_pressure_sum =
+                self.inflight_birth_pressure_sum.saturating_add(pressure);
+        } else {
+            self.bypassed_allocations = self.bypassed_allocations.saturating_add(1);
+        }
+        if self.first_allocation_pressure == 0 {
+            self.first_allocation_pressure = pressure;
+        }
+        self.last_allocation_pressure = pressure;
+        self.latest_prediction = prediction;
+        self.latest_static_prior = static_prior;
+    }
+
+    fn note_deallocation(&mut self, birth_pressure: u64, age_bytes: u64, outcome: Option<bool>) {
+        self.tracked_inflight = self.tracked_inflight.saturating_sub(1);
+        self.inflight_birth_pressure_sum = self
+            .inflight_birth_pressure_sum
+            .saturating_sub(birth_pressure);
+        self.total_completed_age_bytes = self.total_completed_age_bytes.saturating_add(age_bytes);
+        self.maximum_completed_age_bytes = self.maximum_completed_age_bytes.max(age_bytes);
+        match outcome {
+            Some(false) => {
+                self.short_outcomes = self.short_outcomes.saturating_add(1);
+                self.short_requested_bytes = self
+                    .short_requested_bytes
+                    .saturating_add(self.key.requested_size);
+            }
+            Some(true) => {
+                self.long_outcomes = self.long_outcomes.saturating_add(1);
+                self.long_requested_bytes = self
+                    .long_requested_bytes
+                    .saturating_add(self.key.requested_size);
+            }
+            None => {
+                self.censored_outcomes = self.censored_outcomes.saturating_add(1);
+                self.censored_requested_bytes = self
+                    .censored_requested_bytes
+                    .saturating_add(self.key.requested_size);
+            }
+        }
+    }
+
+    fn snapshot(self, current_pressure: u64) -> LifetimeAdaptiveSiteSnapshot {
+        LifetimeAdaptiveSiteSnapshot {
+            callsite: self.key.callsite,
+            type_id: self.key.type_id,
+            module_id: self.key.module_id,
+            requested_size: self.key.requested_size,
+            align: self.key.align,
+            minimum_payload_capacity: self.minimum_payload_capacity,
+            maximum_payload_capacity: self.maximum_payload_capacity,
+            allocation_count: self.allocation_count,
+            allocation_requested_bytes: self.allocation_requested_bytes,
+            allocation_payload_bytes: self.allocation_payload_bytes,
+            tracked_allocations: self.tracked_allocations,
+            bypassed_allocations: self.bypassed_allocations,
+            completed_outcomes: self
+                .short_outcomes
+                .saturating_add(self.long_outcomes)
+                .saturating_add(self.censored_outcomes),
+            short_outcomes: self.short_outcomes,
+            long_outcomes: self.long_outcomes,
+            censored_outcomes: self.censored_outcomes,
+            short_requested_bytes: self.short_requested_bytes,
+            long_requested_bytes: self.long_requested_bytes,
+            censored_requested_bytes: self.censored_requested_bytes,
+            total_completed_age_bytes: self.total_completed_age_bytes,
+            maximum_completed_age_bytes: self.maximum_completed_age_bytes,
+            tracked_inflight: self.tracked_inflight,
+            inflight_age_lower_bound_bytes: current_pressure
+                .saturating_mul(self.tracked_inflight as u64)
+                .saturating_sub(self.inflight_birth_pressure_sum),
+            first_allocation_pressure: self.first_allocation_pressure,
+            last_allocation_pressure: self.last_allocation_pressure,
+            predictor_key_ambiguous: self.predictor_key_ambiguous,
+            predictor_flags_seen: self.predictor_flags_seen,
+            predictor_placement_hint_bits_union: self.predictor_placement_hint_bits_union,
+            latest_prediction: self.latest_prediction as u8,
+            latest_static_prior: self.latest_static_prior as u8,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 #[repr(C)]
 struct AdaptiveSlotTrailer {
     birth_pressure: u64,
@@ -1078,6 +1640,7 @@ struct LifetimeArenaState {
     current_identity_regions: usize,
     peak_identity_regions: usize,
     adaptive_sites: [AdaptiveSiteState; ADAPTIVE_SITE_SLOTS],
+    adaptive_observations: [AdaptiveObservationState; ADAPTIVE_OBSERVATION_SLOTS],
     adaptive_pressure_bytes: u64,
     adaptive_epoch_advances: usize,
     adaptive_site_count: usize,
@@ -1090,6 +1653,10 @@ struct LifetimeArenaState {
     adaptive_missing_identity_bypasses: usize,
     adaptive_site_table_bypasses: usize,
     adaptive_prior_conflicts: usize,
+    adaptive_observation_recording: bool,
+    adaptive_observation_site_count: usize,
+    adaptive_observation_table_bypasses: usize,
+    adaptive_force_track_all: AdaptiveForceTrackAllState,
     adaptive_live_trailers: usize,
     adaptive_trailer_corruptions: usize,
     adaptive_short_observations: usize,
@@ -1171,6 +1738,7 @@ impl LifetimeArenaState {
             current_identity_regions: 0,
             peak_identity_regions: 0,
             adaptive_sites: [AdaptiveSiteState::empty(); ADAPTIVE_SITE_SLOTS],
+            adaptive_observations: [AdaptiveObservationState::empty(); ADAPTIVE_OBSERVATION_SLOTS],
             adaptive_pressure_bytes: 0,
             adaptive_epoch_advances: 0,
             adaptive_site_count: 0,
@@ -1183,6 +1751,10 @@ impl LifetimeArenaState {
             adaptive_missing_identity_bypasses: 0,
             adaptive_site_table_bypasses: 0,
             adaptive_prior_conflicts: 0,
+            adaptive_observation_recording: false,
+            adaptive_observation_site_count: 0,
+            adaptive_observation_table_bypasses: 0,
+            adaptive_force_track_all: AdaptiveForceTrackAllState::disabled(),
             adaptive_live_trailers: 0,
             adaptive_trailer_corruptions: 0,
             adaptive_short_observations: 0,
@@ -1265,6 +1837,11 @@ impl LifetimeArenaState {
         self.adaptive_missing_identity_bypasses = 0;
         self.adaptive_site_table_bypasses = 0;
         self.adaptive_prior_conflicts = 0;
+        self.adaptive_observations =
+            [AdaptiveObservationState::empty(); ADAPTIVE_OBSERVATION_SLOTS];
+        self.adaptive_observation_site_count = 0;
+        self.adaptive_observation_table_bypasses = 0;
+        self.adaptive_force_track_all.reset_counters();
         self.adaptive_live_trailers = 0;
         self.adaptive_trailer_corruptions = 0;
         self.adaptive_short_observations = 0;
@@ -1425,6 +2002,41 @@ impl LifetimeArenaState {
             adaptive_missing_identity_bypasses: self.adaptive_missing_identity_bypasses,
             adaptive_site_table_bypasses: self.adaptive_site_table_bypasses,
             adaptive_prior_conflicts: self.adaptive_prior_conflicts,
+            adaptive_observation_recording: self.adaptive_observation_recording,
+            adaptive_observation_site_count: self.adaptive_observation_site_count,
+            adaptive_observation_table_bypasses: self.adaptive_observation_table_bypasses,
+            adaptive_force_track_all: self.adaptive_force_track_all.enabled,
+            adaptive_force_track_all_maximum_allocations: self
+                .adaptive_force_track_all
+                .maximum_allocations,
+            adaptive_force_track_all_maximum_requested_bytes: self
+                .adaptive_force_track_all
+                .maximum_requested_bytes,
+            adaptive_force_track_all_admitted_allocations: self
+                .adaptive_force_track_all
+                .admitted_allocations,
+            adaptive_force_track_all_admitted_requested_bytes: self
+                .adaptive_force_track_all
+                .admitted_requested_bytes,
+            adaptive_force_track_all_guard_bypasses: self.adaptive_force_track_all.guard_bypasses,
+            adaptive_force_track_all_pressure_allocations: self
+                .adaptive_force_track_all
+                .pressure_allocations,
+            adaptive_force_track_all_pressure_requested_bytes: self
+                .adaptive_force_track_all
+                .pressure_requested_bytes,
+            adaptive_force_track_all_raw_pressure_allocations: self
+                .adaptive_force_track_all
+                .raw_pressure_allocations,
+            adaptive_force_track_all_raw_pressure_requested_bytes: self
+                .adaptive_force_track_all
+                .raw_pressure_requested_bytes,
+            adaptive_force_track_all_raw_reallocation_pressure_allocations: self
+                .adaptive_force_track_all
+                .raw_reallocation_pressure_allocations,
+            adaptive_force_track_all_raw_reallocation_pressure_requested_bytes: self
+                .adaptive_force_track_all
+                .raw_reallocation_pressure_requested_bytes,
             adaptive_live_trailers: self.adaptive_live_trailers,
             adaptive_trailer_corruptions: self.adaptive_trailer_corruptions,
             adaptive_short_observations: self.adaptive_short_observations,
@@ -1484,6 +2096,30 @@ impl LifetimeArenaState {
                 .false_negative_bytes,
             adaptive_static_hint_abstained_objects: self.adaptive_static_hint_abstained_objects,
             adaptive_static_hint_abstained_bytes: self.adaptive_static_hint_abstained_bytes,
+            compiler_inferred_unknown_or_unproven_bypasses:
+                COMPILER_INFERRED_UNKNOWN_OR_UNPROVEN_BYPASSES.load(Ordering::Acquire),
+            compiler_inferred_proven_ephemeral_bypasses:
+                COMPILER_INFERRED_PROVEN_EPHEMERAL_BYPASSES.load(Ordering::Acquire),
+            compiler_inferred_bypass_requested_bytes: COMPILER_INFERRED_BYPASS_REQUESTED_BYTES
+                .load(Ordering::Acquire),
+            compiler_inferred_arena_lock_acquisitions: COMPILER_INFERRED_ARENA_LOCK_ACQUISITIONS
+                .load(Ordering::Acquire),
+            compiler_inferred_direct_long_routes: COMPILER_INFERRED_DIRECT_LONG_ROUTES
+                .load(Ordering::Acquire),
+            compiler_inferred_direct_long_requested_bytes:
+                COMPILER_INFERRED_DIRECT_LONG_REQUESTED_BYTES.load(Ordering::Acquire),
+            compiler_inferred_direct_long_slot_bytes: COMPILER_INFERRED_DIRECT_LONG_SLOT_BYTES
+                .load(Ordering::Acquire),
+            compiler_inferred_direct_long_deallocations:
+                COMPILER_INFERRED_DIRECT_LONG_DEALLOCATIONS.load(Ordering::Acquire),
+            compiler_inferred_direct_long_routes_without_trailer:
+                COMPILER_INFERRED_DIRECT_LONG_ROUTES_WITHOUT_TRAILER.load(Ordering::Acquire),
+            compiler_inferred_density_promotion_attempts:
+                COMPILER_INFERRED_DENSITY_PROMOTION_ATTEMPTS.load(Ordering::Acquire),
+            compiler_inferred_density_promotion_successes:
+                COMPILER_INFERRED_DENSITY_PROMOTION_SUCCESSES.load(Ordering::Acquire),
+            compiler_inferred_density_promotion_errors: COMPILER_INFERRED_DENSITY_PROMOTION_ERRORS
+                .load(Ordering::Acquire),
         }
     }
 
@@ -1514,6 +2150,104 @@ impl LifetimeArenaState {
         None
     }
 
+    fn adaptive_observation_slot(&mut self, key: AdaptiveObservationKey) -> Option<usize> {
+        let fingerprint = key.fingerprint();
+        let start = fingerprint as usize & (ADAPTIVE_OBSERVATION_SLOTS - 1);
+        for offset in 0..ADAPTIVE_OBSERVATION_PROBE_LIMIT {
+            let idx = (start + offset) & (ADAPTIVE_OBSERVATION_SLOTS - 1);
+            if self.adaptive_observations[idx].is_empty() {
+                self.adaptive_observations[idx] = AdaptiveObservationState::new(key);
+                self.adaptive_observation_site_count =
+                    self.adaptive_observation_site_count.saturating_add(1);
+                return Some(idx);
+            }
+            if self.adaptive_observations[idx].fingerprint == fingerprint
+                && self.adaptive_observations[idx].key == key
+            {
+                return Some(idx);
+            }
+        }
+        self.adaptive_observation_table_bypasses =
+            self.adaptive_observation_table_bypasses.saturating_add(1);
+        None
+    }
+
+    fn adaptive_observation_find(&self, key: AdaptiveObservationKey) -> Option<usize> {
+        let fingerprint = key.fingerprint();
+        let start = fingerprint as usize & (ADAPTIVE_OBSERVATION_SLOTS - 1);
+        for offset in 0..ADAPTIVE_OBSERVATION_PROBE_LIMIT {
+            let idx = (start + offset) & (ADAPTIVE_OBSERVATION_SLOTS - 1);
+            let observation = self.adaptive_observations[idx];
+            if observation.is_empty() {
+                return None;
+            }
+            if observation.fingerprint == fingerprint && observation.key == key {
+                return Some(idx);
+            }
+        }
+        None
+    }
+
+    #[inline]
+    fn adaptive_observation_note_allocation(
+        &mut self,
+        site: AdaptiveSiteKey,
+        requested_size: usize,
+        pressure: u64,
+        tracked: bool,
+        prediction: AdaptivePrediction,
+        static_prior: LifetimePlacementClass,
+    ) {
+        if !self.adaptive_observation_recording {
+            return;
+        }
+        let key = AdaptiveObservationKey::from_site(site, requested_size);
+        let Some(idx) = self.adaptive_observation_slot(key) else {
+            return;
+        };
+        self.adaptive_observations[idx].note_allocation(
+            site,
+            pressure,
+            tracked,
+            prediction,
+            static_prior,
+        );
+    }
+
+    #[inline]
+    fn adaptive_observation_note_deallocation(
+        &mut self,
+        site: AdaptiveSiteKey,
+        requested_size: usize,
+        birth_pressure: u64,
+        age_bytes: u64,
+        outcome: Option<bool>,
+    ) {
+        if !self.adaptive_observation_recording {
+            return;
+        }
+        let key = AdaptiveObservationKey::from_site(site, requested_size);
+        let Some(idx) = self.adaptive_observation_find(key) else {
+            return;
+        };
+        self.adaptive_observations[idx].note_deallocation(birth_pressure, age_bytes, outcome);
+    }
+
+    fn adaptive_observation_snapshot(&self, out: &mut [LifetimeAdaptiveSiteSnapshot]) -> usize {
+        let mut written = 0;
+        for observation in self
+            .adaptive_observations
+            .iter()
+            .filter(|observation| !observation.is_empty())
+        {
+            if written < out.len() {
+                out[written] = observation.snapshot(self.adaptive_pressure_bytes);
+            }
+            written += 1;
+        }
+        written
+    }
+
     #[inline]
     fn adaptive_note_pressure(&mut self, payload_capacity: usize) -> u64 {
         let old_epoch = self.adaptive_pressure_bytes / ADAPTIVE_EPOCH_BYTES;
@@ -1528,8 +2262,24 @@ impl LifetimeArenaState {
     }
 
     #[inline]
-    fn adaptive_note_bypass(&mut self, payload_capacity: usize, prediction: AdaptivePrediction) {
-        self.adaptive_note_pressure(payload_capacity);
+    fn adaptive_note_force_track_pressure(
+        &mut self,
+        requested_bytes: usize,
+        source: ForcePressureSource,
+    ) -> u64 {
+        debug_assert!(self.adaptive_force_track_all.enabled);
+        self.adaptive_force_track_all
+            .note_pressure(requested_bytes, source);
+        self.adaptive_note_pressure(requested_bytes)
+    }
+
+    #[inline]
+    fn adaptive_note_bypass(
+        &mut self,
+        payload_capacity: usize,
+        prediction: AdaptivePrediction,
+    ) -> u64 {
+        let pressure = self.adaptive_note_pressure(payload_capacity);
         self.adaptive_eligible_allocations = self.adaptive_eligible_allocations.saturating_add(1);
         match prediction {
             AdaptivePrediction::Cold => {
@@ -1542,16 +2292,29 @@ impl LifetimeArenaState {
             }
             AdaptivePrediction::Long => unreachable!("learned-long allocation bypassed tracking"),
         }
+        pressure
+    }
+
+    #[inline]
+    fn adaptive_note_force_track_guard_bypass(&mut self) {
+        self.adaptive_eligible_allocations = self.adaptive_eligible_allocations.saturating_add(1);
+        self.adaptive_force_track_all.note_guard_bypass();
     }
 
     #[inline]
     fn adaptive_note_allocation(
         &mut self,
         site_idx: usize,
+        requested_size: usize,
         payload_capacity: usize,
         prediction: AdaptivePrediction,
+        precounted_pressure: Option<u64>,
     ) -> u64 {
-        let birth_pressure = self.adaptive_note_pressure(payload_capacity);
+        if self.adaptive_force_track_all.enabled {
+            self.adaptive_force_track_all.note_admitted(requested_size);
+        }
+        let birth_pressure =
+            precounted_pressure.unwrap_or_else(|| self.adaptive_note_pressure(payload_capacity));
         self.adaptive_sites[site_idx].note_tracked_allocation();
         self.adaptive_eligible_allocations = self.adaptive_eligible_allocations.saturating_add(1);
         self.adaptive_live_trailers = self.adaptive_live_trailers.saturating_add(1);
@@ -1592,12 +2355,20 @@ impl LifetimeArenaState {
             self.adaptive_trailer_corruptions = self.adaptive_trailer_corruptions.saturating_add(1);
             return;
         }
+        let site = self.adaptive_sites[site_idx].key;
         self.adaptive_sites[site_idx].note_tracked_deallocation();
 
         let age_bytes = self
             .adaptive_pressure_bytes
             .saturating_sub(trailer.birth_pressure);
         let actual_long = adaptive_lifetime_outcome(age_bytes);
+        self.adaptive_observation_note_deallocation(
+            site,
+            trailer.requested_size as usize,
+            trailer.birth_pressure,
+            age_bytes,
+            actual_long,
+        );
         match actual_long {
             Some(false) => {
                 self.adaptive_short_observations =
@@ -2008,6 +2779,40 @@ impl LifetimeArenaState {
         }
     }
 
+    /// Enable THP eligibility only after bounded-long placement has packed
+    /// at least half of an extent. This performs one asynchronous `MADV_HUGEPAGE`
+    /// advice transition and deliberately avoids synchronous `MADV_COLLAPSE` on
+    /// the allocation path.
+    unsafe fn promote_dense_compiler_inferred_extent(&mut self, idx: usize) {
+        let extent = &self.extents[idx];
+        if extent.live.saturating_mul(extent.slot_size) < THP_PROMOTION_MIN_LIVE_BYTES
+            || !matches!(
+                extent.backing,
+                ActualBacking::ThpCandidateNoHugepage
+                    | ActualBacking::ThpCandidateNoHugepageAdviceFailed
+            )
+        {
+            return;
+        }
+
+        COMPILER_INFERRED_DENSITY_PROMOTION_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
+        self.thp_advice_attempts = self.thp_advice_attempts.saturating_add(1);
+        if sys_alloc::advise_transparent_hugepage(
+            extent.base as *mut u8,
+            LIFETIME_HUGEPAGE_EXTENT_BYTES,
+        ) {
+            self.thp_advice_successes = self.thp_advice_successes.saturating_add(1);
+            COMPILER_INFERRED_DENSITY_PROMOTION_SUCCESSES.fetch_add(1, Ordering::Relaxed);
+            self.extents[idx].backing = ActualBacking::ThpAdvisedUnverified;
+        } else {
+            self.thp_advice_errors = self.thp_advice_errors.saturating_add(1);
+            COMPILER_INFERRED_DENSITY_PROMOTION_ERRORS.fetch_add(1, Ordering::Relaxed);
+            // Record a terminal advice failure so every later allocation in the
+            // dense extent does not repeat the same kernel call.
+            self.extents[idx].backing = ActualBacking::ThpAdviceFailed;
+        }
+    }
+
     unsafe fn create_extent(
         &mut self,
         geometry: SlotGeometry,
@@ -2257,7 +3062,19 @@ impl LifetimeArenaState {
                 extent_backing,
                 trailer,
             );
+        } else if matches!(
+            lifetime_hugepage_policy(),
+            LifetimeHugepagePolicy::CompilerInferredHugepage
+                | LifetimeHugepagePolicy::CompilerInferredOrdinary
+        ) {
+            debug_assert_eq!(lifetime_class, LifetimePlacementClass::LongLived);
+            COMPILER_INFERRED_DIRECT_LONG_DEALLOCATIONS.fetch_add(1, Ordering::Relaxed);
         } else {
+            // The generic validator defines "actually long" by explicit epoch
+            // transitions. Compiler-inferred regions carry a separate proof
+            // contract and may run without runtime epoch markers, so feeding
+            // them into this counter would report every same-epoch release as
+            // a false positive even when the compiler proof was correct.
             self.note_runtime_validation(
                 lifetime_class,
                 extent_backing,
@@ -2322,6 +3139,19 @@ impl LifetimeArenaState {
 static POLICY: AtomicUsize = AtomicUsize::new(LifetimeHugepagePolicy::Disabled as usize);
 static BACKEND: AtomicUsize = AtomicUsize::new(LifetimePageBackend::ExplicitHugeTLB as usize);
 static ACTIVE_EXTENTS: AtomicUsize = AtomicUsize::new(0);
+static ADAPTIVE_FORCE_TRACK_ALL_ENABLED: AtomicBool = AtomicBool::new(false);
+static COMPILER_INFERRED_UNKNOWN_OR_UNPROVEN_BYPASSES: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_INFERRED_PROVEN_EPHEMERAL_BYPASSES: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_INFERRED_BYPASS_REQUESTED_BYTES: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_INFERRED_ARENA_LOCK_ACQUISITIONS: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_INFERRED_DIRECT_LONG_ROUTES: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_INFERRED_DIRECT_LONG_REQUESTED_BYTES: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_INFERRED_DIRECT_LONG_SLOT_BYTES: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_INFERRED_DIRECT_LONG_DEALLOCATIONS: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_INFERRED_DIRECT_LONG_ROUTES_WITHOUT_TRAILER: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_INFERRED_DENSITY_PROMOTION_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_INFERRED_DENSITY_PROMOTION_SUCCESSES: AtomicUsize = AtomicUsize::new(0);
+static COMPILER_INFERRED_DENSITY_PROMOTION_ERRORS: AtomicUsize = AtomicUsize::new(0);
 static ARENA: Mutex<LifetimeArenaState> = Mutex::new(LifetimeArenaState::new());
 #[thread_local]
 static mut PHASE_FLUSH_ACTIVE: bool = false;
@@ -2551,7 +3381,12 @@ pub fn lifetime_hugepage_backend() -> LifetimePageBackend {
 /// Select the placement policy before the process creates routed objects.
 /// Changing policy while arena mappings remain live is rejected.
 pub fn lifetime_hugepage_configure(policy: LifetimeHugepagePolicy) -> bool {
-    let backend = if policy == LifetimeHugepagePolicy::AdaptiveRuntimeHugepage {
+    let backend = if matches!(
+        policy,
+        LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+            | LifetimeHugepagePolicy::CompilerInferredHugepage
+            | LifetimeHugepagePolicy::CompilerInferredOrdinary
+    ) {
         LifetimePageBackend::TransparentHugepage
     } else {
         LifetimePageBackend::ExplicitHugeTLB
@@ -2565,13 +3400,22 @@ pub fn lifetime_hugepage_configure_with_backend(
     policy: LifetimeHugepagePolicy,
     backend: LifetimePageBackend,
 ) -> bool {
-    if policy == LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
-        && backend != LifetimePageBackend::TransparentHugepage
+    if matches!(
+        policy,
+        LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+            | LifetimeHugepagePolicy::CompilerInferredHugepage
+            | LifetimeHugepagePolicy::CompilerInferredOrdinary
+    ) && backend != LifetimePageBackend::TransparentHugepage
     {
         return false;
     }
     let state = ARENA.lock();
     if state.live_objects != 0 || state.current_extents != 0 {
+        return false;
+    }
+    if state.adaptive_force_track_all.enabled
+        && policy != LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+    {
         return false;
     }
     BACKEND.store(backend as usize, Ordering::Release);
@@ -2581,6 +3425,125 @@ pub fn lifetime_hugepage_configure_with_backend(
 
 pub fn lifetime_hugepage_stats_snapshot() -> LifetimeHugepageStatsSnapshot {
     ARENA.lock().snapshot()
+}
+
+/// Enable evaluation-only exact-layout runtime lifetime observations.
+///
+/// Toggling is rejected while adaptive trailers remain live so every tracked
+/// allocation has a matching deallocation outcome in the export table.
+pub fn lifetime_hugepage_adaptive_site_recording_enable() -> bool {
+    let mut state = ARENA.lock();
+    if state.adaptive_live_trailers != 0 {
+        return false;
+    }
+    state.adaptive_observation_recording = true;
+    true
+}
+
+/// Disable exact-layout runtime lifetime observations at a quiescent point.
+pub fn lifetime_hugepage_adaptive_site_recording_disable() -> bool {
+    let mut state = ARENA.lock();
+    if state.adaptive_live_trailers != 0 || state.adaptive_force_track_all.enabled {
+        return false;
+    }
+    state.adaptive_observation_recording = false;
+    true
+}
+
+pub fn lifetime_hugepage_adaptive_site_recording_enabled() -> bool {
+    ARENA.lock().adaptive_observation_recording
+}
+
+/// Enable evaluation-only complete observation under explicit hard guards.
+///
+/// Every eligible allocation is routed through adaptive trailer geometry on
+/// ordinary pages, independent of the learned placement prediction. Once
+/// either guard is exhausted, later allocations fall back safely and increment
+/// `adaptive_force_track_all_guard_bypasses`; such a run is ineligible for
+/// unbiased prevalence or accuracy claims. Configuration is accepted only at
+/// a quiescent point after exact-site observation recording has been enabled.
+pub fn lifetime_hugepage_adaptive_site_force_track_all_enable(
+    maximum_allocations: usize,
+    maximum_requested_bytes: usize,
+) -> bool {
+    let mut state = ARENA.lock();
+    if !state.adaptive_observation_recording
+        || state.live_objects != 0
+        || state.current_extents != 0
+        || state.adaptive_live_trailers != 0
+    {
+        return false;
+    }
+    let enabled = state
+        .adaptive_force_track_all
+        .enable(maximum_allocations, maximum_requested_bytes);
+    if enabled {
+        ADAPTIVE_FORCE_TRACK_ALL_ENABLED.store(true, Ordering::Release);
+    }
+    enabled
+}
+
+/// Disable evaluation-only complete observation at a quiescent point.
+pub fn lifetime_hugepage_adaptive_site_force_track_all_disable() -> bool {
+    let mut state = ARENA.lock();
+    if state.live_objects != 0 || state.current_extents != 0 || state.adaptive_live_trailers != 0 {
+        return false;
+    }
+    state.adaptive_force_track_all = AdaptiveForceTrackAllState::disabled();
+    ADAPTIVE_FORCE_TRACK_ALL_ENABLED.store(false, Ordering::Release);
+    true
+}
+
+pub fn lifetime_hugepage_adaptive_site_force_track_all_enabled() -> bool {
+    ADAPTIVE_FORCE_TRACK_ALL_ENABLED.load(Ordering::Acquire)
+}
+
+#[inline]
+fn force_track_note_external_pressure(requested_bytes: usize, source: ForcePressureSource) {
+    if requested_bytes == 0
+        || !ADAPTIVE_FORCE_TRACK_ALL_ENABLED.load(Ordering::Relaxed)
+        || POLICY.load(Ordering::Relaxed)
+            != LifetimeHugepagePolicy::AdaptiveRuntimeHugepage as usize
+    {
+        return;
+    }
+    let mut state = ARENA.lock();
+    if state.adaptive_force_track_all.enabled
+        && lifetime_hugepage_policy() == LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+    {
+        state.adaptive_note_force_track_pressure(requested_bytes, source);
+    }
+}
+
+/// Add one successful raw/unattributed allocation generation to the
+/// evaluation-only global pressure clock. Production adaptive mode pays only
+/// the relaxed disabled check above.
+pub(crate) fn lifetime_hugepage_force_track_note_raw_allocation(requested_bytes: usize) {
+    force_track_note_external_pressure(requested_bytes, ForcePressureSource::RawAllocation);
+}
+
+/// Add one successful semantic allocation generation that bypassed
+/// `try_allocate` to the evaluation-only global pressure clock. Guard-page
+/// mappings are the current caller; ordinary semantic fallbacks pass through
+/// `try_allocate` and have already been counted there.
+pub(crate) fn lifetime_hugepage_force_track_note_external_semantic_allocation(
+    requested_bytes: usize,
+) {
+    force_track_note_external_pressure(requested_bytes, ForcePressureSource::SemanticAllocation);
+}
+
+/// Add one successful raw realloc that moved to a new address. In-place growth
+/// retains the existing allocation generation and deliberately adds no clock
+/// pressure.
+pub(crate) fn lifetime_hugepage_force_track_note_raw_moved_reallocation(requested_bytes: usize) {
+    force_track_note_external_pressure(requested_bytes, ForcePressureSource::RawMovedReallocation);
+}
+
+/// Copy exact-layout observation rows into `out` and return the total populated
+/// row count. A shorter slice receives a prefix while the return value still
+/// reports the required capacity.
+pub fn lifetime_hugepage_adaptive_site_snapshot(out: &mut [LifetimeAdaptiveSiteSnapshot]) -> usize {
+    ARENA.lock().adaptive_observation_snapshot(out)
 }
 
 /// Advance the process-wide logical phase used by runtime lifetime validation.
@@ -2635,20 +3598,104 @@ pub fn lifetime_hugepage_stats_reset() -> bool {
     let preserve_adaptive_model =
         lifetime_hugepage_policy() == LifetimeHugepagePolicy::AdaptiveRuntimeHugepage;
     state.reset_counters(preserve_adaptive_model);
+    COMPILER_INFERRED_UNKNOWN_OR_UNPROVEN_BYPASSES.store(0, Ordering::Release);
+    COMPILER_INFERRED_PROVEN_EPHEMERAL_BYPASSES.store(0, Ordering::Release);
+    COMPILER_INFERRED_BYPASS_REQUESTED_BYTES.store(0, Ordering::Release);
+    COMPILER_INFERRED_ARENA_LOCK_ACQUISITIONS.store(0, Ordering::Release);
+    COMPILER_INFERRED_DIRECT_LONG_ROUTES.store(0, Ordering::Release);
+    COMPILER_INFERRED_DIRECT_LONG_REQUESTED_BYTES.store(0, Ordering::Release);
+    COMPILER_INFERRED_DIRECT_LONG_SLOT_BYTES.store(0, Ordering::Release);
+    COMPILER_INFERRED_DIRECT_LONG_DEALLOCATIONS.store(0, Ordering::Release);
+    COMPILER_INFERRED_DIRECT_LONG_ROUTES_WITHOUT_TRAILER.store(0, Ordering::Release);
+    COMPILER_INFERRED_DENSITY_PROMOTION_ATTEMPTS.store(0, Ordering::Release);
+    COMPILER_INFERRED_DENSITY_PROMOTION_SUCCESSES.store(0, Ordering::Release);
+    COMPILER_INFERRED_DENSITY_PROMOTION_ERRORS.store(0, Ordering::Release);
     true
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CompilerInferredAdmission {
+    BypassUnknownOrUnproven,
+    DirectBoundedLong,
+}
+
+#[inline]
+fn compiler_inferred_admission(lifetime_hint: u16) -> CompilerInferredAdmission {
+    match compiler_bounded_lifetime_placement_class(lifetime_hint) {
+        LifetimePlacementClass::Unknown => CompilerInferredAdmission::BypassUnknownOrUnproven,
+        LifetimePlacementClass::Ephemeral => CompilerInferredAdmission::BypassUnknownOrUnproven,
+        LifetimePlacementClass::LongLived => CompilerInferredAdmission::DirectBoundedLong,
+    }
+}
+
+#[inline]
+fn note_compiler_inferred_prelock_bypass(
+    admission: CompilerInferredAdmission,
+    requested_bytes: usize,
+) {
+    match admission {
+        CompilerInferredAdmission::BypassUnknownOrUnproven => {
+            COMPILER_INFERRED_UNKNOWN_OR_UNPROVEN_BYPASSES.fetch_add(1, Ordering::Relaxed);
+        }
+        CompilerInferredAdmission::DirectBoundedLong => {
+            unreachable!("bounded-long admission cannot be recorded as a bypass")
+        }
+    }
+    COMPILER_INFERRED_BYPASS_REQUESTED_BYTES.fetch_add(requested_bytes, Ordering::Relaxed);
 }
 
 /// Try to route one exact semantic allocation into a lifetime/size arena.
 /// `None` preserves the existing allocator path.
 pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) -> Option<*mut u8> {
-    if POLICY.load(Ordering::Acquire) == LifetimeHugepagePolicy::Disabled as usize {
+    let observed_policy = LifetimeHugepagePolicy::from_usize(POLICY.load(Ordering::Acquire));
+    if observed_policy == LifetimeHugepagePolicy::Disabled {
         return None;
+    }
+    let observed_compiler_inferred = matches!(
+        observed_policy,
+        LifetimeHugepagePolicy::CompilerInferredHugepage
+            | LifetimeHugepagePolicy::CompilerInferredOrdinary
+    );
+    if observed_compiler_inferred {
+        let admission = compiler_inferred_admission(metadata.lifetime_hint);
+        if admission != CompilerInferredAdmission::DirectBoundedLong {
+            note_compiler_inferred_prelock_bypass(admission, layout.size());
+            return None;
+        }
     }
     let static_class = lifetime_placement_class(metadata.lifetime_hint);
     let mut state = ARENA.lock();
+    // Configuration also holds ARENA while publishing BACKEND and POLICY.
+    // Reload both controls after locking so a bounded-long allocation that
+    // waited behind reconfiguration never combines an old policy with a new
+    // backend. Pre-lock bypasses linearize at their stable policy load above.
     let policy = lifetime_hugepage_policy();
+    if policy == LifetimeHugepagePolicy::Disabled {
+        return None;
+    }
     let backend = lifetime_hugepage_backend();
+    let compiler_inferred = matches!(
+        policy,
+        LifetimeHugepagePolicy::CompilerInferredHugepage
+            | LifetimeHugepagePolicy::CompilerInferredOrdinary
+    );
+    if compiler_inferred {
+        let admission = compiler_inferred_admission(metadata.lifetime_hint);
+        if admission != CompilerInferredAdmission::DirectBoundedLong {
+            note_compiler_inferred_prelock_bypass(admission, layout.size());
+            return None;
+        }
+        COMPILER_INFERRED_ARENA_LOCK_ACQUISITIONS.fetch_add(1, Ordering::Relaxed);
+    }
     let adaptive = policy == LifetimeHugepagePolicy::AdaptiveRuntimeHugepage;
+    let force_track_pressure = if adaptive && state.adaptive_force_track_all.enabled {
+        Some(state.adaptive_note_force_track_pressure(
+            layout.size(),
+            ForcePressureSource::SemanticAllocation,
+        ))
+    } else {
+        None
+    };
     let (class, geometry, adaptive_site) = if adaptive {
         let cold_geometry = match slot_geometry(layout, LifetimePlacementClass::Ephemeral, true) {
             Some(geometry) => geometry,
@@ -2672,11 +3719,34 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
         };
         let site_idx = state.adaptive_site_slot(key, static_class)?;
         let prediction = state.adaptive_sites[site_idx].effective_prediction();
-        if !state.adaptive_sites[site_idx].should_track_allocation() {
-            state.adaptive_note_bypass(cold_geometry.payload_capacity, prediction);
+        let force_track_all = state.adaptive_force_track_all.enabled;
+        if force_track_all && !state.adaptive_force_track_all.allows(layout.size()) {
+            let pressure = force_track_pressure
+                .expect("force-track allocation pressure must be counted before admission");
+            state.adaptive_note_force_track_guard_bypass();
+            state.adaptive_observation_note_allocation(
+                key,
+                layout.size(),
+                pressure,
+                false,
+                prediction,
+                static_class,
+            );
             return None;
         }
-        let class = prediction.placement_class();
+        if !force_track_all && !state.adaptive_sites[site_idx].should_track_allocation() {
+            let pressure = state.adaptive_note_bypass(cold_geometry.payload_capacity, prediction);
+            state.adaptive_observation_note_allocation(
+                key,
+                layout.size(),
+                pressure,
+                false,
+                prediction,
+                static_class,
+            );
+            return None;
+        }
+        let class = adaptive_placement_class(prediction, force_track_all);
         let geometry = if class == LifetimePlacementClass::Ephemeral {
             cold_geometry
         } else {
@@ -2739,8 +3809,22 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
         }
     };
     let adaptive_record = adaptive_site.map(|(site_idx, prediction)| {
-        let birth_pressure =
-            state.adaptive_note_allocation(site_idx, geometry.payload_capacity, prediction);
+        let birth_pressure = state.adaptive_note_allocation(
+            site_idx,
+            layout.size(),
+            geometry.payload_capacity,
+            prediction,
+            force_track_pressure,
+        );
+        let site = state.adaptive_sites[site_idx].key;
+        state.adaptive_observation_note_allocation(
+            site,
+            layout.size(),
+            birth_pressure,
+            true,
+            prediction,
+            static_class,
+        );
         AdaptiveAllocationRecord {
             birth_pressure,
             site_fingerprint: state.adaptive_sites[site_idx].fingerprint,
@@ -2750,14 +3834,29 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
             static_hint: static_class,
         }
     });
-    Some(state.allocate_from_extent(
+    let ptr = state.allocate_from_extent(
         idx,
         identity,
         class,
         birth_epoch,
         epoch_cohort,
         adaptive_record,
-    ))
+    );
+    if compiler_inferred {
+        debug_assert_eq!(class, LifetimePlacementClass::LongLived);
+        COMPILER_INFERRED_DIRECT_LONG_ROUTES.fetch_add(1, Ordering::Relaxed);
+        COMPILER_INFERRED_DIRECT_LONG_REQUESTED_BYTES.fetch_add(layout.size(), Ordering::Relaxed);
+        COMPILER_INFERRED_DIRECT_LONG_SLOT_BYTES.fetch_add(geometry.slot_size, Ordering::Relaxed);
+        if !geometry.adaptive_trailer {
+            COMPILER_INFERRED_DIRECT_LONG_ROUTES_WITHOUT_TRAILER.fetch_add(1, Ordering::Relaxed);
+        }
+        if policy == LifetimeHugepagePolicy::CompilerInferredHugepage
+            && backend == LifetimePageBackend::TransparentHugepage
+        {
+            state.promote_dense_compiler_inferred_extent(idx);
+        }
+    }
+    Some(ptr)
 }
 
 #[inline]
@@ -2803,6 +3902,291 @@ pub(crate) unsafe fn try_deallocate(ptr: *mut u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::alloc_api::type_isolation::{
+        LIFETIME_HINT_BOUNDED_PROCESS_LONG, LIFETIME_HINT_EPHEMERAL, LIFETIME_HINT_LOCAL_DROP_FACT,
+        LIFETIME_HINT_LONG_LIVED,
+    };
+
+    static COMPILER_INFERRED_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn compiler_fact_values_preserve_drop_unknown_and_bounded_long_semantics() {
+        assert_eq!(
+            lifetime_placement_class(LIFETIME_HINT_EPHEMERAL),
+            LifetimePlacementClass::Ephemeral
+        );
+        assert_eq!(
+            lifetime_placement_class(LIFETIME_HINT_LONG_LIVED),
+            LifetimePlacementClass::LongLived
+        );
+        assert_eq!(
+            lifetime_placement_class(LIFETIME_HINT_LOCAL_DROP_FACT),
+            LifetimePlacementClass::Unknown
+        );
+        assert_eq!(
+            lifetime_placement_class(LIFETIME_HINT_BOUNDED_PROCESS_LONG),
+            LifetimePlacementClass::LongLived
+        );
+        assert_eq!(
+            compiler_bounded_lifetime_placement_class(LIFETIME_HINT_EPHEMERAL),
+            LifetimePlacementClass::Unknown
+        );
+        assert_eq!(
+            compiler_bounded_lifetime_placement_class(LIFETIME_HINT_LONG_LIVED),
+            LifetimePlacementClass::Unknown
+        );
+        assert_eq!(
+            compiler_bounded_lifetime_placement_class(LIFETIME_HINT_LOCAL_DROP_FACT),
+            LifetimePlacementClass::Unknown
+        );
+    }
+
+    #[test]
+    fn compiler_inferred_admission_trusts_only_bounded_long_oracle() {
+        assert_eq!(
+            compiler_inferred_admission(0),
+            CompilerInferredAdmission::BypassUnknownOrUnproven
+        );
+        assert_eq!(
+            compiler_inferred_admission(LIFETIME_HINT_EPHEMERAL),
+            CompilerInferredAdmission::BypassUnknownOrUnproven
+        );
+        assert_eq!(
+            compiler_inferred_admission(LIFETIME_HINT_LONG_LIVED),
+            CompilerInferredAdmission::BypassUnknownOrUnproven
+        );
+        assert_eq!(
+            compiler_inferred_admission(LIFETIME_HINT_LOCAL_DROP_FACT),
+            CompilerInferredAdmission::BypassUnknownOrUnproven
+        );
+        assert_eq!(
+            compiler_inferred_admission(LIFETIME_HINT_BOUNDED_PROCESS_LONG),
+            CompilerInferredAdmission::DirectBoundedLong
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::from_usize(6),
+            LifetimeHugepagePolicy::CompilerInferredHugepage
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::from_usize(7),
+            LifetimeHugepagePolicy::CompilerInferredOrdinary
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::CompilerInferredHugepage.requested_backing(
+                LifetimePlacementClass::Ephemeral,
+                LifetimePageBackend::TransparentHugepage,
+            ),
+            None
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::CompilerInferredHugepage.requested_backing(
+                LifetimePlacementClass::LongLived,
+                LifetimePageBackend::TransparentHugepage,
+            ),
+            Some(RequestedBacking::EpochCandidate)
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::CompilerInferredOrdinary.requested_backing(
+                LifetimePlacementClass::Ephemeral,
+                LifetimePageBackend::TransparentHugepage,
+            ),
+            None
+        );
+        assert_eq!(
+            LifetimeHugepagePolicy::CompilerInferredOrdinary.requested_backing(
+                LifetimePlacementClass::LongLived,
+                LifetimePageBackend::TransparentHugepage,
+            ),
+            Some(RequestedBacking::Ordinary)
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn compiler_inferred_policy_bypasses_prelock_and_routes_long_without_trailers() {
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::CompilerInferredHugepage
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let base_metadata = AllocationMetadata::for_type(0xC011_1FE7)
+            .with_module(0xA110_C001)
+            .with_callsite(0x51_7E);
+
+        assert!(unsafe { try_allocate(layout, base_metadata) }.is_none());
+        assert!(unsafe {
+            try_allocate(
+                layout,
+                base_metadata.with_lifetime_hint(LIFETIME_HINT_LOCAL_DROP_FACT),
+            )
+        }
+        .is_none());
+        let bypass = lifetime_hugepage_stats_snapshot();
+        assert_eq!(bypass.compiler_inferred_unknown_or_unproven_bypasses, 2);
+        assert_eq!(bypass.compiler_inferred_proven_ephemeral_bypasses, 0);
+        assert_eq!(
+            bypass.compiler_inferred_bypass_requested_bytes,
+            layout.size() * 2
+        );
+        assert_eq!(bypass.compiler_inferred_arena_lock_acquisitions, 0);
+        assert_eq!(bypass.compiler_inferred_direct_long_routes, 0);
+        assert_eq!(
+            bypass.compiler_inferred_direct_long_routes_without_trailer,
+            0
+        );
+        assert_eq!(bypass.adaptive_training_allocations, 0);
+        assert_eq!(bypass.adaptive_live_trailers, 0);
+
+        const ROUTES_TO_DENSITY_THRESHOLD: usize = THP_PROMOTION_MIN_LIVE_BYTES / 4096;
+        let mut pointers = [core::ptr::null_mut(); ROUTES_TO_DENSITY_THRESHOLD];
+        let long_metadata = base_metadata.with_lifetime_hint(LIFETIME_HINT_BOUNDED_PROCESS_LONG);
+        for ptr in &mut pointers {
+            *ptr = unsafe { try_allocate(layout, long_metadata) }
+                .expect("bounded-long compiler oracle should route directly");
+        }
+
+        let routed = lifetime_hugepage_stats_snapshot();
+        assert_eq!(
+            routed.policy,
+            LifetimeHugepagePolicy::CompilerInferredHugepage
+        );
+        assert_eq!(routed.backend, LifetimePageBackend::TransparentHugepage);
+        assert_eq!(
+            routed.compiler_inferred_arena_lock_acquisitions,
+            ROUTES_TO_DENSITY_THRESHOLD
+        );
+        assert_eq!(
+            routed.compiler_inferred_direct_long_routes,
+            ROUTES_TO_DENSITY_THRESHOLD
+        );
+        assert_eq!(
+            routed.compiler_inferred_direct_long_requested_bytes,
+            ROUTES_TO_DENSITY_THRESHOLD * layout.size()
+        );
+        assert_eq!(
+            routed.compiler_inferred_direct_long_slot_bytes,
+            ROUTES_TO_DENSITY_THRESHOLD * 4096
+        );
+        assert_eq!(routed.compiler_inferred_direct_long_deallocations, 0);
+        assert_eq!(
+            routed.compiler_inferred_direct_long_routes_without_trailer,
+            ROUTES_TO_DENSITY_THRESHOLD
+        );
+        assert_eq!(routed.adaptive_site_count, 0);
+        assert_eq!(routed.adaptive_training_allocations, 0);
+        assert_eq!(routed.adaptive_live_trailers, 0);
+        assert_eq!(routed.thp_candidate_extent_mappings, 1);
+        assert_eq!(routed.compiler_inferred_density_promotion_attempts, 1);
+        assert_eq!(
+            routed.compiler_inferred_density_promotion_successes
+                + routed.compiler_inferred_density_promotion_errors,
+            1
+        );
+        assert_eq!(routed.thp_collapse_attempts, 0);
+
+        for ptr in pointers {
+            assert!(unsafe { try_deallocate(ptr) });
+        }
+        let released = lifetime_hugepage_stats_snapshot();
+        assert!(released.all_mappings_released);
+        assert_eq!(
+            released.compiler_inferred_direct_long_deallocations,
+            ROUTES_TO_DENSITY_THRESHOLD
+        );
+        assert_eq!(released.runtime_validated_objects, 0);
+        assert_eq!(released.adaptive_short_observations, 0);
+        assert_eq!(released.adaptive_long_observations, 0);
+        assert_eq!(released.adaptive_censored_observations, 0);
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn compiler_inferred_ordinary_matches_admission_and_disables_thp() {
+        let _guard = COMPILER_INFERRED_TEST_LOCK.lock();
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::CompilerInferredOrdinary
+        ));
+        assert_eq!(
+            lifetime_hugepage_backend(),
+            LifetimePageBackend::TransparentHugepage
+        );
+        assert!(lifetime_hugepage_stats_reset());
+        let layout = Layout::from_size_align(4096, 64).unwrap();
+        let base_metadata = AllocationMetadata::for_type(0xC011_0FF7)
+            .with_module(0xA110_C001)
+            .with_callsite(0x51_7E);
+
+        assert!(unsafe { try_allocate(layout, base_metadata) }.is_none());
+        assert!(unsafe {
+            try_allocate(
+                layout,
+                base_metadata.with_lifetime_hint(LIFETIME_HINT_LOCAL_DROP_FACT),
+            )
+        }
+        .is_none());
+
+        const MATCHED_ROUTES: usize = THP_PROMOTION_MIN_LIVE_BYTES / 4096;
+        let mut pointers = [core::ptr::null_mut(); MATCHED_ROUTES];
+        let long_metadata = base_metadata.with_lifetime_hint(LIFETIME_HINT_BOUNDED_PROCESS_LONG);
+        for ptr in &mut pointers {
+            *ptr = unsafe { try_allocate(layout, long_metadata) }
+                .expect("bounded-long compiler oracle should route into the ordinary control");
+        }
+
+        let routed = lifetime_hugepage_stats_snapshot();
+        assert_eq!(
+            routed.policy,
+            LifetimeHugepagePolicy::CompilerInferredOrdinary
+        );
+        assert_eq!(routed.compiler_inferred_unknown_or_unproven_bypasses, 2);
+        assert_eq!(routed.compiler_inferred_proven_ephemeral_bypasses, 0);
+        assert_eq!(
+            routed.compiler_inferred_arena_lock_acquisitions,
+            MATCHED_ROUTES
+        );
+        assert_eq!(routed.compiler_inferred_direct_long_routes, MATCHED_ROUTES);
+        assert_eq!(
+            routed.compiler_inferred_direct_long_requested_bytes,
+            MATCHED_ROUTES * layout.size()
+        );
+        assert_eq!(
+            routed.compiler_inferred_direct_long_slot_bytes,
+            MATCHED_ROUTES * 4096
+        );
+        assert_eq!(routed.compiler_inferred_direct_long_deallocations, 0);
+        assert_eq!(
+            routed.compiler_inferred_direct_long_routes_without_trailer,
+            MATCHED_ROUTES
+        );
+        assert_eq!(routed.ordinary_extent_mappings, 1);
+        assert_eq!(routed.thp_extent_mappings, 0);
+        assert_eq!(routed.thp_candidate_extent_mappings, 0);
+        assert_eq!(routed.thp_advice_attempts, 0);
+        assert_eq!(routed.compiler_inferred_density_promotion_attempts, 0);
+        assert_eq!(routed.adaptive_site_count, 0);
+        assert_eq!(routed.adaptive_training_allocations, 0);
+        assert_eq!(routed.adaptive_live_trailers, 0);
+
+        for ptr in pointers {
+            assert!(unsafe { try_deallocate(ptr) });
+        }
+        let released = lifetime_hugepage_stats_snapshot();
+        assert!(released.all_mappings_released);
+        assert_eq!(
+            released.compiler_inferred_direct_long_deallocations,
+            MATCHED_ROUTES
+        );
+        assert_eq!(released.runtime_validated_objects, 0);
+        assert!(lifetime_hugepage_configure(
+            LifetimeHugepagePolicy::Disabled
+        ));
+        assert!(lifetime_hugepage_stats_reset());
+    }
 
     #[test]
     fn page_backend_changes_backing_without_changing_lifetime_selection() {
@@ -2935,6 +4319,39 @@ mod tests {
             ),
             Some(RequestedBacking::LargePage)
         );
+    }
+
+    #[test]
+    fn adaptive_force_track_all_uses_ordinary_placement_and_hard_guards() {
+        assert_eq!(
+            adaptive_placement_class(AdaptivePrediction::Long, true),
+            LifetimePlacementClass::Ephemeral
+        );
+        assert_eq!(
+            adaptive_placement_class(AdaptivePrediction::Long, false),
+            LifetimePlacementClass::LongLived
+        );
+
+        let mut guard = AdaptiveForceTrackAllState::disabled();
+        assert!(!guard.enable(0, 128));
+        assert!(!guard.enable(2, 0));
+        assert!(guard.enable(2, 128));
+        assert!(guard.allows(64));
+        guard.note_admitted(64);
+        assert!(guard.allows(64));
+        guard.note_admitted(64);
+        assert!(!guard.allows(1));
+        guard.note_guard_bypass();
+        assert_eq!(guard.admitted_allocations, 2);
+        assert_eq!(guard.admitted_requested_bytes, 128);
+        assert_eq!(guard.guard_bypasses, 1);
+
+        guard.reset_counters();
+        assert!(guard.enabled);
+        assert_eq!(guard.maximum_allocations, 2);
+        assert_eq!(guard.maximum_requested_bytes, 128);
+        assert_eq!(guard.admitted_allocations, 0);
+        assert_eq!(guard.guard_bypasses, 0);
     }
 
     #[test]
@@ -3076,5 +4493,104 @@ mod tests {
         second = first;
         second.align *= 2;
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn adaptive_observation_key_adds_exact_requested_size_without_rekeying_predictor() {
+        let predictor = adaptive_test_key(18, 28);
+        let small = AdaptiveObservationKey::from_site(predictor, 4096);
+        let large = AdaptiveObservationKey::from_site(predictor, 8192);
+
+        assert_ne!(small, large);
+        assert_eq!(small.callsite, large.callsite);
+        assert_eq!(small.type_id, large.type_id);
+        assert_eq!(small.module_id, large.module_id);
+        assert_eq!(small.align, large.align);
+        assert_eq!(predictor.payload_capacity, 64);
+        assert_eq!(predictor.flags, 1);
+        assert_eq!(predictor.placement_hint, 0);
+    }
+
+    #[test]
+    fn adaptive_observation_accounts_outcomes_and_live_right_censoring() {
+        let predictor = adaptive_test_key(19, 29);
+        let key = AdaptiveObservationKey::from_site(predictor, 4096);
+        let mut observation = AdaptiveObservationState::new(key);
+
+        for pressure in [100, 200, 300, 400] {
+            observation.note_allocation(
+                predictor,
+                pressure,
+                true,
+                AdaptivePrediction::Cold,
+                LifetimePlacementClass::Unknown,
+            );
+        }
+        observation.note_allocation(
+            predictor,
+            500,
+            false,
+            AdaptivePrediction::Short,
+            LifetimePlacementClass::Ephemeral,
+        );
+        observation.note_deallocation(100, ADAPTIVE_EPOCH_BYTES - 1, Some(false));
+        observation.note_deallocation(200, ADAPTIVE_LONG_AGE_BYTES, Some(true));
+        observation.note_deallocation(300, ADAPTIVE_EPOCH_BYTES, None);
+
+        let snapshot = observation.snapshot(ADAPTIVE_LONG_AGE_BYTES + 400);
+        assert_eq!(snapshot.allocation_count, 5);
+        assert_eq!(snapshot.tracked_allocations, 4);
+        assert_eq!(snapshot.bypassed_allocations, 1);
+        assert_eq!(snapshot.completed_outcomes, 3);
+        assert_eq!(snapshot.short_outcomes, 1);
+        assert_eq!(snapshot.long_outcomes, 1);
+        assert_eq!(snapshot.censored_outcomes, 1);
+        assert_eq!(snapshot.tracked_inflight, 1);
+        assert_eq!(
+            snapshot.inflight_age_lower_bound_bytes,
+            ADAPTIVE_LONG_AGE_BYTES
+        );
+        assert_eq!(
+            snapshot.allocation_requested_bytes,
+            snapshot.allocation_count * key.requested_size
+        );
+        assert_eq!(
+            snapshot.tracked_allocations,
+            snapshot.completed_outcomes + snapshot.tracked_inflight
+        );
+    }
+
+    #[test]
+    fn adaptive_observation_reports_predictor_key_ambiguity_without_merging_predictor_state() {
+        let first = adaptive_test_key(20, 30);
+        let mut second = first;
+        second.flags = 4;
+        second.placement_hint = 2;
+        second.payload_capacity = 128;
+        let key = AdaptiveObservationKey::from_site(first, 48);
+        assert_eq!(key, AdaptiveObservationKey::from_site(second, 48));
+        assert_ne!(first, second);
+
+        let mut observation = AdaptiveObservationState::new(key);
+        observation.note_allocation(
+            first,
+            64,
+            false,
+            AdaptivePrediction::Cold,
+            LifetimePlacementClass::Unknown,
+        );
+        observation.note_allocation(
+            second,
+            192,
+            false,
+            AdaptivePrediction::Short,
+            LifetimePlacementClass::Ephemeral,
+        );
+        let snapshot = observation.snapshot(192);
+        assert!(snapshot.predictor_key_ambiguous);
+        assert_eq!(snapshot.minimum_payload_capacity, 64);
+        assert_eq!(snapshot.maximum_payload_capacity, 128);
+        assert_eq!(snapshot.predictor_flags_seen, 5);
+        assert_eq!(snapshot.predictor_placement_hint_bits_union, 2);
     }
 }

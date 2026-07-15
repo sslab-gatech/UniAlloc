@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import json
+import argparse
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cross_allocator_large_page_experiment as experiment
 
@@ -43,6 +45,54 @@ def paired_rows(values: list[tuple[float, float]]) -> dict[str, list[dict[str, o
 
 
 class CrossAllocatorLargePageExperimentTests(unittest.TestCase):
+    def test_custom_build_root_derives_all_google_artifact_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "google"
+            args = experiment.parse_args(
+                [
+                    "--output-dir",
+                    str(Path(temporary) / "run"),
+                    "--google-tcmalloc-build-root",
+                    str(root),
+                ]
+            )
+            self.assertEqual(args.google_tcmalloc_provenance, root / "provenance.json")
+            self.assertEqual(
+                args.google_tcmalloc_binary,
+                root / "bin/cross_allocator_large_page_workload_google_tcmalloc",
+            )
+            self.assertEqual(
+                args.google_tcmalloc_control_binary,
+                root / "bin/cross_allocator_large_page_workload_system",
+            )
+
+    def test_blocked_google_arm_writes_output_local_status(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "blocked-run"
+            with (
+                mock.patch.object(
+                    experiment,
+                    "google_tcmalloc_provenance",
+                    side_effect=RuntimeError("fixed-revision Bazel proof missing"),
+                ),
+                mock.patch.object(experiment, "host_snapshot", return_value="host\n"),
+            ):
+                returncode = experiment.main(
+                    [
+                        "--output-dir",
+                        str(output),
+                        "--skip-build",
+                    ]
+                )
+            self.assertEqual(returncode, 2)
+            status = json.loads(
+                (output / "runner-manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(status["status"], "BLOCKED")
+            self.assertFalse(status["claim_grade"])
+            self.assertFalse(status["fallback_attempted"])
+            self.assertTrue((output / "manifest.json").is_file())
+
     def test_semantic_summary_normalizes_historical_mechanism_metadata(self) -> None:
         row = {
             "case": "unialloc_default",
@@ -75,11 +125,17 @@ class CrossAllocatorLargePageExperimentTests(unittest.TestCase):
             semantic["unialloc_lifetime_thp_on"].mechanism,
             "selective-lifetime-thp",
         )
-        cases = {case.name: case for case in experiment.neutral_cases()}
+        cases = {case.name: case for case in experiment.neutral_cases(True)}
+        self.assertEqual(
+            cases["google_tcmalloc_temeraire"].mechanism, "temeraire-hpaa"
+        )
         self.assertEqual(cases["mimalloc_thp_on"].expected_backing, "thp")
         self.assertEqual(cases["jemalloc_thp_off"].expected_backing, "no-thp")
         self.assertEqual(cases["jemalloc_thp_on"].mechanism, "allocator-wide-thp")
-        self.assertEqual(cases["gperftools_hugetlb"].mechanism, "explicit-hugetlb")
+        self.assertEqual(
+            cases["gperftools_legacy_hugetlb"].mechanism,
+            "legacy-explicit-hugetlb",
+        )
         self.assertEqual(cases["snmalloc_default"].mechanism, "os-eligibility")
         self.assertTrue(cases["snmalloc_os_thp_off"].disable_process_thp)
 
@@ -97,7 +153,7 @@ class CrossAllocatorLargePageExperimentTests(unittest.TestCase):
             self.assertEqual(on[key], off[key])
 
     def test_backing_validation_uses_actual_process_evidence(self) -> None:
-        cases = {case.name: case for case in experiment.neutral_cases()}
+        cases = {case.name: case for case in experiment.neutral_cases(True)}
         claimed_only = neutral_row(anon_huge_delta_kib=0, peak_thp_coverage=1.0)
         self.assertIn(
             "missing_anon_thp",
@@ -113,10 +169,118 @@ class CrossAllocatorLargePageExperimentTests(unittest.TestCase):
         hugetlb = neutral_row(hugetlb_delta_kib=262144)
         self.assertEqual(
             experiment.validate_neutral_row(
-                hugetlb, cases["gperftools_hugetlb"], 0.25
+                hugetlb, cases["gperftools_legacy_hugetlb"], 0.25
             ),
             [],
         )
+
+    def test_gperftools_is_legacy_opt_in_and_never_replaces_google_tcmalloc(self) -> None:
+        default_names = {case.name for case in experiment.neutral_cases()}
+        legacy_names = {case.name for case in experiment.neutral_cases(True)}
+        self.assertIn("google_tcmalloc_temeraire", default_names)
+        self.assertNotIn("gperftools_legacy_default", default_names)
+        self.assertIn("gperftools_legacy_default", legacy_names)
+        self.assertIn("gperftools_legacy_hugetlb", legacy_names)
+
+    def test_google_tcmalloc_provenance_fails_closed_on_wrong_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary = root / "probe"
+            binary.write_bytes(b"gperftools legacy payload")
+            provenance_path = root / "provenance.json"
+            provenance_path.write_text(
+                json.dumps(
+                    {
+                        "status": "VERIFIED",
+                        "claim_eligible": True,
+                        "fallback_allowed": False,
+                        "repository": "https://github.com/gperftools/gperftools.git",
+                        "commit": experiment.google_tcmalloc.GOOGLE_TCMALLOC_COMMIT,
+                        "malloc_target": experiment.google_tcmalloc.MALLOC_TARGET,
+                        "hugepage_allocator_identity": "Temeraire / HugePageAwareAllocator (HPAA)",
+                        "gperftools_legacy_eligible_as_google_tcmalloc": False,
+                        "verification": {
+                            "binary_sha256": experiment.sha256_file(binary)
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = argparse.Namespace(
+                skip_build=True,
+                google_tcmalloc_provenance=provenance_path,
+                google_tcmalloc_build_root=root,
+                google_tcmalloc_binary=binary,
+                google_tcmalloc_control_binary=root / "control",
+                bazel="bazel",
+            )
+            with self.assertRaisesRegex(RuntimeError, "BLOCKED"):
+                experiment.google_tcmalloc_provenance(args)
+
+    def test_google_tcmalloc_provenance_rejects_non_object_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            provenance_path = root / "provenance.json"
+            provenance_path.write_text("[]\n", encoding="utf-8")
+            args = argparse.Namespace(
+                skip_build=True,
+                google_tcmalloc_provenance=provenance_path,
+                google_tcmalloc_build_root=root,
+                google_tcmalloc_binary=root / "probe",
+                google_tcmalloc_control_binary=root / "control",
+                bazel="bazel",
+            )
+            with self.assertRaisesRegex(RuntimeError, "root must be an object"):
+                experiment.google_tcmalloc_provenance(args)
+
+    def test_neutral_commands_share_the_bazel_codegen_control(self) -> None:
+        cases = {case.name: case for case in experiment.neutral_cases()}
+        args = argparse.Namespace(
+            cpu=3,
+            numa_node=0,
+            objects=1024,
+            slot_bytes=4096,
+            passes=1,
+            warmup_passes=1,
+            waves=1,
+            settle_ms=0,
+        )
+        google = Path("/tmp/google-tcmalloc-probe")
+        control = Path("/tmp/bazel-system-control")
+        google_command = experiment.neutral_command(
+            cases["google_tcmalloc_temeraire"], args, 7, google, control
+        )
+        glibc_command = experiment.neutral_command(
+            cases["glibc_default"], args, 7, google, control
+        )
+        mimalloc_command = experiment.neutral_command(
+            cases["mimalloc_thp_on"], args, 7, google, control
+        )
+        self.assertIn(str(google), google_command)
+        self.assertIn(str(control), glibc_command)
+        self.assertIn(str(control), mimalloc_command)
+
+    def test_google_hpaa_claim_gate_excludes_each_unbacked_sample(self) -> None:
+        rows = [
+            {
+                "block": 0,
+                "anon_huge_delta_kib": 2048,
+                "hugetlb_delta_kib": 0,
+                "peak_thp_coverage": 0.5,
+            },
+            {
+                "block": 1,
+                "anon_huge_delta_kib": 0,
+                "hugetlb_delta_kib": 0,
+                "peak_thp_coverage": 0.0,
+            },
+        ]
+        gate = experiment.google_tcmalloc_hugepage_claim_gate(rows, 0.25)
+        self.assertTrue(gate["identity_claim_ready"])
+        self.assertFalse(gate["hugepage_mechanism_claim_ready"])
+        self.assertFalse(gate["hpaa_performance_causality_claim_ready"])
+        self.assertEqual(gate["backed_sample_count"], 1)
+        self.assertEqual(gate["excluded_blocks"], [1])
 
     def test_forced_off_semantic_pair_requires_identical_topology(self) -> None:
         common = {

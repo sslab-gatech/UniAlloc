@@ -28,6 +28,8 @@
 #[cfg(unialloc_rustc_current)]
 extern crate rustc_abi;
 extern crate rustc_ast;
+#[cfg(unialloc_rustc_current)]
+extern crate rustc_data_structures;
 extern crate rustc_driver;
 extern crate rustc_hir;
 extern crate rustc_interface;
@@ -36,6 +38,8 @@ extern crate rustc_span;
 
 #[cfg(unialloc_rustc_current)]
 use rustc_abi::Size;
+#[cfg(unialloc_rustc_current)]
+use rustc_data_structures::steal::Steal;
 #[cfg(unialloc_rustc_current)]
 use rustc_driver::{run_compiler, Callbacks, Compilation};
 #[cfg(not(unialloc_rustc_current))]
@@ -46,8 +50,8 @@ use rustc_interface::interface;
 use rustc_middle::mir::interpret::Scalar;
 use rustc_middle::mir::visit::{MutatingUseContext, NonMutatingUseContext, PlaceContext, Visitor};
 use rustc_middle::mir::{
-    BasicBlock, BasicBlockData, Body, CastKind, LocalDecl, Location, Operand, Place, Rvalue,
-    SourceInfo, StatementKind, Terminator, TerminatorKind,
+    BasicBlock, BasicBlockData, Body, CastKind, Local, LocalDecl, Location, Operand, Place, Rvalue,
+    SourceInfo, StatementKind, Terminator, TerminatorKind, RETURN_PLACE,
 };
 #[cfg(unialloc_rustc_current)]
 use rustc_middle::mir::{CallSource, UnwindAction, UnwindTerminateReason};
@@ -103,8 +107,13 @@ const LIFETIME_PROFILE_BINDING: &str = "exact(callsite,type_id,module_id)";
 const LIFETIME_PROFILE_DIGEST_ALGORITHM: &str = "fnv1a64-raw-bytes";
 const LIFETIME_HINT_EPHEMERAL: u16 = 1;
 const LIFETIME_HINT_LONG_LIVED: u16 = 2;
+/// Bounded process-long oracle used only for exact `mem::forget`/`Box::leak`
+/// smoke patterns. This tag is deliberately outside real-program Long claims.
+const LIFETIME_HINT_BOUNDED_PROCESS_LONG_ORACLE: u16 = 0xA102;
 const AUTOMATIC_LIFETIME_CLASSIFIER_PRECEDENCE: &str =
     "exact_profile>manual_global>automatic>Unknown";
+const AUTOMATIC_HEAP_LIFETIME_INFERENCE_PRECEDENCE: &str =
+    "exact_profile>manual_global>automatic_heap>automatic_epoch>Unknown";
 
 #[cfg(unialloc_rustc_current)]
 type OptimizedMirDefId = LocalDefId;
@@ -114,6 +123,10 @@ type OptimizedMirDefId = DefId;
 static mut ORIGINAL_OPTIMIZED_MIR: Option<
     for<'tcx> fn(TyCtxt<'tcx>, OptimizedMirDefId) -> &'tcx Body<'tcx>,
 > = None;
+#[cfg(unialloc_rustc_current)]
+static mut ORIGINAL_MIR_DROPS_ELABORATED_AND_CONST_CHECKED: Option<
+    for<'tcx> fn(TyCtxt<'tcx>, LocalDefId) -> &'tcx Steal<Body<'tcx>>,
+> = None;
 static mut RECORDS: Option<Mutex<Vec<RewriteRecord>>> = None;
 static mut ACTUAL_MIR_REWRITE: bool = false;
 static mut ACTUAL_SEMANTIC_SCOPE_REWRITE: bool = false;
@@ -122,6 +135,7 @@ static mut LOWERING_POLICY_FLAGS: u32 = DEFAULT_LOWERING_POLICY_FLAGS;
 static mut LOWERING_LIFETIME_HINT: u16 = 0;
 static mut LOWERING_LIFETIME_CONFIDENCE_THRESHOLD: u8 = 0;
 static mut AUTO_LIFETIME_CLASSIFIER: bool = false;
+static mut AUTO_HEAP_LIFETIME_INFERENCE: bool = false;
 static mut LOWERING_PLACEMENT_HINT: u16 = 0;
 static mut AUTO_CROSS_THREAD_RECOVERY_HINT: bool = false;
 static mut DIRECT_LOCAL_METADATA_ABI: bool = false;
@@ -165,6 +179,7 @@ struct Cli {
     lifetime_confidence_threshold: u8,
     lifetime_profile: Option<LifetimeProfile>,
     auto_lifetime_classifier: bool,
+    auto_heap_lifetime_inference: bool,
     placement_hint: u16,
     auto_cross_thread_recovery_hint: bool,
     direct_local_metadata_abi: bool,
@@ -220,6 +235,21 @@ enum AutomaticLifetimeDecision {
     UnsupportedSiteUnknown,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AutomaticHeapLifetimeDecision {
+    ExactLocalDrop,
+    ExactLocalMoveChainDrop,
+    ExactMemForget,
+    ExactBoxLeak,
+    AliasOrEscapeUnknown,
+    CleanupOrUnwindUnknown,
+    MissingTerminalUnknown,
+    NonlinearControlFlowUnknown,
+    UnsupportedOwnerUnknown,
+    RefcountedOwnerUnknown,
+    AmbiguousOwnerSiteUnknown,
+}
+
 enum ParsedInvocation {
     Bypass(Vec<String>),
     RunPass(Cli),
@@ -257,6 +287,38 @@ struct RewriteRecord {
     semantic_scope_unwind_pop_inserted: bool,
     metadata_pairing_contract: &'static str,
     lowering_kind: &'static str,
+    lifetime_analysis_features: Option<SemanticLifetimeFeatureExport>,
+}
+
+#[derive(Clone, Debug)]
+struct SemanticLifetimeFeatureExport {
+    analysis_phase: &'static str,
+    owner_place: Option<String>,
+    owner_place_basis: &'static str,
+    requested_size_bytes: Option<u64>,
+    requested_align_bytes: Option<u64>,
+    requested_layout_basis: &'static str,
+    owner_move_count: usize,
+    return_sink: bool,
+    escape_sink: bool,
+    store_sink: bool,
+    allocation_in_natural_loop: bool,
+    reachable_backedge_after_allocation: bool,
+    function_has_yield_or_await: bool,
+    reachable_yield_or_await: bool,
+    receiver_owned_allocation: bool,
+    exact_drop_path: bool,
+    conditional_drop_path: bool,
+    cleanup_drop_path: bool,
+    normal_drop_blocks: Vec<String>,
+    cleanup_drop_blocks: Vec<String>,
+    return_sink_blocks: Vec<String>,
+    escape_sink_blocks: Vec<String>,
+    store_sink_blocks: Vec<String>,
+    reachable_normal_blocks: Vec<String>,
+    reachable_cleanup_blocks: Vec<String>,
+    normal_successor_count: usize,
+    cleanup_successor_count: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -525,6 +587,10 @@ struct SemanticScopeCandidate<'tcx> {
     original_from_hir_call: MirCallSource,
     fn_span: Span,
     original_terminator: Terminator<'tcx>,
+    feature_owner: Option<Place<'tcx>>,
+    feature_owner_basis: &'static str,
+    receiver_owned_allocation: bool,
+    lifetime_analysis_features: Option<SemanticLifetimeFeatureExport>,
 }
 
 #[derive(Clone, Debug)]
@@ -546,7 +612,7 @@ struct SemanticDropCandidate<'tcx> {
 struct RewriteDryRunCallbacks;
 
 fn usage() -> &'static str {
-    "Usage:\n  RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs -o /tmp/unialloc-rustc-mir-rewrite-dry-run\n  DYLD_LIBRARY_PATH=$(rustc +$(cat rust-toolchain) --print sysroot)/lib /tmp/unialloc-rustc-mir-rewrite-dry-run \\\n    --unialloc-rewrite-audit-out /tmp/rewrite-audit.json -- --sysroot $(rustc +$(cat rust-toolchain) --print sysroot) --edition=2021 input.rs\n\nOptions:\n  --unialloc-rewrite-audit-out <path>  JSON rewrite audit output. Defaults to env UNIALLOC_REWRITE_AUDIT_OUT or ./unialloc-rustc-mir-rewrite-dry-run.json\n  --unialloc-rewrite-audit-dir <dir>   Wrapper-friendly output directory. Defaults to env UNIALLOC_REWRITE_AUDIT_DIR if set\n  --unialloc-pass-log-out <path>       Optional pass log output. Defaults to env UNIALLOC_PASS_LOG_OUT if set\n  --unialloc-pass-log-dir <dir>        Wrapper-friendly log directory. Defaults to env UNIALLOC_PASS_LOG_DIR if set\n  --unialloc-target-crates <names>     Optional comma-separated Cargo crate allowlist. Defaults to env UNIALLOC_RUSTC_TARGET_CRATES. Hyphens and underscores compare equivalently\n  --unialloc-actual-mir-rewrite        Opt in to replacing supported direct allocator-call terminators. Defaults to env UNIALLOC_ACTUAL_MIR_REWRITE truthiness\n  --unialloc-actual-semantic-scope-rewrite  Opt in to inserting __unialloc_semantic_scope_push/pop around supported semantic allocation calls. Defaults to env UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE truthiness\n  --unialloc-auto-lifetime-classifier  Classify stable nonescaping linear owners as Ephemeral before, or LongLived across, an exact UniAlloc epoch boundary; read-only uses are allowed and every unproven site stays Unknown. Defaults to env UNIALLOC_AUTO_LIFETIME_CLASSIFIER truthiness\n  --unialloc-auto-cross-thread-recovery-hint  OR the cross-thread recovery placement bit into solved heap-object scopes when the MIR body contains thread-spawn/escape calls. Defaults to env UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT truthiness\n  --unialloc-direct-local-metadata-abi  Use no-recovery UniAlloc Layout alloc/alloc_zeroed/realloc/dealloc ABI variants only when paired metadata deallocation/reallocation is explicit; unpaired size/align exchange_malloc keeps recovery ABI. Defaults to env UNIALLOC_DIRECT_LOCAL_METADATA_ABI truthiness\n  --unialloc-direct-local-size-align-with-semantic-drop  Enable no-recovery semantic scopes only for destination-proven linear Drop ownership; raw size/align calls without an exact owner link remain recovery-backed. Defaults to env UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP truthiness\n  --unialloc-policy-flags <u32>        Policy flags inserted into UniAlloc metadata. Defaults to env UNIALLOC_LOWERING_POLICY_FLAGS or 0x1 (TYPE_ISOLATED only)\n  --unialloc-lifetime-hint <u16>       Optional invocation-wide metadata lifetime hint. Defaults to env UNIALLOC_LOWERING_LIFETIME_HINT or 0\n  --unialloc-lifetime-profile <path>   Exact per-site lifetime profile. Defaults to env UNIALLOC_LIFETIME_PROFILE. Profile misses override manual and automatic inputs with Unknown (0)\n  --unialloc-lifetime-confidence-threshold <0..100>  Minimum v2 profile or automatic-classifier confidence to emit a lifetime hint. Defaults to env UNIALLOC_LIFETIME_CONFIDENCE_THRESHOLD or 0\n  --unialloc-placement-hint <u16>      Optional metadata placement hint. Defaults to env UNIALLOC_LOWERING_PLACEMENT_HINT or 0\n  --unialloc-continue-compilation      Continue after analysis and produce normal rustc outputs. Actual rewrite modes continue by default. Defaults to env UNIALLOC_CONTINUE_COMPILATION truthiness\n  --unialloc-stop-after-analysis       Force analysis-only output even if an actual rewrite flag is set\n  --unialloc-dry-run-only              Force audit-only mode even if actual rewrite env flags are set\n  --unialloc-help                      Print this help\n\nEverything after `--` is passed to rustc_driver as a direct invocation. Without `--`, an executable path or a bare command resolved through PATH/PATHEXT is treated as Cargo's compiler argv0. Executable source files therefore require explicit `--` for direct compilation.\n"
+    "Usage:\n  RUSTC_BOOTSTRAP=1 rustc +$(cat rust-toolchain) tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs -o /tmp/unialloc-rustc-mir-rewrite-dry-run\n  DYLD_LIBRARY_PATH=$(rustc +$(cat rust-toolchain) --print sysroot)/lib /tmp/unialloc-rustc-mir-rewrite-dry-run \\\n    --unialloc-rewrite-audit-out /tmp/rewrite-audit.json -- --sysroot $(rustc +$(cat rust-toolchain) --print sysroot) --edition=2021 input.rs\n\nOptions:\n  --unialloc-rewrite-audit-out <path>  JSON rewrite audit output. Defaults to env UNIALLOC_REWRITE_AUDIT_OUT or ./unialloc-rustc-mir-rewrite-dry-run.json\n  --unialloc-rewrite-audit-dir <dir>   Wrapper-friendly output directory. Defaults to env UNIALLOC_REWRITE_AUDIT_DIR if set\n  --unialloc-pass-log-out <path>       Optional pass log output. Defaults to env UNIALLOC_PASS_LOG_OUT if set\n  --unialloc-pass-log-dir <dir>        Wrapper-friendly log directory. Defaults to env UNIALLOC_PASS_LOG_DIR if set\n  --unialloc-target-crates <names>     Optional comma-separated Cargo crate allowlist. Defaults to env UNIALLOC_RUSTC_TARGET_CRATES. Hyphens and underscores compare equivalently\n  --unialloc-actual-mir-rewrite        Opt in to replacing supported direct allocator-call terminators. Defaults to env UNIALLOC_ACTUAL_MIR_REWRITE truthiness\n  --unialloc-actual-semantic-scope-rewrite  Opt in to inserting __unialloc_semantic_scope_push/pop around supported semantic allocation calls. Defaults to env UNIALLOC_ACTUAL_SEMANTIC_SCOPE_REWRITE truthiness\n  --unialloc-auto-lifetime-classifier  Classify stable nonescaping linear owners as Ephemeral before, or LongLived across, an exact UniAlloc epoch boundary; read-only uses are allowed and every unproven site stays Unknown. Defaults to env UNIALLOC_AUTO_LIFETIME_CLASSIFIER truthiness\n  --unialloc-auto-heap-lifetime-inference  Export marker-free ownership features; exact Drop stays Unknown as an eventual-release fact, while exact mem::forget/Box::leak may emit only the bounded process-long smoke oracle. No automatic short or real-program Long claim is made. Defaults to env UNIALLOC_AUTO_HEAP_LIFETIME_INFERENCE truthiness\n  --unialloc-auto-cross-thread-recovery-hint  OR the cross-thread recovery placement bit into solved heap-object scopes when the MIR body contains thread-spawn/escape calls. Defaults to env UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT truthiness\n  --unialloc-direct-local-metadata-abi  Use no-recovery UniAlloc Layout alloc/alloc_zeroed/realloc/dealloc ABI variants only when paired metadata deallocation/reallocation is explicit; unpaired size/align exchange_malloc keeps recovery ABI. Defaults to env UNIALLOC_DIRECT_LOCAL_METADATA_ABI truthiness\n  --unialloc-direct-local-size-align-with-semantic-drop  Enable no-recovery semantic scopes only for destination-proven linear Drop ownership; raw size/align calls without an exact owner link remain recovery-backed. Defaults to env UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP truthiness\n  --unialloc-policy-flags <u32>        Policy flags inserted into UniAlloc metadata. Defaults to env UNIALLOC_LOWERING_POLICY_FLAGS or 0x1 (TYPE_ISOLATED only)\n  --unialloc-lifetime-hint <u16>       Optional invocation-wide metadata lifetime hint. Defaults to env UNIALLOC_LOWERING_LIFETIME_HINT or 0\n  --unialloc-lifetime-profile <path>   Exact per-site lifetime profile. Defaults to env UNIALLOC_LIFETIME_PROFILE. Profile misses override manual and automatic inputs with Unknown (0)\n  --unialloc-lifetime-confidence-threshold <0..100>  Minimum v2 profile or automatic-classifier confidence to emit a lifetime hint. Defaults to env UNIALLOC_LIFETIME_CONFIDENCE_THRESHOLD or 0\n  --unialloc-placement-hint <u16>      Optional metadata placement hint. Defaults to env UNIALLOC_LOWERING_PLACEMENT_HINT or 0\n  --unialloc-continue-compilation      Continue after analysis and produce normal rustc outputs. Actual rewrite modes continue by default. Defaults to env UNIALLOC_CONTINUE_COMPILATION truthiness\n  --unialloc-stop-after-analysis       Force analysis-only output even if an actual rewrite flag is set\n  --unialloc-dry-run-only              Force audit-only mode even if actual rewrite env flags are set\n  --unialloc-help                      Print this help\n\nEverything after `--` is passed to rustc_driver as a direct invocation. Without `--`, an executable path or a bare command resolved through PATH/PATHEXT is treated as Cargo's compiler argv0. Executable source files therefore require explicit `--` for direct compilation.\n"
 }
 
 fn env_truthy(name: &str) -> bool {
@@ -924,6 +990,146 @@ fn select_lifetime_hint_with_automatic_decision(
     }
 }
 
+fn automatic_heap_lifetime_selection(
+    decision: Option<AutomaticHeapLifetimeDecision>,
+) -> LifetimeHintSelection {
+    match decision {
+        Some(AutomaticHeapLifetimeDecision::ExactLocalDrop) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_heap_exact_local_drop_fact_unknown",
+        },
+        Some(AutomaticHeapLifetimeDecision::ExactLocalMoveChainDrop) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_heap_exact_move_chain_drop_fact_unknown",
+        },
+        Some(AutomaticHeapLifetimeDecision::ExactMemForget) => LifetimeHintSelection {
+            hint: LIFETIME_HINT_BOUNDED_PROCESS_LONG_ORACLE,
+            confidence: 100,
+            basis: "automatic_heap_exact_mem_forget",
+        },
+        Some(AutomaticHeapLifetimeDecision::ExactBoxLeak) => LifetimeHintSelection {
+            hint: LIFETIME_HINT_BOUNDED_PROCESS_LONG_ORACLE,
+            confidence: 100,
+            basis: "automatic_heap_exact_box_leak",
+        },
+        Some(AutomaticHeapLifetimeDecision::AliasOrEscapeUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_heap_alias_or_escape_unknown",
+        },
+        Some(AutomaticHeapLifetimeDecision::CleanupOrUnwindUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_heap_cleanup_or_unwind_unknown",
+        },
+        Some(AutomaticHeapLifetimeDecision::MissingTerminalUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_heap_missing_terminal_unknown",
+        },
+        Some(AutomaticHeapLifetimeDecision::NonlinearControlFlowUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_heap_nonlinear_control_flow_unknown",
+        },
+        Some(AutomaticHeapLifetimeDecision::UnsupportedOwnerUnknown) | None => {
+            LifetimeHintSelection {
+                hint: 0,
+                confidence: 0,
+                basis: "automatic_heap_unsupported_owner_unknown",
+            }
+        }
+        Some(AutomaticHeapLifetimeDecision::RefcountedOwnerUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_heap_refcounted_owner_unknown",
+        },
+        Some(AutomaticHeapLifetimeDecision::AmbiguousOwnerSiteUnknown) => LifetimeHintSelection {
+            hint: 0,
+            confidence: 0,
+            basis: "automatic_heap_ambiguous_owner_site_unknown",
+        },
+    }
+}
+
+fn select_lifetime_hint_with_heap_inference(
+    profile: Option<&LifetimeProfile>,
+    configured_hint: u16,
+    confidence_threshold: u8,
+    heap_inference_enabled: bool,
+    heap_decision: Option<AutomaticHeapLifetimeDecision>,
+    automatic_classifier_enabled: bool,
+    automatic_decision: Option<AutomaticLifetimeDecision>,
+    callsite: u64,
+    type_id: u64,
+    module_id: u64,
+) -> LifetimeHintSelection {
+    if profile.is_some() || configured_hint != 0 {
+        return select_lifetime_hint(
+            profile,
+            configured_hint,
+            confidence_threshold,
+            callsite,
+            type_id,
+            module_id,
+        );
+    }
+
+    if heap_inference_enabled {
+        let selection = automatic_heap_lifetime_selection(heap_decision);
+        if selection.hint != 0 {
+            return if selection.confidence < confidence_threshold {
+                LifetimeHintSelection {
+                    hint: 0,
+                    confidence: selection.confidence,
+                    basis: "automatic_heap_below_confidence_threshold",
+                }
+            } else {
+                selection
+            };
+        }
+        if matches!(
+            heap_decision,
+            Some(
+                AutomaticHeapLifetimeDecision::ExactLocalDrop
+                    | AutomaticHeapLifetimeDecision::ExactLocalMoveChainDrop
+            )
+        ) {
+            // Exact Drop is a feature fact only. The epoch classifier cannot
+            // upgrade eventual release into a short-duration placement hint.
+            return selection;
+        }
+        if !automatic_classifier_enabled {
+            return selection;
+        }
+    }
+
+    select_lifetime_hint_with_automatic_decision(
+        None,
+        0,
+        confidence_threshold,
+        automatic_classifier_enabled,
+        automatic_decision,
+        callsite,
+        type_id,
+        module_id,
+    )
+}
+
+fn automatic_heap_lifetime_bounded_process_long_oracle_basis(basis: &str) -> bool {
+    matches!(
+        basis,
+        "automatic_heap_exact_mem_forget" | "automatic_heap_exact_box_leak"
+    )
+}
+
+fn automatic_heap_lifetime_unknown_basis(basis: &str) -> bool {
+    basis == "automatic_heap_below_confidence_threshold"
+        || (basis.starts_with("automatic_heap_") && basis.ends_with("_unknown"))
+}
+
 fn automatic_lifetime_ephemeral_basis(basis: &str) -> bool {
     basis == "automatic_exact_local_drop_before_phase_boundary"
 }
@@ -934,7 +1140,9 @@ fn automatic_lifetime_long_lived_basis(basis: &str) -> bool {
 
 fn automatic_lifetime_unknown_basis(basis: &str) -> bool {
     basis == "automatic_below_confidence_threshold"
-        || (basis.starts_with("automatic_") && basis.ends_with("_unknown"))
+        || (basis.starts_with("automatic_")
+            && !basis.starts_with("automatic_heap_")
+            && basis.ends_with("_unknown"))
 }
 
 fn automatic_lifetime_unsupported_basis(basis: &str) -> bool {
@@ -968,11 +1176,14 @@ fn lowering_lifetime_hint_for_site(
     type_id: u64,
     module_id: u64,
     automatic_decision: Option<AutomaticLifetimeDecision>,
+    heap_decision: Option<AutomaticHeapLifetimeDecision>,
 ) -> LifetimeHintSelection {
-    select_lifetime_hint_with_automatic_decision(
+    select_lifetime_hint_with_heap_inference(
         LIFETIME_PROFILE.get(),
         lowering_lifetime_hint(),
         lowering_lifetime_confidence_threshold(),
+        auto_heap_lifetime_inference_enabled(),
+        heap_decision,
         auto_lifetime_classifier_enabled(),
         automatic_decision,
         callsite,
@@ -984,6 +1195,11 @@ fn lowering_lifetime_hint_for_site(
 #[inline]
 fn auto_lifetime_classifier_enabled() -> bool {
     unsafe { AUTO_LIFETIME_CLASSIFIER }
+}
+
+#[inline]
+fn auto_heap_lifetime_inference_enabled() -> bool {
+    unsafe { AUTO_HEAP_LIFETIME_INFERENCE }
 }
 
 #[inline]
@@ -1021,6 +1237,7 @@ fn lowering_metadata_hints_requested() -> bool {
     LIFETIME_PROFILE.get().is_some()
         || lowering_lifetime_hint() != 0
         || auto_lifetime_classifier_enabled()
+        || auto_heap_lifetime_inference_enabled()
         || lowering_placement_hint() != 0
         || auto_cross_thread_recovery_hint_enabled()
 }
@@ -1378,6 +1595,7 @@ fn parse_cli() -> Result<ParsedInvocation, String> {
     let mut lifetime_confidence_threshold = None;
     let mut lifetime_profile_path = env::var_os("UNIALLOC_LIFETIME_PROFILE").map(PathBuf::from);
     let mut auto_lifetime_classifier = env_truthy("UNIALLOC_AUTO_LIFETIME_CLASSIFIER");
+    let mut auto_heap_lifetime_inference = env_truthy("UNIALLOC_AUTO_HEAP_LIFETIME_INFERENCE");
     let mut placement_hint = None;
     let mut auto_cross_thread_recovery_hint =
         env_truthy("UNIALLOC_LOWERING_AUTO_CROSS_THREAD_HINT");
@@ -1499,6 +1717,9 @@ fn parse_cli() -> Result<ParsedInvocation, String> {
             }
             "--unialloc-auto-lifetime-classifier" => {
                 auto_lifetime_classifier = true;
+            }
+            "--unialloc-auto-heap-lifetime-inference" => {
+                auto_heap_lifetime_inference = true;
             }
             "--unialloc-placement-hint" => {
                 i += 1;
@@ -1623,6 +1844,7 @@ fn parse_cli() -> Result<ParsedInvocation, String> {
         lifetime_confidence_threshold,
         lifetime_profile,
         auto_lifetime_classifier,
+        auto_heap_lifetime_inference,
         placement_hint,
         auto_cross_thread_recovery_hint,
         direct_local_metadata_abi,
@@ -1661,6 +1883,145 @@ fn push_json_string_array(json: &mut String, values: &BTreeSet<String>) {
         let _ = write!(json, "\"{}\"", json_escape(value));
     }
     json.push(']');
+}
+
+fn push_json_string_vec(json: &mut String, values: &[String]) {
+    json.push('[');
+    for (index, value) in values.iter().enumerate() {
+        if index > 0 {
+            json.push_str(", ");
+        }
+        let _ = write!(json, "\"{}\"", json_escape(value));
+    }
+    json.push(']');
+}
+
+fn push_semantic_lifetime_features_json(json: &mut String, record: &RewriteRecord) {
+    let Some(features) = &record.lifetime_analysis_features else {
+        json.push_str("      \"lifetime_analysis_features\": null,\n");
+        return;
+    };
+    json.push_str("      \"lifetime_analysis_features\": {\n");
+    json.push_str("        \"schema_version\": 1,\n");
+    json.push_str("        \"analysis_only\": true,\n");
+    let _ = writeln!(
+        json,
+        "        \"analysis_phase\": \"{}\",",
+        features.analysis_phase
+    );
+    json.push_str("        \"classification_rule_applied\": false,\n");
+    json.push_str("        \"runtime_join_key_contract\": \"exact(callsite,type_id,module_id,requested_size_bytes,requested_align_bytes)\",\n");
+    let runtime_join_key_complete =
+        features.requested_size_bytes.is_some() && features.requested_align_bytes.is_some();
+    let _ = writeln!(
+        json,
+        "        \"runtime_join_key_complete\": {},",
+        runtime_join_key_complete
+    );
+    json.push_str("        \"runtime_join_key\": {\n");
+    let _ = writeln!(json, "          \"callsite\": {},", record.callsite);
+    let _ = writeln!(json, "          \"type_id\": {},", record.type_id);
+    let _ = writeln!(json, "          \"module_id\": {},", record.module_id);
+    match features.requested_size_bytes {
+        Some(size) => {
+            let _ = writeln!(json, "          \"requested_size_bytes\": {},", size);
+        }
+        None => json.push_str("          \"requested_size_bytes\": null,\n"),
+    }
+    match features.requested_align_bytes {
+        Some(align) => {
+            let _ = writeln!(json, "          \"requested_align_bytes\": {}", align);
+        }
+        None => json.push_str("          \"requested_align_bytes\": null\n"),
+    }
+    json.push_str("        },\n");
+    let _ = writeln!(
+        json,
+        "        \"requested_layout_basis\": \"{}\",",
+        features.requested_layout_basis
+    );
+    match &features.owner_place {
+        Some(owner) => {
+            let _ = writeln!(json, "        \"owner_place\": \"{}\",", json_escape(owner));
+        }
+        None => json.push_str("        \"owner_place\": null,\n"),
+    }
+    let _ = writeln!(
+        json,
+        "        \"owner_place_basis\": \"{}\",",
+        features.owner_place_basis
+    );
+    let _ = writeln!(
+        json,
+        "        \"owner_move_count\": {},",
+        features.owner_move_count
+    );
+    for (name, value) in [
+        ("return_sink", features.return_sink),
+        ("escape_sink", features.escape_sink),
+        ("store_sink", features.store_sink),
+        (
+            "allocation_in_natural_loop",
+            features.allocation_in_natural_loop,
+        ),
+        (
+            "reachable_backedge_after_allocation",
+            features.reachable_backedge_after_allocation,
+        ),
+        (
+            "function_has_yield_or_await",
+            features.function_has_yield_or_await,
+        ),
+        (
+            "reachable_yield_or_await",
+            features.reachable_yield_or_await,
+        ),
+        (
+            "receiver_owned_allocation",
+            features.receiver_owned_allocation,
+        ),
+        ("exact_drop_path", features.exact_drop_path),
+        ("conditional_drop_path", features.conditional_drop_path),
+        ("cleanup_drop_path", features.cleanup_drop_path),
+    ] {
+        let _ = writeln!(json, "        \"{}\": {},", name, value);
+    }
+    let _ = writeln!(
+        json,
+        "        \"normal_successor_count\": {},",
+        features.normal_successor_count
+    );
+    let _ = writeln!(
+        json,
+        "        \"cleanup_successor_count\": {},",
+        features.cleanup_successor_count
+    );
+    let _ = writeln!(
+        json,
+        "        \"allocation_block\": \"{}\",",
+        json_escape(&record.basic_block)
+    );
+    let _ = writeln!(
+        json,
+        "        \"allocation_source_span\": \"{}\",",
+        json_escape(&record.source_span)
+    );
+    for (name, values) in [
+        ("normal_drop_blocks", &features.normal_drop_blocks),
+        ("cleanup_drop_blocks", &features.cleanup_drop_blocks),
+        ("return_sink_blocks", &features.return_sink_blocks),
+        ("escape_sink_blocks", &features.escape_sink_blocks),
+        ("store_sink_blocks", &features.store_sink_blocks),
+        ("reachable_normal_blocks", &features.reachable_normal_blocks),
+    ] {
+        let _ = write!(json, "        \"{}\": ", name);
+        push_json_string_vec(json, values);
+        json.push_str(",\n");
+    }
+    json.push_str("        \"reachable_cleanup_blocks\": ");
+    push_json_string_vec(json, &features.reachable_cleanup_blocks);
+    json.push('\n');
+    json.push_str("      },\n");
 }
 
 fn push_direct_local_size_align_pairing_details_json(
@@ -8951,6 +9312,7 @@ struct SemanticLocalOwnershipProof {
     allocation_pairs: BTreeSet<(String, String)>,
     drop_pairs: BTreeSet<(String, String)>,
     automatic_lifetime_decisions: BTreeMap<(String, String), AutomaticLifetimeDecision>,
+    automatic_heap_lifetime_decisions: BTreeMap<(String, String), AutomaticHeapLifetimeDecision>,
     exact_zip_drop_pairs: BTreeSet<(String, String)>,
 }
 
@@ -9194,6 +9556,843 @@ fn candidate_has_stable_nonescaping_owner_uses<'tcx>(
     candidate: &SemanticScopeCandidate<'tcx>,
 ) -> bool {
     candidate_has_owner_uses(body, candidate, true)
+}
+
+struct ExactHeapOwnerUseVisitor<'tcx> {
+    owner: Place<'tcx>,
+    saw_use: bool,
+}
+
+impl<'tcx> Visitor<'tcx> for ExactHeapOwnerUseVisitor<'tcx> {
+    fn visit_place(&mut self, place: &Place<'tcx>, context: PlaceContext, _location: Location) {
+        if self.saw_use
+            || place.local != self.owner.local
+            || matches!(context, PlaceContext::NonUse(_))
+        {
+            return;
+        }
+        self.saw_use = true;
+    }
+}
+
+fn statement_uses_exact_heap_owner<'tcx>(
+    statement: &rustc_middle::mir::Statement<'tcx>,
+    owner: Place<'tcx>,
+    location: Location,
+) -> bool {
+    let mut visitor = ExactHeapOwnerUseVisitor {
+        owner,
+        saw_use: false,
+    };
+    visitor.visit_statement(statement, location);
+    visitor.saw_use
+}
+
+fn terminator_uses_exact_heap_owner<'tcx>(
+    terminator: &Terminator<'tcx>,
+    owner: Place<'tcx>,
+    location: Location,
+) -> bool {
+    let mut visitor = ExactHeapOwnerUseVisitor {
+        owner,
+        saw_use: false,
+    };
+    visitor.visit_terminator(terminator, location);
+    visitor.saw_use
+}
+
+fn exact_unprojected_owner_move<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    statement: &rustc_middle::mir::Statement<'tcx>,
+    owner: Place<'tcx>,
+) -> Option<Place<'tcx>> {
+    let assigned = match &statement.kind {
+        StatementKind::Assign(assigned) => assigned,
+        _ => return None,
+    };
+    let (destination, rvalue) = &**assigned;
+    let source = rvalue_move_source(rvalue)?;
+    if *source != owner
+        || !source.projection.is_empty()
+        || !destination.projection.is_empty()
+        || destination.local == owner.local
+        || destination.ty(&body.local_decls, tcx).ty != owner.ty(&body.local_decls, tcx).ty
+    {
+        return None;
+    }
+    Some(*destination)
+}
+
+#[cfg(unialloc_rustc_current)]
+fn rvalue_move_source<'a, 'tcx>(rvalue: &'a Rvalue<'tcx>) -> Option<&'a Place<'tcx>> {
+    match rvalue {
+        Rvalue::Use(Operand::Move(source), _) => Some(source),
+        _ => None,
+    }
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn rvalue_move_source<'a, 'tcx>(rvalue: &'a Rvalue<'tcx>) -> Option<&'a Place<'tcx>> {
+    match rvalue {
+        Rvalue::Use(Operand::Move(source)) => Some(source),
+        _ => None,
+    }
+}
+
+fn operand_is_exact_owner_consume<'tcx>(operand: &Operand<'tcx>, owner: Place<'tcx>) -> bool {
+    matches!(operand, Operand::Move(place) | Operand::Copy(place) if *place == owner && place.projection.is_empty())
+}
+
+fn exact_core_mem_forget_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "core"
+        && matches!(
+            strip_rustc_crate_disambiguators(&tcx.def_path_str(def_id)).as_str(),
+            "core::mem::forget" | "std::mem::forget"
+        )
+}
+
+fn exact_core_mem_drop_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "core"
+        && matches!(
+            strip_rustc_crate_disambiguators(&tcx.def_path_str(def_id)).as_str(),
+            "core::mem::drop" | "std::mem::drop"
+        )
+}
+
+fn exact_alloc_box_leak_def_path(path: &str) -> bool {
+    let normalized = strip_rustc_crate_disambiguators(path);
+    if matches!(
+        normalized.as_str(),
+        "alloc::boxed::Box::<T>::leak"
+            | "std::boxed::Box::<T>::leak"
+            | "alloc::boxed::Box::<T, A>::leak"
+            | "std::boxed::Box::<T, A>::leak"
+            | "alloc::boxed::Box::leak"
+            | "std::boxed::Box::leak"
+    ) {
+        return true;
+    }
+    let impl_index = normalized
+        .strip_prefix("alloc::boxed::{impl#")
+        .and_then(|rest| rest.strip_suffix("}::leak"));
+    matches!(impl_index, Some(index) if !index.is_empty() && index.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
+fn exact_alloc_box_leak_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.crate_name(def_id.krate).as_str() == "alloc"
+        && exact_alloc_box_leak_def_path(&tcx.def_path_str(def_id))
+}
+
+fn exact_box_owner_ty(tcx: TyCtxt<'_>, owner_ty: Ty<'_>) -> bool {
+    matches!(
+        owner_ty.kind(),
+        ty::Adt(def, _) if exact_alloc_adt_def_id(tcx, def.did(), exact_alloc_box_def_path)
+            && tcx.lang_items().owned_box() == Some(def.did())
+    )
+}
+
+#[cfg(unialloc_rustc_current)]
+fn terminator_has_cleanup_or_unwind_edge(terminator: &Terminator<'_>) -> bool {
+    let unwind = match &terminator.kind {
+        TerminatorKind::Call { unwind, .. } | TerminatorKind::Drop { unwind, .. } => unwind,
+        _ => return false,
+    };
+    !matches!(unwind, UnwindAction::Unreachable)
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn terminator_has_cleanup_or_unwind_edge(terminator: &Terminator<'_>) -> bool {
+    // Legacy MIR used `None` both for outward propagation and sites without a
+    // materialized cleanup block. Conservatively retain Unknown for every
+    // owner-live Call/Drop on that representation.
+    matches!(
+        &terminator.kind,
+        TerminatorKind::Call { .. } | TerminatorKind::Drop { .. }
+    )
+}
+
+fn refcounted_heap_owner_ty(tcx: TyCtxt<'_>, owner_ty: Ty<'_>) -> bool {
+    matches!(
+        owner_ty.kind(),
+        ty::Adt(def, _)
+            if exact_alloc_adt_def_id(tcx, def.did(), exact_alloc_arc_def_path)
+                || exact_alloc_adt_def_id(tcx, def.did(), exact_alloc_rc_def_path)
+    )
+}
+
+fn terminator_exact_bounded_process_long_decision<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    terminator: &Terminator<'tcx>,
+    owner: Place<'tcx>,
+) -> Option<AutomaticHeapLifetimeDecision> {
+    let (func, args) = match &terminator.kind {
+        TerminatorKind::Call { func, args, .. } => (func, call_arg_operands(args)),
+        _ => return None,
+    };
+    if args.len() != 1 || !operand_is_exact_owner_consume(&args[0], owner) {
+        return None;
+    }
+    let def_id = match func.ty(&body.local_decls, tcx).kind() {
+        ty::FnDef(def_id, _) => *def_id,
+        _ => return None,
+    };
+    if exact_core_mem_forget_def_id(tcx, def_id) {
+        Some(AutomaticHeapLifetimeDecision::ExactMemForget)
+    } else if exact_box_owner_ty(tcx, owner.ty(&body.local_decls, tcx).ty)
+        && exact_alloc_box_leak_def_id(tcx, def_id)
+    {
+        Some(AutomaticHeapLifetimeDecision::ExactBoxLeak)
+    } else {
+        None
+    }
+}
+
+#[cfg(unialloc_rustc_current)]
+fn exact_box_new_requested_layout<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> Option<(u64, u64)> {
+    let func = match &candidate.original_terminator.kind {
+        TerminatorKind::Call { func, .. } => func,
+        _ => return None,
+    };
+    let def_id = match func.ty(&body.local_decls, tcx).kind() {
+        ty::FnDef(def_id, _) => *def_id,
+        _ => return None,
+    };
+    if !exact_alloc_box_new_def_id(tcx, def_id) {
+        return None;
+    }
+    let destination_ty = candidate.destination.ty(&body.local_decls, tcx).ty;
+    let payload_ty = match destination_ty.kind() {
+        ty::Adt(def, args)
+            if exact_alloc_adt_def_id(tcx, def.did(), exact_alloc_box_def_path)
+                && tcx.lang_items().owned_box() == Some(def.did()) =>
+        {
+            generic_arg_type(args.get(0)?)?
+        }
+        _ => return None,
+    };
+    if clone_result_has_unresolved_params(payload_ty) {
+        return None;
+    }
+    let layout = tcx
+        .layout_of(body.typing_env(tcx).as_query_input(payload_ty))
+        .ok()?;
+    Some((layout.size.bytes(), layout.align.abi.bytes()))
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn exact_box_new_requested_layout<'tcx>(
+    _tcx: TyCtxt<'tcx>,
+    _body: &Body<'tcx>,
+    _candidate: &SemanticScopeCandidate<'tcx>,
+) -> Option<(u64, u64)> {
+    None
+}
+
+fn rvalue_move_or_copy_source<'a, 'tcx>(rvalue: &'a Rvalue<'tcx>) -> Option<&'a Place<'tcx>> {
+    #[cfg(unialloc_rustc_current)]
+    match rvalue {
+        Rvalue::Use(Operand::Move(source) | Operand::Copy(source), _) => Some(source),
+        _ => None,
+    }
+    #[cfg(not(unialloc_rustc_current))]
+    match rvalue {
+        Rvalue::Use(Operand::Move(source) | Operand::Copy(source)) => Some(source),
+        _ => None,
+    }
+}
+
+fn operand_exact_place<'tcx>(operand: &Operand<'tcx>) -> Option<Place<'tcx>> {
+    match operand {
+        Operand::Move(place) | Operand::Copy(place) => Some(*place),
+        _ => None,
+    }
+}
+
+fn exact_ref_source_for_local<'tcx>(
+    body: &Body<'tcx>,
+    reference_local: Local,
+) -> Option<Place<'tcx>> {
+    let mut source = None;
+    for data in body_basic_blocks!(body).iter() {
+        for statement in &data.statements {
+            let (destination, rvalue) = match &statement.kind {
+                StatementKind::Assign(assigned) => &**assigned,
+                _ => continue,
+            };
+            if !destination.projection.is_empty() || destination.local != reference_local {
+                continue;
+            }
+            let candidate_source = match rvalue {
+                Rvalue::Ref(_, _, place) if place.projection.is_empty() => Some(*place),
+                _ => None,
+            };
+            match (source, candidate_source) {
+                (None, Some(place)) => source = Some(place),
+                (Some(existing), Some(place)) if existing == place => {}
+                (_, _) => return None,
+            }
+        }
+    }
+    source
+}
+
+fn semantic_feature_owner_place<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    destination: Place<'tcx>,
+    args: &[Operand<'tcx>],
+    receiver_owned_allocation: bool,
+) -> (Option<Place<'tcx>>, &'static str) {
+    if receiver_owned_allocation {
+        let receiver_place = args
+            .first()
+            .and_then(|operand| operand_exact_place(operand));
+        if let Some(receiver_place) = receiver_place {
+            let receiver_ty = receiver_place.ty(&body.local_decls, tcx).ty;
+            if receiver_place.projection.is_empty()
+                && direct_supported_heap_object_destination(tcx, receiver_ty)
+            {
+                return (Some(receiver_place), "exact_receiver_operand");
+            }
+            if receiver_place.projection.is_empty() {
+                if let Some(source) = exact_ref_source_for_local(body, receiver_place.local) {
+                    let source_ty = source.ty(&body.local_decls, tcx).ty;
+                    if direct_supported_heap_object_destination(tcx, source_ty) {
+                        return (Some(source), "exact_receiver_ref_source");
+                    }
+                }
+            }
+        }
+        return (None, "receiver_owner_place_unresolved");
+    }
+
+    let destination_ty = destination.ty(&body.local_decls, tcx).ty;
+    if destination.projection.is_empty()
+        && direct_supported_heap_object_destination(tcx, destination_ty)
+    {
+        (Some(destination), "semantic_destination_owner")
+    } else {
+        (None, "destination_owner_place_unresolved")
+    }
+}
+
+fn reachable_cfg_blocks<'tcx>(
+    body: &Body<'tcx>,
+    start: Option<BasicBlock>,
+) -> BTreeSet<BasicBlock> {
+    let mut reachable = BTreeSet::new();
+    let mut pending = match start {
+        Some(start) => vec![start],
+        None => Vec::new(),
+    };
+    while let Some(bb) = pending.pop() {
+        if !reachable.insert(bb) {
+            continue;
+        }
+        if let Some(terminator) = &body[bb].terminator {
+            pending.extend(terminator.successors());
+        }
+    }
+    reachable
+}
+
+fn natural_loop_blocks_and_backedges<'tcx>(
+    body: &Body<'tcx>,
+) -> (BTreeSet<BasicBlock>, BTreeSet<(BasicBlock, BasicBlock)>) {
+    let blocks = body_basic_blocks!(body);
+    let dominators = blocks.dominators();
+    let predecessors = blocks.predecessors();
+    let mut loop_blocks = BTreeSet::new();
+    let mut backedges = BTreeSet::new();
+
+    for (from, data) in blocks.iter_enumerated() {
+        if !dominators.is_reachable(from) {
+            continue;
+        }
+        let Some(terminator) = &data.terminator else {
+            continue;
+        };
+        for to in terminator.successors() {
+            if !dominators.is_reachable(to) || !dominators.dominates(to, from) {
+                continue;
+            }
+            backedges.insert((from, to));
+            loop_blocks.insert(to);
+            let mut pending = vec![from];
+            while let Some(node) = pending.pop() {
+                if !loop_blocks.insert(node) || node == to {
+                    continue;
+                }
+                pending.extend(predecessors[node].iter().copied());
+            }
+        }
+    }
+    (loop_blocks, backedges)
+}
+
+struct AliasConsumingUseVisitor<'a> {
+    aliases: &'a BTreeSet<Local>,
+    saw_consuming_use: bool,
+}
+
+impl<'tcx> Visitor<'tcx> for AliasConsumingUseVisitor<'_> {
+    fn visit_place(&mut self, place: &Place<'tcx>, context: PlaceContext, _location: Location) {
+        if self.aliases.contains(&place.local)
+            && matches!(
+                context,
+                PlaceContext::NonMutatingUse(
+                    NonMutatingUseContext::Move | NonMutatingUseContext::Copy
+                )
+            )
+        {
+            self.saw_consuming_use = true;
+        }
+    }
+}
+
+fn rvalue_consumes_owner_alias<'tcx>(
+    rvalue: &Rvalue<'tcx>,
+    aliases: &BTreeSet<Local>,
+    location: Location,
+) -> bool {
+    let mut visitor = AliasConsumingUseVisitor {
+        aliases,
+        saw_consuming_use: false,
+    };
+    visitor.visit_rvalue(rvalue, location);
+    visitor.saw_consuming_use
+}
+
+fn terminator_has_yield_or_await(terminator: &Terminator<'_>) -> bool {
+    matches!(&terminator.kind, TerminatorKind::Yield { .. })
+}
+
+fn sorted_block_labels(blocks: impl IntoIterator<Item = BasicBlock>) -> Vec<String> {
+    blocks
+        .into_iter()
+        .map(|block| format!("{:?}", block))
+        .collect()
+}
+
+fn semantic_lifetime_feature_export<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> SemanticLifetimeFeatureExport {
+    let reachable = reachable_cfg_blocks(body, candidate.original_target);
+    let (natural_loop_blocks, backedges) = natural_loop_blocks_and_backedges(body);
+    let mut reachable_normal = BTreeSet::new();
+    let mut reachable_cleanup = BTreeSet::new();
+    for bb in &reachable {
+        if body[*bb].is_cleanup {
+            reachable_cleanup.insert(*bb);
+        } else {
+            reachable_normal.insert(*bb);
+        }
+    }
+
+    let mut aliases = BTreeSet::new();
+    if let Some(owner) = candidate.feature_owner {
+        aliases.insert(owner.local);
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for bb in &reachable {
+            for statement in &body[*bb].statements {
+                let (destination, rvalue) = match &statement.kind {
+                    StatementKind::Assign(assigned) => &**assigned,
+                    _ => continue,
+                };
+                let Some(source) = rvalue_move_or_copy_source(rvalue) else {
+                    continue;
+                };
+                if aliases.contains(&source.local)
+                    && source.projection.is_empty()
+                    && destination.projection.is_empty()
+                    && destination.ty(&body.local_decls, tcx).ty
+                        == source.ty(&body.local_decls, tcx).ty
+                    && aliases.insert(destination.local)
+                {
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    let mut owner_move_count = 0usize;
+    let mut return_sink_blocks = BTreeSet::new();
+    let mut escape_sink_blocks = BTreeSet::new();
+    let mut store_sink_blocks = BTreeSet::new();
+    let mut normal_drop_blocks = BTreeSet::new();
+    let mut cleanup_drop_blocks = BTreeSet::new();
+    let mut function_has_yield_or_await = false;
+    let mut reachable_yield_or_await = false;
+
+    for (bb, data) in body_basic_blocks!(body).iter_enumerated() {
+        if data
+            .terminator
+            .as_ref()
+            .map(terminator_has_yield_or_await)
+            .unwrap_or(false)
+        {
+            function_has_yield_or_await = true;
+            if reachable.contains(&bb) {
+                reachable_yield_or_await = true;
+            }
+        }
+        if !reachable.contains(&bb) {
+            continue;
+        }
+        for (statement_index, statement) in data.statements.iter().enumerate() {
+            let (destination, rvalue) = match &statement.kind {
+                StatementKind::Assign(assigned) => &**assigned,
+                _ => continue,
+            };
+            let exact_alias_move = rvalue_move_or_copy_source(rvalue).filter(|source| {
+                aliases.contains(&source.local)
+                    && source.projection.is_empty()
+                    && destination.projection.is_empty()
+                    && destination.ty(&body.local_decls, tcx).ty
+                        == source.ty(&body.local_decls, tcx).ty
+            });
+            if exact_alias_move.is_some() {
+                owner_move_count += 1;
+                if destination.local == RETURN_PLACE {
+                    return_sink_blocks.insert(bb);
+                }
+            } else if rvalue_consumes_owner_alias(
+                rvalue,
+                &aliases,
+                Location {
+                    block: bb,
+                    statement_index,
+                },
+            ) {
+                store_sink_blocks.insert(bb);
+            }
+        }
+        let Some(terminator) = &data.terminator else {
+            continue;
+        };
+        match &terminator.kind {
+            TerminatorKind::Drop { place, .. }
+                if aliases.contains(&place.local) && place.projection.is_empty() =>
+            {
+                if data.is_cleanup {
+                    cleanup_drop_blocks.insert(bb);
+                } else {
+                    normal_drop_blocks.insert(bb);
+                }
+            }
+            TerminatorKind::Call { func, args, .. } => {
+                let def_id = match func.ty(&body.local_decls, tcx).kind() {
+                    ty::FnDef(def_id, _) => Some(*def_id),
+                    _ => None,
+                };
+                let owner_argument = call_arg_operands(args).iter().any(|operand| {
+                    operand_exact_place(operand)
+                        .map(|place| aliases.contains(&place.local) && place.projection.is_empty())
+                        .unwrap_or(false)
+                });
+                if owner_argument {
+                    if def_id
+                        .map(|def_id| exact_core_mem_drop_def_id(tcx, def_id))
+                        .unwrap_or(false)
+                    {
+                        if data.is_cleanup {
+                            cleanup_drop_blocks.insert(bb);
+                        } else {
+                            normal_drop_blocks.insert(bb);
+                        }
+                    } else {
+                        escape_sink_blocks.insert(bb);
+                    }
+                }
+            }
+            TerminatorKind::Return if aliases.contains(&RETURN_PLACE) => {
+                return_sink_blocks.insert(bb);
+            }
+            _ => {}
+        }
+    }
+
+    let nonlinear_normal_cfg = reachable_normal.iter().any(|bb| {
+        body[*bb]
+            .terminator
+            .as_ref()
+            .map(|terminator| {
+                terminator
+                    .successors()
+                    .filter(|successor| !body[*successor].is_cleanup)
+                    .count()
+                    > 1
+            })
+            .unwrap_or(false)
+    });
+    // This is a normal-path CFG fact only. Cleanup/unwind is exported in its
+    // own field and independently forces the automatic hint to Unknown.
+    let exact_drop_path = normal_drop_blocks.len() == 1
+        && !nonlinear_normal_cfg
+        && return_sink_blocks.is_empty()
+        && escape_sink_blocks.is_empty()
+        && store_sink_blocks.is_empty();
+    let conditional_drop_path = !exact_drop_path && !normal_drop_blocks.is_empty();
+    let (requested_size_bytes, requested_align_bytes, requested_layout_basis) =
+        match exact_box_new_requested_layout(tcx, body, candidate) {
+            Some((size, align)) => (Some(size), Some(align), "exact_box_new_payload_layout"),
+            None => (None, None, "dynamic_or_unproven_requested_layout"),
+        };
+    let (normal_successor_count, cleanup_successor_count) = candidate
+        .original_terminator
+        .successors()
+        .fold((0usize, 0usize), |(normal, cleanup), successor| {
+            if body[successor].is_cleanup {
+                (normal, cleanup + 1)
+            } else {
+                (normal + 1, cleanup)
+            }
+        });
+    #[cfg(unialloc_rustc_current)]
+    let analysis_phase = if marker_free_heap_preoptimization_rewrite_enabled() {
+        "post_borrowck_pre_optimization"
+    } else {
+        "optimized_mir"
+    };
+    #[cfg(not(unialloc_rustc_current))]
+    let analysis_phase = "optimized_mir";
+
+    SemanticLifetimeFeatureExport {
+        analysis_phase,
+        owner_place: candidate.feature_owner.map(|place| format!("{:?}", place)),
+        owner_place_basis: candidate.feature_owner_basis,
+        requested_size_bytes,
+        requested_align_bytes,
+        requested_layout_basis,
+        owner_move_count,
+        return_sink: !return_sink_blocks.is_empty(),
+        escape_sink: !escape_sink_blocks.is_empty(),
+        store_sink: !store_sink_blocks.is_empty(),
+        allocation_in_natural_loop: natural_loop_blocks.contains(&candidate.bb),
+        reachable_backedge_after_allocation: backedges
+            .iter()
+            .any(|(from, to)| reachable.contains(from) && reachable.contains(to)),
+        function_has_yield_or_await,
+        reachable_yield_or_await,
+        receiver_owned_allocation: candidate.receiver_owned_allocation,
+        exact_drop_path,
+        conditional_drop_path,
+        cleanup_drop_path: !cleanup_drop_blocks.is_empty(),
+        normal_drop_blocks: sorted_block_labels(normal_drop_blocks),
+        cleanup_drop_blocks: sorted_block_labels(cleanup_drop_blocks),
+        return_sink_blocks: sorted_block_labels(return_sink_blocks),
+        escape_sink_blocks: sorted_block_labels(escape_sink_blocks),
+        store_sink_blocks: sorted_block_labels(store_sink_blocks),
+        reachable_normal_blocks: sorted_block_labels(reachable_normal),
+        reachable_cleanup_blocks: sorted_block_labels(reachable_cleanup),
+        normal_successor_count,
+        cleanup_successor_count,
+    }
+}
+
+#[derive(Clone, Debug)]
+struct AutomaticHeapLifetimeTrace {
+    decision: AutomaticHeapLifetimeDecision,
+    terminal_owner_place: Option<String>,
+}
+
+fn candidate_marker_free_heap_lifetime_decision<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &Body<'tcx>,
+    candidate: &SemanticScopeCandidate<'tcx>,
+) -> AutomaticHeapLifetimeTrace {
+    let destination_ty = candidate.destination.ty(&body.local_decls, tcx).ty;
+    if !direct_supported_heap_object_destination(tcx, destination_ty)
+        || format!("{:?}", destination_ty) != candidate.semantic_object_type
+        || !candidate.destination.projection.is_empty()
+    {
+        return AutomaticHeapLifetimeTrace {
+            decision: AutomaticHeapLifetimeDecision::UnsupportedOwnerUnknown,
+            terminal_owner_place: None,
+        };
+    }
+    if refcounted_heap_owner_ty(tcx, destination_ty) {
+        return AutomaticHeapLifetimeTrace {
+            decision: AutomaticHeapLifetimeDecision::RefcountedOwnerUnknown,
+            terminal_owner_place: None,
+        };
+    }
+
+    let mut owner = candidate.destination;
+    let mut owner_move_count = 0usize;
+    let mut bb = match candidate.original_target {
+        Some(bb) => bb,
+        None => {
+            return AutomaticHeapLifetimeTrace {
+                decision: AutomaticHeapLifetimeDecision::MissingTerminalUnknown,
+                terminal_owner_place: None,
+            }
+        }
+    };
+    let mut visited = BTreeSet::new();
+
+    loop {
+        if !visited.insert(bb) {
+            return AutomaticHeapLifetimeTrace {
+                decision: AutomaticHeapLifetimeDecision::NonlinearControlFlowUnknown,
+                terminal_owner_place: None,
+            };
+        }
+        let data = &body[bb];
+        if data.is_cleanup {
+            return AutomaticHeapLifetimeTrace {
+                decision: AutomaticHeapLifetimeDecision::MissingTerminalUnknown,
+                terminal_owner_place: None,
+            };
+        }
+
+        for (statement_index, statement) in data.statements.iter().enumerate() {
+            if let Some(next_owner) = exact_unprojected_owner_move(tcx, body, statement, owner) {
+                owner = next_owner;
+                owner_move_count += 1;
+                continue;
+            }
+            if statement_uses_exact_heap_owner(
+                statement,
+                owner,
+                Location {
+                    block: bb,
+                    statement_index,
+                },
+            ) {
+                return AutomaticHeapLifetimeTrace {
+                    decision: AutomaticHeapLifetimeDecision::AliasOrEscapeUnknown,
+                    terminal_owner_place: None,
+                };
+            }
+        }
+
+        let terminator = match &data.terminator {
+            Some(terminator) => terminator,
+            None => {
+                return AutomaticHeapLifetimeTrace {
+                    decision: AutomaticHeapLifetimeDecision::MissingTerminalUnknown,
+                    terminal_owner_place: None,
+                }
+            }
+        };
+        let bounded_process_long_terminal =
+            terminator_exact_bounded_process_long_decision(tcx, body, terminator, owner);
+        if terminator_has_cleanup_or_unwind_edge(terminator)
+            && bounded_process_long_terminal.is_none()
+        {
+            // The owner is live across this potentially-unwinding operation.
+            // A normal-path Drop/forget says nothing about cleanup behavior;
+            // retain Unknown until every normal and cleanup terminal has an
+            // exact process-long proof.
+            return AutomaticHeapLifetimeTrace {
+                decision: AutomaticHeapLifetimeDecision::CleanupOrUnwindUnknown,
+                terminal_owner_place: None,
+            };
+        }
+        if let Some(decision) = bounded_process_long_terminal {
+            return AutomaticHeapLifetimeTrace {
+                decision,
+                terminal_owner_place: None,
+            };
+        }
+        if let TerminatorKind::Drop { place, .. } = &terminator.kind {
+            if *place == owner {
+                return AutomaticHeapLifetimeTrace {
+                    decision: if owner_move_count > 0 {
+                        AutomaticHeapLifetimeDecision::ExactLocalMoveChainDrop
+                    } else {
+                        AutomaticHeapLifetimeDecision::ExactLocalDrop
+                    },
+                    terminal_owner_place: Some(format!("{:?}", owner)),
+                };
+            }
+        }
+        if let TerminatorKind::Call { func, args, .. } = &terminator.kind {
+            let def_id = match func.ty(&body.local_decls, tcx).kind() {
+                ty::FnDef(def_id, _) => Some(*def_id),
+                _ => None,
+            };
+            let args = call_arg_operands(args);
+            let exact_owner_consumer =
+                args.len() == 1 && operand_is_exact_owner_consume(&args[0], owner);
+            if exact_owner_consumer {
+                if def_id
+                    .map(|def_id| exact_core_mem_drop_def_id(tcx, def_id))
+                    .unwrap_or(false)
+                {
+                    return AutomaticHeapLifetimeTrace {
+                        // Drop elaboration lowers an explicit `drop(owner)` to
+                        // one compiler-generated argument temporary. Count
+                        // that final move as call plumbing; any earlier owner
+                        // move is the bounded source-level move chain.
+                        decision: if owner_move_count > 1 {
+                            AutomaticHeapLifetimeDecision::ExactLocalMoveChainDrop
+                        } else {
+                            AutomaticHeapLifetimeDecision::ExactLocalDrop
+                        },
+                        terminal_owner_place: None,
+                    };
+                }
+                if def_id
+                    .map(|def_id| exact_core_mem_forget_def_id(tcx, def_id))
+                    .unwrap_or(false)
+                {
+                    return AutomaticHeapLifetimeTrace {
+                        decision: AutomaticHeapLifetimeDecision::ExactMemForget,
+                        terminal_owner_place: None,
+                    };
+                }
+                if exact_box_owner_ty(tcx, owner.ty(&body.local_decls, tcx).ty)
+                    && def_id
+                        .map(|def_id| exact_alloc_box_leak_def_id(tcx, def_id))
+                        .unwrap_or(false)
+                {
+                    return AutomaticHeapLifetimeTrace {
+                        decision: AutomaticHeapLifetimeDecision::ExactBoxLeak,
+                        terminal_owner_place: None,
+                    };
+                }
+            }
+        }
+        if terminator_uses_exact_heap_owner(
+            terminator,
+            owner,
+            Location {
+                block: bb,
+                statement_index: data.statements.len(),
+            },
+        ) {
+            return AutomaticHeapLifetimeTrace {
+                decision: AutomaticHeapLifetimeDecision::AliasOrEscapeUnknown,
+                terminal_owner_place: None,
+            };
+        }
+
+        let successors = terminator.successors().collect::<Vec<_>>();
+        if successors.len() != 1 {
+            return AutomaticHeapLifetimeTrace {
+                decision: if successors.is_empty() {
+                    AutomaticHeapLifetimeDecision::MissingTerminalUnknown
+                } else {
+                    AutomaticHeapLifetimeDecision::NonlinearControlFlowUnknown
+                },
+                terminal_owner_place: None,
+            };
+        }
+        bb = successors[0];
+    }
 }
 
 fn candidate_has_linear_exact_drop<'tcx>(
@@ -9465,6 +10664,7 @@ fn exact_semantic_local_ownership_proof<'tcx>(
 ) -> SemanticLocalOwnershipProof {
     if !direct_local_size_align_with_semantic_drop_requested()
         && !auto_lifetime_classifier_enabled()
+        && !auto_heap_lifetime_inference_enabled()
     {
         return SemanticLocalOwnershipProof::default();
     }
@@ -9474,6 +10674,8 @@ fn exact_semantic_local_ownership_proof<'tcx>(
         String,
         Vec<((String, String), AutomaticLifetimeDecision, bool)>,
     > = BTreeMap::new();
+    let mut heap_candidate_traces: Vec<((String, String), String, AutomaticHeapLifetimeTrace)> =
+        Vec::new();
     let solved_drop_pairs = solved_semantic_drop_pairs(tcx, body);
 
     for candidate in candidates {
@@ -9488,6 +10690,19 @@ fn exact_semantic_local_ownership_proof<'tcx>(
             && candidate_has_linear_exact_drop(body, candidate)
             && solved_drop_pairs.contains(&key);
         *candidate_counts.entry(key.clone()).or_insert(0) += 1;
+        let heap_trace = if candidate.original_is_cleanup {
+            AutomaticHeapLifetimeTrace {
+                decision: AutomaticHeapLifetimeDecision::MissingTerminalUnknown,
+                terminal_owner_place: None,
+            }
+        } else {
+            candidate_marker_free_heap_lifetime_decision(tcx, body, candidate)
+        };
+        heap_candidate_traces.push((
+            key.clone(),
+            candidate.semantic_object_type.clone(),
+            heap_trace,
+        ));
         candidate_pairs
             .entry(candidate.semantic_object_type.clone())
             .or_default()
@@ -9503,6 +10718,35 @@ fn exact_semantic_local_ownership_proof<'tcx>(
     }
 
     let mut proof = SemanticLocalOwnershipProof::default();
+    let mut heap_terminal_counts: BTreeMap<(String, String), usize> = BTreeMap::new();
+    for (_, semantic_object_type, trace) in &heap_candidate_traces {
+        if let Some(terminal_owner_place) = &trace.terminal_owner_place {
+            *heap_terminal_counts
+                .entry((semantic_object_type.clone(), terminal_owner_place.clone()))
+                .or_insert(0) += 1;
+        }
+    }
+    for (pair, semantic_object_type, trace) in &heap_candidate_traces {
+        let decision = if candidate_counts.get(pair) == Some(&1) {
+            trace.decision
+        } else {
+            AutomaticHeapLifetimeDecision::AmbiguousOwnerSiteUnknown
+        };
+        proof
+            .automatic_heap_lifetime_decisions
+            .insert(pair.clone(), decision);
+        if let Some(terminal_owner_place) = &trace.terminal_owner_place {
+            let terminal_pair = (semantic_object_type.clone(), terminal_owner_place.clone());
+            let terminal_decision = if heap_terminal_counts.get(&terminal_pair) == Some(&1) {
+                decision
+            } else {
+                AutomaticHeapLifetimeDecision::AmbiguousOwnerSiteUnknown
+            };
+            proof
+                .automatic_heap_lifetime_decisions
+                .insert(terminal_pair, terminal_decision);
+        }
+    }
     for pairs in candidate_pairs.values() {
         for (pair, decision, _) in pairs {
             if candidate_counts.get(pair) == Some(&1) {
@@ -9697,6 +10941,7 @@ fn record_or_rewrite_candidates<'tcx>(
             type_id,
             configured_module_id,
             Some(AutomaticLifetimeDecision::UnsupportedSiteUnknown),
+            Some(AutomaticHeapLifetimeDecision::UnsupportedOwnerUnknown),
         );
         let candidate_cross_thread_escape = semantic_object_needs_cross_thread_recovery_hint(
             cross_thread_escape,
@@ -9816,6 +11061,7 @@ fn record_or_rewrite_candidates<'tcx>(
                         semantic_scope_unwind_pop_inserted: false,
                         metadata_pairing_contract,
                         lowering_kind: "direct_allocator_call_rewrite",
+                        lifetime_analysis_features: None,
                     });
                     continue;
                 }
@@ -9935,6 +11181,7 @@ fn record_or_rewrite_candidates<'tcx>(
             semantic_scope_unwind_pop_inserted: false,
             metadata_pairing_contract,
             lowering_kind: "direct_allocator_call_rewrite",
+            lifetime_analysis_features: None,
         });
     }
     let local_ownership = record_or_rewrite_semantic_scope_candidates(
@@ -10659,6 +11906,7 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             semantic_scope_unwind_pop_inserted: false,
             metadata_pairing_contract,
             lowering_kind: "semantic_ownership_transfer_rewrite",
+            lifetime_analysis_features: None,
         });
         handled_blocks.insert(candidate.bb);
     }
@@ -10794,6 +12042,15 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 | None => UNKNOWN_HEAP_OBJECT_TYPE.to_string(),
             },
         };
+        let receiver_owned_allocation =
+            semantic_scope_receiver_mutating_allocation_like_call(&callee);
+        let (feature_owner, feature_owner_basis) = semantic_feature_owner_place(
+            tcx,
+            body,
+            *destination,
+            &arg_operands,
+            receiver_owned_allocation,
+        );
         candidate_blocks.push(SemanticScopeCandidate {
             bb,
             original_is_cleanup: data.is_cleanup,
@@ -10814,7 +12071,16 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             original_from_hir_call: from_hir_call,
             fn_span: *fn_span,
             original_terminator: terminator.clone(),
+            feature_owner,
+            feature_owner_basis,
+            receiver_owned_allocation,
+            lifetime_analysis_features: None,
         });
+    }
+
+    for candidate in &mut candidate_blocks {
+        candidate.lifetime_analysis_features =
+            Some(semantic_lifetime_feature_export(tcx, body, candidate));
     }
 
     // The local ABI is a per-owner optimization, not a per-type heuristic.
@@ -10841,6 +12107,10 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
         original_from_hir_call,
         fn_span,
         mut original_terminator,
+        feature_owner: _,
+        feature_owner_basis: _,
+        receiver_owned_allocation: _,
+        lifetime_analysis_features,
     } in candidate_blocks
     {
         let source_span = tcx.sess.source_map().span_to_diagnostic_string(fn_span);
@@ -10910,6 +12180,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 semantic_scope_unwind_pop_inserted: false,
                 metadata_pairing_contract: "audit_only_no_supported_heap_owner",
                 lowering_kind: "semantic_scope_non_heap_object_skipped",
+                lifetime_analysis_features: lifetime_analysis_features.clone(),
             });
             continue;
         }
@@ -10968,6 +12239,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 semantic_scope_unwind_pop_inserted: false,
                 metadata_pairing_contract: "audit_only_ambiguous_heap_object_type",
                 lowering_kind: "semantic_scope_unsolved_heap_object_candidate",
+                lifetime_analysis_features: lifetime_analysis_features.clone(),
             });
             continue;
         }
@@ -11044,6 +12316,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 } else {
                     "semantic_scope_unsolved_heap_object_candidate"
                 },
+                lifetime_analysis_features: lifetime_analysis_features.clone(),
             });
             continue;
         }
@@ -11054,11 +12327,16 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             .automatic_lifetime_decisions
             .get(&(semantic_object_type.clone(), destination_place.clone()))
             .copied();
+        let automatic_heap_lifetime_decision = local_ownership
+            .automatic_heap_lifetime_decisions
+            .get(&(semantic_object_type.clone(), destination_place.clone()))
+            .copied();
         let lifetime_selection = lowering_lifetime_hint_for_site(
             callsite,
             type_id,
             module_id,
             automatic_lifetime_decision,
+            automatic_heap_lifetime_decision,
         );
         let lifetime_hint = lifetime_selection.hint;
         let lifetime_hint_confidence = lifetime_selection.confidence;
@@ -11230,6 +12508,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             semantic_scope_unwind_pop_inserted,
             metadata_pairing_contract: "semantic_scope_active_metadata",
             lowering_kind: "semantic_scope_enter_exit_rewrite",
+            lifetime_analysis_features,
         });
     }
     local_ownership
@@ -11402,6 +12681,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                 semantic_scope_unwind_pop_inserted: false,
                 metadata_pairing_contract: "audit_only_multiple_heap_owner_drop_type",
                 lowering_kind: "semantic_scope_drop_multiple_heap_owners_skipped",
+                lifetime_analysis_features: None,
             });
             continue;
         }
@@ -11490,6 +12770,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                 semantic_scope_unwind_pop_inserted: false,
                 metadata_pairing_contract,
                 lowering_kind,
+                lifetime_analysis_features: None,
             });
             continue;
         }
@@ -11500,11 +12781,16 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             .automatic_lifetime_decisions
             .get(&pair)
             .copied();
+        let automatic_heap_lifetime_decision = local_ownership
+            .automatic_heap_lifetime_decisions
+            .get(&pair)
+            .copied();
         let lifetime_selection = lowering_lifetime_hint_for_site(
             callsite,
             type_id,
             module_id,
             automatic_lifetime_decision,
+            automatic_heap_lifetime_decision,
         );
         let lifetime_hint = lifetime_selection.hint;
         let lifetime_hint_confidence = lifetime_selection.confidence;
@@ -11662,6 +12948,7 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             semantic_scope_unwind_pop_inserted,
             metadata_pairing_contract: "semantic_scope_drop_active_metadata",
             lowering_kind: "semantic_scope_drop_rewrite",
+            lifetime_analysis_features: None,
         });
     }
 }
@@ -11674,6 +12961,14 @@ fn optimized_mir_with_rewrite_dry_run<'tcx>(
     let original = unsafe {
         ORIGINAL_OPTIMIZED_MIR.expect("original optimized_mir provider not installed")(tcx, def_id)
     };
+    // Marker-free lifetime scopes are inserted in the post-borrowck,
+    // pre-optimization provider below. Returning the normally optimized body
+    // here preserves rustc's release MIR pipeline while avoiding a second
+    // instrumentation/audit pass over the already-instrumented function.
+    #[cfg(unialloc_rustc_current)]
+    if marker_free_heap_preoptimization_rewrite_enabled() {
+        return original;
+    }
     let mut cloned = original.clone();
     let actual_rewrite = unsafe { ACTUAL_MIR_REWRITE };
     let semantic_scope_rewrite = unsafe { ACTUAL_SEMANTIC_SCOPE_REWRITE };
@@ -11720,14 +13015,75 @@ fn optimized_mir_with_rewrite_dry_run<'tcx>(
     tcx.arena.alloc(cloned)
 }
 
+#[cfg(unialloc_rustc_current)]
+fn marker_free_heap_preoptimization_rewrite_enabled() -> bool {
+    unsafe { AUTO_HEAP_LIFETIME_INFERENCE && ACTUAL_SEMANTIC_SCOPE_REWRITE && !ACTUAL_MIR_REWRITE }
+}
+
+/// Instrument exact marker-free ownership while the MIR still contains the
+/// source-level constructor and consuming call. MIR optimization level 2+
+/// inlines Vec constructors, mem::forget, and Box::leak, erasing precisely the
+/// DefId/owner edges needed by the bounded proof. This provider runs after
+/// borrow checking and drop elaboration, then returns the same `Steal` cache to
+/// rustc so the ordinary release optimization pipeline remains unchanged.
+#[cfg(unialloc_rustc_current)]
+#[cfg_attr(unialloc_rustc_current, allow(static_mut_refs))]
+fn mir_drops_elaborated_with_marker_free_heap_rewrite<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: LocalDefId,
+) -> &'tcx Steal<Body<'tcx>> {
+    let original = unsafe {
+        ORIGINAL_MIR_DROPS_ELABORATED_AND_CONST_CHECKED
+            .expect("original mir_drops_elaborated_and_const_checked provider not installed")(
+            tcx, def_id,
+        )
+    };
+    if !marker_free_heap_preoptimization_rewrite_enabled() {
+        return original;
+    }
+
+    let semantic_scope_abi = resolve_unialloc_semantic_scope(tcx, false);
+    let semantic_scope_local_abi = if direct_local_size_align_with_semantic_drop_requested() {
+        resolve_unialloc_semantic_scope(tcx, true)
+    } else {
+        None
+    };
+    let semantic_ownership_transfer_abi = resolve_unialloc_semantic_ownership_transfer(tcx);
+    let mut body = original.risky_hack_borrow_mut();
+    unsafe {
+        if let Some(records) = &RECORDS {
+            if let Ok(mut guard) = records.lock() {
+                record_or_rewrite_candidates(
+                    tcx,
+                    def_id.to_def_id(),
+                    &mut body,
+                    false,
+                    None,
+                    true,
+                    semantic_scope_abi,
+                    semantic_scope_local_abi,
+                    semantic_ownership_transfer_abi,
+                    &mut guard,
+                );
+            }
+        }
+    }
+    drop(body);
+    original
+}
+
 impl Callbacks for RewriteDryRunCallbacks {
     #[cfg(unialloc_rustc_current)]
     fn config(&mut self, config: &mut interface::Config) {
         config.override_queries = Some(|_sess, providers: &mut Providers| {
             unsafe {
                 ORIGINAL_OPTIMIZED_MIR = Some(providers.queries.optimized_mir);
+                ORIGINAL_MIR_DROPS_ELABORATED_AND_CONST_CHECKED =
+                    Some(providers.queries.mir_drops_elaborated_and_const_checked);
             }
             providers.queries.optimized_mir = optimized_mir_with_rewrite_dry_run;
+            providers.queries.mir_drops_elaborated_and_const_checked =
+                mir_drops_elaborated_with_marker_free_heap_rewrite;
         });
     }
 
@@ -11937,9 +13293,56 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         .iter()
         .filter(|record| automatic_lifetime_unknown_basis(record.lifetime_hint_basis))
         .count();
+    let automatic_heap_exact_drop_fact_count = records
+        .iter()
+        .filter(|record| {
+            record
+                .lifetime_analysis_features
+                .as_ref()
+                .map(|features| features.exact_drop_path)
+                .unwrap_or(false)
+        })
+        .count();
+    let automatic_heap_bounded_process_long_oracle_count = records
+        .iter()
+        .filter(|record| {
+            automatic_heap_lifetime_bounded_process_long_oracle_basis(record.lifetime_hint_basis)
+        })
+        .count();
+    let automatic_heap_unknown_count = records
+        .iter()
+        .filter(|record| automatic_heap_lifetime_unknown_basis(record.lifetime_hint_basis))
+        .count();
     let automatic_lifetime_candidate_allocation_site_count = records
         .iter()
         .filter(|record| record.lowering_kind == "semantic_scope_enter_exit_rewrite")
+        .count();
+    let automatic_heap_exact_drop_fact_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && record
+                    .lifetime_analysis_features
+                    .as_ref()
+                    .map(|features| features.exact_drop_path)
+                    .unwrap_or(false)
+        })
+        .count();
+    let automatic_heap_bounded_process_long_oracle_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_heap_lifetime_bounded_process_long_oracle_basis(
+                    record.lifetime_hint_basis,
+                )
+        })
+        .count();
+    let automatic_heap_unknown_allocation_site_count = records
+        .iter()
+        .filter(|record| {
+            record.lowering_kind == "semantic_scope_enter_exit_rewrite"
+                && automatic_heap_lifetime_unknown_basis(record.lifetime_hint_basis)
+        })
         .count();
     let automatic_lifetime_eligible_allocation_site_count = records
         .iter()
@@ -12043,6 +13446,7 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let metadata_hints_requested = cli.lifetime_profile.is_some()
         || cli.lifetime_hint != 0
         || cli.auto_lifetime_classifier
+        || cli.auto_heap_lifetime_inference
         || cli.placement_hint != 0
         || cli.auto_cross_thread_recovery_hint;
     let local_semantic_scope_applied_count = records
@@ -12238,6 +13642,19 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let _ = writeln!(json, "    \"name\": \"{}\",", PASS_NAME);
     json.push_str("    \"kind\": \"rustc_driver_optimized_mir_provider_override\",\n");
     json.push_str("    \"query_overridden\": \"optimized_mir\",\n");
+    let marker_free_heap_preoptimization_rewrite = cfg!(unialloc_rustc_current)
+        && cli.auto_heap_lifetime_inference
+        && cli.semantic_scope_rewrite
+        && !cli.actual_rewrite;
+    let _ = writeln!(
+        json,
+        "    \"marker_free_heap_preoptimization_rewrite\": {},",
+        marker_free_heap_preoptimization_rewrite
+    );
+    json.push_str(
+        "    \"marker_free_heap_analysis_query\": \"mir_drops_elaborated_and_const_checked\",\n",
+    );
+    json.push_str("    \"release_mir_optimization_preserved\": true,\n");
     json.push_str("    \"body_clone_returned_to_rustc\": true,\n");
     let _ = writeln!(
         json,
@@ -12442,6 +13859,54 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
         let _ = write!(json, "\"{}\": {}", json_escape(basis), count);
     }
     json.push_str("},\n");
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_lifetime_inference_enabled\": {},",
+        cli.auto_heap_lifetime_inference
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_lifetime_inference_precedence\": \"{}\",",
+        AUTOMATIC_HEAP_LIFETIME_INFERENCE_PRECEDENCE
+    );
+    json.push_str(
+        "    \"automatic_heap_lifetime_inference_contract\": \"Exact Drop is exported only as an eventual-release fact with hint=0/confidence=0; it makes no short-duration, pressure-bound, or allocator-phase claim. 0xA102 is a bounded process-long oracle for exact core mem::forget/alloc Box::leak smoke patterns and is excluded from real-program Long solution claims. Owner-live Call/Drop cleanup edges, branches, aliases, refcounted owners, and unsupported sinks abstain. Analysis runs post-borrowck before ordinary release MIR optimization\",\n",
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_bounded_process_long_oracle_hint\": {},",
+        LIFETIME_HINT_BOUNDED_PROCESS_LONG_ORACLE
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_exact_drop_fact_count\": {},",
+        automatic_heap_exact_drop_fact_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_bounded_process_long_oracle_count\": {},",
+        automatic_heap_bounded_process_long_oracle_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_unknown_count\": {},",
+        automatic_heap_unknown_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_exact_drop_fact_allocation_site_count\": {},",
+        automatic_heap_exact_drop_fact_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_bounded_process_long_oracle_allocation_site_count\": {},",
+        automatic_heap_bounded_process_long_oracle_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_unknown_allocation_site_count\": {},",
+        automatic_heap_unknown_allocation_site_count
+    );
     let _ = writeln!(json, "    \"placement_hint\": {},", cli.placement_hint);
     let _ = writeln!(json, "    \"module_id\": {},", lowering_module_id());
     let _ = writeln!(
@@ -12745,6 +14210,26 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     );
     let _ = writeln!(
         json,
+        "    \"automatic_heap_lifetime_inference_enabled\": {},",
+        cli.auto_heap_lifetime_inference
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_exact_drop_fact_allocation_site_count\": {},",
+        automatic_heap_exact_drop_fact_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_bounded_process_long_oracle_allocation_site_count\": {},",
+        automatic_heap_bounded_process_long_oracle_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
+        "    \"automatic_heap_unknown_allocation_site_count\": {},",
+        automatic_heap_unknown_allocation_site_count
+    );
+    let _ = writeln!(
+        json,
         "    \"automatic_lifetime_candidate_allocation_site_count\": {},",
         automatic_lifetime_candidate_allocation_site_count
     );
@@ -13038,6 +14523,7 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
             "      \"metadata_pairing_contract\": \"{}\",",
             record.metadata_pairing_contract
         );
+        push_semantic_lifetime_features_json(&mut json, record);
         let _ = writeln!(
             json,
             "      \"lowering_kind\": \"{}\"",
@@ -13067,6 +14553,17 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let mut text = String::new();
     let _ = writeln!(text, "label: {}", PASS_NAME);
     text.push_str("query_overridden: optimized_mir\n");
+    let marker_free_heap_preoptimization_rewrite = cfg!(unialloc_rustc_current)
+        && cli.auto_heap_lifetime_inference
+        && cli.semantic_scope_rewrite
+        && !cli.actual_rewrite;
+    let _ = writeln!(
+        text,
+        "marker_free_heap_preoptimization_rewrite: {}",
+        marker_free_heap_preoptimization_rewrite
+    );
+    text.push_str("marker_free_heap_analysis_query: mir_drops_elaborated_and_const_checked\n");
+    text.push_str("release_mir_optimization_preserved: true\n");
     text.push_str("body_clone_returned_to_rustc: true\n");
     let rewrite_applied_count = records
         .iter()
@@ -13563,6 +15060,7 @@ fn main() {
         LOWERING_LIFETIME_HINT = cli.lifetime_hint;
         LOWERING_LIFETIME_CONFIDENCE_THRESHOLD = cli.lifetime_confidence_threshold;
         AUTO_LIFETIME_CLASSIFIER = cli.auto_lifetime_classifier;
+        AUTO_HEAP_LIFETIME_INFERENCE = cli.auto_heap_lifetime_inference;
         LOWERING_PLACEMENT_HINT = cli.placement_hint;
         AUTO_CROSS_THREAD_RECOVERY_HINT = cli.auto_cross_thread_recovery_hint;
         DIRECT_LOCAL_METADATA_ABI = cli.direct_local_metadata_abi;

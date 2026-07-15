@@ -1,0 +1,191 @@
+{
+  "builds": {
+    "baseline": {
+      "audit": {
+        "audit_file_count": 1,
+        "audit_root": "/tmp/unialloc-compiler-lifetime-oracle-20260715-v2/compiler-audits/baseline",
+        "audit_sha256": "d9cce734dd7623e25e2ad671b37fb8c933ebd0314d4ac92bc65b13131601f56e",
+        "basis_counts": {
+          "default_unknown": 5
+        },
+        "bounded_mechanism_coverage": 0.0,
+        "bounded_mechanism_site_count": 0,
+        "bounded_process_long_oracle_site_count": 0,
+        "candidate_allocation_site_count": 5,
+        "eventual_release_fact_site_count": 2,
+        "heap_unknown_site_count": 0,
+        "hint_counts": {
+          "0": 5
+        },
+        "inference_enabled_audit_file_count": 0,
+        "proven_scoped_site_count": 0,
+        "schema_version": 1,
+        "source": "compiler-heap-lifetime-audit-summary"
+      },
+      "binary": "/tmp/unialloc-compiler-lifetime-oracle-20260715-v2/targets/baseline/release/compiler_heap_lifetime_fixture",
+      "binary_sha256": "988ca94234fb0ba8524d5672c97c4a9a898acc53f123c6b0e4f0c5bdceefb7a8",
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "build",
+        "--release",
+        "--offline",
+        "--manifest-path",
+        "/tmp/unialloc-compiler-lifetime-oracle-20260715-v2/fixture-crate/Cargo.toml"
+      ],
+      "inference": false,
+      "mode": "baseline",
+      "stderr_sha256": "d2d27f47eb6483837d2571921cba2dae277d768e9bce5fc41406cdb6416b981d",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inferred": {
+      "audit": {
+        "audit_file_count": 1,
+        "audit_root": "/tmp/unialloc-compiler-lifetime-oracle-20260715-v2/compiler-audits/inferred",
+        "audit_sha256": "f6ac3581414fc7787e39dd51118ea138df744bfb31bd107ea73279e9d4b882a2",
+        "basis_counts": {
+          "automatic_heap_alias_or_escape_unknown": 3,
+          "automatic_heap_cleanup_or_unwind_unknown": 3,
+          "automatic_heap_exact_box_leak": 1,
+          "automatic_heap_exact_mem_forget": 1,
+          "automatic_heap_nonlinear_control_flow_unknown": 1
+        },
+        "bounded_mechanism_coverage": 0.2222222222222222,
+        "bounded_mechanism_site_count": 2,
+        "bounded_process_long_oracle_site_count": 2,
+        "candidate_allocation_site_count": 9,
+        "eventual_release_fact_site_count": 2,
+        "heap_unknown_site_count": 7,
+        "hint_counts": {
+          "0": 7,
+          "41218": 2
+        },
+        "inference_enabled_audit_file_count": 1,
+        "proven_scoped_site_count": 0,
+        "schema_version": 1,
+        "source": "compiler-heap-lifetime-audit-summary"
+      },
+      "binary": "/tmp/unialloc-compiler-lifetime-oracle-20260715-v2/targets/inferred/release/compiler_heap_lifetime_fixture",
+      "binary_sha256": "158bc3e801e74565629840b63fef7c2e8e3f386f25bcf6947e3a8948de3bb1c6",
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "build",
+        "--release",
+        "--offline",
+        "--manifest-path",
+        "/tmp/unialloc-compiler-lifetime-oracle-20260715-v2/fixture-crate/Cargo.toml"
+      ],
+      "inference": true,
+      "mode": "inferred",
+      "stderr_sha256": "d2d27f47eb6483837d2571921cba2dae277d768e9bce5fc41406cdb6416b981d",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "configuration": {
+    "bootstrap_resamples": 2000,
+    "bounded_mechanism_hints": {
+      "bounded_process_long_oracle": 41218,
+      "proven_scoped": 41217
+    },
+    "compiler_environment": "UNIALLOC_AUTO_HEAP_LIFETIME_INFERENCE=1",
+    "compiler_flag": "--unialloc-auto-heap-lifetime-inference",
+    "cpu": 20,
+    "iterations": 4096,
+    "numa_node": 0,
+    "repeats": 5,
+    "require_thp": false,
+    "runtime_policies": {
+      "adaptive": "AdaptiveRuntimeHugepage (repr 5)",
+      "ordinary": "CompilerInferredOrdinary (repr 7)",
+      "thp": "CompilerInferredHugepage (repr 6)"
+    },
+    "seed": 20260715,
+    "thp_settle_ms": 50,
+    "touch_passes": 64,
+    "warmups": 1,
+    "workload_seed": 539363093
+  },
+  "created_at_unix": 1784097197,
+  "fixture": "/home/hanqing/alloc/UniAlloc-heap-lifetime-inference-20260715/evaluation/fixtures/compiler_heap_lifetime_workload.rs",
+  "fixture_lock_sha256": "66ab291dc606a02483b8fdf9154f23d96f34d84d165f9ae4009bfd36e9971d18",
+  "fixture_manifest_sha256": "fdffa3fb568fb92aee7bc18e8fdd673b130a458739e8a0f93632f66d09abbf1e",
+  "fixture_sha256": "0c5eb415c2ab29a9eccae208334cc4a7a98acb0169e628b76bd1b704a99648e6",
+  "git": {
+    "head": "f0ec76dd28e56694fb9ded0f57244e708524e545",
+    "status_short": [
+      " M evaluation/scripts/cross_allocator_large_page_experiment.py",
+      " M evaluation/scripts/realworld_type_isolation_matrix.py",
+      " M evaluation/scripts/render_cross_allocator_large_page_charts.py",
+      " M evaluation/scripts/render_realworld_allocator_report.py",
+      " M evaluation/scripts/runtime_lifetime_classifier_realapp.py",
+      " M evaluation/scripts/test_cross_allocator_large_page_experiment.py",
+      " M evaluation/scripts/test_realworld_type_isolation_matrix.py",
+      " M evaluation/scripts/test_render_cross_allocator_large_page_charts.py",
+      " M evaluation/scripts/test_render_realworld_allocator_report.py",
+      " M evaluation/scripts/test_runtime_lifetime_classifier_realapp.py",
+      " M tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs",
+      " M unialloc/src/alloc_api/lifetime_hugepage.rs",
+      " M unialloc/src/alloc_api/mod.rs",
+      " M unialloc/src/alloc_api/type_isolation.rs",
+      " M unialloc/src/cache/mod.rs",
+      " M unialloc/src/lib.rs",
+      " M unialloc/tests/lifetime_hugepage_allocator.rs",
+      "?? docs/compiler-heap-lifetime-ground-truth.md",
+      "?? docs/compiler-heap-lifetime-inference.md",
+      "?? docs/evidence/cross-allocator-modern-tcmalloc-20260715/",
+      "?? evaluation/external/_checkouts",
+      "?? evaluation/fixtures/",
+      "?? evaluation/scripts/compiler_heap_lifetime_experiment.py",
+      "?? evaluation/scripts/compiler_heap_lifetime_ground_truth.py",
+      "?? evaluation/scripts/google_tcmalloc_bazel_probe.py",
+      "?? evaluation/scripts/test_compiler_heap_lifetime_experiment.py",
+      "?? evaluation/scripts/test_compiler_heap_lifetime_ground_truth.py",
+      "?? evaluation/scripts/test_google_tcmalloc_bazel_probe.py",
+      "?? tools/unialloc-rustc-pass/test_mir_marker_free_heap_lifetime_inference.py"
+    ]
+  },
+  "host": {
+    "machine": "x86_64",
+    "meminfo_hugepages": [
+      "HugePages_Total:    4096",
+      "HugePages_Free:     4096",
+      "HugePages_Rsvd:        0",
+      "HugePages_Surp:        0",
+      "Hugepagesize:       2048 kB",
+      "Hugetlb:         8388608 kB"
+    ],
+    "platform": "Linux-6.8.0-111-generic-x86_64-with-glibc2.39",
+    "pmd_size": "2097152",
+    "python": "3.13.7",
+    "sysroot": "/home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu",
+    "thp_defrag": "always defer defer+madvise [madvise] never",
+    "thp_enabled": "always [madvise] never",
+    "toolchain": "nightly-2026-06-11"
+  },
+  "repository_lock_sha256": "6318fc95869f59c163c4d714116dcb39ef8dcf64e57b60482f4585ead361965a",
+  "run_id": "compiler-heap-lifetime-20260715-023303",
+  "schema_version": 1,
+  "script": "/home/hanqing/alloc/UniAlloc-heap-lifetime-inference-20260715/evaluation/scripts/compiler_heap_lifetime_experiment.py",
+  "script_sha256": "15935840a17ac18fa528f4216407185a861d9e5934b0a32d44ef5d1dafc66042",
+  "source": "compiler-heap-lifetime-experiment-manifest",
+  "wrapper": {
+    "built_by_harness": true,
+    "command": [
+      "rustc",
+      "+nightly-2026-06-11",
+      "--cfg",
+      "unialloc_rustc_current",
+      "/home/hanqing/alloc/UniAlloc-heap-lifetime-inference-20260715/tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs",
+      "-O",
+      "-o",
+      "/tmp/unialloc-compiler-lifetime-oracle-20260715-v2/tools/unialloc-rustc-wrapper"
+    ],
+    "path": "/tmp/unialloc-compiler-lifetime-oracle-20260715-v2/tools/unialloc-rustc-wrapper",
+    "sha256": "96789b3abb7ebf3374f4d627d1cc96f90ccb4f652671ccd13ade9cb74b2e34bb",
+    "source": "/home/hanqing/alloc/UniAlloc-heap-lifetime-inference-20260715/tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs",
+    "source_sha256": "8d4c288bf3cb2da9df44df74407082017fee6bd9d20268597e4c5d0dfd5e766d",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

@@ -1,0 +1,581 @@
+{
+  "case_summaries": {
+    "glibc_default": {
+      "case": "glibc_default",
+      "family": "allocator-neutral",
+      "label": "glibc default",
+      "mechanism": "default",
+      "median_anon_huge_delta_kib": 0.0,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 1224.828430176,
+      "median_max_effective_resident_kib": 134112.0,
+      "median_ns_per_touch": 24.716392517,
+      "median_peak_thp_coverage": 0.0,
+      "samples": 5
+    },
+    "google_tcmalloc_temeraire": {
+      "case": "google_tcmalloc_temeraire",
+      "family": "allocator-neutral",
+      "label": "Google TCMalloc / Temeraire HPAA",
+      "mechanism": "temeraire-hpaa",
+      "median_anon_huge_delta_kib": 0.0,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 1272.942362467,
+      "median_max_effective_resident_kib": 140488.0,
+      "median_ns_per_touch": 23.074913025,
+      "median_peak_thp_coverage": 0.0,
+      "samples": 5
+    },
+    "jemalloc_thp_off": {
+      "case": "jemalloc_thp_off",
+      "family": "allocator-neutral",
+      "label": "jemalloc THP off",
+      "mechanism": "allocator-wide-thp",
+      "median_anon_huge_delta_kib": 0.0,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 1368.743123372,
+      "median_max_effective_resident_kib": 140840.0,
+      "median_ns_per_touch": 22.681106567,
+      "median_peak_thp_coverage": 0.0,
+      "samples": 5
+    },
+    "jemalloc_thp_on": {
+      "case": "jemalloc_thp_on",
+      "family": "allocator-neutral",
+      "label": "jemalloc THP on",
+      "mechanism": "allocator-wide-thp",
+      "median_anon_huge_delta_kib": 129024.0,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 466.473124186,
+      "median_max_effective_resident_kib": 144896.0,
+      "median_ns_per_touch": 14.255531311,
+      "median_peak_thp_coverage": 0.961832061,
+      "samples": 5
+    },
+    "mimalloc_thp_off": {
+      "case": "mimalloc_thp_off",
+      "family": "allocator-neutral",
+      "label": "mimalloc THP off",
+      "mechanism": "process-wide-thp",
+      "median_anon_huge_delta_kib": 0.0,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 1253.433329264,
+      "median_max_effective_resident_kib": 134312.0,
+      "median_ns_per_touch": 23.058563232,
+      "median_peak_thp_coverage": 0.0,
+      "samples": 5
+    },
+    "mimalloc_thp_on": {
+      "case": "mimalloc_thp_on",
+      "family": "allocator-neutral",
+      "label": "mimalloc THP on",
+      "mechanism": "process-wide-thp",
+      "median_anon_huge_delta_kib": 135168.0,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 191.829793294,
+      "median_max_effective_resident_kib": 141416.0,
+      "median_ns_per_touch": 14.144897461,
+      "median_peak_thp_coverage": 0.999881643,
+      "samples": 5
+    },
+    "snmalloc_default": {
+      "case": "snmalloc_default",
+      "family": "allocator-neutral",
+      "label": "snmalloc default eligibility",
+      "mechanism": "os-eligibility",
+      "median_anon_huge_delta_kib": 0.0,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 1195.434366862,
+      "median_max_effective_resident_kib": 136820.0,
+      "median_ns_per_touch": 23.106773376,
+      "median_peak_thp_coverage": 0.0,
+      "samples": 5
+    },
+    "snmalloc_os_thp_off": {
+      "case": "snmalloc_os_thp_off",
+      "family": "allocator-neutral",
+      "label": "snmalloc process THP disabled",
+      "mechanism": "os-eligibility",
+      "median_anon_huge_delta_kib": 0.0,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 1209.783447266,
+      "median_max_effective_resident_kib": 136856.0,
+      "median_ns_per_touch": 23.2085495,
+      "median_peak_thp_coverage": 0.0,
+      "samples": 5
+    },
+    "unialloc_default": {
+      "case": "unialloc_default",
+      "family": "unialloc-semantic",
+      "label": "UniAlloc default",
+      "mechanism": "allocator-default",
+      "median_anon_huge_delta_kib": 0.0,
+      "median_classification_failure_rate": 0.049438477,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 2109.9434204101562,
+      "median_max_effective_resident_kib": 137272.0,
+      "median_ns_per_touch": 22.381615,
+      "median_policy_intent_placement_failure_rate": 0.5,
+      "samples": 5
+    },
+    "unialloc_lifetime_thp_off": {
+      "case": "unialloc_lifetime_thp_off",
+      "family": "unialloc-semantic",
+      "label": "UniAlloc lifetime layout / THP off",
+      "mechanism": "lifetime-layout-thp-disabled",
+      "median_anon_huge_delta_kib": 0.0,
+      "median_classification_failure_rate": 0.049438477,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 2286.5887451171875,
+      "median_max_effective_resident_kib": 136788.0,
+      "median_ns_per_touch": 21.435585,
+      "median_policy_intent_placement_failure_rate": 0.049438477,
+      "samples": 5
+    },
+    "unialloc_lifetime_thp_on": {
+      "case": "unialloc_lifetime_thp_on",
+      "family": "unialloc-semantic",
+      "label": "UniAlloc selective lifetime THP",
+      "mechanism": "selective-lifetime-thp",
+      "median_anon_huge_delta_kib": 67584.0,
+      "median_classification_failure_rate": 0.049438477,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 1435.0140686035156,
+      "median_max_effective_resident_kib": 138820.0,
+      "median_ns_per_touch": 14.152222,
+      "median_policy_intent_placement_failure_rate": 0.049438477,
+      "samples": 5
+    },
+    "unialloc_ordinary": {
+      "case": "unialloc_ordinary",
+      "family": "unialloc-semantic",
+      "label": "UniAlloc ordinary arenas",
+      "mechanism": "lifetime-segregated-ordinary",
+      "median_anon_huge_delta_kib": 0.0,
+      "median_classification_failure_rate": 0.049438477,
+      "median_hugetlb_delta_kib": 0.0,
+      "median_lifecycle_ns_per_allocation": 2287.0948791503906,
+      "median_max_effective_resident_kib": 136788.0,
+      "median_ns_per_touch": 21.534996,
+      "median_policy_intent_placement_failure_rate": 0.5,
+      "samples": 5
+    }
+  },
+  "claim_grade": true,
+  "comparisons": {
+    "jemalloc_thp": {
+      "max_effective_resident": {
+        "baseline": "jemalloc_thp_off",
+        "block_ratios": [
+          1.0284010224368076,
+          1.028798636750923,
+          1.0433115592161317,
+          1.0284018290777925,
+          1.0430559500142005
+        ],
+        "ci_high_pct": -2.848085568526515,
+        "ci_low_pct": -4.029072298110914,
+        "conclusion": "regressed",
+        "equivalence_band_pct": 5.0,
+        "improvement_pct": -3.4368934632635906,
+        "lower_is_better": true,
+        "metric": "max_effective_resident_kib",
+        "paired_geomean_ratio": 1.034368934632636,
+        "sample_count": 5,
+        "target": "jemalloc_thp_on"
+      },
+      "touch": {
+        "baseline": "jemalloc_thp_off",
+        "block_ratios": [
+          0.6269602988325648,
+          0.6274266729373124,
+          0.6221124410266353,
+          0.6738542507109062,
+          0.4624111990332629
+        ],
+        "ci_high_pct": 47.84410781089481,
+        "ci_low_pct": 34.63257627349,
+        "conclusion": "improved",
+        "equivalence_band_pct": 3.0,
+        "improvement_pct": 40.23413023914121,
+        "lower_is_better": true,
+        "metric": "ns_per_touch",
+        "paired_geomean_ratio": 0.5976586976085879,
+        "sample_count": 5,
+        "target": "jemalloc_thp_on"
+      }
+    },
+    "mimalloc_thp": {
+      "max_effective_resident": {
+        "baseline": "mimalloc_thp_off",
+        "block_ratios": [
+          1.0528917743760795,
+          1.0528917743760795,
+          1.0528901992316626,
+          1.0528604187140773,
+          1.0528917743760795
+        ],
+        "ci_high_pct": -5.287264584337925,
+        "ci_low_pct": -5.28917743760795,
+        "conclusion": "regressed",
+        "equivalence_band_pct": 5.0,
+        "improvement_pct": -5.288518814177912,
+        "lower_is_better": true,
+        "metric": "max_effective_resident_kib",
+        "paired_geomean_ratio": 1.0528851881417791,
+        "sample_count": 5,
+        "target": "mimalloc_thp_on"
+      },
+      "touch": {
+        "baseline": "mimalloc_thp_off",
+        "block_ratios": [
+          0.6186450144830536,
+          0.6117236624016904,
+          0.6148312636914158,
+          0.6093096343458773,
+          0.6157044485723929
+        ],
+        "ci_high_pct": 38.893368852744494,
+        "ci_low_pct": 38.33334028456555,
+        "conclusion": "improved",
+        "equivalence_band_pct": 3.0,
+        "improvement_pct": 38.59657228263317,
+        "lower_is_better": true,
+        "metric": "ns_per_touch",
+        "paired_geomean_ratio": 0.6140342771736683,
+        "sample_count": 5,
+        "target": "mimalloc_thp_on"
+      }
+    },
+    "snmalloc_os_eligibility": {
+      "max_effective_resident": {
+        "baseline": "snmalloc_os_thp_off",
+        "block_ratios": [
+          0.9997369497866371,
+          0.9999707645081128,
+          0.9999707721985153,
+          0.9997369497866371,
+          1.0002631194269844
+        ],
+        "ci_high_pct": 0.021629164315062344,
+        "ci_low_pct": -0.0099393220309274,
+        "conclusion": "practically-equivalent",
+        "equivalence_band_pct": 5.0,
+        "improvement_pct": 0.006430772517285188,
+        "lower_is_better": true,
+        "metric": "max_effective_resident_kib",
+        "paired_geomean_ratio": 0.9999356922748271,
+        "sample_count": 5,
+        "target": "snmalloc_default"
+      },
+      "touch": {
+        "baseline": "snmalloc_os_thp_off",
+        "block_ratios": [
+          0.9837479365930523,
+          0.9914565821961429,
+          0.989755605421329,
+          1.0111412157318216,
+          1.0057678048003202
+        ],
+        "ci_high_pct": 1.2312717390762562,
+        "ci_low_pct": -0.5755063873970956,
+        "conclusion": "practically-equivalent",
+        "equivalence_band_pct": 3.0,
+        "improvement_pct": 0.3679630315578053,
+        "lower_is_better": true,
+        "metric": "ns_per_touch",
+        "paired_geomean_ratio": 0.996320369684422,
+        "sample_count": 5,
+        "target": "snmalloc_default"
+      }
+    },
+    "unialloc_lifetime_thp": {
+      "max_effective_resident": {
+        "baseline": "unialloc_lifetime_thp_off",
+        "block_ratios": [
+          1.013919349650554,
+          1.0156446471912741,
+          1.0145287652011226,
+          1.0144118334892422,
+          1.0158210264658576
+        ],
+        "ci_high_pct": -1.4238191977180792,
+        "ci_low_pct": -1.546849554973373,
+        "conclusion": "regressed",
+        "equivalence_band_pct": 5.0,
+        "improvement_pct": -1.48648549783712,
+        "lower_is_better": true,
+        "metric": "max_effective_resident_kib",
+        "paired_geomean_ratio": 1.0148648549783712,
+        "sample_count": 5,
+        "target": "unialloc_lifetime_thp_on"
+      },
+      "touch": {
+        "baseline": "unialloc_lifetime_thp_off",
+        "block_ratios": [
+          0.664735887049557,
+          0.6672963487544608,
+          0.6669685012095542,
+          0.6562162742143461,
+          0.6644063899319133
+        ],
+        "ci_high_pct": 34.00120246745346,
+        "ci_low_pct": 33.334758891856275,
+        "conclusion": "improved",
+        "equivalence_band_pct": 3.0,
+        "improvement_pct": 33.608757095029475,
+        "lower_is_better": true,
+        "metric": "ns_per_touch",
+        "paired_geomean_ratio": 0.6639124290497053,
+        "sample_count": 5,
+        "target": "unialloc_lifetime_thp_on"
+      }
+    }
+  },
+  "evidence_contract": {
+    "actual_hugetlb_backing": "/proc/self/status HugetlbPages",
+    "actual_thp_backing": "/proc/self/smaps_rollup AnonHugePages",
+    "cross_family_raw_timing_ranking_allowed": false,
+    "google_tcmalloc_fallback_allowed": false,
+    "google_tcmalloc_hpaa_performance_causality_claim_ready": false,
+    "google_tcmalloc_hugepage_claim_ready": false,
+    "google_tcmalloc_identity": "fixed-revision Bazel link-time Temeraire/HPAA",
+    "gperftools_is_google_tcmalloc": false,
+    "gperftools_legacy_claim_role": "historical-only",
+    "neutral_pairing": "same malloc/free binary and trace within each allocator",
+    "resident_metric": "max(VmRSS + HugetlbPages) across live phases",
+    "semantic_primary_pair": "same long-thp policy and trace; PR_SET_THP_DISABLE changes only physical THP eligibility",
+    "snmalloc_control_kind": "OS eligibility; snmalloc has no public THP toggle"
+  },
+  "google_tcmalloc_temeraire_gate": {
+    "backed_sample_count": 0,
+    "claim_boundary": "The fixed-revision link proves Google TCMalloc with HPAA code. Every measured sample needs physical hugepage backing for a Temeraire/hugepage-mechanism endpoint claim. A matched HPAA-off control is still required for HPAA performance causality.",
+    "excluded_blocks": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "hpaa_performance_causality_claim_ready": false,
+    "hugepage_mechanism_claim_ready": false,
+    "identity_claim_ready": true,
+    "measured_sample_count": 5,
+    "sample_evidence": [
+      {
+        "anon_huge_kib": 0,
+        "block": 1,
+        "hugetlb_kib": 0,
+        "peak_thp_coverage": 0.0,
+        "physical_hugepage_backing_realized": false
+      },
+      {
+        "anon_huge_kib": 0,
+        "block": 2,
+        "hugetlb_kib": 0,
+        "peak_thp_coverage": 0.0,
+        "physical_hugepage_backing_realized": false
+      },
+      {
+        "anon_huge_kib": 0,
+        "block": 3,
+        "hugetlb_kib": 0,
+        "peak_thp_coverage": 0.0,
+        "physical_hugepage_backing_realized": false
+      },
+      {
+        "anon_huge_kib": 0,
+        "block": 4,
+        "hugetlb_kib": 0,
+        "peak_thp_coverage": 0.0,
+        "physical_hugepage_backing_realized": false
+      },
+      {
+        "anon_huge_kib": 0,
+        "block": 5,
+        "hugetlb_kib": 0,
+        "peak_thp_coverage": 0.0,
+        "physical_hugepage_backing_realized": false
+      }
+    ]
+  },
+  "invariants_passed": true,
+  "measured_repeats": 5,
+  "objects": 32768,
+  "passes": 8,
+  "run_id": "unialloc-modern-tcmalloc-cross-20260715",
+  "schema_version": 1,
+  "seed": 20260714,
+  "slide_data": {
+    "backing": [
+      {
+        "anon_thp_mib": 0.0,
+        "hugetlb_mib": 0.0,
+        "label": "UniAlloc off"
+      },
+      {
+        "anon_thp_mib": 66.0,
+        "hugetlb_mib": 0.0,
+        "label": "UniAlloc selective THP"
+      },
+      {
+        "anon_thp_mib": 0.0,
+        "hugetlb_mib": 0.0,
+        "label": "Google TCMalloc / Temeraire"
+      },
+      {
+        "anon_thp_mib": 0.0,
+        "hugetlb_mib": 0.0,
+        "label": "mimalloc off"
+      },
+      {
+        "anon_thp_mib": 132.0,
+        "hugetlb_mib": 0.0,
+        "label": "mimalloc THP"
+      },
+      {
+        "anon_thp_mib": 0.0,
+        "hugetlb_mib": 0.0,
+        "label": "jemalloc off"
+      },
+      {
+        "anon_thp_mib": 126.0,
+        "hugetlb_mib": 0.0,
+        "label": "jemalloc THP"
+      },
+      {
+        "anon_thp_mib": 0.0,
+        "hugetlb_mib": 0.0,
+        "label": "snmalloc default"
+      }
+    ],
+    "endpoints": [
+      {
+        "label": "glibc",
+        "large_page_backing_mib": 0.0,
+        "max_effective_resident_mib": 130.96875,
+        "mechanism": "default",
+        "mode": "default",
+        "ns_per_touch": 24.716392517,
+        "pair": "glibc"
+      },
+      {
+        "label": "Google TCMalloc / Temeraire",
+        "large_page_backing_mib": 0.0,
+        "max_effective_resident_mib": 137.1953125,
+        "mechanism": "temeraire-hpaa",
+        "mode": "default",
+        "ns_per_touch": 23.074913025,
+        "pair": "google-tcmalloc"
+      },
+      {
+        "label": "mimalloc off",
+        "large_page_backing_mib": 0.0,
+        "max_effective_resident_mib": 131.1640625,
+        "mechanism": "process-wide-thp",
+        "mode": "off",
+        "ns_per_touch": 23.058563232,
+        "pair": "mimalloc"
+      },
+      {
+        "label": "mimalloc THP",
+        "large_page_backing_mib": 132.0,
+        "max_effective_resident_mib": 138.1015625,
+        "mechanism": "process-wide-thp",
+        "mode": "on",
+        "ns_per_touch": 14.144897461,
+        "pair": "mimalloc"
+      },
+      {
+        "label": "jemalloc off",
+        "large_page_backing_mib": 0.0,
+        "max_effective_resident_mib": 137.5390625,
+        "mechanism": "allocator-wide-thp",
+        "mode": "off",
+        "ns_per_touch": 22.681106567,
+        "pair": "jemalloc"
+      },
+      {
+        "label": "jemalloc THP",
+        "large_page_backing_mib": 126.0,
+        "max_effective_resident_mib": 141.5,
+        "mechanism": "allocator-wide-thp",
+        "mode": "on",
+        "ns_per_touch": 14.255531311,
+        "pair": "jemalloc"
+      },
+      {
+        "label": "snmalloc eligible",
+        "large_page_backing_mib": 0.0,
+        "max_effective_resident_mib": 133.61328125,
+        "mechanism": "os-eligibility",
+        "mode": "on",
+        "ns_per_touch": 23.106773376,
+        "pair": "snmalloc"
+      },
+      {
+        "label": "snmalloc disabled",
+        "large_page_backing_mib": 0.0,
+        "max_effective_resident_mib": 133.6484375,
+        "mechanism": "os-eligibility",
+        "mode": "off",
+        "ns_per_touch": 23.2085495,
+        "pair": "snmalloc"
+      }
+    ],
+    "toggle_effects": [
+      {
+        "label": "UniAlloc selective THP",
+        "max_resident_change_pct": 1.48648549783712,
+        "max_resident_ci_high_pct": 1.546849554973373,
+        "max_resident_ci_low_pct": 1.4238191977180792,
+        "max_resident_conclusion": "regressed",
+        "mechanism": "selective-thp",
+        "speedup_ci_high_pct": 34.00120246745346,
+        "speedup_ci_low_pct": 33.334758891856275,
+        "speedup_conclusion": "improved",
+        "speedup_pct": 33.608757095029475
+      },
+      {
+        "label": "mimalloc global THP",
+        "max_resident_change_pct": 5.288518814177912,
+        "max_resident_ci_high_pct": 5.28917743760795,
+        "max_resident_ci_low_pct": 5.287264584337925,
+        "max_resident_conclusion": "regressed",
+        "mechanism": "process-wide-thp",
+        "speedup_ci_high_pct": 38.893368852744494,
+        "speedup_ci_low_pct": 38.33334028456555,
+        "speedup_conclusion": "improved",
+        "speedup_pct": 38.59657228263317
+      },
+      {
+        "label": "jemalloc allocator THP",
+        "max_resident_change_pct": 3.4368934632635906,
+        "max_resident_ci_high_pct": 4.029072298110914,
+        "max_resident_ci_low_pct": 2.848085568526515,
+        "max_resident_conclusion": "regressed",
+        "mechanism": "allocator-wide-thp",
+        "speedup_ci_high_pct": 47.84410781089481,
+        "speedup_ci_low_pct": 34.63257627349,
+        "speedup_conclusion": "improved",
+        "speedup_pct": 40.23413023914121
+      },
+      {
+        "label": "snmalloc OS eligibility",
+        "max_resident_change_pct": -0.006430772517285188,
+        "max_resident_ci_high_pct": 0.0099393220309274,
+        "max_resident_ci_low_pct": -0.021629164315062344,
+        "max_resident_conclusion": "practically-equivalent",
+        "mechanism": "os-eligibility",
+        "speedup_ci_high_pct": 1.2312717390762562,
+        "speedup_ci_low_pct": -0.5755063873970956,
+        "speedup_conclusion": "practically-equivalent",
+        "speedup_pct": 0.3679630315578053
+      }
+    ]
+  },
+  "slot_bytes": 4096,
+  "source": "cross_allocator_large_page_experiment",
+  "warmup_blocks": 1,
+  "waves": 1
+}

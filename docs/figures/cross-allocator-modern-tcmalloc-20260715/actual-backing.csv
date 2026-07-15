@@ -1,0 +1,9 @@
+label,anon_thp_mib,hugetlb_mib
+UniAlloc off,0.0,0.0
+UniAlloc selective THP,66.0,0.0
+Google TCMalloc / Temeraire,0.0,0.0
+mimalloc off,0.0,0.0
+mimalloc THP,132.0,0.0
+jemalloc off,0.0,0.0
+jemalloc THP,126.0,0.0
+snmalloc default,0.0,0.0
