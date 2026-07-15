@@ -384,6 +384,18 @@ class OxipngRealappReproSmokeTests(unittest.TestCase):
             self.assertIn('\\"last_mismatch_recorded_module_id\\"', main)
             self.assertIn('\\"last_mismatch_requested_callsite\\"', main)
             self.assertIn('\\"last_mismatch_recorded_callsite\\"', main)
+            for field in (
+                "typed_cache_wrong_identity_denials",
+                "last_wrong_identity_requested_type_id",
+                "last_wrong_identity_retained_type_id",
+                "last_wrong_identity_requested_module_id",
+                "last_wrong_identity_retained_module_id",
+                "last_wrong_identity_requested_callsite",
+                "last_wrong_identity_size",
+                "last_wrong_identity_align",
+            ):
+                self.assertIn(f'\\"{field}\\"', main)
+                self.assertIn(f"stats.{field}", main)
             self.assertIn('\\"address_oracle\\"', main)
             self.assertNotIn("0xC002", main)
             self.assertIn("extern crate unialloc;", (oxipng / "src" / "lib.rs").read_text(encoding="utf-8"))

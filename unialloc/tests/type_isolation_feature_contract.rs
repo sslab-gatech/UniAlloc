@@ -25,7 +25,29 @@ fn release_semantic_allocation_requires_type_isolation_feature() {
     );
 }
 
-#[cfg(not(feature = "stats"))]
+#[test]
+fn release_rust_scope_push_rejection_preserves_depth() {
+    let before = unialloc::semantic_scope_depth_snapshot();
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        unialloc::alloc_api::type_isolation::__unialloc_semantic_scope_push_for_rust_type::<u64>(
+            0xC0DE,
+            unialloc::FLAG_TYPE_ISOLATED,
+            0xA116,
+        );
+    }));
+
+    assert!(
+        result.is_err(),
+        "release builds must reject Rust semantic scope activation without type isolation"
+    );
+    assert_eq!(
+        unialloc::semantic_scope_depth_snapshot(),
+        before,
+        "rejected Rust scope activation must not mutate TLS depth"
+    );
+}
+
+#[cfg(not(any(feature = "stats", feature = "reclaim_checks")))]
 mod raw_only_global_alloc {
     use super::*;
     use core::alloc::GlobalAlloc;
@@ -231,5 +253,43 @@ mod raw_only_global_alloc {
             );
         }
         assert_raw_global_alloc_still_works();
+    }
+}
+
+#[cfg(feature = "reclaim_checks")]
+mod reclaim_checks_global_alloc {
+    use super::*;
+    use core::alloc::GlobalAlloc;
+
+    fn ensure_allocator_ready() {
+        #[cfg(feature = "fixed_heap")]
+        super::fixed_heap_probe_global::ensure_initialized_for_probe();
+    }
+
+    #[test]
+    fn release_reclaim_checks_preserve_legal_global_realloc() {
+        ensure_allocator_ready();
+        let allocator = UniAlloc::new();
+        let old_layout = Layout::from_size_align(64, 8).unwrap();
+        let new_layout = Layout::from_size_align(513, old_layout.align()).unwrap();
+        let ptr = unsafe { GlobalAlloc::alloc(&allocator, old_layout) };
+        assert!(!ptr.is_null());
+        for offset in 0..old_layout.size() {
+            unsafe {
+                ptr.add(offset).write((offset as u8).wrapping_mul(17));
+            }
+        }
+
+        let grown = unsafe { GlobalAlloc::realloc(&allocator, ptr, old_layout, new_layout.size()) };
+        assert!(!grown.is_null());
+        for offset in 0..old_layout.size() {
+            assert_eq!(
+                unsafe { grown.add(offset).read() },
+                (offset as u8).wrapping_mul(17)
+            );
+        }
+        unsafe {
+            GlobalAlloc::dealloc(&allocator, grown, new_layout);
+        }
     }
 }

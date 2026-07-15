@@ -3588,7 +3588,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                 """
                 use core::alloc::{GlobalAlloc, Layout};
                 use core::mem::MaybeUninit;
-                const UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION: u32 = 3;
+                const UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION: u32 = 4;
                 const UNIALLOC_SEMANTIC_TYPE_STATS_SNAPSHOT_ABI_VERSION: u32 = 2;
                 const UNIALLOC_SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION: u32 = 1;
                 const UNIALLOC_SEMANTIC_METADATA_VALIDATION_SNAPSHOT_ABI_VERSION: u32 = 1;
@@ -3610,6 +3610,14 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                     pub typed_cache_hits: usize,
                     pub typed_cache_inserts: usize,
                     pub typed_cache_bypasses: usize,
+                    pub typed_cache_wrong_identity_denials: usize,
+                    pub last_wrong_identity_requested_type_id: u64,
+                    pub last_wrong_identity_retained_type_id: u64,
+                    pub last_wrong_identity_requested_module_id: u64,
+                    pub last_wrong_identity_retained_module_id: u64,
+                    pub last_wrong_identity_requested_callsite: u64,
+                    pub last_wrong_identity_size: usize,
+                    pub last_wrong_identity_align: usize,
                     pub delayed_free_enqueues: usize,
                     pub delayed_free_flushes: usize,
                     pub metadata_pac_auth_signs: usize,
@@ -3815,14 +3823,14 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (module_dir / "unialloc_kernel_ffi.h").write_text(
-                "#define UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION 3u\n"
+                "#define UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION 4u\n"
                 "#define UNIALLOC_SEMANTIC_TYPE_STATS_SNAPSHOT_ABI_VERSION 2u\n"
                 "#define UNIALLOC_SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION 1u\n"
                 "#define UNIALLOC_SEMANTIC_METADATA_VALIDATION_SNAPSHOT_ABI_VERSION 1u\n"
                 "#define UNIALLOC_CONSTRAINED_BOOT_SAMPLE_ABI_VERSION 2u\n"
                 "#define UNIALLOC_FLAG_TYPE_ISOLATED (1u << 0)\n"
                 "typedef struct UniallocSemanticStatsSnapshot {\n"
-                "size_t total_allocations; size_t typed_allocations; size_t fallback_allocations; size_t total_allocated_bytes; size_t typed_allocated_bytes; size_t fallback_allocated_bytes; size_t typed_deallocations; size_t fallback_deallocations; uint32_t policy_flags_seen; uint64_t last_type_id; size_t coverage_basis_points; size_t typed_cache_hits; size_t typed_cache_inserts; size_t typed_cache_bypasses; size_t delayed_free_enqueues; size_t delayed_free_flushes; size_t metadata_pac_auth_signs; size_t metadata_pac_auth_verifications; size_t metadata_pac_auth_failures; size_t metadata_pac_software_fallback_signs; size_t metadata_pac_software_fallback_verifications; size_t metadata_pac_software_fallback_failures; size_t total_deallocations; size_t semantic_type_stats_dropped_events;\n"
+                "size_t total_allocations; size_t typed_allocations; size_t fallback_allocations; size_t total_allocated_bytes; size_t typed_allocated_bytes; size_t fallback_allocated_bytes; size_t typed_deallocations; size_t fallback_deallocations; uint32_t policy_flags_seen; uint64_t last_type_id; size_t coverage_basis_points; size_t typed_cache_hits; size_t typed_cache_inserts; size_t typed_cache_bypasses; size_t typed_cache_wrong_identity_denials; uint64_t last_wrong_identity_requested_type_id; uint64_t last_wrong_identity_retained_type_id; uint64_t last_wrong_identity_requested_module_id; uint64_t last_wrong_identity_retained_module_id; uint64_t last_wrong_identity_requested_callsite; size_t last_wrong_identity_size; size_t last_wrong_identity_align; size_t delayed_free_enqueues; size_t delayed_free_flushes; size_t metadata_pac_auth_signs; size_t metadata_pac_auth_verifications; size_t metadata_pac_auth_failures; size_t metadata_pac_software_fallback_signs; size_t metadata_pac_software_fallback_verifications; size_t metadata_pac_software_fallback_failures; size_t total_deallocations; size_t semantic_type_stats_dropped_events;\n"
                 "} UniallocSemanticStatsSnapshot;\n"
                 "typedef struct UniallocSemanticTypeStatsSnapshot { uint64_t type_id; uint64_t module_id; uint64_t callsite; size_t allocations; size_t allocated_bytes; size_t deallocations; size_t cache_hits; size_t cache_inserts; size_t cache_bypasses; size_t observed_alloc_size; size_t observed_alloc_align; size_t observed_dealloc_size; size_t observed_dealloc_align; uint32_t policy_flags_seen; } UniallocSemanticTypeStatsSnapshot;\n"
                 "typedef struct UniallocSemanticFallbackAttributionSnapshot { size_t raw_alloc_no_metadata; size_t raw_alloc_no_metadata_bytes; size_t raw_dealloc_no_metadata; size_t raw_realloc_no_metadata; size_t raw_realloc_no_metadata_bytes; size_t raw_realloc_moved_dealloc_no_metadata; size_t realloc_recorded_old_metadata_new_allocations; size_t realloc_recorded_old_metadata_new_allocation_bytes; } UniallocSemanticFallbackAttributionSnapshot;\n"
@@ -3902,7 +3910,7 @@ class CompilerCoverageClaimGradeGateTests(unittest.TestCase):
             ROOT / "kernel" / "kernel-modules" / "benchmarking" / "unialloc_kernel_ffi.h"
         ).read_text(encoding="utf-8")
         self.assertIn("typedef struct UniallocSemanticStatsSnapshot", source)
-        self.assertIn("UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION 3u", source)
+        self.assertIn("UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION 4u", source)
         self.assertIn("semantic_type_stats_dropped_events", source)
         self.assertIn("UNIALLOC_CONSTRAINED_BOOT_SAMPLE_ABI_VERSION 2u", source)
         self.assertIn("uint32_t policy_flags_seen", source)
@@ -11246,7 +11254,9 @@ fn do_bench_clone_from(times: usize, dst_len: usize, src_len: usize) {
         self.assertIn("UNIALLOC_DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP", pass_source)
         self.assertIn("local_metadata_abi_semantic_drop_scope", pass_source)
         self.assertIn("semantic_scope_drop_active_metadata", pass_source)
-        self.assertIn("mir-heap-object-type-v1", pass_source)
+        self.assertIn('b"rust-type-id-v2"', pass_source)
+        self.assertIn("tcx.type_id_hash(owner_ty)", pass_source)
+        self.assertIn("rustc_type_id_hash_runtime_equivalent", pass_source)
         self.assertIn("direct_local_size_align_pairing_details", pass_source)
         self.assertIn("direct_local_size_align_pairing_gap_count", pass_source)
 
@@ -11889,7 +11899,11 @@ fn do_bench_clone_from(times: usize, dst_len: usize, src_len: usize) {
         self.assertIn(") -> std::path::PathBuf", source)
         self.assertIn("std::ffi::OsString", source)
         self.assertIn("std::ffi::os_str::OsString", source)
-        self.assertIn("owned-buffer push::<...>", source)
+        self.assertIn(
+            "callback-capable receiver calls remain audit-only",
+            source,
+        )
+        self.assertIn("SemanticScopeHeapClass::CallbackCapable", source)
         self.assertIn('"::push::<"', source)
         self.assertIn("std::ffi::CString", source)
         self.assertIn("alloc::ffi::c_str::CString", source)
@@ -11919,8 +11933,8 @@ fn do_bench_clone_from(times: usize, dst_len: usize, src_len: usize) {
         self.assertIn("__unialloc_dealloc_layout_with_metadata_local", source)
         self.assertIn("recovery_backed_size_align_alloc_unpaired_dealloc", source)
         self.assertIn("place_parent_for_tuple_layout_field_zero", source)
-        self.assertIn("rustc_middle_mir_layout_reconstructed_heap_object_type", source)
-        self.assertIn("rustc_middle_mir_layout_size_align_constructor_heap_object_type", source)
+        self.assertIn("rustc_middle_mir_layout_reconstructed_audit_only", source)
+        self.assertIn("rustc_middle_mir_layout_size_align_constructor_audit_only", source)
         self.assertIn("rustc_middle_mir_layout_composite_heap_object_type", source)
         self.assertIn("rustc_middle_mir_layout_result_option_passthrough_heap_object_type", source)
         self.assertIn("std::option::Option", source)

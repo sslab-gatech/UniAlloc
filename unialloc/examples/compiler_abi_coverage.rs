@@ -56,7 +56,7 @@ struct MapEntryProxy {
     next_hash: u64,
 }
 
-unsafe fn abi_alloc<T>(flags: u32, callsite: u64) -> *mut T {
+unsafe fn abi_alloc<T: 'static>(flags: u32, callsite: u64) -> *mut T {
     let layout = Layout::new::<T>();
     __unialloc_alloc_with_metadata(
         layout.size(),
@@ -68,7 +68,7 @@ unsafe fn abi_alloc<T>(flags: u32, callsite: u64) -> *mut T {
     ) as *mut T
 }
 
-unsafe fn abi_alloc_array<T>(len: usize, flags: u32, callsite: u64) -> (*mut T, Layout) {
+unsafe fn abi_alloc_array<T: 'static>(len: usize, flags: u32, callsite: u64) -> (*mut T, Layout) {
     let layout =
         Layout::from_size_align(size_of::<T>() * len, align_of::<T>()).expect("valid array layout");
     let ptr = __unialloc_alloc_with_metadata(
@@ -82,7 +82,7 @@ unsafe fn abi_alloc_array<T>(len: usize, flags: u32, callsite: u64) -> (*mut T, 
     (ptr, layout)
 }
 
-unsafe fn abi_dealloc<T>(ptr: *mut T, flags: u32, callsite: u64) {
+unsafe fn abi_dealloc<T: 'static>(ptr: *mut T, flags: u32, callsite: u64) {
     let layout = Layout::new::<T>();
     __unialloc_dealloc_with_metadata(
         ptr as *mut u8,
@@ -95,7 +95,7 @@ unsafe fn abi_dealloc<T>(ptr: *mut T, flags: u32, callsite: u64) {
     );
 }
 
-unsafe fn abi_dealloc_array<T>(ptr: *mut T, layout: Layout, flags: u32, callsite: u64) {
+unsafe fn abi_dealloc_array<T: 'static>(ptr: *mut T, layout: Layout, flags: u32, callsite: u64) {
     __unialloc_dealloc_with_metadata(
         ptr as *mut u8,
         layout.size(),
@@ -107,7 +107,7 @@ unsafe fn abi_dealloc_array<T>(ptr: *mut T, layout: Layout, flags: u32, callsite
     );
 }
 
-unsafe fn abi_realloc_array<T>(
+unsafe fn abi_realloc_array<T: 'static>(
     ptr: *mut T,
     old_layout: Layout,
     new_len: usize,

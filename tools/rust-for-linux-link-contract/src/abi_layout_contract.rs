@@ -37,7 +37,7 @@ macro_rules! assert_abi_layout_pair {
 }
 
 const _: () = {
-    assert!(unialloc::SEMANTIC_STATS_SNAPSHOT_ABI_VERSION == 3);
+    assert!(unialloc::SEMANTIC_STATS_SNAPSHOT_ABI_VERSION == 4);
     assert!(unialloc::SEMANTIC_TYPE_STATS_SNAPSHOT_ABI_VERSION == 2);
     assert!(unialloc::SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION == 1);
     assert!(unialloc::SEMANTIC_METADATA_VALIDATION_SNAPSHOT_ABI_VERSION == 1);
@@ -67,7 +67,7 @@ const _: () = {
 assert_abi_layout_pair!(
     BridgeStatsSnapshot,
     RuntimeStatsSnapshot,
-    size = 192;
+    size = 256;
     total_allocations = 0,
     typed_allocations = 8,
     fallback_allocations = 16,
@@ -82,16 +82,24 @@ assert_abi_layout_pair!(
     typed_cache_hits = 88,
     typed_cache_inserts = 96,
     typed_cache_bypasses = 104,
-    delayed_free_enqueues = 112,
-    delayed_free_flushes = 120,
-    metadata_pac_auth_signs = 128,
-    metadata_pac_auth_verifications = 136,
-    metadata_pac_auth_failures = 144,
-    metadata_pac_software_fallback_signs = 152,
-    metadata_pac_software_fallback_verifications = 160,
-    metadata_pac_software_fallback_failures = 168,
-    total_deallocations = 176,
-    semantic_type_stats_dropped_events = 184,
+    typed_cache_wrong_identity_denials = 112,
+    last_wrong_identity_requested_type_id = 120,
+    last_wrong_identity_retained_type_id = 128,
+    last_wrong_identity_requested_module_id = 136,
+    last_wrong_identity_retained_module_id = 144,
+    last_wrong_identity_requested_callsite = 152,
+    last_wrong_identity_size = 160,
+    last_wrong_identity_align = 168,
+    delayed_free_enqueues = 176,
+    delayed_free_flushes = 184,
+    metadata_pac_auth_signs = 192,
+    metadata_pac_auth_verifications = 200,
+    metadata_pac_auth_failures = 208,
+    metadata_pac_software_fallback_signs = 216,
+    metadata_pac_software_fallback_verifications = 224,
+    metadata_pac_software_fallback_failures = 232,
+    total_deallocations = 240,
+    semantic_type_stats_dropped_events = 248,
 );
 
 assert_abi_layout_pair!(

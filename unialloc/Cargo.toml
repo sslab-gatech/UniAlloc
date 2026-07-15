@@ -47,16 +47,19 @@ harness = false
 name = "semantic_std"
 path = "benches/semantic_std.rs"
 test = true
+required-features = ["type_isolation"]
 
 [[bench]]
 name = "std_bench_compiler_proto_generated"
 path = "benches/std_bench_compiler_proto_generated.rs"
 test = true
+required-features = ["stats", "type_isolation"]
 
 [[bench]]
 name = "std_bench_compiler_exact_dynamic_generated"
 path = "benches/std_bench_compiler_exact_dynamic_generated.rs"
 test = true
+required-features = ["stats", "type_isolation"]
 
 [[example]]
 name = "pac_metadata_probe_nostd"
@@ -142,6 +145,10 @@ bench_snmalloc = ["snmalloc-rs"]
 # startup guard rejects execution unless those ABI symbols resolve to Scudo.
 bench_scudo = []
 allow_mem_leak = []
+# Bounded exact-address lifecycle validation for allocator-visible duplicate
+# reclaim before an intervening address reuse. This reuses the ownership table
+# already required by Type Isolation and remains independently ablatable.
+reclaim_checks = []
 type_isolation = []
 # The paper "metadata_segregation" variant must exercise an allocator path with
 # separated size-class/page metadata, not only attach a different semantic flag

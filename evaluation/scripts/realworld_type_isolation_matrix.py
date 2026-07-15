@@ -57,12 +57,39 @@ DEFAULT_RAW_DIR = ROOT / "evaluation" / "raw" / "realworld-type-isolation-matrix
 DEFAULT_CHECKOUT_ROOT = ROOT / "evaluation" / "external" / "_checkouts"
 DEFAULT_WRAPPER = DEFAULT_RAW_DIR / "tools" / "unialloc-rustc-wrapper"
 PASS_SOURCE = (
-    ROOT
-    / "tools"
-    / "unialloc-rustc-pass"
-    / "unialloc-rustc-mir-rewrite-dry-run.rs"
+    ROOT / "tools" / "unialloc-rustc-pass" / "unialloc-rustc-mir-rewrite-dry-run.rs"
 )
 STATS_PREFIX = "UNIALLOC_REALWORLD_STATS="
+TYPE_STATS_PREFIX = "UNIALLOC_REALWORLD_TYPE_STATS="
+DEPOT_STATS_PREFIX = "UNIALLOC_REALWORLD_DEPOT_STATS="
+DEPOT_EVENT_COUNTERS = (
+    "attempts",
+    "inserts",
+    "rescued_overflow",
+    "hits",
+    "hits_after_recorded_l1_bypass",
+    "evictions",
+    "rejected_capacity",
+    "rejected_policy",
+    "rejected_registry_headroom",
+    "from_probe_window_full",
+    "from_slot_depth",
+    "from_slot_byte_budget",
+    "from_aggregate_byte_budget",
+    "from_aggregate_entry_budget",
+    "from_segregated_capacity",
+    "from_local_eviction",
+)
+DEPOT_STATS_REQUIRED_FIELDS = tuple(
+    f"cache_admission_depot_{counter}_{metric}"
+    for counter in DEPOT_EVENT_COUNTERS
+    for metric in ("events", "rounded_bytes")
+) + (
+    "cache_admission_depot_current_entries",
+    "cache_admission_depot_peak_entries",
+    "cache_admission_depot_current_rounded_bytes",
+    "cache_admission_depot_peak_rounded_bytes",
+)
 GNU_TIME_PREFIX = "UNIALLOC_GNU_TIME"
 GNU_TIME_FORMAT = GNU_TIME_PREFIX + "\t%U\t%S\t%P\t%M\t%F\t%R\t%c\t%w\t%x"
 MIMALLOC_SYS_DEPENDENCY = 'libmimalloc-sys = "=0.1.49"'
@@ -164,6 +191,7 @@ UNIALLOC_FEATURE_VARIANTS = {
     "unialloc_pthread_dtor": ("pthread_dtor",),
     "unialloc_hugepage": ("hugepage",),
     "unialloc_separate_sc": ("separate_sc_backend",),
+    "unialloc_reclaim_checks": ("reclaim_checks",),
     "unialloc_metadata_segregation": ("metadata_segregation",),
     "unialloc_type_isolation": ("type_isolation",),
     "unialloc_pac": ("pac",),
@@ -263,6 +291,11 @@ APP_SPECS = {
     ),
 }
 
+# fd remains available as an explicit compiler-path diagnostic. Its typed
+# negative control is not equivalent to the uninstrumented UniAlloc route on
+# the pinned directory-walk workload, so it is excluded from default campaigns.
+DEFAULT_APPS = ("ripgrep", "oxipng")
+
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -301,7 +334,9 @@ def implementation_digest() -> str:
 
 
 def parse_csv(raw: str, allowed: Iterable[str], label: str) -> tuple[str, ...]:
-    values = tuple(dict.fromkeys(part.strip() for part in raw.split(",") if part.strip()))
+    values = tuple(
+        dict.fromkeys(part.strip() for part in raw.split(",") if part.strip())
+    )
     unknown = sorted(set(values) - set(allowed))
     if not values:
         raise argparse.ArgumentTypeError(f"{label} must contain at least one value")
@@ -312,7 +347,7 @@ def parse_csv(raw: str, allowed: Iterable[str], label: str) -> tuple[str, ...]:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--apps", default=",".join(APP_SPECS))
+    parser.add_argument("--apps", default=",".join(DEFAULT_APPS))
     parser.add_argument("--variants", default=",".join(DEFAULT_VARIANTS))
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--quick", dest="quick", action="store_true")
@@ -321,10 +356,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--warmups", type=int)
     parser.add_argument("--repetitions", type=int)
     parser.add_argument("--raw-dir", type=pathlib.Path, default=DEFAULT_RAW_DIR)
-    parser.add_argument("--checkout-root", type=pathlib.Path, default=DEFAULT_CHECKOUT_ROOT)
+    parser.add_argument(
+        "--checkout-root", type=pathlib.Path, default=DEFAULT_CHECKOUT_ROOT
+    )
     parser.add_argument("--wrapper", type=pathlib.Path)
     parser.add_argument("--toolchain", default="nightly-2026-06-11")
-    parser.add_argument("--time-binary", type=pathlib.Path, default=pathlib.Path("/usr/bin/time"))
+    parser.add_argument(
+        "--time-binary", type=pathlib.Path, default=pathlib.Path("/usr/bin/time")
+    )
     parser.add_argument("--jobs", type=int, default=max(1, os.cpu_count() or 1))
     parser.add_argument(
         "--cpu-list",
@@ -431,7 +470,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def measurement_counts(args: argparse.Namespace) -> tuple[int, int]:
     warmups = args.warmups if args.warmups is not None else (1 if args.quick else 2)
-    repetitions = args.repetitions if args.repetitions is not None else (3 if args.quick else 7)
+    repetitions = (
+        args.repetitions if args.repetitions is not None else (3 if args.quick else 7)
+    )
     return warmups, repetitions
 
 
@@ -478,9 +519,7 @@ def execute(
 
 
 def git_text(checkout: pathlib.Path, args: Sequence[str]) -> str:
-    result = execute(
-        ["git", *args], cwd=checkout, env=os.environ.copy(), timeout=60
-    )
+    result = execute(["git", *args], cwd=checkout, env=os.environ.copy(), timeout=60)
     if result["exit_code"] != 0:
         raise MatrixError(result["stderr"].decode("utf-8", errors="replace"))
     return result["stdout"].decode("utf-8", errors="replace").strip()
@@ -491,7 +530,9 @@ def verify_checkout(path: pathlib.Path, expected_head: str) -> dict[str, str]:
         raise MatrixError(f"missing Git checkout: {path}")
     head = git_text(path, ("rev-parse", "HEAD"))
     if head != expected_head:
-        raise MatrixError(f"checkout HEAD mismatch for {path}: got {head}, expected {expected_head}")
+        raise MatrixError(
+            f"checkout HEAD mismatch for {path}: got {head}, expected {expected_head}"
+        )
     status = git_text(path, ("status", "--short"))
     if status:
         raise MatrixError(f"checkout must be clean before copying: {path}\n{status}")
@@ -547,9 +588,7 @@ def mimalloc_build_provenance(
     if version_match is None:
         raise MatrixError(f"mimalloc core version is absent from {header}")
     archives = sorted(
-        (target_dir / "release" / "build").glob(
-            "libmimalloc-sys-*/out/libmimalloc.a"
-        )
+        (target_dir / "release" / "build").glob("libmimalloc-sys-*/out/libmimalloc.a")
     )
     return {
         "route": "rust-global-allocator-native-api",
@@ -606,9 +645,7 @@ def cargo_path_dependency(
         options.append("default-features = false")
     if features:
         options.append(
-            "features = ["
-            + ", ".join(json.dumps(value) for value in features)
-            + "]"
+            "features = [" + ", ".join(json.dumps(value) for value in features) + "]"
         )
     return "unialloc = { " + ", ".join(options) + " }"
 
@@ -713,10 +750,14 @@ def inject_unialloc_workspace_crates(
 
 
 def find_cached_spin() -> pathlib.Path:
-    roots = sorted((pathlib.Path.home() / ".cargo" / "registry" / "src").glob("*/spin-0.9.0"))
+    roots = sorted(
+        (pathlib.Path.home() / ".cargo" / "registry" / "src").glob("*/spin-0.9.0")
+    )
     if not roots:
         raise MatrixError("spin 0.9.0 is absent from the Cargo source cache")
-    indexed = [path for path in roots if path.parent.name.startswith("index.crates.io-")]
+    indexed = [
+        path for path in roots if path.parent.name.startswith("index.crates.io-")
+    ]
     return (indexed or roots)[0].resolve()
 
 
@@ -756,8 +797,14 @@ mod unialloc_realworld_instrumentation {{
         let fallback = unialloc::semantic_fallback_attribution_snapshot();
         let validation = unialloc::semantic_metadata_validation_snapshot();
         let side_cache = unialloc::type_isolation_side_cache_snapshot();
+        let metadata_side_cache =
+            unialloc::metadata_segregation_side_cache_snapshot();
+        let admission = unialloc::type_cache_admission_stats_snapshot();
+        let mut type_rows = [unialloc::SemanticTypeStatsSnapshot::empty(); 512];
+        let type_row_count =
+            unialloc::semantic_type_stats_snapshot(&mut type_rows).min(type_rows.len());
         eprintln!(
-            "{STATS_PREFIX}{{{{\\\"total_allocations\\\":{{}},\\\"typed_allocations\\\":{{}},\\\"fallback_allocations\\\":{{}},\\\"typed_deallocations\\\":{{}},\\\"fallback_deallocations\\\":{{}},\\\"coverage_basis_points\\\":{{}},\\\"raw_alloc_no_metadata\\\":{{}},\\\"raw_dealloc_no_metadata\\\":{{}},\\\"raw_realloc_no_metadata\\\":{{}},\\\"cache_hits\\\":{{}},\\\"cache_inserts\\\":{{}},\\\"cache_bypasses\\\":{{}},\\\"recovery_matches\\\":{{}},\\\"recovery_mismatches\\\":{{}},\\\"type_stats_dropped_events\\\":{{}},\\\"side_cache_entries\\\":{{}},\\\"side_cache_corrupt_slots\\\":{{}}}}}}",
+            "{STATS_PREFIX}{{{{\\\"total_allocations\\\":{{}},\\\"typed_allocations\\\":{{}},\\\"fallback_allocations\\\":{{}},\\\"typed_deallocations\\\":{{}},\\\"fallback_deallocations\\\":{{}},\\\"coverage_basis_points\\\":{{}},\\\"raw_alloc_no_metadata\\\":{{}},\\\"raw_dealloc_no_metadata\\\":{{}},\\\"raw_realloc_no_metadata\\\":{{}},\\\"cache_hits\\\":{{}},\\\"cache_inserts\\\":{{}},\\\"cache_bypasses\\\":{{}},\\\"typed_cache_wrong_identity_denials\\\":{{}},\\\"last_wrong_identity_requested_type_id\\\":{{}},\\\"last_wrong_identity_retained_type_id\\\":{{}},\\\"last_wrong_identity_requested_module_id\\\":{{}},\\\"last_wrong_identity_retained_module_id\\\":{{}},\\\"last_wrong_identity_requested_callsite\\\":{{}},\\\"last_wrong_identity_size\\\":{{}},\\\"last_wrong_identity_align\\\":{{}},\\\"recovery_matches\\\":{{}},\\\"recovery_mismatches\\\":{{}},\\\"type_stats_dropped_events\\\":{{}},\\\"side_cache_entries\\\":{{}},\\\"side_cache_retained_bytes\\\":{{}},\\\"side_cache_corrupt_slots\\\":{{}},\\\"metadata_segregation_side_cache_entries\\\":{{}},\\\"metadata_segregation_side_cache_retained_bytes\\\":{{}},\\\"metadata_segregation_side_cache_corrupt_buckets\\\":{{}},\\\"cache_admission_admitted_events\\\":{{}},\\\"cache_admission_admitted_rounded_bytes\\\":{{}},\\\"cache_admission_rejected_too_small_events\\\":{{}},\\\"cache_admission_rejected_too_small_rounded_bytes\\\":{{}},\\\"cache_admission_rejected_too_large_events\\\":{{}},\\\"cache_admission_rejected_too_large_rounded_bytes\\\":{{}},\\\"cache_admission_rejected_metadata_ineligible_events\\\":{{}},\\\"cache_admission_rejected_metadata_ineligible_rounded_bytes\\\":{{}},\\\"cache_admission_rejected_probe_window_full_events\\\":{{}},\\\"cache_admission_rejected_probe_window_full_rounded_bytes\\\":{{}},\\\"cache_admission_rejected_slot_depth_events\\\":{{}},\\\"cache_admission_rejected_slot_depth_rounded_bytes\\\":{{}},\\\"cache_admission_rejected_slot_byte_budget_events\\\":{{}},\\\"cache_admission_rejected_slot_byte_budget_rounded_bytes\\\":{{}},\\\"cache_admission_rejected_aggregate_byte_budget_events\\\":{{}},\\\"cache_admission_rejected_aggregate_byte_budget_rounded_bytes\\\":{{}},\\\"cache_admission_rejected_aggregate_entry_budget_events\\\":{{}},\\\"cache_admission_rejected_aggregate_entry_budget_rounded_bytes\\\":{{}},\\\"cache_admission_rejected_structural_or_alignment_events\\\":{{}},\\\"cache_admission_rejected_structural_or_alignment_rounded_bytes\\\":{{}},\\\"cache_admission_rejected_segregated_capacity_events\\\":{{}},\\\"cache_admission_rejected_segregated_capacity_rounded_bytes\\\":{{}},\\\"cache_admission_rejected_registry_pressure_events\\\":{{}},\\\"cache_admission_rejected_registry_pressure_rounded_bytes\\\":{{}},\\\"cache_admission_ownership_registry_full_failstop_events\\\":{{}},\\\"cache_admission_ownership_registry_full_failstop_rounded_bytes\\\":{{}},\\\"cache_admission_tiny_side_inserts_events\\\":{{}},\\\"cache_admission_tiny_side_inserts_rounded_bytes\\\":{{}},\\\"cache_admission_tiny_side_hits_events\\\":{{}},\\\"cache_admission_tiny_side_hits_rounded_bytes\\\":{{}},\\\"cache_admission_terminal_events\\\":{{}}}}}}",
             stats.total_allocations,
             stats.typed_allocations,
             stats.fallback_allocations,
@@ -770,12 +817,113 @@ mod unialloc_realworld_instrumentation {{
             stats.typed_cache_hits,
             stats.typed_cache_inserts,
             stats.typed_cache_bypasses,
+            stats.typed_cache_wrong_identity_denials,
+            stats.last_wrong_identity_requested_type_id,
+            stats.last_wrong_identity_retained_type_id,
+            stats.last_wrong_identity_requested_module_id,
+            stats.last_wrong_identity_retained_module_id,
+            stats.last_wrong_identity_requested_callsite,
+            stats.last_wrong_identity_size,
+            stats.last_wrong_identity_align,
             validation.recovery_identity_matches,
             validation.recovery_identity_mismatches,
             stats.semantic_type_stats_dropped_events,
             side_cache.occupied_entries,
+            side_cache.retained_bytes,
             side_cache.corrupt_slots,
+            metadata_side_cache.occupied_entries,
+            metadata_side_cache.retained_bytes,
+            metadata_side_cache.corrupt_buckets,
+            admission.admitted.events,
+            admission.admitted.rounded_bytes,
+            admission.rejected_too_small.events,
+            admission.rejected_too_small.rounded_bytes,
+            admission.rejected_too_large.events,
+            admission.rejected_too_large.rounded_bytes,
+            admission.rejected_metadata_ineligible.events,
+            admission.rejected_metadata_ineligible.rounded_bytes,
+            admission.rejected_probe_window_full.events,
+            admission.rejected_probe_window_full.rounded_bytes,
+            admission.rejected_slot_depth.events,
+            admission.rejected_slot_depth.rounded_bytes,
+            admission.rejected_slot_byte_budget.events,
+            admission.rejected_slot_byte_budget.rounded_bytes,
+            admission.rejected_aggregate_byte_budget.events,
+            admission.rejected_aggregate_byte_budget.rounded_bytes,
+            admission.rejected_aggregate_entry_budget.events,
+            admission.rejected_aggregate_entry_budget.rounded_bytes,
+            admission.rejected_structural_or_alignment.events,
+            admission.rejected_structural_or_alignment.rounded_bytes,
+            admission.rejected_segregated_capacity.events,
+            admission.rejected_segregated_capacity.rounded_bytes,
+            admission.rejected_registry_pressure.events,
+            admission.rejected_registry_pressure.rounded_bytes,
+            admission.ownership_registry_full_failstop.events,
+            admission.ownership_registry_full_failstop.rounded_bytes,
+            admission.tiny_side_inserts.events,
+            admission.tiny_side_inserts.rounded_bytes,
+            admission.tiny_side_hits.events,
+            admission.tiny_side_hits.rounded_bytes,
+            admission.terminal_events(),
         );
+        eprintln!(
+            "{DEPOT_STATS_PREFIX}{{{{\\\"cache_admission_depot_attempts_events\\\":{{}},\\\"cache_admission_depot_attempts_rounded_bytes\\\":{{}},\\\"cache_admission_depot_inserts_events\\\":{{}},\\\"cache_admission_depot_inserts_rounded_bytes\\\":{{}},\\\"cache_admission_depot_rescued_overflow_events\\\":{{}},\\\"cache_admission_depot_rescued_overflow_rounded_bytes\\\":{{}},\\\"cache_admission_depot_hits_events\\\":{{}},\\\"cache_admission_depot_hits_rounded_bytes\\\":{{}},\\\"cache_admission_depot_hits_after_recorded_l1_bypass_events\\\":{{}},\\\"cache_admission_depot_hits_after_recorded_l1_bypass_rounded_bytes\\\":{{}},\\\"cache_admission_depot_evictions_events\\\":{{}},\\\"cache_admission_depot_evictions_rounded_bytes\\\":{{}},\\\"cache_admission_depot_rejected_capacity_events\\\":{{}},\\\"cache_admission_depot_rejected_capacity_rounded_bytes\\\":{{}},\\\"cache_admission_depot_rejected_policy_events\\\":{{}},\\\"cache_admission_depot_rejected_policy_rounded_bytes\\\":{{}},\\\"cache_admission_depot_rejected_registry_headroom_events\\\":{{}},\\\"cache_admission_depot_rejected_registry_headroom_rounded_bytes\\\":{{}},\\\"cache_admission_depot_from_probe_window_full_events\\\":{{}},\\\"cache_admission_depot_from_probe_window_full_rounded_bytes\\\":{{}},\\\"cache_admission_depot_from_slot_depth_events\\\":{{}},\\\"cache_admission_depot_from_slot_depth_rounded_bytes\\\":{{}},\\\"cache_admission_depot_from_slot_byte_budget_events\\\":{{}},\\\"cache_admission_depot_from_slot_byte_budget_rounded_bytes\\\":{{}},\\\"cache_admission_depot_from_aggregate_byte_budget_events\\\":{{}},\\\"cache_admission_depot_from_aggregate_byte_budget_rounded_bytes\\\":{{}},\\\"cache_admission_depot_from_aggregate_entry_budget_events\\\":{{}},\\\"cache_admission_depot_from_aggregate_entry_budget_rounded_bytes\\\":{{}},\\\"cache_admission_depot_from_segregated_capacity_events\\\":{{}},\\\"cache_admission_depot_from_segregated_capacity_rounded_bytes\\\":{{}},\\\"cache_admission_depot_from_local_eviction_events\\\":{{}},\\\"cache_admission_depot_from_local_eviction_rounded_bytes\\\":{{}},\\\"cache_admission_depot_current_entries\\\":{{}},\\\"cache_admission_depot_peak_entries\\\":{{}},\\\"cache_admission_depot_current_rounded_bytes\\\":{{}},\\\"cache_admission_depot_peak_rounded_bytes\\\":{{}}}}}}",
+            admission.depot_attempts.events,
+            admission.depot_attempts.rounded_bytes,
+            admission.depot_inserts.events,
+            admission.depot_inserts.rounded_bytes,
+            admission.depot_rescued_overflow.events,
+            admission.depot_rescued_overflow.rounded_bytes,
+            admission.depot_hits.events,
+            admission.depot_hits.rounded_bytes,
+            admission.depot_hits_after_recorded_l1_bypass.events,
+            admission.depot_hits_after_recorded_l1_bypass.rounded_bytes,
+            admission.depot_evictions.events,
+            admission.depot_evictions.rounded_bytes,
+            admission.depot_rejected_capacity.events,
+            admission.depot_rejected_capacity.rounded_bytes,
+            admission.depot_rejected_policy.events,
+            admission.depot_rejected_policy.rounded_bytes,
+            admission.depot_rejected_registry_headroom.events,
+            admission.depot_rejected_registry_headroom.rounded_bytes,
+            admission.depot_from_probe_window_full.events,
+            admission.depot_from_probe_window_full.rounded_bytes,
+            admission.depot_from_slot_depth.events,
+            admission.depot_from_slot_depth.rounded_bytes,
+            admission.depot_from_slot_byte_budget.events,
+            admission.depot_from_slot_byte_budget.rounded_bytes,
+            admission.depot_from_aggregate_byte_budget.events,
+            admission.depot_from_aggregate_byte_budget.rounded_bytes,
+            admission.depot_from_aggregate_entry_budget.events,
+            admission.depot_from_aggregate_entry_budget.rounded_bytes,
+            admission.depot_from_segregated_capacity.events,
+            admission.depot_from_segregated_capacity.rounded_bytes,
+            admission.depot_from_local_eviction.events,
+            admission.depot_from_local_eviction.rounded_bytes,
+            admission.depot_current_entries,
+            admission.depot_peak_entries,
+            admission.depot_current_rounded_bytes,
+            admission.depot_peak_rounded_bytes,
+        );
+        for row in type_rows.iter().take(type_row_count) {{
+            eprintln!(
+                "{TYPE_STATS_PREFIX}{{{{\\\"type_id\\\":{{}},\\\"module_id\\\":{{}},\\\"callsite\\\":{{}},\\\"allocations\\\":{{}},\\\"allocated_bytes\\\":{{}},\\\"deallocations\\\":{{}},\\\"cache_hits\\\":{{}},\\\"cache_inserts\\\":{{}},\\\"cache_bypasses\\\":{{}},\\\"observed_alloc_size\\\":{{}},\\\"observed_alloc_align\\\":{{}},\\\"observed_dealloc_size\\\":{{}},\\\"observed_dealloc_align\\\":{{}},\\\"policy_flags_seen\\\":{{}}}}}}",
+                row.type_id,
+                row.module_id,
+                row.callsite,
+                row.allocations,
+                row.allocated_bytes,
+                row.deallocations,
+                row.cache_hits,
+                row.cache_inserts,
+                row.cache_bypasses,
+                row.observed_alloc_size,
+                row.observed_alloc_align,
+                row.observed_dealloc_size,
+                row.observed_dealloc_align,
+                row.policy_flags_seen,
+            );
+        }}
     }}
 
     extern "C" fn initialize() {{
@@ -791,13 +939,15 @@ mod unialloc_realworld_instrumentation {{
 }}
 '''
     else:
-        raise MatrixError(f"allocator source requested for unsupported variant: {variant}")
-    return f'''\n\n{INSTRUMENTATION_MARKER}
+        raise MatrixError(
+            f"allocator source requested for unsupported variant: {variant}"
+        )
+    return f"""\n\n{INSTRUMENTATION_MARKER}
 mod unialloc_realworld_instrumentation {{
     #[global_allocator]
     {body}
 }}
-'''
+"""
 
 
 def inject_allocator_main(main_source: pathlib.Path, variant: str) -> None:
@@ -808,7 +958,11 @@ def inject_allocator_main(main_source: pathlib.Path, variant: str) -> None:
 
 
 def merge_glibc_tunable(current: str) -> str:
-    values = [value for value in current.split(":") if value and not value.startswith("glibc.pthread.rseq=")]
+    values = [
+        value
+        for value in current.split(":")
+        if value and not value.startswith("glibc.pthread.rseq=")
+    ]
     values.append("glibc.pthread.rseq=0")
     return ":".join(values)
 
@@ -831,9 +985,7 @@ def allocator_runtime_environment_overrides(variant: str) -> dict[str, str]:
     }
 
 
-def allocator_runtime_environment(
-    base: dict[str, str], variant: str
-) -> dict[str, str]:
+def allocator_runtime_environment(base: dict[str, str], variant: str) -> dict[str, str]:
     env = dict(base)
     env.update(allocator_runtime_environment_overrides(variant))
     return env
@@ -976,12 +1128,8 @@ def allocator_runtime_prefix(
     ]
 
 
-def mimalloc_no_thp_build_record(
-    mimalloc_build: dict[str, Any]
-) -> dict[str, Any]:
-    if mimalloc_build.get("variant") != "mimalloc" or not mimalloc_build.get(
-        "success"
-    ):
+def mimalloc_no_thp_build_record(mimalloc_build: dict[str, Any]) -> dict[str, Any]:
+    if mimalloc_build.get("variant") != "mimalloc" or not mimalloc_build.get("success"):
         raise MatrixError("mimalloc_no_thp requires a successful mimalloc build")
     return {
         **mimalloc_build,
@@ -1175,7 +1323,8 @@ def typeiso_environment(
             "UNIALLOC_CONTINUE_COMPILATION": "1",
             "UNIALLOC_LOWERING_POLICY_FLAGS": str(policy_flags),
             "CARGO_INCREMENTAL": "0",
-            "LD_LIBRARY_PATH": library_dir + ((os.pathsep + existing) if existing else ""),
+            "LD_LIBRARY_PATH": library_dir
+            + ((os.pathsep + existing) if existing else ""),
         }
     )
     return env
@@ -1189,9 +1338,7 @@ def force_load_environment(
 ) -> dict[str, str]:
     driver = driver_wrapper.resolve()
     rlib = pathlib.Path(str(force_load.get("rlib", ""))).resolve()
-    dependency_dir = pathlib.Path(
-        str(force_load.get("dependency_dir", ""))
-    ).resolve()
+    dependency_dir = pathlib.Path(str(force_load.get("dependency_dir", ""))).resolve()
     if not driver.is_file():
         raise MatrixError(f"missing MIR rewrite driver: {driver}")
     if not rlib.is_file() or rlib.suffix != ".rlib":
@@ -1264,6 +1411,55 @@ def google_tcmalloc_target_identity_evidence(
     }
 
 
+def parse_type_stats_json(stderr: str) -> list[dict[str, Any]]:
+    parsed: list[dict[str, Any]] = []
+    for line in stderr.splitlines():
+        if not line.startswith(TYPE_STATS_PREFIX):
+            continue
+        try:
+            candidate = json.loads(line[len(TYPE_STATS_PREFIX) :])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(candidate, dict):
+            parsed.append(candidate)
+    return parsed
+
+
+def parse_depot_stats_json(stderr: str) -> dict[str, Any] | None:
+    parsed: dict[str, Any] | None = None
+    for line in stderr.splitlines():
+        if not line.startswith(DEPOT_STATS_PREFIX):
+            continue
+        try:
+            candidate = json.loads(line[len(DEPOT_STATS_PREFIX) :])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(candidate, dict):
+            parsed = candidate
+    return parsed
+
+
+def validate_depot_stats(stats: dict[str, Any] | None, label: str) -> None:
+    if not isinstance(stats, dict):
+        raise MatrixError(f"{label} emitted no complete depot stats JSON")
+    missing = sorted(set(DEPOT_STATS_REQUIRED_FIELDS) - stats.keys())
+    if missing:
+        raise MatrixError(
+            f"{label} emitted incomplete depot stats JSON; missing: "
+            + ",".join(missing)
+        )
+    invalid = sorted(
+        field
+        for field in DEPOT_STATS_REQUIRED_FIELDS
+        if type(stats[field]) is not int or stats[field] < 0
+    )
+    if invalid:
+        raise MatrixError(
+            f"{label} emitted invalid depot stats JSON fields: "
+            + ",".join(invalid)
+        )
+
+
 def summarize_audits(audit_dir: pathlib.Path) -> dict[str, Any]:
     files = sorted(audit_dir.glob("*.json")) if audit_dir.exists() else []
     semantic_rewrites = 0
@@ -1281,8 +1477,14 @@ def summarize_audits(audit_dir: pathlib.Path) -> dict[str, Any]:
             record = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        summary = record.get("summary") if isinstance(record.get("summary"), dict) else {}
-        compiler = record.get("compiler_pass") if isinstance(record.get("compiler_pass"), dict) else {}
+        summary = (
+            record.get("summary") if isinstance(record.get("summary"), dict) else {}
+        )
+        compiler = (
+            record.get("compiler_pass")
+            if isinstance(record.get("compiler_pass"), dict)
+            else {}
+        )
         rustc_args = record.get("rustc_args")
         if isinstance(rustc_args, list):
             for index, value in enumerate(rustc_args):
@@ -1292,12 +1494,49 @@ def summarize_audits(audit_dir: pathlib.Path) -> dict[str, Any]:
                 if isinstance(value, str) and value.startswith("--crate-name="):
                     crate_names.add(value.split("=", 1)[1].replace("-", "_"))
                     break
-        direct_allocator = int(summary.get("rewrite_applied_count", compiler.get("rewrite_applied_count", 0)) or 0)
-        direct_layout = int(summary.get("direct_layout_allocator_rewrite_applied_count", compiler.get("direct_layout_allocator_rewrite_applied_count", 0)) or 0)
-        scope = int(summary.get("semantic_scope_rewrite_applied_count", compiler.get("semantic_scope_rewrite_applied_count", 0)) or 0)
-        drops = int(summary.get("semantic_scope_drop_rewrite_applied_count", compiler.get("semantic_scope_drop_rewrite_applied_count", 0)) or 0)
-        ownership = int(summary.get("semantic_ownership_transfer_rewrite_applied_count", compiler.get("semantic_ownership_transfer_rewrite_applied_count", 0)) or 0)
-        deallocation_like = int(summary.get("semantic_scope_deallocation_like_rewrite_applied_count", compiler.get("semantic_scope_deallocation_like_rewrite_applied_count", 0)) or 0)
+        direct_allocator = int(
+            summary.get(
+                "rewrite_applied_count", compiler.get("rewrite_applied_count", 0)
+            )
+            or 0
+        )
+        direct_layout = int(
+            summary.get(
+                "direct_layout_allocator_rewrite_applied_count",
+                compiler.get("direct_layout_allocator_rewrite_applied_count", 0),
+            )
+            or 0
+        )
+        scope = int(
+            summary.get(
+                "semantic_scope_rewrite_applied_count",
+                compiler.get("semantic_scope_rewrite_applied_count", 0),
+            )
+            or 0
+        )
+        drops = int(
+            summary.get(
+                "semantic_scope_drop_rewrite_applied_count",
+                compiler.get("semantic_scope_drop_rewrite_applied_count", 0),
+            )
+            or 0
+        )
+        ownership = int(
+            summary.get(
+                "semantic_ownership_transfer_rewrite_applied_count",
+                compiler.get("semantic_ownership_transfer_rewrite_applied_count", 0),
+            )
+            or 0
+        )
+        deallocation_like = int(
+            summary.get(
+                "semantic_scope_deallocation_like_rewrite_applied_count",
+                compiler.get(
+                    "semantic_scope_deallocation_like_rewrite_applied_count", 0
+                ),
+            )
+            or 0
+        )
         direct_allocator_rewrites += direct_allocator
         direct_layout_allocator_rewrites += direct_layout
         scope_rewrites += scope
@@ -1305,7 +1544,12 @@ def summarize_audits(audit_dir: pathlib.Path) -> dict[str, Any]:
         semantic_ownership_rewrites += ownership
         semantic_deallocation_like_rewrites += deallocation_like
         semantic_rewrites += scope + drops
-        resolution = str(summary.get("semantic_scope_replacement_resolution_status", compiler.get("semantic_scope_replacement_resolution_status", "")))
+        resolution = str(
+            summary.get(
+                "semantic_scope_replacement_resolution_status",
+                compiler.get("semantic_scope_replacement_resolution_status", ""),
+            )
+        )
         if "not_resolved" in resolution:
             unresolved_files += 1
         if bool(summary.get("claim_grade", compiler.get("claim_grade", False))):
@@ -1340,9 +1584,7 @@ def validate_typeiso_audit_presence(
     if int(audit.get("audit_file_count", 0)) <= 0:
         raise MatrixError("Type Isolation build emitted no compiler audit files")
     expected = {name.replace("-", "_") for name in target_crates}
-    observed = {
-        str(name).replace("-", "_") for name in audit.get("crate_names", [])
-    }
+    observed = {str(name).replace("-", "_") for name in audit.get("crate_names", [])}
     missing = sorted(expected - observed)
     if missing:
         raise MatrixError(
@@ -1359,7 +1601,9 @@ def validate_typeiso_audits(
         raise MatrixError("Type Isolation build applied zero semantic rewrites")
 
 
-def validate_typeiso_coverage(audit: dict[str, Any], stats: dict[str, Any] | None) -> None:
+def validate_typeiso_coverage(
+    audit: dict[str, Any], stats: dict[str, Any] | None
+) -> None:
     validate_typeiso_audits(audit)
     if not isinstance(stats, dict):
         raise MatrixError("typeiso_coverage run emitted no complete stats JSON")
@@ -1431,7 +1675,10 @@ def ensure_wrapper(path: pathlib.Path, toolchain: str, timeout: int) -> pathlib.
 
 def ensure_force_load_wrapper(path: pathlib.Path) -> pathlib.Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists() or path.read_text(encoding="utf-8") != FORCE_LOAD_WRAPPER_SOURCE:
+    if (
+        not path.exists()
+        or path.read_text(encoding="utf-8") != FORCE_LOAD_WRAPPER_SOURCE
+    ):
         path.write_text(FORCE_LOAD_WRAPPER_SOURCE, encoding="utf-8")
     path.chmod(0o755)
     return path.resolve()
@@ -1469,9 +1716,7 @@ def unialloc_build_evidence(variant: str) -> dict[str, Any]:
             "unialloc_features": None,
             "default_features_enabled": None,
         }
-    features, default_features_enabled = unialloc_configuration_for_variant(
-        variant
-    )
+    features, default_features_enabled = unialloc_configuration_for_variant(variant)
     return {
         "unialloc_features": list(features),
         "default_features_enabled": default_features_enabled,
@@ -1484,9 +1729,7 @@ def dependency_for_variant(variant: str) -> tuple[str, tuple[str, ...]]:
     if variant in MIMALLOC_VARIANTS:
         return 'mimalloc = { version = "=0.1.25", default-features = false }', ()
     if variant in UNIALLOC_VARIANTS:
-        features, default_features_enabled = unialloc_configuration_for_variant(
-            variant
-        )
+        features, default_features_enabled = unialloc_configuration_for_variant(variant)
         return (
             cargo_path_dependency(
                 ROOT / "unialloc",
@@ -1500,7 +1743,9 @@ def dependency_for_variant(variant: str) -> tuple[str, tuple[str, ...]]:
 
 def force_load_features_for_variant(variant: str) -> tuple[str, ...]:
     if variant not in TYPEISO_VARIANTS:
-        raise MatrixError(f"force-load rlib requested for unsupported variant: {variant}")
+        raise MatrixError(
+            f"force-load rlib requested for unsupported variant: {variant}"
+        )
     _dependency, features = dependency_for_variant(variant)
     return features
 
@@ -1563,9 +1808,7 @@ def build_force_load_rlib(
     (build_root / "build.stderr").write_bytes(result["stderr"])
     candidates = sorted((target_dir / "release" / "deps").glob("libunialloc-*.rlib"))
     success = (
-        result["exit_code"] == 0
-        and not result["timed_out"]
-        and len(candidates) == 1
+        result["exit_code"] == 0 and not result["timed_out"] and len(candidates) == 1
     )
     record: dict[str, Any] = {
         "mode": "selected-crate-rustc-force-extern",
@@ -1650,12 +1893,13 @@ def is_reusable_binary_record(
         return False
     if variant in TYPEISO_VARIANTS:
         recorded_force_load = record.get("force_load")
-        if not isinstance(recorded_force_load, dict) or not isinstance(force_load, dict):
-            return False
-        if (
-            recorded_force_load.get("rlib_sha256") != force_load.get("rlib_sha256")
-            or recorded_force_load.get("features") != force_load.get("features")
+        if not isinstance(recorded_force_load, dict) or not isinstance(
+            force_load, dict
         ):
+            return False
+        if recorded_force_load.get("rlib_sha256") != force_load.get(
+            "rlib_sha256"
+        ) or recorded_force_load.get("features") != force_load.get("features"):
             return False
     return (
         record.get("toolchain") == toolchain
@@ -1687,7 +1931,9 @@ def build_variant(
     record_path = output_binary.parent / "build.json"
     target_dir = raw_dir / "targets" / spec.name / variant
     implementation_sha256 = implementation_digest()
-    compiler_wrapper_sha256 = sha256_file(wrapper) if variant in TYPEISO_VARIANTS else None
+    compiler_wrapper_sha256 = (
+        sha256_file(wrapper) if variant in TYPEISO_VARIANTS else None
+    )
     force_load: dict[str, Any] | None = None
     force_load_wrapper: pathlib.Path | None = None
     force_load_wrapper_sha256: str | None = None
@@ -1727,7 +1973,9 @@ def build_variant(
     copy_checkout(source_checkout, worktree)
     ensure_standalone_workspace(worktree / "Cargo.toml")
     patched_manifests: list[pathlib.Path] = []
-    if variant not in {"native", "system"} and not uses_original_jemalloc(spec, variant):
+    if variant not in {"native", "system"} and not uses_original_jemalloc(
+        spec, variant
+    ):
         root_manifest = worktree / "Cargo.toml"
         if variant in TYPEISO_VARIANTS:
             inject_allocator_main(worktree / spec.main_source, variant)
@@ -1786,7 +2034,9 @@ def build_variant(
     (output_binary.parent / "build.stderr").write_bytes(result["stderr"])
     built_binary = target_dir / "release" / spec.binary
     audit = summarize_audits(audit_dir) if variant in TYPEISO_VARIANTS else None
-    success = result["exit_code"] == 0 and built_binary.exists() and not result["timed_out"]
+    success = (
+        result["exit_code"] == 0 and built_binary.exists() and not result["timed_out"]
+    )
     if success and audit is not None:
         validate_typeiso_audits(audit, spec.target_crates)
     record = {
@@ -1817,16 +2067,16 @@ def build_variant(
             if variant == "system"
             else (
                 "original-native"
-            if variant == "native"
-            else (
-                "original-fd-use-jemalloc"
-                if uses_original_jemalloc(spec, variant)
+                if variant == "native"
                 else (
-                    "injected-selected-crate-force-load"
-                    if variant in TYPEISO_VARIANTS
-                    else "injected"
+                    "original-fd-use-jemalloc"
+                    if uses_original_jemalloc(spec, variant)
+                    else (
+                        "injected-selected-crate-force-load"
+                        if variant in TYPEISO_VARIANTS
+                        else "injected"
+                    )
                 )
-            )
             )
         ),
         "success": success,
@@ -1837,7 +2087,9 @@ def build_variant(
         "patched_manifests": [
             path.relative_to(worktree).as_posix() for path in patched_manifests
         ],
-        "target_crates": list(spec.target_crates) if variant in TYPEISO_VARIANTS else [],
+        "target_crates": list(spec.target_crates)
+        if variant in TYPEISO_VARIANTS
+        else [],
         "force_load_lock_packages": (
             list(spec.force_load_lock_packages) if variant in TYPEISO_VARIANTS else []
         ),
@@ -1846,7 +2098,9 @@ def build_variant(
         "actual_mir_rewrite": variant in TYPEISO_VARIANTS,
         "compatibility": compatibility,
         "lowering_policy_flags": (
-            0 if variant == "typed_plain" else (1 if variant in TYPEISO_VARIANTS else None)
+            0
+            if variant == "typed_plain"
+            else (1 if variant in TYPEISO_VARIANTS else None)
         ),
         "audit": audit,
     }
@@ -1863,7 +2117,9 @@ def build_variant(
             record["allocator_provenance"] = mimalloc_build_provenance(
                 worktree / "Cargo.lock", target_dir
             )
-    record_path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    record_path.write_text(
+        json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     if not success:
         stderr = result["stderr"].decode("utf-8", errors="replace")
         raise MatrixError(f"build failed for {spec.name}/{variant}:\n{stderr[-8000:]}")
@@ -1892,7 +2148,9 @@ def prepare_metadata_tree(root: pathlib.Path, *, file_count: int) -> dict[str, A
     bucket_count = min(256, file_count)
     digest = hashlib.sha256()
     for index in range(file_count):
-        relative = pathlib.Path(f"bucket-{index % bucket_count:03d}") / f"file-{index:06d}.txt"
+        relative = (
+            pathlib.Path(f"bucket-{index % bucket_count:03d}") / f"file-{index:06d}.txt"
+        )
         path = root / relative
         path.parent.mkdir(exist_ok=True)
         path.touch()
@@ -2047,14 +2305,20 @@ def run_measured(
 
 def parse_gnu_time_metrics(text: str) -> dict[str, Any]:
     record = next(
-        (line for line in reversed(text.splitlines()) if line.startswith(GNU_TIME_PREFIX + "\t")),
+        (
+            line
+            for line in reversed(text.splitlines())
+            if line.startswith(GNU_TIME_PREFIX + "\t")
+        ),
         None,
     )
     if record is None:
         raise MatrixError("GNU time emitted no complete metric record")
     fields = record.split("\t")
     if len(fields) != 10:
-        raise MatrixError(f"GNU time metric record has {len(fields) - 1} fields, expected 9")
+        raise MatrixError(
+            f"GNU time metric record has {len(fields) - 1} fields, expected 9"
+        )
     try:
         return {
             "user_cpu_seconds": float(fields[1]),
@@ -2074,7 +2338,9 @@ def parse_gnu_time_metrics(text: str) -> dict[str, Any]:
 def persist_result(path: pathlib.Path, record: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     temporary.replace(path)
 
 
@@ -2083,7 +2349,9 @@ def median_absolute_deviation(values: Sequence[float]) -> float:
     return statistics.median(abs(value - center) for value in values)
 
 
-def throughput_value(work_amount: int | float, work_unit: str, wall_seconds: float) -> tuple[float, str]:
+def throughput_value(
+    work_amount: int | float, work_unit: str, wall_seconds: float
+) -> tuple[float, str]:
     if wall_seconds <= 0:
         raise MatrixError("wall time must be positive for throughput")
     if work_unit == "bytes":
@@ -2108,9 +2376,13 @@ def paired_median_ratio(
     return statistics.median(ratios) if ratios else None
 
 
-def summarize_measurements(measurements: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+def summarize_measurements(
+    measurements: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
     summaries: list[dict[str, Any]] = []
-    keys = sorted({(row["app"], row["variant"]) for row in measurements if not row["warmup"]})
+    keys = sorted(
+        {(row["app"], row["variant"]) for row in measurements if not row["warmup"]}
+    )
     for app, variant in keys:
         rows = [
             row
@@ -2124,7 +2396,9 @@ def summarize_measurements(measurements: Sequence[dict[str, Any]]) -> list[dict[
             for row in rows
         ]
         throughput_values = [
-            throughput_value(row["work_amount"], row["work_unit"], row["wall_seconds"])[0]
+            throughput_value(row["work_amount"], row["work_unit"], row["wall_seconds"])[
+                0
+            ]
             for row in rows
         ]
         _, throughput_unit = throughput_value(
@@ -2178,7 +2452,9 @@ def summarize_measurements(measurements: Sequence[dict[str, Any]]) -> list[dict[
                 "performance_eligible": variant != "typeiso_coverage",
             }
         )
-    by_app = {name: [row for row in summaries if row["app"] == name] for name in APP_SPECS}
+    by_app = {
+        name: [row for row in summaries if row["app"] == name] for name in APP_SPECS
+    }
     for app, summary_rows in by_app.items():
         baseline = next(
             (row for row in summary_rows if row["variant"] == "system"),
@@ -2199,11 +2475,19 @@ def summarize_measurements(measurements: Sequence[dict[str, Any]]) -> list[dict[
                 if baseline is not None:
                     baseline_name = str(baseline["variant"])
                     row["baseline_variant"] = baseline_name
-                    row[f"wall_ratio_vs_{baseline_name}"] = row["median_wall_seconds"] / baseline["median_wall_seconds"]
-                    row[f"rss_ratio_vs_{baseline_name}"] = row["median_peak_rss_kib"] / baseline["median_peak_rss_kib"]
+                    row[f"wall_ratio_vs_{baseline_name}"] = (
+                        row["median_wall_seconds"] / baseline["median_wall_seconds"]
+                    )
+                    row[f"rss_ratio_vs_{baseline_name}"] = (
+                        row["median_peak_rss_kib"] / baseline["median_peak_rss_kib"]
+                    )
                 if typed_plain is not None:
-                    row["wall_ratio_vs_typed_plain"] = row["median_wall_seconds"] / typed_plain["median_wall_seconds"]
-                    row["rss_ratio_vs_typed_plain"] = row["median_peak_rss_kib"] / typed_plain["median_peak_rss_kib"]
+                    row["wall_ratio_vs_typed_plain"] = (
+                        row["median_wall_seconds"] / typed_plain["median_wall_seconds"]
+                    )
+                    row["rss_ratio_vs_typed_plain"] = (
+                        row["median_peak_rss_kib"] / typed_plain["median_peak_rss_kib"]
+                    )
                 current_rows = rows_by_variant.get(str(row["variant"]), [])
                 for comparator in (
                     "system",
@@ -2247,7 +2531,9 @@ def workload_evidence(
     repetitions = path_repetitions_for_app(spec, args)
     if spec.name == "ripgrep":
         corpus = result["corpus"]
-        total_bytes = int(corpus["file_count"]) * int(corpus["file_bytes"]) * repetitions
+        total_bytes = (
+            int(corpus["file_count"]) * int(corpus["file_bytes"]) * repetitions
+        )
         return {
             "description": "single-thread regex search over repeated deterministic paths",
             "path_repetitions": repetitions,
@@ -2289,7 +2575,11 @@ def host_snapshot() -> dict[str, Any]:
         "cpu_model": model_name,
         "logical_cpu_count": os.cpu_count(),
         "process_affinity": sorted(os.sched_getaffinity(0)),
-        "load_average": {"one_minute": load[0], "five_minutes": load[1], "fifteen_minutes": load[2]},
+        "load_average": {
+            "one_minute": load[0],
+            "five_minutes": load[1],
+            "fifteen_minutes": load[2],
+        },
     }
 
 
@@ -2300,7 +2590,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     raw_dir = args.raw_dir.resolve()
     raw_dir.mkdir(parents=True, exist_ok=True)
-    wrapper = ensure_wrapper((args.wrapper or (raw_dir / "tools" / "unialloc-rustc-wrapper")).resolve(), args.toolchain, args.build_timeout)
+    wrapper = ensure_wrapper(
+        (args.wrapper or (raw_dir / "tools" / "unialloc-rustc-wrapper")).resolve(),
+        args.toolchain,
+        args.build_timeout,
+    )
     sysroot = rustc_sysroot(args.toolchain)
     warmups, repetitions = measurement_counts(args)
     affinity_prefix = measurement_command_prefix(args.cpu_list, args.numa_node)
@@ -2414,11 +2708,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             elif variant == "mimalloc_no_thp":
                 build = mimalloc_no_thp_build_record(build)
                 persist_result(
-                    raw_dir
-                    / "binaries"
-                    / app
-                    / "mimalloc_no_thp"
-                    / "build.json",
+                    raw_dir / "binaries" / app / "mimalloc_no_thp" / "build.json",
                     build,
                 )
             builds[(app, variant)] = build
@@ -2479,7 +2769,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     (run_dir / "stdout.bin").write_bytes(stdout)
                     (run_dir / "stderr.bin").write_bytes(stderr)
                 if measured["exit_code"] != 0 or measured["timed_out"]:
-                    raise MatrixError(f"workload failed for {app}/{variant}: {measured}")
+                    raise MatrixError(
+                        f"workload failed for {app}/{variant}: {measured}"
+                    )
                 target_identity = google_tcmalloc_target_identity_evidence(
                     variant, stderr
                 )
@@ -2491,12 +2783,28 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "modern google/tcmalloc identity markers; expected "
                         f"{target_identity['google_tcmalloc_expected_identity_marker_count']}"
                     )
-                output_sha = sha256_file(output_file) if output_file is not None else measured["stdout_sha256"]
+                output_sha = (
+                    sha256_file(output_file)
+                    if output_file is not None
+                    else measured["stdout_sha256"]
+                )
                 stats = parse_stats_json(stderr.decode("utf-8", errors="replace"))
+                depot_stats = parse_depot_stats_json(
+                    stderr.decode("utf-8", errors="replace")
+                )
+                if variant == "typeiso_coverage":
+                    validate_depot_stats(depot_stats, f"{app}/{variant}")
+                if stats is not None and depot_stats is not None:
+                    stats.update(depot_stats)
+                type_stats = parse_type_stats_json(
+                    stderr.decode("utf-8", errors="replace")
+                )
                 if variant == "typeiso_coverage":
                     validate_typeiso_coverage(build["audit"], stats)
                 elif stats is not None:
-                    raise MatrixError(f"performance variant unexpectedly emitted stats: {app}/{variant}")
+                    raise MatrixError(
+                        f"performance variant unexpectedly emitted stats: {app}/{variant}"
+                    )
                 expected = expected_outputs.setdefault(app, output_sha)
                 if output_sha != expected:
                     raise MatrixError(
@@ -2511,6 +2819,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "measurement_index": measured_index,
                     "output_sha256": output_sha,
                     "stats": stats,
+                    "type_stats": type_stats,
                     "runtime_environment_overrides": (
                         allocator_runtime_environment_overrides(variant)
                     ),
@@ -2525,7 +2834,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     result["summaries"] = summarize_measurements(result["measurements"])
     result["success"] = True
     persist_result(result_path, result)
-    print(json.dumps({"success": True, "results": str(result_path), "summaries": result["summaries"]}, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "success": True,
+                "results": str(result_path),
+                "summaries": result["summaries"],
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 

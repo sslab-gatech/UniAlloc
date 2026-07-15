@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove actual MIR metadata keeps equal type ids isolated by crate module id."""
+"""Prove compiler TypeId and module metadata isolate same-name crates."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ DEFAULT_PASS_SOURCE = (
     ROOT / "tools/unialloc-rustc-pass/unialloc-rustc-mir-rewrite-dry-run.rs"
 )
 SHARED_CRATE_NAME = "shared_owner"
-APPLIED_SCOPE_STATUS = "actual_semantic_scope_enter_exit_rewrite_applied"
+APPLIED_SCOPE_STATUS = "actual_semantic_scope_generic_type_rewrite_applied"
 TYPE_ISOLATED = 0x1
 PAYLOAD_BYTES = 64
 
@@ -59,10 +59,18 @@ def write_fixture(workspace: Path) -> Path:
     for crate in (app, alpha, beta):
         (crate / "src").mkdir(parents=True)
 
+    spin_candidates = sorted(
+        (Path.home() / ".cargo/registry/src").glob("*/spin-0.9.0")
+    )
+    assert spin_candidates, "spin 0.9.0 must be present in the Cargo source cache"
+    spin_path = json.dumps(str(spin_candidates[-1]))
     (workspace / "Cargo.toml").write_text(
-        '''[workspace]
+        f'''[workspace]
 members = ["application", "module-alpha", "module-beta"]
 resolver = "2"
+
+[patch.crates-io]
+spin = {{ path = {spin_path} }}
 ''',
         encoding="utf-8",
     )
@@ -129,6 +137,14 @@ pub fn allocation_cycle(seed: u64) -> usize {{
     drop(value);
     address
 }}
+
+pub fn semantic_box_type_id() -> u64 {{
+    unialloc::semantic_type_id::<Box<Payload>>()
+}}
+
+pub fn semantic_box_type_name() -> &'static str {{
+    std::any::type_name::<Box<Payload>>()
+}}
 '''
     (alpha / "src/lib.rs").write_text(dependency_source, encoding="utf-8")
     (beta / "src/lib.rs").write_text(dependency_source, encoding="utf-8")
@@ -150,7 +166,12 @@ fn main() {
     let alpha_seed = alpha::allocation_cycle(0xA11C_0001);
     let beta_probe = beta::allocation_cycle(0xB37A_0001);
     let alpha_recovery = alpha::allocation_cycle(0xA11C_0002);
+    let alpha_type_id = alpha::semantic_box_type_id();
+    let beta_type_id = beta::semantic_box_type_id();
+    let type_names_equal = alpha::semantic_box_type_name() == beta::semantic_box_type_name();
 
+    assert!(type_names_equal, "the fixture must exercise a type_name collision");
+    assert_ne!(alpha_type_id, beta_type_id, "compiler TypeId must retain crate disambiguation");
     assert_ne!(
         beta_probe, alpha_seed,
         "equal compiler type ids from distinct crates must not share cached storage"
@@ -167,10 +188,13 @@ fn main() {
     semantic_stats_recording_disable();
 
     println!(
-        "{{\"source\":\"multicrate_module_isolation_probe\",\"alpha_seed\":{},\"beta_probe\":{},\"alpha_recovery\":{},\"wrong_module_non_reuse\":true,\"same_module_reuse\":true,\"recovery_identity_mismatches\":{},\"side_cache_corrupt_slots\":{}}}",
+        "{{\"source\":\"multicrate_module_isolation_probe\",\"alpha_seed\":{},\"beta_probe\":{},\"alpha_recovery\":{},\"alpha_type_id\":{},\"beta_type_id\":{},\"type_names_equal\":{},\"wrong_module_non_reuse\":true,\"same_module_reuse\":true,\"recovery_identity_mismatches\":{},\"side_cache_corrupt_slots\":{}}}",
         alpha_seed,
         beta_probe,
         alpha_recovery,
+        alpha_type_id,
+        beta_type_id,
+        type_names_equal,
         validation.recovery_identity_mismatches,
         side_cache.corrupt_slots,
     );
@@ -224,7 +248,10 @@ def validate(audits: list[dict[str, object]], stdout: str) -> dict[str, object]:
     module_ids = {int(row["module_id"]) for row in rows}
     object_types = {str(row["semantic_object_type"]) for row in rows}
     assert len(object_types) == 1, rows
-    assert len(type_ids) == 1 and next(iter(type_ids)) != 0, rows
+    assert type_ids == {0}, (
+        "runtime compiler-TypeId scopes must not persist a textual placeholder hash",
+        rows,
+    )
     assert len(module_ids) == 2 and 0 not in module_ids, (
         "distinct rustc crate disambiguators must produce distinct nonzero module ids",
         rows,
@@ -233,6 +260,8 @@ def validate(audits: list[dict[str, object]], stdout: str) -> dict[str, object]:
     runtime_lines = [line for line in stdout.splitlines() if line.startswith("{")]
     assert len(runtime_lines) == 1, stdout
     runtime = json.loads(runtime_lines[0])
+    assert runtime.get("type_names_equal") is True, runtime
+    assert int(runtime["alpha_type_id"]) != int(runtime["beta_type_id"]), runtime
     assert runtime.get("wrong_module_non_reuse") is True, runtime
     assert runtime.get("same_module_reuse") is True, runtime
     assert int(runtime["alpha_seed"]) != int(runtime["beta_probe"]), runtime
@@ -240,7 +269,7 @@ def validate(audits: list[dict[str, object]], stdout: str) -> dict[str, object]:
     assert int(runtime["recovery_identity_mismatches"]) == 0, runtime
     assert int(runtime["side_cache_corrupt_slots"]) == 0, runtime
     return {
-        "type_id": next(iter(type_ids)),
+        "type_id_basis": "monomorphized_compiler_type_id_runtime",
         "module_ids": sorted(module_ids),
         "semantic_object_type": next(iter(object_types)),
         "runtime": runtime,
@@ -374,7 +403,7 @@ def main() -> int:
                 "pass_source": str(pass_source),
                 "boundaries": [
                     "Functional compiler-pass and allocator module-isolation regression only; no benchmark or performance claim.",
-                    "Two packages deliberately use the same rustc crate name and identical source so their compiler type ids match; only the crate disambiguator-derived module id may separate reuse.",
+                    "Two packages deliberately use the same rustc crate name and identical source; their type_name strings collide while compiler TypeId and module metadata retain crate disambiguation.",
                 ],
                 "evidence": {
                     **evidence,

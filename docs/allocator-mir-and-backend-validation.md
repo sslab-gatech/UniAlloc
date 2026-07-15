@@ -792,6 +792,23 @@ This proves only the two bounded `Result` shapes above.  It is not universal
 
 ### Plain `Clone` candidate classification boundary
 
+Current-source WIP supersession (2026-07-15): the active rewrite allowlist for
+plain `Clone::clone` is limited to compiler-authenticated direct `String` and
+direct `Vec<u8, Global>` destinations.  The Clone trait method and the built-in
+owner type are bound through rustc lang/diagnostic-item identities.  `Option`,
+`Result`, aggregate wrappers, custom Clone traits, and same-path crates remain
+audit-only.  The older positive wrapper examples below are retained as
+historical snapshot evidence and do not describe the current claim surface.
+
+Allocator-visible identities for applied current-source scopes now come from
+`tcx.type_id_hash(exact_owner_ty)` and are mapped byte-for-byte to UniAlloc's
+runtime `semantic_type_id<T>` domain.  Type debug text is audit display only.
+Distinct dependency packages with the same crate/type display name receive
+distinct IDs; the regression also proves allocation/Drop pairing, wrong-type
+non-reuse, and exact-type reuse.  Layout-only direct-allocation provenance is
+neutral (`type_id=0`) and recovery-backed until the pass has CFG reaching-def
+proof, so the older Layout-derived identity claims below are historical.
+
 The MIR pass now classifies exact plain `Clone::clone` return values before
 lowering them as semantic heap-object scopes.  The fail-closed behavior is
 intentional:

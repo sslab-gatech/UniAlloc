@@ -46,6 +46,10 @@ modules.builtin
 *.xz
 *.lzo
 *.patch
+# The RustSec evaluation catalog hashes these source-control artifacts as
+# experiment inputs, so they must remain trackable.
+!evaluation/harnesses/rustsec_heap/**/patches/*.patch
+!evaluation/harnesses/rustsec_heap_expansion/**/patches/*.patch
 *.gcno
 
 # evaluation generated artifacts

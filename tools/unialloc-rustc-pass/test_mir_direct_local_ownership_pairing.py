@@ -175,6 +175,8 @@ def applied_rows(
         in {
             "actual_semantic_scope_enter_exit_rewrite_applied",
             "actual_semantic_scope_drop_rewrite_applied",
+            "actual_semantic_scope_generic_type_rewrite_applied",
+            "actual_semantic_scope_drop_generic_type_rewrite_applied",
         }
     ]
 
@@ -191,6 +193,8 @@ def assert_default_recovery_scope(
         assert row.get("replacement_symbol") in {
             "__unialloc_semantic_scope_push",
             "__unialloc_semantic_scope_push_hints",
+            "__unialloc_semantic_scope_push_for_rust_type",
+            "__unialloc_semantic_scope_push_for_rust_type_hints",
         }, (
             label,
             row,
@@ -212,6 +216,8 @@ def assert_exact_local_scope(rows: list[dict[str, object]], label: str) -> None:
         assert row.get("replacement_symbol") in {
             "__unialloc_semantic_scope_push_local",
             "__unialloc_semantic_scope_push_hints_local",
+            "__unialloc_semantic_scope_push_for_rust_type_local",
+            "__unialloc_semantic_scope_push_for_rust_type_hints_local",
         }, (
             label,
             row,

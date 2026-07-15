@@ -9,7 +9,8 @@ use crate::alloc_api::type_isolation::{
     begin_global_tracked_reclaim_from_observation, checked_recorded_reallocation_old_metadata,
     deallocation_metadata_after_recovery_record, finish_global_raw_reclaim_in_place,
     global_address_lifecycle_tracking_active, observe_global_reclaim,
-    preview_deallocation_metadata_after_recovery_record, recorded_reallocation_old_metadata,
+    preview_deallocation_metadata_after_recovery_record,
+    record_recovery_deallocation_layout_mismatch, recorded_reallocation_old_metadata,
     reject_known_retained_or_released_from_observation, release_global_raw_reclaim,
     release_global_reclaim_with_metadata, rollback_global_raw_reclaim,
     select_auto_allocation_metadata, semantic_allocation_slow_path_enabled,
@@ -310,9 +311,10 @@ unsafe fn dealloc_with_active_or_recorded_metadata_from_observation(
         AutoAllocationRecordLookup::Missing => {
             dealloc_raw_with_fallback_attribution_from_observation(alloc, layout, observation);
         }
-        AutoAllocationRecordLookup::Mismatched => {
+        AutoAllocationRecordLookup::Mismatched(mismatch) => {
             // A live record for this address with a different layout makes a
             // raw release unsafe. Preserve it for a correct retry.
+            record_recovery_deallocation_layout_mismatch(layout, mismatch);
         }
     }
 }
@@ -404,7 +406,7 @@ unsafe fn realloc_with_auto_metadata(
             }
             new_ptr
         }
-        AutoAllocationRecordLookup::Mismatched => core::ptr::null_mut(),
+        AutoAllocationRecordLookup::Mismatched(_) => core::ptr::null_mut(),
     }
 }
 
@@ -464,7 +466,7 @@ unsafe fn realloc_with_active_metadata(
             }
             new_ptr
         }
-        AutoAllocationRecordLookup::Mismatched => core::ptr::null_mut(),
+        AutoAllocationRecordLookup::Mismatched(_) => core::ptr::null_mut(),
     }
 }
 
@@ -533,7 +535,7 @@ unsafe fn realloc_with_active_local_metadata(
                 old_recovery,
             )
         }),
-        AutoAllocationRecordLookup::Mismatched => core::ptr::null_mut(),
+        AutoAllocationRecordLookup::Mismatched(_) => core::ptr::null_mut(),
     }
 }
 
@@ -545,9 +547,11 @@ pub struct RustAllocator;
 // GlobalAlloc implementation can therefore compile directly to the raw backend
 // while development and feature-enabled builds retain the dynamic gates.
 const DYNAMIC_GLOBAL_ALLOC_SEMANTICS_SUPPORTED: bool = cfg!(any(
+    test,
     debug_assertions,
     feature = "type_isolation",
     feature = "quarantine",
+    feature = "reclaim_checks",
     feature = "stats"
 ));
 
@@ -631,7 +635,13 @@ impl RustAllocator {
     }
 
     #[cfg_attr(
-        not(any(feature = "type_isolation", feature = "quarantine", feature = "stats")),
+        not(any(
+            test,
+            feature = "type_isolation",
+            feature = "quarantine",
+            feature = "reclaim_checks",
+            feature = "stats"
+        )),
         cold
     )]
     #[inline(never)]
@@ -662,7 +672,13 @@ impl RustAllocator {
     }
 
     #[cfg_attr(
-        not(any(feature = "type_isolation", feature = "quarantine", feature = "stats")),
+        not(any(
+            test,
+            feature = "type_isolation",
+            feature = "quarantine",
+            feature = "reclaim_checks",
+            feature = "stats"
+        )),
         cold
     )]
     #[inline(never)]
@@ -697,12 +713,13 @@ impl RustAllocator {
                     reclaim_observation,
                 );
             }
-            AutoAllocationRecordLookup::Mismatched => {
+            AutoAllocationRecordLookup::Mismatched(mismatch) => {
                 // A recovery record for this address with a different layout
                 // proves that raw deallocation under the caller's layout is
                 // unsafe. Preserve the authoritative record for an exact
                 // retry instead of treating the mismatch as if no record
                 // existed.
+                record_recovery_deallocation_layout_mismatch(layout, mismatch);
                 return;
             }
             AutoAllocationRecordLookup::Missing => {}
@@ -883,7 +900,7 @@ impl RustAllocator {
     ) -> *mut u8 {
         let reclaim_observation = observe_global_reclaim(ptr);
         let old_recovery = checked_recorded_reallocation_old_metadata(ptr, old_layout);
-        if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched) {
+        if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched(_)) {
             // `Allocator::{grow,shrink}` reaches this helper when alignment
             // changes.  A record for the same address under another Layout is
             // authoritative: allocating/copying first would publish a second
@@ -921,7 +938,7 @@ impl RustAllocator {
                     }
                 }
             },
-            AutoAllocationRecordLookup::Mismatched => unreachable!(),
+            AutoAllocationRecordLookup::Mismatched(_) => unreachable!(),
         };
         if let Some((metadata, _)) = release_metadata {
             verify_memory_tagged_reallocation_source(ptr, old_layout, metadata);
@@ -941,7 +958,7 @@ impl RustAllocator {
                 match old_recovery {
                     AutoAllocationRecordLookup::Exact(metadata) => Some((metadata, true, false)),
                     AutoAllocationRecordLookup::Missing => None,
-                    AutoAllocationRecordLookup::Mismatched => unreachable!(),
+                    AutoAllocationRecordLookup::Mismatched(_) => unreachable!(),
                 }
             } else {
                 None
@@ -1161,7 +1178,7 @@ unsafe impl GlobalAlloc for RustAllocator {
         crate::alloc_api::type_isolation::pause_reallocation_after_recovery_lookup_for_test(
             old_recovery,
         );
-        if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched) {
+        if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched(_)) {
             // The exact recovery Layout remains authoritative. Reject before
             // admission, accounting, compiler-stream consumption, or storage
             // mutation so a correct-layout retry remains possible.
@@ -1201,7 +1218,7 @@ unsafe impl GlobalAlloc for RustAllocator {
                     }
                 }
             },
-            AutoAllocationRecordLookup::Mismatched => unreachable!(),
+            AutoAllocationRecordLookup::Mismatched(_) => unreachable!(),
         };
         if let Some(metadata) = preflight_metadata {
             verify_memory_tagged_reallocation_source(ptr, layout, metadata);
@@ -1259,8 +1276,8 @@ unsafe impl GlobalAlloc for RustAllocator {
                         None
                     }
                 }
-                (Some(_), AutoAllocationRecordLookup::Mismatched)
-                | (None, AutoAllocationRecordLookup::Mismatched) => unreachable!(),
+                (Some(_), AutoAllocationRecordLookup::Mismatched(_))
+                | (None, AutoAllocationRecordLookup::Mismatched(_)) => unreachable!(),
             };
             release_global_reclaim_with_metadata(self, layout, release_metadata, admission);
             return dangling_ptr_for_layout(new_layout);
@@ -1350,7 +1367,7 @@ unsafe impl GlobalAlloc for RustAllocator {
                 }
                 return new_ptr;
             }
-            AutoAllocationRecordLookup::Mismatched => {
+            AutoAllocationRecordLookup::Mismatched(_) => {
                 // A live recovery record for this address with a different
                 // layout makes both raw reallocation and semantic cache/tag
                 // mutation unsafe. Preserve the authoritative old allocation

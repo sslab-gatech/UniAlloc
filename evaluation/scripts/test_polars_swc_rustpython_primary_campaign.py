@@ -159,7 +159,7 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
                 current_working_tree=True,
             )
         )
-        self.assertFalse(
+        self.assertTrue(
             campaign.primary_publication_allowed(
                 {"status": "complete", "measured_rounds": 3},
                 current_working_tree=False,
@@ -168,6 +168,12 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
         self.assertTrue(
             campaign.primary_publication_allowed(
                 {"status": "complete", "measured_rounds": 5},
+                current_working_tree=False,
+            )
+        )
+        self.assertFalse(
+            campaign.primary_publication_allowed(
+                {"status": "complete", "measured_rounds": 4},
                 current_working_tree=False,
             )
         )
@@ -181,8 +187,15 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
             )
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             campaign.parse_args(["--cpu-list", "96-99"])
+        self.assertEqual(
+            3, campaign.parse_args(["--targets", "swc", "--rounds", "3"]).rounds
+        )
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            campaign.parse_args(["--targets", "swc", "--rounds", "3"])
+            campaign.parse_args(["--targets", "swc", "--rounds", "5"])
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            campaign.parse_args(
+                ["--targets", "swc", "--current-working-tree", "--rounds", "5"]
+            )
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             campaign.parse_args(
                 ["--targets", "swc", "--current-working-tree", "--rounds", "4"]
@@ -268,9 +281,9 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
         output = "time: [900.0 µs 1.25 ms 1.5 ms]".encode()
         self.assertAlmostEqual(0.00125, campaign.criterion_seconds(output))
 
-    def test_compiler_route_gate_uses_five_same_round_ratios(self) -> None:
+    def test_compiler_route_gate_uses_three_same_round_ratios(self) -> None:
         rows = []
-        for round_number in range(1, 6):
+        for round_number in range(1, 4):
             rows.extend(
                 [
                     {
@@ -334,9 +347,9 @@ class PolarsSwcRustPythonPrimaryCampaignTests(unittest.TestCase):
         self.assertEqual(("swc",), args.targets)
         self.assertLessEqual(args.jobs, 32)
         self.assertEqual(1, args.warmups)
-        self.assertEqual(5, args.rounds)
+        self.assertEqual(3, args.rounds)
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
-            campaign.parse_args(["--targets", "swc", "--rounds", "6"])
+            campaign.parse_args(["--targets", "swc", "--rounds", "5"])
         command = campaign.command_for(
             campaign.TARGET_SPECS["swc"],
             pathlib.Path("/tmp/bench"),

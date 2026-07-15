@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate supported plain Clone isolation beside ambiguous Clone fallback."""
+"""Validate broad Clone fail-closed fallback beside exact typed controls."""
 from __future__ import annotations
 import argparse, hashlib, json, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
@@ -12,7 +12,7 @@ PROBE_NAME = "rustc_driver_mir_ambiguous_clone_fallback_probe"
 PROBE_SOURCE = ROOT / "unialloc/src/bin" / f"{PROBE_NAME}.rs"
 SOURCE_BINDING_PATHS = (Path("Cargo.toml"), Path("Cargo.lock"), Path("rust-toolchain"), Path("alloc_macros/Cargo.toml"), Path("alloc_macros/src"), Path("unialloc/Cargo.toml"), Path("unialloc/build.rs"), Path("unialloc/src"), PASS_SOURCE.relative_to(ROOT), RUNNER_SOURCE.relative_to(ROOT))
 AMBIGUOUS_FUNCTION = "Result::clone"
-AMBIGUOUS_STATUS = "semantic_scope_rewrite_skipped_ambiguous_heap_object_type"
+AUDIT_ONLY_CLONE_STATUS = "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
 PLAIN_CLONE_FUNCTION = "Option::clone"
 PLAIN_CLONE_HELPER = "supported_plain_option_clone"
 PLAIN_RESULT_CLONE_FUNCTION = "Result::clone"
@@ -105,30 +105,31 @@ def actual_type_isolated_scope(row: Dict[str,Any], label: str) -> None:
     assert row.get('metadata_pairing_contract')=='semantic_scope_active_metadata', f"{label} has the wrong metadata pairing contract: {row!r}"
     assert int(row.get('flags') or 0)&TYPE_ISOLATED, f"{label} is not type isolated: {row!r}"
 
+def audit_only_plain_clone(row: Dict[str,Any], label: str) -> None:
+    assert row.get('lowering_kind')=='semantic_scope_unsolved_heap_object_candidate', f"{label} has the wrong lowering kind: {row!r}"
+    assert row.get('rewrite_status')==AUDIT_ONLY_CLONE_STATUS, f"{label} was not fail-closed: {row!r}"
+    assert row.get('replacement_resolution_status')=='rustc_middle_heap_object_type_not_solved', f"{label} has the wrong resolution: {row!r}"
+    assert row.get('metadata_pairing_contract')=='audit_only_unresolved_heap_object_type', f"{label} has the wrong pairing contract: {row!r}"
+    assert row.get('semantic_object_type')=='<unknown-heap-object-type>', f"{label} attributed an unproved owner: {row!r}"
+
 def validate_plain_clone_control(audit: Dict[str,Any]) -> Dict[str,Any]:
     rows=[]
     for row in audit.get('rewrite_candidates',[]):
         if not isinstance(row,dict) or not probe_function_matches(row,PLAIN_CLONE_HELPER): continue
         callee=str(row.get('callee') or '')
         destination=str(row.get('destination_type') or '')
-        semantic=str(row.get('semantic_object_type') or '')
-        if 'Clone' in callee and 'clone' in callee and 'Option' in destination and 'Vec' in destination and 'ProducerPayload' in destination and 'Vec<ProducerPayload' in semantic:
+        if 'Clone' in callee and 'clone' in callee and 'Option' in destination and 'Vec' in destination and 'ProducerPayload' in destination:
             rows.append(row)
-    assert len(rows)==1, f"{PLAIN_CLONE_HELPER} must have exactly one supported Option Clone scope candidate, got {len(rows)}: {rows!r}"
+    assert len(rows)==1, f"{PLAIN_CLONE_HELPER} must have exactly one Option Clone audit row, got {len(rows)}: {rows!r}"
     row=rows[0]
-    actual_type_isolated_scope(row, f"{PLAIN_CLONE_HELPER} Option Clone scope")
-    type_id=int(row.get('type_id') or 0); module_id=int(row.get('module_id') or 0)
-    assert type_id!=0, "supported Option Clone compiler type_id must be nonzero"
-    assert module_id!=0, "supported Option Clone module_id must be nonzero"
+    audit_only_plain_clone(row, f"{PLAIN_CLONE_HELPER} Option Clone")
     return {
-        'actual_scope_rows':1,
+        'audit_only_rows':1,
         'callee':row.get('callee'),
         'destination_type':row.get('destination_type'),
         'semantic_object_type':row.get('semantic_object_type'),
         'rewrite_status':row.get('rewrite_status'),
         'source_span':row.get('source_span'),
-        'type_id':type_id,
-        'module_id':module_id,
     }
 
 def validate_plain_result_clone_control(audit: Dict[str,Any]) -> Dict[str,Any]:
@@ -137,24 +138,18 @@ def validate_plain_result_clone_control(audit: Dict[str,Any]) -> Dict[str,Any]:
         if not isinstance(row,dict) or not probe_function_matches(row,PLAIN_RESULT_CLONE_HELPER): continue
         callee=str(row.get('callee') or '')
         destination=str(row.get('destination_type') or '')
-        semantic=str(row.get('semantic_object_type') or '')
-        if 'Clone' in callee and 'clone' in callee and 'Result' in destination and 'ProducerPayload' in destination and 'u8' in destination and 'Vec<ProducerPayload' in semantic:
+        if 'Clone' in callee and 'clone' in callee and 'Result' in destination and 'ProducerPayload' in destination and 'u8' in destination:
             rows.append(row)
-    assert len(rows)==1, f"{PLAIN_RESULT_CLONE_HELPER} must have exactly one supported Result Clone scope candidate, got {len(rows)}: {rows!r}"
+    assert len(rows)==1, f"{PLAIN_RESULT_CLONE_HELPER} must have exactly one Result Clone audit row, got {len(rows)}: {rows!r}"
     row=rows[0]
-    actual_type_isolated_scope(row, f"{PLAIN_RESULT_CLONE_HELPER} Result Clone scope")
-    type_id=int(row.get('type_id') or 0); module_id=int(row.get('module_id') or 0)
-    assert type_id!=0, "supported Result Clone compiler type_id must be nonzero"
-    assert module_id!=0, "supported Result Clone module_id must be nonzero"
+    audit_only_plain_clone(row, f"{PLAIN_RESULT_CLONE_HELPER} Result Clone")
     return {
-        'actual_scope_rows':1,
+        'audit_only_rows':1,
         'callee':row.get('callee'),
         'destination_type':row.get('destination_type'),
         'semantic_object_type':row.get('semantic_object_type'),
         'rewrite_status':row.get('rewrite_status'),
         'source_span':row.get('source_span'),
-        'type_id':type_id,
-        'module_id':module_id,
     }
 
 def validate_wrong_type_control(audit: Dict[str,Any]) -> Dict[str,Any]:
@@ -233,22 +228,23 @@ def validate_audit(audit: Dict[str,Any]) -> Dict[str,Any]:
     rows=ambiguous_clone_rows(audit); assert rows, f"missing audit row for {AMBIGUOUS_FUNCTION}"
     applied=[r for r in rows if r.get('rewrite_status') in APPLIED_STATUSES]; assert not applied, f"ambiguous Clone must not receive an applied/planned scope: {applied!r}"
     assert len(rows)==1, f"expected exactly one ambiguous Clone audit row, got {len(rows)}: {rows!r}"
-    amb=[r for r in rows if r.get('lowering_kind')=='semantic_scope_unsolved_heap_object_candidate' and r.get('rewrite_status')==AMBIGUOUS_STATUS and r.get('replacement_resolution_status')=='rustc_middle_multiple_heap_object_types_not_lowered']
-    assert len(amb)==1, f"expected one ambiguous fail-closed row, got {len(amb)}: {rows!r}"
+    amb=[r for r in rows if r.get('lowering_kind')=='semantic_scope_unsolved_heap_object_candidate' and r.get('rewrite_status')==AUDIT_ONLY_CLONE_STATUS and r.get('replacement_resolution_status')=='rustc_middle_heap_object_type_not_solved']
+    assert len(amb)==1, f"expected one broad Result fail-closed row, got {len(amb)}: {rows!r}"
+    audit_only_plain_clone(amb[0], "multi-owner Result Clone")
     row=amb[0]; assert 'Result' in str(row.get('destination_type'))
-    preview=str(row.get('replacement_preview') or ''); assert 'std::vec::Vec' in preview and 'std::string::String' in preview, preview
+    preview=str(row.get('replacement_preview') or ''); assert 'did not solve a supported heap object type' in preview, preview
     supported=validate_supported_controls(audit)
     plain_clone=validate_plain_clone_control(audit)
     plain_result_clone=validate_plain_result_clone_control(audit)
     wrong_type=validate_wrong_type_control(audit)
     producer_type_id=int(supported['type_id']); producer_module_id=int(supported['module_id'])
-    assert int(plain_clone['type_id'])==producer_type_id, f"Option Clone and Producer controls must share one compiler type_id: {plain_clone['type_id']} != {producer_type_id}"
-    assert int(plain_clone['module_id'])==producer_module_id, f"Option Clone and Producer controls must share one module_id: {plain_clone['module_id']} != {producer_module_id}"
-    assert int(plain_result_clone['type_id'])==producer_type_id, f"Result Clone and Producer controls must share one compiler type_id: {plain_result_clone['type_id']} != {producer_type_id}"
-    assert int(plain_result_clone['module_id'])==producer_module_id, f"Result Clone and Producer controls must share one module_id: {plain_result_clone['module_id']} != {producer_module_id}"
     assert int(wrong_type['type_id'])!=producer_type_id, "same-layout Consumer and Producer must have distinct compiler type_id values"
     assert int(wrong_type['module_id'])==producer_module_id, f"same-module Consumer and Producer controls must share one module_id: {wrong_type['module_id']} != {producer_module_id}"
-    return {'ambiguous_fail_closed_rows':len(amb),'ambiguous_destination_type':row.get('destination_type'),'ambiguous_preview':preview,'supported_controls':supported,'plain_clone_control':plain_clone,'plain_result_clone_control':plain_result_clone,'wrong_type_control':wrong_type}
+    broad_rows=[*amb]
+    broad_rows.extend(r for r in audit.get('rewrite_candidates',[]) if isinstance(r,dict) and (probe_function_matches(r,PLAIN_CLONE_HELPER) or probe_function_matches(r,PLAIN_RESULT_CLONE_HELPER)) and 'Clone' in str(r.get('callee') or '') and 'clone' in str(r.get('callee') or ''))
+    assert len(broad_rows)==3, f"expected exactly three broad Clone audit rows, got {broad_rows!r}"
+    assert not [r for r in broad_rows if r.get('rewrite_status') in APPLIED_STATUSES or r.get('lowering_kind')=='semantic_scope_enter_exit_rewrite'], broad_rows
+    return {'broad_clone_fail_closed_rows':len(broad_rows),'broad_result_destination_type':row.get('destination_type'),'broad_result_preview':preview,'zero_broad_clone_rewrites':True,'supported_controls':supported,'plain_clone_control':plain_clone,'plain_result_clone_control':plain_result_clone,'wrong_type_control':wrong_type}
 
 def validate_runtime(runtime: Dict[str,Any], compiler_type_id: Optional[int]=None, wrong_type_id: Optional[int]=None) -> Dict[str,Any]:
     assert runtime.get('result_variant')=='Ok'; assert runtime.get('clone_function')==AMBIGUOUS_FUNCTION; assert runtime.get('buffers_distinct') is True; assert int(runtime.get('same_layout_bytes') or 0)==64; assert int(runtime.get('source_len') or 0)==int(runtime.get('cloned_len') or 0)==4
@@ -258,20 +254,22 @@ def validate_runtime(runtime: Dict[str,Any], compiler_type_id: Optional[int]=Non
     assert source!=fallback; assert source!=protected, "protected seed reused the still-live source allocation"
     assert runtime.get('fallback_avoided_protected_buffer') is True; assert fallback!=protected, "ambiguous fallback reused the protected typed cache entry"
     assert runtime.get('typed_recovery_preserved') is True; assert recovered==protected, "supported typed recovery did not return the protected cache entry"
-    assert runtime.get('plain_clone_buffers_distinct') is True; assert plain_source!=plain_clone, "supported Option Clone aliased its source buffer"
+    assert runtime.get('plain_clone_buffers_distinct') is True; assert plain_source!=plain_clone, "audit-only Option Clone aliased its source buffer"
     assert runtime.get('plain_clone_avoided_wrong_type_buffer') is True; assert plain_clone!=wrong_buffer and protected!=wrong_buffer, "supported Option Clone reused same-layout Consumer storage"
-    assert runtime.get('plain_clone_reused_protected_buffer') is True; assert plain_clone==protected, "supported Option Clone did not recover the protected Producer cache entry"
-    plain_result=runtime.get('plain_result_clone'); assert isinstance(plain_result,dict), "missing supported Result Clone runtime evidence"
+    assert runtime.get('plain_clone_reused_protected_buffer') is False
+    assert runtime.get('plain_clone_avoided_protected_buffer') is True; assert plain_clone!=protected, "audit-only Option Clone consumed protected Producer storage"
+    plain_result=runtime.get('plain_result_clone'); assert isinstance(plain_result,dict), "missing audit-only Result Clone runtime evidence"
     assert plain_result.get('clone_function')==PLAIN_RESULT_CLONE_FUNCTION; assert plain_result.get('variant')=='Ok'; assert int(plain_result.get('cloned_len') or 0)==4
     plain_result_source=int(plain_result.get('source_buffer') or 0); plain_result_clone=int(plain_result.get('cloned_buffer') or 0)
     assert plain_result_source!=0 and plain_result_clone!=0
     assert plain_result.get('buffers_distinct') is True; assert plain_result_source!=plain_result_clone, "supported Result Clone aliased its source buffer"
     assert plain_result.get('avoided_wrong_type_buffer') is True; assert plain_result_clone!=wrong_buffer, "supported Result Clone reused same-layout Consumer storage"
-    assert plain_result.get('reused_protected_buffer') is True; assert plain_result_clone==protected, "supported Result Clone did not recover the protected Producer cache entry"
+    assert plain_result.get('reused_protected_buffer') is False
+    assert plain_result.get('avoided_protected_buffer') is True; assert plain_result_clone!=protected, "audit-only Result Clone consumed protected Producer storage"
     seed_type_id=int(runtime.get('seed_type_id') or 0); recovery_type_id=int(runtime.get('recovery_type_id') or 0); plain_type_id=int(runtime.get('plain_clone_type_id') or 0); runtime_wrong_type_id=int(runtime.get('wrong_type_id') or 0)
     assert seed_type_id!=0 and recovery_type_id==seed_type_id
-    assert plain_type_id==seed_type_id, "supported Option Clone runtime type_id differs from Producer controls"
-    assert int(plain_result.get('type_id') or 0)==seed_type_id, "supported Result Clone runtime type_id differs from Producer controls"
+    assert plain_type_id==0, "audit-only Option Clone exposed a typed identity"
+    assert int(plain_result.get('type_id') or 0)==0, "audit-only Result Clone exposed a typed identity"
     assert runtime_wrong_type_id!=0 and runtime_wrong_type_id!=seed_type_id, "same-layout Consumer runtime type_id must differ from Producer"
     if compiler_type_id is not None: assert seed_type_id==compiler_type_id, f"runtime type_id {seed_type_id} does not match compiler type_id {compiler_type_id}"
     if wrong_type_id is not None: assert runtime_wrong_type_id==wrong_type_id, f"runtime Consumer type_id {runtime_wrong_type_id} does not match compiler type_id {wrong_type_id}"
@@ -279,17 +277,18 @@ def validate_runtime(runtime: Dict[str,Any], compiler_type_id: Optional[int]=Non
     assert int(runtime.get('wrong_type_typed_allocations') or 0)==1; assert int(runtime.get('wrong_type_typed_deallocations') or 0)==1; assert int(runtime.get('wrong_type_typed_cache_inserts') or 0)==1
     for field in ('wrong_type_fallback_allocations','wrong_type_fallback_deallocations','wrong_type_raw_alloc_no_metadata','wrong_type_raw_dealloc_no_metadata'):
         assert int(runtime.get(field) or 0)==0, f"same-layout Consumer control unexpectedly used fallback path: {field}={runtime.get(field)!r}"
-    assert int(runtime.get('plain_clone_typed_allocations') or 0)==1; assert int(runtime.get('plain_clone_typed_deallocations') or 0)==1; assert int(runtime.get('plain_clone_typed_cache_hits') or 0)==1; assert int(runtime.get('plain_clone_typed_cache_inserts') or 0)==1
-    for field in ('plain_clone_fallback_allocations','plain_clone_fallback_deallocations','plain_clone_raw_alloc_no_metadata','plain_clone_raw_dealloc_no_metadata','plain_clone_raw_realloc_no_metadata'):
-        assert int(runtime.get(field) or 0)==0, f"supported Option Clone unexpectedly used fallback path: {field}={runtime.get(field)!r}"
-    for field in ('typed_allocations','typed_deallocations','typed_cache_hits','typed_cache_inserts'):
-        assert int(plain_result.get(field) or 0)==1, f"supported Result Clone expected one {field}: {plain_result!r}"
-    for field in ('fallback_allocations','fallback_deallocations','raw_alloc_no_metadata','raw_dealloc_no_metadata','raw_realloc_no_metadata'):
-        assert int(plain_result.get(field) or 0)==0, f"supported Result Clone unexpectedly used fallback path: {field}={plain_result.get(field)!r}"
+    for field in ('plain_clone_typed_allocations','plain_clone_typed_deallocations','plain_clone_typed_cache_hits','plain_clone_typed_cache_inserts','plain_clone_raw_realloc_no_metadata'):
+        assert int(runtime.get(field) or 0)==0, f"audit-only Option Clone unexpectedly used typed/realloc path: {field}={runtime.get(field)!r}"
+    for field in ('plain_clone_fallback_allocations','plain_clone_fallback_deallocations','plain_clone_raw_alloc_no_metadata','plain_clone_raw_dealloc_no_metadata'):
+        assert int(runtime.get(field) or 0)==1, f"audit-only Option Clone expected one fallback event: {field}={runtime.get(field)!r}"
+    for field in ('typed_allocations','typed_deallocations','typed_cache_hits','typed_cache_inserts','raw_realloc_no_metadata'):
+        assert int(plain_result.get(field) or 0)==0, f"audit-only Result Clone unexpectedly used typed/realloc path: {field}={plain_result!r}"
+    for field in ('fallback_allocations','fallback_deallocations','raw_alloc_no_metadata','raw_dealloc_no_metadata'):
+        assert int(plain_result.get(field) or 0)==1, f"audit-only Result Clone expected one fallback event: {field}={plain_result!r}"
     assert int(runtime.get('clone_typed_allocations') or 0)==0; assert int(runtime.get('clone_typed_deallocations') or 0)==0; assert int(runtime.get('clone_fallback_allocations') or 0)==1; assert int(runtime.get('clone_fallback_deallocations_before_drop') or 0)==0; assert int(runtime.get('clone_raw_alloc_no_metadata') or 0)==1; assert int(runtime.get('clone_raw_alloc_no_metadata_bytes') or 0)==256; assert int(runtime.get('clone_raw_realloc_no_metadata') or 0)==0; assert int(runtime.get('clone_recorded_old_realloc_fallback') or 0)==0; assert int(runtime.get('drop_fallback_deallocations') or 0)==1; assert int(runtime.get('drop_raw_dealloc_no_metadata') or 0)==1
     assert int(runtime.get('recovery_typed_allocations') or 0)==1; assert int(runtime.get('recovery_typed_deallocations') or 0)==1; assert int(runtime.get('recovery_typed_cache_hits') or 0)==1; assert int(runtime.get('recovery_typed_cache_inserts') or 0)==1
     assert int(runtime.get('recovery_identity_mismatches') or 0)==0; assert int(runtime.get('side_cache_corrupt_slots') or 0)==0
-    return {'protected_buffer':protected,'plain_clone_buffer':plain_clone,'plain_result_clone_buffer':plain_result_clone,'wrong_type_buffer':wrong_buffer,'fallback_buffer':fallback,'recovered_buffer':recovered,'plain_clone_reused_protected_buffer':True,'plain_clone_avoided_wrong_type_buffer':True,'plain_result_clone_reused_protected_buffer':True,'plain_result_clone_avoided_wrong_type_buffer':True,'fallback_avoided_protected_buffer':True,'typed_recovery_preserved':True,'compiler_type_id':compiler_type_id,'wrong_compiler_type_id':wrong_type_id,'clone_raw_alloc_no_metadata':1,'drop_raw_dealloc_no_metadata':1}
+    return {'protected_buffer':protected,'plain_clone_buffer':plain_clone,'plain_result_clone_buffer':plain_result_clone,'wrong_type_buffer':wrong_buffer,'fallback_buffer':fallback,'recovered_buffer':recovered,'plain_clone_avoided_protected_buffer':True,'plain_clone_avoided_wrong_type_buffer':True,'plain_result_clone_avoided_protected_buffer':True,'plain_result_clone_avoided_wrong_type_buffer':True,'all_broad_clones_used_fallback':True,'fallback_avoided_protected_buffer':True,'typed_recovery_preserved':True,'compiler_type_id':compiler_type_id,'wrong_compiler_type_id':wrong_type_id,'clone_raw_alloc_no_metadata':1,'drop_raw_dealloc_no_metadata':1}
 
 def validate(audit: Dict[str,Any], runtime: Dict[str,Any]) -> Dict[str,Any]:
     audit_evidence=validate_audit(audit)
@@ -319,6 +318,6 @@ def main() -> int:
     paths=sorted(rewrites.glob('*.json'))
     if len(paths)!=1: raise SystemExit(f"expected one target audit, found {len(paths)} in {rewrites}")
     audit=json.loads(paths[0].read_text(encoding='utf-8')); runtime=load_runtime_event(Path(run['stdout'])); validation=validate(audit,runtime); shutil.rmtree(target); end=source_binding_snapshot(toolchain,rustc); assert_source_binding_stable(start,end)
-    summary={'schema_version':1,'source':'mir_ambiguous_clone_fallback_probe_summary','validated':True,'fixed_heap':a.fixed_heap,'toolchain':toolchain,'rustc':start['rustc_verbose_version'],'sysroot':sysroot,'git_head':start['git_head'],'git_status':start['git_status'],'source_binding':{'start':start,'end':end,'drift_checked':True,'commit_bound':True},'features':features,'build':build,'run':run,'artifacts':{'pass_source':str(PASS_SOURCE),'pass_source_sha256':sha256(PASS_SOURCE),'pass_binary':str(pass_bin),'pass_binary_sha256':sha256(pass_bin),'probe_source':str(PROBE_SOURCE),'probe_source_sha256':sha256(PROBE_SOURCE),'rewrite_audit':str(paths[0]),'rewrite_audit_sha256':sha256(paths[0])},'validation':validation,'runtime':runtime,'boundaries':['Functional compiler-pass and runtime type-isolation regression only; no benchmark or paper-performance claim.','The Rust source uses ordinary Vec, Option::clone, and Result::clone operations and no manual metadata allocator ABI calls.','The pass must actually lower the single-owner Option<Vec<ProducerPayload>> and Result<Vec<ProducerPayload>, u8> Clone calls plus supported Vec controls to one Producer identity while assigning same-layout ConsumerPayload a distinct identity.','Runtime typed allocation/deallocation counters and exact address relations prove both supported wrapper Clones recovered Producer storage, did not reuse Consumer storage, and used no fallback path.','The ambiguous Result<Vec<ProducerPayload>, String> Clone remains exactly one fail-closed compiler row and one raw runtime allocation/deallocation; no broader Clone coverage claim is made.']}
+    summary={'schema_version':1,'source':'mir_ambiguous_clone_fallback_probe_summary','validated':True,'fixed_heap':a.fixed_heap,'toolchain':toolchain,'rustc':start['rustc_verbose_version'],'sysroot':sysroot,'git_head':start['git_head'],'git_status':start['git_status'],'source_binding':{'start':start,'end':end,'drift_checked':True,'commit_bound':True},'features':features,'build':build,'run':run,'artifacts':{'pass_source':str(PASS_SOURCE),'pass_source_sha256':sha256(PASS_SOURCE),'pass_binary':str(pass_bin),'pass_binary_sha256':sha256(pass_bin),'probe_source':str(PROBE_SOURCE),'probe_source_sha256':sha256(PROBE_SOURCE),'rewrite_audit':str(paths[0]),'rewrite_audit_sha256':sha256(paths[0])},'validation':validation,'runtime':runtime,'boundaries':['Functional compiler-pass and runtime type-isolation regression only; no benchmark or paper-performance claim.','The Rust source uses ordinary Vec, Option::clone, and Result::clone operations and no manual metadata allocator ABI calls.','All three broad Option/Result Clone calls must remain exact unresolved audit-only rows with zero applied compiler scopes.','Runtime counters prove each audit-only Clone allocation/deallocation used fallback without consuming the protected Producer or same-layout Consumer typed-cache entries.','Exact Vec controls retain distinct Producer/Consumer identities and recover the protected Producer entry after all broad Clone fallbacks.']}
     sp=out/'summary.json'; sp.write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n',encoding='utf-8'); print(json.dumps({'summary':str(sp),'validated':True},sort_keys=True)); return 0
 if __name__=='__main__': sys.exit(main())

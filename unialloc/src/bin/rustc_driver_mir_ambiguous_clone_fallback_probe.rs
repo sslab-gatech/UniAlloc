@@ -172,9 +172,9 @@ fn main() {
 
     // The binary intentionally uses only ordinary Rust `Vec`, `Option::clone`,
     // and `Result::clone` operations. It does not manually call UniAlloc
-    // metadata or allocator ABIs. The companion runner proves the single-owner
-    // Option and Result clones plus supported Vec controls received actual scope
-    // rewrites while the multi-owner Result clone stayed fail-closed.
+    // metadata or allocator ABIs. The companion runner proves every broad
+    // Option/Result Clone remains fail-closed while exact Vec controls still
+    // receive compiler scopes and retain their typed-cache entries.
     semantic_auto_metadata_disable();
 
     // Keep the source allocation live so the protected seed below cannot
@@ -307,9 +307,9 @@ fn main() {
     assert_eq!(plain_cloned_len, 4);
     assert_eq!(checksum(plain_cloned_vec), plain_source_checksum);
     assert_ne!(plain_cloned_buffer, plain_source_buffer);
-    assert_eq!(
+    assert_ne!(
         plain_cloned_buffer, protected_buffer,
-        "supported Option clone should recover the protected Producer cache entry"
+        "audit-only Option clone consumed a protected typed cache entry"
     );
     assert_ne!(
         plain_cloned_buffer, wrong_type_buffer,
@@ -341,8 +341,8 @@ fn main() {
         after_plain_clone_fallback,
         "raw_realloc_no_metadata",
     );
-    assert_eq!(plain_clone_typed_allocations, 1);
-    assert_eq!(plain_clone_typed_cache_hits, 1);
+    assert_eq!(plain_clone_typed_allocations, 0);
+    assert_eq!(plain_clone_typed_cache_hits, 0);
     assert_eq!(
         stats_delta(
             before_plain_clone_stats,
@@ -351,11 +351,10 @@ fn main() {
         ),
         0
     );
-    assert_eq!(plain_clone_fallback_allocations, 0);
-    assert_eq!(plain_clone_raw_alloc_no_metadata, 0);
+    assert_eq!(plain_clone_fallback_allocations, 1);
+    assert_eq!(plain_clone_raw_alloc_no_metadata, 1);
     assert_eq!(plain_clone_raw_realloc_no_metadata, 0);
-    let plain_clone_type_id = after_plain_clone_stats.last_type_id;
-    assert_eq!(plain_clone_type_id, seed_type_id);
+    let plain_clone_type_id = 0;
 
     drop(plain_cloned);
     let after_plain_drop_stats = semantic_stats_snapshot();
@@ -380,10 +379,10 @@ fn main() {
         after_plain_drop_fallback,
         "raw_dealloc_no_metadata",
     );
-    assert_eq!(plain_clone_typed_deallocations, 1);
-    assert_eq!(plain_clone_typed_cache_inserts, 1);
-    assert_eq!(plain_clone_fallback_deallocations, 0);
-    assert_eq!(plain_clone_raw_dealloc_no_metadata, 0);
+    assert_eq!(plain_clone_typed_deallocations, 0);
+    assert_eq!(plain_clone_typed_cache_inserts, 0);
+    assert_eq!(plain_clone_fallback_deallocations, 1);
+    assert_eq!(plain_clone_raw_dealloc_no_metadata, 1);
 
     let before_plain_result_clone_stats = semantic_stats_snapshot();
     let before_plain_result_clone_fallback = semantic_fallback_attribution_snapshot();
@@ -401,9 +400,9 @@ fn main() {
         plain_result_source_checksum
     );
     assert_ne!(plain_result_cloned_buffer, plain_result_source_buffer);
-    assert_eq!(
+    assert_ne!(
         plain_result_cloned_buffer, protected_buffer,
-        "supported Result clone should recover the protected Producer cache entry"
+        "audit-only Result clone consumed a protected typed cache entry"
     );
     assert_ne!(
         plain_result_cloned_buffer, wrong_type_buffer,
@@ -435,8 +434,8 @@ fn main() {
         after_plain_result_clone_fallback,
         "raw_realloc_no_metadata",
     );
-    assert_eq!(plain_result_typed_allocations, 1);
-    assert_eq!(plain_result_typed_cache_hits, 1);
+    assert_eq!(plain_result_typed_allocations, 0);
+    assert_eq!(plain_result_typed_cache_hits, 0);
     assert_eq!(
         stats_delta(
             before_plain_result_clone_stats,
@@ -445,11 +444,10 @@ fn main() {
         ),
         0
     );
-    assert_eq!(plain_result_fallback_allocations, 0);
-    assert_eq!(plain_result_raw_alloc_no_metadata, 0);
+    assert_eq!(plain_result_fallback_allocations, 1);
+    assert_eq!(plain_result_raw_alloc_no_metadata, 1);
     assert_eq!(plain_result_raw_realloc_no_metadata, 0);
-    let plain_result_type_id = after_plain_result_clone_stats.last_type_id;
-    assert_eq!(plain_result_type_id, seed_type_id);
+    let plain_result_type_id = 0;
 
     drop(plain_result_cloned);
     let after_plain_result_drop_stats = semantic_stats_snapshot();
@@ -474,10 +472,10 @@ fn main() {
         after_plain_result_drop_fallback,
         "raw_dealloc_no_metadata",
     );
-    assert_eq!(plain_result_typed_deallocations, 1);
-    assert_eq!(plain_result_typed_cache_inserts, 1);
-    assert_eq!(plain_result_fallback_deallocations, 0);
-    assert_eq!(plain_result_raw_dealloc_no_metadata, 0);
+    assert_eq!(plain_result_typed_deallocations, 0);
+    assert_eq!(plain_result_typed_cache_inserts, 0);
+    assert_eq!(plain_result_fallback_deallocations, 1);
+    assert_eq!(plain_result_raw_dealloc_no_metadata, 1);
 
     let before_stats = semantic_stats_snapshot();
     let before_fallback = semantic_fallback_attribution_snapshot();
@@ -647,7 +645,8 @@ fn main() {
             "\"cloned_buffer\":{},",
             "\"cloned_len\":{},",
             "\"buffers_distinct\":true,",
-            "\"reused_protected_buffer\":true,",
+            "\"reused_protected_buffer\":false,",
+            "\"avoided_protected_buffer\":true,",
             "\"avoided_wrong_type_buffer\":true,",
             "\"checksum\":{},",
             "\"type_id\":{},",
@@ -702,7 +701,8 @@ fn main() {
             "\"wrong_type_buffer\":{},",
             "\"buffers_distinct\":true,",
             "\"plain_clone_buffers_distinct\":true,",
-            "\"plain_clone_reused_protected_buffer\":true,",
+            "\"plain_clone_reused_protected_buffer\":false,",
+            "\"plain_clone_avoided_protected_buffer\":true,",
             "\"plain_clone_avoided_wrong_type_buffer\":true,",
             "\"fallback_avoided_protected_buffer\":{},",
             "\"typed_recovery_preserved\":{},",
