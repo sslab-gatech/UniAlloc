@@ -3466,6 +3466,8 @@ pub fn semantic_auto_metadata_type_id_basis() -> &'static str {
 /// `flags == 0` selects `FLAG_TYPE_ISOLATED`; otherwise the supplied flags are
 /// ORed with `FLAG_TYPE_ISOLATED` so the typed frontend is exercised. Scoped
 /// metadata on the current thread still takes precedence over this mode.
+/// Release builds require the `type_isolation` feature. Activation panics
+/// before publishing state when that feature is disabled.
 pub fn semantic_auto_metadata_enable(module_id: u64, flags: u32, callsite: u64) {
     require_semantic_lifecycle_feature();
     let normalized_flags = normalize_auto_metadata_flags(flags);
@@ -3530,6 +3532,8 @@ unsafe fn semantic_auto_compiler_metadata_enable_with_mode(
 /// unmodified benchmark allocations can flow through the same runtime ABI with
 /// compiler-assigned ids, but it is not by itself proof that a compiler pass
 /// dynamically attributed each runtime allocation to its exact site.
+/// Release builds require the `type_isolation` feature. Activation panics
+/// before publishing state when that feature is disabled.
 ///
 /// # Safety
 ///
@@ -3562,6 +3566,8 @@ pub unsafe fn semantic_auto_compiler_metadata_enable(
 /// global table, so the ordinary `GlobalAlloc` hot path avoids a global lock.
 /// Use `semantic_auto_compiler_metadata_enable` for conservative cross-thread
 /// visibility.
+/// Release builds require the `type_isolation` feature. Activation panics
+/// before publishing state when that feature is disabled.
 ///
 /// # Safety
 ///
@@ -3594,6 +3600,8 @@ pub unsafe fn semantic_auto_compiler_metadata_thread_local_recovery_enable(
 /// exhausted, additional ordinary allocations are left untyped so coverage
 /// evidence can expose a short runtime id stream rather than hiding it behind
 /// layout-derived fallback ids.
+/// Release builds require the `type_isolation` feature. Activation panics
+/// before publishing state when that feature is disabled.
 ///
 /// # Safety
 ///
@@ -3625,6 +3633,8 @@ pub unsafe fn semantic_auto_compiler_metadata_stream_enable(
 /// process-global table.  It is appropriate for local benchmark replay and for
 /// compiler paths that prove same-thread deallocation; the default stream API
 /// remains conservative for unknown cross-thread ownership transfer.
+/// Release builds require the `type_isolation` feature. Activation panics
+/// before publishing state when that feature is disabled.
 ///
 /// # Safety
 ///
@@ -5984,6 +5994,9 @@ pub fn active_allocation_metadata() -> Option<AllocationMetadata> {
 
 /// Install active semantic metadata for this thread and return the previous
 /// value so callers can restore it after an instrumented allocation scope.
+/// Release builds require the `type_isolation` feature when `metadata`
+/// activates a scope. Activation panics before publishing state when that
+/// feature is disabled.
 pub unsafe fn set_active_metadata(metadata: AllocationMetadata) -> AllocationMetadata {
     replace_active_metadata(metadata)
 }
@@ -5995,6 +6008,10 @@ pub unsafe fn restore_active_metadata(previous: AllocationMetadata) {
 
 /// Run `f` while ordinary global-allocation calls on this thread inherit
 /// `metadata`.
+///
+/// Release builds require the `type_isolation` feature when `metadata`
+/// activates a scope. Activation panics before `f` runs when that feature is
+/// disabled.
 pub fn with_semantic_metadata<R>(metadata: AllocationMetadata, f: impl FnOnce() -> R) -> R {
     let _guard = MetadataScopeGuard {
         previous: unsafe { set_active_metadata(metadata) },
@@ -14973,6 +14990,9 @@ pub extern "C" fn __unialloc_semantic_stats_reset() {
 
 /// Enable process-wide layout-derived metadata for evaluation-only
 /// unmodified-`GlobalAlloc` benchmark runs.
+///
+/// Release builds require the `type_isolation` feature. Valid activation in a
+/// release build without that feature aborts fail-closed at the C ABI boundary.
 #[no_mangle]
 pub extern "C" fn __unialloc_semantic_auto_metadata_enable(
     module_id: u64,
@@ -14985,6 +15005,9 @@ pub extern "C" fn __unialloc_semantic_auto_metadata_enable(
 
 /// Enable process-wide compiler-id replay auto metadata for evaluation
 /// harnesses that run ordinary `GlobalAlloc` benchmark targets.
+///
+/// Release builds require the `type_isolation` feature. Valid activation in a
+/// release build without that feature aborts fail-closed at the C ABI boundary.
 #[no_mangle]
 pub unsafe extern "C" fn __unialloc_semantic_auto_compiler_metadata_enable(
     module_id: u64,
@@ -14998,6 +15021,9 @@ pub unsafe extern "C" fn __unialloc_semantic_auto_compiler_metadata_enable(
 
 /// Enable process-wide finite compiler-id stream auto metadata for evaluation
 /// harnesses that run ordinary `GlobalAlloc` benchmark targets.
+///
+/// Release builds require the `type_isolation` feature. Valid activation in a
+/// release build without that feature aborts fail-closed at the C ABI boundary.
 #[no_mangle]
 pub unsafe extern "C" fn __unialloc_semantic_auto_compiler_metadata_stream_enable(
     module_id: u64,
@@ -15018,6 +15044,9 @@ pub extern "C" fn __unialloc_semantic_auto_metadata_disable() {
 /// Enter a thread-local semantic metadata scope for ordinary `GlobalAlloc`
 /// calls. The returned value must be passed to
 /// `__unialloc_semantic_scope_exit` to restore the previous scope.
+///
+/// Release builds require the `type_isolation` feature. Valid activation in a
+/// release build without that feature aborts fail-closed at the C ABI boundary.
 #[no_mangle]
 pub extern "C" fn __unialloc_semantic_scope_enter(
     type_id: u64,
@@ -15029,6 +15058,9 @@ pub extern "C" fn __unialloc_semantic_scope_enter(
 }
 
 /// Enter a thread-local semantic metadata scope with full metadata hints.
+///
+/// Release builds require the `type_isolation` feature. Valid activation in a
+/// release build without that feature aborts fail-closed at the C ABI boundary.
 #[no_mangle]
 pub extern "C" fn __unialloc_semantic_scope_enter_hints(
     type_id: u64,
@@ -15139,6 +15171,9 @@ fn conservative_compiler_scope_metadata(metadata: AllocationMetadata) -> Allocat
 /// full `AllocationMetadata` value through the C ABI on every allocation-site
 /// scope.  The previous scope is stored in a bounded thread-local stack and is
 /// restored by `__unialloc_semantic_scope_pop`.
+///
+/// Release builds require the `type_isolation` feature. Valid activation in a
+/// release build without that feature aborts fail-closed at the C ABI boundary.
 #[no_mangle]
 pub extern "C" fn __unialloc_semantic_scope_push(
     type_id: u64,
@@ -15157,6 +15192,9 @@ pub extern "C" fn __unialloc_semantic_scope_push(
 /// allocation, drop, and local realloc scopes.  It preserves active metadata for
 /// ordinary `GlobalAlloc` calls but marks the scope so the allocator can skip
 /// recovery-record bookkeeping on the hot path.
+///
+/// Release builds require the `type_isolation` feature. Valid activation in a
+/// release build without that feature aborts fail-closed at the C ABI boundary.
 #[no_mangle]
 pub extern "C" fn __unialloc_semantic_scope_push_local(
     type_id: u64,
@@ -15170,6 +15208,9 @@ pub extern "C" fn __unialloc_semantic_scope_push_local(
 }
 
 /// Push a thread-local semantic metadata scope with full metadata hints.
+///
+/// Release builds require the `type_isolation` feature. Valid activation in a
+/// release build without that feature aborts fail-closed at the C ABI boundary.
 #[no_mangle]
 pub extern "C" fn __unialloc_semantic_scope_push_hints(
     type_id: u64,
@@ -15192,6 +15233,9 @@ pub extern "C" fn __unialloc_semantic_scope_push_hints(
 }
 
 /// Push a compiler-proven local semantic metadata scope with full hints.
+///
+/// Release builds require the `type_isolation` feature. Valid activation in a
+/// release build without that feature aborts fail-closed at the C ABI boundary.
 #[no_mangle]
 pub extern "C" fn __unialloc_semantic_scope_push_hints_local(
     type_id: u64,
