@@ -2288,21 +2288,28 @@ mod tests {
     }
 
     #[cfg(feature = "fixed_heap")]
-    struct FixedHeapZoneUnavailableGuard(*mut crate::zone::ZoneAllocator);
+    struct FixedHeapZoneUnavailableGuard {
+        saved: *mut crate::zone::ZoneAllocator,
+        _fixed_heap: spin::MutexGuard<'static, ()>,
+    }
 
     #[cfg(feature = "fixed_heap")]
     impl FixedHeapZoneUnavailableGuard {
         fn install() -> Self {
+            let fixed_heap = fixed_heap_thread_cache_test_guard();
             let saved = crate::zone::GLOBAL_ZONE_PTR
                 .swap(core::ptr::null_mut(), core::sync::atomic::Ordering::AcqRel);
-            Self(saved)
+            Self {
+                saved,
+                _fixed_heap: fixed_heap,
+            }
         }
     }
 
     #[cfg(feature = "fixed_heap")]
     impl Drop for FixedHeapZoneUnavailableGuard {
         fn drop(&mut self) {
-            crate::zone::GLOBAL_ZONE_PTR.store(self.0, core::sync::atomic::Ordering::Release);
+            crate::zone::GLOBAL_ZONE_PTR.store(self.saved, core::sync::atomic::Ordering::Release);
         }
     }
 
