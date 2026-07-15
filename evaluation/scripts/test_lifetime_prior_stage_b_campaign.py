@@ -220,6 +220,29 @@ class LifetimePriorStageBCampaignTests(unittest.TestCase):
             "independent-per-sample-sustained-backing", result["pairing_mode"]
         )
 
+    def test_measurement_phase_excludes_only_criterion_warmup(self) -> None:
+        samples = [
+            {**smaps(0), "elapsed_seconds": 0.0},
+            {**smaps(0), "elapsed_seconds": 2.0},
+            {**smaps(2048), "elapsed_seconds": 5.0},
+            {**smaps(4096), "elapsed_seconds": 8.0},
+        ]
+        phase = campaign.measurement_phase_smaps(samples, start_seconds=5.0)
+        selected = phase.pop("samples")
+        self.assertEqual([2048, 4096], [row["anon_hugepages_kib"] for row in selected])
+        self.assertEqual(2, phase["excluded_pre_measurement_sample_count"])
+        self.assertTrue(campaign.strict_thp_pair_gate([smaps(0)], selected)["passed"])
+
+    def test_measurement_phase_rejects_missing_or_nonmonotonic_samples(self) -> None:
+        with self.assertRaises(campaign.stage_a.CampaignContractError):
+            campaign.measurement_phase_smaps([smaps(0)], start_seconds=2.0)
+        samples = [
+            {**smaps(0), "elapsed_seconds": 2.0},
+            {**smaps(0), "elapsed_seconds": 1.0},
+        ]
+        with self.assertRaises(campaign.stage_a.CampaignContractError):
+            campaign.measurement_phase_smaps(samples, start_seconds=0.0)
+
     def test_thp_activity_requires_routing_mapping_and_successful_advice(self) -> None:
         stats = {
             "adaptive_long_routed_allocations": 4,

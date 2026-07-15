@@ -356,6 +356,53 @@ def strict_ordinary_backing_gate(
     }
 
 
+def measurement_phase_smaps(
+    samples: Sequence[Mapping[str, Any]], *, start_seconds: float
+) -> dict[str, Any]:
+    if (
+        isinstance(start_seconds, bool)
+        or not isinstance(start_seconds, (int, float))
+        or not math.isfinite(float(start_seconds))
+        or start_seconds < 0
+    ):
+        raise stage_a.CampaignContractError(
+            "measurement-phase start must be a finite non-negative number"
+        )
+    selected: list[Mapping[str, Any]] = []
+    previous_elapsed = -1.0
+    for index, sample in enumerate(samples):
+        elapsed = sample.get("elapsed_seconds")
+        if (
+            isinstance(elapsed, bool)
+            or not isinstance(elapsed, (int, float))
+            or not math.isfinite(float(elapsed))
+            or elapsed < 0
+            or elapsed < previous_elapsed
+        ):
+            raise stage_a.CampaignContractError(
+                f"smaps sample {index} has an invalid elapsed time"
+            )
+        previous_elapsed = float(elapsed)
+        if elapsed >= start_seconds:
+            selected.append(sample)
+    if not selected:
+        raise stage_a.CampaignContractError(
+            "no smaps samples fall inside the measured phase"
+        )
+    return {
+        "samples": selected,
+        "measurement_phase_start_seconds": float(start_seconds),
+        "process_sample_count": len(samples),
+        "measurement_phase_sample_count": len(selected),
+        "excluded_pre_measurement_sample_count": len(samples) - len(selected),
+        "claim_boundary": (
+            "Criterion warm-up samples are excluded before per-sample backing "
+            "validation; every sample in the timed measurement phase remains "
+            "subject to the ordinary or selective-THP backing gate"
+        ),
+    }
+
+
 def _sample_primary_metric(
     target_id: str, sample: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -570,6 +617,7 @@ def run_campaign(
     timeout: float,
     sample_interval: float,
     lock_path: Path,
+    criterion_warm_up_seconds: float,
 ) -> dict[str, Any]:
     document = _read_json(stage_a_results)
     target = _stage_a_target_contract(document, target_id)
@@ -616,6 +664,7 @@ def run_campaign(
                     arm_name=arm_name,
                     command_prefix=("taskset", "-c", str(cpu)),
                     evidence_stage="production",
+                    criterion_warm_up_seconds=criterion_warm_up_seconds,
                 )
                 wall_seconds = _finite_positive(sample["wall_seconds"])
                 duration_eligible = (
@@ -706,6 +755,11 @@ def run_campaign(
                 for row in by_arm.values():
                     row["cross_arm_output_equivalent"] = True
             smaps_by_arm: dict[str, list[dict[str, Any]]] = {}
+            measurement_phase_start = (
+                0.0
+                if target_id in FIXED_WORK_TARGETS
+                else criterion_warm_up_seconds
+            )
             for arm_name, row in by_arm.items():
                 smaps_value = json.loads(
                     Path(row["smaps_samples_path"]).read_text(encoding="utf-8")
@@ -716,7 +770,11 @@ def run_campaign(
                     raise stage_a.CampaignContractError(
                         f"{target_id}/{arm_name} smaps evidence is invalid"
                     )
-                smaps_by_arm[arm_name] = smaps_value
+                measured_phase = measurement_phase_smaps(
+                    smaps_value, start_seconds=measurement_phase_start
+                )
+                smaps_by_arm[arm_name] = list(measured_phase.pop("samples"))
+                row["smaps_measurement_phase"] = measured_phase
 
             for arm_name in (
                 "default",
@@ -1009,6 +1067,11 @@ def run_campaign(
         "pinned_cpu": cpu,
         "measurement_lock_path": str(lock_path.resolve()),
         "measurement_seconds": measurement_seconds,
+        "criterion_warm_up_seconds": (
+            criterion_warm_up_seconds
+            if target_id not in FIXED_WORK_TARGETS
+            else None
+        ),
         "work_units": work_units,
         "thp_host_state": _thp_host_state(),
         "arms": list(ARM_NAMES),
@@ -1054,6 +1117,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--run-timeout", type=float, default=stage_a.HARD_PROCESS_CAP_SECONDS
     )
     parser.add_argument("--sample-interval", type=float, default=0.5)
+    parser.add_argument("--criterion-warm-up-seconds", type=float, default=5.0)
     parser.add_argument(
         "--lock-path",
         type=Path,
@@ -1069,6 +1133,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         <= stage_a.DEFAULT_SCREEN_MAX_SECONDS
         or args.run_timeout <= 0
         or args.sample_interval <= 0
+        or not 0.0 < args.criterion_warm_up_seconds <= 20.0
     ):
         parser.error("invalid Stage-B experiment boundary or unbalanced repeat count")
     return args
@@ -1086,6 +1151,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         timeout=args.run_timeout,
         sample_interval=args.sample_interval,
         lock_path=args.lock_path,
+        criterion_warm_up_seconds=args.criterion_warm_up_seconds,
     )
     print(
         json.dumps(

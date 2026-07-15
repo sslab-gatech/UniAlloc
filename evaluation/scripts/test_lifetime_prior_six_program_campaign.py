@@ -340,6 +340,26 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                 with self.assertRaises(campaign.CampaignContractError):
                     campaign.validate_stage_duration(stage, value)
 
+    def test_criterion_command_records_explicit_warmup_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "criterion-bench"
+            binary.write_bytes(b"bench")
+            command = campaign.criterion_screening_command(
+                binary=binary,
+                selector="real/program",
+                measurement_seconds=30.0,
+                warm_up_seconds=5.0,
+            )
+            warmup_index = command.index("--warm-up-time")
+            self.assertEqual("5.000", command[warmup_index + 1])
+            with self.assertRaises(campaign.CampaignContractError):
+                campaign.criterion_screening_command(
+                    binary=binary,
+                    selector="real/program",
+                    measurement_seconds=30.0,
+                    warm_up_seconds=0.0,
+                )
+
     def test_screening_summary_and_long_opportunity_gate(self) -> None:
         rows = [
             {

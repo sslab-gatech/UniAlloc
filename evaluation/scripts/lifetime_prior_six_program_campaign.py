@@ -1580,7 +1580,11 @@ def amplified_polars_source() -> str:
 
 
 def criterion_screening_command(
-    *, binary: Path, selector: str, measurement_seconds: float
+    *,
+    binary: Path,
+    selector: str,
+    measurement_seconds: float,
+    warm_up_seconds: float = 1.0,
 ) -> list[str]:
     if not binary.is_file():
         raise CampaignContractError(f"Criterion binary is missing: {binary}")
@@ -1590,12 +1594,14 @@ def criterion_screening_command(
         <= DEFAULT_SCREEN_MAX_SECONDS
     ):
         raise CampaignContractError("Criterion screening time is outside 20--60 seconds")
+    if not math.isfinite(warm_up_seconds) or not 0.0 < warm_up_seconds <= 20.0:
+        raise CampaignContractError("Criterion warm-up time is outside 0--20 seconds")
     return [
         str(binary.resolve()),
         "--bench",
         selector,
         "--warm-up-time",
-        "1.0",
+        f"{warm_up_seconds:.3f}",
         "--measurement-time",
         f"{measurement_seconds:.3f}",
         "--sample-size",
@@ -1611,6 +1617,7 @@ def screening_command(
     work_dir: Path,
     work_units: int | None = None,
     measurement_seconds: float = 30.0,
+    criterion_warm_up_seconds: float = 1.0,
     input_path: Path | None = None,
 ) -> list[str]:
     """Build one same-process Stage-A command for every pinned target."""
@@ -1637,6 +1644,7 @@ def screening_command(
             binary=binary,
             selector=spec.harness_filters[target.harness_id],
             measurement_seconds=measurement_seconds,
+            warm_up_seconds=criterion_warm_up_seconds,
         )
     if target_id == "actix_web":
         _package, _bench, selector, _source = redb_actix.ACTIX_BENCHES[
@@ -1646,6 +1654,7 @@ def screening_command(
             binary=binary,
             selector=selector,
             measurement_seconds=measurement_seconds,
+            warm_up_seconds=criterion_warm_up_seconds,
         )
     raise CampaignContractError(f"unknown target: {target_id}")
 
@@ -3822,6 +3831,7 @@ def run_stage_a_sample(
     arm_name: str | None = None,
     command_prefix: Sequence[str] = (),
     evidence_stage: str = "stage-a",
+    criterion_warm_up_seconds: float = 1.0,
 ) -> dict[str, Any]:
     arm = ARM_BY_NAME[
         arm_name or STAGE_A_ARM_BY_BUILD_GROUP[build_group]
@@ -3843,6 +3853,7 @@ def run_stage_a_sample(
         work_dir=work_dir,
         work_units=work_units,
         measurement_seconds=measurement_seconds,
+        criterion_warm_up_seconds=criterion_warm_up_seconds,
         input_path=input_path,
     )
     command = [*command_prefix, *command]
@@ -3901,6 +3912,11 @@ def run_stage_a_sample(
         "runtime_arm_selector": runtime_arm_selector(arm),
         "work_units": work_units,
         "measurement_seconds": measurement_seconds,
+        "criterion_warm_up_seconds": (
+            criterion_warm_up_seconds
+            if target_id not in STAGE_A_FIXED_WORK_UNITS
+            else None
+        ),
         "runtime_stats": stats,
         "runtime_sites_path": str((artifact_dir / "runtime-sites.json").resolve()),
         "smaps_samples_path": str((artifact_dir / "smaps-samples.json").resolve()),
