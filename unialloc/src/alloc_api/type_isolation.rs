@@ -41,12 +41,28 @@ const FNV1A_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV1A_PRIME: u64 = 0x0000_0100_0000_01b3;
 const TYPE_CACHE_SLOTS: usize = 64;
 const TYPE_CACHE_PROBE_LIMIT: usize = 4;
+/// Direct exact-entry tier for hot compiler-scoped objects below 24 bytes.
+///
+/// These objects often alternate between only a handful of identities and
+/// layouts. Keeping one out-of-line pointer per key avoids both intrusive-list
+/// bookkeeping and the richer metadata-segregated bucket machinery.
+const SMALL_EXACT_TYPE_CACHE_SLOTS: usize = 8;
+/// Maximum linked objects inspected for one exact identity/layout slot.
+///
+/// Bursty containers can release hundreds of nodes of one exact layout at
+/// once. Let that hot identity use a larger share of the existing per-thread
+/// budget instead of forcing every object through the synchronized global L2.
+/// The aggregate entry and byte caps below preserve the original 4,096-entry
+/// registry bound and the 512 KiB total retained-memory bound.
+#[cfg(not(feature = "fixed_heap"))]
+const MAX_TYPE_CACHE_DEPTH: usize = 1024;
+#[cfg(feature = "fixed_heap")]
 const MAX_TYPE_CACHE_DEPTH: usize = 64;
 /// Per-bucket metadata-segregated cache depth.
 ///
 /// Two inline entries already cover the common alternating pair. Four cold
 /// entries per bucket retain bounded reuse without reserving eight full
-/// authenticated metadata records in every thread; excess frees safely bypass
+/// full metadata records in every thread; excess frees safely bypass
 /// the cache and return to the ordinary allocator.
 #[cfg(not(feature = "fixed_heap"))]
 const SEGREGATED_TYPE_CACHE_DEPTH: usize = 4;
@@ -57,7 +73,11 @@ const SEGREGATED_TYPE_CACHE_DEPTH: usize = 8;
 const SEGREGATED_TYPE_CACHE_PROBE_LIMIT: usize = 4;
 const SEGREGATED_TYPE_CACHE_DOMAIN_ORDINARY: u8 = 0;
 const SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE: u8 = 1;
-const TYPE_CACHE_NODE_WORDS: usize = 3;
+/// Intrusive plain-cache nodes store only the next pointer in freed payload.
+/// Exact layout authorization lives in the owning `TypeCacheSlot`, so a
+/// word-sized object can use the fast exact-type tier without an out-of-line
+/// metadata record.
+const TYPE_CACHE_NODE_WORDS: usize = 1;
 const DELAYED_FREE_SLOTS: usize = 32;
 /// Process-visible ownership records for objects retained in per-thread quarantine rings.
 ///
@@ -72,9 +92,10 @@ const GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_MASK: usize =
 ///
 /// Cache payloads remain thread-local, but ownership must be process-visible so
 /// a duplicate free on another thread cannot publish the same address into a
-/// second TLS cache.  The registry is bounded and allocation-free: when a probe
-/// window is full, the incoming object bypasses the semantic cache and returns
-/// to the raw allocator instead of creating untracked ownership.
+/// second TLS cache. The registry is bounded and allocation-free. A full probe
+/// window lets an already-owned delayed-free handoff fall back through its
+/// durable source owner; an ordinary semantic deallocation fails closed before
+/// release. Both paths prevent untracked ownership.
 const GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT: usize = 8;
 #[cfg(not(feature = "fixed_heap"))]
 const GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS: usize = 1024;
@@ -85,12 +106,83 @@ const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 64;
 #[cfg(feature = "fixed_heap")]
 const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 32;
 const GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_MASK: usize = GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT - 1;
+/// Exact-count negative filters for process-visible semantic pointer state.
+///
+/// Global recovery records and retained T/D ownership use separate arrays so
+/// test-only resets cannot erase the other domain. A zero counter proves that
+/// no pointer with the same full-address hash is present; a nonzero counter is
+/// only a conservative slow-path hint. Counters publish before their record and
+/// retire after it, so collisions can add work but can never hide an owner.
+#[cfg(not(feature = "fixed_heap"))]
+const GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS: usize = 8192;
+#[cfg(feature = "fixed_heap")]
+const GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS: usize = 1024;
+const GLOBAL_SEMANTIC_POINTER_FILTER_MASK: usize = GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS - 1;
+/// Keep hosted active lifecycle records below a 37.5% table load.
+///
+/// A 75% process-wide count can still saturate one 64-slot local probe window:
+/// SWC exposed that case as registry churn even though the global table had
+/// nominal headroom. The lower hosted target bounds persistent T/depot owners
+/// before that clustered-load regime while retaining enough capacity for the
+/// measured real-world working sets. The smaller fixed-heap table keeps its
+/// existing 75% target and 512-owner retention bound.
+#[cfg(not(feature = "fixed_heap"))]
+const GLOBAL_ADDRESS_LIFECYCLE_TARGET_OCCUPANCY: usize =
+    GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT * GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS * 3 / 8;
+#[cfg(feature = "fixed_heap")]
+const GLOBAL_ADDRESS_LIFECYCLE_TARGET_OCCUPANCY: usize =
+    GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT * GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS * 3 / 4;
+/// Persistent type-cache owners share the lifecycle table with the independent
+/// delayed-free registry. Reserve its complete bounded population before
+/// deciding how many T/leased records may survive a deallocation.
+const GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT: usize = GLOBAL_ADDRESS_LIFECYCLE_TARGET_OCCUPANCY
+    - GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_COUNT * GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_SLOTS;
+/// Hosted process-wide L2 for exact typed objects that overflow a thread's L1.
+///
+/// The depot deliberately owns far fewer objects than the hosted lifecycle
+/// registry can describe.  It therefore absorbs short producer/consumer
+/// bursts without consuming the registry headroom required by per-thread L1s.
+#[cfg(not(feature = "fixed_heap"))]
+const TYPE_CACHE_DEPOT_SHARD_COUNT: usize = 8;
+#[cfg(not(feature = "fixed_heap"))]
+const TYPE_CACHE_DEPOT_SHARD_SLOTS: usize = 512;
+#[cfg(not(feature = "fixed_heap"))]
+const TYPE_CACHE_DEPOT_SHARD_MASK: usize = TYPE_CACHE_DEPOT_SHARD_COUNT - 1;
+#[cfg(not(feature = "fixed_heap"))]
+const TYPE_CACHE_DEPOT_KEY_SLOTS: usize = 32;
+#[cfg(not(feature = "fixed_heap"))]
+const TYPE_CACHE_DEPOT_KEY_PROBE_LIMIT: usize = 4;
+#[cfg(not(feature = "fixed_heap"))]
+const TYPE_CACHE_DEPOT_EMPTY_INDEX: usize = usize::MAX;
+#[cfg(not(feature = "fixed_heap"))]
+const MAX_TYPE_CACHE_DEPOT_SHARD_BYTES: usize = 64 * 1024;
+/// Depot owners use the same authoritative persistent-retention budget as
+/// every other T owner. Moving an already-counted T owner between L1 and the
+/// depot does not consume another registry record.
+#[cfg(not(feature = "fixed_heap"))]
+const TYPE_CACHE_DEPOT_REGISTRY_COUNT_LIMIT: usize = GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT;
 const ADDRESS_LIFECYCLE_EMPTY: u8 = 0;
 const ADDRESS_LIFECYCLE_PROBE_TOMBSTONE: u8 = 1;
 const ADDRESS_LIFECYCLE_TYPE_RETAINED: u8 = 2;
 const ADDRESS_LIFECYCLE_DELAYED_RETAINED: u8 = 3;
 const ADDRESS_LIFECYCLE_RELEASED: u8 = 4;
 const ADDRESS_LIFECYCLE_LIVE: u8 = 5;
+/// A live allocation returned by the exact-type cache while its bounded
+/// lifecycle-table reservation remains attached to the address.
+///
+/// Keeping the reservation lets a hot small-object free move directly back to
+/// `TYPE_RETAINED` without retiring and recreating two address generations.
+const ADDRESS_LIFECYCLE_TYPE_LEASED: u8 = 6;
+/// Lease only while total type-cache lifecycle reservations remain within the
+/// proven pre-unification bound. Since leased entries remain in
+/// `GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT`, this also bounds the leased subset
+/// without another atomic counter on the hot path. The 1,266 limit preserves
+/// the former 5,888-owner safety envelope after reserving the complete 4,622
+/// entry worst-case TLS headroom.
+#[cfg(not(feature = "fixed_heap"))]
+const TYPE_CACHE_LEASE_REGISTRY_COUNT_LIMIT: usize = 1266;
+#[cfg(feature = "fixed_heap")]
+const TYPE_CACHE_LEASE_REGISTRY_COUNT_LIMIT: usize = 0;
 /// Recent exact-address generations retained after lifecycle entries leave the
 /// primary table. Eight-way replacement keeps the raw-only stale-address
 /// window allocation-free and bounded while exact keys prevent unrelated hash
@@ -159,8 +251,26 @@ const AUTO_ALLOCATION_RECORD_SHARD_SLOTS: usize =
 const AUTO_ALLOCATION_RECORD_PROBE_LIMIT: usize = 16;
 const AUTO_ALLOCATION_RECORD_SHARD_MASK: usize = AUTO_ALLOCATION_RECORD_SHARD_COUNT - 1;
 const AUTO_ALLOCATION_RECORD_TOMBSTONE_PTR: usize = usize::MAX;
+/// Global recovery records reserve the high alignment bit as an independently
+/// authoritative integrity-policy marker. Non-zero allocation layouts cannot
+/// use this bit because their padded size must remain within `isize::MAX`.
+const AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT: usize = 1usize << (usize::BITS - 1);
 #[cfg(not(feature = "fixed_heap"))]
-const AUTO_ALLOCATION_RECORD_OVERFLOW_SLOTS: usize = 512;
+const AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY: usize = 512;
+#[cfg(not(feature = "fixed_heap"))]
+const AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_NUMERATOR: usize = 3;
+#[cfg(not(feature = "fixed_heap"))]
+const AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_DENOMINATOR: usize = 4;
+#[cfg(not(feature = "fixed_heap"))]
+/// Maximum empty recovery-overflow mapping retained by each shard.
+///
+/// Repeated compiler workloads refill the same cross-thread recovery shards.
+/// Keeping one zeroed high-water mapping per shard avoids rebuilding every OA
+/// growth level on the next burst while bounding process-wide retention to
+/// 8MiB across the eight shards. Larger tiers also need at least 25% use in
+/// the drained burst and survive one following shard phase; an inline-only
+/// following phase sheds the obsolete high-water mapping at quiescence.
+const AUTO_ALLOCATION_RECORD_OVERFLOW_RETAINED_MAPPING_MAX_BYTES: usize = 1024 * 1024;
 /// Same-thread compiler recovery is a TLS cache, not the full side table.
 ///
 /// Keep the hosted tier deliberately small (128 records, currently 8KiB on 64-bit targets)
@@ -201,11 +311,14 @@ pub const MAX_TYPE_CACHE_OBJECT_SIZE: usize = 64 * 1024;
 /// Maximum cold linked-list bytes retained behind one plain semantic type slot.
 ///
 /// `MAX_TYPE_CACHE_DEPTH` protects the number of cached objects, but a single
-/// semantic type can otherwise retain 64 medium objects.  Keep the inline
-/// one-object hot path, then cap the per-type linked overflow at the same 64 KiB
-/// target as the ordinary thread cache.  The cap is enforced by a small per-slot
-/// byte counter so typed deallocation stays O(1) instead of scanning the linked
-/// cache on every push.
+/// semantic type can otherwise retain many medium objects. Keep the inline
+/// one-object hot path, then allow a hot exact layout to consume at most one
+/// quarter of the 512 KiB aggregate plain-cache budget. The cap is enforced by
+/// a small per-slot byte counter so typed deallocation stays O(1) instead of
+/// scanning the linked cache on every push.
+#[cfg(not(feature = "fixed_heap"))]
+pub const MAX_TYPE_CACHE_SLOT_BYTES: usize = 128 * 1024;
+#[cfg(feature = "fixed_heap")]
 pub const MAX_TYPE_CACHE_SLOT_BYTES: usize = 64 * 1024;
 /// Maximum allocator-rounded bytes retained by one thread's plain semantic cache.
 ///
@@ -215,6 +328,12 @@ pub const MAX_TYPE_CACHE_SLOT_BYTES: usize = 64 * 1024;
 /// tier across all slots; overflowed frees fall back to the ordinary allocator
 /// deallocation path instead of being privately retained by one thread.
 pub const MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES: usize = 512 * 1024;
+/// Maximum linked plain-cache owners retained by one thread across all slots.
+///
+/// This preserves the former 64-slot x 64-node ownership ceiling while letting
+/// a single hot exact layout absorb a bounded burst. The process-visible
+/// registry therefore sees no larger per-thread worst case than before.
+pub const MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES: usize = 4096;
 /// Maximum allocator-rounded bytes retained by one metadata-segregated semantic cache bucket.
 ///
 /// Side-table entries carry richer metadata and are stored in bounded buckets
@@ -382,7 +501,7 @@ impl AllocationMetadata {
         }
     }
 
-    pub fn for_rust_type<T>() -> Self {
+    pub fn for_rust_type<T: 'static>() -> Self {
         Self::for_type(semantic_type_id::<T>())
     }
 
@@ -442,6 +561,20 @@ fn non_zero_hash(hash: u64) -> u64 {
     }
 }
 
+struct SemanticTypeIdHasher(u64);
+
+impl core::hash::Hasher for SemanticTypeIdHasher {
+    #[inline]
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    #[inline]
+    fn write(&mut self, bytes: &[u8]) {
+        self.0 = fnv1a_mix(self.0, bytes);
+    }
+}
+
 #[inline]
 fn mix_semantic_metadata_fields(
     hash: u64,
@@ -460,18 +593,19 @@ fn mix_semantic_metadata_fields(
     }
 }
 
-/// Deterministically derive a non-zero semantic id from Rust type metadata.
+/// Derive a non-zero, compiler-disambiguated semantic id for a Rust type.
 ///
-/// The paper prototype assigns type IDs in the compiler. This helper is not a
-/// replacement for that pass, but it gives in-tree manual/ABI instrumentation a
-/// stable type-derived identifier so coverage experiments do not rely on
-/// hard-coded constants.
-pub fn semantic_type_id<T>() -> u64 {
-    let hash = fnv1a_mix(FNV1A_OFFSET, b"rust-type-v1");
-    let hash = fnv1a_mix(hash, core::any::type_name::<T>().as_bytes());
-    let hash = fnv1a_mix(hash, &core::mem::size_of::<T>().to_le_bytes());
-    let hash = fnv1a_mix(hash, &core::mem::align_of::<T>().to_le_bytes());
-    non_zero_hash(hash)
+/// The compiler intrinsic is evaluated after generic monomorphization. Its
+/// opaque `TypeId` includes crate disambiguation, so identically named types
+/// from two dependency versions remain distinct. Hashing that value into the
+/// allocator's 64-bit metadata field gives compiler-inserted generic scopes and
+/// in-tree manual instrumentation one process-local identity contract without
+/// hashing unresolved `T`/`K`/`V` placeholder text.
+pub fn semantic_type_id<T: 'static>() -> u64 {
+    let compiler_type_id = const { core::intrinsics::type_id::<T>() };
+    let mut hasher = SemanticTypeIdHasher(fnv1a_mix(FNV1A_OFFSET, b"rust-type-id-v2"));
+    core::hash::Hash::hash(&compiler_type_id, &mut hasher);
+    non_zero_hash(core::hash::Hasher::finish(&hasher))
 }
 
 /// Deterministically derive a non-zero semantic id from allocation layout.
@@ -510,6 +644,14 @@ pub struct SemanticStats {
     typed_cache_hits: AtomicUsize,
     typed_cache_inserts: AtomicUsize,
     typed_cache_bypasses: AtomicUsize,
+    typed_cache_wrong_identity_denials: AtomicUsize,
+    last_wrong_identity_requested_type_id: AtomicU64,
+    last_wrong_identity_retained_type_id: AtomicU64,
+    last_wrong_identity_requested_module_id: AtomicU64,
+    last_wrong_identity_retained_module_id: AtomicU64,
+    last_wrong_identity_requested_callsite: AtomicU64,
+    last_wrong_identity_size: AtomicUsize,
+    last_wrong_identity_align: AtomicUsize,
     delayed_free_enqueues: AtomicUsize,
     delayed_free_flushes: AtomicUsize,
     metadata_pac_auth_signs: AtomicUsize,
@@ -555,6 +697,313 @@ pub struct SemanticMetadataValidation {
     last_mismatch_recorded_module_id: AtomicU64,
     last_mismatch_requested_callsite: AtomicU64,
     last_mismatch_recorded_callsite: AtomicU64,
+    recovery_deallocation_layout_mismatches: AtomicUsize,
+    last_layout_mismatch_requested_size: AtomicUsize,
+    last_layout_mismatch_requested_align: AtomicUsize,
+    last_layout_mismatch_recorded_size: AtomicUsize,
+    last_layout_mismatch_recorded_align: AtomicUsize,
+    last_layout_mismatch_recorded_type_id: AtomicU64,
+    last_layout_mismatch_recorded_module_id: AtomicU64,
+    last_layout_mismatch_recorded_callsite: AtomicU64,
+}
+
+/// Event and allocator-rounded-byte totals for one terminal type-cache outcome.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TypeCacheAdmissionCounterSnapshot {
+    pub events: usize,
+    pub rounded_bytes: usize,
+}
+
+/// Reason-specific outcomes for completed typed-free cache admission attempts.
+///
+/// This is a companion diagnostic contract rather than part of the exported
+/// `SemanticStatsSnapshot` ABI.  A workload can therefore explain
+/// `typed_deallocations - typed_cache_inserts` without growing the stable FFI
+/// aggregate every time the bounded-cache policy gains a new rejection reason.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct TypeCacheAdmissionStatsSnapshot {
+    pub admitted: TypeCacheAdmissionCounterSnapshot,
+    pub rejected_too_small: TypeCacheAdmissionCounterSnapshot,
+    pub rejected_too_large: TypeCacheAdmissionCounterSnapshot,
+    pub rejected_metadata_ineligible: TypeCacheAdmissionCounterSnapshot,
+    pub rejected_probe_window_full: TypeCacheAdmissionCounterSnapshot,
+    pub rejected_slot_depth: TypeCacheAdmissionCounterSnapshot,
+    pub rejected_slot_byte_budget: TypeCacheAdmissionCounterSnapshot,
+    pub rejected_aggregate_byte_budget: TypeCacheAdmissionCounterSnapshot,
+    pub rejected_aggregate_entry_budget: TypeCacheAdmissionCounterSnapshot,
+    pub rejected_structural_or_alignment: TypeCacheAdmissionCounterSnapshot,
+    pub rejected_segregated_capacity: TypeCacheAdmissionCounterSnapshot,
+    /// Cacheable frees released synchronously to preserve bounded lifecycle
+    /// table probe headroom. These are terminal, safe non-admissions.
+    pub rejected_registry_pressure: TypeCacheAdmissionCounterSnapshot,
+    pub ownership_registry_full_failstop: TypeCacheAdmissionCounterSnapshot,
+    /// Successful cache insertions for exact-typed objects smaller than one
+    /// pointer word, which still require an out-of-line side entry.
+    pub tiny_side_inserts: TypeCacheAdmissionCounterSnapshot,
+    /// Successful exact-identity hits from that out-of-line tiny-object tier.
+    pub tiny_side_hits: TypeCacheAdmissionCounterSnapshot,
+    /// L1 overflow objects offered to the hosted process-wide exact-type depot.
+    pub depot_attempts: TypeCacheAdmissionCounterSnapshot,
+    /// Objects accepted into the depot, including ownership-preserving L1
+    /// eviction transfers.
+    pub depot_inserts: TypeCacheAdmissionCounterSnapshot,
+    /// L1 admission failures rescued by the depot. These operations retain an
+    /// L1 `typed_cache_bypasses` diagnostic but complete as admitted inserts.
+    pub depot_rescued_overflow: TypeCacheAdmissionCounterSnapshot,
+    /// Exact identity/layout/policy allocations served by the depot.
+    pub depot_hits: TypeCacheAdmissionCounterSnapshot,
+    /// Depot hits reached after the plain L1 had already recorded its local
+    /// miss as a `typed_cache_bypasses` event.
+    pub depot_hits_after_recorded_l1_bypass: TypeCacheAdmissionCounterSnapshot,
+    /// Older depot entries displaced by a bounded replacement.
+    pub depot_evictions: TypeCacheAdmissionCounterSnapshot,
+    /// Offers rejected because the selected shard could not remain within its
+    /// key-directory, entry, or allocator-rounded-byte bounds.
+    pub depot_rejected_capacity: TypeCacheAdmissionCounterSnapshot,
+    /// Offers rejected because the policy requires storage outside the generic
+    /// hosted depot (including hugepage metadata and fixed-heap builds).
+    pub depot_rejected_policy: TypeCacheAdmissionCounterSnapshot,
+    /// Offers rejected to preserve lifecycle-registry headroom for TLS owners.
+    pub depot_rejected_registry_headroom: TypeCacheAdmissionCounterSnapshot,
+    /// Offers caused by a plain L1 probe-window collision.
+    pub depot_from_probe_window_full: TypeCacheAdmissionCounterSnapshot,
+    /// Offers caused by a full per-identity plain L1 slot.
+    pub depot_from_slot_depth: TypeCacheAdmissionCounterSnapshot,
+    /// Offers caused by the plain L1 per-slot retained-byte bound.
+    pub depot_from_slot_byte_budget: TypeCacheAdmissionCounterSnapshot,
+    /// Offers caused by the plain L1 aggregate retained-byte bound.
+    pub depot_from_aggregate_byte_budget: TypeCacheAdmissionCounterSnapshot,
+    /// Offers caused by the plain L1 aggregate ownership-entry bound.
+    pub depot_from_aggregate_entry_budget: TypeCacheAdmissionCounterSnapshot,
+    /// Offers caused by metadata/tiny L1 capacity.
+    pub depot_from_segregated_capacity: TypeCacheAdmissionCounterSnapshot,
+    /// Existing L1 entries transferred after bounded local replacement.
+    pub depot_from_local_eviction: TypeCacheAdmissionCounterSnapshot,
+    pub depot_current_entries: usize,
+    pub depot_peak_entries: usize,
+    pub depot_current_rounded_bytes: usize,
+    pub depot_peak_rounded_bytes: usize,
+}
+
+impl TypeCacheAdmissionStatsSnapshot {
+    /// Completed cache-admission outcomes. Registry fail-stop attempts and
+    /// cache hits are intentionally outside this conservation total.
+    pub const fn terminal_events(self) -> usize {
+        self.admitted
+            .events
+            .saturating_add(self.rejected_too_small.events)
+            .saturating_add(self.rejected_too_large.events)
+            .saturating_add(self.rejected_metadata_ineligible.events)
+            .saturating_add(self.rejected_probe_window_full.events)
+            .saturating_add(self.rejected_slot_depth.events)
+            .saturating_add(self.rejected_slot_byte_budget.events)
+            .saturating_add(self.rejected_aggregate_byte_budget.events)
+            .saturating_add(self.rejected_aggregate_entry_budget.events)
+            .saturating_add(self.rejected_structural_or_alignment.events)
+            .saturating_add(self.rejected_segregated_capacity.events)
+            .saturating_add(self.rejected_registry_pressure.events)
+    }
+}
+
+struct TypeCacheAdmissionCounter {
+    events: AtomicUsize,
+    rounded_bytes: AtomicUsize,
+}
+
+impl TypeCacheAdmissionCounter {
+    const fn new() -> Self {
+        Self {
+            events: AtomicUsize::new(0),
+            rounded_bytes: AtomicUsize::new(0),
+        }
+    }
+
+    #[inline]
+    fn record(&self, rounded_bytes: usize) {
+        self.events.fetch_add(1, Ordering::Relaxed);
+        self.rounded_bytes
+            .fetch_add(rounded_bytes, Ordering::Relaxed);
+    }
+
+    fn reset(&self) {
+        self.events.store(0, Ordering::Relaxed);
+        self.rounded_bytes.store(0, Ordering::Relaxed);
+    }
+
+    fn snapshot(&self) -> TypeCacheAdmissionCounterSnapshot {
+        TypeCacheAdmissionCounterSnapshot {
+            events: self.events.load(Ordering::Relaxed),
+            rounded_bytes: self.rounded_bytes.load(Ordering::Relaxed),
+        }
+    }
+}
+
+struct TypeCacheAdmissionStats {
+    admitted: TypeCacheAdmissionCounter,
+    rejected_too_small: TypeCacheAdmissionCounter,
+    rejected_too_large: TypeCacheAdmissionCounter,
+    rejected_metadata_ineligible: TypeCacheAdmissionCounter,
+    rejected_probe_window_full: TypeCacheAdmissionCounter,
+    rejected_slot_depth: TypeCacheAdmissionCounter,
+    rejected_slot_byte_budget: TypeCacheAdmissionCounter,
+    rejected_aggregate_byte_budget: TypeCacheAdmissionCounter,
+    rejected_aggregate_entry_budget: TypeCacheAdmissionCounter,
+    rejected_structural_or_alignment: TypeCacheAdmissionCounter,
+    rejected_segregated_capacity: TypeCacheAdmissionCounter,
+    rejected_registry_pressure: TypeCacheAdmissionCounter,
+    ownership_registry_full_failstop: TypeCacheAdmissionCounter,
+    tiny_side_inserts: TypeCacheAdmissionCounter,
+    tiny_side_hits: TypeCacheAdmissionCounter,
+    depot_attempts: TypeCacheAdmissionCounter,
+    depot_inserts: TypeCacheAdmissionCounter,
+    depot_rescued_overflow: TypeCacheAdmissionCounter,
+    depot_hits: TypeCacheAdmissionCounter,
+    depot_hits_after_recorded_l1_bypass: TypeCacheAdmissionCounter,
+    depot_evictions: TypeCacheAdmissionCounter,
+    depot_rejected_capacity: TypeCacheAdmissionCounter,
+    depot_rejected_policy: TypeCacheAdmissionCounter,
+    depot_rejected_registry_headroom: TypeCacheAdmissionCounter,
+    depot_from_probe_window_full: TypeCacheAdmissionCounter,
+    depot_from_slot_depth: TypeCacheAdmissionCounter,
+    depot_from_slot_byte_budget: TypeCacheAdmissionCounter,
+    depot_from_aggregate_byte_budget: TypeCacheAdmissionCounter,
+    depot_from_aggregate_entry_budget: TypeCacheAdmissionCounter,
+    depot_from_segregated_capacity: TypeCacheAdmissionCounter,
+    depot_from_local_eviction: TypeCacheAdmissionCounter,
+    depot_current_entries: AtomicUsize,
+    depot_peak_entries: AtomicUsize,
+    depot_current_rounded_bytes: AtomicUsize,
+    depot_peak_rounded_bytes: AtomicUsize,
+}
+
+impl TypeCacheAdmissionStats {
+    const fn new() -> Self {
+        Self {
+            admitted: TypeCacheAdmissionCounter::new(),
+            rejected_too_small: TypeCacheAdmissionCounter::new(),
+            rejected_too_large: TypeCacheAdmissionCounter::new(),
+            rejected_metadata_ineligible: TypeCacheAdmissionCounter::new(),
+            rejected_probe_window_full: TypeCacheAdmissionCounter::new(),
+            rejected_slot_depth: TypeCacheAdmissionCounter::new(),
+            rejected_slot_byte_budget: TypeCacheAdmissionCounter::new(),
+            rejected_aggregate_byte_budget: TypeCacheAdmissionCounter::new(),
+            rejected_aggregate_entry_budget: TypeCacheAdmissionCounter::new(),
+            rejected_structural_or_alignment: TypeCacheAdmissionCounter::new(),
+            rejected_segregated_capacity: TypeCacheAdmissionCounter::new(),
+            rejected_registry_pressure: TypeCacheAdmissionCounter::new(),
+            ownership_registry_full_failstop: TypeCacheAdmissionCounter::new(),
+            tiny_side_inserts: TypeCacheAdmissionCounter::new(),
+            tiny_side_hits: TypeCacheAdmissionCounter::new(),
+            depot_attempts: TypeCacheAdmissionCounter::new(),
+            depot_inserts: TypeCacheAdmissionCounter::new(),
+            depot_rescued_overflow: TypeCacheAdmissionCounter::new(),
+            depot_hits: TypeCacheAdmissionCounter::new(),
+            depot_hits_after_recorded_l1_bypass: TypeCacheAdmissionCounter::new(),
+            depot_evictions: TypeCacheAdmissionCounter::new(),
+            depot_rejected_capacity: TypeCacheAdmissionCounter::new(),
+            depot_rejected_policy: TypeCacheAdmissionCounter::new(),
+            depot_rejected_registry_headroom: TypeCacheAdmissionCounter::new(),
+            depot_from_probe_window_full: TypeCacheAdmissionCounter::new(),
+            depot_from_slot_depth: TypeCacheAdmissionCounter::new(),
+            depot_from_slot_byte_budget: TypeCacheAdmissionCounter::new(),
+            depot_from_aggregate_byte_budget: TypeCacheAdmissionCounter::new(),
+            depot_from_aggregate_entry_budget: TypeCacheAdmissionCounter::new(),
+            depot_from_segregated_capacity: TypeCacheAdmissionCounter::new(),
+            depot_from_local_eviction: TypeCacheAdmissionCounter::new(),
+            depot_current_entries: AtomicUsize::new(0),
+            depot_peak_entries: AtomicUsize::new(0),
+            depot_current_rounded_bytes: AtomicUsize::new(0),
+            depot_peak_rounded_bytes: AtomicUsize::new(0),
+        }
+    }
+
+    fn reset(&self) {
+        self.admitted.reset();
+        self.rejected_too_small.reset();
+        self.rejected_too_large.reset();
+        self.rejected_metadata_ineligible.reset();
+        self.rejected_probe_window_full.reset();
+        self.rejected_slot_depth.reset();
+        self.rejected_slot_byte_budget.reset();
+        self.rejected_aggregate_byte_budget.reset();
+        self.rejected_aggregate_entry_budget.reset();
+        self.rejected_structural_or_alignment.reset();
+        self.rejected_segregated_capacity.reset();
+        self.rejected_registry_pressure.reset();
+        self.ownership_registry_full_failstop.reset();
+        self.tiny_side_inserts.reset();
+        self.tiny_side_hits.reset();
+        self.depot_attempts.reset();
+        self.depot_inserts.reset();
+        self.depot_rescued_overflow.reset();
+        self.depot_hits.reset();
+        self.depot_hits_after_recorded_l1_bypass.reset();
+        self.depot_evictions.reset();
+        self.depot_rejected_capacity.reset();
+        self.depot_rejected_policy.reset();
+        self.depot_rejected_registry_headroom.reset();
+        self.depot_from_probe_window_full.reset();
+        self.depot_from_slot_depth.reset();
+        self.depot_from_slot_byte_budget.reset();
+        self.depot_from_aggregate_byte_budget.reset();
+        self.depot_from_aggregate_entry_budget.reset();
+        self.depot_from_segregated_capacity.reset();
+        self.depot_from_local_eviction.reset();
+        let (current_entries, current_bytes) = type_cache_depot_current_occupancy();
+        self.depot_current_entries
+            .store(current_entries, Ordering::Relaxed);
+        self.depot_current_rounded_bytes
+            .store(current_bytes, Ordering::Relaxed);
+        self.depot_peak_entries
+            .store(current_entries, Ordering::Relaxed);
+        self.depot_peak_rounded_bytes
+            .store(current_bytes, Ordering::Relaxed);
+    }
+
+    fn snapshot(&self) -> TypeCacheAdmissionStatsSnapshot {
+        let (depot_current_entries, depot_current_rounded_bytes) =
+            type_cache_depot_current_occupancy();
+        TypeCacheAdmissionStatsSnapshot {
+            admitted: self.admitted.snapshot(),
+            rejected_too_small: self.rejected_too_small.snapshot(),
+            rejected_too_large: self.rejected_too_large.snapshot(),
+            rejected_metadata_ineligible: self.rejected_metadata_ineligible.snapshot(),
+            rejected_probe_window_full: self.rejected_probe_window_full.snapshot(),
+            rejected_slot_depth: self.rejected_slot_depth.snapshot(),
+            rejected_slot_byte_budget: self.rejected_slot_byte_budget.snapshot(),
+            rejected_aggregate_byte_budget: self.rejected_aggregate_byte_budget.snapshot(),
+            rejected_aggregate_entry_budget: self.rejected_aggregate_entry_budget.snapshot(),
+            rejected_structural_or_alignment: self.rejected_structural_or_alignment.snapshot(),
+            rejected_segregated_capacity: self.rejected_segregated_capacity.snapshot(),
+            rejected_registry_pressure: self.rejected_registry_pressure.snapshot(),
+            ownership_registry_full_failstop: self.ownership_registry_full_failstop.snapshot(),
+            tiny_side_inserts: self.tiny_side_inserts.snapshot(),
+            tiny_side_hits: self.tiny_side_hits.snapshot(),
+            depot_attempts: self.depot_attempts.snapshot(),
+            depot_inserts: self.depot_inserts.snapshot(),
+            depot_rescued_overflow: self.depot_rescued_overflow.snapshot(),
+            depot_hits: self.depot_hits.snapshot(),
+            depot_hits_after_recorded_l1_bypass: self
+                .depot_hits_after_recorded_l1_bypass
+                .snapshot(),
+            depot_evictions: self.depot_evictions.snapshot(),
+            depot_rejected_capacity: self.depot_rejected_capacity.snapshot(),
+            depot_rejected_policy: self.depot_rejected_policy.snapshot(),
+            depot_rejected_registry_headroom: self.depot_rejected_registry_headroom.snapshot(),
+            depot_from_probe_window_full: self.depot_from_probe_window_full.snapshot(),
+            depot_from_slot_depth: self.depot_from_slot_depth.snapshot(),
+            depot_from_slot_byte_budget: self.depot_from_slot_byte_budget.snapshot(),
+            depot_from_aggregate_byte_budget: self.depot_from_aggregate_byte_budget.snapshot(),
+            depot_from_aggregate_entry_budget: self.depot_from_aggregate_entry_budget.snapshot(),
+            depot_from_segregated_capacity: self.depot_from_segregated_capacity.snapshot(),
+            depot_from_local_eviction: self.depot_from_local_eviction.snapshot(),
+            depot_current_entries,
+            depot_peak_entries: self.depot_peak_entries.load(Ordering::Relaxed),
+            depot_current_rounded_bytes,
+            depot_peak_rounded_bytes: self.depot_peak_rounded_bytes.load(Ordering::Relaxed),
+        }
+    }
 }
 
 /// Version for the exported semantic-stats snapshot ABI.
@@ -562,7 +1011,7 @@ pub struct SemanticMetadataValidation {
 /// The snapshot is an evaluation/runtime integration structure and may grow as
 /// the claim-grade evidence contract gains counters.  Size-negotiated FFI
 /// callers should check this version plus `__unialloc_semantic_stats_snapshot_size`.
-pub const SEMANTIC_STATS_SNAPSHOT_ABI_VERSION: u32 = 3;
+pub const SEMANTIC_STATS_SNAPSHOT_ABI_VERSION: u32 = 4;
 
 /// Version for the exported fallback-attribution snapshot ABI.
 pub const SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION: u32 = 1;
@@ -594,6 +1043,14 @@ impl SemanticStats {
             typed_cache_hits: AtomicUsize::new(0),
             typed_cache_inserts: AtomicUsize::new(0),
             typed_cache_bypasses: AtomicUsize::new(0),
+            typed_cache_wrong_identity_denials: AtomicUsize::new(0),
+            last_wrong_identity_requested_type_id: AtomicU64::new(UNKNOWN_SEMANTIC_ID),
+            last_wrong_identity_retained_type_id: AtomicU64::new(UNKNOWN_SEMANTIC_ID),
+            last_wrong_identity_requested_module_id: AtomicU64::new(UNKNOWN_SEMANTIC_ID),
+            last_wrong_identity_retained_module_id: AtomicU64::new(UNKNOWN_SEMANTIC_ID),
+            last_wrong_identity_requested_callsite: AtomicU64::new(0),
+            last_wrong_identity_size: AtomicUsize::new(0),
+            last_wrong_identity_align: AtomicUsize::new(0),
             delayed_free_enqueues: AtomicUsize::new(0),
             delayed_free_flushes: AtomicUsize::new(0),
             metadata_pac_auth_signs: AtomicUsize::new(0),
@@ -654,6 +1111,31 @@ impl SemanticStats {
     #[inline]
     pub fn record_type_cache_bypass(&self) {
         self.typed_cache_bypasses.fetch_add(1, Ordering::Relaxed);
+    }
+
+    #[inline]
+    fn record_type_cache_wrong_identity_denial(
+        &self,
+        requested: AllocationMetadata,
+        retained: TypeCacheIdentity,
+        layout: Layout,
+    ) {
+        self.typed_cache_wrong_identity_denials
+            .fetch_add(1, Ordering::Relaxed);
+        self.last_wrong_identity_requested_type_id
+            .store(requested.type_id, Ordering::Relaxed);
+        self.last_wrong_identity_retained_type_id
+            .store(retained.type_id, Ordering::Relaxed);
+        self.last_wrong_identity_requested_module_id
+            .store(requested.module_id, Ordering::Relaxed);
+        self.last_wrong_identity_retained_module_id
+            .store(retained.module_id, Ordering::Relaxed);
+        self.last_wrong_identity_requested_callsite
+            .store(requested.callsite, Ordering::Relaxed);
+        self.last_wrong_identity_size
+            .store(layout.size(), Ordering::Relaxed);
+        self.last_wrong_identity_align
+            .store(layout.align(), Ordering::Relaxed);
     }
 
     #[inline]
@@ -725,6 +1207,20 @@ impl SemanticStats {
         self.typed_cache_hits.store(0, Ordering::Relaxed);
         self.typed_cache_inserts.store(0, Ordering::Relaxed);
         self.typed_cache_bypasses.store(0, Ordering::Relaxed);
+        self.typed_cache_wrong_identity_denials
+            .store(0, Ordering::Relaxed);
+        self.last_wrong_identity_requested_type_id
+            .store(UNKNOWN_SEMANTIC_ID, Ordering::Relaxed);
+        self.last_wrong_identity_retained_type_id
+            .store(UNKNOWN_SEMANTIC_ID, Ordering::Relaxed);
+        self.last_wrong_identity_requested_module_id
+            .store(UNKNOWN_SEMANTIC_ID, Ordering::Relaxed);
+        self.last_wrong_identity_retained_module_id
+            .store(UNKNOWN_SEMANTIC_ID, Ordering::Relaxed);
+        self.last_wrong_identity_requested_callsite
+            .store(0, Ordering::Relaxed);
+        self.last_wrong_identity_size.store(0, Ordering::Relaxed);
+        self.last_wrong_identity_align.store(0, Ordering::Relaxed);
         self.delayed_free_enqueues.store(0, Ordering::Relaxed);
         self.delayed_free_flushes.store(0, Ordering::Relaxed);
         self.metadata_pac_auth_signs.store(0, Ordering::Relaxed);
@@ -762,6 +1258,26 @@ impl SemanticStats {
             typed_cache_hits: self.typed_cache_hits.load(Ordering::Relaxed),
             typed_cache_inserts: self.typed_cache_inserts.load(Ordering::Relaxed),
             typed_cache_bypasses: self.typed_cache_bypasses.load(Ordering::Relaxed),
+            typed_cache_wrong_identity_denials: self
+                .typed_cache_wrong_identity_denials
+                .load(Ordering::Relaxed),
+            last_wrong_identity_requested_type_id: self
+                .last_wrong_identity_requested_type_id
+                .load(Ordering::Relaxed),
+            last_wrong_identity_retained_type_id: self
+                .last_wrong_identity_retained_type_id
+                .load(Ordering::Relaxed),
+            last_wrong_identity_requested_module_id: self
+                .last_wrong_identity_requested_module_id
+                .load(Ordering::Relaxed),
+            last_wrong_identity_retained_module_id: self
+                .last_wrong_identity_retained_module_id
+                .load(Ordering::Relaxed),
+            last_wrong_identity_requested_callsite: self
+                .last_wrong_identity_requested_callsite
+                .load(Ordering::Relaxed),
+            last_wrong_identity_size: self.last_wrong_identity_size.load(Ordering::Relaxed),
+            last_wrong_identity_align: self.last_wrong_identity_align.load(Ordering::Relaxed),
             delayed_free_enqueues: self.delayed_free_enqueues.load(Ordering::Relaxed),
             delayed_free_flushes: self.delayed_free_flushes.load(Ordering::Relaxed),
             metadata_pac_auth_signs: self.metadata_pac_auth_signs.load(Ordering::Relaxed),
@@ -893,6 +1409,14 @@ impl SemanticMetadataValidation {
             last_mismatch_recorded_module_id: AtomicU64::new(UNKNOWN_SEMANTIC_ID),
             last_mismatch_requested_callsite: AtomicU64::new(0),
             last_mismatch_recorded_callsite: AtomicU64::new(0),
+            recovery_deallocation_layout_mismatches: AtomicUsize::new(0),
+            last_layout_mismatch_requested_size: AtomicUsize::new(0),
+            last_layout_mismatch_requested_align: AtomicUsize::new(0),
+            last_layout_mismatch_recorded_size: AtomicUsize::new(0),
+            last_layout_mismatch_recorded_align: AtomicUsize::new(0),
+            last_layout_mismatch_recorded_type_id: AtomicU64::new(UNKNOWN_SEMANTIC_ID),
+            last_layout_mismatch_recorded_module_id: AtomicU64::new(UNKNOWN_SEMANTIC_ID),
+            last_layout_mismatch_recorded_callsite: AtomicU64::new(0),
         }
     }
 
@@ -924,6 +1448,32 @@ impl SemanticMetadataValidation {
             .store(recorded.callsite, Ordering::Relaxed);
     }
 
+    #[inline]
+    fn record_recovery_deallocation_layout_mismatch(
+        &self,
+        requested: Layout,
+        recorded_size: usize,
+        recorded_align: usize,
+        recorded_metadata: AllocationMetadata,
+    ) {
+        self.recovery_deallocation_layout_mismatches
+            .fetch_add(1, Ordering::Relaxed);
+        self.last_layout_mismatch_requested_size
+            .store(requested.size(), Ordering::Relaxed);
+        self.last_layout_mismatch_requested_align
+            .store(requested.align(), Ordering::Relaxed);
+        self.last_layout_mismatch_recorded_size
+            .store(recorded_size, Ordering::Relaxed);
+        self.last_layout_mismatch_recorded_align
+            .store(recorded_align, Ordering::Relaxed);
+        self.last_layout_mismatch_recorded_type_id
+            .store(recorded_metadata.type_id, Ordering::Relaxed);
+        self.last_layout_mismatch_recorded_module_id
+            .store(recorded_metadata.module_id, Ordering::Relaxed);
+        self.last_layout_mismatch_recorded_callsite
+            .store(recorded_metadata.callsite, Ordering::Relaxed);
+    }
+
     pub fn reset(&self) {
         self.recovery_identity_matches.store(0, Ordering::Relaxed);
         self.recovery_identity_mismatches
@@ -939,6 +1489,22 @@ impl SemanticMetadataValidation {
         self.last_mismatch_requested_callsite
             .store(0, Ordering::Relaxed);
         self.last_mismatch_recorded_callsite
+            .store(0, Ordering::Relaxed);
+        self.recovery_deallocation_layout_mismatches
+            .store(0, Ordering::Relaxed);
+        self.last_layout_mismatch_requested_size
+            .store(0, Ordering::Relaxed);
+        self.last_layout_mismatch_requested_align
+            .store(0, Ordering::Relaxed);
+        self.last_layout_mismatch_recorded_size
+            .store(0, Ordering::Relaxed);
+        self.last_layout_mismatch_recorded_align
+            .store(0, Ordering::Relaxed);
+        self.last_layout_mismatch_recorded_type_id
+            .store(UNKNOWN_SEMANTIC_ID, Ordering::Relaxed);
+        self.last_layout_mismatch_recorded_module_id
+            .store(UNKNOWN_SEMANTIC_ID, Ordering::Relaxed);
+        self.last_layout_mismatch_recorded_callsite
             .store(0, Ordering::Relaxed);
     }
 
@@ -963,6 +1529,35 @@ impl SemanticMetadataValidation {
                 .load(Ordering::Relaxed),
             last_mismatch_recorded_callsite: self
                 .last_mismatch_recorded_callsite
+                .load(Ordering::Relaxed),
+        }
+    }
+
+    pub fn allocation_layout_snapshot(&self) -> SemanticAllocationLayoutValidationSnapshot {
+        SemanticAllocationLayoutValidationSnapshot {
+            recovery_deallocation_layout_mismatches: self
+                .recovery_deallocation_layout_mismatches
+                .load(Ordering::Relaxed),
+            last_requested_size: self
+                .last_layout_mismatch_requested_size
+                .load(Ordering::Relaxed),
+            last_requested_align: self
+                .last_layout_mismatch_requested_align
+                .load(Ordering::Relaxed),
+            last_recorded_size: self
+                .last_layout_mismatch_recorded_size
+                .load(Ordering::Relaxed),
+            last_recorded_align: self
+                .last_layout_mismatch_recorded_align
+                .load(Ordering::Relaxed),
+            last_recorded_type_id: self
+                .last_layout_mismatch_recorded_type_id
+                .load(Ordering::Relaxed),
+            last_recorded_module_id: self
+                .last_layout_mismatch_recorded_module_id
+                .load(Ordering::Relaxed),
+            last_recorded_callsite: self
+                .last_layout_mismatch_recorded_callsite
                 .load(Ordering::Relaxed),
         }
     }
@@ -992,6 +1587,18 @@ pub struct SemanticStatsSnapshot {
     pub typed_cache_hits: usize,
     pub typed_cache_inserts: usize,
     pub typed_cache_bypasses: usize,
+    /// Cache-pop attempts denied because a same-layout retained object existed
+    /// under a different exact type-cache identity. This is evaluation
+    /// telemetry for cross-type reuse opportunities; the allocator still
+    /// returns a normal cache miss and preserves the retained object.
+    pub typed_cache_wrong_identity_denials: usize,
+    pub last_wrong_identity_requested_type_id: u64,
+    pub last_wrong_identity_retained_type_id: u64,
+    pub last_wrong_identity_requested_module_id: u64,
+    pub last_wrong_identity_retained_module_id: u64,
+    pub last_wrong_identity_requested_callsite: u64,
+    pub last_wrong_identity_size: usize,
+    pub last_wrong_identity_align: usize,
     pub delayed_free_enqueues: usize,
     pub delayed_free_flushes: usize,
     pub metadata_pac_auth_signs: usize,
@@ -1044,6 +1651,25 @@ pub struct SemanticMetadataValidationSnapshot {
     pub last_mismatch_recorded_callsite: u64,
 }
 
+/// Exact allocation/deallocation layout mismatches rejected by a live recovery
+/// record.
+///
+/// This companion diagnostic intentionally stays outside the stable metadata-
+/// identity FFI snapshot. It records only a same-pointer allocation-layout
+/// disagreement on a fail-closed deallocation path; authentication failures and
+/// rejected reallocations do not contribute to this counter.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SemanticAllocationLayoutValidationSnapshot {
+    pub recovery_deallocation_layout_mismatches: usize,
+    pub last_requested_size: usize,
+    pub last_requested_align: usize,
+    pub last_recorded_size: usize,
+    pub last_recorded_align: usize,
+    pub last_recorded_type_id: u64,
+    pub last_recorded_module_id: u64,
+    pub last_recorded_callsite: u64,
+}
+
 /// Process-wide observability for compiler-lowered allocation ownership
 /// transfers such as `Box<[T]>` into `Vec<T>` while semantic stats recording
 /// is enabled.
@@ -1070,6 +1696,11 @@ pub static SEMANTIC_FALLBACK_ATTRIBUTION: SemanticFallbackAttribution =
     SemanticFallbackAttribution::new();
 pub static SEMANTIC_METADATA_VALIDATION: SemanticMetadataValidation =
     SemanticMetadataValidation::new();
+static TYPE_CACHE_ADMISSION_STATS: TypeCacheAdmissionStats = TypeCacheAdmissionStats::new();
+#[cfg(test)]
+static TEST_TYPE_CACHE_DEPOT_FORCE_REJECT: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+static TEST_TYPE_CACHE_REGISTRY_RETENTION_LIMIT: AtomicUsize = AtomicUsize::new(usize::MAX);
 static SEMANTIC_OWNERSHIP_TRANSFER_APPLIED: AtomicUsize = AtomicUsize::new(0);
 static SEMANTIC_OWNERSHIP_TRANSFER_REJECTED: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
@@ -1099,7 +1730,9 @@ impl Drop for SemanticTestGuard {
         // creates test-only orphaned ownership. Drain the current worker before
         // releasing the shared test lock so later global resets stay coherent.
         unsafe {
-            let _ = drain_current_thread_semantic_state(&RustAllocator::new());
+            let alloc = RustAllocator::new();
+            let _ = drain_current_thread_semantic_state(&alloc);
+            let _ = drain_type_cache_depot_for_test(&alloc);
         }
     }
 }
@@ -1432,6 +2065,14 @@ impl AutoLayoutMetadataHotSlot {
 struct TypeCacheSlot {
     cache_key: u64,
     identity: TypeCacheIdentity,
+    /// Exact allocator-visible layout shared by every node in this slot.
+    ///
+    /// The hashed `cache_key` chooses a probe window; these fields authorize
+    /// reuse after a hash match and let each freed object carry only one link
+    /// word. A layout hash collision therefore remains a bounded probe event
+    /// and cannot mix differently sized objects in one list.
+    size: usize,
+    align: usize,
     head: *mut u8,
     count: usize,
     /// Allocator-rounded bytes represented by the linked nodes in this slot.
@@ -1440,9 +2081,10 @@ struct TypeCacheSlot {
     /// scan on every typed free. The budget uses the allocator size class
     /// retained for each cached object, not only the requested `Layout::size`,
     /// so semantic caches cannot hide internal fragmentation behind tiny
-    /// layout sizes. It is intentionally local to the TLS cache: corruption
-    /// recovery still validates links before reuse and `clear()` is the single
-    /// reset path for key/head/count/accounting state.
+    /// layout sizes. It is intentionally local to the TLS cache: the hot path
+    /// validates exact slot authority plus the immediate link, while cold
+    /// repair and thread teardown validate the complete bounded chain.
+    /// `clear()` remains the single canonical reset for slot state.
     retained_bytes: usize,
 }
 
@@ -1451,6 +2093,8 @@ impl TypeCacheSlot {
         Self {
             cache_key: UNKNOWN_SEMANTIC_ID,
             identity: TypeCacheIdentity::unknown(),
+            size: 0,
+            align: EMPTY_LAYOUT_ALIGN,
             head: core::ptr::null_mut(),
             count: 0,
             retained_bytes: 0,
@@ -1465,15 +2109,47 @@ impl TypeCacheSlot {
     }
 
     #[inline]
+    fn matches_layout(self, layout: Layout) -> bool {
+        self.size == layout.size() && self.align == layout.align()
+    }
+
+    #[inline]
+    fn has_corrupt_layout(self) -> bool {
+        if self.count == 0 {
+            return self.size != 0 || self.align != EMPTY_LAYOUT_ALIGN;
+        }
+        self.size < MIN_TYPE_CACHE_OBJECT_SIZE
+            || self.size > MAX_TYPE_CACHE_OBJECT_SIZE
+            || Layout::from_size_align(self.size, self.align).is_err()
+            || (self.head as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0
+            || (self.head as usize) & (self.align - 1) != 0
+    }
+
+    #[inline]
+    fn has_corrupt_authority(self) -> bool {
+        if self.count == 0 {
+            self.cache_key != UNKNOWN_SEMANTIC_ID || self.identity != TypeCacheIdentity::unknown()
+        } else {
+            self.cache_key == UNKNOWN_SEMANTIC_ID || self.identity == TypeCacheIdentity::unknown()
+        }
+    }
+
+    #[inline]
     fn has_corrupt_accounting(self) -> bool {
-        self.retained_bytes > MAX_TYPE_CACHE_SLOT_BYTES
-            || (self.count == 0 && self.retained_bytes != 0)
-            || (self.count != 0 && self.retained_bytes == 0)
+        let expected = if self.count == 0 {
+            Some(0)
+        } else {
+            type_cache_retained_bytes_for_object(self.size).checked_mul(self.count)
+        };
+        self.retained_bytes > MAX_TYPE_CACHE_SLOT_BYTES || expected != Some(self.retained_bytes)
     }
 
     #[inline]
     fn is_corrupt(self) -> bool {
-        self.has_corrupt_links() || self.has_corrupt_accounting()
+        self.has_corrupt_links()
+            || self.has_corrupt_layout()
+            || self.has_corrupt_authority()
+            || self.has_corrupt_accounting()
     }
 
     #[inline]
@@ -1622,6 +2298,12 @@ static mut TYPE_CACHE: [TypeCacheSlot; TYPE_CACHE_SLOTS] =
 #[thread_local]
 static mut PLAIN_TYPE_CACHE_RETAINED_BYTES: usize = 0;
 
+// Linked plain-cache owners represented by `PLAIN_TYPE_CACHE_RETAINED_BYTES`.
+// The inline object consumes aggregate byte budget directly at admission but
+// consumes no linked-entry budget.
+#[thread_local]
+static mut PLAIN_TYPE_CACHE_RETAINED_ENTRIES: usize = 0;
+
 #[thread_local]
 static mut PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED: bool = false;
 
@@ -1645,6 +2327,19 @@ static PLAIN_TYPE_CACHE_AGGREGATE_SCANS: AtomicUsize = AtomicUsize::new(0);
 
 #[thread_local]
 static mut INLINE_TYPE_CACHE_ENTRY: InlineTypeCacheEntry = InlineTypeCacheEntry::empty();
+
+#[thread_local]
+static mut SMALL_EXACT_TYPE_CACHE: [InlineTypeCacheEntry; SMALL_EXACT_TYPE_CACHE_SLOTS] =
+    [InlineTypeCacheEntry::empty(); SMALL_EXACT_TYPE_CACHE_SLOTS];
+
+#[thread_local]
+static mut SMALL_EXACT_TYPE_CACHE_OCCUPIED: usize = 0;
+
+#[thread_local]
+static mut SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES: usize = 0;
+
+#[thread_local]
+static mut SMALL_EXACT_TYPE_CACHE_HOT_SLOT: TypeCacheHotSlot = TypeCacheHotSlot::empty();
 
 #[derive(Clone, Copy)]
 struct SegregatedTypeCacheEntry {
@@ -1771,6 +2466,299 @@ impl SegregatedTypeCacheEntry {
     fn retained_bytes(self) -> usize {
         type_cache_retained_bytes_for_object(self.size)
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TypeCacheDepotSource {
+    ProbeWindowFull,
+    SlotDepth,
+    SlotByteBudget,
+    AggregateByteBudget,
+    AggregateEntryBudget,
+    SegregatedCapacity,
+    LocalEviction,
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[derive(Clone, Copy)]
+struct TypeCacheDepotKeySlot {
+    cache_key: u64,
+    identity: TypeCacheIdentity,
+    policy_key: u32,
+    size: usize,
+    align: usize,
+    head: usize,
+    count: usize,
+    active: bool,
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+impl TypeCacheDepotKeySlot {
+    const fn empty() -> Self {
+        Self {
+            cache_key: UNKNOWN_SEMANTIC_ID,
+            identity: TypeCacheIdentity::unknown(),
+            policy_key: 0,
+            size: 0,
+            align: EMPTY_LAYOUT_ALIGN,
+            head: TYPE_CACHE_DEPOT_EMPTY_INDEX,
+            count: 0,
+            active: false,
+        }
+    }
+
+    fn matches(
+        self,
+        layout: Layout,
+        identity: TypeCacheIdentity,
+        cache_key: u64,
+        policy_key: u32,
+    ) -> bool {
+        self.active
+            && self.cache_key == cache_key
+            && self.identity == identity
+            && self.policy_key == policy_key
+            && self.size == layout.size()
+            && self.align == layout.align()
+    }
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+struct TypeCacheDepotShard {
+    entries: [SegregatedTypeCacheEntry; TYPE_CACHE_DEPOT_SHARD_SLOTS],
+    next: [usize; TYPE_CACHE_DEPOT_SHARD_SLOTS],
+    keys: [TypeCacheDepotKeySlot; TYPE_CACHE_DEPOT_KEY_SLOTS],
+    count: usize,
+    retained_bytes: usize,
+    free_cursor: usize,
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+impl TypeCacheDepotShard {
+    const fn empty() -> Self {
+        Self {
+            entries: [SegregatedTypeCacheEntry::empty(); TYPE_CACHE_DEPOT_SHARD_SLOTS],
+            next: [TYPE_CACHE_DEPOT_EMPTY_INDEX; TYPE_CACHE_DEPOT_SHARD_SLOTS],
+            keys: [TypeCacheDepotKeySlot::empty(); TYPE_CACHE_DEPOT_KEY_SLOTS],
+            count: 0,
+            retained_bytes: 0,
+            free_cursor: 0,
+        }
+    }
+
+    fn find_free_entry(&self) -> Option<usize> {
+        let mut offset = 0usize;
+        while offset < TYPE_CACHE_DEPOT_SHARD_SLOTS {
+            let idx = (self.free_cursor + offset) & (TYPE_CACHE_DEPOT_SHARD_SLOTS - 1);
+            if self.entries[idx].is_empty() {
+                return Some(idx);
+            }
+            offset += 1;
+        }
+        None
+    }
+
+    fn push(
+        &mut self,
+        entry: SegregatedTypeCacheEntry,
+        key_start: usize,
+    ) -> Result<Option<SegregatedTypeCacheEntry>, ()> {
+        entry.validate_structural_integrity();
+        if entry.is_empty() {
+            return Err(());
+        }
+        let incoming_bytes = entry.retained_bytes();
+        if incoming_bytes > MAX_TYPE_CACHE_DEPOT_SHARD_BYTES {
+            return Err(());
+        }
+
+        let layout = checked_side_table_layout(entry.size, entry.align, "type-cache depot");
+        let identity = TypeCacheIdentity::from_metadata(entry.metadata);
+        let mut matching_key = None;
+        let mut empty_key = None;
+        let mut offset = 0usize;
+        while offset < TYPE_CACHE_DEPOT_KEY_PROBE_LIMIT {
+            let idx = (key_start + offset) & (TYPE_CACHE_DEPOT_KEY_SLOTS - 1);
+            let key = self.keys[idx];
+            if key.matches(layout, identity, entry.cache_key, entry.policy_key) {
+                matching_key = Some(idx);
+                break;
+            }
+            if !key.active && empty_key.is_none() {
+                empty_key = Some(idx);
+            }
+            offset += 1;
+        }
+
+        let key_idx = match matching_key.or(empty_key) {
+            Some(idx) => idx,
+            None => return Err(()),
+        };
+        let free_entry = if self.count < TYPE_CACHE_DEPOT_SHARD_SLOTS {
+            self.find_free_entry()
+        } else {
+            None
+        };
+        if let Some(entry_idx) = free_entry {
+            if self.retained_bytes.saturating_add(incoming_bytes)
+                <= MAX_TYPE_CACHE_DEPOT_SHARD_BYTES
+            {
+                if !self.keys[key_idx].active {
+                    self.keys[key_idx] = TypeCacheDepotKeySlot {
+                        cache_key: entry.cache_key,
+                        identity,
+                        policy_key: entry.policy_key,
+                        size: entry.size,
+                        align: entry.align,
+                        head: TYPE_CACHE_DEPOT_EMPTY_INDEX,
+                        count: 0,
+                        active: true,
+                    };
+                }
+                self.next[entry_idx] = self.keys[key_idx].head;
+                self.entries[entry_idx] = entry;
+                self.keys[key_idx].head = entry_idx;
+                self.keys[key_idx].count += 1;
+                self.count += 1;
+                self.retained_bytes = self.retained_bytes.saturating_add(incoming_bytes);
+                self.free_cursor = (entry_idx + 1) & (TYPE_CACHE_DEPOT_SHARD_SLOTS - 1);
+                return Ok(None);
+            }
+        }
+
+        // Saturation keeps the existing exact owners stable. Replacing one
+        // interchangeable pointer with every later free preserves no extra
+        // isolation capacity and turns large free bursts into depot-lock and
+        // backend-release churn. The caller releases the incoming owner.
+        Err(())
+    }
+
+    fn pop(
+        &mut self,
+        layout: Layout,
+        identity: TypeCacheIdentity,
+        cache_key: u64,
+        policy_key: u32,
+        key_start: usize,
+    ) -> (Option<SegregatedTypeCacheEntry>, Option<TypeCacheIdentity>) {
+        let mut foreign = None;
+        let mut offset = 0usize;
+        while offset < TYPE_CACHE_DEPOT_KEY_PROBE_LIMIT {
+            let key_idx = (key_start + offset) & (TYPE_CACHE_DEPOT_KEY_SLOTS - 1);
+            let key = self.keys[key_idx];
+            if key.matches(layout, identity, cache_key, policy_key) {
+                let entry_idx = key.head;
+                if entry_idx >= TYPE_CACHE_DEPOT_SHARD_SLOTS {
+                    panic!("type-cache depot directory corrupt");
+                }
+                let entry = self.entries[entry_idx];
+                if !entry.matches_cached_key(layout, identity, cache_key, policy_key) {
+                    panic!("type-cache depot directory corrupt");
+                }
+                self.keys[key_idx].head = self.next[entry_idx];
+                self.keys[key_idx].count = self.keys[key_idx].count.saturating_sub(1);
+                if self.keys[key_idx].count == 0 {
+                    self.keys[key_idx] = TypeCacheDepotKeySlot::empty();
+                }
+                self.entries[entry_idx] = SegregatedTypeCacheEntry::empty();
+                self.next[entry_idx] = TYPE_CACHE_DEPOT_EMPTY_INDEX;
+                self.free_cursor = entry_idx;
+                self.count = self.count.saturating_sub(1);
+                self.retained_bytes = self.retained_bytes.saturating_sub(entry.retained_bytes());
+                return (Some(entry), foreign);
+            }
+            if foreign.is_none()
+                && key.active
+                && key.size == layout.size()
+                && key.align == layout.align()
+                && key.policy_key == policy_key
+                && key.identity != identity
+            {
+                foreign = Some(key.identity);
+            }
+            offset += 1;
+        }
+        (None, foreign)
+    }
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe impl Send for TypeCacheDepotShard {}
+
+#[cfg(not(feature = "fixed_heap"))]
+static TYPE_CACHE_DEPOT: [Mutex<TypeCacheDepotShard>; TYPE_CACHE_DEPOT_SHARD_COUNT] = [
+    Mutex::new(TypeCacheDepotShard::empty()),
+    Mutex::new(TypeCacheDepotShard::empty()),
+    Mutex::new(TypeCacheDepotShard::empty()),
+    Mutex::new(TypeCacheDepotShard::empty()),
+    Mutex::new(TypeCacheDepotShard::empty()),
+    Mutex::new(TypeCacheDepotShard::empty()),
+    Mutex::new(TypeCacheDepotShard::empty()),
+    Mutex::new(TypeCacheDepotShard::empty()),
+];
+
+#[cfg(not(feature = "fixed_heap"))]
+static TYPE_CACHE_DEPOT_SHARD_OCCUPANCY: [AtomicUsize; TYPE_CACHE_DEPOT_SHARD_COUNT] =
+    [const { AtomicUsize::new(0) }; TYPE_CACHE_DEPOT_SHARD_COUNT];
+
+#[cfg(all(test, not(feature = "fixed_heap")))]
+fn clear_type_cache_depot_for_test() {
+    let mut shard_idx = 0usize;
+    while shard_idx < TYPE_CACHE_DEPOT_SHARD_COUNT {
+        *TYPE_CACHE_DEPOT[shard_idx].lock() = TypeCacheDepotShard::empty();
+        TYPE_CACHE_DEPOT_SHARD_OCCUPANCY[shard_idx].store(0, Ordering::Release);
+        shard_idx += 1;
+    }
+    TYPE_CACHE_ADMISSION_STATS
+        .depot_current_entries
+        .store(0, Ordering::Relaxed);
+    TYPE_CACHE_ADMISSION_STATS
+        .depot_current_rounded_bytes
+        .store(0, Ordering::Relaxed);
+}
+
+#[cfg(all(test, feature = "fixed_heap"))]
+fn clear_type_cache_depot_for_test() {}
+
+#[cfg(all(test, not(feature = "fixed_heap")))]
+unsafe fn drain_type_cache_depot_for_test(alloc: &RustAllocator) -> usize {
+    let mut released = 0usize;
+    let mut shard_idx = 0usize;
+    while shard_idx < TYPE_CACHE_DEPOT_SHARD_COUNT {
+        let drained = {
+            let mut shard = TYPE_CACHE_DEPOT[shard_idx].lock();
+            let old_entries = shard.count;
+            let old_bytes = shard.retained_bytes;
+            let drained = core::mem::replace(&mut *shard, TypeCacheDepotShard::empty());
+            note_type_cache_depot_occupancy_change(old_entries, old_bytes, 0, 0);
+            TYPE_CACHE_DEPOT_SHARD_OCCUPANCY[shard_idx].store(0, Ordering::Release);
+            drained
+        };
+        let mut slot_idx = 0usize;
+        while slot_idx < TYPE_CACHE_DEPOT_SHARD_SLOTS {
+            let entry = drained.entries[slot_idx];
+            if !entry.is_empty() {
+                entry.validate_structural_integrity();
+                let layout = checked_side_table_layout(entry.size, entry.align, "type-cache depot");
+                if terminal_release_retained_raw(
+                    alloc,
+                    entry.ptr,
+                    layout,
+                    TerminalRetainedOwnership::TypeCache,
+                ) {
+                    released = released.saturating_add(1);
+                }
+            }
+            slot_idx += 1;
+        }
+        shard_idx += 1;
+    }
+    released
+}
+
+#[cfg(all(test, feature = "fixed_heap"))]
+unsafe fn drain_type_cache_depot_for_test(_alloc: &RustAllocator) -> usize {
+    0
 }
 
 // The entry owns only an allocator object pointer plus metadata authenticator.
@@ -2478,16 +3466,24 @@ pub struct MetadataSegregationSideCacheSnapshot {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct TypeIsolationSideCacheSnapshot {
+    /// Whether either out-of-line inline tier owns at least one object.
     pub inline_occupied: bool,
     pub occupied_slots: usize,
+    /// Aggregate entries across the general inline slot, small exact tier, and
+    /// linked plain slots.
     pub occupied_entries: usize,
-    /// Trusted allocator-rounded bytes retained by the inline entry plus non-corrupt slots.
+    /// Entries in the dedicated sub-24-byte exact tier.
+    pub small_exact_occupied_entries: usize,
+    /// Allocator-rounded bytes owned by the dedicated small exact tier.
+    pub small_exact_retained_bytes: usize,
+    /// Trusted allocator-rounded bytes retained by both inline tiers plus non-corrupt slots.
     ///
     /// Corrupt occupied slots remain visible through `occupied_slots` and
     /// `corrupt_slots`, but their byte counters are not trusted in this total.
     pub retained_bytes: usize,
     pub corrupt_slots: usize,
     pub hot_slot_active: bool,
+    pub small_exact_hot_slot_active: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2732,12 +3728,37 @@ static GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT: AtomicUsize = AtomicUsize::new(0);
 // Raw-only processes cannot have semantic retained or released generations to
 // arbitrate. Keep that common path out of the sharded lifecycle tables until a
 // semantic allocation path activates the process-wide, sticky contract.
-// Semantic-feature and development builds start active so their concurrency
-// contract covers raw allocations that precede the first semantic operation.
+// Type-isolation builds support that transition without forcing transport-only
+// compiler metadata through the lifecycle tables. Tests start active to keep
+// their concurrency coverage deterministic, and reclaim checks remain active
+// process-wide by definition.
+const fn global_address_lifecycle_tracking_support_gate(
+    test_build: bool,
+    type_isolation: bool,
+    reclaim_checks: bool,
+) -> bool {
+    test_build || type_isolation || reclaim_checks
+}
+
+const fn global_address_lifecycle_tracking_initial_gate(
+    test_build: bool,
+    reclaim_checks: bool,
+) -> bool {
+    test_build || reclaim_checks
+}
+
+const GLOBAL_ADDRESS_LIFECYCLE_TRACKING_SUPPORTED: bool =
+    global_address_lifecycle_tracking_support_gate(
+        cfg!(test),
+        cfg!(feature = "type_isolation"),
+        cfg!(feature = "reclaim_checks"),
+    );
 const GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL: bool =
-    cfg!(any(debug_assertions, feature = "type_isolation"));
+    global_address_lifecycle_tracking_initial_gate(cfg!(test), cfg!(feature = "reclaim_checks"));
 static GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE: AtomicBool =
     AtomicBool::new(GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL);
+#[cfg(test)]
+static TEST_RETAINED_ONLY_ADDRESS_LIFECYCLE: AtomicBool = AtomicBool::new(false);
 #[cfg(test)]
 static TEST_STRICT_ALLOCATION_PUBLICATIONS: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
@@ -2746,6 +3767,34 @@ static TEST_SEMANTIC_ALLOCATION_PUBLICATIONS: AtomicUsize = AtomicUsize::new(0);
 static TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_RETAINED_FILTER_PUBLICATION_PHASE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_POINTER_FILTER_SLOW_PATH_PHASE: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+fn pause_after_retained_filter_publication_for_test() {
+    if TEST_RETAINED_FILTER_PUBLICATION_PHASE
+        .compare_exchange(1, 2, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        while TEST_RETAINED_FILTER_PUBLICATION_PHASE.load(Ordering::Acquire) == 2 {
+            core::hint::spin_loop();
+        }
+    }
+}
+
+#[cfg(test)]
+fn pause_after_pointer_filter_slow_path_for_test() {
+    if TEST_POINTER_FILTER_SLOW_PATH_PHASE
+        .compare_exchange(1, 2, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        while TEST_POINTER_FILTER_SLOW_PATH_PHASE.load(Ordering::Acquire) == 2 {
+            core::hint::spin_loop();
+        }
+    }
+}
 
 static GLOBAL_RETAINED_OWNERSHIP_ARBITRATION: [Mutex<()>;
     GLOBAL_RETAINED_OWNERSHIP_ARBITRATION_SHARD_COUNT] = [
@@ -2761,27 +3810,57 @@ static GLOBAL_RETAINED_OWNERSHIP_ARBITRATION: [Mutex<()>;
 
 #[inline]
 pub(crate) fn global_address_lifecycle_tracking_active() -> bool {
-    #[cfg(all(not(debug_assertions), not(feature = "type_isolation")))]
+    if !GLOBAL_ADDRESS_LIFECYCLE_TRACKING_SUPPORTED {
+        return false;
+    }
+    GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.load(Ordering::Acquire)
+}
+
+/// Full Live/Released generation history is the `reclaim_checks` contract.
+/// Type Isolation itself needs only exact recovery and retained T/D ownership.
+#[inline]
+fn global_address_generation_tracking_active() -> bool {
+    if cfg!(feature = "reclaim_checks") {
+        return true;
+    }
+    #[cfg(test)]
+    {
+        return !TEST_RETAINED_ONLY_ADDRESS_LIFECYCLE.load(Ordering::Acquire);
+    }
+    #[cfg(not(test))]
     {
         false
     }
-    #[cfg(any(debug_assertions, feature = "type_isolation"))]
-    {
-        GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.load(Ordering::Acquire)
-    }
+}
+
+/// Return whether process-wide semantic address lifecycle tracking is active.
+///
+/// This read-only diagnostic lets release integration tests distinguish a
+/// supported-but-lazy Type Isolation build from a process-start policy.
+#[doc(hidden)]
+pub fn semantic_address_lifecycle_tracking_active_for_diagnostics() -> bool {
+    global_address_lifecycle_tracking_active()
 }
 
 #[inline]
 fn activate_global_address_lifecycle_tracking() {
-    require_semantic_lifecycle_feature();
+    if !GLOBAL_ADDRESS_LIFECYCLE_TRACKING_SUPPORTED {
+        semantic_lifecycle_feature_required();
+    }
     if !GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.load(Ordering::Relaxed) {
         GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.store(true, Ordering::Release);
     }
 }
 
 #[inline]
+fn activate_semantic_address_lifecycle_tracking() {
+    require_semantic_lifecycle_feature();
+    activate_global_address_lifecycle_tracking();
+}
+
+#[inline]
 fn require_semantic_lifecycle_feature() {
-    if !cfg!(any(debug_assertions, feature = "type_isolation")) {
+    if !cfg!(any(test, feature = "type_isolation")) {
         semantic_lifecycle_feature_required();
     }
 }
@@ -2927,18 +4006,54 @@ impl AutoAllocationRecord {
     }
 
     #[inline]
+    fn recorded_align(self) -> usize {
+        self.align & !AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT
+    }
+
+    #[inline]
+    fn global_integrity_auth_required(self) -> bool {
+        self.align & AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT != 0
+            || metadata_integrity_required(self.metadata)
+            || self.auth != 0
+    }
+
+    #[inline]
     fn matches_allocation(self, ptr: *mut u8, layout: Layout) -> bool {
         self.ptr == ptr as usize
             && self.size == layout.size()
-            && self.align == layout.align()
-            && self.auth == derive_auto_allocation_record_auth(ptr, layout, self.metadata)
+            && self.recorded_align() == layout.align()
+            && (!self.global_integrity_auth_required()
+                || self.auth == derive_auto_allocation_record_auth(ptr, layout, self.metadata))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct AutoAllocationRecordMismatch {
+    recorded_size: usize,
+    recorded_align: usize,
+    recorded_metadata: AllocationMetadata,
+}
+
+impl AutoAllocationRecordMismatch {
+    #[inline]
+    fn from_record(record: AutoAllocationRecord) -> Self {
+        Self {
+            recorded_size: record.size,
+            recorded_align: record.recorded_align(),
+            recorded_metadata: record.metadata,
+        }
+    }
+
+    #[inline]
+    fn is_layout_mismatch(self, requested: Layout) -> bool {
+        self.recorded_size != requested.size() || self.recorded_align != requested.align()
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum AutoAllocationRecordLookup {
     Missing,
-    Mismatched,
+    Mismatched(AutoAllocationRecordMismatch),
     Exact(AllocationMetadata),
 }
 
@@ -2947,23 +4062,38 @@ impl AutoAllocationRecordLookup {
     fn exact_metadata(self) -> Option<AllocationMetadata> {
         match self {
             AutoAllocationRecordLookup::Exact(metadata) => Some(metadata),
-            AutoAllocationRecordLookup::Missing | AutoAllocationRecordLookup::Mismatched => None,
+            AutoAllocationRecordLookup::Missing | AutoAllocationRecordLookup::Mismatched(_) => None,
         }
     }
 }
 
 #[cfg(not(feature = "fixed_heap"))]
-struct AutoAllocationRecordPage {
-    next: *mut AutoAllocationRecordPage,
-    entries: [AutoAllocationRecord; AUTO_ALLOCATION_RECORD_OVERFLOW_SLOTS],
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AutoAllocationRecordOverflowRetention {
+    None,
+    Fresh,
+    Armed,
 }
 
 #[cfg(not(feature = "fixed_heap"))]
-impl AutoAllocationRecordPage {
+#[derive(Clone, Copy)]
+struct AutoAllocationRecordOverflowTable {
+    slots: *mut AutoAllocationRecord,
+    capacity: usize,
+    live: usize,
+    tombstones: usize,
+    retention: AutoAllocationRecordOverflowRetention,
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+impl AutoAllocationRecordOverflowTable {
     const fn empty() -> Self {
         Self {
-            next: core::ptr::null_mut(),
-            entries: [AutoAllocationRecord::empty(); AUTO_ALLOCATION_RECORD_OVERFLOW_SLOTS],
+            slots: core::ptr::null_mut(),
+            capacity: 0,
+            live: 0,
+            tombstones: 0,
+            retention: AutoAllocationRecordOverflowRetention::None,
         }
     }
 }
@@ -2990,7 +4120,7 @@ struct GlobalAutoAllocationRecordTable {
     hot: GlobalAutoAllocationRecordHotSlot,
     live_count: usize,
     #[cfg(not(feature = "fixed_heap"))]
-    overflow: *mut AutoAllocationRecordPage,
+    overflow: AutoAllocationRecordOverflowTable,
 }
 
 impl GlobalAutoAllocationRecordTable {
@@ -3000,15 +4130,14 @@ impl GlobalAutoAllocationRecordTable {
             hot: GlobalAutoAllocationRecordHotSlot::empty(),
             live_count: 0,
             #[cfg(not(feature = "fixed_heap"))]
-            overflow: core::ptr::null_mut(),
+            overflow: AutoAllocationRecordOverflowTable::empty(),
         }
     }
 }
 
-// Each global compiler-allocation recovery shard owns overflow pages behind its
-// shard-local spin mutex.  The raw page pointer is only followed while that
-// shard mutex is held, so guarded transfer between threads is sound at this
-// bookkeeping layer.
+// Each global compiler-allocation recovery shard owns one mmap-backed overflow
+// table behind its shard-local spin mutex. Raw slot pointers never escape that
+// guard, so growth can transactionally rehash and replace the mapping.
 unsafe impl Send for GlobalAutoAllocationRecordTable {}
 
 static AUTO_ALLOCATION_RECORDS: [Mutex<GlobalAutoAllocationRecordTable>;
@@ -3023,18 +4152,32 @@ static AUTO_ALLOCATION_RECORDS: [Mutex<GlobalAutoAllocationRecordTable>;
     Mutex::new(GlobalAutoAllocationRecordTable::empty()),
 ];
 static AUTO_ALLOCATION_RECORD_COUNT: AtomicUsize = AtomicUsize::new(0);
+static GLOBAL_RECOVERY_POINTER_FILTER: [AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
+    [const { AtomicUsize::new(0) }; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS];
+static GLOBAL_RETAINED_POINTER_FILTER: [AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
+    [const { AtomicUsize::new(0) }; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS];
 #[cfg(test)]
 static TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_RECOVERY_RECORD_INSERT_PHASE: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_IDENTITY_REBIND_RECOVERY_UPDATE_FAIL: AtomicBool = AtomicBool::new(false);
+#[cfg(all(test, not(feature = "fixed_heap")))]
+static TEST_GLOBAL_RECOVERY_OVERFLOW_PROBE_STEPS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(all(test, not(feature = "fixed_heap")))]
+static TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(all(test, not(feature = "fixed_heap")))]
+static TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP: AtomicBool = AtomicBool::new(false);
+#[cfg(all(test, not(feature = "fixed_heap")))]
+static TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_REHASH: AtomicBool = AtomicBool::new(false);
 /// Bitset of global recovery shards with at least one live record.
 ///
 /// The count is still the source of truth for "does any recovery record exist?"
 /// This bitset is an exact-but-defensive lock-skipping hint for sparse sharded
-/// traffic: each insertion sets its shard bit before publishing the record, and
-/// removals clear the bit only after scanning that shard under the shard lock.
+/// traffic. The shard mutex serializes slot publication; insertion sets its
+/// shard bit before the new global live count becomes observable, and hosted
+/// lookup also forces the pointer's home shard into its probe set. Removals
+/// clear the bit only after updating that shard under the same lock.
 /// A removal never clears unrelated shard bits: legacy/test state may therefore
 /// leave a conservative stale bit until the next explicit table reset, but it
 /// cannot hide a record concurrently published in another shard.
@@ -3046,7 +4189,7 @@ static AUTO_ALLOCATION_RECORD_ACTIVE_SHARDS: AtomicUsize = AtomicUsize::new(0);
 /// Sticky hosted compatibility gate for recovery records installed outside
 /// their pointer-derived home shard.
 ///
-/// New hosted records stay home-affine and use the existing home overflow list,
+/// New hosted records stay home-affine and use one mmap-backed overflow table,
 /// which lets insertion and lookup take one shard lock. Older/test state may
 /// still contain an inline record in another shard. Every supported non-home
 /// installer publishes this bit before the record, so later operations retain
@@ -3169,7 +4312,7 @@ pub(crate) fn without_auto_allocation_recovery_recording<R>(f: impl FnOnce() -> 
 /// Run `f` without consuming or synthesizing process-wide auto metadata.
 ///
 /// Compiler ownership-transfer helpers use this while they either preserve an
-/// authenticated source record or deliberately fall back to raw allocation.
+/// exact source record or deliberately fall back to raw allocation.
 /// Otherwise a rejected transfer could consume an unrelated compiler-stream
 /// entry or attach layout-derived metadata to the replacement allocation.
 fn without_auto_metadata_selection<R>(f: impl FnOnce() -> R) -> R {
@@ -3226,6 +4369,64 @@ pub fn semantic_runtime_slow_path_enabled() -> bool {
         return true;
     }
     let mut runtime_flags = global_flags & !SLOW_PATH_SCOPED_METADATA_MASK;
+    if runtime_flags & SLOW_PATH_AUTO_METADATA != 0 && auto_metadata_allocations_exhausted() {
+        runtime_flags &= !SLOW_PATH_AUTO_METADATA;
+    }
+    runtime_flags != 0
+}
+
+#[inline]
+unsafe fn current_thread_fast_recovery_maybe_tracks_pointer(ptr: *mut u8) -> bool {
+    if ptr.is_null() || !current_thread_fast_auto_allocation_records_active() {
+        return false;
+    }
+    let ptr_key = ptr as usize;
+    if FAST_AUTO_ALLOCATION_RECORD_INLINE.ptr == ptr_key {
+        return true;
+    }
+    let start = fast_auto_allocation_record_slot(ptr);
+    let mut offset = 0usize;
+    while offset < FAST_AUTO_ALLOCATION_RECORD_PROBE_LIMIT {
+        let idx = (start + offset) & (FAST_AUTO_ALLOCATION_RECORD_SLOTS - 1);
+        let record = FAST_AUTO_ALLOCATION_RECORDS[idx];
+        if record.is_empty() {
+            break;
+        }
+        if record.ptr == ptr_key {
+            return true;
+        }
+        offset += 1;
+    }
+    false
+}
+
+/// Pointer-specific deallocation/reallocation gate.
+///
+/// A positive result preserves the complete semantic path. A negative result
+/// requires every exact-count recovery/retained filter to be empty for this
+/// address hash and is therefore safe for the ordinary raw backend path.
+#[inline]
+pub(crate) unsafe fn semantic_runtime_slow_path_enabled_for_pointer(ptr: *mut u8) -> bool {
+    let lifecycle_active = global_address_lifecycle_tracking_active();
+    if global_address_generation_tracking_active() && lifecycle_active {
+        return true;
+    }
+    if !lifecycle_active {
+        return semantic_runtime_slow_path_enabled();
+    }
+    let global_flags = SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed);
+    if scoped_metadata_slow_path_enabled(global_flags) {
+        return true;
+    }
+    let pointer_maybe_tracked = current_thread_fast_recovery_maybe_tracks_pointer(ptr)
+        || global_semantic_pointer_maybe_tracked(ptr);
+    if pointer_maybe_tracked {
+        #[cfg(test)]
+        pause_after_pointer_filter_slow_path_for_test();
+        return true;
+    }
+    let mut runtime_flags =
+        global_flags & !(SLOW_PATH_ALLOCATION_RECORDS | SLOW_PATH_SCOPED_METADATA_MASK);
     if runtime_flags & SLOW_PATH_AUTO_METADATA != 0 && auto_metadata_allocations_exhausted() {
         runtime_flags &= !SLOW_PATH_AUTO_METADATA;
     }
@@ -3298,13 +4499,35 @@ fn scoped_metadata_is_active(metadata: AllocationMetadata) -> bool {
 }
 
 #[inline]
-fn current_thread_scoped_metadata_active() -> bool {
-    unsafe { scoped_metadata_is_active(ACTIVE_METADATA) }
+fn allocator_metadata_is_effective(metadata: AllocationMetadata) -> bool {
+    metadata.flags != 0 || semantic_stats_any_recording_enabled()
+}
+
+#[inline]
+fn scoped_metadata_requests_allocator_policy(metadata: AllocationMetadata) -> bool {
+    metadata.flags != 0
+}
+
+#[inline]
+fn compose_mandatory_allocator_policy(metadata: AllocationMetadata) -> AllocationMetadata {
+    #[cfg(feature = "quarantine")]
+    if metadata.flags == 0 {
+        return metadata.with_flags(metadata.flags | FLAG_DELAYED_FREE);
+    }
+    metadata
+}
+
+#[inline]
+fn current_thread_allocator_metadata_active() -> bool {
+    unsafe {
+        scoped_metadata_is_active(ACTIVE_METADATA)
+            && allocator_metadata_is_effective(ACTIVE_METADATA)
+    }
 }
 
 #[inline]
 fn scoped_metadata_slow_path_enabled(global_flags: usize) -> bool {
-    global_flags & SLOW_PATH_SCOPED_METADATA_MASK != 0 && current_thread_scoped_metadata_active()
+    global_flags & SLOW_PATH_SCOPED_METADATA_MASK != 0 && current_thread_allocator_metadata_active()
 }
 
 #[inline]
@@ -3314,11 +4537,16 @@ fn current_thread_fast_auto_allocation_records_active() -> bool {
     }
 }
 
-fn scoped_metadata_activate() {
-    require_semantic_lifecycle_feature();
+#[inline]
+fn scoped_metadata_publish_coarse_gate() {
     if SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed) & SLOW_PATH_SCOPED_METADATA_MASK == 0 {
         semantic_slow_path_set(SLOW_PATH_SCOPED_METADATA_UNIT);
     }
+}
+
+fn scoped_metadata_activate() {
+    activate_semantic_address_lifecycle_tracking();
+    scoped_metadata_publish_coarse_gate();
 }
 
 #[inline]
@@ -3326,10 +4554,37 @@ fn scoped_metadata_deactivate() {
     // The process-wide flag is only a coarse gate telling ordinary GlobalAlloc
     // calls that scoped metadata has been used in this process.  Exact activity
     // is thread-local (`ACTIVE_METADATA`), checked by
-    // `current_thread_scoped_metadata_active()`.  Keeping this bit sticky avoids
+    // `current_thread_allocator_metadata_active()`. Keeping this bit sticky avoids
     // an atomic decrement/CAS on every compiler-inserted scope pop; unrelated
     // threads still return false from the slow-path predicate because their TLS
     // active metadata is empty.
+}
+
+#[inline]
+fn prepare_active_metadata_transition(previous: AllocationMetadata, next: AllocationMetadata) {
+    let previous_active = scoped_metadata_is_active(previous);
+    let next_active = scoped_metadata_is_active(next);
+    if !previous_active && next_active {
+        // Transport-only metadata still uses the semantic ABI. Preserve the
+        // release-build feature boundary before publishing TLS or the coarse
+        // process gate, even though it does not activate allocator policy.
+        require_semantic_lifecycle_feature();
+        if scoped_metadata_requests_allocator_policy(next) {
+            scoped_metadata_activate();
+        } else {
+            scoped_metadata_publish_coarse_gate();
+        }
+    } else if previous_active
+        && next_active
+        && !scoped_metadata_requests_allocator_policy(previous)
+        && scoped_metadata_requests_allocator_policy(next)
+    {
+        // A nested policy scope must activate the lifecycle even when its
+        // transport-only outer scope already made ACTIVE_METADATA non-empty.
+        scoped_metadata_activate();
+    } else if previous_active && !next_active {
+        scoped_metadata_deactivate();
+    }
 }
 
 #[inline]
@@ -3359,24 +4614,14 @@ fn fast_auto_allocation_record_global_deactivate() {
 #[inline]
 unsafe fn replace_active_metadata(metadata: AllocationMetadata) -> AllocationMetadata {
     let previous = ACTIVE_METADATA;
-    let previous_active = scoped_metadata_is_active(previous);
-    let next_active = scoped_metadata_is_active(metadata);
-    if previous_active != next_active {
-        if next_active {
-            scoped_metadata_activate();
-        } else {
-            scoped_metadata_deactivate();
-        }
-    }
+    prepare_active_metadata_transition(previous, metadata);
     ACTIVE_METADATA = metadata;
     previous
 }
 
 #[inline(always)]
 unsafe fn set_semantic_scope_active_metadata(metadata: AllocationMetadata) {
-    if scoped_metadata_is_active(metadata) && !scoped_metadata_is_active(ACTIVE_METADATA) {
-        scoped_metadata_activate();
-    }
+    prepare_active_metadata_transition(ACTIVE_METADATA, metadata);
     ACTIVE_METADATA = metadata;
 }
 
@@ -3469,7 +4714,7 @@ pub fn semantic_auto_metadata_type_id_basis() -> &'static str {
 /// Release builds require the `type_isolation` feature. Activation panics
 /// before publishing state when that feature is disabled.
 pub fn semantic_auto_metadata_enable(module_id: u64, flags: u32, callsite: u64) {
-    require_semantic_lifecycle_feature();
+    activate_semantic_address_lifecycle_tracking();
     let normalized_flags = normalize_auto_metadata_flags(flags);
     let mut config = AUTO_METADATA_CONFIG.write();
     let generation = next_auto_metadata_config_generation(*config);
@@ -3502,7 +4747,7 @@ unsafe fn semantic_auto_compiler_metadata_enable_with_mode(
     if type_ids.is_null() || len == 0 {
         return false;
     }
-    require_semantic_lifecycle_feature();
+    activate_semantic_address_lifecycle_tracking();
     let normalized_flags = normalize_auto_metadata_flags(flags);
     let mut config = AUTO_METADATA_CONFIG.write();
     let generation = next_auto_metadata_config_generation(*config);
@@ -4059,98 +5304,413 @@ fn auto_allocation_record_for(
     layout: Layout,
     metadata: AllocationMetadata,
 ) -> AutoAllocationRecord {
+    debug_assert_eq!(
+        layout.align() & AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT,
+        0,
+        "valid allocation alignment must leave the recovery integrity marker available"
+    );
     AutoAllocationRecord {
         ptr: ptr as usize,
         size: layout.size(),
-        align: layout.align(),
-        auth: derive_auto_allocation_record_auth(ptr, layout, metadata),
+        align: layout.align()
+            | if metadata_integrity_required(metadata) {
+                AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT
+            } else {
+                0
+            },
+        // Recovery metadata requests authenticated storage explicitly through
+        // the metadata-protection/PAC policy flags. Plain type isolation keeps
+        // the same private-table trust boundary as the TLS recovery tier and
+        // avoids hashing eight metadata fields twice per allocation lifetime.
+        auth: fast_auto_allocation_record_auth(ptr, layout, metadata),
         metadata,
     }
 }
 
 #[cfg(not(feature = "fixed_heap"))]
-unsafe fn allocate_auto_allocation_record_page() -> *mut AutoAllocationRecordPage {
-    let prot = system_alloc::prots::get_prot(true, true, false);
-    let page = system_alloc::mmap(size_of::<AutoAllocationRecordPage>(), prot)
-        as *mut AutoAllocationRecordPage;
-    if page.is_null() || page as usize == usize::MAX {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AutoAllocationRecordOverflowProbe {
+    Found(usize),
+    Vacant(usize),
+    Full,
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AutoAllocationRecordOverflowInsert {
+    Updated,
+    Inserted,
+    Full,
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn auto_allocation_record_overflow_mapping_size(capacity: usize) -> Option<usize> {
+    let size = capacity.checked_mul(size_of::<AutoAllocationRecord>())?;
+    if size > isize::MAX as usize {
+        None
+    } else {
+        Some(size)
+    }
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn auto_allocation_record_overflow_mapping_is_retainable(capacity: usize) -> bool {
+    matches!(
+        auto_allocation_record_overflow_mapping_size(capacity),
+        Some(size) if size <= AUTO_ALLOCATION_RECORD_OVERFLOW_RETAINED_MAPPING_MAX_BYTES
+    )
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn auto_allocation_record_overflow_should_retain_after_drain(
+    capacity: usize,
+    occupied_before_drain: usize,
+) -> bool {
+    auto_allocation_record_overflow_mapping_is_retainable(capacity)
+        && (capacity == AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY
+            || occupied_before_drain >= capacity / 4)
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn auto_allocation_record_overflow_is_empty(overflow: &AutoAllocationRecordOverflowTable) -> bool {
+    overflow.slots.is_null()
+        && overflow.capacity == 0
+        && overflow.live == 0
+        && overflow.tombstones == 0
+        && overflow.retention == AutoAllocationRecordOverflowRetention::None
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn auto_allocation_record_overflow_is_mapped_valid(
+    overflow: &AutoAllocationRecordOverflowTable,
+) -> bool {
+    !overflow.slots.is_null()
+        && overflow.capacity.is_power_of_two()
+        && overflow.live.saturating_add(overflow.tombstones) <= overflow.capacity
+        && (overflow.retention == AutoAllocationRecordOverflowRetention::None
+            || (overflow.live == 0 && overflow.tombstones == 0))
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn auto_allocation_record_overflow_start(ptr_key: usize, capacity: usize) -> usize {
+    debug_assert!(capacity.is_power_of_two());
+    let hash = type_cache_avalanche(((ptr_key >> 4) as u64) ^ 0xa076_1d64_78bd_642f);
+    hash as usize & (capacity - 1)
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe fn allocate_auto_allocation_record_overflow_slots(
+    capacity: usize,
+) -> *mut AutoAllocationRecord {
+    if !capacity.is_power_of_two() || capacity == 0 {
         return core::ptr::null_mut();
     }
-    page.write(AutoAllocationRecordPage::empty());
-    page
+    #[cfg(test)]
+    if TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.swap(false, Ordering::AcqRel) {
+        return core::ptr::null_mut();
+    }
+    let mapping_size = match auto_allocation_record_overflow_mapping_size(capacity) {
+        Some(size) => size,
+        None => return core::ptr::null_mut(),
+    };
+    let prot = system_alloc::prots::get_prot(true, true, false);
+    let slots = system_alloc::mmap(mapping_size, prot) as *mut AutoAllocationRecord;
+    if slots.is_null() || slots as usize == usize::MAX {
+        return core::ptr::null_mut();
+    }
+    // Anonymous mappings are zero-filled. `ptr == 0` is the authoritative empty
+    // marker, so no allocator-recursive initialization pass is needed here.
+    slots
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe fn release_auto_allocation_record_overflow_slots(
+    slots: *mut AutoAllocationRecord,
+    capacity: usize,
+) {
+    if slots.is_null() {
+        return;
+    }
+    let mapping_size = auto_allocation_record_overflow_mapping_size(capacity)
+        .expect("live recovery overflow mapping size must remain representable");
+    #[cfg(test)]
+    TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.fetch_add(1, Ordering::Relaxed);
+    system_alloc::munmap(slots as *mut u8, mapping_size);
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+fn probe_auto_allocation_record_overflow(
+    overflow: &AutoAllocationRecordOverflowTable,
+    ptr_key: usize,
+) -> AutoAllocationRecordOverflowProbe {
+    if !auto_allocation_record_overflow_is_mapped_valid(overflow) {
+        return AutoAllocationRecordOverflowProbe::Full;
+    }
+    debug_assert!(overflow.capacity.is_power_of_two());
+    let start = auto_allocation_record_overflow_start(ptr_key, overflow.capacity);
+    let mut first_tombstone = None;
+    let mut offset = 0usize;
+    while offset < overflow.capacity {
+        #[cfg(test)]
+        TEST_GLOBAL_RECOVERY_OVERFLOW_PROBE_STEPS.fetch_add(1, Ordering::Relaxed);
+        let idx = (start + offset) & (overflow.capacity - 1);
+        let record = unsafe { *overflow.slots.add(idx) };
+        if record.ptr == ptr_key {
+            return AutoAllocationRecordOverflowProbe::Found(idx);
+        }
+        if record.is_empty() {
+            return AutoAllocationRecordOverflowProbe::Vacant(first_tombstone.unwrap_or(idx));
+        }
+        if record.is_tombstone() && first_tombstone.is_none() {
+            first_tombstone = Some(idx);
+        }
+        offset += 1;
+    }
+    match first_tombstone {
+        Some(idx) => AutoAllocationRecordOverflowProbe::Vacant(idx),
+        None => AutoAllocationRecordOverflowProbe::Full,
+    }
 }
 
 #[cfg(not(feature = "fixed_heap"))]
 fn find_auto_allocation_record_in_overflow(
-    overflow: *mut AutoAllocationRecordPage,
+    overflow: &AutoAllocationRecordOverflowTable,
     ptr_key: usize,
 ) -> Option<*mut AutoAllocationRecord> {
-    let mut page = overflow;
-    while !page.is_null() {
-        let page_ref = unsafe { &mut *page };
-        let mut entry_idx = 0;
-        while entry_idx < AUTO_ALLOCATION_RECORD_OVERFLOW_SLOTS {
-            let entry = &mut page_ref.entries[entry_idx];
-            if entry.ptr == ptr_key {
-                return Some(entry as *mut AutoAllocationRecord);
-            }
-            entry_idx += 1;
+    match probe_auto_allocation_record_overflow(overflow, ptr_key) {
+        AutoAllocationRecordOverflowProbe::Found(idx) => Some(unsafe { overflow.slots.add(idx) }),
+        AutoAllocationRecordOverflowProbe::Vacant(_) | AutoAllocationRecordOverflowProbe::Full => {
+            None
         }
-        page = page_ref.next;
     }
-    None
 }
 
 #[cfg(not(feature = "fixed_heap"))]
-fn first_available_auto_allocation_record_in_overflow(
-    overflow: *mut AutoAllocationRecordPage,
-) -> *mut AutoAllocationRecord {
-    let mut page = overflow;
-    while !page.is_null() {
-        let page_ref = unsafe { &mut *page };
-        let mut entry_idx = 0;
-        while entry_idx < AUTO_ALLOCATION_RECORD_OVERFLOW_SLOTS {
-            let entry = &mut page_ref.entries[entry_idx];
-            if entry.is_available() {
-                return entry as *mut AutoAllocationRecord;
+unsafe fn rehash_auto_allocation_record_overflow(
+    shard_idx: usize,
+    overflow: &mut AutoAllocationRecordOverflowTable,
+    new_capacity: usize,
+) -> bool {
+    let old_is_empty = auto_allocation_record_overflow_is_empty(overflow);
+    let old_is_mapped = auto_allocation_record_overflow_is_mapped_valid(overflow);
+    if (!old_is_empty && !old_is_mapped)
+        || !new_capacity.is_power_of_two()
+        || new_capacity == 0
+        || new_capacity < overflow.live
+    {
+        return false;
+    }
+    #[cfg(test)]
+    if TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_REHASH.swap(false, Ordering::AcqRel) {
+        return false;
+    }
+    let new_slots = allocate_auto_allocation_record_overflow_slots(new_capacity);
+    if new_slots.is_null() {
+        return false;
+    }
+    let mut replacement = AutoAllocationRecordOverflowTable {
+        slots: new_slots,
+        capacity: new_capacity,
+        live: 0,
+        tombstones: 0,
+        retention: AutoAllocationRecordOverflowRetention::None,
+    };
+
+    let mut old_idx = 0usize;
+    let mut old_tombstones = 0usize;
+    while old_idx < overflow.capacity {
+        let record = *overflow.slots.add(old_idx);
+        if record.is_tombstone() {
+            old_tombstones += 1;
+        } else if !record.is_empty() {
+            if auto_allocation_record_shard(record.ptr as *mut u8) != shard_idx {
+                release_auto_allocation_record_overflow_slots(
+                    replacement.slots,
+                    replacement.capacity,
+                );
+                return false;
             }
-            entry_idx += 1;
+            match probe_auto_allocation_record_overflow(&replacement, record.ptr) {
+                AutoAllocationRecordOverflowProbe::Vacant(new_idx) => {
+                    *replacement.slots.add(new_idx) = record;
+                    replacement.live += 1;
+                }
+                AutoAllocationRecordOverflowProbe::Found(_)
+                | AutoAllocationRecordOverflowProbe::Full => {
+                    release_auto_allocation_record_overflow_slots(
+                        replacement.slots,
+                        replacement.capacity,
+                    );
+                    return false;
+                }
+            }
         }
-        page = page_ref.next;
+        old_idx += 1;
     }
-    core::ptr::null_mut()
+    if replacement.live != overflow.live || old_tombstones != overflow.tombstones {
+        release_auto_allocation_record_overflow_slots(replacement.slots, replacement.capacity);
+        return false;
+    }
+
+    let old = *overflow;
+    *overflow = replacement;
+    release_auto_allocation_record_overflow_slots(old.slots, old.capacity);
+    true
 }
 
 #[cfg(not(feature = "fixed_heap"))]
-fn auto_allocation_record_overflow_page_has_live_record(page: &AutoAllocationRecordPage) -> bool {
-    page.entries.iter().any(|entry| !entry.is_available())
-}
+unsafe fn insert_auto_allocation_record_overflow(
+    shard_idx: usize,
+    overflow: &mut AutoAllocationRecordOverflowTable,
+    record: AutoAllocationRecord,
+) -> AutoAllocationRecordOverflowInsert {
+    if auto_allocation_record_shard(record.ptr as *mut u8) != shard_idx {
+        return AutoAllocationRecordOverflowInsert::Full;
+    }
+    let mut probe = probe_auto_allocation_record_overflow(overflow, record.ptr);
+    if let AutoAllocationRecordOverflowProbe::Found(idx) = probe {
+        *overflow.slots.add(idx) = record;
+        overflow.retention = AutoAllocationRecordOverflowRetention::None;
+        return AutoAllocationRecordOverflowInsert::Updated;
+    }
 
-#[cfg(not(feature = "fixed_heap"))]
-unsafe fn release_empty_auto_allocation_record_overflow_pages(
-    head: &mut *mut AutoAllocationRecordPage,
-) {
-    let mut prev: *mut AutoAllocationRecordPage = core::ptr::null_mut();
-    let mut page = *head;
-
-    while !page.is_null() {
-        let next = (*page).next;
-        // Overflow chains are full scans, not linear-probe chains.  Tombstones
-        // only preserve reuse semantics inside the page, so a page with no live
-        // records can be unlinked and unmapped immediately after the record that
-        // made it empty is consumed.
-        if !auto_allocation_record_overflow_page_has_live_record(&*page) {
-            if prev.is_null() {
-                *head = next;
-            } else {
-                (*prev).next = next;
-            }
-            system_alloc::munmap(page as *mut u8, size_of::<AutoAllocationRecordPage>());
+    let occupied = overflow.live.saturating_add(overflow.tombstones);
+    let load_limit = overflow.capacity / AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_DENOMINATOR
+        * AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_NUMERATOR;
+    let rebuild_needed = overflow.capacity == 0 || occupied.saturating_add(1) > load_limit;
+    if rebuild_needed {
+        let new_capacity = if overflow.capacity == 0 {
+            Some(AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY)
         } else {
-            prev = page;
+            let live_after_insert = overflow.live.saturating_add(1);
+            if live_after_insert > load_limit {
+                overflow.capacity.checked_mul(2)
+            } else {
+                Some(overflow.capacity)
+            }
+        };
+        let new_capacity = match new_capacity {
+            Some(new_capacity) => new_capacity,
+            None => return AutoAllocationRecordOverflowInsert::Full,
+        };
+        if !rehash_auto_allocation_record_overflow(shard_idx, overflow, new_capacity) {
+            // Resource failures and invariant failures share one fail-closed
+            // result. The old descriptor remains byte-for-byte authoritative,
+            // and the new identity never becomes partially visible.
+            return AutoAllocationRecordOverflowInsert::Full;
         }
-        page = next;
+        probe = probe_auto_allocation_record_overflow(overflow, record.ptr);
+        if let AutoAllocationRecordOverflowProbe::Found(idx) = probe {
+            *overflow.slots.add(idx) = record;
+            overflow.retention = AutoAllocationRecordOverflowRetention::None;
+            return AutoAllocationRecordOverflowInsert::Updated;
+        }
     }
+
+    let idx = match probe {
+        AutoAllocationRecordOverflowProbe::Vacant(idx) => idx,
+        AutoAllocationRecordOverflowProbe::Found(idx) => {
+            *overflow.slots.add(idx) = record;
+            overflow.retention = AutoAllocationRecordOverflowRetention::None;
+            return AutoAllocationRecordOverflowInsert::Updated;
+        }
+        AutoAllocationRecordOverflowProbe::Full => {
+            return AutoAllocationRecordOverflowInsert::Full;
+        }
+    };
+    if (*overflow.slots.add(idx)).is_tombstone() {
+        overflow.tombstones = overflow.tombstones.saturating_sub(1);
+    }
+    *overflow.slots.add(idx) = record;
+    overflow.live = overflow.live.saturating_add(1);
+    overflow.retention = AutoAllocationRecordOverflowRetention::None;
+    AutoAllocationRecordOverflowInsert::Inserted
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe fn insert_filtered_auto_allocation_record_overflow(
+    shard_idx: usize,
+    overflow: &mut AutoAllocationRecordOverflowTable,
+    record: AutoAllocationRecord,
+) -> AutoAllocationRecordOverflowInsert {
+    // The extra publication is conservative while an update/full result is
+    // resolved under the authoritative shard lock. Only a new record keeps it.
+    increment_global_recovery_pointer_filter(record.ptr as *mut u8);
+    let result = insert_auto_allocation_record_overflow(shard_idx, overflow, record);
+    if result != AutoAllocationRecordOverflowInsert::Inserted {
+        decrement_global_recovery_pointer_filter(record.ptr as *mut u8);
+    }
+    result
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe fn try_remove_auto_allocation_record_overflow_at(
+    shard_idx: usize,
+    overflow: &mut AutoAllocationRecordOverflowTable,
+    idx: usize,
+) -> bool {
+    if !auto_allocation_record_overflow_is_mapped_valid(overflow)
+        || idx >= overflow.capacity
+        || overflow.live == 0
+        || (*overflow.slots.add(idx)).is_available()
+    {
+        return false;
+    }
+    if overflow.live == 1 {
+        let mut actual_live = 0usize;
+        let mut actual_tombstones = 0usize;
+        let mut scan_idx = 0usize;
+        while scan_idx < overflow.capacity {
+            let record = *overflow.slots.add(scan_idx);
+            if record.is_tombstone() {
+                actual_tombstones += 1;
+            } else if !record.is_empty() {
+                actual_live += 1;
+                if auto_allocation_record_shard(record.ptr as *mut u8) != shard_idx {
+                    return false;
+                }
+            }
+            scan_idx += 1;
+        }
+        if actual_live != overflow.live || actual_tombstones != overflow.tombstones {
+            return false;
+        }
+        if auto_allocation_record_overflow_should_retain_after_drain(
+            overflow.capacity,
+            actual_live.saturating_add(actual_tombstones),
+        ) {
+            let mapping_size = auto_allocation_record_overflow_mapping_size(overflow.capacity)
+                .expect("validated recovery overflow mapping size");
+            // Validate before mutation so a logical count or home-shard
+            // inconsistency remains byte-for-byte available for fail-closed
+            // diagnosis. The shard lock excludes concurrent probes while the
+            // retained mapping is reset for the next burst.
+            core::ptr::write_bytes(overflow.slots as *mut u8, 0, mapping_size);
+            overflow.live = 0;
+            overflow.tombstones = 0;
+            overflow.retention =
+                if overflow.capacity == AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY {
+                    AutoAllocationRecordOverflowRetention::None
+                } else {
+                    AutoAllocationRecordOverflowRetention::Fresh
+                };
+        } else {
+            let old = *overflow;
+            *overflow = AutoAllocationRecordOverflowTable::empty();
+            release_auto_allocation_record_overflow_slots(old.slots, old.capacity);
+        }
+        return true;
+    }
+    *overflow.slots.add(idx) = AutoAllocationRecord::tombstone();
+    overflow.live -= 1;
+    overflow.tombstones = overflow.tombstones.saturating_add(1);
+    true
 }
 
 /// Destructively reset recovery bookkeeping for isolated tests.
@@ -4165,18 +5725,18 @@ fn clear_auto_allocation_records() {
         let mut table = table_lock.lock();
         #[cfg(not(feature = "fixed_heap"))]
         {
-            let mut page = table.overflow;
-            while !page.is_null() {
-                let next = unsafe { (*page).next };
-                unsafe {
-                    system_alloc::munmap(page as *mut u8, size_of::<AutoAllocationRecordPage>());
-                }
-                page = next;
+            let overflow = table.overflow;
+            table.overflow = AutoAllocationRecordOverflowTable::empty();
+            unsafe {
+                release_auto_allocation_record_overflow_slots(overflow.slots, overflow.capacity);
             }
         }
         *table = GlobalAutoAllocationRecordTable::empty();
     }
     AUTO_ALLOCATION_RECORD_COUNT.store(0, Ordering::Relaxed);
+    for count in GLOBAL_RECOVERY_POINTER_FILTER.iter() {
+        count.store(0, Ordering::Release);
+    }
     AUTO_ALLOCATION_RECORD_ACTIVE_SHARDS.store(0, Ordering::Release);
     #[cfg(not(feature = "fixed_heap"))]
     AUTO_ALLOCATION_RECORD_LEGACY_NON_HOME_POSSIBLE.store(false, Ordering::Release);
@@ -4189,6 +5749,12 @@ fn clear_auto_allocation_records() {
     }
     #[cfg(test)]
     FAST_AUTO_ALLOCATION_RECORD_PROBE_STEPS.store(0, Ordering::Relaxed);
+    #[cfg(all(test, not(feature = "fixed_heap")))]
+    TEST_GLOBAL_RECOVERY_OVERFLOW_PROBE_STEPS.store(0, Ordering::Relaxed);
+    #[cfg(all(test, not(feature = "fixed_heap")))]
+    TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.store(false, Ordering::Release);
+    #[cfg(all(test, not(feature = "fixed_heap")))]
+    TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_REHASH.store(false, Ordering::Release);
     FAST_AUTO_ALLOCATION_RECORD_GLOBAL_COUNT.store(0, Ordering::Relaxed);
     semantic_slow_path_clear(SLOW_PATH_ALLOCATION_RECORDS);
 }
@@ -4264,6 +5830,37 @@ fn increment_global_auto_allocation_record_shard_live_count(
     }
 }
 
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn advance_or_release_empty_retained_auto_allocation_record_overflow(
+    table: &mut GlobalAutoAllocationRecordTable,
+) {
+    if table.live_count != 0
+        || !auto_allocation_record_overflow_is_mapped_valid(&table.overflow)
+        || table.overflow.live != 0
+        || table.overflow.tombstones != 0
+    {
+        return;
+    }
+
+    match table.overflow.retention {
+        AutoAllocationRecordOverflowRetention::Fresh => {
+            // Preserve one recently useful high-water mapping for the next
+            // complete shard phase. A subsequent overflow insertion disarms
+            // this state; an inline-only phase advances it to release below.
+            table.overflow.retention = AutoAllocationRecordOverflowRetention::Armed;
+        }
+        AutoAllocationRecordOverflowRetention::Armed => {
+            let old = table.overflow;
+            table.overflow = AutoAllocationRecordOverflowTable::empty();
+            unsafe {
+                release_auto_allocation_record_overflow_slots(old.slots, old.capacity);
+            }
+        }
+        AutoAllocationRecordOverflowRetention::None => {}
+    }
+}
+
 #[inline]
 fn decrement_global_auto_allocation_record_shard_live_count(
     shard_idx: usize,
@@ -4272,6 +5869,8 @@ fn decrement_global_auto_allocation_record_shard_live_count(
     let becomes_empty = table.live_count <= 1;
     table.live_count = table.live_count.saturating_sub(1);
     if becomes_empty {
+        #[cfg(not(feature = "fixed_heap"))]
+        advance_or_release_empty_retained_auto_allocation_record_overflow(table);
         auto_allocation_record_clear_shard_active(shard_idx);
     }
 }
@@ -4405,7 +6004,9 @@ fn lookup_fast_auto_allocation_record(
                 }
                 return AutoAllocationRecordLookup::Exact(inline_record.metadata);
             }
-            return AutoAllocationRecordLookup::Mismatched;
+            return AutoAllocationRecordLookup::Mismatched(
+                AutoAllocationRecordMismatch::from_record(inline_record),
+            );
         }
 
         let mut checked_hot_idx = None;
@@ -4430,7 +6031,9 @@ fn lookup_fast_auto_allocation_record(
                     }
                     return AutoAllocationRecordLookup::Exact(record.metadata);
                 }
-                return AutoAllocationRecordLookup::Mismatched;
+                return AutoAllocationRecordLookup::Mismatched(
+                    AutoAllocationRecordMismatch::from_record(record),
+                );
             }
             // A stale non-empty/tombstone hot slot has already been inspected;
             // skip it in the bounded probe below.  If it is empty, preserve the
@@ -4479,7 +6082,9 @@ fn lookup_fast_auto_allocation_record(
                     remember_fast_auto_allocation_record_hot_slot(ptr_key, idx);
                     return AutoAllocationRecordLookup::Exact(record.metadata);
                 }
-                return AutoAllocationRecordLookup::Mismatched;
+                return AutoAllocationRecordLookup::Mismatched(
+                    AutoAllocationRecordMismatch::from_record(record),
+                );
             }
             offset += 1;
         }
@@ -4565,6 +6170,8 @@ fn install_global_auto_allocation_inline_record(
         return false;
     }
     if existing.is_available() {
+        // Publish the negative-filter gate before the record becomes visible.
+        increment_global_recovery_pointer_filter(ptr);
         AUTO_ALLOCATION_RECORD_COUNT.fetch_add(1, Ordering::Relaxed);
         increment_global_auto_allocation_record_shard_live_count(shard_idx, table);
     } else {
@@ -4630,7 +6237,7 @@ fn update_global_auto_allocation_record_in_shard(
 
     #[cfg(feature = "fixed_heap")]
     {
-        // fixed_heap builds do not have mmap-backed overflow pages.  Scan the
+        // fixed_heap builds do not have an mmap-backed overflow table. Scan the
         // rest of this shard after the bounded hot probe, then continue to
         // later shards so total inline capacity remains 4096 records.
         let mut slow_offset = AUTO_ALLOCATION_RECORD_PROBE_LIMIT;
@@ -4658,7 +6265,7 @@ fn update_global_auto_allocation_record_in_shard(
 
     #[cfg(not(feature = "fixed_heap"))]
     {
-        // Overflow pages are appended only to the pointer's home shard after
+        // The overflow table belongs only to the pointer's home shard after
         // every shard-local inline table is full.  Inline records may live in a
         // different shard to preserve the historical global inline capacity,
         // but overflow records do not migrate.  Skipping non-home overflow
@@ -4666,7 +6273,7 @@ fn update_global_auto_allocation_record_in_shard(
         // and prevents a corrupt impossible non-home overflow entry from
         // shadowing the authoritative home-shard record.
         if search_overflow {
-            if let Some(slot) = find_auto_allocation_record_in_overflow(table.overflow, ptr_key) {
+            if let Some(slot) = find_auto_allocation_record_in_overflow(&table.overflow, ptr_key) {
                 auto_allocation_record_mark_shard_active(shard_idx);
                 unsafe {
                     *slot = auto_allocation_record_for(ptr, layout, metadata);
@@ -4798,32 +6405,32 @@ unsafe fn record_global_auto_allocation_metadata_eligible_sharded(
 
     #[cfg(not(feature = "fixed_heap"))]
     {
-        // All shard-local inline probe windows were occupied.  Spill into the
-        // home shard's overflow list; lookup scans each shard's overflow list
-        // under the corresponding shard lock.
+        // All shard-local inline probe windows were occupied. Spill into the
+        // home shard's dynamically sized overflow table.
         let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
-        let mut overflow_slot = first_available_auto_allocation_record_in_overflow(table.overflow);
-        if overflow_slot.is_null() {
-            let page = allocate_auto_allocation_record_page();
-            if !page.is_null() {
-                (*page).next = table.overflow;
-                table.overflow = page;
-                overflow_slot = &mut (*page).entries[0] as *mut AutoAllocationRecord;
+        match insert_filtered_auto_allocation_record_overflow(
+            home_shard_idx,
+            &mut table.overflow,
+            auto_allocation_record_for(ptr, layout, metadata),
+        ) {
+            AutoAllocationRecordOverflowInsert::Updated => return true,
+            AutoAllocationRecordOverflowInsert::Inserted => {
+                increment_global_auto_allocation_record_shard_live_count(
+                    home_shard_idx,
+                    &mut *table,
+                );
+                AUTO_ALLOCATION_RECORD_COUNT.fetch_add(1, Ordering::Relaxed);
+                semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+                return true;
             }
-        }
-        if !overflow_slot.is_null() {
-            increment_global_auto_allocation_record_shard_live_count(home_shard_idx, &mut *table);
-            *overflow_slot = auto_allocation_record_for(ptr, layout, metadata);
-            AUTO_ALLOCATION_RECORD_COUNT.fetch_add(1, Ordering::Relaxed);
-            semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
-            return true;
+            AutoAllocationRecordOverflowInsert::Full => {}
         }
     }
     false
 }
 
 /// Install or update a hosted recovery record in its pointer-derived home
-/// shard. Hosted overflow pages are already shard-local and unbounded, so
+/// shard. The hosted overflow table is shard-local and dynamically sized, so
 /// spreading a record into foreign inline capacity only makes every normal
 /// insert and miss scan unrelated locks.
 #[cfg(not(feature = "fixed_heap"))]
@@ -4864,24 +6471,20 @@ unsafe fn record_home_auto_allocation_metadata_eligible(
         }
     }
 
-    let mut overflow_slot = first_available_auto_allocation_record_in_overflow(table.overflow);
-    if overflow_slot.is_null() {
-        let page = allocate_auto_allocation_record_page();
-        if !page.is_null() {
-            (*page).next = table.overflow;
-            table.overflow = page;
-            overflow_slot = &mut (*page).entries[0] as *mut AutoAllocationRecord;
+    match insert_filtered_auto_allocation_record_overflow(
+        home_shard_idx,
+        &mut table.overflow,
+        auto_allocation_record_for(ptr, layout, metadata),
+    ) {
+        AutoAllocationRecordOverflowInsert::Updated => true,
+        AutoAllocationRecordOverflowInsert::Inserted => {
+            increment_global_auto_allocation_record_shard_live_count(home_shard_idx, &mut *table);
+            AUTO_ALLOCATION_RECORD_COUNT.fetch_add(1, Ordering::Relaxed);
+            semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+            true
         }
+        AutoAllocationRecordOverflowInsert::Full => false,
     }
-    if overflow_slot.is_null() {
-        return false;
-    }
-
-    increment_global_auto_allocation_record_shard_live_count(home_shard_idx, &mut *table);
-    *overflow_slot = auto_allocation_record_for(ptr, layout, metadata);
-    AUTO_ALLOCATION_RECORD_COUNT.fetch_add(1, Ordering::Relaxed);
-    semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
-    true
 }
 
 #[inline]
@@ -4927,7 +6530,9 @@ fn lookup_auto_allocation_record(
     let global_lookup = lookup_global_auto_allocation_record(ptr, layout, remove);
     match global_lookup {
         AutoAllocationRecordLookup::Exact(_) => global_lookup,
-        AutoAllocationRecordLookup::Mismatched => AutoAllocationRecordLookup::Mismatched,
+        AutoAllocationRecordLookup::Mismatched(mismatch) => {
+            AutoAllocationRecordLookup::Mismatched(mismatch)
+        }
         AutoAllocationRecordLookup::Missing => fast_lookup,
     }
 }
@@ -5011,6 +6616,8 @@ fn remove_global_auto_allocation_inline_record(
         table.inline[idx] = AutoAllocationRecord::tombstone();
         decrement_global_auto_allocation_record_shard_live_count(shard_idx, table);
     }
+    // Retire the filter only after the authoritative record is gone.
+    decrement_global_recovery_pointer_filter(ptr_key as *mut u8);
 }
 
 fn lookup_global_auto_allocation_record_in_shard(
@@ -5038,7 +6645,9 @@ fn lookup_global_auto_allocation_record_in_shard(
                 }
                 return AutoAllocationRecordLookup::Exact(record.metadata);
             }
-            return AutoAllocationRecordLookup::Mismatched;
+            return AutoAllocationRecordLookup::Mismatched(
+                AutoAllocationRecordMismatch::from_record(record),
+            );
         }
         clear_global_auto_allocation_record_hot_slot(&mut *table, ptr_key);
     }
@@ -5064,7 +6673,9 @@ fn lookup_global_auto_allocation_record_in_shard(
                 }
                 return AutoAllocationRecordLookup::Exact(record.metadata);
             }
-            return AutoAllocationRecordLookup::Mismatched;
+            return AutoAllocationRecordLookup::Mismatched(
+                AutoAllocationRecordMismatch::from_record(record),
+            );
         }
         offset += 1;
     }
@@ -5075,39 +6686,45 @@ fn lookup_global_auto_allocation_record_in_shard(
         // shard. The caller passes this explicitly so legacy foreign-shard
         // fallback never accepts a corrupt non-home overflow entry.
         if search_home_overflow {
-            if let Some(slot) = find_auto_allocation_record_in_overflow(table.overflow, ptr_key) {
-                let record = unsafe { *slot };
+            if let AutoAllocationRecordOverflowProbe::Found(idx) =
+                probe_auto_allocation_record_overflow(&table.overflow, ptr_key)
+            {
+                let record = unsafe { *table.overflow.slots.add(idx) };
                 if record.matches_allocation(ptr, layout) {
                     if remove {
-                        if atomic_saturating_decrement(&AUTO_ALLOCATION_RECORD_COUNT) == 0 {
-                            #[cfg(test)]
-                            pause_after_last_global_recovery_count_decrement_for_test();
-                            unsafe {
-                                *slot = AutoAllocationRecord::empty();
-                            }
-                            decrement_global_auto_allocation_record_shard_live_count(
+                        if !unsafe {
+                            try_remove_auto_allocation_record_overflow_at(
                                 shard_idx,
-                                &mut *table,
-                            );
-                            semantic_slow_path_clear(SLOW_PATH_ALLOCATION_RECORDS);
-                        } else {
-                            unsafe {
-                                *slot = AutoAllocationRecord::tombstone();
-                            }
-                            decrement_global_auto_allocation_record_shard_live_count(
-                                shard_idx,
-                                &mut *table,
+                                &mut table.overflow,
+                                idx,
+                            )
+                        } {
+                            return AutoAllocationRecordLookup::Mismatched(
+                                AutoAllocationRecordMismatch::from_record(record),
                             );
                         }
-                        unsafe {
-                            release_empty_auto_allocation_record_overflow_pages(
-                                &mut table.overflow,
-                            );
+                        // The overflow slot is no longer authoritative before
+                        // its negative-filter publication is retired.
+                        decrement_global_recovery_pointer_filter(ptr);
+                        let removed_last_global =
+                            atomic_saturating_decrement(&AUTO_ALLOCATION_RECORD_COUNT) == 0;
+                        if removed_last_global {
+                            #[cfg(test)]
+                            pause_after_last_global_recovery_count_decrement_for_test();
+                        }
+                        decrement_global_auto_allocation_record_shard_live_count(
+                            shard_idx,
+                            &mut *table,
+                        );
+                        if removed_last_global {
+                            semantic_slow_path_clear(SLOW_PATH_ALLOCATION_RECORDS);
                         }
                     }
                     return AutoAllocationRecordLookup::Exact(record.metadata);
                 }
-                return AutoAllocationRecordLookup::Mismatched;
+                return AutoAllocationRecordLookup::Mismatched(
+                    AutoAllocationRecordMismatch::from_record(record),
+                );
             }
         }
     }
@@ -5136,7 +6753,9 @@ fn lookup_global_auto_allocation_record_in_shard(
                     }
                     return AutoAllocationRecordLookup::Exact(record.metadata);
                 }
-                return AutoAllocationRecordLookup::Mismatched;
+                return AutoAllocationRecordLookup::Mismatched(
+                    AutoAllocationRecordMismatch::from_record(record),
+                );
             }
             slow_offset += 1;
         }
@@ -5226,7 +6845,8 @@ enum AutoAllocationRecordStorage {
     Global,
 }
 
-/// Locate one unambiguous, authenticated recovery record for an owned allocation.
+/// Locate one unambiguous, exact recovery record for an owned allocation.
+/// Integrity-policy records additionally require keyed authentication.
 ///
 /// A pointer must not be rebound while duplicate fast/global records exist. Even
 /// if both copies currently agree, changing only one copy could let a later
@@ -5551,8 +7171,8 @@ pub fn __unialloc_semantic_box_slice_into_vec<T, A: Allocator>(
 ///
 /// This compiler-lowering helper follows `String::into_bytes`, whose standard
 /// representation-preserving conversion keeps the allocation pointer, length,
-/// and capacity.  UniAlloc changes only the type component of one exact,
-/// authenticated recovery record and, when enabled, the matching authenticated
+/// and capacity.  UniAlloc changes only the type component of one exact
+/// recovery record and, when enabled, the matching authenticated
 /// memory-tag record. Missing, mismatched, duplicate, zero-sized, or incoherent
 /// records fail closed and retain their original identity.
 #[doc(hidden)]
@@ -5603,7 +7223,7 @@ pub fn __unialloc_semantic_string_into_bytes(
 ///
 /// `CString::into_bytes_with_nul` moves the exact `Box<[u8]>` backing storage
 /// into `Vec<u8, Global>` without changing its pointer, length, or capacity.
-/// UniAlloc changes only the `type_id` of one exact authenticated recovery
+/// UniAlloc changes only the `type_id` of one exact recovery
 /// record and its matching memory tag when present. Wrong, zero, same,
 /// missing, duplicated, or incoherent identities leave the source identity
 /// authoritative; the standard conversion still succeeds.
@@ -5654,7 +7274,7 @@ pub fn __unialloc_semantic_cstring_into_bytes_with_nul(
 ///
 /// `String::into_boxed_str` may shrink spare capacity before returning.  This
 /// helper therefore follows the same fail-closed contract as
-/// [`__unialloc_semantic_vec_into_boxed_slice`]: an exact authenticated source
+/// [`__unialloc_semantic_vec_into_boxed_slice`]: an exact source
 /// record supplies either target metadata for an accepted shrink or unchanged
 /// source metadata for a rejected one.  Missing or ambiguous source records run
 /// with unrelated outer scopes and process-wide auto metadata suppressed.  An
@@ -5747,8 +7367,8 @@ pub fn __unialloc_semantic_string_into_boxed_str(
 /// live type-isolation identity selected by the compiler.
 ///
 /// `Box<str>::into_string` preserves the allocation pointer and exact byte
-/// layout. UniAlloc therefore changes only the `type_id` of one exact,
-/// authenticated recovery record and its matching memory-tag record when
+/// layout. UniAlloc therefore changes only the `type_id` of one exact
+/// recovery record and its matching memory-tag record when
 /// present. Wrong, zero, same, missing, duplicated, or incoherent identities
 /// leave the source identity authoritative; the standard conversion still
 /// succeeds in every case.
@@ -5800,8 +7420,8 @@ pub fn __unialloc_semantic_boxed_str_into_string(
 ///
 /// `Vec::into_iter` transfers the allocation without reallocating it.  After
 /// verifying that the iterator still exposes the original unconsumed pointer
-/// and length, UniAlloc changes only the type component of one exact,
-/// authenticated recovery record and its matching memory tag when present.
+/// and length, UniAlloc changes only the type component of one exact
+/// recovery record and its matching memory tag when present.
 /// Wrong, zero, same, missing, duplicated, or incoherent identities leave the
 /// authoritative source record untouched; the standard conversion succeeds in
 /// every case.
@@ -5851,7 +7471,7 @@ pub fn __unialloc_semantic_vec_into_iter<T, A: Allocator>(
 /// compiler.
 ///
 /// `Vec::into_boxed_slice` may shrink the allocation before returning.  When
-/// an exact, authenticated source record exists, run that shrink under metadata
+/// an exact source record exists, run that shrink under metadata
 /// derived from the source record with only `type_id` changed.  A moved shrink
 /// then releases the old Vec identity and publishes the new Box identity through
 /// the ordinary split-reallocation path.  If no shrink occurs, update the exact
@@ -5897,7 +7517,7 @@ pub fn __unialloc_semantic_vec_into_boxed_slice<T, A: Allocator>(
         })
     });
 
-    // Always mask any unrelated outer scope.  An authenticated source record
+    // Always mask any unrelated outer scope.  An exact source record
     // is the conservative metadata for a rejected shrink; otherwise the
     // replacement must remain raw rather than inheriting an outer scope or
     // consuming process-wide auto metadata.
@@ -5968,6 +7588,28 @@ pub(crate) fn checked_recorded_reallocation_old_metadata(
     lookup_auto_allocation_record(ptr, layout, false)
 }
 
+/// Record an exact allocation/deallocation layout disagreement observed while
+/// a live recovery record forced deallocation to fail closed.
+///
+/// The lookup result already carries the authoritative allocation layout and
+/// metadata, so this cold diagnostic adds no second side-table probe. An
+/// authentication-only mismatch has equal recorded/requested layout fields and
+/// is deliberately excluded from the layout counter.
+#[inline]
+pub(crate) fn record_recovery_deallocation_layout_mismatch(
+    requested: Layout,
+    mismatch: AutoAllocationRecordMismatch,
+) {
+    if mismatch.is_layout_mismatch(requested) {
+        SEMANTIC_METADATA_VALIDATION.record_recovery_deallocation_layout_mismatch(
+            requested,
+            mismatch.recorded_size,
+            mismatch.recorded_align,
+            mismatch.recorded_metadata,
+        );
+    }
+}
+
 /// Recover compiler-stream auto metadata for an ordinary `GlobalAlloc`
 /// deallocation without consuming the next allocation-site stream entry.
 pub fn take_auto_deallocation_metadata(ptr: *mut u8, layout: Layout) -> Option<AllocationMetadata> {
@@ -5978,8 +7620,10 @@ pub fn take_auto_deallocation_metadata(ptr: *mut u8, layout: Layout) -> Option<A
 /// `GlobalAlloc` calls on this thread.
 ///
 /// Compiler instrumentation can use the scope-enter/scope-exit ABI below to
-/// make otherwise unmodified standard-library allocation sites flow through the
-/// semantic path. When no scope is active, normal `GlobalAlloc` calls remain
+/// transport exact metadata around otherwise unmodified standard-library
+/// allocation sites. Flags-zero scopes remain observable here while allocator
+/// operations stay raw unless statistics or mandatory compiled policy requires
+/// the semantic path. When no scope is active, normal `GlobalAlloc` calls remain
 /// fallback evidence for coverage denominators.
 pub fn active_allocation_metadata() -> Option<AllocationMetadata> {
     unsafe {
@@ -5989,6 +7633,55 @@ pub fn active_allocation_metadata() -> Option<AllocationMetadata> {
         } else {
             Some(metadata)
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ActiveAllocatorMetadata {
+    Inactive,
+    TransportOnly(AllocationMetadata),
+    Policy(AllocationMetadata),
+}
+
+/// Select the allocator meaning of the current compiler scope exactly once.
+///
+/// Flags-zero metadata proves compiler/runtime transport while deliberately
+/// suppressing both typed policy and process-wide auto metadata. Lifetime and
+/// placement hints remain visible through [`active_allocation_metadata`], but
+/// cannot independently authorize allocator behavior. Enabling aggregate or
+/// per-type statistics promotes the same metadata to `Policy` for accounting.
+#[inline]
+pub(crate) fn active_allocator_metadata() -> ActiveAllocatorMetadata {
+    match active_allocation_metadata() {
+        Some(metadata) if allocator_metadata_is_effective(metadata) => {
+            // Statistics promote transport metadata for accounting. Mandatory
+            // compiled policy is composed without changing its typed identity.
+            ActiveAllocatorMetadata::Policy(compose_mandatory_allocator_policy(metadata))
+        }
+        Some(metadata) => {
+            #[cfg(feature = "quarantine")]
+            {
+                // A flags-zero scope suppresses auto metadata while the
+                // compiled quarantine remains mandatory. Preserve the scoped
+                // type identity so conservative scopes can recover this exact
+                // delayed-free attribution after the scope has popped.
+                ActiveAllocatorMetadata::Policy(compose_mandatory_allocator_policy(metadata))
+            }
+            #[cfg(not(feature = "quarantine"))]
+            {
+                ActiveAllocatorMetadata::TransportOnly(metadata)
+            }
+        }
+        None => ActiveAllocatorMetadata::Inactive,
+    }
+}
+
+/// Activate lifecycle arbitration before an allocator path observes an address
+/// under policy-bearing or stats-accounted scoped metadata.
+#[inline]
+pub(crate) fn ensure_active_allocator_metadata_lifecycle(selection: ActiveAllocatorMetadata) {
+    if matches!(selection, ActiveAllocatorMetadata::Policy(_)) || cfg!(feature = "quarantine") {
+        activate_semantic_address_lifecycle_tracking();
     }
 }
 
@@ -6021,7 +7714,7 @@ pub fn with_semantic_metadata<R>(metadata: AllocationMetadata, f: impl FnOnce() 
 
 /// Convenience helper for source-level or compiler-prototype experiments that
 /// classify a region by Rust type.
-pub fn with_rust_type_metadata_at<T, R>(
+pub fn with_rust_type_metadata_at<T: 'static, R>(
     module_id: u64,
     flags: u32,
     callsite: u64,
@@ -6201,10 +7894,10 @@ fn type_cache_slot(cache_key: u64) -> usize {
 fn plain_type_cache_slot_key(identity_key: u64, layout: Layout) -> u64 {
     // `identity_key` is intentionally layout-agnostic so allocation and Drop
     // sites for the same heap-object class can agree on reuse identity.  The
-    // cold linked-list cache, however, stores concrete object layouts in the
-    // object header.  Mixing size/align into the *slot* key keeps different
-    // layouts for the same type in separate probe windows without adding per
-    // slot metadata or weakening the allocator-visible type identity.
+    // cold linked-list cache stores the exact layout in each owning slot.
+    // Mixing size/align into the slot key keeps different layouts in separate
+    // probe windows; the slot's full size/align fields authorize reuse after
+    // the hash lookup and keep collisions isolated.
     let mut key = identity_key ^ (layout.size() as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
     key = key.rotate_left(29);
     key ^= (layout.align() as u64).wrapping_mul(0xbf58_476d_1ce4_e5b9);
@@ -6237,8 +7930,13 @@ fn record_plain_type_cache_aggregate_scan() {
 fn record_plain_type_cache_aggregate_scan() {}
 
 #[inline]
-unsafe fn set_plain_type_cache_retained_bytes(retained_bytes: usize, trusted: bool) {
+unsafe fn set_plain_type_cache_retained_accounting(
+    retained_bytes: usize,
+    retained_entries: usize,
+    trusted: bool,
+) {
     PLAIN_TYPE_CACHE_RETAINED_BYTES = retained_bytes;
+    PLAIN_TYPE_CACHE_RETAINED_ENTRIES = retained_entries;
     PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED = trusted;
 }
 
@@ -6248,25 +7946,34 @@ unsafe fn mark_plain_type_cache_retained_bytes_untrusted() {
 }
 
 #[inline]
-unsafe fn adjust_trusted_plain_type_cache_retained_bytes(
+unsafe fn adjust_trusted_plain_type_cache_retained_accounting(
     released_bytes: usize,
     retained_bytes: usize,
+    released_entries: usize,
+    retained_entries: usize,
 ) {
     if !PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED {
         return;
     }
 
-    match PLAIN_TYPE_CACHE_RETAINED_BYTES
+    let updated_bytes = PLAIN_TYPE_CACHE_RETAINED_BYTES
         .checked_sub(released_bytes)
-        .and_then(|remaining| remaining.checked_add(retained_bytes))
-    {
-        Some(updated) if updated <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES => {
-            PLAIN_TYPE_CACHE_RETAINED_BYTES = updated;
+        .and_then(|remaining| remaining.checked_add(retained_bytes));
+    let updated_entries = PLAIN_TYPE_CACHE_RETAINED_ENTRIES
+        .checked_sub(released_entries)
+        .and_then(|remaining| remaining.checked_add(retained_entries));
+    match (updated_bytes, updated_entries) {
+        (Some(bytes), Some(entries))
+            if bytes <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES
+                && entries <= MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES =>
+        {
+            PLAIN_TYPE_CACHE_RETAINED_BYTES = bytes;
+            PLAIN_TYPE_CACHE_RETAINED_ENTRIES = entries;
         }
         _ => {
-            // An impossible underflow/overflow means the aggregate counter can
-            // no longer authorize cache growth.  Leave its last value intact
-            // for diagnostics and force a bounded rebuild before reuse.
+            // An impossible underflow/overflow means the aggregate counters
+            // can no longer authorize cache growth. Leave their last values
+            // intact and force one bounded rebuild before reuse.
             mark_plain_type_cache_retained_bytes_untrusted();
         }
     }
@@ -6275,11 +7982,12 @@ unsafe fn adjust_trusted_plain_type_cache_retained_bytes(
 #[inline]
 unsafe fn clear_type_cache_slot(slot: &mut TypeCacheSlot, cache_key: u64) {
     let retained_bytes = slot.retained_bytes;
+    let retained_entries = slot.count;
     let accounting_was_trustworthy = !slot.is_corrupt();
     slot.clear();
     clear_type_cache_hot_slot(cache_key);
     if accounting_was_trustworthy {
-        adjust_trusted_plain_type_cache_retained_bytes(retained_bytes, 0);
+        adjust_trusted_plain_type_cache_retained_accounting(retained_bytes, 0, retained_entries, 0);
     } else {
         mark_plain_type_cache_retained_bytes_untrusted();
     }
@@ -6287,40 +7995,38 @@ unsafe fn clear_type_cache_slot(slot: &mut TypeCacheSlot, cache_key: u64) {
 
 unsafe fn type_cache_slot_head_is_valid(slot: &TypeCacheSlot) -> bool {
     if slot.count == 0 {
-        return true;
+        return slot.head.is_null()
+            && slot.size == 0
+            && slot.align == EMPTY_LAYOUT_ALIGN
+            && slot.retained_bytes == 0;
     }
-    if slot.head.is_null() || (slot.head as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0 {
-        return false;
-    }
-
-    let node = slot.head as *mut usize;
-    let size = node.add(1).read();
-    let align = node.add(2).read();
-    Layout::from_size_align(size, align).is_ok()
+    !slot.has_corrupt_layout()
 }
 
 unsafe fn type_cache_slot_retained_bytes(slot: &TypeCacheSlot) -> Option<usize> {
-    if slot.has_corrupt_links() {
+    if slot.has_corrupt_links() || slot.has_corrupt_layout() || slot.has_corrupt_authority() {
         return None;
     }
 
-    let mut total = 0usize;
+    if slot.count == 0 {
+        return Some(0);
+    }
+
+    let retained_per_object = type_cache_retained_bytes_for_object(slot.size);
+    let expected_total = retained_per_object.checked_mul(slot.count)?;
+
     let mut current = slot.head;
     let mut remaining = slot.count;
     while remaining > 0 {
-        if current.is_null() || (current as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0 {
+        if current.is_null()
+            || (current as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0
+            || (current as usize) & (slot.align - 1) != 0
+        {
             return None;
         }
 
         let node = current as *mut usize;
         let next = node.read() as *mut u8;
-        let size = node.add(1).read();
-        let align = node.add(2).read();
-        if Layout::from_size_align(size, align).is_err() {
-            return None;
-        }
-
-        total = total.saturating_add(type_cache_retained_bytes_for_object(size));
         current = next;
         remaining -= 1;
     }
@@ -6329,11 +8035,11 @@ unsafe fn type_cache_slot_retained_bytes(slot: &TypeCacheSlot) -> Option<usize> 
         return None;
     }
 
-    Some(total)
+    Some(expected_total)
 }
 
 unsafe fn repair_type_cache_slot_accounting_if_possible(slot: &mut TypeCacheSlot) -> bool {
-    if slot.has_corrupt_links() {
+    if slot.has_corrupt_links() || slot.has_corrupt_layout() || slot.has_corrupt_authority() {
         mark_plain_type_cache_retained_bytes_untrusted();
         return false;
     }
@@ -6361,21 +8067,27 @@ unsafe fn repair_type_cache_slot_accounting_if_possible(slot: &mut TypeCacheSlot
     }
 }
 
-unsafe fn plain_type_cache_trusted_retained_bytes() -> Option<usize> {
-    let inline_retained_bytes = if INLINE_TYPE_CACHE_ENTRY.is_empty() {
+unsafe fn plain_type_cache_trusted_retained_accounting() -> Option<(usize, usize)> {
+    let mut inline_retained_bytes = if INLINE_TYPE_CACHE_ENTRY.is_empty() {
         0
     } else {
         INLINE_TYPE_CACHE_ENTRY.retained_bytes()
     };
-
+    inline_retained_bytes =
+        inline_retained_bytes.checked_add(SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES)?;
     if PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED
         && PLAIN_TYPE_CACHE_RETAINED_BYTES <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES
+        && PLAIN_TYPE_CACHE_RETAINED_ENTRIES <= MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES
     {
-        return PLAIN_TYPE_CACHE_RETAINED_BYTES.checked_add(inline_retained_bytes);
+        return Some((
+            PLAIN_TYPE_CACHE_RETAINED_BYTES.checked_add(inline_retained_bytes)?,
+            PLAIN_TYPE_CACHE_RETAINED_ENTRIES,
+        ));
     }
 
     record_plain_type_cache_aggregate_scan();
     let mut retained_bytes = 0usize;
+    let mut retained_entries = 0usize;
 
     let mut idx = 0usize;
     while idx < TYPE_CACHE_SLOTS {
@@ -6393,20 +8105,42 @@ unsafe fn plain_type_cache_trusted_retained_bytes() -> Option<usize> {
                 Some(total) => total,
                 None => return None,
             };
+            retained_entries = match retained_entries.checked_add(slot.count) {
+                Some(total) => total,
+                None => return None,
+            };
         }
         idx += 1;
     }
 
-    set_plain_type_cache_retained_bytes(retained_bytes, true);
-    retained_bytes.checked_add(inline_retained_bytes)
+    if retained_bytes > MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES
+        || retained_entries > MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES
+    {
+        return None;
+    }
+    set_plain_type_cache_retained_accounting(retained_bytes, retained_entries, true);
+    Some((
+        retained_bytes.checked_add(inline_retained_bytes)?,
+        retained_entries,
+    ))
 }
 
 #[inline]
 unsafe fn plain_type_cache_can_accept_retained_bytes(incoming_retained_bytes: usize) -> bool {
-    match plain_type_cache_trusted_retained_bytes() {
-        Some(retained_bytes) => {
+    match plain_type_cache_trusted_retained_accounting() {
+        Some((retained_bytes, _)) => {
             retained_bytes.saturating_add(incoming_retained_bytes)
                 <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES
+        }
+        None => false,
+    }
+}
+
+#[inline]
+unsafe fn plain_type_cache_can_accept_linked_entry() -> bool {
+    match plain_type_cache_trusted_retained_accounting() {
+        Some((_, retained_entries)) => {
+            retained_entries.saturating_add(1) <= MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES
         }
         None => false,
     }
@@ -6416,11 +8150,12 @@ unsafe fn plain_type_cache_can_accept_retained_bytes(incoming_retained_bytes: us
 unsafe fn type_cache_hot_slot(
     cache_key: u64,
     identity: TypeCacheIdentity,
+    layout: Layout,
 ) -> Option<*mut TypeCacheSlot> {
     if TYPE_CACHE_HOT_SLOT.cache_key == cache_key {
         let idx = TYPE_CACHE_HOT_SLOT.slot_idx & (TYPE_CACHE_SLOTS - 1);
         let slot = &mut TYPE_CACHE[idx];
-        if slot.cache_key == cache_key && slot.identity == identity {
+        if slot.cache_key == cache_key && slot.identity == identity && slot.matches_layout(layout) {
             if !repair_type_cache_slot_accounting_if_possible(slot) {
                 clear_type_cache_slot(slot, cache_key);
                 return None;
@@ -6434,11 +8169,12 @@ unsafe fn type_cache_hot_slot(
 
 unsafe fn type_cache_find_slot_for_key(
     cache_key: u64,
+    layout: Layout,
     metadata: AllocationMetadata,
     allow_empty: bool,
 ) -> Option<*mut TypeCacheSlot> {
     let identity = TypeCacheIdentity::from_metadata(metadata);
-    if let Some(slot) = type_cache_hot_slot(cache_key, identity) {
+    if let Some(slot) = type_cache_hot_slot(cache_key, identity, layout) {
         return Some(slot);
     }
 
@@ -6457,11 +8193,20 @@ unsafe fn type_cache_find_slot_for_key(
                 clear_type_cache_slot(slot, stale_cache_key);
             }
         }
-        if slot.cache_key == cache_key && slot.identity == identity {
+        if slot.cache_key == cache_key && slot.identity == identity && slot.matches_layout(layout) {
             remember_type_cache_hot_slot(cache_key, idx);
             return Some(slot as *mut TypeCacheSlot);
         }
-        if allow_empty && first_empty.is_null() && slot.cache_key == UNKNOWN_SEMANTIC_ID {
+        if allow_empty
+            && first_empty.is_null()
+            && slot.cache_key == UNKNOWN_SEMANTIC_ID
+            && slot.identity == TypeCacheIdentity::unknown()
+            && slot.count == 0
+            && slot.head.is_null()
+            && slot.size == 0
+            && slot.align == EMPTY_LAYOUT_ALIGN
+            && slot.retained_bytes == 0
+        {
             first_empty = slot as *mut TypeCacheSlot;
             first_empty_idx = idx;
         }
@@ -6980,15 +8725,17 @@ pub fn type_isolation_side_cache_snapshot() -> TypeIsolationSideCacheSnapshot {
     unsafe {
         let mut occupied_slots = 0usize;
         let mut occupied_entries: usize = if INLINE_TYPE_CACHE_ENTRY.is_empty() {
-            0
+            0usize
         } else {
-            1
-        };
+            1usize
+        }
+        .saturating_add(SMALL_EXACT_TYPE_CACHE_OCCUPIED);
         let mut retained_bytes = if INLINE_TYPE_CACHE_ENTRY.is_empty() {
-            0
+            0usize
         } else {
             INLINE_TYPE_CACHE_ENTRY.retained_bytes()
-        };
+        }
+        .saturating_add(SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES);
         let mut corrupt_slots = 0usize;
         let mut idx = 0usize;
         while idx < TYPE_CACHE_SLOTS {
@@ -7010,12 +8757,17 @@ pub fn type_isolation_side_cache_snapshot() -> TypeIsolationSideCacheSnapshot {
             idx += 1;
         }
         TypeIsolationSideCacheSnapshot {
-            inline_occupied: !INLINE_TYPE_CACHE_ENTRY.is_empty(),
+            inline_occupied: !INLINE_TYPE_CACHE_ENTRY.is_empty()
+                || SMALL_EXACT_TYPE_CACHE_OCCUPIED != 0,
             occupied_slots,
             occupied_entries,
+            small_exact_occupied_entries: SMALL_EXACT_TYPE_CACHE_OCCUPIED,
+            small_exact_retained_bytes: SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES,
             retained_bytes,
             corrupt_slots,
             hot_slot_active: TYPE_CACHE_HOT_SLOT.cache_key != UNKNOWN_SEMANTIC_ID,
+            small_exact_hot_slot_active: SMALL_EXACT_TYPE_CACHE_HOT_SLOT.cache_key
+                != UNKNOWN_SEMANTIC_ID,
         }
     }
 }
@@ -7169,10 +8921,374 @@ fn compiler_type_isolated_recovery_fast_path(metadata: AllocationMetadata) -> bo
         && !metadata.is_layout_derived()
 }
 
+/// Small compiler-exact objects dominate short transaction lifecycles. Their
+/// cache-hit address may keep one bounded lifecycle reservation until the next
+/// reclaim, provided no policy needs a separate metadata ownership domain.
+#[inline]
+fn small_exact_type_fast_path_eligible(layout: Layout, metadata: AllocationMetadata) -> bool {
+    layout.size() != 0
+        && layout.size() < 3 * size_of::<usize>()
+        && metadata.has_type()
+        && metadata.flags == FLAG_TYPE_ISOLATED
+        && !metadata.is_layout_derived()
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SemanticTypeCacheClass {
     Plain,
+    /// Exact-typed objects smaller than the intrusive plain-cache header.
+    /// Their payload stays untouched while an authenticated side entry owns
+    /// the pointer, layout, policy, and full allocator-visible type identity.
+    SmallOutOfLine,
     Segregated,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TypeCacheAdmissionRejection {
+    TooSmall,
+    TooLarge,
+    MetadataIneligible,
+    ProbeWindowFull,
+    SlotDepth,
+    SlotByteBudget,
+    AggregateByteBudget,
+    AggregateEntryBudget,
+    StructuralOrAlignment,
+    SegregatedCapacity,
+    RegistryPressure,
+}
+
+#[inline]
+fn type_cache_classification_rejection(
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> TypeCacheAdmissionRejection {
+    if layout.size() > MAX_TYPE_CACHE_OBJECT_SIZE {
+        TypeCacheAdmissionRejection::TooLarge
+    } else if layout.size() != 0
+        && layout.size() < MIN_TYPE_CACHE_OBJECT_SIZE
+        && metadata.has_type()
+        && metadata.requests(FLAG_TYPE_ISOLATED)
+        && !metadata.is_layout_derived()
+        && !metadata_side_table_required(metadata)
+    {
+        TypeCacheAdmissionRejection::TooSmall
+    } else if layout.size() == 0 {
+        TypeCacheAdmissionRejection::StructuralOrAlignment
+    } else {
+        TypeCacheAdmissionRejection::MetadataIneligible
+    }
+}
+
+#[inline]
+fn plain_tiny_type_cache_route(layout: Layout, metadata: AllocationMetadata) -> bool {
+    layout.size() != 0
+        && layout.size() < MIN_TYPE_CACHE_OBJECT_SIZE
+        && metadata.has_type()
+        && metadata.requests(FLAG_TYPE_ISOLATED)
+        && !metadata.is_layout_derived()
+        && !metadata_side_table_required(metadata)
+}
+
+#[inline]
+fn record_type_cache_admission_counter(counter: &TypeCacheAdmissionCounter, layout: Layout) {
+    if semantic_stats_recording_flags() & SLOW_PATH_STATS != 0 {
+        counter.record(type_cache_retained_bytes_for_layout(layout));
+    }
+}
+
+#[inline]
+fn record_type_cache_admitted(layout: Layout, metadata: AllocationMetadata) {
+    record_type_cache_admission_counter(&TYPE_CACHE_ADMISSION_STATS.admitted, layout);
+    if plain_tiny_type_cache_route(layout, metadata) {
+        record_type_cache_admission_counter(&TYPE_CACHE_ADMISSION_STATS.tiny_side_inserts, layout);
+    }
+}
+
+#[inline]
+fn record_type_cache_admission_rejection(rejection: TypeCacheAdmissionRejection, layout: Layout) {
+    let counter = match rejection {
+        TypeCacheAdmissionRejection::TooSmall => &TYPE_CACHE_ADMISSION_STATS.rejected_too_small,
+        TypeCacheAdmissionRejection::TooLarge => &TYPE_CACHE_ADMISSION_STATS.rejected_too_large,
+        TypeCacheAdmissionRejection::MetadataIneligible => {
+            &TYPE_CACHE_ADMISSION_STATS.rejected_metadata_ineligible
+        }
+        TypeCacheAdmissionRejection::ProbeWindowFull => {
+            &TYPE_CACHE_ADMISSION_STATS.rejected_probe_window_full
+        }
+        TypeCacheAdmissionRejection::SlotDepth => &TYPE_CACHE_ADMISSION_STATS.rejected_slot_depth,
+        TypeCacheAdmissionRejection::SlotByteBudget => {
+            &TYPE_CACHE_ADMISSION_STATS.rejected_slot_byte_budget
+        }
+        TypeCacheAdmissionRejection::AggregateByteBudget => {
+            &TYPE_CACHE_ADMISSION_STATS.rejected_aggregate_byte_budget
+        }
+        TypeCacheAdmissionRejection::AggregateEntryBudget => {
+            &TYPE_CACHE_ADMISSION_STATS.rejected_aggregate_entry_budget
+        }
+        TypeCacheAdmissionRejection::StructuralOrAlignment => {
+            &TYPE_CACHE_ADMISSION_STATS.rejected_structural_or_alignment
+        }
+        TypeCacheAdmissionRejection::SegregatedCapacity => {
+            &TYPE_CACHE_ADMISSION_STATS.rejected_segregated_capacity
+        }
+        TypeCacheAdmissionRejection::RegistryPressure => {
+            &TYPE_CACHE_ADMISSION_STATS.rejected_registry_pressure
+        }
+    };
+    record_type_cache_admission_counter(counter, layout);
+}
+
+#[inline]
+fn record_type_cache_registry_full_failstop(layout: Layout) {
+    record_type_cache_admission_counter(
+        &TYPE_CACHE_ADMISSION_STATS.ownership_registry_full_failstop,
+        layout,
+    );
+}
+
+#[inline]
+fn record_tiny_side_cache_hit(layout: Layout, metadata: AllocationMetadata) {
+    if plain_tiny_type_cache_route(layout, metadata) {
+        record_type_cache_admission_counter(&TYPE_CACHE_ADMISSION_STATS.tiny_side_hits, layout);
+    }
+}
+
+#[inline]
+fn type_cache_depot_source_for_rejection(
+    rejection: TypeCacheAdmissionRejection,
+) -> Option<TypeCacheDepotSource> {
+    match rejection {
+        TypeCacheAdmissionRejection::ProbeWindowFull => Some(TypeCacheDepotSource::ProbeWindowFull),
+        TypeCacheAdmissionRejection::SlotDepth => Some(TypeCacheDepotSource::SlotDepth),
+        TypeCacheAdmissionRejection::SlotByteBudget => Some(TypeCacheDepotSource::SlotByteBudget),
+        TypeCacheAdmissionRejection::AggregateByteBudget => {
+            Some(TypeCacheDepotSource::AggregateByteBudget)
+        }
+        TypeCacheAdmissionRejection::AggregateEntryBudget => {
+            Some(TypeCacheDepotSource::AggregateEntryBudget)
+        }
+        TypeCacheAdmissionRejection::SegregatedCapacity => {
+            Some(TypeCacheDepotSource::SegregatedCapacity)
+        }
+        TypeCacheAdmissionRejection::RegistryPressure => None,
+        TypeCacheAdmissionRejection::TooSmall
+        | TypeCacheAdmissionRejection::TooLarge
+        | TypeCacheAdmissionRejection::MetadataIneligible
+        | TypeCacheAdmissionRejection::StructuralOrAlignment => None,
+    }
+}
+
+#[inline]
+fn record_type_cache_depot_counter(counter: &TypeCacheAdmissionCounter, rounded_bytes: usize) {
+    if semantic_stats_recording_flags() & SLOW_PATH_STATS != 0 {
+        counter.record(rounded_bytes);
+    }
+}
+
+#[inline]
+fn record_type_cache_depot_source(source: TypeCacheDepotSource, rounded_bytes: usize) {
+    let counter = match source {
+        TypeCacheDepotSource::ProbeWindowFull => {
+            &TYPE_CACHE_ADMISSION_STATS.depot_from_probe_window_full
+        }
+        TypeCacheDepotSource::SlotDepth => &TYPE_CACHE_ADMISSION_STATS.depot_from_slot_depth,
+        TypeCacheDepotSource::SlotByteBudget => {
+            &TYPE_CACHE_ADMISSION_STATS.depot_from_slot_byte_budget
+        }
+        TypeCacheDepotSource::AggregateByteBudget => {
+            &TYPE_CACHE_ADMISSION_STATS.depot_from_aggregate_byte_budget
+        }
+        TypeCacheDepotSource::AggregateEntryBudget => {
+            &TYPE_CACHE_ADMISSION_STATS.depot_from_aggregate_entry_budget
+        }
+        TypeCacheDepotSource::SegregatedCapacity => {
+            &TYPE_CACHE_ADMISSION_STATS.depot_from_segregated_capacity
+        }
+        TypeCacheDepotSource::LocalEviction => {
+            &TYPE_CACHE_ADMISSION_STATS.depot_from_local_eviction
+        }
+    };
+    record_type_cache_depot_counter(counter, rounded_bytes);
+}
+
+#[inline]
+fn update_type_cache_depot_peak(counter: &AtomicUsize, candidate: usize) {
+    let mut current = counter.load(Ordering::Relaxed);
+    while candidate > current {
+        match counter.compare_exchange_weak(
+            current,
+            candidate,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => return,
+            Err(observed) => current = observed,
+        }
+    }
+}
+
+#[inline]
+fn note_type_cache_depot_occupancy_change(
+    old_entries: usize,
+    old_bytes: usize,
+    new_entries: usize,
+    new_bytes: usize,
+) {
+    if (old_entries == new_entries && old_bytes == new_bytes)
+        || semantic_stats_recording_flags() & SLOW_PATH_STATS == 0
+    {
+        return;
+    }
+    let current_entries = if new_entries >= old_entries {
+        TYPE_CACHE_ADMISSION_STATS
+            .depot_current_entries
+            .fetch_add(new_entries - old_entries, Ordering::Relaxed)
+            .saturating_add(new_entries - old_entries)
+    } else {
+        TYPE_CACHE_ADMISSION_STATS
+            .depot_current_entries
+            .fetch_sub(old_entries - new_entries, Ordering::Relaxed)
+            .saturating_sub(old_entries - new_entries)
+    };
+    let current_bytes = if new_bytes >= old_bytes {
+        TYPE_CACHE_ADMISSION_STATS
+            .depot_current_rounded_bytes
+            .fetch_add(new_bytes - old_bytes, Ordering::Relaxed)
+            .saturating_add(new_bytes - old_bytes)
+    } else {
+        TYPE_CACHE_ADMISSION_STATS
+            .depot_current_rounded_bytes
+            .fetch_sub(old_bytes - new_bytes, Ordering::Relaxed)
+            .saturating_sub(old_bytes - new_bytes)
+    };
+    update_type_cache_depot_peak(
+        &TYPE_CACHE_ADMISSION_STATS.depot_peak_entries,
+        current_entries,
+    );
+    update_type_cache_depot_peak(
+        &TYPE_CACHE_ADMISSION_STATS.depot_peak_rounded_bytes,
+        current_bytes,
+    );
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn type_cache_depot_mixed_key(cache_key: u64, size: usize, align: usize, policy_key: u32) -> u64 {
+    type_cache_avalanche(
+        cache_key
+            ^ (size as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+            ^ (align as u64).wrapping_mul(0xbf58_476d_1ce4_e5b9)
+            ^ (policy_key as u64).wrapping_mul(0x94d0_49bb_1331_11eb),
+    )
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn type_cache_depot_shard_index(entry: SegregatedTypeCacheEntry) -> usize {
+    let mixed =
+        type_cache_depot_mixed_key(entry.cache_key, entry.size, entry.align, entry.policy_key);
+    (mixed as usize) & TYPE_CACHE_DEPOT_SHARD_MASK
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn type_cache_depot_location_for_request(
+    cache_key: u64,
+    layout: Layout,
+    policy_key: u32,
+) -> (usize, usize) {
+    let mixed = type_cache_depot_mixed_key(cache_key, layout.size(), layout.align(), policy_key);
+    (
+        (mixed as usize) & TYPE_CACHE_DEPOT_SHARD_MASK,
+        ((mixed as usize) >> TYPE_CACHE_DEPOT_SHARD_COUNT.trailing_zeros())
+            & (TYPE_CACHE_DEPOT_KEY_SLOTS - 1),
+    )
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn type_cache_depot_slot_for_entry(entry: SegregatedTypeCacheEntry) -> usize {
+    type_cache_depot_location_for_request(
+        entry.cache_key,
+        checked_side_table_layout(entry.size, entry.align, "type-cache depot"),
+        entry.policy_key,
+    )
+    .1
+}
+
+#[inline]
+fn type_cache_depot_policy_eligible(metadata: AllocationMetadata) -> bool {
+    #[cfg(test)]
+    if TEST_TYPE_CACHE_DEPOT_FORCE_REJECT.load(Ordering::Acquire) {
+        return false;
+    }
+    cfg!(not(feature = "fixed_heap")) && !metadata.requests(FLAG_HUGEPAGE_METADATA)
+}
+
+#[inline]
+fn type_cache_registry_retention_limit() -> usize {
+    #[cfg(test)]
+    {
+        return core::cmp::min(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT,
+            TEST_TYPE_CACHE_REGISTRY_RETENTION_LIMIT.load(Ordering::Acquire),
+        );
+    }
+    #[cfg(not(test))]
+    {
+        GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT
+    }
+}
+
+#[inline]
+fn type_cache_registry_can_retain_pending_owner() -> bool {
+    GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire)
+        <= type_cache_registry_retention_limit()
+}
+
+#[inline]
+fn type_cache_lease_registry_count_limit() -> usize {
+    #[cfg(not(feature = "fixed_heap"))]
+    {
+        core::cmp::min(
+            TYPE_CACHE_LEASE_REGISTRY_COUNT_LIMIT,
+            type_cache_registry_retention_limit(),
+        )
+    }
+    #[cfg(feature = "fixed_heap")]
+    {
+        TYPE_CACHE_LEASE_REGISTRY_COUNT_LIMIT
+    }
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn type_cache_depot_registry_has_headroom() -> bool {
+    GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire)
+        <= core::cmp::min(
+            TYPE_CACHE_DEPOT_REGISTRY_COUNT_LIMIT,
+            type_cache_registry_retention_limit(),
+        )
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+fn type_cache_depot_current_occupancy() -> (usize, usize) {
+    let mut entries = 0usize;
+    let mut retained_bytes = 0usize;
+    let mut shard_idx = 0usize;
+    while shard_idx < TYPE_CACHE_DEPOT_SHARD_COUNT {
+        let shard = TYPE_CACHE_DEPOT[shard_idx].lock();
+        entries = entries.saturating_add(shard.count);
+        retained_bytes = retained_bytes.saturating_add(shard.retained_bytes);
+        shard_idx += 1;
+    }
+    (entries, retained_bytes)
+}
+
+#[cfg(feature = "fixed_heap")]
+fn type_cache_depot_current_occupancy() -> (usize, usize) {
+    (0, 0)
 }
 
 #[inline]
@@ -7189,7 +9305,7 @@ fn classify_typed_object_cache_class(
     } else if layout.size() >= MIN_TYPE_CACHE_OBJECT_SIZE {
         Some(SemanticTypeCacheClass::Plain)
     } else {
-        None
+        Some(SemanticTypeCacheClass::SmallOutOfLine)
     }
 }
 
@@ -7215,7 +9331,10 @@ fn type_cache_eligible(layout: Layout, metadata: AllocationMetadata) -> bool {
 
 #[inline]
 fn segregated_type_cache_eligible(layout: Layout, metadata: AllocationMetadata) -> bool {
-    semantic_type_cache_class(layout, metadata) == Some(SemanticTypeCacheClass::Segregated)
+    matches!(
+        semantic_type_cache_class(layout, metadata),
+        Some(SemanticTypeCacheClass::SmallOutOfLine | SemanticTypeCacheClass::Segregated)
+    )
 }
 
 #[inline]
@@ -7233,23 +9352,27 @@ fn compiler_type_metadata_cache_class(
 }
 
 #[inline]
-fn inline_segregated_type_cache_eligible_for_classified(metadata: AllocationMetadata) -> bool {
-    !metadata.requests(FLAG_HUGEPAGE_METADATA)
-        && (
-            // The inline slot is the common one-object reuse path for any
-            // ordinary out-of-line metadata policy.  PAC / metadata-protection
-            // entries still carry and verify their authenticator through the
-            // same SegregatedTypeCacheEntry, so forcing them through the bucket
-            // table only adds probe overhead without improving isolation.
-            metadata.requests(FLAG_METADATA_SEGREGATED) || metadata_integrity_required(metadata)
-        )
+fn inline_segregated_type_cache_eligible_for_classified(
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> bool {
+    plain_tiny_type_cache_route(layout, metadata)
+        || (!metadata.requests(FLAG_HUGEPAGE_METADATA)
+            && (
+                // The inline slot is the common one-object reuse path for any
+                // ordinary out-of-line metadata policy.  PAC / metadata-protection
+                // entries still carry and verify their authenticator through the
+                // same SegregatedTypeCacheEntry, so forcing them through the bucket
+                // table only adds probe overhead without improving isolation.
+                metadata.requests(FLAG_METADATA_SEGREGATED) || metadata_integrity_required(metadata)
+            ))
 }
 
 #[inline]
-fn inline_segregated_type_cache_pop_eligible(metadata: AllocationMetadata) -> bool {
+fn inline_segregated_type_cache_pop_eligible(layout: Layout, metadata: AllocationMetadata) -> bool {
     // Hugepage metadata may occupy either bounded inline entry before a third
     // cached object justifies allocating the mmap_huge-backed bucket table.
-    inline_segregated_type_cache_eligible_for_classified(metadata)
+    inline_segregated_type_cache_eligible_for_classified(layout, metadata)
         || metadata.requests(FLAG_HUGEPAGE_METADATA)
 }
 
@@ -7262,11 +9385,182 @@ unsafe fn pop_inline_type_cache_eligible_with_key(
     let entry = INLINE_TYPE_CACHE_ENTRY;
     if entry.matches_cached_key(layout, metadata, cache_key) {
         INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
-        let _ = unregister_global_type_cache_ownership(entry.ptr);
+        consume_global_type_cache_ownership_for_allocation(entry.ptr, layout, metadata);
         record_stats_type_cache_hit(metadata);
         Some(entry.ptr)
     } else {
         None
+    }
+}
+
+#[inline]
+fn small_exact_type_cache_lookup_key(cache_key: u64, layout: Layout) -> u64 {
+    let mixed = cache_key
+        ^ (layout.size() as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        ^ (layout.align() as u64).rotate_left(17);
+    non_zero_hash(mixed)
+}
+
+#[inline]
+unsafe fn pop_small_exact_type_cache(
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> Option<*mut u8> {
+    if !small_exact_type_fast_path_eligible(layout, metadata) {
+        return None;
+    }
+    let cache_key = type_cache_identity_key(metadata);
+    let lookup_key = small_exact_type_cache_lookup_key(cache_key, layout);
+    let hot = SMALL_EXACT_TYPE_CACHE_HOT_SLOT;
+    let mut checked_hot_idx = None;
+    if hot.cache_key == lookup_key {
+        let idx = hot.slot_idx & (SMALL_EXACT_TYPE_CACHE_SLOTS - 1);
+        checked_hot_idx = Some(idx);
+        let entry = SMALL_EXACT_TYPE_CACHE[idx];
+        if entry.matches_cached_key(layout, metadata, cache_key) {
+            SMALL_EXACT_TYPE_CACHE[idx] = InlineTypeCacheEntry::empty();
+            SMALL_EXACT_TYPE_CACHE_OCCUPIED = SMALL_EXACT_TYPE_CACHE_OCCUPIED.saturating_sub(1);
+            SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES =
+                SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES.saturating_sub(entry.retained_bytes());
+            consume_global_type_cache_ownership_for_allocation(entry.ptr, layout, metadata);
+            record_stats_type_cache_hit(metadata);
+            record_tiny_side_cache_hit(layout, metadata);
+            return Some(entry.ptr);
+        }
+        SMALL_EXACT_TYPE_CACHE_HOT_SLOT = TypeCacheHotSlot::empty();
+    }
+
+    let start = type_cache_slot(lookup_key);
+    let mut offset = 0usize;
+    while offset < SMALL_EXACT_TYPE_CACHE_SLOTS {
+        let idx = (start + offset) & (SMALL_EXACT_TYPE_CACHE_SLOTS - 1);
+        if checked_hot_idx != Some(idx) {
+            let entry = SMALL_EXACT_TYPE_CACHE[idx];
+            if entry.matches_cached_key(layout, metadata, cache_key) {
+                SMALL_EXACT_TYPE_CACHE[idx] = InlineTypeCacheEntry::empty();
+                SMALL_EXACT_TYPE_CACHE_OCCUPIED = SMALL_EXACT_TYPE_CACHE_OCCUPIED.saturating_sub(1);
+                SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES =
+                    SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES.saturating_sub(entry.retained_bytes());
+                SMALL_EXACT_TYPE_CACHE_HOT_SLOT = TypeCacheHotSlot {
+                    cache_key: lookup_key,
+                    slot_idx: idx,
+                };
+                consume_global_type_cache_ownership_for_allocation(entry.ptr, layout, metadata);
+                record_stats_type_cache_hit(metadata);
+                record_tiny_side_cache_hit(layout, metadata);
+                return Some(entry.ptr);
+            }
+        }
+        offset += 1;
+    }
+    None
+}
+
+#[inline]
+unsafe fn push_small_exact_type_cache(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> bool {
+    if ptr.is_null()
+        || !small_exact_type_fast_path_eligible(layout, metadata)
+        || SMALL_EXACT_TYPE_CACHE_OCCUPIED >= SMALL_EXACT_TYPE_CACHE_SLOTS
+        || !plain_type_cache_can_accept_retained_bytes(type_cache_retained_bytes_for_layout(layout))
+    {
+        return false;
+    }
+    let cache_key = type_cache_identity_key(metadata);
+    let lookup_key = small_exact_type_cache_lookup_key(cache_key, layout);
+    let hot = SMALL_EXACT_TYPE_CACHE_HOT_SLOT;
+    let mut target = None;
+    if hot.cache_key == lookup_key {
+        let idx = hot.slot_idx & (SMALL_EXACT_TYPE_CACHE_SLOTS - 1);
+        if SMALL_EXACT_TYPE_CACHE[idx].is_empty() {
+            target = Some(idx);
+        }
+    }
+    if target.is_none() {
+        let start = type_cache_slot(lookup_key);
+        let mut offset = 0usize;
+        while offset < SMALL_EXACT_TYPE_CACHE_SLOTS {
+            let idx = (start + offset) & (SMALL_EXACT_TYPE_CACHE_SLOTS - 1);
+            if SMALL_EXACT_TYPE_CACHE[idx].is_empty() {
+                target = Some(idx);
+                break;
+            }
+            offset += 1;
+        }
+    }
+    let idx = match target {
+        Some(idx) => idx,
+        None => return false,
+    };
+    let entry = InlineTypeCacheEntry {
+        cache_key,
+        identity: TypeCacheIdentity::from_metadata(metadata),
+        ptr,
+        size: layout.size(),
+        align: layout.align(),
+    };
+    SMALL_EXACT_TYPE_CACHE[idx] = entry;
+    SMALL_EXACT_TYPE_CACHE_OCCUPIED = SMALL_EXACT_TYPE_CACHE_OCCUPIED.saturating_add(1);
+    SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES =
+        SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES.saturating_add(entry.retained_bytes());
+    SMALL_EXACT_TYPE_CACHE_HOT_SLOT = TypeCacheHotSlot {
+        cache_key: lookup_key,
+        slot_idx: idx,
+    };
+    record_stats_type_cache_insert(metadata);
+    true
+}
+
+#[inline]
+unsafe fn record_small_exact_type_cache_wrong_identity_denial_if_present(
+    layout: Layout,
+    metadata: AllocationMetadata,
+) {
+    if semantic_stats_recording_flags() & SLOW_PATH_STATS == 0
+        || layout.size() == 0
+        || layout.size() >= 3 * size_of::<usize>()
+        || !metadata.has_type()
+        || !metadata.requests(FLAG_TYPE_ISOLATED)
+        || metadata.is_layout_derived()
+    {
+        return;
+    }
+    // The existing fallback tier already records one candidate after its own
+    // exact tiers miss. Avoid counting the same allocation miss twice when
+    // both direct-small and fallback tiers retain a foreign identity.
+    let fallback_has_candidate = match semantic_type_cache_class(layout, metadata) {
+        Some(SemanticTypeCacheClass::Plain) => {
+            plain_type_cache_wrong_identity_candidate(layout, metadata).is_some()
+        }
+        Some(SemanticTypeCacheClass::SmallOutOfLine | SemanticTypeCacheClass::Segregated) => {
+            segregated_type_cache_wrong_identity_candidate(
+                layout,
+                metadata,
+                segregated_type_cache_policy_key(metadata),
+            )
+            .is_some()
+        }
+        None => false,
+    };
+    if fallback_has_candidate {
+        return;
+    }
+    let requested = TypeCacheIdentity::from_metadata(metadata);
+    let mut idx = 0usize;
+    while idx < SMALL_EXACT_TYPE_CACHE_SLOTS {
+        let entry = SMALL_EXACT_TYPE_CACHE[idx];
+        if !entry.is_empty()
+            && entry.size == layout.size()
+            && entry.align == layout.align()
+            && entry.identity != requested
+        {
+            record_stats_type_cache_wrong_identity_denial(metadata, entry.identity, layout);
+            return;
+        }
+        idx += 1;
     }
 }
 
@@ -7294,6 +9588,50 @@ unsafe fn push_inline_type_cache_eligible_with_key(
     }
 }
 
+unsafe fn plain_type_cache_wrong_identity_candidate(
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> Option<TypeCacheIdentity> {
+    let requested = TypeCacheIdentity::from_metadata(metadata);
+    let inline = INLINE_TYPE_CACHE_ENTRY;
+    if !inline.is_empty()
+        && inline.size == layout.size()
+        && inline.align == layout.align()
+        && inline.identity != requested
+    {
+        return Some(inline.identity);
+    }
+
+    let mut slot_idx = 0usize;
+    while slot_idx < TYPE_CACHE_SLOTS {
+        let slot = TYPE_CACHE[slot_idx];
+        if slot.identity != requested
+            && slot.matches_layout(layout)
+            && !slot.is_corrupt()
+            && (slot.head as usize) & (layout.align() - 1) == 0
+        {
+            return Some(slot.identity);
+        }
+        slot_idx += 1;
+    }
+    None
+}
+
+unsafe fn record_plain_type_cache_wrong_identity_denial_if_present(
+    layout: Layout,
+    metadata: AllocationMetadata,
+) {
+    // A cache-wide candidate scan is evaluation telemetry, not part of the
+    // production allocation policy. Keep it behind the existing stats gate so
+    // release/performance builds preserve the exact-miss fast path.
+    if semantic_stats_recording_flags() & SLOW_PATH_STATS == 0 {
+        return;
+    }
+    if let Some(retained) = plain_type_cache_wrong_identity_candidate(layout, metadata) {
+        record_stats_type_cache_wrong_identity_denial(metadata, retained, layout);
+    }
+}
+
 unsafe fn pop_type_cache(layout: Layout, metadata: AllocationMetadata) -> Option<*mut u8> {
     let cache_key = type_cache_identity_key(metadata);
     pop_type_cache_with_key(layout, metadata, cache_key)
@@ -7317,7 +9655,7 @@ unsafe fn pop_type_cache_eligible_with_key(
     cache_key: u64,
 ) -> Option<*mut u8> {
     let slot_key = plain_type_cache_slot_key(cache_key, layout);
-    let slot = match type_cache_find_slot_for_key(slot_key, metadata, false) {
+    let slot = match type_cache_find_slot_for_key(slot_key, layout, metadata, false) {
         Some(slot) => &mut *slot,
         None => {
             record_stats_type_cache_bypass(metadata);
@@ -7330,64 +9668,52 @@ unsafe fn pop_type_cache_eligible_with_key(
         return None;
     }
 
-    let mut current = slot.head;
-    let mut previous: *mut usize = core::ptr::null_mut();
-    let mut remaining = slot.count;
-    while !current.is_null() && remaining > 0 {
-        if (current as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0 {
-            mark_plain_type_cache_retained_bytes_untrusted();
-            clear_type_cache_slot(slot, slot_key);
-            record_stats_type_cache_bypass(metadata);
-            return None;
-        }
-        let node = current as *mut usize;
-        let next = node.read() as *mut u8;
-        let size = node.add(1).read();
-        let align = node.add(2).read();
-        if size == layout.size()
-            && align == layout.align()
-            && (current as usize) & (layout.align() - 1) == 0
-        {
-            let expected_tail_after_current = remaining.saturating_sub(1);
-            if previous.is_null() {
-                slot.head = next;
-            } else {
-                previous.write(next as usize);
-            }
-            slot.count -= 1;
-            let released_bytes = type_cache_retained_bytes_for_object(size);
-            let updated_slot_retained_bytes = slot.retained_bytes.checked_sub(released_bytes);
-            slot.retained_bytes = updated_slot_retained_bytes.unwrap_or(0);
-            let remaining_chain_is_corrupt = updated_slot_retained_bytes.is_none()
-                || (expected_tail_after_current != 0 && next.is_null())
-                || slot.has_corrupt_accounting();
-            if remaining_chain_is_corrupt {
-                mark_plain_type_cache_retained_bytes_untrusted();
-            } else {
-                adjust_trusted_plain_type_cache_retained_bytes(released_bytes, 0);
-            }
-            if slot.count == 0 || remaining_chain_is_corrupt {
-                // Emptying a slot must also clear the head pointer.  A corrupted
-                // under- or over-counted chain should be dropped immediately
-                // instead of leaving an UNKNOWN-key slot with a stale head that a
-                // later push could splice back into the hot path.
-                clear_type_cache_slot(slot, slot_key);
-            }
-            let _ = unregister_global_type_cache_ownership(current);
-            record_stats_type_cache_hit(metadata);
-            return Some(current);
-        }
-        previous = node;
-        current = next;
-        remaining -= 1;
-    }
-
-    if !current.is_null() || remaining != 0 {
+    let current = slot.head;
+    if (current as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0
+        || (current as usize) & (layout.align() - 1) != 0
+    {
         mark_plain_type_cache_retained_bytes_untrusted();
         clear_type_cache_slot(slot, slot_key);
+        record_stats_type_cache_bypass(metadata);
+        return None;
     }
-    record_stats_type_cache_bypass(metadata);
-    None
+    let next = (current as *mut usize).read() as *mut u8;
+    slot.head = next;
+    slot.count -= 1;
+    let released_bytes = type_cache_retained_bytes_for_object(slot.size);
+    let updated_slot_retained_bytes = slot.retained_bytes.checked_sub(released_bytes);
+    slot.retained_bytes = updated_slot_retained_bytes.unwrap_or(0);
+    let remaining_chain_is_corrupt = updated_slot_retained_bytes.is_none()
+        || (slot.count == 0 && !next.is_null())
+        || (slot.count != 0
+            && (next.is_null()
+                || (next as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0
+                || (next as usize) & (slot.align - 1) != 0))
+        || slot.has_corrupt_accounting();
+    if remaining_chain_is_corrupt {
+        mark_plain_type_cache_retained_bytes_untrusted();
+    } else {
+        adjust_trusted_plain_type_cache_retained_accounting(released_bytes, 0, 1, 0);
+    }
+    if slot.count == 0 {
+        // Normalize the transient post-pop state before the generic clear so
+        // exact layout metadata from the just-emptied slot is not mistaken for
+        // stale authority and does not invalidate trusted aggregate accounting.
+        slot.cache_key = UNKNOWN_SEMANTIC_ID;
+        slot.identity = TypeCacheIdentity::unknown();
+        slot.head = core::ptr::null_mut();
+        slot.size = 0;
+        slot.align = EMPTY_LAYOUT_ALIGN;
+        clear_type_cache_slot(slot, slot_key);
+    } else if remaining_chain_is_corrupt {
+        // Emptying a slot clears its exact layout authority together with the
+        // head pointer. A short or malformed tail is detached immediately so
+        // a later insertion cannot splice it back into an authorized chain.
+        clear_type_cache_slot(slot, slot_key);
+    }
+    consume_global_type_cache_ownership_for_allocation(current, layout, metadata);
+    record_stats_type_cache_hit(metadata);
+    Some(current)
 }
 
 unsafe fn push_type_cache(ptr: *mut u8, layout: Layout, metadata: AllocationMetadata) -> bool {
@@ -7414,17 +9740,28 @@ unsafe fn push_type_cache_eligible_with_key(
     metadata: AllocationMetadata,
     cache_key: u64,
 ) -> bool {
-    if (ptr as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0 {
+    try_push_type_cache_eligible_with_key(ptr, layout, metadata, cache_key).is_ok()
+}
+
+unsafe fn try_push_type_cache_eligible_with_key(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+    cache_key: u64,
+) -> Result<(), TypeCacheAdmissionRejection> {
+    if (ptr as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0
+        || (ptr as usize) & (layout.align() - 1) != 0
+    {
         record_stats_type_cache_bypass(metadata);
-        return false;
+        return Err(TypeCacheAdmissionRejection::StructuralOrAlignment);
     }
 
     let slot_key = plain_type_cache_slot_key(cache_key, layout);
-    let slot_ptr = match type_cache_find_slot_for_key(slot_key, metadata, true) {
+    let slot_ptr = match type_cache_find_slot_for_key(slot_key, layout, metadata, true) {
         Some(slot) => slot,
         None => {
             record_stats_type_cache_bypass(metadata);
-            return false;
+            return Err(TypeCacheAdmissionRejection::ProbeWindowFull);
         }
     };
     let retained_size = type_cache_retained_bytes_for_layout(layout);
@@ -7432,13 +9769,13 @@ unsafe fn push_type_cache_eligible_with_key(
         let slot = &mut *slot_ptr;
         if slot.count >= MAX_TYPE_CACHE_DEPTH {
             record_stats_type_cache_bypass(metadata);
-            return false;
+            return Err(TypeCacheAdmissionRejection::SlotDepth);
         }
         if !type_cache_slot_head_is_valid(slot) {
             mark_plain_type_cache_retained_bytes_untrusted();
             clear_type_cache_slot(slot, slot_key);
             record_stats_type_cache_bypass(metadata);
-            return false;
+            return Err(TypeCacheAdmissionRejection::StructuralOrAlignment);
         }
         debug_assert_eq!(
             type_cache_slot_retained_bytes(slot),
@@ -7447,29 +9784,33 @@ unsafe fn push_type_cache_eligible_with_key(
         );
         if slot.retained_bytes.saturating_add(retained_size) > MAX_TYPE_CACHE_SLOT_BYTES {
             record_stats_type_cache_bypass(metadata);
-            return false;
+            return Err(TypeCacheAdmissionRejection::SlotByteBudget);
         }
     }
     if !plain_type_cache_can_accept_retained_bytes(retained_size) {
         record_stats_type_cache_bypass(metadata);
-        return false;
+        return Err(TypeCacheAdmissionRejection::AggregateByteBudget);
+    }
+    if !plain_type_cache_can_accept_linked_entry() {
+        record_stats_type_cache_bypass(metadata);
+        return Err(TypeCacheAdmissionRejection::AggregateEntryBudget);
     }
 
     let slot = &mut *slot_ptr;
     let node = ptr as *mut usize;
     node.write(slot.head as usize);
-    node.add(1).write(layout.size());
-    node.add(2).write(layout.align());
     if slot.cache_key == UNKNOWN_SEMANTIC_ID {
         slot.cache_key = slot_key;
         slot.identity = TypeCacheIdentity::from_metadata(metadata);
+        slot.size = layout.size();
+        slot.align = layout.align();
     }
     slot.head = ptr;
     slot.count += 1;
     slot.retained_bytes = slot.retained_bytes.saturating_add(retained_size);
-    adjust_trusted_plain_type_cache_retained_bytes(0, retained_size);
+    adjust_trusted_plain_type_cache_retained_accounting(0, retained_size, 0, 1);
     record_stats_type_cache_insert(metadata);
-    true
+    Ok(())
 }
 
 unsafe fn pop_segregated_type_cache_from(
@@ -7535,15 +9876,413 @@ unsafe fn pop_segregated_type_cache_from(
     None
 }
 
+#[inline]
+fn segregated_type_cache_entry_wrong_identity_candidate(
+    entry: SegregatedTypeCacheEntry,
+    layout: Layout,
+    requested: TypeCacheIdentity,
+    policy_key: u32,
+) -> Option<TypeCacheIdentity> {
+    if entry.is_empty() {
+        return None;
+    }
+    // The ordinary pop path authenticates every occupied candidate before it
+    // can influence a hit or miss. The diagnostic scan keeps the same fail-stop
+    // integrity contract.
+    entry.validate_structural_integrity();
+    let retained = TypeCacheIdentity::from_metadata(entry.metadata);
+    if entry.size == layout.size()
+        && entry.align == layout.align()
+        && entry.policy_key == policy_key
+        && retained != requested
+    {
+        Some(retained)
+    } else {
+        None
+    }
+}
+
+#[cfg(not(unialloc_target_arm64e))]
+unsafe fn segregated_type_cache_wrong_identity_candidate_in_inline_domain(
+    layout: Layout,
+    requested: TypeCacheIdentity,
+    policy_key: u32,
+    cache_domain: u8,
+) -> Option<TypeCacheIdentity> {
+    let mut index = 0usize;
+    while index < inline_segregated_type_cache_capacity(cache_domain) {
+        let entry = *inline_segregated_type_cache_entry_at(cache_domain, index);
+        if let Some(retained) = segregated_type_cache_entry_wrong_identity_candidate(
+            entry, layout, requested, policy_key,
+        ) {
+            return Some(retained);
+        }
+        index += 1;
+    }
+    None
+}
+
+#[cfg(not(unialloc_target_arm64e))]
+fn segregated_type_cache_wrong_identity_candidate_in_buckets(
+    cache: &[SegregatedTypeCacheBucket; TYPE_CACHE_SLOTS],
+    layout: Layout,
+    requested: TypeCacheIdentity,
+    policy_key: u32,
+) -> Option<TypeCacheIdentity> {
+    let mut bucket_index = 0usize;
+    while bucket_index < TYPE_CACHE_SLOTS {
+        let bucket = cache[bucket_index];
+        let mut entry_index = 0usize;
+        while entry_index < SEGREGATED_TYPE_CACHE_DEPTH {
+            if let Some(retained) = segregated_type_cache_entry_wrong_identity_candidate(
+                bucket.entries[entry_index],
+                layout,
+                requested,
+                policy_key,
+            ) {
+                return Some(retained);
+            }
+            entry_index += 1;
+        }
+        bucket_index += 1;
+    }
+    None
+}
+
+unsafe fn segregated_type_cache_wrong_identity_candidate(
+    layout: Layout,
+    metadata: AllocationMetadata,
+    policy_key: u32,
+) -> Option<TypeCacheIdentity> {
+    let requested = TypeCacheIdentity::from_metadata(metadata);
+    #[cfg(unialloc_target_arm64e)]
+    let candidate = {
+        let entry = *ARM64E_INLINE_SEGREGATED_TYPE_CACHE_ENTRY.lock();
+        segregated_type_cache_entry_wrong_identity_candidate(entry, layout, requested, policy_key)
+    };
+
+    #[cfg(not(unialloc_target_arm64e))]
+    let candidate = {
+        let inline_domain = segregated_type_cache_inline_domain(metadata);
+        let mut candidate = segregated_type_cache_wrong_identity_candidate_in_inline_domain(
+            layout,
+            requested,
+            policy_key,
+            inline_domain,
+        );
+        if candidate.is_none() {
+            candidate = segregated_type_cache_wrong_identity_candidate_in_buckets(
+                &*ordinary_segregated_type_cache_mut(),
+                layout,
+                requested,
+                policy_key,
+            );
+        }
+        #[cfg(not(feature = "fixed_heap"))]
+        if candidate.is_none() && metadata.requests(FLAG_HUGEPAGE_METADATA) {
+            if let Some(cache) = hugepage_segregated_type_cache_if_allocated() {
+                candidate = segregated_type_cache_wrong_identity_candidate_in_buckets(
+                    &*cache, layout, requested, policy_key,
+                );
+            }
+        }
+        candidate
+    };
+
+    candidate
+}
+
+unsafe fn record_segregated_type_cache_wrong_identity_denial_if_present(
+    layout: Layout,
+    metadata: AllocationMetadata,
+    policy_key: u32,
+) {
+    if semantic_stats_recording_flags() & SLOW_PATH_STATS == 0 {
+        return;
+    }
+
+    if let Some(retained) =
+        segregated_type_cache_wrong_identity_candidate(layout, metadata, policy_key)
+    {
+        record_stats_type_cache_wrong_identity_denial(metadata, retained, layout);
+    }
+}
+
 unsafe fn finish_popped_segregated_type_cache_entry(
     layout: Layout,
     metadata: AllocationMetadata,
     entry: SegregatedTypeCacheEntry,
 ) -> *mut u8 {
     verify_metadata_record_auth(entry.ptr, layout, metadata, entry.metadata, entry.auth);
-    let _ = unregister_global_type_cache_ownership(entry.ptr);
+    consume_global_type_cache_ownership_for_allocation(entry.ptr, layout, metadata);
     record_stats_type_cache_hit(metadata);
+    record_tiny_side_cache_hit(layout, metadata);
     entry.ptr
+}
+
+enum TypeCacheDepotPendingPushResult {
+    Accepted(Option<SegregatedTypeCacheEntry>),
+    Rejected(PendingGlobalTypeCacheOwnership),
+}
+
+enum TypeCacheDepotTransferResult {
+    Accepted(Option<SegregatedTypeCacheEntry>),
+    Rejected(SegregatedTypeCacheEntry),
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe fn try_push_type_cache_depot_with_pending_ownership(
+    entry: SegregatedTypeCacheEntry,
+    source: TypeCacheDepotSource,
+    ownership: PendingGlobalTypeCacheOwnership,
+) -> TypeCacheDepotPendingPushResult {
+    let retained_bytes = entry.retained_bytes();
+    record_type_cache_depot_counter(&TYPE_CACHE_ADMISSION_STATS.depot_attempts, retained_bytes);
+    record_type_cache_depot_source(source, retained_bytes);
+    if !type_cache_depot_policy_eligible(entry.metadata) {
+        record_type_cache_depot_counter(
+            &TYPE_CACHE_ADMISSION_STATS.depot_rejected_policy,
+            retained_bytes,
+        );
+        return TypeCacheDepotPendingPushResult::Rejected(ownership);
+    }
+    if !type_cache_depot_registry_has_headroom() {
+        record_type_cache_depot_counter(
+            &TYPE_CACHE_ADMISSION_STATS.depot_rejected_registry_headroom,
+            retained_bytes,
+        );
+        return TypeCacheDepotPendingPushResult::Rejected(ownership);
+    }
+    let shard_idx = type_cache_depot_shard_index(entry);
+    if TYPE_CACHE_DEPOT_SHARD_OCCUPANCY[shard_idx].load(Ordering::Acquire)
+        >= TYPE_CACHE_DEPOT_SHARD_SLOTS
+    {
+        record_type_cache_depot_counter(
+            &TYPE_CACHE_ADMISSION_STATS.depot_rejected_capacity,
+            retained_bytes,
+        );
+        return TypeCacheDepotPendingPushResult::Rejected(ownership);
+    }
+    let slot = type_cache_depot_slot_for_entry(entry);
+    let mut shard = TYPE_CACHE_DEPOT[shard_idx].lock();
+    let old_entries = shard.count;
+    let old_bytes = shard.retained_bytes;
+    match shard.push(entry, slot) {
+        Ok(evicted) => {
+            // Publish the durable lifecycle token before the pointer becomes
+            // visible to another thread. The shard lock keeps a depot pop from
+            // racing ahead of this commit.
+            ownership.commit();
+            if old_entries != shard.count || old_bytes != shard.retained_bytes {
+                note_type_cache_depot_occupancy_change(
+                    old_entries,
+                    old_bytes,
+                    shard.count,
+                    shard.retained_bytes,
+                );
+                TYPE_CACHE_DEPOT_SHARD_OCCUPANCY[shard_idx].store(shard.count, Ordering::Release);
+            }
+            drop(shard);
+            record_type_cache_depot_counter(
+                &TYPE_CACHE_ADMISSION_STATS.depot_inserts,
+                retained_bytes,
+            );
+            record_type_cache_depot_counter(
+                &TYPE_CACHE_ADMISSION_STATS.depot_rescued_overflow,
+                retained_bytes,
+            );
+            record_stats_type_cache_insert(entry.metadata);
+            if let Some(victim) = evicted {
+                record_type_cache_depot_counter(
+                    &TYPE_CACHE_ADMISSION_STATS.depot_evictions,
+                    victim.retained_bytes(),
+                );
+            }
+            TypeCacheDepotPendingPushResult::Accepted(evicted)
+        }
+        Err(()) => {
+            drop(shard);
+            record_type_cache_depot_counter(
+                &TYPE_CACHE_ADMISSION_STATS.depot_rejected_capacity,
+                retained_bytes,
+            );
+            TypeCacheDepotPendingPushResult::Rejected(ownership)
+        }
+    }
+}
+
+#[cfg(feature = "fixed_heap")]
+unsafe fn try_push_type_cache_depot_with_pending_ownership(
+    entry: SegregatedTypeCacheEntry,
+    source: TypeCacheDepotSource,
+    ownership: PendingGlobalTypeCacheOwnership,
+) -> TypeCacheDepotPendingPushResult {
+    let retained_bytes = entry.retained_bytes();
+    record_type_cache_depot_counter(&TYPE_CACHE_ADMISSION_STATS.depot_attempts, retained_bytes);
+    record_type_cache_depot_source(source, retained_bytes);
+    record_type_cache_depot_counter(
+        &TYPE_CACHE_ADMISSION_STATS.depot_rejected_policy,
+        retained_bytes,
+    );
+    TypeCacheDepotPendingPushResult::Rejected(ownership)
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe fn try_transfer_type_cache_entry_to_depot(
+    entry: SegregatedTypeCacheEntry,
+) -> TypeCacheDepotTransferResult {
+    let retained_bytes = entry.retained_bytes();
+    record_type_cache_depot_counter(&TYPE_CACHE_ADMISSION_STATS.depot_attempts, retained_bytes);
+    record_type_cache_depot_source(TypeCacheDepotSource::LocalEviction, retained_bytes);
+    if !type_cache_depot_policy_eligible(entry.metadata) {
+        record_type_cache_depot_counter(
+            &TYPE_CACHE_ADMISSION_STATS.depot_rejected_policy,
+            retained_bytes,
+        );
+        return TypeCacheDepotTransferResult::Rejected(entry);
+    }
+    if !type_cache_depot_registry_has_headroom() {
+        record_type_cache_depot_counter(
+            &TYPE_CACHE_ADMISSION_STATS.depot_rejected_registry_headroom,
+            retained_bytes,
+        );
+        return TypeCacheDepotTransferResult::Rejected(entry);
+    }
+    let shard_idx = type_cache_depot_shard_index(entry);
+    if TYPE_CACHE_DEPOT_SHARD_OCCUPANCY[shard_idx].load(Ordering::Acquire)
+        >= TYPE_CACHE_DEPOT_SHARD_SLOTS
+    {
+        record_type_cache_depot_counter(
+            &TYPE_CACHE_ADMISSION_STATS.depot_rejected_capacity,
+            retained_bytes,
+        );
+        return TypeCacheDepotTransferResult::Rejected(entry);
+    }
+    let slot = type_cache_depot_slot_for_entry(entry);
+    let mut shard = TYPE_CACHE_DEPOT[shard_idx].lock();
+    let old_entries = shard.count;
+    let old_bytes = shard.retained_bytes;
+    match shard.push(entry, slot) {
+        Ok(evicted) => {
+            if old_entries != shard.count || old_bytes != shard.retained_bytes {
+                note_type_cache_depot_occupancy_change(
+                    old_entries,
+                    old_bytes,
+                    shard.count,
+                    shard.retained_bytes,
+                );
+                TYPE_CACHE_DEPOT_SHARD_OCCUPANCY[shard_idx].store(shard.count, Ordering::Release);
+            }
+            drop(shard);
+            record_type_cache_depot_counter(
+                &TYPE_CACHE_ADMISSION_STATS.depot_inserts,
+                retained_bytes,
+            );
+            if let Some(victim) = evicted {
+                record_type_cache_depot_counter(
+                    &TYPE_CACHE_ADMISSION_STATS.depot_evictions,
+                    victim.retained_bytes(),
+                );
+            }
+            TypeCacheDepotTransferResult::Accepted(evicted)
+        }
+        Err(()) => {
+            drop(shard);
+            record_type_cache_depot_counter(
+                &TYPE_CACHE_ADMISSION_STATS.depot_rejected_capacity,
+                retained_bytes,
+            );
+            TypeCacheDepotTransferResult::Rejected(entry)
+        }
+    }
+}
+
+#[cfg(feature = "fixed_heap")]
+unsafe fn try_transfer_type_cache_entry_to_depot(
+    entry: SegregatedTypeCacheEntry,
+) -> TypeCacheDepotTransferResult {
+    let retained_bytes = entry.retained_bytes();
+    record_type_cache_depot_counter(&TYPE_CACHE_ADMISSION_STATS.depot_attempts, retained_bytes);
+    record_type_cache_depot_source(TypeCacheDepotSource::LocalEviction, retained_bytes);
+    record_type_cache_depot_counter(
+        &TYPE_CACHE_ADMISSION_STATS.depot_rejected_policy,
+        retained_bytes,
+    );
+    TypeCacheDepotTransferResult::Rejected(entry)
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe fn pop_type_cache_depot(layout: Layout, metadata: AllocationMetadata) -> Option<*mut u8> {
+    let cache_key = type_cache_identity_key(metadata);
+    let policy_key = segregated_type_cache_policy_key(metadata);
+    pop_type_cache_depot_with_key(layout, metadata, cache_key, policy_key, false)
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe fn pop_type_cache_depot_with_key(
+    layout: Layout,
+    metadata: AllocationMetadata,
+    cache_key: u64,
+    policy_key: u32,
+    l1_bypass_was_recorded: bool,
+) -> Option<*mut u8> {
+    if !type_cache_depot_policy_eligible(metadata) {
+        return None;
+    }
+    let identity = TypeCacheIdentity::from_metadata(metadata);
+    let (shard_idx, slot) = type_cache_depot_location_for_request(cache_key, layout, policy_key);
+    if TYPE_CACHE_DEPOT_SHARD_OCCUPANCY[shard_idx].load(Ordering::Acquire) == 0 {
+        return None;
+    }
+    let mut shard = TYPE_CACHE_DEPOT[shard_idx].lock();
+    let old_entries = shard.count;
+    let old_bytes = shard.retained_bytes;
+    let (entry, foreign) = shard.pop(layout, identity, cache_key, policy_key, slot);
+    if entry.is_some() {
+        note_type_cache_depot_occupancy_change(
+            old_entries,
+            old_bytes,
+            shard.count,
+            shard.retained_bytes,
+        );
+        TYPE_CACHE_DEPOT_SHARD_OCCUPANCY[shard_idx].store(shard.count, Ordering::Release);
+    }
+    drop(shard);
+    if let Some(entry) = entry {
+        record_type_cache_depot_counter(
+            &TYPE_CACHE_ADMISSION_STATS.depot_hits,
+            entry.retained_bytes(),
+        );
+        if l1_bypass_was_recorded {
+            record_type_cache_depot_counter(
+                &TYPE_CACHE_ADMISSION_STATS.depot_hits_after_recorded_l1_bypass,
+                entry.retained_bytes(),
+            );
+        }
+        return Some(finish_popped_segregated_type_cache_entry(
+            layout, metadata, entry,
+        ));
+    }
+    if let Some(retained) = foreign {
+        record_stats_type_cache_wrong_identity_denial(metadata, retained, layout);
+    }
+    None
+}
+
+#[cfg(feature = "fixed_heap")]
+unsafe fn pop_type_cache_depot(_layout: Layout, _metadata: AllocationMetadata) -> Option<*mut u8> {
+    None
+}
+
+#[cfg(feature = "fixed_heap")]
+unsafe fn pop_type_cache_depot_with_key(
+    _layout: Layout,
+    _metadata: AllocationMetadata,
+    _cache_key: u64,
+    _policy_key: u32,
+    _l1_bypass_was_recorded: bool,
+) -> Option<*mut u8> {
+    None
 }
 
 #[cfg(unialloc_target_arm64e)]
@@ -7632,7 +10371,7 @@ unsafe fn pop_segregated_type_cache_eligible_with_key(
     let identity = TypeCacheIdentity::from_metadata(metadata);
     #[cfg(unialloc_target_arm64e)]
     {
-        if inline_segregated_type_cache_pop_eligible(metadata) {
+        if inline_segregated_type_cache_pop_eligible(layout, metadata) {
             if let Some(entry) = arm64e_pop_inline_segregated_type_cache_entry(
                 layout, identity, cache_key, policy_key,
             ) {
@@ -7641,13 +10380,19 @@ unsafe fn pop_segregated_type_cache_eligible_with_key(
                 ));
             }
         }
+        if let Some(ptr) =
+            pop_type_cache_depot_with_key(layout, metadata, cache_key, policy_key, false)
+        {
+            return Some(ptr);
+        }
+        record_segregated_type_cache_wrong_identity_denial_if_present(layout, metadata, policy_key);
         record_stats_type_cache_bypass(metadata);
         return None;
     }
 
     #[cfg(not(unialloc_target_arm64e))]
     {
-        if inline_segregated_type_cache_pop_eligible(metadata) {
+        if inline_segregated_type_cache_pop_eligible(layout, metadata) {
             let inline_cache_domain = segregated_type_cache_inline_domain(metadata);
             if let Some(entry) = pop_inline_segregated_type_cache_eligible_with_key(
                 layout,
@@ -7711,6 +10456,12 @@ unsafe fn pop_segregated_type_cache_bucket_eligible_with_key(
         release_empty_hugepage_segregated_type_cache();
     }
 
+    if let Some(ptr) = pop_type_cache_depot_with_key(layout, metadata, cache_key, policy_key, false)
+    {
+        return Some(ptr);
+    }
+
+    record_segregated_type_cache_wrong_identity_denial_if_present(layout, metadata, policy_key);
     record_stats_type_cache_bypass(metadata);
     None
 }
@@ -7995,7 +10746,7 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
     let identity = TypeCacheIdentity::from_metadata(metadata);
     #[cfg(unialloc_target_arm64e)]
     {
-        if inline_segregated_type_cache_eligible_for_classified(metadata)
+        if inline_segregated_type_cache_eligible_for_classified(layout, metadata)
             && arm64e_push_inline_segregated_type_cache_entry(
                 ptr, layout, metadata, cache_key, policy_key,
             )
@@ -8034,8 +10785,8 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
 
         let (cache, cache_domain) = segregated_type_cache_for_push(metadata);
         let inline_cache_domain = segregated_type_cache_inline_domain(metadata);
-        if inline_segregated_type_cache_eligible_for_classified(metadata) {
-            if push_inline_segregated_type_cache_eligible_with_key(
+        if inline_segregated_type_cache_eligible_for_classified(layout, metadata)
+            && push_inline_segregated_type_cache_eligible_with_key(
                 ptr,
                 layout,
                 metadata,
@@ -8044,9 +10795,9 @@ unsafe fn push_segregated_type_cache_eligible_with_key(
                 cache_domain,
                 inline_cache_domain,
                 cache,
-            ) {
-                return Ok(None);
-            }
+            )
+        {
+            return Ok(None);
         }
 
         let start = segregated_type_cache_slot_for_key(cache_key, layout);
@@ -8246,12 +10997,28 @@ unsafe fn pop_plain_semantic_type_cache_eligible(
     if let Some(ptr) = pop_inline_type_cache_eligible_with_key(layout, metadata, cache_key) {
         return Some(ptr);
     }
-    pop_type_cache_eligible_with_key(layout, metadata, cache_key)
+    if let Some(ptr) = pop_type_cache_eligible_with_key(layout, metadata, cache_key) {
+        return Some(ptr);
+    }
+    if let Some(ptr) = pop_type_cache_depot_with_key(
+        layout,
+        metadata,
+        cache_key,
+        segregated_type_cache_policy_key(metadata),
+        true,
+    ) {
+        return Some(ptr);
+    }
+    record_plain_type_cache_wrong_identity_denial_if_present(layout, metadata);
+    None
 }
 
 unsafe fn pop_semantic_type_cache(layout: Layout, metadata: AllocationMetadata) -> Option<*mut u8> {
-    match semantic_type_cache_class(layout, metadata) {
-        Some(SemanticTypeCacheClass::Segregated) => {
+    if let Some(ptr) = pop_small_exact_type_cache(layout, metadata) {
+        return Some(ptr);
+    }
+    let result = match semantic_type_cache_class(layout, metadata) {
+        Some(SemanticTypeCacheClass::SmallOutOfLine | SemanticTypeCacheClass::Segregated) => {
             pop_segregated_type_cache_eligible(layout, metadata)
         }
         Some(SemanticTypeCacheClass::Plain) => {
@@ -8261,15 +11028,22 @@ unsafe fn pop_semantic_type_cache(layout: Layout, metadata: AllocationMetadata) 
             record_stats_type_cache_bypass(metadata);
             None
         }
+    };
+    if result.is_none() {
+        record_small_exact_type_cache_wrong_identity_denial_if_present(layout, metadata);
     }
+    result
 }
 
 unsafe fn pop_compiler_type_metadata_cache(
     layout: Layout,
     metadata: AllocationMetadata,
 ) -> Option<*mut u8> {
-    match compiler_type_metadata_cache_class(layout, metadata) {
-        Some(SemanticTypeCacheClass::Segregated) => {
+    if let Some(ptr) = pop_small_exact_type_cache(layout, metadata) {
+        return Some(ptr);
+    }
+    let result = match compiler_type_metadata_cache_class(layout, metadata) {
+        Some(SemanticTypeCacheClass::SmallOutOfLine | SemanticTypeCacheClass::Segregated) => {
             pop_segregated_type_cache_eligible(layout, metadata)
         }
         Some(SemanticTypeCacheClass::Plain) => {
@@ -8279,7 +11053,11 @@ unsafe fn pop_compiler_type_metadata_cache(
             record_stats_type_cache_bypass(metadata);
             None
         }
+    };
+    if result.is_none() {
+        record_small_exact_type_cache_wrong_identity_denial_if_present(layout, metadata);
     }
+    result
 }
 
 unsafe fn push_plain_semantic_type_cache_eligible(
@@ -8287,11 +11065,19 @@ unsafe fn push_plain_semantic_type_cache_eligible(
     layout: Layout,
     metadata: AllocationMetadata,
 ) -> bool {
+    try_push_plain_semantic_type_cache_eligible(ptr, layout, metadata).is_ok()
+}
+
+unsafe fn try_push_plain_semantic_type_cache_eligible(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) -> Result<(), TypeCacheAdmissionRejection> {
     let cache_key = type_cache_identity_key(metadata);
     if push_inline_type_cache_eligible_with_key(ptr, layout, metadata, cache_key) {
-        true
+        Ok(())
     } else {
-        push_type_cache_eligible_with_key(ptr, layout, metadata, cache_key)
+        try_push_type_cache_eligible_with_key(ptr, layout, metadata, cache_key)
     }
 }
 
@@ -8337,6 +11123,85 @@ unsafe fn finish_rejected_type_cache_insert(
     }
 }
 
+#[inline]
+unsafe fn release_type_cache_depot_transfer_outcome(
+    alloc: &RustAllocator,
+    outcome: TypeCacheDepotTransferResult,
+) {
+    let release = match outcome {
+        TypeCacheDepotTransferResult::Accepted(evicted) => evicted,
+        TypeCacheDepotTransferResult::Rejected(entry) => Some(entry),
+    };
+    if let Some(entry) = release {
+        // Depot mutation and its shard guard completed before this helper was
+        // entered; lifecycle/backend release never runs under the depot lock.
+        release_evicted_segregated_type_cache_entry(alloc, entry);
+    }
+}
+
+#[inline]
+unsafe fn transfer_local_type_cache_eviction_to_depot(
+    alloc: &RustAllocator,
+    entry: SegregatedTypeCacheEntry,
+) {
+    let outcome = try_transfer_type_cache_entry_to_depot(entry);
+    release_type_cache_depot_transfer_outcome(alloc, outcome);
+}
+
+unsafe fn rescue_rejected_type_cache_insert_in_depot(
+    alloc: &RustAllocator,
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+    rejection: TypeCacheAdmissionRejection,
+    ownership: PendingGlobalTypeCacheOwnership,
+    terminal_ownership: TerminalRetainedOwnership,
+) -> bool {
+    let source = match type_cache_depot_source_for_rejection(rejection) {
+        Some(source) => source,
+        None => {
+            record_type_cache_admission_rejection(rejection, layout);
+            return finish_rejected_type_cache_insert(
+                alloc,
+                ptr,
+                layout,
+                metadata,
+                ownership,
+                terminal_ownership,
+            );
+        }
+    };
+    let entry = SegregatedTypeCacheEntry::new(
+        type_cache_identity_key(metadata),
+        segregated_type_cache_policy_key(metadata),
+        ptr,
+        layout,
+        metadata,
+    );
+    match try_push_type_cache_depot_with_pending_ownership(entry, source, ownership) {
+        TypeCacheDepotPendingPushResult::Accepted(evicted) => {
+            record_type_cache_admitted(layout, metadata);
+            if let Some(victim) = evicted {
+                release_evicted_segregated_type_cache_entry(alloc, victim);
+            }
+            true
+        }
+        TypeCacheDepotPendingPushResult::Rejected(ownership) => {
+            // The reason becomes terminal only after both bounded tiers refuse
+            // the object. L1-only pressure rescued by the depot is admitted.
+            record_type_cache_admission_rejection(rejection, layout);
+            finish_rejected_type_cache_insert(
+                alloc,
+                ptr,
+                layout,
+                metadata,
+                ownership,
+                terminal_ownership,
+            )
+        }
+    }
+}
+
 /// Complete a bounded-registry miss while the pointer's cross-domain
 /// arbitration lock is still held. A delayed-free handoff already has durable
 /// source ownership and can safely fall back to that owner. An ordinary free
@@ -8352,6 +11217,7 @@ unsafe fn finish_full_type_cache_ownership(
     _arbitration: spin::MutexGuard<'static, ()>,
 ) -> bool {
     record_stats_type_cache_bypass(metadata);
+    record_type_cache_registry_full_failstop(layout);
     match terminal_ownership {
         TerminalRetainedOwnership::DelayedFree => false,
         TerminalRetainedOwnership::TypeCache => {
@@ -8373,11 +11239,19 @@ unsafe fn cache_compiler_type_metadata_free(
 ) -> bool {
     if ptr.is_null() {
         record_stats_type_cache_bypass(metadata);
+        record_type_cache_admission_rejection(
+            TypeCacheAdmissionRejection::StructuralOrAlignment,
+            layout,
+        );
         drop(ownership);
         return false;
     }
     #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
     if super::lifetime_hugepage::owns(ptr) {
+        record_type_cache_admission_rejection(
+            TypeCacheAdmissionRejection::MetadataIneligible,
+            layout,
+        );
         ownership.commit();
         if metadata.requests(FLAG_FORCE_INITIALIZE) {
             core::ptr::write_bytes(ptr, 0, layout.size());
@@ -8392,6 +11266,10 @@ unsafe fn cache_compiler_type_metadata_free(
         Some(cache_class) => cache_class,
         None => {
             record_stats_type_cache_bypass(metadata);
+            record_type_cache_admission_rejection(
+                type_cache_classification_rejection(layout, metadata),
+                layout,
+            );
             ownership.commit();
             if metadata.requests(FLAG_FORCE_INITIALIZE) {
                 core::ptr::write_bytes(ptr, 0, layout.size());
@@ -8405,39 +11283,64 @@ unsafe fn cache_compiler_type_metadata_free(
             return true;
         }
     };
+    if !type_cache_registry_can_retain_pending_owner() {
+        record_stats_type_cache_bypass(metadata);
+        record_type_cache_admission_rejection(
+            TypeCacheAdmissionRejection::RegistryPressure,
+            layout,
+        );
+        return finish_rejected_type_cache_insert(
+            alloc,
+            ptr,
+            layout,
+            metadata,
+            ownership,
+            TerminalRetainedOwnership::TypeCache,
+        );
+    }
+    if push_small_exact_type_cache(ptr, layout, metadata) {
+        record_type_cache_admitted(layout, metadata);
+        ownership.commit();
+        return true;
+    }
     match cache_class {
-        SemanticTypeCacheClass::Segregated => {
+        SemanticTypeCacheClass::SmallOutOfLine | SemanticTypeCacheClass::Segregated => {
             match push_segregated_type_cache_eligible(ptr, layout, metadata) {
                 Ok(evicted) => {
+                    record_type_cache_admitted(layout, metadata);
                     ownership.commit();
                     if let Some(slot) = evicted {
-                        release_evicted_segregated_type_cache_entry(alloc, slot);
+                        transfer_local_type_cache_eviction_to_depot(alloc, slot);
                     }
                     true
                 }
-                Err(()) => finish_rejected_type_cache_insert(
+                Err(()) => rescue_rejected_type_cache_insert_in_depot(
                     alloc,
                     ptr,
                     layout,
                     metadata,
+                    TypeCacheAdmissionRejection::SegregatedCapacity,
                     ownership,
                     TerminalRetainedOwnership::TypeCache,
                 ),
             }
         }
         SemanticTypeCacheClass::Plain => {
-            if push_plain_semantic_type_cache_eligible(ptr, layout, metadata) {
-                ownership.commit();
-                true
-            } else {
-                finish_rejected_type_cache_insert(
+            match try_push_plain_semantic_type_cache_eligible(ptr, layout, metadata) {
+                Ok(()) => {
+                    record_type_cache_admitted(layout, metadata);
+                    ownership.commit();
+                    true
+                }
+                Err(rejection) => rescue_rejected_type_cache_insert_in_depot(
                     alloc,
                     ptr,
                     layout,
                     metadata,
+                    rejection,
                     ownership,
                     TerminalRetainedOwnership::TypeCache,
-                )
+                ),
             }
         }
     }
@@ -8453,11 +11356,19 @@ unsafe fn cache_semantic_free_with_rejected_insert_owner(
 ) -> bool {
     if ptr.is_null() {
         record_stats_type_cache_bypass(metadata);
+        record_type_cache_admission_rejection(
+            TypeCacheAdmissionRejection::StructuralOrAlignment,
+            layout,
+        );
         drop(preacquired_ownership);
         return false;
     }
     #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
     if super::lifetime_hugepage::owns(ptr) {
+        record_type_cache_admission_rejection(
+            TypeCacheAdmissionRejection::MetadataIneligible,
+            layout,
+        );
         let release_ownership = match (preacquired_ownership, terminal_ownership) {
             (Some(ownership), _) => {
                 ownership.commit();
@@ -8495,6 +11406,10 @@ unsafe fn cache_semantic_free_with_rejected_insert_owner(
         Some(cache_class) => cache_class,
         None => {
             record_stats_type_cache_bypass(metadata);
+            record_type_cache_admission_rejection(
+                type_cache_classification_rejection(layout, metadata),
+                layout,
+            );
             if let Some(ownership) = preacquired_ownership {
                 ownership.commit();
                 if metadata.requests(FLAG_FORCE_INITIALIZE) {
@@ -8533,39 +11448,64 @@ unsafe fn cache_semantic_free_with_rejected_insert_owner(
             );
         }
     };
+    if !type_cache_registry_can_retain_pending_owner() {
+        record_stats_type_cache_bypass(metadata);
+        record_type_cache_admission_rejection(
+            TypeCacheAdmissionRejection::RegistryPressure,
+            layout,
+        );
+        return finish_rejected_type_cache_insert(
+            alloc,
+            ptr,
+            layout,
+            metadata,
+            ownership,
+            terminal_ownership,
+        );
+    }
+    if push_small_exact_type_cache(ptr, layout, metadata) {
+        record_type_cache_admitted(layout, metadata);
+        ownership.commit();
+        return true;
+    }
     match cache_class {
-        SemanticTypeCacheClass::Segregated => {
+        SemanticTypeCacheClass::SmallOutOfLine | SemanticTypeCacheClass::Segregated => {
             match push_segregated_type_cache_eligible(ptr, layout, metadata) {
                 Ok(evicted) => {
+                    record_type_cache_admitted(layout, metadata);
                     ownership.commit();
                     if let Some(slot) = evicted {
-                        release_evicted_segregated_type_cache_entry(alloc, slot);
+                        transfer_local_type_cache_eviction_to_depot(alloc, slot);
                     }
                     true
                 }
-                Err(()) => finish_rejected_type_cache_insert(
+                Err(()) => rescue_rejected_type_cache_insert_in_depot(
                     alloc,
                     ptr,
                     layout,
                     metadata,
+                    TypeCacheAdmissionRejection::SegregatedCapacity,
                     ownership,
                     terminal_ownership,
                 ),
             }
         }
         SemanticTypeCacheClass::Plain => {
-            if push_plain_semantic_type_cache_eligible(ptr, layout, metadata) {
-                ownership.commit();
-                true
-            } else {
-                finish_rejected_type_cache_insert(
+            match try_push_plain_semantic_type_cache_eligible(ptr, layout, metadata) {
+                Ok(()) => {
+                    record_type_cache_admitted(layout, metadata);
+                    ownership.commit();
+                    true
+                }
+                Err(rejection) => rescue_rejected_type_cache_insert_in_depot(
                     alloc,
                     ptr,
                     layout,
                     metadata,
+                    rejection,
                     ownership,
                     terminal_ownership,
-                )
+                ),
             }
         }
     }
@@ -9798,6 +12738,7 @@ enum GlobalTypeCacheOwnershipRegistration {
 enum GlobalAddressLifecycleSnapshot {
     Absent,
     Live,
+    TypeLeased,
     RetiredUnknown,
     TypeRetained,
     DelayedRetained,
@@ -9889,7 +12830,9 @@ impl PendingGlobalTypeCacheOwnership {
             panic!("type-retained ownership changed before rollback");
         }
         restore_global_address_lifecycle(self.ptr, self.prior);
-        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+        if self.prior != GlobalAddressLifecycleSnapshot::TypeLeased {
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+        }
         self.finished = true;
         drop(arbitration);
     }
@@ -9899,14 +12842,22 @@ impl PendingGlobalTypeCacheOwnership {
         let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
             [global_retained_ownership_arbitration_shard(self.ptr)]
         .lock();
+        let (target_state, releases_reservation) =
+            if self.prior == GlobalAddressLifecycleSnapshot::TypeLeased {
+                (ADDRESS_LIFECYCLE_TYPE_LEASED, false)
+            } else {
+                (ADDRESS_LIFECYCLE_PROBE_TOMBSTONE, true)
+            };
         transition_global_address_lifecycle(
             self.ptr,
             GlobalAddressLifecycleSnapshot::TypeRetained,
             None,
-            ADDRESS_LIFECYCLE_PROBE_TOMBSTONE,
+            target_state,
         )
         .unwrap_or_else(|_| panic!("type-retained ownership changed before live reuse"));
-        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+        if releases_reservation {
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+        }
         self.finished = true;
         drop(arbitration);
     }
@@ -9963,18 +12914,79 @@ impl Drop for PendingGlobalTypeCacheOwnership {
 
 #[inline]
 fn global_retained_ownership_arbitration_shard(ptr: *mut u8) -> usize {
-    let mut value = (ptr as usize) >> 3;
-    value ^= value >> 17;
-    value ^= value >> 31;
-    value.wrapping_mul(0x9e37_79b1usize) & GLOBAL_RETAINED_OWNERSHIP_ARBITRATION_SHARD_MASK
+    global_type_cache_ownership_hash(ptr) & GLOBAL_RETAINED_OWNERSHIP_ARBITRATION_SHARD_MASK
 }
 
 #[inline]
 fn global_type_cache_ownership_hash(ptr: *mut u8) -> usize {
-    let mut value = (ptr as usize) >> 3;
-    value ^= value >> 17;
-    value ^= value >> 31;
-    value.wrapping_mul(0x9e37_79b1usize)
+    type_cache_avalanche(((ptr as usize) >> 3) as u64) as usize
+}
+
+#[inline]
+fn global_semantic_pointer_filter_index(ptr: *mut u8) -> usize {
+    global_type_cache_ownership_hash(ptr) & GLOBAL_SEMANTIC_POINTER_FILTER_MASK
+}
+
+#[inline]
+fn increment_semantic_pointer_filter(
+    filter: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
+    ptr: *mut u8,
+) {
+    if ptr.is_null() {
+        panic!("semantic pointer filter cannot publish null");
+    }
+    // Every count corresponds to an authoritative recovery or retained-owner
+    // record. Hosted overflow mappings are bounded by `isize::MAX`, while the
+    // fixed-heap and retained-owner tables have much smaller hard capacities,
+    // so a valid live set cannot reach `usize::MAX`.
+    let previous = filter[global_semantic_pointer_filter_index(ptr)].fetch_add(1, Ordering::AcqRel);
+    assert_ne!(
+        previous,
+        usize::MAX,
+        "semantic pointer filter count exhausted"
+    );
+}
+
+#[inline]
+fn decrement_semantic_pointer_filter(
+    filter: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
+    ptr: *mut u8,
+) {
+    if ptr.is_null() {
+        panic!("semantic pointer filter cannot retire null");
+    }
+    let previous = filter[global_semantic_pointer_filter_index(ptr)].fetch_sub(1, Ordering::AcqRel);
+    assert_ne!(previous, 0, "semantic pointer filter count underflow");
+}
+
+#[inline]
+fn increment_global_recovery_pointer_filter(ptr: *mut u8) {
+    increment_semantic_pointer_filter(&GLOBAL_RECOVERY_POINTER_FILTER, ptr);
+}
+
+#[inline]
+fn decrement_global_recovery_pointer_filter(ptr: *mut u8) {
+    decrement_semantic_pointer_filter(&GLOBAL_RECOVERY_POINTER_FILTER, ptr);
+}
+
+#[inline]
+fn increment_global_retained_pointer_filter(ptr: *mut u8) {
+    increment_semantic_pointer_filter(&GLOBAL_RETAINED_POINTER_FILTER, ptr);
+}
+
+#[inline]
+fn decrement_global_retained_pointer_filter(ptr: *mut u8) {
+    decrement_semantic_pointer_filter(&GLOBAL_RETAINED_POINTER_FILTER, ptr);
+}
+
+#[inline]
+fn global_semantic_pointer_maybe_tracked(ptr: *mut u8) -> bool {
+    if ptr.is_null() {
+        return false;
+    }
+    let idx = global_semantic_pointer_filter_index(ptr);
+    GLOBAL_RECOVERY_POINTER_FILTER[idx].load(Ordering::Acquire) != 0
+        || GLOBAL_RETAINED_POINTER_FILTER[idx].load(Ordering::Acquire) != 0
 }
 
 #[inline]
@@ -9990,6 +13002,7 @@ fn global_type_cache_ownership_shard_and_slot(ptr: *mut u8) -> (usize, usize) {
 fn address_lifecycle_state_snapshot(state: u8) -> GlobalAddressLifecycleSnapshot {
     match state {
         ADDRESS_LIFECYCLE_LIVE => GlobalAddressLifecycleSnapshot::Live,
+        ADDRESS_LIFECYCLE_TYPE_LEASED => GlobalAddressLifecycleSnapshot::TypeLeased,
         ADDRESS_LIFECYCLE_TYPE_RETAINED => GlobalAddressLifecycleSnapshot::TypeRetained,
         ADDRESS_LIFECYCLE_DELAYED_RETAINED => GlobalAddressLifecycleSnapshot::DelayedRetained,
         ADDRESS_LIFECYCLE_RELEASED => GlobalAddressLifecycleSnapshot::Released,
@@ -9998,6 +13011,28 @@ fn address_lifecycle_state_snapshot(state: u8) -> GlobalAddressLifecycleSnapshot
         }
         _ => panic!("address lifecycle state corrupt"),
     }
+}
+
+#[inline]
+fn address_lifecycle_snapshot_requires_retained_filter(
+    snapshot: GlobalAddressLifecycleSnapshot,
+) -> bool {
+    matches!(
+        snapshot,
+        GlobalAddressLifecycleSnapshot::TypeLeased
+            | GlobalAddressLifecycleSnapshot::TypeRetained
+            | GlobalAddressLifecycleSnapshot::DelayedRetained
+    )
+}
+
+#[inline]
+fn address_lifecycle_state_requires_retained_filter(state: u8) -> bool {
+    matches!(
+        state,
+        ADDRESS_LIFECYCLE_TYPE_LEASED
+            | ADDRESS_LIFECYCLE_TYPE_RETAINED
+            | ADDRESS_LIFECYCLE_DELAYED_RETAINED
+    )
 }
 
 #[inline]
@@ -10150,6 +13185,12 @@ fn global_address_lifecycle_observation(ptr: *mut u8) -> GlobalAddressLifecycleO
         }
         offset += 1;
     }
+    if !global_address_generation_tracking_active() {
+        return GlobalAddressLifecycleObservation {
+            snapshot: GlobalAddressLifecycleSnapshot::Absent,
+            epoch: 0,
+        };
+    }
     global_address_generation_history_observation(&table, ptr_key).unwrap_or(
         GlobalAddressLifecycleObservation {
             snapshot: GlobalAddressLifecycleSnapshot::Absent,
@@ -10237,12 +13278,19 @@ fn transition_global_address_lifecycle(
             idx
         }
         None => {
-            let missing = global_address_generation_history_observation(&table, ptr_key).unwrap_or(
+            let missing = if global_address_generation_tracking_active() {
+                global_address_generation_history_observation(&table, ptr_key).unwrap_or(
+                    GlobalAddressLifecycleObservation {
+                        snapshot: GlobalAddressLifecycleSnapshot::Absent,
+                        epoch: 0,
+                    },
+                )
+            } else {
                 GlobalAddressLifecycleObservation {
                     snapshot: GlobalAddressLifecycleSnapshot::Absent,
                     epoch: 0,
-                },
-            );
+                }
+            };
             if expected != missing.snapshot
                 || expected_epoch
                     .map(|epoch| missing.epoch != epoch)
@@ -10286,12 +13334,24 @@ fn transition_global_address_lifecycle(
         );
     }
 
+    let prior_requires_filter = address_lifecycle_snapshot_requires_retained_filter(expected);
+    let target_requires_filter = address_lifecycle_state_requires_retained_filter(target_state);
+    if target_requires_filter && !prior_requires_filter {
+        // Publish before the retained entry so a pointer fast-negative cannot
+        // miss an already-visible T/D owner.
+        increment_global_retained_pointer_filter(ptr);
+        #[cfg(test)]
+        pause_after_retained_filter_publication_for_test();
+    }
+
     if target_state == ADDRESS_LIFECYCLE_PROBE_TOMBSTONE {
-        record_global_address_generation_history(
-            &mut table,
-            ptr_key,
-            GlobalAddressLifecycleSnapshot::Absent,
-        );
+        if global_address_generation_tracking_active() {
+            record_global_address_generation_history(
+                &mut table,
+                ptr_key,
+                GlobalAddressLifecycleSnapshot::Absent,
+            );
+        }
         table.ptrs[idx] = 0;
         table.states[idx] = ADDRESS_LIFECYCLE_PROBE_TOMBSTONE;
         table.entry_epochs[idx] = 0;
@@ -10300,6 +13360,11 @@ fn transition_global_address_lifecycle(
         table.ptrs[idx] = ptr_key;
         table.states[idx] = target_state;
         table.entry_epochs[idx] = epoch;
+    }
+    if prior_requires_filter && !target_requires_filter {
+        // The authoritative lifecycle entry is gone before zero becomes
+        // observable to a raw pointer fast-negative.
+        decrement_global_retained_pointer_filter(ptr);
     }
     Ok(())
 }
@@ -10364,6 +13429,7 @@ fn restore_global_address_lifecycle(ptr: *mut u8, prior: GlobalAddressLifecycleS
     }
     let target_state = match prior {
         GlobalAddressLifecycleSnapshot::Live => ADDRESS_LIFECYCLE_LIVE,
+        GlobalAddressLifecycleSnapshot::TypeLeased => ADDRESS_LIFECYCLE_TYPE_LEASED,
         GlobalAddressLifecycleSnapshot::TypeRetained => ADDRESS_LIFECYCLE_TYPE_RETAINED,
         GlobalAddressLifecycleSnapshot::DelayedRetained => ADDRESS_LIFECYCLE_DELAYED_RETAINED,
         GlobalAddressLifecycleSnapshot::Released => ADDRESS_LIFECYCLE_RELEASED,
@@ -10394,7 +13460,9 @@ fn register_global_type_cache_ownership_from_snapshot(
         ADDRESS_LIFECYCLE_TYPE_RETAINED,
     ) {
         Ok(()) => {
-            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_add(1, Ordering::Release);
+            if expected.snapshot != GlobalAddressLifecycleSnapshot::TypeLeased {
+                GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_add(1, Ordering::Release);
+            }
             Ok(PendingGlobalTypeCacheOwnership::new(ptr, expected.snapshot))
         }
         Err(AddressLifecycleTransitionError::Conflict) => {
@@ -10413,7 +13481,9 @@ fn register_global_type_cache_ownership(ptr: *mut u8) -> GlobalTypeCacheOwnershi
     .lock();
     let result = if matches!(
         observation.snapshot,
-        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live
+        GlobalAddressLifecycleSnapshot::Absent
+            | GlobalAddressLifecycleSnapshot::Live
+            | GlobalAddressLifecycleSnapshot::TypeLeased
     ) {
         register_global_type_cache_ownership_from_snapshot(ptr, observation)
     } else {
@@ -10433,10 +13503,9 @@ fn unregister_global_type_cache_ownership(ptr: *mut u8) -> bool {
     let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
         [global_retained_ownership_arbitration_shard(ptr)]
     .lock();
-    if global_address_lifecycle_snapshot(ptr) != GlobalAddressLifecycleSnapshot::TypeRetained {
-        drop(arbitration);
-        return false;
-    }
+    // The checked transition already validates the exact TypeRetained state
+    // while holding the lifecycle shard lock.  A separate snapshot would lock
+    // and probe the same table twice on every successful cache hit.
     let transitioned = transition_global_address_lifecycle(
         ptr,
         GlobalAddressLifecycleSnapshot::TypeRetained,
@@ -10449,6 +13518,108 @@ fn unregister_global_type_cache_ownership(ptr: *mut u8) -> bool {
     }
     drop(arbitration);
     transitioned
+}
+
+/// Consume exact type-cache ownership and publish the returned allocation as
+/// one address-lifecycle transaction. A cache hit already proves that the
+/// pointer came from the matching identity/layout/policy domain, so exposing it
+/// only requires advancing retained ownership through the same two generations
+/// as `unregister_global_type_cache_ownership` followed by
+/// `publish_semantic_allocation_return`.
+///
+/// Keeping both generation advances under one arbiter/table lock removes the
+/// intermediate reclaim window and the second hash, probe, and lock pass from
+/// every cache hit. Eligible small exact objects retain a bounded leased entry
+/// instead; all other hits finish as an Absent generation-history record.
+#[inline]
+fn consume_global_type_cache_ownership_for_allocation(
+    ptr: *mut u8,
+    layout: Layout,
+    metadata: AllocationMetadata,
+) {
+    if ptr.is_null() {
+        panic!("type-cache allocation publication requires a non-null pointer");
+    }
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+        [global_retained_ownership_arbitration_shard(ptr)]
+    .lock();
+    let ptr_key = ptr as usize;
+    let (shard_idx, start) = global_type_cache_ownership_shard_and_slot(ptr);
+    let mut table = GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock();
+    let mut found = None;
+    let mut offset = 0usize;
+    while offset < GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT {
+        let idx = (start + offset) & (GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS - 1);
+        let state = table.states[idx];
+        if state == ADDRESS_LIFECYCLE_EMPTY {
+            break;
+        }
+        if state != ADDRESS_LIFECYCLE_PROBE_TOMBSTONE && table.ptrs[idx] == ptr_key {
+            found = Some(idx);
+            break;
+        }
+        offset += 1;
+    }
+    let idx = match found {
+        Some(idx) => idx,
+        #[cfg(test)]
+        None => {
+            // Low-level cache unit tests may construct direct entries without
+            // going through the production ownership-admission path.
+            drop(table);
+            drop(arbitration);
+            return;
+        }
+        #[cfg(not(test))]
+        None => panic!("type-cache allocation lost retained ownership"),
+    };
+    if table.states[idx] != ADDRESS_LIFECYCLE_TYPE_RETAINED {
+        drop(table);
+        drop(arbitration);
+        panic!("type-cache allocation ownership changed before reuse");
+    }
+    #[cfg(test)]
+    TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.fetch_add(1, Ordering::Relaxed);
+
+    if small_exact_type_fast_path_eligible(layout, metadata)
+        && GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire)
+            <= type_cache_lease_registry_count_limit()
+    {
+        // The cache entry already proved exact identity/layout/policy. Preserve
+        // its bounded lifecycle reservation while the object is live so the
+        // matching reclaim can return directly to T without history churn.
+        let epoch = next_global_address_epoch(&mut table);
+        table.states[idx] = ADDRESS_LIFECYCLE_TYPE_LEASED;
+        table.entry_epochs[idx] = epoch;
+        drop(table);
+        drop(arbitration);
+        return;
+    }
+
+    // Retire the T generation, then publish the allocation-return generation.
+    // These are the same two history advances as the former two-call path, with
+    // no observable intermediate state between them.
+    if global_address_generation_tracking_active() {
+        record_global_address_generation_history(
+            &mut table,
+            ptr_key,
+            GlobalAddressLifecycleSnapshot::Absent,
+        );
+    }
+    table.ptrs[idx] = 0;
+    table.states[idx] = ADDRESS_LIFECYCLE_PROBE_TOMBSTONE;
+    table.entry_epochs[idx] = 0;
+    if global_address_generation_tracking_active() {
+        record_global_address_generation_history(
+            &mut table,
+            ptr_key,
+            GlobalAddressLifecycleSnapshot::Absent,
+        );
+    }
+    decrement_global_retained_pointer_filter(ptr);
+    GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+    drop(table);
+    drop(arbitration);
 }
 
 fn begin_global_type_cache_ownership_under_arbitration(
@@ -10484,7 +13655,9 @@ fn begin_global_type_cache_ownership_from_observation(
         panic!("delayed-free pointer already quarantined");
     }
     match observation.snapshot {
-        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live => {
+        GlobalAddressLifecycleSnapshot::Absent
+        | GlobalAddressLifecycleSnapshot::Live
+        | GlobalAddressLifecycleSnapshot::TypeLeased => {
             begin_global_type_cache_ownership_under_arbitration(ptr, observation, arbitration)
         }
         _ => panic!("type-cache pointer already retained or released"),
@@ -10552,10 +13725,18 @@ fn clear_global_type_cache_ownership_for_test() {
         pin_shard_idx += 1;
     }
 
+    // Depot payloads share the lifecycle table below. Test resets deliberately
+    // discard allocator-owned fixtures, so detach that test-only payload state
+    // before replacing its ownership records.
+    clear_type_cache_depot_for_test();
+
     let mut shard_idx = 0usize;
     while shard_idx < GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT {
         *GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock() = GlobalTypeCacheOwnershipTable::empty();
         shard_idx += 1;
+    }
+    for count in GLOBAL_RETAINED_POINTER_FILTER.iter() {
+        count.store(0, Ordering::Release);
     }
     GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.store(0, Ordering::Release);
 }
@@ -10631,6 +13812,9 @@ impl PendingGlobalDelayedFreeOwnership {
             panic!("delayed-retained registry disappeared before rollback");
         }
         restore_global_address_lifecycle(self.ptr, self.prior);
+        if self.prior == GlobalAddressLifecycleSnapshot::TypeLeased {
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_add(1, Ordering::Release);
+        }
         self.finished = true;
         drop(arbitration);
     }
@@ -10772,7 +13956,9 @@ pub(crate) fn reject_known_retained_or_released_from_observation(
         GlobalAddressLifecycleSnapshot::RetiredUnknown => {
             panic!("pointer belongs to evicted released history")
         }
-        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live => {}
+        GlobalAddressLifecycleSnapshot::Absent
+        | GlobalAddressLifecycleSnapshot::Live
+        | GlobalAddressLifecycleSnapshot::TypeLeased => {}
     }
 }
 
@@ -10849,7 +14035,7 @@ fn publish_authoritative_allocation_return(ptr: *mut u8, accept_existing_live: b
 /// Validate a pointer returned by the raw backend before it is exposed.
 #[inline]
 pub(crate) fn accept_raw_allocation_return(ptr: *mut u8) {
-    if !global_address_lifecycle_tracking_active() {
+    if !global_address_lifecycle_tracking_active() || !global_address_generation_tracking_active() {
         return;
     }
     publish_authoritative_allocation_return(ptr, false);
@@ -10859,7 +14045,10 @@ pub(crate) fn accept_raw_allocation_return(ptr: *mut u8) {
 /// record just published by the nested raw allocation hook.
 #[inline]
 fn publish_semantic_allocation_return(ptr: *mut u8) {
-    activate_global_address_lifecycle_tracking();
+    activate_semantic_address_lifecycle_tracking();
+    if !global_address_generation_tracking_active() {
+        return;
+    }
     publish_authoritative_allocation_return(ptr, true);
 }
 
@@ -10915,7 +14104,9 @@ fn begin_global_raw_reclaim_from_lifecycle_observation(
         [global_retained_ownership_arbitration_shard(ptr)]
     .lock();
     match observation.snapshot {
-        GlobalAddressLifecycleSnapshot::Absent if observation.epoch == 0 => {
+        GlobalAddressLifecycleSnapshot::Absent
+            if observation.epoch == 0 && !cfg!(feature = "reclaim_checks") =>
+        {
             if global_address_lifecycle_observation(ptr) != observation {
                 drop(arbitration);
                 panic!("raw reclaim address lifecycle changed while queued");
@@ -10923,7 +14114,9 @@ fn begin_global_raw_reclaim_from_lifecycle_observation(
             drop(arbitration);
             GlobalRawReclaimAdmission::Untracked(ptr)
         }
-        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live => {
+        GlobalAddressLifecycleSnapshot::Absent
+        | GlobalAddressLifecycleSnapshot::Live
+        | GlobalAddressLifecycleSnapshot::TypeLeased => {
             match register_global_type_cache_ownership_from_snapshot(ptr, observation) {
                 Ok(ownership) => {
                     drop(arbitration);
@@ -11036,6 +14229,12 @@ pub(crate) fn observe_global_reclaim(ptr: *mut u8) -> GlobalReclaimObservation {
     }
     let mut history_lease = None;
     let lifecycle = lifecycle.unwrap_or_else(|| {
+        if !global_address_generation_tracking_active() {
+            return GlobalAddressLifecycleObservation {
+                snapshot: GlobalAddressLifecycleSnapshot::Absent,
+                epoch: 0,
+            };
+        }
         match global_address_generation_history_entry(&table, ptr_key) {
             Some((idx, observation)) => {
                 if observation.snapshot == GlobalAddressLifecycleSnapshot::Absent {
@@ -11228,10 +14427,15 @@ fn register_global_delayed_free_ownership_from_snapshot(
         Some(expected.epoch),
         ADDRESS_LIFECYCLE_DELAYED_RETAINED,
     ) {
-        Ok(()) => Ok(PendingGlobalDelayedFreeOwnership::new_from_transition(
-            ptr,
-            expected.snapshot,
-        )),
+        Ok(()) => {
+            if expected.snapshot == GlobalAddressLifecycleSnapshot::TypeLeased {
+                GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
+            }
+            Ok(PendingGlobalDelayedFreeOwnership::new_from_transition(
+                ptr,
+                expected.snapshot,
+            ))
+        }
         Err(AddressLifecycleTransitionError::Conflict) => {
             let _ = unregister_global_delayed_free_slot(ptr);
             Err(GlobalDelayedFreeRegistration::Duplicate)
@@ -11250,7 +14454,9 @@ fn register_global_delayed_free_ownership(ptr: *mut u8) -> GlobalDelayedFreeRegi
     .lock();
     let result = if matches!(
         observation.snapshot,
-        GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live
+        GlobalAddressLifecycleSnapshot::Absent
+            | GlobalAddressLifecycleSnapshot::Live
+            | GlobalAddressLifecycleSnapshot::TypeLeased
     ) {
         register_global_delayed_free_ownership_from_snapshot(ptr, observation)
     } else {
@@ -11340,11 +14546,26 @@ fn begin_global_deallocation_admission_from_lifecycle_observation(
 ) -> GlobalDeallocationAdmission {
     #[cfg(test)]
     pause_before_cross_domain_dealloc_arbitration_for_test();
-    let _arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
+    let arbitration = GLOBAL_RETAINED_OWNERSHIP_ARBITRATION
         [global_retained_ownership_arbitration_shard(ptr)]
     .lock();
+    if observation.snapshot == GlobalAddressLifecycleSnapshot::TypeLeased {
+        let ownership = match register_global_type_cache_ownership_from_snapshot(ptr, observation) {
+            Ok(ownership) => ownership,
+            Err(GlobalTypeCacheOwnershipRegistration::Duplicate) => {
+                panic!("type-cache lease changed while reclaim was queued")
+            }
+            Err(GlobalTypeCacheOwnershipRegistration::Full) => {
+                unreachable!("an existing type-cache lease already owns a lifecycle slot")
+            }
+            Err(GlobalTypeCacheOwnershipRegistration::Inserted) => unreachable!(),
+        };
+        drop(arbitration);
+        return deallocation_admission_from_type_reclaim(ownership, layout, metadata);
+    }
     match observation.snapshot {
         GlobalAddressLifecycleSnapshot::Absent | GlobalAddressLifecycleSnapshot::Live => {}
+        GlobalAddressLifecycleSnapshot::TypeLeased => unreachable!(),
         GlobalAddressLifecycleSnapshot::TypeRetained => {
             panic!("type-cache pointer already retained")
         }
@@ -11378,6 +14599,8 @@ fn begin_global_deallocation_admission_from_lifecycle_observation(
             panic!("type-cache pointer already retained")
         }
         Err(GlobalTypeCacheOwnershipRegistration::Full) => {
+            record_stats_type_cache_bypass(metadata);
+            record_type_cache_registry_full_failstop(layout);
             panic!("retained ownership registry capacity exhausted")
         }
         Err(GlobalTypeCacheOwnershipRegistration::Inserted) => unreachable!(),
@@ -11484,7 +14707,11 @@ unsafe fn terminal_release_retained_raw(
         ptr,
         ownership.expected_snapshot(),
         None,
-        ADDRESS_LIFECYCLE_RELEASED,
+        if global_address_generation_tracking_active() {
+            ADDRESS_LIFECYCLE_RELEASED
+        } else {
+            ADDRESS_LIFECYCLE_PROBE_TOMBSTONE
+        },
     )
     .unwrap_or_else(|_| panic!("terminal retained ownership disappeared early"));
     match ownership {
@@ -11531,7 +14758,11 @@ unsafe fn terminal_release_retained_guarded(
         ptr,
         ownership.expected_snapshot(),
         None,
-        ADDRESS_LIFECYCLE_RELEASED,
+        if global_address_generation_tracking_active() {
+            ADDRESS_LIFECYCLE_RELEASED
+        } else {
+            ADDRESS_LIFECYCLE_PROBE_TOMBSTONE
+        },
     )
     .unwrap_or_else(|_| panic!("terminal guarded ownership disappeared early"));
     match ownership {
@@ -11937,47 +15168,87 @@ pub(crate) unsafe fn drain_current_thread_semantic_retained_state(alloc: &RustAl
     }
 
     idx = 0;
+    while idx < SMALL_EXACT_TYPE_CACHE_SLOTS {
+        let entry = SMALL_EXACT_TYPE_CACHE[idx];
+        SMALL_EXACT_TYPE_CACHE[idx] = InlineTypeCacheEntry::empty();
+        if !entry.is_empty() {
+            #[cfg(test)]
+            let has_ownership = global_address_lifecycle_snapshot(entry.ptr)
+                == GlobalAddressLifecycleSnapshot::TypeRetained;
+            #[cfg(not(test))]
+            let has_ownership = true;
+            if let Ok(layout) = Layout::from_size_align(entry.size, entry.align) {
+                if has_ownership
+                    && terminal_release_retained_raw(
+                        alloc,
+                        entry.ptr,
+                        layout,
+                        TerminalRetainedOwnership::TypeCache,
+                    )
+                {
+                    released = released.saturating_add(1);
+                }
+            }
+        }
+        idx += 1;
+    }
+    SMALL_EXACT_TYPE_CACHE_OCCUPIED = 0;
+    SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES = 0;
+    SMALL_EXACT_TYPE_CACHE_HOT_SLOT = TypeCacheHotSlot::empty();
+
+    idx = 0;
     while idx < TYPE_CACHE_SLOTS {
         let slot = TYPE_CACHE[idx];
         TYPE_CACHE[idx] = TypeCacheSlot::empty();
+        if slot.has_corrupt_links() || slot.has_corrupt_layout() {
+            idx += 1;
+            continue;
+        }
+        // Validate the complete bounded chain while every node is still
+        // retained. Following a corrupt cycle after releasing its first node
+        // would read backend-owned storage during thread teardown.
+        if type_cache_slot_retained_bytes(&slot).is_none() {
+            idx += 1;
+            continue;
+        }
+        let layout = match Layout::from_size_align(slot.size, slot.align) {
+            Ok(layout) if slot.count != 0 => layout,
+            _ => {
+                idx += 1;
+                continue;
+            }
+        };
         let mut current = slot.head;
         let mut remaining = core::cmp::min(slot.count, MAX_TYPE_CACHE_DEPTH);
         while remaining != 0 && !current.is_null() {
-            if (current as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0 {
+            if (current as usize) & (TYPE_CACHE_NODE_ALIGN - 1) != 0
+                || (current as usize) & (layout.align() - 1) != 0
+            {
                 break;
             }
             let node = current as *mut usize;
             let next = node.read() as *mut u8;
-            let size = node.add(1).read();
-            let align = node.add(2).read();
-            match Layout::from_size_align(size, align) {
-                Ok(layout) => {
-                    #[cfg(test)]
-                    let has_ownership = global_address_lifecycle_snapshot(current)
-                        == GlobalAddressLifecycleSnapshot::TypeRetained;
-                    #[cfg(not(test))]
-                    let has_ownership = true;
-                    if has_ownership
-                        && terminal_release_retained_raw(
-                            alloc,
-                            current,
-                            layout,
-                            TerminalRetainedOwnership::TypeCache,
-                        )
-                    {
-                        released = released.saturating_add(1);
-                    }
-                }
-                Err(_) => {
-                    break;
-                }
+            #[cfg(test)]
+            let has_ownership = global_address_lifecycle_snapshot(current)
+                == GlobalAddressLifecycleSnapshot::TypeRetained;
+            #[cfg(not(test))]
+            let has_ownership = true;
+            if has_ownership
+                && terminal_release_retained_raw(
+                    alloc,
+                    current,
+                    layout,
+                    TerminalRetainedOwnership::TypeCache,
+                )
+            {
+                released = released.saturating_add(1);
             }
             current = next;
             remaining -= 1;
         }
         idx += 1;
     }
-    set_plain_type_cache_retained_bytes(0, false);
+    set_plain_type_cache_retained_accounting(0, 0, false);
 
     SEGREGATED_TYPE_CACHE_HOT_BUCKET = SegregatedTypeCacheHotBucket::empty();
     released = released.saturating_add(drain_inline_segregated_type_cache_at_thread_exit(
@@ -12324,11 +15595,10 @@ impl RustAllocator {
         if layout.size() == 0 {
             return semantic_zero_size_ptr(layout);
         }
-        activate_global_address_lifecycle_tracking();
+        activate_semantic_address_lifecycle_tracking();
         let ptr = if let Some(ptr) = self.try_alloc_lifetime_arena(layout, metadata) {
             ptr
         } else if let Some(ptr) = pop_compiler_type_metadata_cache(layout, metadata) {
-            publish_semantic_allocation_return(ptr);
             ptr
         } else {
             self.alloc_raw(layout)
@@ -12446,9 +15716,11 @@ impl RustAllocator {
     /// Complete semantic allocation work after the pointer source has already
     /// published one authoritative allocation witness.
     ///
-    /// Raw allocator misses use the strict `alloc_raw` publication. Cache hits
-    /// and guarded mappings continue through the wrapper above because their
-    /// source-specific lifecycle transition is separate from raw allocation.
+    /// Raw allocator misses use the strict `alloc_raw` publication. Type-cache
+    /// hits fuse their retained-ownership consume with the allocation witness
+    /// before entering this helper. Guarded mappings continue through the
+    /// wrapper above because their source-specific lifecycle transition remains
+    /// separate from raw allocation.
     #[inline]
     unsafe fn finish_semantic_allocation_no_recovery_after_publication(
         &self,
@@ -12557,7 +15829,7 @@ impl RustAllocator {
         if layout_derived_raw_only_fast_path(metadata) {
             return self.alloc_raw(layout);
         }
-        activate_global_address_lifecycle_tracking();
+        activate_semantic_address_lifecycle_tracking();
         if compiler_type_isolated_recovery_fast_path(metadata) {
             return self.alloc_with_compiler_type_metadata_fast(
                 layout,
@@ -12585,7 +15857,7 @@ impl RustAllocator {
         }
 
         if let Some(ptr) = pop_semantic_type_cache(layout, metadata) {
-            return self.finish_semantic_allocation_with_policy(
+            return self.finish_semantic_allocation_with_policy_after_publication(
                 ptr,
                 layout,
                 metadata,
@@ -12614,7 +15886,7 @@ impl RustAllocator {
         if layout_derived_raw_only_fast_path(metadata) {
             return self.alloc_raw(layout);
         }
-        activate_global_address_lifecycle_tracking();
+        activate_semantic_address_lifecycle_tracking();
         if compiler_type_isolated_recovery_fast_path(metadata) {
             return self.alloc_with_compiler_type_metadata_fast(layout, metadata, false);
         }
@@ -12629,7 +15901,8 @@ impl RustAllocator {
         }
 
         if let Some(ptr) = pop_semantic_type_cache(layout, metadata) {
-            return self.finish_semantic_allocation_no_recovery(ptr, layout, metadata);
+            return self
+                .finish_semantic_allocation_no_recovery_after_publication(ptr, layout, metadata);
         }
 
         let ptr = self.alloc_raw(layout);
@@ -12686,7 +15959,7 @@ impl RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return true;
         }
-        activate_global_address_lifecycle_tracking();
+        activate_semantic_address_lifecycle_tracking();
         self.dealloc_with_metadata_inner_from_observation(
             layout,
             metadata,
@@ -12716,10 +15989,11 @@ impl RustAllocator {
                     return true;
                 }
                 AutoAllocationRecordLookup::Missing => (metadata, false),
-                AutoAllocationRecordLookup::Mismatched => {
+                AutoAllocationRecordLookup::Mismatched(mismatch) => {
                     // A live record for the pointer with a different
                     // layout/auth identity makes caller metadata unsafe to
                     // apply. Preserve that exact record for a correct retry.
+                    record_recovery_deallocation_layout_mismatch(layout, mismatch);
                     return false;
                 }
             }
@@ -13027,7 +16301,7 @@ impl RustAllocator {
         if ptr.is_null() || old_layout.size() == 0 {
             return core::ptr::null_mut();
         }
-        if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched) {
+        if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched(_)) {
             return core::ptr::null_mut();
         }
         let dealloc_metadata = match old_recovery {
@@ -13035,7 +16309,7 @@ impl RustAllocator {
                 preview_deallocation_metadata_after_recovery_record(old_metadata, recorded_metadata)
             }
             AutoAllocationRecordLookup::Missing => old_metadata,
-            AutoAllocationRecordLookup::Mismatched => unreachable!(),
+            AutoAllocationRecordLookup::Mismatched(_) => unreachable!(),
         };
         // Tag validation is read-only. Keep it before durable ownership and
         // replacement publication so a rejected operation remains retryable.
@@ -13066,7 +16340,7 @@ impl RustAllocator {
         let ptr = admission.ptr();
         if ptr.is_null()
             || old_layout.size() == 0
-            || matches!(old_recovery, AutoAllocationRecordLookup::Mismatched)
+            || matches!(old_recovery, AutoAllocationRecordLookup::Mismatched(_))
         {
             rollback_global_raw_reclaim(admission);
             return core::ptr::null_mut();
@@ -13077,7 +16351,7 @@ impl RustAllocator {
                 true,
             ),
             AutoAllocationRecordLookup::Missing => (old_metadata, false),
-            AutoAllocationRecordLookup::Mismatched => unreachable!(),
+            AutoAllocationRecordLookup::Mismatched(_) => unreachable!(),
         };
         let new_size = new_layout.size();
         let mut ownership = Some(admission.into_tracked());
@@ -13131,7 +16405,7 @@ impl RustAllocator {
                             new_metadata,
                         )
                 }
-                AutoAllocationRecordLookup::Mismatched => unreachable!(),
+                AutoAllocationRecordLookup::Mismatched(_) => unreachable!(),
             };
             if !recovery_record_committed {
                 ownership
@@ -13221,7 +16495,7 @@ unsafe impl SemanticAlloc for RustAllocator {
             }
             return semantic_zero_size_ptr(new_layout);
         }
-        activate_global_address_lifecycle_tracking();
+        activate_semantic_address_lifecycle_tracking();
         let observation = observe_global_reclaim(ptr);
         let old_recovery = lookup_auto_allocation_record(ptr, old_layout, false);
         #[cfg(test)]
@@ -13258,6 +16532,13 @@ pub fn semantic_fallback_attribution_snapshot() -> SemanticFallbackAttributionSn
 
 pub fn semantic_metadata_validation_snapshot() -> SemanticMetadataValidationSnapshot {
     SEMANTIC_METADATA_VALIDATION.snapshot()
+}
+
+/// Return allocation/deallocation layout mismatches that were rejected by an
+/// authoritative same-pointer recovery record.
+pub fn semantic_allocation_layout_validation_snapshot() -> SemanticAllocationLayoutValidationSnapshot
+{
+    SEMANTIC_METADATA_VALIDATION.allocation_layout_snapshot()
 }
 
 /// Return cumulative counters for completed ownership-transfer attempts made
@@ -13517,8 +16798,19 @@ pub fn semantic_stats_reset() {
     SEMANTIC_STATS.reset();
     SEMANTIC_FALLBACK_ATTRIBUTION.reset();
     SEMANTIC_METADATA_VALIDATION.reset();
+    TYPE_CACHE_ADMISSION_STATS.reset();
     semantic_type_stats_reset();
     semantic_stats_recording_enable();
+}
+
+/// Return reason-specific terminal outcomes for typed-free cache admission.
+pub fn type_cache_admission_stats_snapshot() -> TypeCacheAdmissionStatsSnapshot {
+    TYPE_CACHE_ADMISSION_STATS.snapshot()
+}
+
+/// Reset only the cache-admission companion telemetry.
+pub fn type_cache_admission_stats_reset() {
+    TYPE_CACHE_ADMISSION_STATS.reset();
 }
 
 /// Return true when fallback `GlobalAlloc` calls should pay semantic coverage
@@ -13687,6 +16979,18 @@ fn record_stats_type_cache_bypass(metadata: AllocationMetadata) {
     }
 }
 
+#[inline]
+fn record_stats_type_cache_wrong_identity_denial(
+    requested: AllocationMetadata,
+    retained: TypeCacheIdentity,
+    layout: Layout,
+) {
+    let flags = semantic_stats_recording_flags();
+    if flags & SLOW_PATH_STATS != 0 {
+        SEMANTIC_STATS.record_type_cache_wrong_identity_denial(requested, retained, layout);
+    }
+}
+
 #[cfg(all(feature = "pac", target_arch = "aarch64"))]
 #[inline]
 fn record_stats_metadata_pac_auth_sign() {
@@ -13850,7 +17154,7 @@ unsafe fn realloc_layout_with_split_ffi_metadata(
             preview_deallocation_metadata_after_recovery_record(requested_old_metadata, recorded)
         }
         AutoAllocationRecordLookup::Missing => requested_old_metadata,
-        AutoAllocationRecordLookup::Mismatched => return core::ptr::null_mut(),
+        AutoAllocationRecordLookup::Mismatched(_) => return core::ptr::null_mut(),
     };
     // The recovery lookup above is non-consuming. The allocator consumes or
     // replaces the old record only after a successful reallocation commit, so
@@ -13918,7 +17222,7 @@ unsafe fn realloc_layout_with_ffi_metadata(
             )
         }
         AutoAllocationRecordLookup::Missing => (metadata, metadata, false),
-        AutoAllocationRecordLookup::Mismatched => return core::ptr::null_mut(),
+        AutoAllocationRecordLookup::Mismatched(_) => return core::ptr::null_mut(),
     };
     if !recovery_record_found && is_recovery_delegated_metadata_request(metadata) {
         // A delegated request without an exact record has no identity to
@@ -13986,7 +17290,7 @@ unsafe fn realloc_layout_with_ffi_metadata_local(
     let old_metadata = match old_recovery {
         AutoAllocationRecordLookup::Exact(recorded_metadata) => recorded_metadata,
         AutoAllocationRecordLookup::Missing => metadata,
-        AutoAllocationRecordLookup::Mismatched => {
+        AutoAllocationRecordLookup::Mismatched(_) => {
             // Do not collapse a live same-address/different-layout record into
             // the local ABI's no-record case.  The record remains authoritative
             // until an exact-layout retry consumes it; reallocating first could
@@ -15127,6 +18431,7 @@ unsafe fn pop_overflow_semantic_scope_metadata() -> bool {
 
 #[inline(always)]
 fn push_semantic_scope_metadata(metadata: AllocationMetadata) {
+    require_semantic_lifecycle_feature();
     unsafe {
         let depth = SEMANTIC_SCOPE_STACK_DEPTH;
         if depth < SEMANTIC_SCOPE_STACK_CAPACITY {
@@ -15186,6 +18491,46 @@ pub extern "C" fn __unialloc_semantic_scope_push(
     )));
 }
 
+/// Push compiler metadata using the canonical runtime Rust-type identity.
+///
+/// The MIR pass uses this ABI for exact `Box<T>` scopes in generic and concrete
+/// MIR. Rustc evaluates the compiler TypeId only after generic
+/// monomorphization, preserving crate disambiguators while avoiding identifiers
+/// derived from textual `T`/`K`/`V` placeholders.
+#[doc(hidden)]
+#[inline]
+pub fn __unialloc_semantic_scope_push_for_rust_type<T: 'static>(
+    module_id: u64,
+    flags: u32,
+    callsite: u64,
+) {
+    let metadata = AllocationMetadata::for_rust_type::<T>()
+        .with_module(module_id)
+        .with_flags(flags)
+        .with_callsite(callsite);
+    push_semantic_scope_metadata(conservative_compiler_scope_metadata(metadata));
+}
+
+/// Push canonical Rust-type metadata for a compiler-proven local lifetime.
+///
+/// The MIR pass selects this variant only when the exact allocation and outer
+/// `Box` reclaim scopes are both instrumented on one non-escaping local path.
+/// That proof lets the allocator preserve the monomorphized compiler `TypeId`
+/// while omitting the otherwise-conservative pointer recovery record.
+#[doc(hidden)]
+#[inline]
+pub fn __unialloc_semantic_scope_push_for_rust_type_local<T: 'static>(
+    module_id: u64,
+    flags: u32,
+    callsite: u64,
+) {
+    let metadata = AllocationMetadata::for_rust_type::<T>()
+        .with_module(module_id)
+        .with_flags(flags)
+        .with_callsite(callsite);
+    push_semantic_scope_metadata(local_scope_metadata(metadata));
+}
+
 /// Push a compiler-proven local semantic metadata scope.
 ///
 /// This variant is selected only when the MIR pass also pairs the corresponding
@@ -15230,6 +18575,46 @@ pub extern "C" fn __unialloc_semantic_scope_push_hints(
             callsite,
         ),
     ));
+}
+
+/// Hint-carrying variant of
+/// [`__unialloc_semantic_scope_push_for_rust_type`].
+#[doc(hidden)]
+#[inline]
+pub fn __unialloc_semantic_scope_push_for_rust_type_hints<T: 'static>(
+    module_id: u64,
+    flags: u32,
+    lifetime_hint: u16,
+    placement_hint: u16,
+    callsite: u64,
+) {
+    let metadata = AllocationMetadata::for_rust_type::<T>()
+        .with_module(module_id)
+        .with_flags(flags)
+        .with_lifetime_hint(lifetime_hint)
+        .with_placement_hint(placement_hint)
+        .with_callsite(callsite);
+    push_semantic_scope_metadata(conservative_compiler_scope_metadata(metadata));
+}
+
+/// Hint-carrying local-lifetime variant of
+/// [`__unialloc_semantic_scope_push_for_rust_type_local`].
+#[doc(hidden)]
+#[inline]
+pub fn __unialloc_semantic_scope_push_for_rust_type_hints_local<T: 'static>(
+    module_id: u64,
+    flags: u32,
+    lifetime_hint: u16,
+    placement_hint: u16,
+    callsite: u64,
+) {
+    let metadata = AllocationMetadata::for_rust_type::<T>()
+        .with_module(module_id)
+        .with_flags(flags)
+        .with_lifetime_hint(lifetime_hint)
+        .with_placement_hint(placement_hint)
+        .with_callsite(callsite);
+    push_semantic_scope_metadata(local_scope_metadata(metadata));
 }
 
 /// Push a compiler-proven local semantic metadata scope with full hints.
@@ -15298,6 +18683,96 @@ mod tests {
 
     fn test_guard() -> SemanticTestGuard {
         semantic_test_guard()
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    unsafe fn auto_allocation_record_overflow_with_capacity_for_test(
+        records: &[AutoAllocationRecord],
+        capacity: usize,
+    ) -> AutoAllocationRecordOverflowTable {
+        assert!(capacity.is_power_of_two());
+        assert!(records.len() <= capacity);
+        let slots = allocate_auto_allocation_record_overflow_slots(capacity);
+        assert!(!slots.is_null(), "test recovery overflow mapping");
+        let mut overflow = AutoAllocationRecordOverflowTable {
+            slots,
+            capacity,
+            live: 0,
+            tombstones: 0,
+            retention: AutoAllocationRecordOverflowRetention::None,
+        };
+        for record in records.iter().copied() {
+            let idx = match probe_auto_allocation_record_overflow(&overflow, record.ptr) {
+                AutoAllocationRecordOverflowProbe::Vacant(idx) => idx,
+                other => panic!("test recovery overflow insert failed: {:?}", other),
+            };
+            *overflow.slots.add(idx) = record;
+            overflow.live += 1;
+        }
+        overflow
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    unsafe fn auto_allocation_record_overflow_for_test(
+        records: &[AutoAllocationRecord],
+    ) -> AutoAllocationRecordOverflowTable {
+        let mut capacity = AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY;
+        while records.len()
+            > capacity / AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_DENOMINATOR
+                * AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_NUMERATOR
+        {
+            capacity = capacity.checked_mul(2).expect("test overflow capacity");
+        }
+        auto_allocation_record_overflow_with_capacity_for_test(records, capacity)
+    }
+
+    #[test]
+    fn global_address_lifecycle_tracking_requires_explicit_authorization() {
+        assert!(!global_address_lifecycle_tracking_support_gate(
+            false, false, false
+        ));
+        assert!(global_address_lifecycle_tracking_support_gate(
+            true, false, false
+        ));
+        assert!(global_address_lifecycle_tracking_support_gate(
+            false, true, false
+        ));
+        assert!(global_address_lifecycle_tracking_support_gate(
+            false, false, true
+        ));
+        assert!(!global_address_lifecycle_tracking_initial_gate(
+            false, false
+        ));
+        assert!(global_address_lifecycle_tracking_initial_gate(true, false));
+        assert!(global_address_lifecycle_tracking_initial_gate(false, true));
+    }
+
+    #[cfg(feature = "reclaim_checks")]
+    #[test]
+    fn reclaim_checks_start_process_wide_lifecycle_tracking() {
+        assert!(GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL);
+        assert!(global_address_lifecycle_tracking_active());
+    }
+
+    #[cfg(feature = "reclaim_checks")]
+    #[test]
+    fn reclaim_checks_reject_an_immediate_second_raw_reclaim() {
+        let _guard = test_guard();
+        clear_global_type_cache_ownership_for_test();
+        let allocator = RustAllocator::new();
+        let layout = Layout::from_size_align(64, 8).unwrap();
+        let ptr = unsafe { allocator.alloc_raw(layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            allocator.dealloc_raw(ptr, layout);
+        }
+
+        let duplicate = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+            allocator.dealloc_raw(ptr, layout);
+        }));
+
+        assert!(duplicate.is_err());
+        clear_global_type_cache_ownership_for_test();
     }
 
     #[test]
@@ -15429,6 +18904,39 @@ mod tests {
         }
     }
 
+    struct TypeCacheDepotForceRejectGuard;
+
+    impl TypeCacheDepotForceRejectGuard {
+        fn new() -> Self {
+            assert!(!TEST_TYPE_CACHE_DEPOT_FORCE_REJECT.swap(true, Ordering::AcqRel));
+            Self
+        }
+    }
+
+    impl Drop for TypeCacheDepotForceRejectGuard {
+        fn drop(&mut self) {
+            TEST_TYPE_CACHE_DEPOT_FORCE_REJECT.store(false, Ordering::Release);
+        }
+    }
+
+    struct TypeCacheRegistryRetentionLimitGuard;
+
+    impl TypeCacheRegistryRetentionLimitGuard {
+        fn force(limit: usize) -> Self {
+            assert_eq!(
+                TEST_TYPE_CACHE_REGISTRY_RETENTION_LIMIT.swap(limit, Ordering::AcqRel),
+                usize::MAX
+            );
+            Self
+        }
+    }
+
+    impl Drop for TypeCacheRegistryRetentionLimitGuard {
+        fn drop(&mut self) {
+            TEST_TYPE_CACHE_REGISTRY_RETENTION_LIMIT.store(usize::MAX, Ordering::Release);
+        }
+    }
+
     struct LifecycleTrackingOverride {
         previous: bool,
     }
@@ -15444,6 +18952,24 @@ mod tests {
     impl Drop for LifecycleTrackingOverride {
         fn drop(&mut self) {
             GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.store(self.previous, Ordering::Release);
+        }
+    }
+
+    #[cfg(not(feature = "reclaim_checks"))]
+    struct RetainedOnlyLifecycleOverride;
+
+    #[cfg(not(feature = "reclaim_checks"))]
+    impl RetainedOnlyLifecycleOverride {
+        fn active() -> Self {
+            assert!(!TEST_RETAINED_ONLY_ADDRESS_LIFECYCLE.swap(true, Ordering::AcqRel));
+            Self
+        }
+    }
+
+    #[cfg(not(feature = "reclaim_checks"))]
+    impl Drop for RetainedOnlyLifecycleOverride {
+        fn drop(&mut self) {
+            TEST_RETAINED_ONLY_ADDRESS_LIFECYCLE.store(false, Ordering::Release);
         }
     }
 
@@ -15557,10 +19083,15 @@ mod tests {
     unsafe fn clear_type_cache_for_test() {
         TYPE_CACHE = [TypeCacheSlot::empty(); TYPE_CACHE_SLOTS];
         PLAIN_TYPE_CACHE_RETAINED_BYTES = 0;
+        PLAIN_TYPE_CACHE_RETAINED_ENTRIES = 0;
         PLAIN_TYPE_CACHE_RETAINED_BYTES_TRUSTED = false;
         TYPE_CACHE_HOT_SLOT = TypeCacheHotSlot::empty();
         clear_type_cache_identity_hot_slot_for_test();
         INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
+        SMALL_EXACT_TYPE_CACHE = [InlineTypeCacheEntry::empty(); SMALL_EXACT_TYPE_CACHE_SLOTS];
+        SMALL_EXACT_TYPE_CACHE_OCCUPIED = 0;
+        SMALL_EXACT_TYPE_CACHE_RETAINED_BYTES = 0;
+        SMALL_EXACT_TYPE_CACHE_HOT_SLOT = TypeCacheHotSlot::empty();
         SEGREGATED_TYPE_CACHE = [SegregatedTypeCacheBucket::empty(); TYPE_CACHE_SLOTS];
         SEGREGATED_TYPE_CACHE_OCCUPIED_BUCKETS = 0;
         SEGREGATED_TYPE_CACHE_RETAINED_BYTES = 0;
@@ -15610,6 +19141,11 @@ mod tests {
     #[inline]
     unsafe fn plain_type_cache_retained_bytes_snapshot_for_test() -> usize {
         snapshot_static_copy(core::ptr::addr_of!(PLAIN_TYPE_CACHE_RETAINED_BYTES))
+    }
+
+    #[inline]
+    unsafe fn plain_type_cache_retained_entries_snapshot_for_test() -> usize {
+        snapshot_static_copy(core::ptr::addr_of!(PLAIN_TYPE_CACHE_RETAINED_ENTRIES))
     }
 
     #[inline]
@@ -16959,7 +20495,7 @@ mod tests {
         assert_eq!(
             lookup_auto_allocation_metadata(wrong_spare_new_ptr, layout),
             Some(plain_spare),
-            "a rejected moved shrink must preserve the authenticated source identity"
+            "a rejected moved shrink must preserve the exact source identity"
         );
         drop(wrong_spare_box);
 
@@ -19567,7 +23103,7 @@ mod tests {
             );
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                find_auto_allocation_record_in_overflow(table.overflow, overflow_ptr as usize)
+                find_auto_allocation_record_in_overflow(&table.overflow, overflow_ptr as usize)
                     .is_some(),
                 "hosted recovery records beyond the home probe window should use home-shard overflow"
             );
@@ -19664,6 +23200,219 @@ mod tests {
             0,
             "removing the final live record should clear the sparse-shard bitset"
         );
+    }
+
+    #[test]
+    fn global_semantic_pointer_filter_refcounts_recovery_colliders() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_F117)
+            .with_module(0xC0DE_F117)
+            .with_callsite(0xA110_F117)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let first = 0x1000usize as *mut u8;
+        let filter_idx = global_semantic_pointer_filter_index(first);
+        let mut candidate = 0x1008usize;
+        let second = loop {
+            let ptr = candidate as *mut u8;
+            if global_semantic_pointer_filter_index(ptr) == filter_idx {
+                break ptr;
+            }
+            candidate = candidate.checked_add(8).unwrap();
+        };
+
+        assert!(!global_semantic_pointer_maybe_tracked(first));
+        assert!(!global_semantic_pointer_maybe_tracked(second));
+        assert!(unsafe { record_global_auto_allocation_metadata(first, layout, metadata) });
+        assert!(global_semantic_pointer_maybe_tracked(first));
+        assert!(global_semantic_pointer_maybe_tracked(second));
+        assert!(unsafe { record_global_auto_allocation_metadata(second, layout, metadata) });
+
+        assert_eq!(
+            recover_global_auto_allocation_record_metadata(first, layout, true),
+            Some(metadata)
+        );
+        assert!(
+            global_semantic_pointer_maybe_tracked(second),
+            "removing one colliding record must not create a filter false negative"
+        );
+        assert_eq!(
+            recover_global_auto_allocation_record_metadata(second, layout, true),
+            Some(metadata)
+        );
+        assert!(!global_semantic_pointer_maybe_tracked(first));
+    }
+
+    #[test]
+    fn global_semantic_pointer_filter_tracks_retained_ownership_until_release() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+
+        let ptr = 0x2800usize as *mut u8;
+        assert!(!global_semantic_pointer_maybe_tracked(ptr));
+        assert_eq!(
+            register_global_type_cache_ownership(ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        assert!(global_semantic_pointer_maybe_tracked(ptr));
+        assert!(unregister_global_type_cache_ownership(ptr));
+        assert!(!global_semantic_pointer_maybe_tracked(ptr));
+    }
+
+    #[cfg(all(not(feature = "reclaim_checks"), not(feature = "quarantine")))]
+    #[test]
+    fn retained_filter_publishes_before_type_owner_entry() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _retained_only = RetainedOnlyLifecycleOverride::active();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        assert!(!global_semantic_pointer_maybe_tracked(ptr));
+
+        TEST_RETAINED_FILTER_PUBLICATION_PHASE.store(1, Ordering::Release);
+        let ptr_addr = ptr as usize;
+        let owner =
+            thread::spawn(move || register_global_type_cache_ownership(ptr_addr as *mut u8));
+        while TEST_RETAINED_FILTER_PUBLICATION_PHASE.load(Ordering::Acquire) != 2 {
+            core::hint::spin_loop();
+        }
+        assert!(
+            global_semantic_pointer_maybe_tracked(ptr),
+            "the negative filter must publish before the retained entry"
+        );
+
+        TEST_POINTER_FILTER_SLOW_PATH_PHASE.store(1, Ordering::Release);
+        let ptr_addr = ptr as usize;
+        let foreign = thread::spawn(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                GlobalAlloc::dealloc(&RustAllocator::new(), ptr_addr as *mut u8, layout);
+            }))
+        });
+        while TEST_POINTER_FILTER_SLOW_PATH_PHASE.load(Ordering::Acquire) != 2 {
+            core::hint::spin_loop();
+        }
+
+        TEST_RETAINED_FILTER_PUBLICATION_PHASE.store(3, Ordering::Release);
+        assert_eq!(
+            owner.join().expect("retained owner publication thread"),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        TEST_POINTER_FILTER_SLOW_PATH_PHASE.store(3, Ordering::Release);
+        assert!(
+            foreign
+                .join()
+                .expect("foreign retained-filter reclaim thread")
+                .is_err(),
+            "a foreign raw free queued behind filter publication must fail-stop"
+        );
+        TEST_RETAINED_FILTER_PUBLICATION_PHASE.store(0, Ordering::Release);
+        TEST_POINTER_FILTER_SLOW_PATH_PHASE.store(0, Ordering::Release);
+
+        assert!(global_type_cache_contains_ptr(ptr));
+        assert!(global_semantic_pointer_maybe_tracked(ptr));
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+        assert!(unregister_global_type_cache_ownership(ptr));
+        assert!(!global_semantic_pointer_maybe_tracked(ptr));
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+    }
+
+    #[cfg(all(not(feature = "reclaim_checks"), not(feature = "quarantine")))]
+    #[test]
+    fn retained_only_filter_skips_unrelated_raw_global_alloc_lifecycle_work() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _retained_only = RetainedOnlyLifecycleOverride::active();
+
+        let alloc = RustAllocator::new();
+        let typed_layout =
+            Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let typed_metadata = AllocationMetadata::for_type(0xC003_F118)
+            .with_module(0xC0DE_F118)
+            .with_callsite(0xA110_F118)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let typed = unsafe { alloc.alloc_with_recovery_metadata(typed_layout, typed_metadata) };
+        assert!(!typed.is_null());
+        assert!(global_semantic_pointer_maybe_tracked(typed));
+
+        let raw_layout = Layout::from_size_align(192, align_of::<usize>()).unwrap();
+        let probes_before = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
+        let admissions_before = TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.load(Ordering::Relaxed);
+        let raw = unsafe { GlobalAlloc::alloc(&alloc, raw_layout) };
+        assert!(!raw.is_null());
+        assert_eq!(
+            TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed),
+            probes_before,
+            "an unrelated raw allocation must bypass lifecycle publication"
+        );
+        assert!(
+            !global_semantic_pointer_maybe_tracked(raw),
+            "test raw pointer unexpectedly collided with the tracked semantic filter bucket"
+        );
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, raw, raw_layout);
+        }
+        assert_eq!(
+            TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed),
+            probes_before,
+            "an unrelated raw pointer must bypass lifecycle lookup after semantic activation"
+        );
+        assert_eq!(
+            TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.load(Ordering::Relaxed),
+            admissions_before,
+            "an unrelated raw pointer must bypass retained-ownership admission"
+        );
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, typed, typed_layout);
+        }
+        assert!(
+            TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed) > probes_before,
+            "the matching recovery pointer must retain the semantic reclaim path"
+        );
+        assert!(global_semantic_pointer_maybe_tracked(typed));
+        unsafe {
+            clear_type_cache_for_test();
+            clear_auto_allocation_records();
+        }
     }
 
     #[test]
@@ -19779,12 +23528,15 @@ mod tests {
         if seed_overflow {
             #[cfg(not(feature = "fixed_heap"))]
             unsafe {
-                let page = allocate_auto_allocation_record_page();
-                assert!(!page.is_null(), "hosted race test needs one overflow page");
-                (*page).entries[0] = auto_allocation_record_for(old_ptr, layout, old_metadata);
+                increment_global_recovery_pointer_filter(old_ptr);
+                let overflow =
+                    auto_allocation_record_overflow_for_test(&[auto_allocation_record_for(
+                        old_ptr,
+                        layout,
+                        old_metadata,
+                    )]);
                 let mut table = AUTO_ALLOCATION_RECORDS[old_shard_idx].lock();
-                (*page).next = table.overflow;
-                table.overflow = page;
+                table.overflow = overflow;
                 table.live_count = 1;
                 AUTO_ALLOCATION_RECORD_COUNT.store(1, Ordering::Relaxed);
                 auto_allocation_record_mark_shard_active(old_shard_idx);
@@ -20124,7 +23876,7 @@ mod tests {
             );
             let home = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                find_auto_allocation_record_in_overflow(home.overflow, ptr as usize).is_some(),
+                find_auto_allocation_record_in_overflow(&home.overflow, ptr as usize).is_some(),
                 "the overflow record should remain in its pointer-derived home shard"
             );
         }
@@ -20459,6 +24211,556 @@ mod tests {
 
     #[cfg(not(feature = "fixed_heap"))]
     #[test]
+    fn hosted_recovery_overflow_insert_probe_work_is_bounded() {
+        const RECORDS: usize = 2_048;
+        const MAX_PROBES_PER_INSERT: usize = 64;
+
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let home_ptr = (0x2300_0000usize << 4) as *mut u8;
+        let home_shard_idx = auto_allocation_record_shard(home_ptr);
+        {
+            let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            for idx in 0..AUTO_ALLOCATION_RECORD_SHARD_SLOTS {
+                let ptr = ((0x2400_0000usize + idx) << 4) as *mut u8;
+                let metadata = AllocationMetadata::for_type(0xC002_0000 + idx as u64)
+                    .with_module(0xC0DE)
+                    .with_callsite(0xA110_0000 + idx as u64);
+                table.inline[idx] = auto_allocation_record_for(ptr, layout, metadata);
+            }
+            table.live_count = AUTO_ALLOCATION_RECORD_SHARD_SLOTS;
+        }
+        AUTO_ALLOCATION_RECORD_COUNT.store(AUTO_ALLOCATION_RECORD_SHARD_SLOTS, Ordering::Relaxed);
+        auto_allocation_record_mark_shard_active(home_shard_idx);
+        semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+        TEST_GLOBAL_RECOVERY_OVERFLOW_PROBE_STEPS.store(0, Ordering::Relaxed);
+
+        let mut inserted = 0usize;
+        let mut candidate = 0x2500_0000usize;
+        while inserted < RECORDS {
+            let ptr = (candidate << 4) as *mut u8;
+            candidate += 1;
+            if auto_allocation_record_shard(ptr) != home_shard_idx {
+                continue;
+            }
+            let metadata = AllocationMetadata::for_type(0xC003_0000 + inserted as u64)
+                .with_module(0xC0DE)
+                .with_callsite(0xA120_0000 + inserted as u64);
+            assert!(unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) });
+            inserted += 1;
+        }
+
+        let probes = TEST_GLOBAL_RECOVERY_OVERFLOW_PROBE_STEPS.load(Ordering::Relaxed);
+        assert!(
+            probes <= RECORDS * MAX_PROBES_PER_INSERT,
+            "hosted overflow insertion performed {} record probes for {} inserts; expected at most {} probes per insert",
+            probes,
+            RECORDS,
+            MAX_PROBES_PER_INSERT,
+        );
+
+        clear_auto_allocation_records();
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_rebuild_failures_are_transactional() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let shard_idx = 3usize;
+        let mut records = Vec::new();
+        let mut candidate = 0x2600_0000usize;
+        while records.len() <= 384 {
+            let ptr = (candidate << 4) as *mut u8;
+            candidate += 1;
+            if auto_allocation_record_shard(ptr) != shard_idx {
+                continue;
+            }
+            let metadata = AllocationMetadata::for_type(0xC004_0000 + records.len() as u64)
+                .with_module(0xC0DE)
+                .with_callsite(0xA130_0000 + records.len() as u64)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            records.push(auto_allocation_record_for(ptr, layout, metadata));
+        }
+
+        let mut overflow = AutoAllocationRecordOverflowTable::empty();
+        TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.store(true, Ordering::Release);
+        assert_eq!(
+            unsafe { insert_auto_allocation_record_overflow(shard_idx, &mut overflow, records[0]) },
+            AutoAllocationRecordOverflowInsert::Full
+        );
+        assert!(auto_allocation_record_overflow_is_empty(&overflow));
+
+        for record in records.iter().copied().take(384) {
+            assert_eq!(
+                unsafe { insert_auto_allocation_record_overflow(shard_idx, &mut overflow, record) },
+                AutoAllocationRecordOverflowInsert::Inserted
+            );
+        }
+        let before = (
+            overflow.slots as usize,
+            overflow.capacity,
+            overflow.live,
+            overflow.tombstones,
+        );
+        assert_eq!(before.1, AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY);
+
+        TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.store(true, Ordering::Release);
+        assert_eq!(
+            unsafe {
+                insert_auto_allocation_record_overflow(shard_idx, &mut overflow, records[384])
+            },
+            AutoAllocationRecordOverflowInsert::Full
+        );
+        assert_eq!(
+            (
+                overflow.slots as usize,
+                overflow.capacity,
+                overflow.live,
+                overflow.tombstones,
+            ),
+            before
+        );
+        assert!(find_auto_allocation_record_in_overflow(&overflow, records[0].ptr).is_some());
+        assert!(find_auto_allocation_record_in_overflow(&overflow, records[384].ptr).is_none());
+
+        TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_REHASH.store(true, Ordering::Release);
+        assert_eq!(
+            unsafe {
+                insert_auto_allocation_record_overflow(shard_idx, &mut overflow, records[384])
+            },
+            AutoAllocationRecordOverflowInsert::Full
+        );
+        assert_eq!(
+            (
+                overflow.slots as usize,
+                overflow.capacity,
+                overflow.live,
+                overflow.tombstones,
+            ),
+            before
+        );
+        assert!(find_auto_allocation_record_in_overflow(&overflow, records[0].ptr).is_some());
+        assert!(find_auto_allocation_record_in_overflow(&overflow, records[384].ptr).is_none());
+        unsafe {
+            release_auto_allocation_record_overflow_slots(overflow.slots, overflow.capacity);
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_reuses_zeroed_mapping_after_last_remove() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let first_ptr = (0x2680_0000usize << 4) as *mut u8;
+        let shard_idx = auto_allocation_record_shard(first_ptr);
+        let mut second_key = 0x2680_0001usize;
+        while auto_allocation_record_shard((second_key << 4) as *mut u8) != shard_idx {
+            second_key += 1;
+        }
+        let second_ptr = (second_key << 4) as *mut u8;
+        let first = auto_allocation_record_for(
+            first_ptr,
+            layout,
+            AllocationMetadata::for_type(0xC004_8001).with_flags(FLAG_TYPE_ISOLATED),
+        );
+        let second = auto_allocation_record_for(
+            second_ptr,
+            layout,
+            AllocationMetadata::for_type(0xC004_8002).with_flags(FLAG_TYPE_ISOLATED),
+        );
+        assert_eq!(first.auth, 0);
+        assert_eq!(second.auth, 0);
+        assert!(first.matches_allocation(first_ptr, layout));
+        assert!(second.matches_allocation(second_ptr, layout));
+        let mut overflow = unsafe {
+            auto_allocation_record_overflow_with_capacity_for_test(
+                &[first, second],
+                AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY,
+            )
+        };
+        let retained_slots = overflow.slots;
+        let retained_capacity = overflow.capacity;
+        let unmaps_before = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
+
+        let first_idx = match probe_auto_allocation_record_overflow(&overflow, first.ptr) {
+            AutoAllocationRecordOverflowProbe::Found(idx) => idx,
+            other => panic!("first retained-mapping record missing: {:?}", other),
+        };
+        assert!(unsafe {
+            try_remove_auto_allocation_record_overflow_at(shard_idx, &mut overflow, first_idx)
+        });
+        assert_eq!(overflow.live, 1);
+        assert_eq!(overflow.tombstones, 1);
+
+        let second_idx = match probe_auto_allocation_record_overflow(&overflow, second.ptr) {
+            AutoAllocationRecordOverflowProbe::Found(idx) => idx,
+            other => panic!("second retained-mapping record missing: {:?}", other),
+        };
+        assert!(unsafe {
+            try_remove_auto_allocation_record_overflow_at(shard_idx, &mut overflow, second_idx)
+        });
+        assert_eq!(overflow.slots, retained_slots);
+        assert_eq!(overflow.capacity, retained_capacity);
+        assert_eq!(overflow.live, 0);
+        assert_eq!(overflow.tombstones, 0);
+        assert_eq!(
+            overflow.retention,
+            AutoAllocationRecordOverflowRetention::None,
+            "the bounded initial mapping remains the permanent reusable tier"
+        );
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before
+        );
+        for idx in 0..overflow.capacity {
+            assert!(unsafe { (*overflow.slots.add(idx)).is_empty() });
+        }
+
+        TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.store(true, Ordering::Release);
+        assert_eq!(
+            unsafe { insert_auto_allocation_record_overflow(shard_idx, &mut overflow, first) },
+            AutoAllocationRecordOverflowInsert::Inserted
+        );
+        assert!(
+            TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.swap(false, Ordering::AcqRel),
+            "reusing the retained mapping must not consume an mmap attempt"
+        );
+        assert_eq!(overflow.slots, retained_slots);
+        assert_eq!(overflow.capacity, retained_capacity);
+        assert_eq!(overflow.live, 1);
+        assert_eq!(overflow.tombstones, 0);
+        unsafe {
+            release_auto_allocation_record_overflow_slots(overflow.slots, overflow.capacity);
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_releases_mapping_above_retention_cap() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let ptr = (0x2690_0000usize << 4) as *mut u8;
+        let shard_idx = auto_allocation_record_shard(ptr);
+        let record = auto_allocation_record_for(
+            ptr,
+            layout,
+            AllocationMetadata::for_type(0xC004_9001).with_flags(FLAG_TYPE_ISOLATED),
+        );
+        let mut capacity = AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY;
+        while auto_allocation_record_overflow_mapping_is_retainable(capacity) {
+            capacity = capacity.checked_mul(2).expect("test overflow capacity");
+        }
+        let mut overflow =
+            unsafe { auto_allocation_record_overflow_with_capacity_for_test(&[record], capacity) };
+        let idx = match probe_auto_allocation_record_overflow(&overflow, record.ptr) {
+            AutoAllocationRecordOverflowProbe::Found(idx) => idx,
+            other => panic!("over-cap recovery record missing: {:?}", other),
+        };
+        let unmaps_before = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
+
+        assert!(unsafe {
+            try_remove_auto_allocation_record_overflow_at(shard_idx, &mut overflow, idx)
+        });
+        assert!(auto_allocation_record_overflow_is_empty(&overflow));
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before + 1
+        );
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_sheds_underused_large_retained_mapping() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let ptr = (0x2698_0000usize << 4) as *mut u8;
+        let shard_idx = auto_allocation_record_shard(ptr);
+        let record = auto_allocation_record_for(
+            ptr,
+            layout,
+            AllocationMetadata::for_type(0xC004_9801).with_flags(FLAG_TYPE_ISOLATED),
+        );
+        let mut capacity = AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY;
+        while let Some(next_capacity) = capacity.checked_mul(2) {
+            if !auto_allocation_record_overflow_mapping_is_retainable(next_capacity) {
+                break;
+            }
+            capacity = next_capacity;
+        }
+        assert!(capacity > AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY);
+        assert!(auto_allocation_record_overflow_mapping_is_retainable(
+            capacity
+        ));
+        assert!(!auto_allocation_record_overflow_should_retain_after_drain(
+            capacity, 1
+        ));
+        let mut overflow =
+            unsafe { auto_allocation_record_overflow_with_capacity_for_test(&[record], capacity) };
+        let idx = match probe_auto_allocation_record_overflow(&overflow, record.ptr) {
+            AutoAllocationRecordOverflowProbe::Found(idx) => idx,
+            other => panic!("underused high-water recovery record missing: {:?}", other),
+        };
+        let unmaps_before = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
+
+        assert!(unsafe {
+            try_remove_auto_allocation_record_overflow_at(shard_idx, &mut overflow, idx)
+        });
+        assert!(auto_allocation_record_overflow_is_empty(&overflow));
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before + 1
+        );
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_transitions_fresh_to_armed_then_reuses_in_place() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let ptr = (0x269a_0000usize << 4) as *mut u8;
+        let shard_idx = auto_allocation_record_shard(ptr);
+        let record = auto_allocation_record_for(
+            ptr,
+            layout,
+            AllocationMetadata::for_type(0xC004_9A01).with_flags(FLAG_TYPE_ISOLATED),
+        );
+        let mut capacity = AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY;
+        while let Some(next_capacity) = capacity.checked_mul(2) {
+            if !auto_allocation_record_overflow_mapping_is_retainable(next_capacity) {
+                break;
+            }
+            capacity = next_capacity;
+        }
+        assert!(capacity > AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY);
+        let mut table = GlobalAutoAllocationRecordTable::empty();
+        table.overflow =
+            unsafe { auto_allocation_record_overflow_with_capacity_for_test(&[], capacity) };
+        table.overflow.retention = AutoAllocationRecordOverflowRetention::Fresh;
+        table.live_count = 1;
+        let retained_slots = table.overflow.slots;
+        let unmaps_before = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
+        auto_allocation_record_mark_shard_active(shard_idx);
+
+        decrement_global_auto_allocation_record_shard_live_count(shard_idx, &mut table);
+        assert_eq!(table.live_count, 0);
+        assert_eq!(
+            table.overflow.retention,
+            AutoAllocationRecordOverflowRetention::Armed
+        );
+        assert_eq!(table.overflow.slots, retained_slots);
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before,
+            "the first shard quiescence must arm without unmapping"
+        );
+
+        TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.store(true, Ordering::Release);
+        assert_eq!(
+            unsafe {
+                insert_auto_allocation_record_overflow(shard_idx, &mut table.overflow, record)
+            },
+            AutoAllocationRecordOverflowInsert::Inserted
+        );
+        assert!(
+            TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.swap(false, Ordering::AcqRel),
+            "overflow reuse must not attempt mmap"
+        );
+        assert_eq!(table.overflow.slots, retained_slots);
+        assert_eq!(
+            table.overflow.retention,
+            AutoAllocationRecordOverflowRetention::None,
+            "a real overflow insertion must disarm the retained mapping"
+        );
+        unsafe {
+            release_auto_allocation_record_overflow_slots(
+                table.overflow.slots,
+                table.overflow.capacity,
+            );
+        }
+
+        clear_auto_allocation_records();
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_sheds_armed_high_water_after_inline_only_phase() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let ptr = (0x269c_0000usize << 4) as *mut u8;
+        let shard_idx = auto_allocation_record_shard(ptr);
+        let metadata = AllocationMetadata::for_type(0xC004_9C01)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let mut capacity = AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY;
+        while let Some(next_capacity) = capacity.checked_mul(2) {
+            if !auto_allocation_record_overflow_mapping_is_retainable(next_capacity) {
+                break;
+            }
+            capacity = next_capacity;
+        }
+        assert!(capacity > AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY);
+        let mut retained =
+            unsafe { auto_allocation_record_overflow_with_capacity_for_test(&[], capacity) };
+        retained.retention = AutoAllocationRecordOverflowRetention::Armed;
+        let retained_slots = retained.slots;
+        {
+            let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+            assert_eq!(table.live_count, 0);
+            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+            table.overflow = retained;
+        }
+
+        assert!(unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) });
+        {
+            let table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+            assert_eq!(table.live_count, 1);
+            assert_eq!(table.overflow.slots, retained_slots);
+            assert_eq!(table.overflow.live, 0);
+            assert_eq!(table.overflow.tombstones, 0);
+            assert_eq!(
+                table.overflow.retention,
+                AutoAllocationRecordOverflowRetention::Armed
+            );
+        }
+
+        let unmaps_before = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
+        assert_eq!(take_auto_deallocation_metadata(ptr, layout), Some(metadata));
+        {
+            let table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+            assert_eq!(table.live_count, 0);
+            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+        }
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before + 1,
+            "an inline-only following phase must release the armed high-water mapping"
+        );
+
+        clear_auto_allocation_records();
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_roundtrips_ten_thousand_records() {
+        const RECORDS: usize = 10_000;
+
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let wrong_layout = Layout::from_size_align(128, align_of::<usize>()).unwrap();
+        let home_ptr = (0x2700_0000usize << 4) as *mut u8;
+        let home_shard_idx = auto_allocation_record_shard(home_ptr);
+        {
+            let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            for idx in 0..AUTO_ALLOCATION_RECORD_SHARD_SLOTS {
+                let ptr = ((0x2800_0000usize + idx) << 4) as *mut u8;
+                let metadata = AllocationMetadata::for_type(0xC005_0000 + idx as u64)
+                    .with_module(0xC0DE)
+                    .with_callsite(0xA140_0000 + idx as u64);
+                table.inline[idx] = auto_allocation_record_for(ptr, layout, metadata);
+            }
+            table.live_count = AUTO_ALLOCATION_RECORD_SHARD_SLOTS;
+        }
+        AUTO_ALLOCATION_RECORD_COUNT.store(AUTO_ALLOCATION_RECORD_SHARD_SLOTS, Ordering::Relaxed);
+        auto_allocation_record_mark_shard_active(home_shard_idx);
+        semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+
+        let mut expected = Vec::with_capacity(RECORDS);
+        let mut candidate = 0x2900_0000usize;
+        while expected.len() < RECORDS {
+            let ptr = (candidate << 4) as *mut u8;
+            candidate += 1;
+            if auto_allocation_record_shard(ptr) != home_shard_idx {
+                continue;
+            }
+            let metadata = AllocationMetadata::for_type(0xC006_0000 + expected.len() as u64)
+                .with_module(0xC0DE)
+                .with_callsite(0xA150_0000 + expected.len() as u64)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            assert!(unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) });
+            expected.push((ptr, metadata));
+        }
+
+        {
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert_eq!(table.overflow.live, RECORDS);
+            assert!(table.overflow.capacity.is_power_of_two());
+            assert!(table.overflow.live * 4 <= table.overflow.capacity * 3);
+        }
+        let count_before_update = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        expected[0].1 = AllocationMetadata {
+            callsite: 0xA15F_FFFF,
+            ..expected[0].1
+        };
+        assert!(unsafe {
+            record_global_auto_allocation_metadata(expected[0].0, layout, expected[0].1)
+        });
+        assert_eq!(
+            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+            count_before_update,
+            "same-pointer replacement must remain count-neutral"
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(expected[0].0, wrong_layout),
+            None
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(expected[0].0, layout),
+            Some(expected[0].1),
+            "a layout mismatch must preserve the authoritative record"
+        );
+
+        for &(ptr, metadata) in &expected {
+            assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(metadata));
+        }
+        for (ptr, metadata) in expected {
+            assert_eq!(take_auto_deallocation_metadata(ptr, layout), Some(metadata));
+        }
+        {
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert!(auto_allocation_record_overflow_is_mapped_valid(
+                &table.overflow
+            ));
+            assert!(auto_allocation_record_overflow_mapping_is_retainable(
+                table.overflow.capacity
+            ));
+            assert_eq!(table.overflow.live, 0);
+            assert_eq!(table.overflow.tombstones, 0);
+            assert_eq!(
+                table.overflow.retention,
+                AutoAllocationRecordOverflowRetention::Fresh,
+                "a fully used high-water mapping should survive until shard quiescence"
+            );
+            assert_eq!(table.live_count, AUTO_ALLOCATION_RECORD_SHARD_SLOTS);
+        }
+        assert_eq!(
+            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+            AUTO_ALLOCATION_RECORD_SHARD_SLOTS
+        );
+        clear_auto_allocation_records();
+        {
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
     fn compiler_auto_allocation_records_spill_to_overflow_when_global_table_is_full() {
         let _guard = test_guard();
         unsafe {
@@ -20514,13 +24816,16 @@ mod tests {
             let home_shard_idx = auto_allocation_record_shard(overflow_ptr);
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                !table.overflow.is_null(),
+                !table.overflow.slots.is_null(),
                 "overflow page should be allocated in the home shard for exact recovery records beyond the sharded inline table"
             );
-            assert!(
-                find_auto_allocation_record_in_overflow(table.overflow, overflow_ptr as usize)
-                    .is_some(),
-                "the spill record should be discoverable in overflow"
+            let slot =
+                find_auto_allocation_record_in_overflow(&table.overflow, overflow_ptr as usize)
+                    .expect("the spill record should be discoverable in overflow");
+            assert_ne!(
+                unsafe { (*slot).auth },
+                0,
+                "protected overflow recovery records must keep keyed authentication"
             );
         }
         assert_eq!(
@@ -20539,13 +24844,26 @@ mod tests {
             let home_shard_idx = auto_allocation_record_shard(overflow_ptr);
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                table.overflow.is_null(),
-                "the last consumed overflow recovery record should release its cold mmap page"
+                auto_allocation_record_overflow_is_mapped_valid(&table.overflow),
+                "the last consumed bounded overflow mapping should remain reusable"
             );
+            assert_eq!(table.overflow.live, 0);
+            assert_eq!(table.overflow.tombstones, 0);
         }
 
+        let unmaps_before_clear = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
         clear_auto_allocation_records();
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before_clear + 1,
+            "explicit recovery reset must release the retained mapping"
+        );
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        {
+            let home_shard_idx = auto_allocation_record_shard(overflow_ptr);
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+        }
     }
 
     #[cfg(not(feature = "fixed_heap"))]
@@ -20583,16 +24901,14 @@ mod tests {
             .with_lifetime_hint(0x22);
 
         unsafe {
-            let page = allocate_auto_allocation_record_page();
-            assert!(
-                !page.is_null(),
-                "hosted test needs one recovery overflow page"
-            );
-            (*page).entries[0] = auto_allocation_record_for(first_ptr, layout, first_metadata);
-            (*page).entries[1] = auto_allocation_record_for(second_ptr, layout, second_metadata);
+            increment_global_recovery_pointer_filter(first_ptr);
+            increment_global_recovery_pointer_filter(second_ptr);
+            let overflow = auto_allocation_record_overflow_for_test(&[
+                auto_allocation_record_for(first_ptr, layout, first_metadata),
+                auto_allocation_record_for(second_ptr, layout, second_metadata),
+            ]);
             let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
-            (*page).next = table.overflow;
-            table.overflow = page;
+            table.overflow = overflow;
             table.live_count = 2;
         }
         AUTO_ALLOCATION_RECORD_COUNT.store(2, Ordering::Relaxed);
@@ -20614,11 +24930,11 @@ mod tests {
         {
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                !table.overflow.is_null(),
+                !table.overflow.slots.is_null(),
                 "an overflow page with another live recovery record must not be unmapped"
             );
             assert!(
-                find_auto_allocation_record_in_overflow(table.overflow, second_ptr as usize)
+                find_auto_allocation_record_in_overflow(&table.overflow, second_ptr as usize)
                     .is_some(),
                 "the remaining live overflow record must stay recoverable"
             );
@@ -20632,9 +24948,11 @@ mod tests {
         {
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                table.overflow.is_null(),
-                "the overflow page should be unmapped once its last live record is consumed"
+                auto_allocation_record_overflow_is_mapped_valid(&table.overflow),
+                "the bounded overflow mapping should remain reusable once its last live record is consumed"
             );
+            assert_eq!(table.overflow.live, 0);
+            assert_eq!(table.overflow.tombstones, 0);
             assert_eq!(
                 table.live_count, 0,
                 "release should not leave the recovery shard marked live"
@@ -20642,6 +24960,77 @@ mod tests {
         }
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
 
+        clear_auto_allocation_records();
+        {
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_rejects_understated_last_live_count() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let first_ptr = (0x2180_0000usize << 4) as *mut u8;
+        let home_shard_idx = auto_allocation_record_shard(first_ptr);
+        let mut second_key = 0x2180_0001usize;
+        while auto_allocation_record_shard((second_key << 4) as *mut u8) != home_shard_idx {
+            second_key += 1;
+        }
+        let second_ptr = (second_key << 4) as *mut u8;
+        let first_metadata = AllocationMetadata::for_type(0xC002_E101)
+            .with_module(0xC0DE)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let second_metadata = AllocationMetadata::for_type(0xC002_E102)
+            .with_module(0xC0DE)
+            .with_flags(FLAG_TYPE_ISOLATED);
+
+        let mapping_before;
+        unsafe {
+            let overflow = auto_allocation_record_overflow_for_test(&[
+                auto_allocation_record_for(first_ptr, layout, first_metadata),
+                auto_allocation_record_for(second_ptr, layout, second_metadata),
+            ]);
+            mapping_before = overflow.slots;
+            let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            table.overflow = overflow;
+            table.overflow.live = 1;
+            table.live_count = 2;
+        }
+        AUTO_ALLOCATION_RECORD_COUNT.store(2, Ordering::Relaxed);
+        auto_allocation_record_mark_shard_active(home_shard_idx);
+        semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+
+        assert_eq!(
+            take_auto_deallocation_metadata(first_ptr, layout),
+            None,
+            "an understated last-live descriptor must fail closed"
+        );
+        {
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert_eq!(table.overflow.slots, mapping_before);
+            assert_eq!(table.overflow.live, 1);
+            assert_eq!(table.live_count, 2);
+            assert!(
+                find_auto_allocation_record_in_overflow(&table.overflow, first_ptr as usize)
+                    .is_some()
+            );
+            assert!(
+                find_auto_allocation_record_in_overflow(&table.overflow, second_ptr as usize)
+                    .is_some()
+            );
+        }
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 2);
+        assert_eq!(
+            lookup_auto_allocation_metadata(first_ptr, layout),
+            Some(first_metadata)
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(second_ptr, layout),
+            Some(second_metadata)
+        );
         clear_auto_allocation_records();
     }
 
@@ -20667,15 +25056,11 @@ mod tests {
             .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_PROTECTION);
 
         unsafe {
-            let page = allocate_auto_allocation_record_page();
-            assert!(
-                !page.is_null(),
-                "hosted test needs one recovery overflow page"
-            );
-            (*page).entries[0] = auto_allocation_record_for(ptr, layout, metadata);
+            let overflow = auto_allocation_record_overflow_for_test(&[auto_allocation_record_for(
+                ptr, layout, metadata,
+            )]);
             let mut table = AUTO_ALLOCATION_RECORDS[non_home_shard_idx].lock();
-            (*page).next = table.overflow;
-            table.overflow = page;
+            table.overflow = overflow;
         }
         AUTO_ALLOCATION_RECORD_COUNT.store(1, Ordering::Relaxed);
         auto_allocation_record_mark_shard_active(non_home_shard_idx);
@@ -20731,6 +25116,89 @@ mod tests {
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
 
         clear_auto_allocation_records();
+    }
+
+    #[test]
+    fn rsh031_recovery_layout_mismatch_is_exact_bound_and_policy_independent() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+
+        let allocation_layout = Layout::from_size_align(1009, 256).unwrap();
+        let vulnerable_deallocation_layout = Layout::from_size_align(1009, 1).unwrap();
+
+        for (flags, type_id) in [(0, 0xC002_3100), (FLAG_TYPE_ISOLATED, 0xC002_3101)] {
+            semantic_stats_reset();
+            let metadata = AllocationMetadata::for_type(type_id)
+                .with_module(0xC0DE_0310)
+                .with_callsite(0xA110_0310)
+                .with_flags(flags);
+            let ptr = unsafe {
+                __unialloc_alloc_with_metadata(
+                    allocation_layout.size(),
+                    allocation_layout.align(),
+                    metadata.type_id,
+                    metadata.module_id,
+                    metadata.flags,
+                    metadata.callsite,
+                )
+            };
+            assert!(!ptr.is_null());
+
+            let accepted = unsafe {
+                __unialloc_dealloc_with_metadata(
+                    ptr,
+                    vulnerable_deallocation_layout.size(),
+                    vulnerable_deallocation_layout.align(),
+                    metadata.type_id,
+                    metadata.module_id,
+                    metadata.flags,
+                    0xD310_0310,
+                )
+            };
+            let observed = semantic_allocation_layout_validation_snapshot();
+            assert!(!accepted, "RSH-031 layout mismatch must fail closed");
+            assert_eq!(observed.recovery_deallocation_layout_mismatches, 1);
+            assert_eq!(observed.last_requested_size, 1009);
+            assert_eq!(observed.last_requested_align, 1);
+            assert_eq!(observed.last_recorded_size, 1009);
+            assert_eq!(observed.last_recorded_align, 256);
+            assert_eq!(observed.last_recorded_type_id, metadata.type_id);
+            assert_eq!(observed.last_recorded_module_id, metadata.module_id);
+            assert_eq!(observed.last_recorded_callsite, metadata.callsite);
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, allocation_layout),
+                Some(metadata),
+                "the diagnostic must stay bound to the live allocation record"
+            );
+
+            assert!(unsafe {
+                __unialloc_dealloc_with_metadata(
+                    ptr,
+                    allocation_layout.size(),
+                    allocation_layout.align(),
+                    metadata.type_id,
+                    metadata.module_id,
+                    metadata.flags,
+                    0xD310_0311,
+                )
+            });
+            assert_eq!(
+                semantic_allocation_layout_validation_snapshot()
+                    .recovery_deallocation_layout_mismatches,
+                1,
+                "the exact-layout patched control must stay signal-free"
+            );
+            unsafe {
+                clear_type_cache_for_test();
+            }
+        }
+        semantic_stats_recording_disable();
     }
 
     #[test]
@@ -21158,6 +25626,134 @@ mod tests {
             payload_preserved,
             "mismatched semantic realloc changed payload"
         );
+    }
+
+    #[test]
+    fn plain_global_recovery_record_skips_optional_auth_and_stays_layout_exact() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let wrong_layout = Layout::from_size_align(128, align_of::<usize>()).unwrap();
+        let ptr = (0x4480usize << 4) as *mut u8;
+        let metadata = AllocationMetadata::for_type(0xC002_2480)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_C248)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_lifetime_hint(0x17)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+
+        assert!(unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) });
+        let (shard_idx, record_idx) = global_auto_allocation_record_location_for_test(ptr)
+            .expect("plain global recovery record");
+        {
+            let table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+            assert_eq!(table.inline[record_idx].auth, 0);
+            assert_eq!(
+                table.inline[record_idx].align & AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT,
+                0
+            );
+            assert_eq!(table.inline[record_idx].recorded_align(), layout.align());
+            assert!(table.inline[record_idx].matches_allocation(ptr, layout));
+        }
+        assert_eq!(lookup_auto_allocation_metadata(ptr, wrong_layout), None);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(metadata));
+        assert_eq!(take_auto_deallocation_metadata(ptr, layout), Some(metadata));
+        assert_eq!(take_auto_deallocation_metadata(ptr, layout), None);
+
+        clear_auto_allocation_records();
+    }
+
+    #[test]
+    fn protected_global_recovery_records_keep_keyed_authentication() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        reset_metadata_auth_cookie_for_test();
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        for (case_idx, integrity_flags) in IntoIterator::into_iter([
+            FLAG_POINTER_AUTH,
+            FLAG_METADATA_PROTECTION,
+            FLAG_POINTER_AUTH | FLAG_METADATA_PROTECTION,
+        ])
+        .enumerate()
+        {
+            let ptr = ((0x4490usize + case_idx) << 4) as *mut u8;
+            let metadata = AllocationMetadata::for_type(0xC002_2490 + case_idx as u64)
+                .with_module(0xC0DE)
+                .with_callsite(0xA110_C249 + case_idx as u64)
+                .with_flags(FLAG_TYPE_ISOLATED | integrity_flags)
+                .with_lifetime_hint(0x21 + case_idx as u16)
+                .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+            assert!(unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) });
+            let (shard_idx, record_idx) = global_auto_allocation_record_location_for_test(ptr)
+                .expect("protected global recovery record");
+            let (auth, encoded_align) = {
+                let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+                let auth = table.inline[record_idx].auth;
+                let encoded_align = table.inline[record_idx].align;
+                assert_ne!(auth, 0);
+                assert_ne!(
+                    encoded_align & AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT,
+                    0,
+                    "protected global records must carry an independent integrity marker"
+                );
+                assert_eq!(table.inline[record_idx].recorded_align(), layout.align());
+                assert_eq!(
+                    auth,
+                    derive_auto_allocation_record_auth(ptr, layout, metadata)
+                );
+                table.inline[record_idx].metadata = AllocationMetadata {
+                    callsite: metadata.callsite ^ 1,
+                    ..metadata
+                };
+                (auth, encoded_align)
+            };
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                None,
+                "tampered protected record must fail authentication"
+            );
+            {
+                let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+                assert_eq!(table.inline[record_idx].auth, auth);
+                table.inline[record_idx].metadata = metadata;
+            }
+
+            {
+                let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+                assert_eq!(table.inline[record_idx].align, encoded_align);
+                table.inline[record_idx].metadata = metadata.with_flags(FLAG_TYPE_ISOLATED);
+                table.inline[record_idx].auth = 0;
+            }
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                None,
+                "clearing protected flags and auth must not downgrade a marked global record"
+            );
+            {
+                let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+                assert_eq!(table.inline[record_idx].align, encoded_align);
+                assert_eq!(table.inline[record_idx].auth, 0);
+                table.inline[record_idx].metadata = metadata;
+                table.inline[record_idx].auth = auth;
+            }
+            assert_eq!(take_auto_deallocation_metadata(ptr, layout), Some(metadata));
+        }
+
+        clear_auto_allocation_records();
     }
 
     #[test]
@@ -21632,9 +26228,12 @@ mod tests {
                     inline_occupied: false,
                     occupied_slots: 0,
                     occupied_entries: 0,
+                    small_exact_occupied_entries: 0,
+                    small_exact_retained_bytes: 0,
                     retained_bytes: 0,
                     corrupt_slots: 0,
                     hot_slot_active: false,
+                    small_exact_hot_slot_active: false,
                 }
             );
             assert_eq!(
@@ -22244,7 +26843,7 @@ mod tests {
             clear_delayed_free_for_test();
         }
         semantic_auto_metadata_disable();
-        semantic_stats_recording_disable();
+        semantic_stats_reset();
         semantic_type_stats_recording_disable();
 
         let plain_layout =
@@ -22255,7 +26854,11 @@ mod tests {
         let side_table = AllocationMetadata::for_type(0xC003_5102)
             .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
 
-        assert_eq!(semantic_type_cache_class(plain_layout, plain), None);
+        assert_eq!(
+            semantic_type_cache_class(plain_layout, plain),
+            Some(SemanticTypeCacheClass::SmallOutOfLine),
+            "small exact-typed objects should use the out-of-line cache because they cannot carry an intrusive plain-cache node"
+        );
         assert_eq!(
             semantic_type_cache_class(side_table_layout, side_table),
             Some(SemanticTypeCacheClass::Segregated),
@@ -22263,6 +26866,43 @@ mod tests {
         );
 
         let alloc = RustAllocator::new();
+        let plain_ptr = unsafe { alloc.alloc_with_metadata(plain_layout, plain) };
+        assert!(!plain_ptr.is_null());
+        unsafe {
+            alloc.dealloc_with_metadata(plain_ptr, plain_layout, plain);
+        }
+        let ordinary_cached = type_isolation_side_cache_snapshot();
+        let segregated_cached = metadata_segregation_side_cache_snapshot();
+        assert_eq!(ordinary_cached.occupied_entries, 1);
+        assert_eq!(segregated_cached.occupied_entries, 0);
+        assert!(ordinary_cached.retained_bytes <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES);
+        assert_eq!(ordinary_cached.corrupt_slots, 0);
+
+        let foreign = AllocationMetadata::for_type(0xC003_51F1).with_flags(FLAG_TYPE_ISOLATED);
+        let foreign_ptr = unsafe { alloc.alloc_with_metadata(plain_layout, foreign) };
+        assert!(!foreign_ptr.is_null());
+        assert_ne!(
+            foreign_ptr, plain_ptr,
+            "an equal-layout foreign identity must not consume the retained tiny object"
+        );
+        let reused_plain = unsafe { alloc.alloc_with_metadata(plain_layout, plain) };
+        assert_eq!(
+            reused_plain, plain_ptr,
+            "the exact tiny-object owner should recover its retained pointer"
+        );
+        unsafe {
+            alloc.dealloc_raw(foreign_ptr, plain_layout);
+            alloc.dealloc_raw(reused_plain, plain_layout);
+        }
+
+        #[cfg(feature = "stats")]
+        {
+            let admission = type_cache_admission_stats_snapshot();
+            assert_eq!(admission.rejected_too_small.events, 0);
+            assert_eq!(admission.tiny_side_inserts.events, 1);
+            assert_eq!(admission.tiny_side_hits.events, 1);
+        }
+
         let ptr = unsafe { alloc.alloc_with_metadata(side_table_layout, side_table) };
         assert!(!ptr.is_null());
         unsafe {
@@ -22274,6 +26914,976 @@ mod tests {
             );
             alloc.dealloc_raw(reused, side_table_layout);
         }
+    }
+
+    #[test]
+    fn small_exact_type_cache_preserves_payload_and_full_identity() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(9, 1).unwrap();
+        let exact = AllocationMetadata::for_type(0xC003_51B0)
+            .with_module(0xC0DE_51B0)
+            .with_callsite(0xA110_51B0);
+        let foreign = AllocationMetadata::for_type(exact.type_id)
+            .with_module(0xC0DE_51BF)
+            .with_callsite(0xA110_51BF);
+        let ptr = unsafe { alloc.alloc_with_metadata(layout, exact) };
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.write_bytes(0xA5, layout.size());
+            alloc.dealloc_with_metadata(ptr, layout, exact);
+        }
+
+        assert_eq!(unsafe { SMALL_EXACT_TYPE_CACHE_OCCUPIED }, 1);
+        assert_eq!(type_isolation_side_cache_snapshot().occupied_entries, 1);
+        assert!(unsafe { INLINE_TYPE_CACHE_ENTRY.is_empty() });
+        assert_eq!(
+            metadata_segregation_side_cache_snapshot().occupied_entries,
+            0
+        );
+        assert!(global_type_cache_contains_ptr(ptr));
+
+        let foreign_ptr = unsafe { alloc.alloc_with_metadata(layout, foreign) };
+        assert!(!foreign_ptr.is_null());
+        assert_ne!(
+            foreign_ptr, ptr,
+            "module identity must authorize small reuse"
+        );
+        #[cfg(feature = "stats")]
+        assert_eq!(
+            semantic_stats_snapshot().typed_cache_wrong_identity_denials,
+            1,
+            "a same-layout foreign request should retain denial evidence"
+        );
+        let policy_mismatch = exact.with_flags(FLAG_TYPE_ISOLATED | FLAG_FORCE_INITIALIZE);
+        let policy_ptr = unsafe { alloc.alloc_with_metadata(layout, policy_mismatch) };
+        assert!(!policy_ptr.is_null());
+        assert_ne!(policy_ptr, ptr);
+        #[cfg(feature = "stats")]
+        assert_eq!(
+            semantic_stats_snapshot().typed_cache_wrong_identity_denials,
+            2,
+            "a same-layout policy mismatch should retain denial evidence"
+        );
+        let reused = unsafe { alloc.alloc_with_metadata(layout, exact) };
+        assert_eq!(reused, ptr);
+        for offset in 0..layout.size() {
+            assert_eq!(unsafe { reused.add(offset).read() }, 0xA5);
+        }
+        assert_eq!(unsafe { SMALL_EXACT_TYPE_CACHE_OCCUPIED }, 0);
+        #[cfg(not(feature = "fixed_heap"))]
+        assert_eq!(
+            global_address_lifecycle_snapshot(reused),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+        #[cfg(feature = "fixed_heap")]
+        {
+            assert_eq!(
+                global_address_lifecycle_snapshot(reused),
+                GlobalAddressLifecycleSnapshot::Absent
+            );
+            assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        }
+
+        unsafe {
+            alloc.dealloc_raw(foreign_ptr, layout);
+            alloc.dealloc_raw(policy_ptr, layout);
+            alloc.dealloc_raw(reused, layout);
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn small_exact_type_cache_reports_one_tiny_wrong_identity_denial() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        for (index, size) in [1usize, MIN_TYPE_CACHE_OBJECT_SIZE - 1]
+            .iter()
+            .copied()
+            .enumerate()
+        {
+            let layout = Layout::from_size_align(size, 1).unwrap();
+            let exact = AllocationMetadata::for_type(0xC003_51C0 + index as u64)
+                .with_module(0xC0DE_51C0 + index as u64);
+            let foreign = exact.with_module(0xF0E1_51C0 + index as u64);
+            let ptr = unsafe { alloc.alloc_with_metadata(layout, exact) };
+            assert!(!ptr.is_null());
+            unsafe {
+                alloc.dealloc_with_metadata(ptr, layout, exact);
+            }
+
+            let foreign_ptr = unsafe { alloc.alloc_with_metadata(layout, foreign) };
+            assert!(!foreign_ptr.is_null());
+            assert_ne!(foreign_ptr, ptr);
+            assert_eq!(
+                semantic_stats_snapshot().typed_cache_wrong_identity_denials,
+                index + 1,
+                "each tiny direct-tier miss should contribute exactly one denial"
+            );
+            let reused = unsafe { alloc.alloc_with_metadata(layout, exact) };
+            assert_eq!(reused, ptr);
+            unsafe {
+                alloc.dealloc_raw(foreign_ptr, layout);
+                alloc.dealloc_raw(reused, layout);
+            }
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn small_exact_type_cache_capacity_falls_back_to_existing_exact_tier() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(9, 1).unwrap();
+        let mut ptrs = [core::ptr::null_mut(); SMALL_EXACT_TYPE_CACHE_SLOTS + 1];
+        let mut metadata = [AllocationMetadata::unknown(); SMALL_EXACT_TYPE_CACHE_SLOTS + 1];
+        let mut idx = 0usize;
+        while idx < ptrs.len() {
+            metadata[idx] = AllocationMetadata::for_type(0xC003_5200 + idx as u64)
+                .with_module(0xC0DE_5200 + idx as u64);
+            ptrs[idx] = unsafe { alloc.alloc_with_metadata(layout, metadata[idx]) };
+            assert!(!ptrs[idx].is_null());
+            idx += 1;
+        }
+        idx = 0;
+        while idx < ptrs.len() {
+            unsafe {
+                alloc.dealloc_with_metadata(ptrs[idx], layout, metadata[idx]);
+            }
+            idx += 1;
+        }
+
+        assert_eq!(
+            unsafe { SMALL_EXACT_TYPE_CACHE_OCCUPIED },
+            SMALL_EXACT_TYPE_CACHE_SLOTS
+        );
+        assert!(
+            !unsafe { INLINE_TYPE_CACHE_ENTRY.is_empty() },
+            "the ninth exact owner should retain coverage in the existing inline tier"
+        );
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            SMALL_EXACT_TYPE_CACHE_SLOTS + 1
+        );
+        let fallback =
+            unsafe { alloc.alloc_with_metadata(layout, metadata[SMALL_EXACT_TYPE_CACHE_SLOTS]) };
+        assert_eq!(fallback, ptrs[SMALL_EXACT_TYPE_CACHE_SLOTS]);
+        assert!(unsafe { INLINE_TYPE_CACHE_ENTRY.is_empty() });
+        #[cfg(not(feature = "fixed_heap"))]
+        {
+            assert_eq!(
+                global_address_lifecycle_snapshot(fallback),
+                GlobalAddressLifecycleSnapshot::TypeLeased
+            );
+            assert_eq!(
+                GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+                SMALL_EXACT_TYPE_CACHE_SLOTS + 1
+            );
+        }
+        #[cfg(feature = "fixed_heap")]
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            SMALL_EXACT_TYPE_CACHE_SLOTS
+        );
+        unsafe {
+            alloc.dealloc_with_metadata(fallback, layout, metadata[SMALL_EXACT_TYPE_CACHE_SLOTS]);
+        }
+        assert!(!unsafe { INLINE_TYPE_CACHE_ENTRY.is_empty() });
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            SMALL_EXACT_TYPE_CACHE_SLOTS + 1
+        );
+        assert_eq!(
+            unsafe { drain_current_thread_semantic_retained_state(&alloc) },
+            SMALL_EXACT_TYPE_CACHE_SLOTS + 1
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn semantic_type_cache_class_routes_word_sized_objects_to_plain_cache() {
+        let _guard = test_guard();
+        let metadata = AllocationMetadata::for_type(0xC003_5103).with_flags(FLAG_TYPE_ISOLATED);
+        let word = Layout::from_size_align(size_of::<usize>(), align_of::<usize>()).unwrap();
+        let two_words =
+            Layout::from_size_align(size_of::<usize>() * 2, align_of::<usize>()).unwrap();
+
+        assert_eq!(
+            semantic_type_cache_class(word, metadata),
+            Some(SemanticTypeCacheClass::Plain),
+            "one-word exact-typed objects should use the intrusive exact-type cache"
+        );
+        assert_eq!(
+            semantic_type_cache_class(two_words, metadata),
+            Some(SemanticTypeCacheClass::Plain),
+            "two-word exact-typed objects should avoid the authenticated side table"
+        );
+    }
+
+    #[test]
+    fn word_sized_plain_type_cache_uses_only_the_intrusive_link_word() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            let mut storage = [0usize, 0xA11C_E5A1usize, 0xBADC_0FFEusize];
+            let layout = Layout::from_size_align(size_of::<usize>(), align_of::<usize>()).unwrap();
+            let metadata = AllocationMetadata::for_type(0xC003_5104).with_flags(FLAG_TYPE_ISOLATED);
+            let ptr = storage.as_mut_ptr() as *mut u8;
+
+            assert!(
+                push_type_cache(ptr, layout, metadata),
+                "one-word objects should fit the plain intrusive cache"
+            );
+            let cache_key = type_cache_identity_key(metadata);
+            let slot = type_cache_find_slot_for_key(
+                plain_type_cache_slot_key(cache_key, layout),
+                layout,
+                metadata,
+                false,
+            )
+            .expect("word-sized object should be owned by an exact-layout slot");
+            assert_eq!((*slot).size, layout.size());
+            assert_eq!((*slot).align, layout.align());
+            assert_eq!(storage[1], 0xA11C_E5A1);
+            assert_eq!(storage[2], 0xBADC_0FFE);
+            assert_eq!(pop_type_cache(layout, metadata), Some(ptr));
+        }
+    }
+
+    #[test]
+    fn plain_type_cache_slot_hash_collision_keeps_exact_layout_authority() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            let mut small_storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let small =
+                Layout::from_size_align(size_of_val(&small_storage), align_of::<usize>()).unwrap();
+            let large = Layout::from_size_align(small.size() * 2, align_of::<usize>()).unwrap();
+            let metadata = AllocationMetadata::for_type(0xC003_5105).with_flags(FLAG_TYPE_ISOLATED);
+            let forced_slot_key = 0xC011_1510_C011_5105;
+            let slot_idx = type_cache_slot(forced_slot_key);
+            let ptr = small_storage.as_mut_ptr() as *mut u8;
+            (ptr as *mut usize).write(0);
+            TYPE_CACHE[slot_idx] = TypeCacheSlot {
+                cache_key: forced_slot_key,
+                identity: TypeCacheIdentity::from_metadata(metadata),
+                size: small.size(),
+                align: small.align(),
+                head: ptr,
+                count: 1,
+                retained_bytes: type_cache_retained_bytes_for_layout(small),
+            };
+
+            let colliding_layout_slot =
+                type_cache_find_slot_for_key(forced_slot_key, large, metadata, true)
+                    .expect("a layout hash collision should continue probing");
+            assert_ne!(colliding_layout_slot, &mut TYPE_CACHE[slot_idx] as *mut _);
+            assert_eq!((*colliding_layout_slot).cache_key, UNKNOWN_SEMANTIC_ID);
+            assert_eq!(
+                type_cache_find_slot_for_key(forced_slot_key, small, metadata, false),
+                Some(&mut TYPE_CACHE[slot_idx] as *mut _),
+                "the exact original layout must retain its slot authority"
+            );
+            assert!(
+                type_cache_find_slot_for_key(forced_slot_key, large, metadata, false).is_none(),
+                "a hash match cannot authorize a different size or alignment"
+            );
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn type_cache_admission_stats_attribute_plain_byte_budget_and_oversized_rejections() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let metadata = AllocationMetadata::for_type(0xC003_51A0).with_flags(FLAG_TYPE_ISOLATED);
+        let layout =
+            Layout::from_size_align(MAX_TYPE_CACHE_SLOT_BYTES / 4, align_of::<usize>()).unwrap();
+        let mut ptrs = [core::ptr::null_mut(); 6];
+        for ptr in &mut ptrs {
+            *ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert!(!ptr.is_null());
+        }
+        for ptr in ptrs {
+            unsafe {
+                alloc.dealloc_with_metadata(ptr, layout, metadata);
+            }
+        }
+
+        let oversized = Layout::from_size_align(
+            MAX_TYPE_CACHE_OBJECT_SIZE + size_of::<usize>(),
+            align_of::<usize>(),
+        )
+        .unwrap();
+        let oversized_ptr = unsafe { alloc.alloc_with_metadata(oversized, metadata) };
+        assert!(!oversized_ptr.is_null());
+        unsafe {
+            alloc.dealloc_with_metadata(oversized_ptr, oversized, metadata);
+        }
+
+        let stats = semantic_stats_snapshot();
+        let admission = type_cache_admission_stats_snapshot();
+        assert_eq!(stats.typed_deallocations, 7);
+        #[cfg(not(feature = "fixed_heap"))]
+        {
+            assert_eq!(stats.typed_cache_inserts, 6);
+            assert_eq!(admission.admitted.events, 6);
+            assert_eq!(admission.rejected_slot_byte_budget.events, 0);
+            assert_eq!(admission.depot_rescued_overflow.events, 1);
+            assert_eq!(admission.depot_current_entries, 1);
+        }
+        #[cfg(feature = "fixed_heap")]
+        {
+            assert_eq!(stats.typed_cache_inserts, 5);
+            assert_eq!(admission.admitted.events, 5);
+            assert_eq!(admission.rejected_slot_byte_budget.events, 1);
+            assert_eq!(admission.depot_rescued_overflow.events, 0);
+            assert_eq!(admission.depot_current_entries, 0);
+            assert_eq!(admission.depot_attempts.events, 1);
+            assert_eq!(admission.depot_rejected_policy.events, 1);
+        }
+        assert_eq!(admission.rejected_too_large.events, 1);
+        assert_eq!(admission.depot_from_slot_byte_budget.events, 1);
+        assert_eq!(admission.terminal_events(), stats.typed_deallocations);
+        assert_eq!(
+            admission.admitted.rounded_bytes,
+            stats.typed_cache_inserts * type_cache_retained_bytes_for_layout(layout)
+        );
+        assert_eq!(
+            admission.rejected_slot_byte_budget.rounded_bytes,
+            (6 - stats.typed_cache_inserts) * type_cache_retained_bytes_for_layout(layout)
+        );
+        assert_eq!(
+            admission.rejected_too_large.rounded_bytes,
+            type_cache_retained_bytes_for_layout(oversized)
+        );
+
+        type_cache_admission_stats_reset();
+        assert_eq!(type_cache_admission_stats_snapshot().terminal_events(), 0);
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[test]
+    fn registry_pressure_releases_cacheable_free_without_failstop() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        let _limit = TypeCacheRegistryRetentionLimitGuard::force(0);
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_51A2).with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+        unsafe {
+            alloc.dealloc_with_metadata(ptr, layout, metadata);
+        }
+
+        #[cfg(feature = "stats")]
+        {
+            let stats = semantic_stats_snapshot();
+            let admission = type_cache_admission_stats_snapshot();
+            assert_eq!(stats.typed_deallocations, 1);
+            assert_eq!(stats.typed_cache_inserts, 0);
+            assert_eq!(admission.admitted.events, 0);
+            assert_eq!(admission.rejected_registry_pressure.events, 1);
+            assert_eq!(admission.ownership_registry_full_failstop.events, 0);
+            assert_eq!(admission.terminal_events(), 1);
+        }
+        assert_eq!(type_isolation_side_cache_snapshot().occupied_entries, 0);
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn registry_pressure_admits_limit_and_releases_next_owner() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        let _limit = TypeCacheRegistryRetentionLimitGuard::force(1);
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let retained_metadata =
+            AllocationMetadata::for_type(0xC003_51A3).with_flags(FLAG_TYPE_ISOLATED);
+        let released_metadata =
+            AllocationMetadata::for_type(0xC003_51A4).with_flags(FLAG_TYPE_ISOLATED);
+        let retained_ptr = unsafe { alloc.alloc_with_metadata(layout, retained_metadata) };
+        let released_ptr = unsafe { alloc.alloc_with_metadata(layout, released_metadata) };
+        assert!(!retained_ptr.is_null());
+        assert!(!released_ptr.is_null());
+        assert_ne!(retained_ptr, released_ptr);
+
+        unsafe {
+            alloc.dealloc_with_metadata(retained_ptr, layout, retained_metadata);
+            alloc.dealloc_with_metadata(released_ptr, layout, released_metadata);
+        }
+
+        #[cfg(feature = "stats")]
+        {
+            let stats = semantic_stats_snapshot();
+            let admission = type_cache_admission_stats_snapshot();
+            assert_eq!(stats.typed_deallocations, 2);
+            assert_eq!(stats.typed_cache_inserts, 1);
+            assert_eq!(admission.admitted.events, 1);
+            assert_eq!(admission.rejected_registry_pressure.events, 1);
+            assert_eq!(admission.ownership_registry_full_failstop.events, 0);
+            assert_eq!(admission.terminal_events(), 2);
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(layout, released_metadata) },
+            None
+        );
+
+        let recovered = unsafe {
+            pop_semantic_type_cache(layout, retained_metadata)
+                .expect("the owner admitted at the limit must remain recoverable")
+        };
+        assert_eq!(recovered, retained_ptr);
+        unsafe {
+            alloc.dealloc_raw(recovered, layout);
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn registry_pressure_target_reserves_complete_delayed_registry_capacity() {
+        let total_slots =
+            GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT * GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_SLOTS;
+        let delayed_slots =
+            GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_COUNT * GLOBAL_DELAYED_FREE_OWNERSHIP_SHARD_SLOTS;
+
+        #[cfg(not(feature = "fixed_heap"))]
+        assert_eq!(
+            GLOBAL_ADDRESS_LIFECYCLE_TARGET_OCCUPANCY,
+            total_slots * 3 / 8
+        );
+        #[cfg(feature = "fixed_heap")]
+        assert_eq!(
+            GLOBAL_ADDRESS_LIFECYCLE_TARGET_OCCUPANCY,
+            total_slots * 3 / 4
+        );
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT + delayed_slots,
+            GLOBAL_ADDRESS_LIFECYCLE_TARGET_OCCUPANCY
+        );
+        assert!(GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT < total_slots);
+        #[cfg(not(feature = "fixed_heap"))]
+        {
+            assert_eq!(
+                TYPE_CACHE_DEPOT_REGISTRY_COUNT_LIMIT,
+                GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT
+            );
+            assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT, 2816);
+            assert_eq!(TYPE_CACHE_LEASE_REGISTRY_COUNT_LIMIT, 1266);
+            assert!(
+                TYPE_CACHE_LEASE_REGISTRY_COUNT_LIMIT < GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT
+            );
+        }
+        #[cfg(feature = "fixed_heap")]
+        {
+            assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT, 512);
+            assert_eq!(TYPE_CACHE_LEASE_REGISTRY_COUNT_LIMIT, 0);
+        }
+    }
+
+    #[cfg(all(feature = "fixed_heap", feature = "stats"))]
+    #[test]
+    fn fixed_heap_local_eviction_attributes_depot_policy_rejection() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_stats_reset();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_51A1).with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = unsafe { alloc.alloc_raw(layout) };
+        assert!(!ptr.is_null());
+        let ownership = match begin_global_type_cache_ownership(ptr) {
+            GlobalTypeCacheOwnershipAcquisition::Owned(ownership) => ownership,
+            GlobalTypeCacheOwnershipAcquisition::Full(_) => panic!("empty registry must admit"),
+        };
+        ownership.commit();
+        let entry = SegregatedTypeCacheEntry::new(
+            type_cache_identity_key(metadata),
+            segregated_type_cache_policy_key(metadata),
+            ptr,
+            layout,
+            metadata,
+        );
+        let outcome = unsafe { try_transfer_type_cache_entry_to_depot(entry) };
+        assert!(matches!(
+            &outcome,
+            TypeCacheDepotTransferResult::Rejected(_)
+        ));
+
+        let admission = type_cache_admission_stats_snapshot();
+        assert_eq!(admission.depot_attempts.events, 1);
+        assert_eq!(admission.depot_from_local_eviction.events, 1);
+        assert_eq!(admission.depot_rejected_policy.events, 1);
+        unsafe {
+            release_type_cache_depot_transfer_outcome(&alloc, outcome);
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_type_cache_depot_mixes_exact_layout_into_directory_location() {
+        let _guard = test_guard();
+        let cache_key = 0x16CB_9DF3_613C_D24C;
+        let policy_key = FLAG_TYPE_ISOLATED;
+        let leaf = Layout::from_size_align(104, align_of::<usize>()).unwrap();
+        let internal = Layout::from_size_align(200, align_of::<usize>()).unwrap();
+
+        assert_ne!(
+            type_cache_depot_location_for_request(cache_key, leaf, policy_key),
+            type_cache_depot_location_for_request(cache_key, internal, policy_key),
+            "different exact layouts should not deterministically contend for one depot directory window"
+        );
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn plain_type_cache_retains_btree_shaped_burst_without_global_depot() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        const LEAF_NODES: usize = 834;
+        const INTERNAL_NODES: usize = 77;
+        let alloc = RustAllocator::new();
+        let leaf_layout = Layout::from_size_align(104, align_of::<usize>()).unwrap();
+        let internal_layout = Layout::from_size_align(200, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_D300)
+            .with_module(0xC0DE_D300)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let mut leaves = Vec::with_capacity(LEAF_NODES);
+        let mut internals = Vec::with_capacity(INTERNAL_NODES);
+
+        for _ in 0..LEAF_NODES {
+            let ptr = unsafe { alloc.alloc_with_metadata(leaf_layout, metadata) };
+            assert!(!ptr.is_null());
+            leaves.push(ptr);
+        }
+        for _ in 0..INTERNAL_NODES {
+            let ptr = unsafe { alloc.alloc_with_metadata(internal_layout, metadata) };
+            assert!(!ptr.is_null());
+            internals.push(ptr);
+        }
+        for ptr in leaves {
+            unsafe {
+                alloc.dealloc_with_metadata(ptr, leaf_layout, metadata);
+            }
+        }
+        for ptr in internals {
+            unsafe {
+                alloc.dealloc_with_metadata(ptr, internal_layout, metadata);
+            }
+        }
+
+        let l1 = type_isolation_side_cache_snapshot();
+        assert_eq!(l1.occupied_entries, LEAF_NODES + INTERNAL_NODES);
+        assert_eq!(l1.occupied_slots, 2);
+        assert!(l1.inline_occupied);
+        assert_eq!(
+            l1.retained_bytes,
+            LEAF_NODES * type_cache_retained_bytes_for_layout(leaf_layout)
+                + INTERNAL_NODES * type_cache_retained_bytes_for_layout(internal_layout)
+        );
+        assert_eq!(l1.corrupt_slots, 0);
+        assert_eq!(
+            unsafe { plain_type_cache_retained_entries_snapshot_for_test() },
+            LEAF_NODES + INTERNAL_NODES - 1
+        );
+        assert!(unsafe { plain_type_cache_retained_bytes_trusted_for_test() });
+        assert_eq!(type_cache_depot_current_occupancy(), (0, 0));
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            LEAF_NODES + INTERNAL_NODES
+        );
+
+        let released = unsafe { drain_current_thread_semantic_state(&alloc) };
+        assert_eq!(released, LEAF_NODES + INTERNAL_NODES);
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        assert_eq!(
+            unsafe { plain_type_cache_retained_entries_snapshot_for_test() },
+            0
+        );
+        assert_eq!(
+            unsafe { plain_type_cache_retained_bytes_snapshot_for_test() },
+            0
+        );
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_type_cache_depot_reuses_plain_l1_overflow_across_threads() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_D301)
+            .with_module(0xC0DE_D301)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let producer = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let mut ptrs = Vec::with_capacity(MAX_TYPE_CACHE_DEPTH + 2);
+            for _ in 0..MAX_TYPE_CACHE_DEPTH + 2 {
+                let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+                assert!(!ptr.is_null());
+                ptrs.push(ptr as usize);
+            }
+            let overflow = *ptrs.last().unwrap();
+            for ptr in ptrs {
+                unsafe {
+                    alloc.dealloc_with_metadata(ptr as *mut u8, layout, metadata);
+                }
+            }
+            let released = unsafe { drain_current_thread_semantic_state(&alloc) };
+            assert_eq!(released, MAX_TYPE_CACHE_DEPTH + 1);
+            overflow
+        });
+        let overflow = producer.join().expect("typed producer thread") as *mut u8;
+
+        #[cfg(feature = "stats")]
+        {
+            let after_producer = type_cache_admission_stats_snapshot();
+            assert_eq!(after_producer.depot_rescued_overflow.events, 1);
+            assert_eq!(after_producer.depot_current_entries, 1);
+            assert_eq!(after_producer.rejected_slot_depth.events, 0);
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+
+        let alloc = RustAllocator::new();
+        let foreign = metadata.with_module(metadata.module_id ^ 0x55AA);
+        let foreign_ptr = unsafe { alloc.alloc_with_metadata(layout, foreign) };
+        assert!(!foreign_ptr.is_null());
+        assert_ne!(foreign_ptr, overflow);
+        let exact_ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert_eq!(
+            exact_ptr, overflow,
+            "a consumer thread must recover the exact producer overflow object"
+        );
+
+        #[cfg(feature = "stats")]
+        {
+            let after_hit = type_cache_admission_stats_snapshot();
+            assert_eq!(after_hit.depot_hits.events, 1);
+            assert_eq!(after_hit.depot_hits_after_recorded_l1_bypass.events, 1);
+            assert_eq!(after_hit.depot_current_entries, 0);
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        unsafe {
+            alloc.dealloc_raw(foreign_ptr, layout);
+            alloc.dealloc_raw(exact_ptr, layout);
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_type_cache_depot_rejects_saturation_without_replacing_exact_entries() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_D302)
+            .with_module(0xC0DE_D302)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        for index in 0..=TYPE_CACHE_DEPOT_SHARD_SLOTS {
+            let ptr = unsafe { alloc.alloc_raw(layout) };
+            assert!(!ptr.is_null());
+            let ownership = match begin_global_type_cache_ownership(ptr) {
+                GlobalTypeCacheOwnershipAcquisition::Owned(ownership) => ownership,
+                GlobalTypeCacheOwnershipAcquisition::Full(_) => {
+                    panic!("depot depth test unexpectedly exhausted lifecycle registry")
+                }
+            };
+            let entry = SegregatedTypeCacheEntry::new(
+                type_cache_identity_key(metadata),
+                segregated_type_cache_policy_key(metadata),
+                ptr,
+                layout,
+                metadata,
+            );
+            match unsafe {
+                try_push_type_cache_depot_with_pending_ownership(
+                    entry,
+                    TypeCacheDepotSource::SlotDepth,
+                    ownership,
+                )
+            } {
+                TypeCacheDepotPendingPushResult::Accepted(evicted) => {
+                    assert!(
+                        index < TYPE_CACHE_DEPOT_SHARD_SLOTS,
+                        "the saturated depot must reject the incoming owner"
+                    );
+                    assert!(evicted.is_none());
+                }
+                TypeCacheDepotPendingPushResult::Rejected(ownership) => {
+                    assert_eq!(index, TYPE_CACHE_DEPOT_SHARD_SLOTS);
+                    ownership.rollback_unmodified();
+                    unsafe {
+                        alloc.dealloc_raw(ptr, layout);
+                    }
+                }
+            }
+        }
+
+        #[cfg(feature = "stats")]
+        {
+            let full = type_cache_admission_stats_snapshot();
+            assert_eq!(full.depot_current_entries, TYPE_CACHE_DEPOT_SHARD_SLOTS);
+            assert_eq!(full.depot_peak_entries, TYPE_CACHE_DEPOT_SHARD_SLOTS);
+            assert_eq!(full.depot_evictions.events, 0);
+            assert_eq!(full.depot_rejected_capacity.events, 1);
+        }
+
+        for _ in 0..TYPE_CACHE_DEPOT_SHARD_SLOTS {
+            let ptr = unsafe { pop_type_cache_depot(layout, metadata) }
+                .expect("all bounded exact depot entries must remain reachable");
+            unsafe {
+                alloc.dealloc_raw(ptr, layout);
+            }
+        }
+        assert!(unsafe { pop_type_cache_depot(layout, metadata) }.is_none());
+        #[cfg(feature = "stats")]
+        assert_eq!(
+            type_cache_admission_stats_snapshot().depot_current_entries,
+            0
+        );
+        unsafe {
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_type_cache_depot_rejects_hugepage_policy_and_preserves_registry_headroom() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_stats_reset();
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+
+        let hugepage = AllocationMetadata::for_type(0xC003_D303)
+            .with_flags(FLAG_TYPE_ISOLATED | FLAG_HUGEPAGE_METADATA);
+        let huge_ptr = unsafe { alloc.alloc_raw(layout) };
+        let huge_owner = match begin_global_type_cache_ownership(huge_ptr) {
+            GlobalTypeCacheOwnershipAcquisition::Owned(ownership) => ownership,
+            GlobalTypeCacheOwnershipAcquisition::Full(_) => panic!("empty registry must admit"),
+        };
+        let huge_entry = SegregatedTypeCacheEntry::new(
+            type_cache_identity_key(hugepage),
+            segregated_type_cache_policy_key(hugepage),
+            huge_ptr,
+            layout,
+            hugepage,
+        );
+        match unsafe {
+            try_push_type_cache_depot_with_pending_ownership(
+                huge_entry,
+                TypeCacheDepotSource::SegregatedCapacity,
+                huge_owner,
+            )
+        } {
+            TypeCacheDepotPendingPushResult::Rejected(ownership) => ownership.rollback_unmodified(),
+            TypeCacheDepotPendingPushResult::Accepted(_) => {
+                panic!("hugepage metadata must stay out of the generic depot")
+            }
+        }
+        #[cfg(feature = "stats")]
+        {
+            assert_eq!(
+                type_cache_admission_stats_snapshot().depot_current_entries,
+                0
+            );
+            assert_eq!(
+                type_cache_admission_stats_snapshot()
+                    .depot_rejected_policy
+                    .events,
+                1
+            );
+        }
+        unsafe {
+            alloc.dealloc_raw(huge_ptr, layout);
+        }
+
+        type_cache_admission_stats_reset();
+        let plain = AllocationMetadata::for_type(0xC003_D304).with_flags(FLAG_TYPE_ISOLATED);
+        let plain_ptr = unsafe { alloc.alloc_raw(layout) };
+        let plain_owner = match begin_global_type_cache_ownership(plain_ptr) {
+            GlobalTypeCacheOwnershipAcquisition::Owned(ownership) => ownership,
+            GlobalTypeCacheOwnershipAcquisition::Full(_) => panic!("empty registry must admit"),
+        };
+        let actual_count = GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire);
+        assert_eq!(
+            TYPE_CACHE_DEPOT_REGISTRY_COUNT_LIMIT,
+            GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT
+        );
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT
+            .store(TYPE_CACHE_DEPOT_REGISTRY_COUNT_LIMIT + 1, Ordering::Release);
+        let plain_entry = SegregatedTypeCacheEntry::new(
+            type_cache_identity_key(plain),
+            segregated_type_cache_policy_key(plain),
+            plain_ptr,
+            layout,
+            plain,
+        );
+        let rejected = unsafe {
+            try_push_type_cache_depot_with_pending_ownership(
+                plain_entry,
+                TypeCacheDepotSource::SlotDepth,
+                plain_owner,
+            )
+        };
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.store(actual_count, Ordering::Release);
+        match rejected {
+            TypeCacheDepotPendingPushResult::Rejected(ownership) => ownership.rollback_unmodified(),
+            TypeCacheDepotPendingPushResult::Accepted(_) => {
+                panic!("depot must reject owners above the lifecycle retention limit")
+            }
+        }
+        #[cfg(feature = "stats")]
+        assert_eq!(
+            type_cache_admission_stats_snapshot()
+                .depot_rejected_registry_headroom
+                .events,
+            1
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        unsafe {
+            alloc.dealloc_raw(plain_ptr, layout);
+            clear_type_cache_for_test();
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_type_cache_depot_accepts_counted_owner_at_retention_limit() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_stats_reset();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_D305).with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = unsafe { alloc.alloc_raw(layout) };
+        let ownership = match begin_global_type_cache_ownership(ptr) {
+            GlobalTypeCacheOwnershipAcquisition::Owned(ownership) => ownership,
+            GlobalTypeCacheOwnershipAcquisition::Full(_) => panic!("empty registry must admit"),
+        };
+        let actual_count = GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire);
+        assert_eq!(actual_count, 1);
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.store(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT,
+            Ordering::Release,
+        );
+        let entry = SegregatedTypeCacheEntry::new(
+            type_cache_identity_key(metadata),
+            segregated_type_cache_policy_key(metadata),
+            ptr,
+            layout,
+            metadata,
+        );
+        let accepted = unsafe {
+            try_push_type_cache_depot_with_pending_ownership(
+                entry,
+                TypeCacheDepotSource::SlotDepth,
+                ownership,
+            )
+        };
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.store(actual_count, Ordering::Release);
+
+        match accepted {
+            TypeCacheDepotPendingPushResult::Accepted(evicted) => assert!(evicted.is_none()),
+            TypeCacheDepotPendingPushResult::Rejected(ownership) => {
+                ownership.rollback_unmodified();
+                panic!("a counted owner at the unified retention limit must be admitted")
+            }
+        }
+        assert_eq!(
+            type_cache_admission_stats_snapshot().depot_current_entries,
+            1
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+        unsafe {
+            clear_type_cache_for_test();
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
     }
 
     #[test]
@@ -22445,7 +28055,7 @@ mod tests {
         );
         assert_eq!(
             after_free.occupied_entries, 5,
-            "one inline object plus four 16KiB linked entries fit the 64KiB cold-slot budget"
+            "one inline object plus four quarter-slot linked entries fill the cold-slot budget"
         );
 
         let mut popped = 0usize;
@@ -22456,16 +28066,19 @@ mod tests {
             }
         }
         assert_eq!(
-            popped, 5,
-            "the sixth real free should bypass semantic retention and return to the allocator"
+            popped, 6,
+            "the depot should preserve the sixth exact object beyond the bounded plain L1"
         );
 
         let snap = semantic_stats_snapshot();
-        assert_eq!(snap.typed_cache_inserts, 5);
+        assert_eq!(snap.typed_cache_inserts, 6);
         assert!(
             snap.typed_cache_bypasses >= 1,
-            "the over-budget free should be counted as a cache bypass"
+            "the rescued over-budget free should retain its L1 bypass diagnostic"
         );
+        let admission = type_cache_admission_stats_snapshot();
+        assert_eq!(admission.depot_rescued_overflow.events, 1);
+        assert_eq!(admission.depot_hits.events, 1);
         semantic_stats_recording_disable();
     }
 
@@ -22851,16 +28464,19 @@ mod tests {
             }
         }
         assert_eq!(
-            popped, 4,
-            "later real frees should bypass side-cache retention once the bucket byte cap is full"
+            popped, 6,
+            "the depot should preserve exact overflow after the local bucket cap is full"
         );
 
         let snap = semantic_stats_snapshot();
-        assert_eq!(snap.typed_cache_inserts, 4);
+        assert_eq!(snap.typed_cache_inserts, 6);
         assert!(
             snap.typed_cache_bypasses >= 1,
-            "over-budget metadata-segregated frees should be counted as cache bypasses"
+            "rescued metadata-segregated overflow should retain its L1 bypass diagnostic"
         );
+        let admission = type_cache_admission_stats_snapshot();
+        assert_eq!(admission.depot_rescued_overflow.events, 2);
+        assert_eq!(admission.depot_hits.events, 2);
         semantic_stats_recording_disable();
     }
 
@@ -26041,6 +31657,457 @@ mod tests {
         );
     }
 
+    #[test]
+    fn global_type_cache_ownership_unregister_uses_one_lifecycle_transaction() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+        }
+
+        let ptr = 0x2000usize as *mut u8;
+        assert_eq!(
+            register_global_type_cache_ownership(ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        let probes_before = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
+
+        assert!(unregister_global_type_cache_ownership(ptr));
+
+        assert_eq!(
+            TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed),
+            probes_before,
+            "unregister should let the checked transition validate TypeRetained without a separate lifecycle snapshot"
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn type_cache_allocation_consume_publishes_reuse_without_a_second_probe() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+        }
+
+        let ptr = 0x2800usize as *mut u8;
+        assert_eq!(
+            register_global_type_cache_ownership(ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        let retained = global_address_lifecycle_observation(ptr);
+        assert_eq!(
+            retained.snapshot,
+            GlobalAddressLifecycleSnapshot::TypeRetained
+        );
+        let probes_before = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
+        let publications_before = TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+
+        consume_global_type_cache_ownership_for_allocation(
+            ptr,
+            Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap(),
+            AllocationMetadata::for_type(0xC003_51A7).with_flags(FLAG_TYPE_ISOLATED),
+        );
+
+        assert_eq!(
+            TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed),
+            probes_before,
+            "the fused transition must validate T and publish reuse in its one table pass"
+        );
+        assert_eq!(
+            TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed),
+            publications_before + 1
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        let published = global_address_lifecycle_observation(ptr);
+        assert_eq!(published.snapshot, GlobalAddressLifecycleSnapshot::Absent);
+        assert!(
+            published.epoch > retained.epoch,
+            "allocation reuse must advance the retained generation"
+        );
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn small_exact_cache_hit_keeps_one_bounded_leased_reservation() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+        }
+
+        let ptr = 0x2880usize as *mut u8;
+        let layout = Layout::from_size_align(2 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_51A8).with_flags(FLAG_TYPE_ISOLATED);
+        assert_eq!(
+            register_global_type_cache_ownership(ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+
+        consume_global_type_cache_ownership_for_allocation(ptr, layout, metadata);
+
+        let leased = global_address_lifecycle_observation(ptr);
+        assert_eq!(leased.snapshot, GlobalAddressLifecycleSnapshot::TypeLeased);
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+        let (shard_idx, _) = global_type_cache_ownership_shard_and_slot(ptr);
+        assert!(
+            global_address_generation_history_observation(
+                &GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock(),
+                ptr as usize,
+            )
+            .is_none(),
+            "T-to-L must not publish a missing generation"
+        );
+
+        let ownership = begin_global_semantic_reclaim(ptr);
+        assert_eq!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::TypeRetained
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+        ownership.rollback_unmodified();
+        assert_eq!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+
+        let ownership = begin_global_semantic_reclaim(ptr);
+        ownership.commit();
+        assert!(unregister_global_type_cache_ownership(ptr));
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn queued_duplicate_reclaim_cannot_consume_one_small_exact_lease_twice() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+        }
+
+        let ptr = 0x28c0usize as *mut u8;
+        let layout = Layout::from_size_align(2 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_51AA).with_flags(FLAG_TYPE_ISOLATED);
+        assert_eq!(
+            register_global_type_cache_ownership(ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        consume_global_type_cache_ownership_for_allocation(ptr, layout, metadata);
+        assert_eq!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+
+        let first = observe_global_reclaim(ptr);
+        let queued_duplicate = observe_global_reclaim(ptr);
+        let ownership = begin_global_raw_reclaim_from_observation(first).into_tracked();
+        assert_eq!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::TypeRetained
+        );
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let _ = begin_global_raw_reclaim_from_observation(queued_duplicate);
+            }))
+            .is_err(),
+            "only one reclaim observation may consume a leased generation"
+        );
+        ownership.rollback_unmodified();
+        assert_eq!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+
+        let ownership = begin_global_semantic_reclaim(ptr);
+        ownership.commit();
+        assert!(unregister_global_type_cache_ownership(ptr));
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn small_exact_lease_delayed_rollback_and_release_conserve_ownership() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(2 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let exact = AllocationMetadata::for_type(0xC003_51AB).with_flags(FLAG_TYPE_ISOLATED);
+        let delayed = exact.with_flags(FLAG_TYPE_ISOLATED | FLAG_DELAYED_FREE);
+        let ptr = unsafe { alloc.alloc_raw(layout) };
+        assert!(!ptr.is_null());
+        assert_eq!(
+            register_global_type_cache_ownership(ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        consume_global_type_cache_ownership_for_allocation(ptr, layout, exact);
+        assert_eq!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+
+        let delayed_ownership = match begin_global_deallocation_admission(ptr, layout, delayed) {
+            GlobalDeallocationAdmission::DelayedFree(ownership) => ownership,
+            GlobalDeallocationAdmission::TypeCache(_) => {
+                panic!("available delayed ownership must accept the leased pointer")
+            }
+        };
+        assert_eq!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::DelayedRetained
+        );
+        assert!(global_delayed_free_contains_ptr(ptr));
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        delayed_ownership.rollback_unmodified();
+        assert_eq!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+        assert!(!global_delayed_free_contains_ptr(ptr));
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+
+        let delayed_ownership = match begin_global_deallocation_admission(ptr, layout, delayed) {
+            GlobalDeallocationAdmission::DelayedFree(ownership) => ownership,
+            GlobalDeallocationAdmission::TypeCache(_) => {
+                panic!("available delayed ownership must accept the leased pointer")
+            }
+        };
+        delayed_ownership.commit();
+        assert!(unsafe {
+            terminal_release_retained_raw(
+                &alloc,
+                ptr,
+                layout,
+                TerminalRetainedOwnership::DelayedFree,
+            )
+        });
+        assert_eq!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::Released
+        );
+        assert!(!global_delayed_free_contains_ptr(ptr));
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn small_exact_lease_survives_in_place_and_moved_reallocation() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(9, 1).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_51AC)
+            .with_module(0xC0DE_51AC)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let ptr = unsafe { alloc.alloc_with_metadata(old_layout, metadata) };
+        assert!(!ptr.is_null());
+        unsafe {
+            ptr.write_bytes(0x6D, old_layout.size());
+            alloc.dealloc_with_metadata(ptr, old_layout, metadata);
+        }
+        let leased = unsafe { alloc.alloc_with_metadata(old_layout, metadata) };
+        assert_eq!(leased, ptr);
+        assert_eq!(
+            global_address_lifecycle_snapshot(leased),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+
+        let in_place_size = 10;
+        assert_eq!(
+            crate::size_class::get_size_class(old_layout.size()).index(),
+            crate::size_class::get_size_class(in_place_size).index()
+        );
+        let in_place =
+            unsafe { alloc.realloc_with_metadata(leased, old_layout, in_place_size, metadata) };
+        assert_eq!(in_place, leased);
+        assert_eq!(
+            global_address_lifecycle_snapshot(in_place),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+        for offset in 0..old_layout.size() {
+            assert_eq!(unsafe { in_place.add(offset).read() }, 0x6D);
+        }
+
+        let in_place_layout = Layout::from_size_align(in_place_size, old_layout.align()).unwrap();
+        let moved_size = 64;
+        assert_ne!(
+            crate::size_class::get_size_class(in_place_size).index(),
+            crate::size_class::get_size_class(moved_size).index()
+        );
+        let moved =
+            unsafe { alloc.realloc_with_metadata(in_place, in_place_layout, moved_size, metadata) };
+        assert!(!moved.is_null());
+        assert_ne!(moved, in_place);
+        for offset in 0..old_layout.size() {
+            assert_eq!(unsafe { moved.add(offset).read() }, 0x6D);
+        }
+        assert!(global_type_cache_contains_ptr(in_place));
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+
+        let recovered = unsafe { alloc.alloc_with_metadata(in_place_layout, metadata) };
+        assert_eq!(recovered, in_place);
+        assert_eq!(
+            global_address_lifecycle_snapshot(recovered),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+        unsafe {
+            alloc.dealloc_raw(recovered, in_place_layout);
+            alloc.dealloc_raw(
+                moved,
+                Layout::from_size_align(moved_size, old_layout.align()).unwrap(),
+            );
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn thread_drain_preserves_live_small_exact_lease_for_cross_thread_drop() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let layout = Layout::from_size_align(9, 1).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_51AD)
+            .with_module(0xC0DE_51AD)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let producer = thread::spawn(move || {
+            let alloc = RustAllocator::new();
+            let ptr = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert!(!ptr.is_null());
+            unsafe {
+                alloc.dealloc_with_metadata(ptr, layout, metadata);
+            }
+            let leased = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+            assert_eq!(leased, ptr);
+            assert_eq!(
+                global_address_lifecycle_snapshot(leased),
+                GlobalAddressLifecycleSnapshot::TypeLeased
+            );
+            assert_eq!(
+                unsafe { drain_current_thread_semantic_state(&alloc) },
+                0,
+                "draining retained TLS state must leave a live lease untouched"
+            );
+            leased as usize
+        });
+        let leased = producer.join().expect("small exact producer thread") as *mut u8;
+        assert_eq!(
+            global_address_lifecycle_snapshot(leased),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+
+        let alloc = RustAllocator::new();
+        unsafe {
+            alloc.dealloc_with_metadata(leased, layout, metadata);
+        }
+        assert!(global_type_cache_contains_ptr(leased));
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+        let recovered = unsafe { alloc.alloc_with_metadata(layout, metadata) };
+        assert_eq!(recovered, leased);
+        assert_eq!(
+            global_address_lifecycle_snapshot(recovered),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+        unsafe {
+            alloc.dealloc_raw(recovered, layout);
+        }
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn small_exact_cache_lease_accepts_owner_at_lease_limit() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+        }
+
+        let ptr = 0x28e0usize as *mut u8;
+        let layout = Layout::from_size_align(2 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_51A8).with_flags(FLAG_TYPE_ISOLATED);
+        assert_eq!(
+            register_global_type_cache_ownership(ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT
+            .store(TYPE_CACHE_LEASE_REGISTRY_COUNT_LIMIT, Ordering::Release);
+
+        consume_global_type_cache_ownership_for_allocation(ptr, layout, metadata);
+
+        assert_eq!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::TypeLeased
+        );
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            TYPE_CACHE_LEASE_REGISTRY_COUNT_LIMIT
+        );
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.store(1, Ordering::Release);
+        let ownership = begin_global_semantic_reclaim(ptr);
+        ownership.commit();
+        assert!(unregister_global_type_cache_ownership(ptr));
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn small_exact_cache_lease_budget_falls_back_to_fused_retirement() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+        }
+
+        let ptr = 0x2900usize as *mut u8;
+        let layout = Layout::from_size_align(2 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_51A9).with_flags(FLAG_TYPE_ISOLATED);
+        assert_eq!(
+            register_global_type_cache_ownership(ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT
+            .store(TYPE_CACHE_LEASE_REGISTRY_COUNT_LIMIT + 1, Ordering::Release);
+
+        consume_global_type_cache_ownership_for_allocation(ptr, layout, metadata);
+
+        assert_eq!(
+            global_address_lifecycle_snapshot(ptr),
+            GlobalAddressLifecycleSnapshot::Absent
+        );
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            TYPE_CACHE_LEASE_REGISTRY_COUNT_LIMIT
+        );
+        GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.store(0, Ordering::Release);
+    }
+
     fn lifecycle_occupied_entries_for_test() -> usize {
         let mut occupied = 0usize;
         for shard in GLOBAL_TYPE_CACHE_OWNERSHIP.iter() {
@@ -26263,7 +32330,14 @@ mod tests {
 
         let admission =
             begin_global_raw_reclaim_from_lifecycle_observation(raw_ptr, raw_observation);
-        assert!(matches!(admission, GlobalRawReclaimAdmission::Untracked(ptr) if ptr == raw_ptr));
+        assert_eq!(admission.ptr(), raw_ptr);
+        #[cfg(feature = "reclaim_checks")]
+        assert!(matches!(&admission, GlobalRawReclaimAdmission::Tracked(_)));
+        #[cfg(not(feature = "reclaim_checks"))]
+        assert!(matches!(
+            &admission,
+            GlobalRawReclaimAdmission::Untracked(ptr) if *ptr == raw_ptr
+        ));
         rollback_global_raw_reclaim(admission);
         unsafe {
             clear_type_cache_for_test();
@@ -26377,7 +32451,14 @@ mod tests {
             "an unrelated evicted address must not poison a raw-only collider"
         );
         let admission = begin_global_raw_reclaim(raw_ptr);
-        assert!(matches!(admission, GlobalRawReclaimAdmission::Untracked(ptr) if ptr == raw_ptr));
+        assert_eq!(admission.ptr(), raw_ptr);
+        #[cfg(feature = "reclaim_checks")]
+        assert!(matches!(&admission, GlobalRawReclaimAdmission::Tracked(_)));
+        #[cfg(not(feature = "reclaim_checks"))]
+        assert!(matches!(
+            &admission,
+            GlobalRawReclaimAdmission::Untracked(ptr) if *ptr == raw_ptr
+        ));
         rollback_global_raw_reclaim(admission);
         incoming.rollback_unmodified();
         unsafe {
@@ -27407,7 +33488,7 @@ mod tests {
             }
             let alloc = RustAllocator::new();
             let layout =
-                Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+                Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
             let ptr = unsafe { alloc.alloc_raw(layout) };
             assert!(!ptr.is_null());
             unsafe {
@@ -27495,7 +33576,7 @@ mod tests {
 
             let alloc = RustAllocator::new();
             let layout =
-                Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+                Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
             let metadata = AllocationMetadata::for_type(0xD0B1_EF05)
                 .with_module(0xC0DE_D0B5)
                 .with_callsite(0xA110_D0B5)
@@ -27578,6 +33659,10 @@ mod tests {
             let reused = unsafe { alloc.alloc_with_metadata(layout, metadata) };
             assert_eq!(reused, ptr);
             assert!(!global_type_cache_contains_ptr(reused));
+            assert_eq!(
+                global_address_lifecycle_snapshot(reused),
+                GlobalAddressLifecycleSnapshot::Absent
+            );
             assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
             assert!(unsafe { inline_type_cache_entry_snapshot_for_test() }.is_empty());
             for offset in 0..layout.size() {
@@ -27640,8 +33725,10 @@ mod tests {
             semantic_type_stats_recording_disable();
 
             let alloc = RustAllocator::new();
+            // Keep this regression on the original general inline tier; the
+            // dedicated sub-24-byte tier has its own ownership tests.
             let layout =
-                Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+                Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
             let metadata = AllocationMetadata::for_type(0xD0B1_EF06)
                 .with_module(0xC0DE_D0B6)
                 .with_callsite(0xA110_D0B6)
@@ -27863,7 +33950,14 @@ mod tests {
         assert_eq!(stats.typed_deallocations, 0);
         assert_eq!(stats.typed_cache_inserts, 0);
         assert_eq!(stats.typed_cache_hits, 0);
-        assert_eq!(stats.typed_cache_bypasses, 0);
+        assert_eq!(stats.typed_cache_bypasses, 1);
+        let admission = type_cache_admission_stats_snapshot();
+        assert_eq!(admission.ownership_registry_full_failstop.events, 1);
+        assert_eq!(
+            admission.ownership_registry_full_failstop.rounded_bytes,
+            type_cache_retained_bytes_for_layout(layout)
+        );
+        assert_eq!(admission.terminal_events(), 0);
         assert!(!global_type_cache_contains_ptr(ptr));
         assert_eq!(
             GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
@@ -28394,6 +34488,7 @@ mod tests {
     fn type_cache_rejected_insert_keeps_process_ownership_until_raw_free() {
         let _guard = test_guard();
         let _cleanup = SemanticStateCleanup;
+        let _depot_reject = TypeCacheDepotForceRejectGuard::new();
         unsafe {
             clear_type_cache_for_test();
             clear_delayed_free_for_test();
@@ -28419,13 +34514,17 @@ mod tests {
             unsafe {
                 // Keep the TLS caches empty while making both the inline and
                 // linked plain-cache aggregate checks reject this insertion.
-                set_plain_type_cache_retained_bytes(MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES, true);
+                set_plain_type_cache_retained_accounting(
+                    MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES,
+                    0,
+                    true,
+                );
             }
             retained_tx.send(ptr as usize).unwrap();
             release_rx.recv().unwrap();
             unsafe {
                 alloc.dealloc_with_metadata(ptr, layout, metadata);
-                set_plain_type_cache_retained_bytes(0, false);
+                set_plain_type_cache_retained_accounting(0, 0, false);
             }
             released_tx.send(()).unwrap();
         });
@@ -28473,6 +34572,7 @@ mod tests {
     fn delayed_flush_cache_rejection_preserves_delayed_owner() {
         let _guard = test_guard();
         let _cleanup = SemanticStateCleanup;
+        let _depot_reject = TypeCacheDepotForceRejectGuard::new();
         unsafe {
             clear_type_cache_for_test();
             clear_delayed_free_for_test();
@@ -28497,9 +34597,9 @@ mod tests {
             assert!(global_delayed_free_contains_ptr(ptr));
             assert!(!global_type_cache_contains_ptr(ptr));
 
-            set_plain_type_cache_retained_bytes(MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES, true);
+            set_plain_type_cache_retained_accounting(MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES, 0, true);
             release_delayed_free_for_test(&alloc);
-            set_plain_type_cache_retained_bytes(0, false);
+            set_plain_type_cache_retained_accounting(0, 0, false);
         }
 
         assert!(!global_delayed_free_contains_ptr(ptr));
@@ -28532,6 +34632,7 @@ mod tests {
 
         let _guard = test_guard();
         let _cleanup = SemanticStateCleanup;
+        let _depot_reject = TypeCacheDepotForceRejectGuard::new();
         unsafe {
             clear_type_cache_for_test();
             clear_delayed_free_for_test();
@@ -31882,6 +37983,8 @@ mod tests {
             TYPE_CACHE[slot_idx] = TypeCacheSlot {
                 cache_key: slot_key,
                 identity: TypeCacheIdentity::from_metadata(metadata),
+                size: layout.size(),
+                align: layout.align(),
                 head: 1usize as *mut u8,
                 count: 1,
                 retained_bytes: type_cache_retained_bytes_for_layout(layout),
@@ -31921,6 +38024,8 @@ mod tests {
             TYPE_CACHE[slot_idx] = TypeCacheSlot {
                 cache_key: slot_key,
                 identity: TypeCacheIdentity::from_metadata(metadata),
+                size: layout.size(),
+                align: layout.align(),
                 head: storage.as_mut_ptr() as *mut u8,
                 count: 0,
                 retained_bytes: 0,
@@ -31969,7 +38074,7 @@ mod tests {
         let _guard = test_guard();
         unsafe {
             clear_type_cache_for_test();
-            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let mut storage = [0usize; 3];
             let layout =
                 Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
             let metadata = AllocationMetadata::for_type(0xC003_0040);
@@ -32046,7 +38151,7 @@ mod tests {
         let _guard = test_guard();
         unsafe {
             clear_type_cache_for_test();
-            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let mut storage = [0usize; 3];
             let layout =
                 Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
             let module_a = AllocationMetadata::for_type(0xC003_0049)
@@ -32062,6 +38167,246 @@ mod tests {
             assert_eq!(inline_type_cache_entry_snapshot_for_test().ptr, ptr);
             assert_eq!(pop_semantic_type_cache(layout, module_b), None);
             assert_eq!(pop_semantic_type_cache(layout, module_a), Some(ptr));
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn plain_type_cache_reports_wrong_identity_denial_for_same_layout_retained_object() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        unsafe {
+            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
+            let retained = AllocationMetadata::for_type(0xC002_D001)
+                .with_module(0xC0DE_D001)
+                .with_callsite(0xA110_D001)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let requested = AllocationMetadata::for_type(0xC002_D002)
+                .with_module(0xC0DE_D002)
+                .with_callsite(0xA110_D002)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let ptr = storage.as_mut_ptr() as *mut u8;
+
+            assert!(push_inline_type_cache_eligible_with_key(
+                ptr,
+                layout,
+                retained,
+                type_cache_identity_key(retained),
+            ));
+            assert_eq!(pop_semantic_type_cache(layout, requested), None);
+
+            let snap = semantic_stats_snapshot();
+            assert_eq!(snap.typed_cache_wrong_identity_denials, 1);
+            assert_eq!(
+                snap.last_wrong_identity_requested_type_id,
+                requested.type_id
+            );
+            assert_eq!(snap.last_wrong_identity_retained_type_id, retained.type_id);
+            assert_eq!(
+                snap.last_wrong_identity_requested_module_id,
+                requested.module_id
+            );
+            assert_eq!(
+                snap.last_wrong_identity_retained_module_id,
+                retained.module_id
+            );
+            assert_eq!(
+                snap.last_wrong_identity_requested_callsite,
+                requested.callsite
+            );
+            assert_eq!(snap.last_wrong_identity_size, layout.size());
+            assert_eq!(snap.last_wrong_identity_align, layout.align());
+            assert_eq!(
+                pop_semantic_type_cache(layout, retained),
+                Some(ptr),
+                "a denied wrong-identity reuse must preserve the retained object for its exact owner"
+            );
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn segregated_type_cache_reports_wrong_identity_denial_for_same_layout_retained_object() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        unsafe {
+            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS + 1];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
+            let retained = AllocationMetadata::for_type(0xC002_D051)
+                .with_module(0xC0DE_D051)
+                .with_callsite(0xA110_D051)
+                .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+            let requested = AllocationMetadata::for_type(0xC002_D052)
+                .with_module(0xC0DE_D052)
+                .with_callsite(0xA110_D052)
+                .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_SEGREGATED);
+            let ptr = storage.as_mut_ptr() as *mut u8;
+
+            assert!(push_segregated_type_cache(ptr, layout, retained)
+                .expect("segregated cache should accept the retained object")
+                .is_none());
+            assert_eq!(pop_semantic_type_cache(layout, requested), None);
+
+            let snap = semantic_stats_snapshot();
+            assert_eq!(snap.typed_cache_wrong_identity_denials, 1);
+            assert_eq!(
+                snap.last_wrong_identity_requested_type_id,
+                requested.type_id
+            );
+            assert_eq!(snap.last_wrong_identity_retained_type_id, retained.type_id);
+            assert_eq!(
+                snap.last_wrong_identity_requested_callsite,
+                requested.callsite
+            );
+            assert_eq!(snap.last_wrong_identity_size, layout.size());
+            assert_eq!(snap.last_wrong_identity_align, layout.align());
+            assert_eq!(
+                pop_semantic_type_cache(layout, retained),
+                Some(ptr),
+                "a segregated denial must preserve the retained object for its exact owner"
+            );
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn plain_type_cache_hit_does_not_report_wrong_identity_denial() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        unsafe {
+            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
+            let metadata = AllocationMetadata::for_type(0xC002_D101)
+                .with_module(0xC0DE_D101)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let ptr = storage.as_mut_ptr() as *mut u8;
+
+            assert!(push_type_cache(ptr, layout, metadata));
+            assert_eq!(pop_semantic_type_cache(layout, metadata), Some(ptr));
+
+            let snap = semantic_stats_snapshot();
+            assert_eq!(snap.typed_cache_hits, 1);
+            assert_eq!(snap.typed_cache_wrong_identity_denials, 0);
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn plain_type_cache_miss_for_different_layout_does_not_report_wrong_identity_denial() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        unsafe {
+            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS + 2];
+            let retained_layout = Layout::from_size_align(
+                TYPE_CACHE_NODE_WORDS * size_of::<usize>(),
+                align_of::<usize>(),
+            )
+            .unwrap();
+            let requested_layout = Layout::from_size_align(
+                (TYPE_CACHE_NODE_WORDS + 2) * size_of::<usize>(),
+                align_of::<usize>(),
+            )
+            .unwrap();
+            let retained = AllocationMetadata::for_type(0xC002_D201)
+                .with_module(0xC0DE_D201)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let requested = AllocationMetadata::for_type(0xC002_D202)
+                .with_module(0xC0DE_D202)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let ptr = storage.as_mut_ptr() as *mut u8;
+
+            assert!(push_type_cache(ptr, retained_layout, retained));
+            assert_eq!(pop_semantic_type_cache(requested_layout, requested), None);
+
+            let snap = semantic_stats_snapshot();
+            assert_eq!(snap.typed_cache_wrong_identity_denials, 0);
+            assert_eq!(
+                pop_semantic_type_cache(retained_layout, retained),
+                Some(ptr)
+            );
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn semantic_stats_reset_clears_wrong_identity_denial_report() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        unsafe {
+            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
+            let retained = AllocationMetadata::for_type(0xC002_D301)
+                .with_module(0xC0DE_D301)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let requested = AllocationMetadata::for_type(0xC002_D302)
+                .with_module(0xC0DE_D302)
+                .with_callsite(0xA110_D302)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            let ptr = storage.as_mut_ptr() as *mut u8;
+
+            assert!(push_type_cache(ptr, layout, retained));
+            assert_eq!(pop_semantic_type_cache(layout, requested), None);
+            assert_eq!(
+                semantic_stats_snapshot().typed_cache_wrong_identity_denials,
+                1
+            );
+
+            semantic_stats_reset();
+            let snap = semantic_stats_snapshot();
+            assert_eq!(snap.typed_cache_wrong_identity_denials, 0);
+            assert_eq!(
+                snap.last_wrong_identity_requested_type_id,
+                UNKNOWN_SEMANTIC_ID
+            );
+            assert_eq!(
+                snap.last_wrong_identity_retained_type_id,
+                UNKNOWN_SEMANTIC_ID
+            );
+            assert_eq!(snap.last_wrong_identity_requested_callsite, 0);
+            assert_eq!(snap.last_wrong_identity_size, 0);
+            assert_eq!(snap.last_wrong_identity_align, 0);
+
+            assert_eq!(pop_semantic_type_cache(layout, retained), Some(ptr));
         }
     }
 
@@ -32377,8 +38722,7 @@ mod tests {
         semantic_type_stats_recording_disable();
 
         let alloc = RustAllocator::new();
-        let layout =
-            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
         let metadata = AllocationMetadata::for_type(0xC003_0043)
             .with_module(0xC0DE)
             .with_callsite(0xA110_C343)
@@ -32694,7 +39038,7 @@ mod tests {
     }
 
     #[test]
-    fn compiler_cache_hit_keeps_one_semantic_lifecycle_publication() {
+    fn compiler_cache_hit_fuses_ownership_consume_with_lifecycle_publication() {
         let _guard = test_guard();
         unsafe {
             clear_type_cache_for_test();
@@ -32706,8 +39050,7 @@ mod tests {
         semantic_type_stats_recording_disable();
 
         let alloc = RustAllocator::new();
-        let layout =
-            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
         let metadata = AllocationMetadata::for_type(0xC003_004F)
             .with_module(0xC0DE)
             .with_callsite(0xA110_C34F)
@@ -32723,15 +39066,22 @@ mod tests {
 
         let before_strict = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
         let before_semantic = TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let before_probes = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
         let reused = unsafe { alloc.alloc_with_recovery_metadata(layout, metadata) };
         let after_strict = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
         let after_semantic = TEST_SEMANTIC_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let after_probes = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
         assert_eq!(reused, ptr);
         assert_eq!(after_strict - before_strict, 0);
         assert_eq!(
             after_semantic - before_semantic,
             1,
             "a cache hit must retain its source-specific semantic lifecycle publication"
+        );
+        assert_eq!(
+            after_probes - before_probes,
+            0,
+            "a cache hit must consume retained ownership and publish reuse in one table pass"
         );
         assert_eq!(
             take_auto_deallocation_metadata(reused, layout),
@@ -32857,8 +39207,7 @@ mod tests {
         semantic_type_stats_recording_disable();
 
         let alloc = RustAllocator::new();
-        let layout =
-            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
         let metadata = AllocationMetadata::for_type(0xC003_0044)
             .with_module(0xC0DE)
             .with_callsite(0xA110_C344)
@@ -32908,8 +39257,7 @@ mod tests {
         semantic_stats_reset();
 
         let alloc = RustAllocator::new();
-        let layout =
-            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
         let metadata = AllocationMetadata::for_type(0xC003_5147)
             .with_module(0xC0DE)
             .with_callsite(0xA110_5147)
@@ -32971,6 +39319,48 @@ mod tests {
         unsafe {
             INLINE_TYPE_CACHE_ENTRY = InlineTypeCacheEntry::empty();
         }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn compiler_type_metadata_registry_pressure_releases_without_cache_publication() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        let _limit = TypeCacheRegistryRetentionLimitGuard::force(0);
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_5148)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_5148)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        assert!(compiler_type_isolated_recovery_fast_path(metadata));
+
+        let ptr = unsafe { alloc.alloc_with_recovery_metadata(layout, metadata) };
+        assert!(!ptr.is_null());
+        unsafe {
+            alloc.dealloc(ptr, layout);
+        }
+
+        let stats = semantic_stats_snapshot();
+        let admission = type_cache_admission_stats_snapshot();
+        assert_eq!(stats.typed_allocations, 1);
+        assert_eq!(stats.typed_deallocations, 1);
+        assert_eq!(stats.typed_cache_inserts, 0);
+        assert_eq!(admission.admitted.events, 0);
+        assert_eq!(admission.rejected_registry_pressure.events, 1);
+        assert_eq!(admission.ownership_registry_full_failstop.events, 0);
+        assert_eq!(admission.terminal_events(), 1);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        assert_eq!(type_isolation_side_cache_snapshot().occupied_entries, 0);
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
     }
 
     #[cfg(feature = "stats")]
@@ -33145,8 +39535,7 @@ mod tests {
         semantic_stats_recording_disable();
         semantic_type_stats_recording_disable();
 
-        let layout =
-            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
         let metadata = AllocationMetadata::for_type(0xC003_0144)
             .with_module(0xC0DE)
             .with_callsite(0xA110_C144)
@@ -33230,8 +39619,7 @@ mod tests {
         semantic_stats_recording_disable();
         semantic_type_stats_recording_disable();
 
-        let layout =
-            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
         let metadata = AllocationMetadata::for_type(0xC003_0146)
             .with_module(0xC0DE)
             .with_callsite(0xA110_C146)
@@ -33722,8 +40110,7 @@ mod tests {
         semantic_stats_recording_disable();
         semantic_type_stats_recording_disable();
 
-        let layout =
-            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
         let metadata = AllocationMetadata::for_type(0xC003_0045)
             .with_module(0xC0DE)
             .with_callsite(0xA110_C345)
@@ -35719,8 +42106,9 @@ mod tests {
         semantic_stats_recording_disable();
         semantic_type_stats_recording_disable();
 
-        let layout =
-            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        // This regression exercises cross-thread recovery and the general
+        // inline cache. The direct small tier has separate lifecycle coverage.
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
         let old_metadata = AllocationMetadata::for_type(0xD17A_CA01)
             .with_module(0xC0DE_CA00)
             .with_callsite(0xA110_CA01)
@@ -36597,7 +42985,8 @@ mod tests {
                 UNKNOWN_SEMANTIC_ID
             );
             assert!(
-                type_cache_hot_slot(slot_key, TypeCacheIdentity::from_metadata(metadata)).is_none(),
+                type_cache_hot_slot(slot_key, TypeCacheIdentity::from_metadata(metadata), layout,)
+                    .is_none(),
                 "emptying a slot must clear the stale hot hint instead of rechecking it later"
             );
         }
@@ -36621,18 +43010,27 @@ mod tests {
 
             let node = head as *mut usize;
             node.write(stale_next as usize);
-            node.add(1).write(layout.size());
-            node.add(2).write(layout.align());
             TYPE_CACHE[idx] = TypeCacheSlot {
                 cache_key: slot_key,
                 identity: TypeCacheIdentity::from_metadata(metadata),
+                size: layout.size(),
+                align: layout.align(),
                 head,
                 count: 1,
                 retained_bytes: type_cache_retained_bytes_for_layout(layout),
             };
+            set_plain_type_cache_retained_accounting(
+                type_cache_retained_bytes_for_layout(layout),
+                1,
+                true,
+            );
             remember_type_cache_hot_slot(slot_key, idx);
 
             assert_eq!(pop_type_cache(layout, metadata), Some(head));
+            assert!(
+                !plain_type_cache_retained_bytes_trusted_for_test(),
+                "an uncounted detached tail must invalidate aggregate accounting"
+            );
             assert_eq!(TYPE_CACHE[idx].cache_key, UNKNOWN_SEMANTIC_ID);
             assert_eq!(TYPE_CACHE[idx].identity, TypeCacheIdentity::unknown());
             assert!(TYPE_CACHE[idx].head.is_null());
@@ -36660,11 +43058,11 @@ mod tests {
 
             let node = ptr as *mut usize;
             node.write(core::ptr::null::<u8>() as usize);
-            node.add(1).write(layout.size());
-            node.add(2).write(layout.align());
             TYPE_CACHE[idx] = TypeCacheSlot {
                 cache_key: slot_key,
                 identity: TypeCacheIdentity::from_metadata(metadata),
+                size: layout.size(),
+                align: layout.align(),
                 head: ptr,
                 count: 2,
                 retained_bytes: type_cache_retained_bytes_for_layout(layout) * 2,
@@ -36678,6 +43076,35 @@ mod tests {
             assert_eq!(
                 type_cache_hot_slot_snapshot_for_test().cache_key,
                 UNKNOWN_SEMANTIC_ID
+            );
+        }
+    }
+
+    #[test]
+    fn type_cache_chain_validator_rejects_self_cycle_before_thread_drain() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            let mut storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let layout =
+                Layout::from_size_align(size_of_val(&storage), align_of::<usize>()).unwrap();
+            let metadata = AllocationMetadata::for_type(0xC003_CA10);
+            let ptr = storage.as_mut_ptr() as *mut u8;
+            (ptr as *mut usize).write(ptr as usize);
+            let slot = TypeCacheSlot {
+                cache_key: plain_type_cache_slot_key(type_cache_identity_key(metadata), layout),
+                identity: TypeCacheIdentity::from_metadata(metadata),
+                size: layout.size(),
+                align: layout.align(),
+                head: ptr,
+                count: 2,
+                retained_bytes: type_cache_retained_bytes_for_layout(layout) * 2,
+            };
+
+            assert_eq!(
+                type_cache_slot_retained_bytes(&slot),
+                None,
+                "thread-exit validation must reject a cycle before releasing its first node"
             );
         }
     }
@@ -36699,6 +43126,8 @@ mod tests {
             TYPE_CACHE[idx] = TypeCacheSlot {
                 cache_key: slot_key,
                 identity: TypeCacheIdentity::from_metadata(metadata),
+                size: layout.size(),
+                align: layout.align(),
                 head: ptr,
                 count: MAX_TYPE_CACHE_DEPTH + 1,
                 retained_bytes: type_cache_retained_bytes_for_layout(layout),
@@ -36733,6 +43162,8 @@ mod tests {
             TYPE_CACHE[idx] = TypeCacheSlot {
                 cache_key: slot_key,
                 identity: TypeCacheIdentity::from_metadata(metadata),
+                size: layout.size(),
+                align: layout.align(),
                 head: core::ptr::null_mut(),
                 count: 1,
                 retained_bytes: type_cache_retained_bytes_for_layout(layout),
@@ -36878,35 +43309,35 @@ mod tests {
                 small_slot_key, large_slot_key,
                 "plain cold-cache slots are layout-qualified to avoid mixing sizes"
             );
-            let slot = type_cache_find_slot_for_key(small_slot_key, metadata, false)
+            let slot = type_cache_find_slot_for_key(small_slot_key, small, metadata, false)
                 .expect("slot should exist after the first push");
             assert_eq!((*slot).count, 1);
             assert_eq!((*slot).retained_bytes, small_retained);
             assert_eq!(type_cache_slot_retained_bytes(&*slot), Some(small_retained));
 
             assert!(push_type_cache(large_ptr, large, metadata));
-            let small_slot = type_cache_find_slot_for_key(small_slot_key, metadata, false)
+            let small_slot = type_cache_find_slot_for_key(small_slot_key, small, metadata, false)
                 .expect("small-layout slot should remain after the large push");
             assert_eq!((*small_slot).count, 1);
             assert_eq!((*small_slot).retained_bytes, small_retained);
-            let large_slot = type_cache_find_slot_for_key(large_slot_key, metadata, false)
+            let large_slot = type_cache_find_slot_for_key(large_slot_key, large, metadata, false)
                 .expect("large-layout slot should exist after the large push");
             assert_eq!((*large_slot).count, 1);
             assert_eq!((*large_slot).retained_bytes, large_retained);
 
             assert_eq!(pop_type_cache(small, metadata), Some(small_ptr));
             assert!(
-                type_cache_find_slot_for_key(small_slot_key, metadata, false).is_none(),
+                type_cache_find_slot_for_key(small_slot_key, small, metadata, false).is_none(),
                 "emptying the small-layout slot should not clear the large-layout slot"
             );
-            let slot = type_cache_find_slot_for_key(large_slot_key, metadata, false)
+            let slot = type_cache_find_slot_for_key(large_slot_key, large, metadata, false)
                 .expect("large entry should remain after popping the tail small entry");
             assert_eq!((*slot).count, 1);
             assert_eq!((*slot).retained_bytes, large_retained);
             assert_eq!(type_cache_slot_retained_bytes(&*slot), Some(large_retained));
 
             assert_eq!(pop_type_cache(large, metadata), Some(large_ptr));
-            assert!(type_cache_find_slot_for_key(large_slot_key, metadata, false).is_none());
+            assert!(type_cache_find_slot_for_key(large_slot_key, large, metadata, false).is_none());
             assert_eq!(
                 type_cache_hot_slot_snapshot_for_test().cache_key,
                 UNKNOWN_SEMANTIC_ID
@@ -36941,6 +43372,11 @@ mod tests {
                     retained * (index + 1),
                     "healthy cold pushes should update retained bytes exactly"
                 );
+                assert_eq!(
+                    plain_type_cache_retained_entries_snapshot_for_test(),
+                    index + 1,
+                    "healthy cold pushes should update retained owners exactly"
+                );
             }
 
             for (remaining, expected) in ptrs.iter().rev().enumerate() {
@@ -36949,6 +43385,11 @@ mod tests {
                     plain_type_cache_retained_bytes_snapshot_for_test(),
                     retained * (ptrs.len() - remaining - 1),
                     "healthy cold pops should update retained bytes exactly"
+                );
+                assert_eq!(
+                    plain_type_cache_retained_entries_snapshot_for_test(),
+                    ptrs.len() - remaining - 1,
+                    "healthy cold pops should update retained owners exactly"
                 );
                 assert_eq!(
                     PLAIN_TYPE_CACHE_AGGREGATE_SCANS.load(Ordering::Relaxed),
@@ -36982,7 +43423,7 @@ mod tests {
             );
             assert!(plain_type_cache_retained_bytes_trusted_for_test());
 
-            let slot = type_cache_find_slot_for_key(slot_key, metadata, false)
+            let slot = type_cache_find_slot_for_key(slot_key, layout, metadata, false)
                 .expect("cold plain cache slot should exist after push");
             (*slot).retained_bytes = 0;
             assert_eq!(
@@ -37049,6 +43490,7 @@ mod tests {
             let cache_key = type_cache_identity_key(metadata);
             let slot = type_cache_find_slot_for_key(
                 plain_type_cache_slot_key(cache_key, layout),
+                layout,
                 metadata,
                 false,
             )
@@ -37060,6 +43502,7 @@ mod tests {
             assert_eq!(pop_type_cache(layout, metadata), Some(ptr));
             assert!(type_cache_find_slot_for_key(
                 plain_type_cache_slot_key(cache_key, layout),
+                layout,
                 metadata,
                 false
             )
@@ -37098,6 +43541,7 @@ mod tests {
             let cache_key = type_cache_identity_key(metadata);
             let slot = type_cache_find_slot_for_key(
                 plain_type_cache_slot_key(cache_key, layout),
+                layout,
                 metadata,
                 false,
             )
@@ -37111,10 +43555,11 @@ mod tests {
 
             assert!(
                 !push_type_cache(rejected.as_mut_ptr() as *mut u8, layout, metadata),
-                "a fifth 16KiB object would exceed the 64KiB cold-slot byte budget"
+                "a fifth quarter-slot object would exceed the cold-slot byte budget"
             );
             let slot = type_cache_find_slot_for_key(
                 plain_type_cache_slot_key(cache_key, layout),
+                layout,
                 metadata,
                 false,
             )
@@ -37132,6 +43577,293 @@ mod tests {
             assert_eq!(pop_type_cache(layout, metadata), Some(ptrs[0]));
             assert_eq!(pop_type_cache(layout, metadata), None);
         }
+    }
+
+    #[test]
+    fn type_cache_aggregate_entry_budget_bounds_linked_growth_and_preserves_inline() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            let layout =
+                Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+            let inline_metadata =
+                AllocationMetadata::for_type(0xC003_52E0).with_flags(FLAG_TYPE_ISOLATED);
+            let linked_metadata =
+                AllocationMetadata::for_type(0xC003_52E1).with_flags(FLAG_TYPE_ISOLATED);
+            let mut inline_storage = [0usize; TYPE_CACHE_NODE_WORDS];
+            let mut linked_storage = [0usize; TYPE_CACHE_NODE_WORDS];
+
+            set_plain_type_cache_retained_accounting(
+                0,
+                MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES,
+                true,
+            );
+            assert!(push_inline_type_cache_eligible_with_key(
+                inline_storage.as_mut_ptr() as *mut u8,
+                layout,
+                inline_metadata,
+                type_cache_identity_key(inline_metadata),
+            ));
+            assert_eq!(
+                try_push_type_cache_eligible_with_key(
+                    linked_storage.as_mut_ptr() as *mut u8,
+                    layout,
+                    linked_metadata,
+                    type_cache_identity_key(linked_metadata),
+                ),
+                Err(TypeCacheAdmissionRejection::AggregateEntryBudget)
+            );
+            assert_eq!(type_isolation_side_cache_snapshot().occupied_entries, 1);
+            assert_eq!(
+                pop_inline_type_cache_eligible_with_key(
+                    layout,
+                    inline_metadata,
+                    type_cache_identity_key(inline_metadata),
+                ),
+                Some(inline_storage.as_mut_ptr() as *mut u8)
+            );
+            set_plain_type_cache_retained_accounting(0, 0, false);
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_type_cache_aggregate_entry_budget_tracks_real_linked_owners() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            let layout =
+                Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+            let retained = type_cache_retained_bytes_for_layout(layout);
+            assert!(retained * MAX_TYPE_CACHE_DEPTH <= MAX_TYPE_CACHE_SLOT_BYTES);
+            assert!(
+                retained * MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES
+                    <= MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES
+            );
+            let identities = [
+                AllocationMetadata::for_type(0xC003_52F0).with_flags(FLAG_TYPE_ISOLATED),
+                AllocationMetadata::for_type(0xC003_52F1).with_flags(FLAG_TYPE_ISOLATED),
+                AllocationMetadata::for_type(0xC003_52F2).with_flags(FLAG_TYPE_ISOLATED),
+                AllocationMetadata::for_type(0xC003_52F3).with_flags(FLAG_TYPE_ISOLATED),
+            ];
+            let mut storage: Vec<[usize; TYPE_CACHE_NODE_WORDS]> = (0
+                ..=MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES)
+                .map(|_| [0usize; TYPE_CACHE_NODE_WORDS])
+                .collect();
+            let mut next = 0usize;
+
+            for metadata in identities {
+                for _ in 0..MAX_TYPE_CACHE_DEPTH {
+                    assert!(push_type_cache(
+                        storage[next].as_mut_ptr() as *mut u8,
+                        layout,
+                        metadata,
+                    ));
+                    next += 1;
+                }
+            }
+            assert_eq!(next, MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES);
+            assert_eq!(
+                plain_type_cache_retained_entries_snapshot_for_test(),
+                MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES
+            );
+            assert_eq!(
+                plain_type_cache_retained_bytes_snapshot_for_test(),
+                retained * MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES
+            );
+            assert!(plain_type_cache_retained_bytes_trusted_for_test());
+
+            let overflow_metadata = (0xC003_5300u64..)
+                .map(|type_id| AllocationMetadata::for_type(type_id).with_flags(FLAG_TYPE_ISOLATED))
+                .find(|metadata| {
+                    let cache_key = type_cache_identity_key(*metadata);
+                    let slot_key = plain_type_cache_slot_key(cache_key, layout);
+                    type_cache_find_slot_for_key(slot_key, layout, *metadata, true)
+                        .map(|slot| (*slot).count == 0)
+                        .unwrap_or(false)
+                })
+                .expect("the 64-slot table must have an empty slot outside four hot identities");
+            let overflow_ptr = storage[next].as_mut_ptr() as *mut u8;
+            assert_eq!(
+                try_push_type_cache_eligible_with_key(
+                    overflow_ptr,
+                    layout,
+                    overflow_metadata,
+                    type_cache_identity_key(overflow_metadata),
+                ),
+                Err(TypeCacheAdmissionRejection::AggregateEntryBudget)
+            );
+
+            let released = pop_type_cache(layout, identities[0]).expect("full hot slot must pop");
+            assert_eq!(
+                plain_type_cache_retained_entries_snapshot_for_test(),
+                MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES - 1
+            );
+            assert!(push_type_cache(overflow_ptr, layout, overflow_metadata));
+            assert_eq!(
+                plain_type_cache_retained_entries_snapshot_for_test(),
+                MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES
+            );
+            assert_eq!(
+                pop_type_cache(layout, overflow_metadata),
+                Some(overflow_ptr)
+            );
+
+            let released_index = storage
+                .iter()
+                .position(|node| node.as_ptr() as *mut u8 == released)
+                .expect("popped node belongs to stable test storage");
+            assert!(released_index < MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES);
+            for (identity_index, metadata) in identities.iter().copied().enumerate() {
+                let expected = if identity_index == 0 {
+                    MAX_TYPE_CACHE_DEPTH - 1
+                } else {
+                    MAX_TYPE_CACHE_DEPTH
+                };
+                for _ in 0..expected {
+                    assert!(pop_type_cache(layout, metadata).is_some());
+                }
+                assert!(pop_type_cache(layout, metadata).is_none());
+            }
+            assert_eq!(plain_type_cache_retained_entries_snapshot_for_test(), 0);
+            assert_eq!(plain_type_cache_retained_bytes_snapshot_for_test(), 0);
+        }
+    }
+
+    #[cfg(all(feature = "stats", not(feature = "fixed_heap")))]
+    #[test]
+    fn hosted_registry_retention_cap_preempts_plain_aggregate_overflow() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+
+        let alloc = RustAllocator::new();
+        // Keep the aggregate linked-entry regression independent from the
+        // bounded direct tier, whose eight owners have separate cap coverage.
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let mut identities = Vec::with_capacity(4);
+        let mut next_type = 0xC003_5340u64;
+
+        for identity_index in 0..4 {
+            let metadata = loop {
+                let candidate =
+                    AllocationMetadata::for_type(next_type).with_flags(FLAG_TYPE_ISOLATED);
+                next_type = next_type.wrapping_add(1);
+                let cache_key = type_cache_identity_key(candidate);
+                let slot_key = plain_type_cache_slot_key(cache_key, layout);
+                if unsafe {
+                    type_cache_find_slot_for_key(slot_key, layout, candidate, true)
+                        .map(|slot| (*slot).count == 0)
+                        .unwrap_or(false)
+                } {
+                    break candidate;
+                }
+            };
+            let object_count = MAX_TYPE_CACHE_DEPTH + usize::from(identity_index == 0);
+            let mut ptrs = Vec::with_capacity(object_count);
+            for _ in 0..object_count {
+                let ptr = unsafe { alloc.alloc_with_no_recovery_metadata(layout, metadata) };
+                assert!(!ptr.is_null());
+                ptrs.push(ptr);
+            }
+            for ptr in ptrs {
+                unsafe {
+                    alloc.dealloc_with_metadata(ptr, layout, metadata);
+                }
+            }
+            identities.push((metadata, object_count));
+        }
+
+        let initial_offers = identities
+            .iter()
+            .map(|(_, object_count)| *object_count)
+            .sum::<usize>();
+        assert_eq!(
+            unsafe { plain_type_cache_retained_entries_snapshot_for_test() },
+            GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT - 1,
+            "one retained owner uses the separate inline plain-cache entry"
+        );
+        assert!(unsafe { !INLINE_TYPE_CACHE_ENTRY.is_empty() });
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT
+        );
+        let initial_admission = type_cache_admission_stats_snapshot();
+        assert_eq!(
+            initial_admission.admitted.events,
+            GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT
+        );
+        assert_eq!(
+            initial_admission.rejected_registry_pressure.events,
+            initial_offers - GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT
+        );
+        assert_eq!(initial_admission.depot_attempts.events, 0);
+        assert_eq!(initial_admission.depot_current_entries, 0);
+
+        let overflow_metadata = loop {
+            let candidate = AllocationMetadata::for_type(next_type).with_flags(FLAG_TYPE_ISOLATED);
+            next_type = next_type.wrapping_add(1);
+            let cache_key = type_cache_identity_key(candidate);
+            let slot_key = plain_type_cache_slot_key(cache_key, layout);
+            if unsafe {
+                type_cache_find_slot_for_key(slot_key, layout, candidate, true)
+                    .map(|slot| (*slot).count == 0)
+                    .unwrap_or(false)
+            } {
+                break candidate;
+            }
+        };
+        let overflow_ptr =
+            unsafe { alloc.alloc_with_no_recovery_metadata(layout, overflow_metadata) };
+        assert!(!overflow_ptr.is_null());
+        unsafe {
+            alloc.dealloc_with_metadata(overflow_ptr, layout, overflow_metadata);
+        }
+
+        let admission = type_cache_admission_stats_snapshot();
+        assert_eq!(admission.rejected_aggregate_entry_budget.events, 0);
+        assert_eq!(
+            admission.rejected_registry_pressure.events,
+            initial_offers + 1 - GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT
+        );
+        assert_eq!(admission.ownership_registry_full_failstop.events, 0);
+        assert_eq!(admission.depot_from_aggregate_entry_budget.events, 0);
+        assert_eq!(admission.depot_attempts.events, 0);
+        assert_eq!(admission.depot_inserts.events, 0);
+        assert_eq!(admission.depot_rescued_overflow.events, 0);
+        assert_eq!(admission.depot_rejected_registry_headroom.events, 0);
+        assert_eq!(admission.depot_current_entries, 0);
+        assert_eq!(admission.depot_hits.events, 0);
+        assert_eq!(
+            GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire),
+            GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT
+        );
+        assert_eq!(
+            unsafe { pop_semantic_type_cache(layout, overflow_metadata) },
+            None
+        );
+
+        let mut recovered = 0usize;
+        for (metadata, _) in identities {
+            while let Some(ptr) = unsafe { pop_semantic_type_cache(layout, metadata) } {
+                recovered += 1;
+                unsafe {
+                    alloc.dealloc_raw(ptr, layout);
+                }
+            }
+        }
+        assert_eq!(recovered, GLOBAL_TYPE_CACHE_OWNERSHIP_RETENTION_LIMIT);
+        assert_eq!(
+            unsafe { plain_type_cache_retained_entries_snapshot_for_test() },
+            0
+        );
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 0);
+        semantic_stats_recording_disable();
     }
 
     #[test]
@@ -37156,8 +43888,8 @@ mod tests {
             assert_eq!(MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES % retained, 0);
             let fit_entries = MAX_PLAIN_TYPE_CACHE_RETAINED_BYTES / retained;
             assert!(
-                fit_entries > 1 && fit_entries < TYPE_CACHE_SLOTS * MAX_TYPE_CACHE_DEPTH,
-                "test must fill the aggregate cache budget before table capacity"
+                fit_entries > 1 && fit_entries < MAX_PLAIN_TYPE_CACHE_RETAINED_ENTRIES,
+                "test must fill the aggregate byte budget before the ownership-entry cap"
             );
 
             let mut accepted = 0usize;
@@ -37729,6 +44461,32 @@ mod tests {
             assert_eq!((ptr as usize) & (layout.align() - 1), 0);
             assert_ne!((ptr as usize) & (TYPE_CACHE_NODE_ALIGN - 1), 0);
             assert!(!push_type_cache(ptr, layout, metadata));
+            assert_eq!(pop_type_cache(layout, metadata), None);
+        }
+    }
+
+    #[test]
+    fn type_cache_rejects_word_aligned_pointer_below_requested_layout_alignment() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            let requested_align = TYPE_CACHE_NODE_ALIGN * 2;
+            let mut storage = [0xA5u8; MIN_TYPE_CACHE_OBJECT_SIZE + 4 * TYPE_CACHE_NODE_ALIGN];
+            let before = storage;
+            let base = storage.as_mut_ptr() as usize;
+            let requested_aligned = (base + requested_align - 1) & !(requested_align - 1);
+            let ptr = (requested_aligned + TYPE_CACHE_NODE_ALIGN) as *mut u8;
+            let layout =
+                Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, requested_align).unwrap();
+            let metadata = AllocationMetadata::for_type(0xC003_A110);
+
+            assert_eq!((ptr as usize) & (TYPE_CACHE_NODE_ALIGN - 1), 0);
+            assert_ne!((ptr as usize) & (layout.align() - 1), 0);
+            assert!(!push_type_cache(ptr, layout, metadata));
+            assert_eq!(
+                storage, before,
+                "rejected admission must not write a link word"
+            );
             assert_eq!(pop_type_cache(layout, metadata), None);
         }
     }
@@ -40195,8 +46953,709 @@ mod tests {
         }
     }
 
+    #[cfg(not(any(feature = "quarantine", feature = "reclaim_checks")))]
     #[test]
-    fn conservative_compiler_scope_survives_foreign_thread_deallocation() {
+    fn transport_only_scope_keeps_global_allocator_raw_without_stats() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+            clear_scoped_metadata_gate_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let same_class_size = 63;
+        let same_class_layout =
+            Layout::from_size_align(same_class_size, old_layout.align()).unwrap();
+        let moved_size = 192;
+        let moved_layout = Layout::from_size_align(moved_size, old_layout.align()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_5107)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_lifetime_hint(0x51)
+            .with_placement_hint(0x27)
+            .with_callsite(0xA110_5107);
+        let cache_before = type_isolation_side_cache_snapshot();
+        let strict_before = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let probes_before = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
+        let admissions_before = TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.load(Ordering::Relaxed);
+
+        __unialloc_semantic_scope_push_hints(
+            metadata.type_id,
+            metadata.module_id,
+            metadata.flags,
+            metadata.lifetime_hint,
+            metadata.placement_hint,
+            metadata.callsite,
+        );
+        let active = active_allocation_metadata();
+        let allocation_slow_while_active = semantic_allocation_slow_path_enabled();
+        let runtime_slow_while_active = semantic_runtime_slow_path_enabled();
+        let lifecycle_while_active = global_address_lifecycle_tracking_active();
+
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, old_layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            for offset in 0..old_layout.size() {
+                ptr.add(offset).write((offset as u8).wrapping_mul(29));
+            }
+        }
+        let recovery_after_alloc = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+
+        let same_class =
+            unsafe { GlobalAlloc::realloc(&alloc, ptr, old_layout, same_class_layout.size()) };
+        assert_eq!(same_class, ptr);
+        for offset in 0..same_class_layout.size() {
+            assert_eq!(
+                unsafe { same_class.add(offset).read() },
+                (offset as u8).wrapping_mul(29)
+            );
+        }
+        let moved = unsafe {
+            GlobalAlloc::realloc(&alloc, same_class, same_class_layout, moved_layout.size())
+        };
+        assert!(!moved.is_null());
+        for offset in 0..same_class_layout.size() {
+            assert_eq!(
+                unsafe { moved.add(offset).read() },
+                (offset as u8).wrapping_mul(29)
+            );
+        }
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, moved, moved_layout);
+        }
+        let recovery_after_dealloc = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        let cache_after = type_isolation_side_cache_snapshot();
+        let strict_after = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let probes_after = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
+        let admissions_after = TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.load(Ordering::Relaxed);
+        let lifecycle_after_dealloc = global_address_lifecycle_tracking_active();
+        __unialloc_semantic_scope_pop();
+
+        assert_eq!(
+            active,
+            Some(metadata.with_placement_hint(
+                metadata.placement_hint | PLACEMENT_HINT_CROSS_THREAD_RECOVERY
+            )),
+            "transport metadata must remain visible to the compiler/runtime ABI"
+        );
+        assert!(!allocation_slow_while_active);
+        assert!(!runtime_slow_while_active);
+        assert!(!lifecycle_while_active);
+        assert_eq!(recovery_after_alloc, 0);
+        assert_eq!(recovery_after_dealloc, 0);
+        assert_eq!(cache_after, cache_before);
+        assert_eq!(strict_after, strict_before);
+        assert_eq!(probes_after, probes_before);
+        assert_eq!(admissions_after, admissions_before);
+        assert!(!lifecycle_after_dealloc);
+        assert_eq!(active_allocation_metadata(), None);
+        unsafe {
+            reset_semantic_scope_stack_for_test();
+            clear_scoped_metadata_gate_for_test();
+        }
+    }
+
+    #[test]
+    fn nested_transport_scope_activates_lifecycle_for_inner_policy() {
+        let _guard = test_guard();
+        unsafe {
+            reset_semantic_scope_stack_for_test();
+            clear_scoped_metadata_gate_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let transport = AllocationMetadata::for_type(0xC002_5108)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5108);
+        let policy = AllocationMetadata::for_type(0xC002_5109)
+            .with_module(0xC0DE)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_callsite(0xA110_5109);
+
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        let coarse_gate_after_transport =
+            SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed) & SLOW_PATH_SCOPED_METADATA_MASK;
+        let lifecycle_after_transport = global_address_lifecycle_tracking_active();
+        let allocation_slow_after_transport = semantic_allocation_slow_path_enabled();
+
+        __unialloc_semantic_scope_push(
+            policy.type_id,
+            policy.module_id,
+            policy.flags,
+            policy.callsite,
+        );
+        let lifecycle_with_policy = global_address_lifecycle_tracking_active();
+        let allocation_slow_with_policy = semantic_allocation_slow_path_enabled();
+        __unialloc_semantic_scope_pop();
+
+        let restored = active_allocation_metadata();
+        let lifecycle_after_policy_pop = global_address_lifecycle_tracking_active();
+        let allocation_slow_after_policy_pop = semantic_allocation_slow_path_enabled();
+        __unialloc_semantic_scope_pop();
+
+        assert_eq!(coarse_gate_after_transport, SLOW_PATH_SCOPED_METADATA_UNIT);
+        assert!(!lifecycle_after_transport);
+        assert!(!allocation_slow_after_transport);
+        assert!(lifecycle_with_policy);
+        assert!(allocation_slow_with_policy);
+        assert_eq!(
+            restored,
+            Some(transport.with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY))
+        );
+        assert!(
+            lifecycle_after_policy_pop,
+            "lifecycle activation must stay sticky"
+        );
+        assert!(!allocation_slow_after_policy_pop);
+        assert_eq!(active_allocation_metadata(), None);
+        unsafe {
+            reset_semantic_scope_stack_for_test();
+            clear_scoped_metadata_gate_for_test();
+        }
+    }
+
+    #[test]
+    fn transport_scope_suppresses_auto_compiler_stream_consumption() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let stream_ids = [0xC002_5201_u64, 0xC002_5202_u64];
+        let stream_module = 0xC0DE_5201;
+        let stream_callsite = 0xA110_5201;
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_stream_enable(
+                stream_module,
+                FLAG_TYPE_ISOLATED,
+                stream_callsite,
+                stream_ids.as_ptr(),
+                stream_ids.len(),
+            )
+        });
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let zero_layout = Layout::from_size_align(0, layout.align()).unwrap();
+        let transport = AllocationMetadata::for_type(0xC002_5203)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_lifetime_hint(0x52)
+            .with_placement_hint(0x21)
+            .with_callsite(0xA110_5203);
+
+        __unialloc_semantic_scope_push_hints(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.lifetime_hint,
+            transport.placement_hint,
+            transport.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        let zero_realloc = unsafe {
+            GlobalAlloc::realloc(
+                &alloc,
+                semantic_zero_size_ptr(zero_layout),
+                zero_layout,
+                layout.size(),
+            )
+        };
+        let cursor_inside_transport = AUTO_COMPILER_TYPE_IDS_CURSOR.load(Ordering::Relaxed);
+        let recovery_inside_transport = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+            GlobalAlloc::dealloc(&alloc, zero_realloc, layout);
+        }
+        __unialloc_semantic_scope_pop();
+
+        assert!(!ptr.is_null());
+        assert!(!zero_realloc.is_null());
+        assert_eq!(cursor_inside_transport, 0);
+        #[cfg(not(feature = "quarantine"))]
+        assert_eq!(recovery_inside_transport, 0);
+        #[cfg(feature = "quarantine")]
+        assert_eq!(recovery_inside_transport, 2);
+
+        let first_unscoped = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!first_unscoped.is_null());
+        let recovered = lookup_auto_allocation_metadata(first_unscoped, layout)
+            .expect("first unscoped allocation must consume stream id zero");
+        assert_eq!(recovered.type_id, stream_ids[0]);
+        assert_eq!(recovered.module_id, stream_module);
+        assert_eq!(recovered.callsite, stream_callsite);
+        assert_eq!(AUTO_COMPILER_TYPE_IDS_CURSOR.load(Ordering::Relaxed), 1);
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, first_unscoped, layout);
+            clear_type_cache_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn transport_scope_routes_allocator_when_aggregate_stats_are_enabled() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_510A)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_510A);
+
+        __unialloc_semantic_scope_push(
+            metadata.type_id,
+            metadata.module_id,
+            metadata.flags,
+            metadata.callsite,
+        );
+        assert!(semantic_allocation_slow_path_enabled());
+        assert!(
+            !global_address_lifecycle_tracking_active(),
+            "flags-zero scope entry must stay lifecycle-lazy even when stats are already enabled"
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(global_address_lifecycle_tracking_active());
+        __unialloc_semantic_scope_pop();
+        assert!(!ptr.is_null());
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert!(global_address_lifecycle_tracking_active());
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        let stats = semantic_stats_snapshot();
+        assert_eq!(stats.typed_allocations, 1);
+        assert_eq!(stats.typed_deallocations, 1);
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        unsafe {
+            clear_type_cache_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn transport_scope_routes_allocator_when_only_type_stats_are_enabled() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_enable();
+        assert!(!semantic_stats_recording_enabled());
+        assert!(semantic_type_stats_recording_enabled());
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_510B)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_510B);
+
+        __unialloc_semantic_scope_push(
+            metadata.type_id,
+            metadata.module_id,
+            metadata.flags,
+            metadata.callsite,
+        );
+        assert!(semantic_allocation_slow_path_enabled());
+        assert!(
+            !global_address_lifecycle_tracking_active(),
+            "type-only accounting must stay lifecycle-lazy until the first allocator operation"
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(global_address_lifecycle_tracking_active());
+        __unialloc_semantic_scope_pop();
+        assert!(!ptr.is_null());
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+
+        let mut rows = [empty_type_stats_row(); 4];
+        let row_count = semantic_type_stats_snapshot(&mut rows);
+        let row = rows
+            .iter()
+            .take(row_count)
+            .find(|row| row.type_id == metadata.type_id)
+            .expect("transport metadata must remain available to type-only accounting");
+        assert_eq!(row.allocations, 1);
+        assert_eq!(row.deallocations, 1);
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        unsafe {
+            clear_type_cache_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn mid_scope_stats_enable_activates_before_deallocation_observation() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let transport = AllocationMetadata::for_type(0xC002_5204)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5204);
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        assert!(!global_address_lifecycle_tracking_active());
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+
+        semantic_type_stats_recording_enable();
+        assert!(semantic_type_stats_recording_enabled());
+        assert!(
+            !global_address_lifecycle_tracking_active(),
+            "enabling accounting alone must not publish an address generation"
+        );
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        assert!(
+            global_address_lifecycle_tracking_active(),
+            "deallocation must activate lifecycle before observing the address"
+        );
+        __unialloc_semantic_scope_pop();
+        semantic_stats_recording_disable();
+        unsafe {
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(all(
+        feature = "stats",
+        not(feature = "quarantine"),
+        not(feature = "reclaim_checks")
+    ))]
+    #[test]
+    fn mid_scope_stats_enable_activates_before_reallocation_observation() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let realloc_layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let grow_layout = Layout::from_size_align(80, align_of::<usize>()).unwrap();
+        let transport = AllocationMetadata::for_type(0xC002_5207)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5209);
+        let expected = transport.with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        let realloc_ptr = unsafe { GlobalAlloc::alloc(&alloc, realloc_layout) };
+        let grow_ptr = unsafe { GlobalAlloc::alloc(&alloc, grow_layout) };
+        assert!(!realloc_ptr.is_null());
+        assert!(!grow_ptr.is_null());
+        unsafe {
+            realloc_ptr.write(0xA7);
+            grow_ptr.write(0xB8);
+        }
+        assert!(!global_address_lifecycle_tracking_active());
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+
+        semantic_type_stats_recording_enable();
+        let realloc_new_layout = Layout::from_size_align(192, realloc_layout.align()).unwrap();
+        let reallocated = unsafe {
+            GlobalAlloc::realloc(
+                &alloc,
+                realloc_ptr,
+                realloc_layout,
+                realloc_new_layout.size(),
+            )
+        };
+        assert!(!reallocated.is_null());
+        assert_eq!(unsafe { reallocated.read() }, 0xA7);
+        assert_eq!(
+            lookup_auto_allocation_metadata(reallocated, realloc_new_layout),
+            Some(expected)
+        );
+
+        let grow_new_layout = Layout::from_size_align(320, 64).unwrap();
+        let grown = unsafe {
+            core::alloc::Allocator::grow(
+                &alloc,
+                core::ptr::NonNull::new(grow_ptr).unwrap(),
+                grow_layout,
+                grow_new_layout,
+            )
+        }
+        .expect("mid-scope stats alignment-changing grow");
+        let grown_ptr = grown.as_ptr() as *mut u8;
+        assert_eq!(grown_ptr as usize % grow_new_layout.align(), 0);
+        assert_eq!(unsafe { grown_ptr.read() }, 0xB8);
+        assert_eq!(
+            lookup_auto_allocation_metadata(grown_ptr, grow_new_layout),
+            Some(expected)
+        );
+        assert!(global_address_lifecycle_tracking_active());
+        __unialloc_semantic_scope_pop();
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, reallocated, realloc_new_layout);
+            core::alloc::Allocator::deallocate(
+                &alloc,
+                core::ptr::NonNull::new(grown_ptr).unwrap(),
+                grow_new_layout,
+            );
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(reallocated, realloc_new_layout),
+            None
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(grown_ptr, grow_new_layout),
+            None
+        );
+        semantic_stats_recording_disable();
+        unsafe {
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(feature = "quarantine")]
+    #[test]
+    fn transport_scope_suppresses_auto_metadata_but_keeps_compiled_quarantine() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        semantic_auto_metadata_disable();
+        semantic_auto_metadata_enable(0xC0DE_5205, FLAG_TYPE_ISOLATED, 0xA110_5205);
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let transport = AllocationMetadata::for_type(0xC002_5205)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5206);
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        let expected = transport
+            .with_flags(FLAG_DELAYED_FREE)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(expected));
+        __unialloc_semantic_scope_pop();
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        assert_eq!(AUTO_COMPILER_TYPE_IDS_CURSOR.load(Ordering::Relaxed), 0);
+        assert!(delayed_free_snapshot().occupied_slots >= 1);
+        semantic_auto_metadata_disable();
+        unsafe {
+            clear_delayed_free_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(all(feature = "quarantine", feature = "stats"))]
+    #[test]
+    fn transport_scope_stats_preserve_compiled_quarantine_across_pop() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_auto_metadata_enable(0xC0DE_5206, FLAG_TYPE_ISOLATED, 0xA110_5207);
+        semantic_stats_reset();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let transport = AllocationMetadata::for_type(0xC002_5206)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5208);
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        __unialloc_semantic_scope_pop();
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        let stats = semantic_stats_snapshot();
+        assert_eq!(stats.typed_allocations, 1);
+        assert_eq!(stats.typed_deallocations, 1);
+        assert_ne!(stats.policy_flags_seen & FLAG_DELAYED_FREE, 0);
+        assert!(delayed_free_snapshot().occupied_slots >= 1);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        unsafe {
+            clear_delayed_free_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[test]
+    fn transport_only_scope_preserves_authoritative_recovery_identity() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let wrong_layout = Layout::from_size_align(65, layout.align()).unwrap();
+        let policy = AllocationMetadata::for_type(0xC002_5110)
+            .with_module(0xC0DE)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_callsite(0xA110_5110);
+        let recorded = policy.with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let transport = AllocationMetadata::for_type(0xC002_5111)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5111);
+
+        __unialloc_semantic_scope_push(
+            policy.type_id,
+            policy.module_id,
+            policy.flags,
+            policy.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        __unialloc_semantic_scope_pop();
+        assert!(!ptr.is_null());
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(recorded));
+
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, wrong_layout);
+        }
+        let recovery_after_wrong_layout = lookup_auto_allocation_metadata(ptr, layout);
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        __unialloc_semantic_scope_pop();
+
+        assert_eq!(recovery_after_wrong_layout, Some(recorded));
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        let retained = unsafe { pop_semantic_type_cache(layout, recorded) }
+            .expect("authoritative allocation identity must own the retained object");
+        assert_eq!(retained, ptr);
+        assert_eq!(unsafe { pop_semantic_type_cache(layout, transport) }, None);
+        unsafe {
+            alloc.dealloc_raw(retained, layout);
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[test]
+    fn conservative_policy_scope_survives_foreign_thread_deallocation() {
         let _guard = test_guard();
         unsafe {
             clear_type_cache_for_test();
@@ -40211,7 +47670,7 @@ mod tests {
         let layout = Layout::from_size_align(48, align_of::<usize>()).unwrap();
         let metadata = AllocationMetadata::for_type(0xC002_5107)
             .with_module(0xC0DE)
-            .with_flags(0)
+            .with_flags(FLAG_TYPE_ISOLATED)
             .with_callsite(0xA110_5107);
         let alloc = RustAllocator::new();
 
@@ -40243,6 +47702,58 @@ mod tests {
 
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
         assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        unsafe {
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(not(any(feature = "quarantine", feature = "reclaim_checks")))]
+    #[test]
+    fn transport_only_scope_allocation_can_be_released_on_foreign_thread_raw() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let layout = Layout::from_size_align(48, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_5112)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5112);
+        let alloc = RustAllocator::new();
+
+        __unialloc_semantic_scope_push(
+            metadata.type_id,
+            metadata.module_id,
+            metadata.flags,
+            metadata.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        __unialloc_semantic_scope_pop();
+        assert!(!ptr.is_null());
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert!(!global_address_lifecycle_tracking_active());
+
+        let ptr_addr = ptr as usize;
+        thread::spawn(move || unsafe {
+            GlobalAlloc::dealloc(&RustAllocator::new(), ptr_addr as *mut u8, layout);
+        })
+        .join()
+        .expect("foreign-thread raw release for transport-only allocation");
+
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        assert_eq!(type_isolation_side_cache_snapshot().occupied_entries, 0);
+        assert!(!global_address_lifecycle_tracking_active());
         unsafe {
             clear_auto_allocation_records();
             reset_semantic_scope_stack_for_test();

@@ -283,6 +283,50 @@ fn exact_identity_owns_regions_and_policy_routing_precedes_tls_cache_hits() {
 }
 
 #[test]
+fn matching_identity_reuses_its_region_before_assigning_another() {
+    let _guard = test_guard();
+    let alloc = UniAlloc::new();
+    let layout = Layout::from_size_align(4096, 64).unwrap();
+    let first_type = metadata(0xA11C_0032, LIFETIME_HINT_LONG_LIVED);
+    let second_type = metadata(0xA11C_0033, LIFETIME_HINT_LONG_LIVED);
+
+    assert!(lifetime_hugepage_stats_reset());
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::SegregatedOrdinary
+    ));
+
+    unsafe {
+        let first = alloc.alloc_with_metadata(layout, first_type);
+        let sibling = alloc.alloc_with_metadata(layout, second_type);
+        let first_again = alloc.alloc_with_metadata(layout, first_type);
+        assert!(!first.is_null() && !sibling.is_null() && !first_again.is_null());
+
+        let extent = (first as usize) & !(LIFETIME_HUGEPAGE_EXTENT_BYTES - 1);
+        let region =
+            |ptr: *mut u8| ((ptr as usize) - extent) / LIFETIME_HUGEPAGE_IDENTITY_REGION_BYTES;
+        assert_eq!(region(first_again), region(first));
+        assert_ne!(region(sibling), region(first));
+
+        let active = lifetime_hugepage_stats_snapshot();
+        assert_eq!(active.current_extents, 1);
+        assert_eq!(active.current_identity_regions, 2);
+        assert_eq!(active.identity_region_assignments, 2);
+
+        alloc.dealloc_with_metadata(first, layout, first_type);
+        alloc.dealloc_with_metadata(sibling, layout, second_type);
+        alloc.dealloc_with_metadata(first_again, layout, first_type);
+    }
+
+    let released = lifetime_hugepage_stats_snapshot();
+    assert_eq!(released.identity_region_assignments, 2);
+    assert_eq!(released.identity_region_releases, 2);
+    assert!(released.all_mappings_released);
+    assert!(lifetime_hugepage_configure(
+        LifetimeHugepagePolicy::Disabled
+    ));
+}
+
+#[test]
 fn delayed_free_eviction_and_phase_flush_terminally_release_arena_extent() {
     let _guard = test_guard();
     assert!(lifetime_hugepage_stats_reset());

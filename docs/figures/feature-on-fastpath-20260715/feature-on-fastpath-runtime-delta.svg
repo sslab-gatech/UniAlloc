@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="650" viewBox="0 0 1120 650">
+<rect width="100%" height="100%" fill="#fbfbfa"/>
+<style>text{font-family:Inter,system-ui,sans-serif;fill:#202124}.title{font-size:24px;font-weight:700}.sub{font-size:14px;fill:#5f6368}.label{font-size:14px}.value{font-size:13px;font-weight:700}.axis{font-size:12px;fill:#6b7280}</style>
+<text x="40" y="38" class="title">Feature-on fast-path runtime delta</text>
+<text x="40" y="64" class="sub">Candidate vs baseline; lower is faster. Medians of five pinned-CPU process runs, except semantic std (n=3 geomean).</text>
+<line x1="425.8" y1="78" x2="425.8" y2="572" stroke="#e5e7eb" stroke-width="1"/>
+<text x="425.8" y="598" text-anchor="middle" class="axis">-60%</text>
+<line x1="537.5" y1="78" x2="537.5" y2="572" stroke="#e5e7eb" stroke-width="1"/>
+<text x="537.5" y="598" text-anchor="middle" class="axis">-40%</text>
+<line x1="649.2" y1="78" x2="649.2" y2="572" stroke="#e5e7eb" stroke-width="1"/>
+<text x="649.2" y="598" text-anchor="middle" class="axis">-20%</text>
+<line x1="760.8" y1="78" x2="760.8" y2="572" stroke="#9ca3af" stroke-width="1.5"/>
+<text x="760.8" y="598" text-anchor="middle" class="axis">+0%</text>
+<line x1="872.5" y1="78" x2="872.5" y2="572" stroke="#e5e7eb" stroke-width="1"/>
+<text x="872.5" y="598" text-anchor="middle" class="axis">+20%</text>
+<line x1="984.2" y1="78" x2="984.2" y2="572" stroke="#e5e7eb" stroke-width="1"/>
+<text x="984.2" y="598" text-anchor="middle" class="axis">+40%</text>
+<text x="40" y="114" class="label">Type Isolation: raw under recovery</text>
+<rect x="407.1" y="96" width="353.7" height="24" rx="4" fill="#16865c" opacity="0.92"/>
+<text x="400.1" y="113" text-anchor="end" class="value">-63.35%</text>
+<text x="40" y="157" class="label">Lifetime: identity region 31</text>
+<rect x="647.8" y="139" width="113.0" height="24" rx="4" fill="#16865c" opacity="0.92"/>
+<text x="640.8" y="156" text-anchor="end" class="value">-20.24%</text>
+<text x="40" y="200" class="label">Type Isolation: semantic std geomean</text>
+<rect x="734.5" y="182" width="26.4" height="24" rx="4" fill="#16865c" opacity="0.92"/>
+<text x="727.5" y="199" text-anchor="end" class="value">-4.72%</text>
+<text x="40" y="243" class="label">Type Isolation: conservative same</text>
+<rect x="760.8" y="225" width="14.8" height="24" rx="4" fill="#c65348" opacity="0.92"/>
+<text x="782.6" y="242" text-anchor="start" class="value">+2.64%</text>
+<text x="40" y="286" class="label">Type Isolation: conservative split</text>
+<rect x="760.8" y="268" width="16.0" height="24" rx="4" fill="#c65348" opacity="0.92"/>
+<text x="783.9" y="285" text-anchor="start" class="value">+2.87%</text>
+<text x="40" y="329" class="label">Type Isolation: conservative unscoped</text>
+<rect x="760.8" y="311" width="27.1" height="24" rx="4" fill="#c65348" opacity="0.92"/>
+<text x="794.9" y="328" text-anchor="start" class="value">+4.85%</text>
+<text x="40" y="372" class="label">Default raw control</text>
+<rect x="760.8" y="354" width="2.0" height="24" rx="4" fill="#d28b26" opacity="0.92"/>
+<text x="768.6" y="371" text-anchor="start" class="value">+0.13%</text>
+<text x="40" y="415" class="label">Lifetime single-region control</text>
+<rect x="760.8" y="397" width="2.6" height="24" rx="4" fill="#d28b26" opacity="0.92"/>
+<text x="770.4" y="414" text-anchor="start" class="value">+0.46%</text>
+<text x="40" y="458" class="label">Lifetime unknown control</text>
+<rect x="760.8" y="440" width="4.0" height="24" rx="4" fill="#d28b26" opacity="0.92"/>
+<text x="771.9" y="457" text-anchor="start" class="value">+0.72%</text>
+<text x="40" y="501" class="label">slice sort (layout-confounded)</text>
+<rect x="760.8" y="483" width="250.3" height="24" rx="4" fill="#7c8798" opacity="0.92"/>
+<text x="1018.1" y="500" text-anchor="start" class="value">+44.83%</text>
+<text x="40" y="544" class="label">VecDeque mut iter (allocator-free)</text>
+<rect x="760.8" y="526" width="254.3" height="24" rx="4" fill="#7c8798" opacity="0.92"/>
+<text x="1022.2" y="543" text-anchor="start" class="value">+45.55%</text>
+<rect x="40" y="620" width="12" height="12" rx="2" fill="#16865c"/><text x="59" y="631" class="axis">kept gain</text>
+<rect x="145" y="620" width="12" height="12" rx="2" fill="#c65348"/><text x="164" y="631" class="axis">measured tradeoff</text>
+<rect x="305" y="620" width="12" height="12" rx="2" fill="#d28b26"/><text x="324" y="631" class="axis">control</text>
+<rect x="407" y="620" width="12" height="12" rx="2" fill="#7c8798"/><text x="426" y="631" class="axis">excluded layout signal</text>
+</svg>

@@ -73,6 +73,16 @@ enum MultiOwnerEnum<L, R> {
 }
 
 #[inline(never)]
+fn clone_exact_vec_u8(value: &Vec<u8>) -> Vec<u8> {
+    <Vec<u8> as Clone>::clone(value)
+}
+
+#[inline(never)]
+fn clone_exact_string(value: &String) -> String {
+    <String as Clone>::clone(value)
+}
+
+#[inline(never)]
 fn clone_single_heap(value: &Option<Vec<u8>>) -> Option<Vec<u8>> {
     <Option<Vec<u8>> as Clone>::clone(value)
 }
@@ -157,6 +167,12 @@ fn drop_multi_owner_enum(value: MultiOwnerEnum<Vec<u8>, String>) {
 static EMPTY_VEC: Vec<u8> = Vec::new();
 
 fn main() {
+    let exact_vec = black_box(vec![1_u8, 2, 3]);
+    black_box(clone_exact_vec_u8(black_box(&exact_vec)));
+
+    let exact_string = black_box(String::from("clone-exact-string"));
+    black_box(clone_exact_string(black_box(&exact_string)));
+
     let single = black_box(None::<Vec<u8>>);
     black_box(clone_single_heap(black_box(&single)));
 

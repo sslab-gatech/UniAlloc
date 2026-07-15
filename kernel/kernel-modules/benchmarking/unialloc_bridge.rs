@@ -18,7 +18,7 @@ use bridge_state::{bridge_initialization_action, BridgeInitializationAction};
 const UNIALLOC_KERNEL_HEAP_BYTES: usize = 8 * 1024 * 1024;
 const UNIALLOC_KERNEL_INITIAL_HEAP_BYTES: usize = UNIALLOC_KERNEL_HEAP_BYTES / 2;
 const UNIALLOC_KERNEL_PAGE_SIZE: usize = 4096;
-pub const UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION: u32 = 3;
+pub const UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION: u32 = 4;
 pub const UNIALLOC_SEMANTIC_TYPE_STATS_SNAPSHOT_ABI_VERSION: u32 = 2;
 pub const UNIALLOC_SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION: u32 = 1;
 pub const UNIALLOC_SEMANTIC_METADATA_VALIDATION_SNAPSHOT_ABI_VERSION: u32 = 1;
@@ -42,6 +42,14 @@ pub struct SemanticStatsSnapshot {
     pub typed_cache_hits: usize,
     pub typed_cache_inserts: usize,
     pub typed_cache_bypasses: usize,
+    pub typed_cache_wrong_identity_denials: usize,
+    pub last_wrong_identity_requested_type_id: u64,
+    pub last_wrong_identity_retained_type_id: u64,
+    pub last_wrong_identity_requested_module_id: u64,
+    pub last_wrong_identity_retained_module_id: u64,
+    pub last_wrong_identity_requested_callsite: u64,
+    pub last_wrong_identity_size: usize,
+    pub last_wrong_identity_align: usize,
     pub delayed_free_enqueues: usize,
     pub delayed_free_flushes: usize,
     pub metadata_pac_auth_signs: usize,

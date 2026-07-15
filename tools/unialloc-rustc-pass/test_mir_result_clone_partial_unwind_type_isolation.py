@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove partial Result<Vec<T>, E>::clone unwind preserves typed isolation."""
+"""Prove partial Result<Vec<T>, E>::clone unwind stays audit-only and falls back."""
 
 from __future__ import annotations
 
@@ -73,6 +73,7 @@ unialloc = {{ path = {unialloc_path}, features = ["stats", "type_isolation"] }}
 ''',
         encoding="utf-8",
     )
+    shutil.copy2(ROOT / "Cargo.lock", app / "Cargo.lock")
     (app / "src/main.rs").write_text(
         r'''use std::any::Any;
 use std::fmt::Write as _;
@@ -214,9 +215,9 @@ fn recover_consumer_buffer() -> Vec<ConsumerPayload> {
 fn clone_result_with_partial_panic(
     source: &Result<Vec<ProducerPayload>, u8>,
 ) -> Result<Vec<ProducerPayload>, u8> {
-    // Keep one ordinary Rust cleanup edge in this frame. The pass must route
-    // Result::clone's unwind edge through its inserted semantic-scope pop and
-    // then through this witness Drop; no manual scope or metadata ABI is used.
+    // Keep one ordinary Rust cleanup edge in this frame. Broad Result Clone
+    // stays audit-only, so both its allocation and partial-unwind release use
+    // the fallback path; no manual scope or metadata ABI is used.
     let _cleanup_witness = ResultCloneCleanupWitness;
     <Result<Vec<ProducerPayload>, u8> as Clone>::clone(source)
 }
@@ -279,8 +280,9 @@ fn main() {
     assert_eq!(align_of::<ConsumerPayload>(), align_of::<ProducerPayload>());
 
     // The generated application uses ordinary Result::clone and Vec APIs. It
-    // never calls a metadata allocation ABI; only the actual RUSTC_WRAPPER
-    // may install the semantic scope exercised below.
+    // never calls a metadata allocation ABI. The actual RUSTC_WRAPPER must
+    // leave the broad Result Clone audit-only while retaining exact Vec
+    // controls around it.
     semantic_auto_metadata_disable();
     *PANIC_PAYLOAD.lock().expect("panic payload mutex") =
         Some(Box::new("partial Result<Vec<ProducerPayload>, u8>::clone probe"));
@@ -507,13 +509,36 @@ def unique_scope(rows: list[dict[str, object]], label: str) -> dict[str, object]
     return row
 
 
+def unique_audit_only_clone(
+    rows: list[dict[str, object]], label: str
+) -> dict[str, object]:
+    assert len(rows) == 1, f"{label} must have exactly one audit row, got {rows!r}"
+    row = rows[0]
+    assert row.get("lowering_kind") == "semantic_scope_unsolved_heap_object_candidate", (
+        label,
+        row,
+    )
+    assert row.get("rewrite_status") == (
+        "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+    ), (label, row)
+    assert row.get("replacement_resolution_status") == (
+        "rustc_middle_heap_object_type_not_solved"
+    ), (label, row)
+    assert row.get("metadata_pairing_contract") == (
+        "audit_only_unresolved_heap_object_type"
+    ), (label, row)
+    assert row.get("semantic_object_type") == "<unknown-heap-object-type>", (label, row)
+    assert row.get("semantic_scope_unwind_pop_inserted") is False, (label, row)
+    return row
+
+
 def validate_audit(audit: dict[str, object]) -> dict[str, object]:
     summary = audit.get("summary") or {}
     assert isinstance(summary, dict)
     assert summary.get("provider_override_installed") is True
     assert summary.get("body_clone_returned_to_rustc") is True
     assert summary.get("actual_semantic_scope_rewrite") is True
-    assert int(summary.get("semantic_scope_unwind_pop_inserted_count") or 0) >= 1
+    assert int(summary.get("semantic_scope_rewrite_applied_count") or 0) > 0
 
     rows = audit.get("rewrite_candidates") or []
     result_rows = [
@@ -526,11 +551,8 @@ def validate_audit(audit: dict[str, object]) -> dict[str, object]:
         and "Result" in str(row.get("destination_type") or "")
         and "ProducerPayload" in str(row.get("destination_type") or "")
         and "u8" in str(row.get("destination_type") or "")
-        and "Vec<ProducerPayload"
-        in str(row.get("semantic_object_type") or "")
     ]
-    result_row = unique_scope(result_rows, "partial Result clone scope")
-    assert result_row.get("semantic_scope_unwind_pop_inserted") is True, result_row
+    result_row = unique_audit_only_clone(result_rows, "partial Result Clone")
     assert "src/main.rs" in str(result_row.get("source_span") or ""), result_row
 
     source_row = unique_scope(
@@ -555,11 +577,11 @@ def validate_audit(audit: dict[str, object]) -> dict[str, object]:
 
     producer_type_ids = {
         int(row.get("type_id") or 0)
-        for row in (result_row, source_row, *producer_rows)
+        for row in (source_row, *producer_rows)
     }
     producer_module_ids = {
         int(row.get("module_id") or 0)
-        for row in (result_row, source_row, *producer_rows)
+        for row in (source_row, *producer_rows)
     }
     consumer_type_ids = {int(row.get("type_id") or 0) for row in consumer_rows}
     consumer_module_ids = {int(row.get("module_id") or 0) for row in consumer_rows}
@@ -579,14 +601,17 @@ def validate_audit(audit: dict[str, object]) -> dict[str, object]:
     assert result_callsite != source_callsite
 
     return {
-        "result_clone_type_id": producer_type_id,
+        "producer_type_id": producer_type_id,
         "consumer_type_id": consumer_type_id,
         "module_id": producer_module_id,
         "result_clone_callsite": result_callsite,
         "live_source_allocation_callsite": source_callsite,
         "result_clone_source_span": result_row.get("source_span"),
         "result_clone_basic_block": result_row.get("basic_block"),
-        "result_clone_unwind_pop_inserted": True,
+        "result_clone_rewrite_status": result_row.get("rewrite_status"),
+        "result_clone_audit_only": True,
+        "result_clone_unwind_pop_inserted": False,
+        "zero_result_clone_rewrites": True,
         "producer_control_scopes": len(producer_rows),
         "consumer_control_scopes": len(consumer_rows),
     }
@@ -634,17 +659,14 @@ def validate_runtime(
     assert int(runtime.get("clone_attempts") or 0) == 3, runtime
     assert int(runtime.get("successful_clones") or 0) == 2, runtime
     assert int(runtime.get("cleanup_witness_drops") or 0) == 1, runtime
-    assert int(runtime.get("witness_typed_deallocations") or 0) == 1, runtime
-    assert int(runtime.get("witness_cache_inserts") or 0) == 1, runtime
+    assert int(runtime.get("witness_typed_deallocations") or 0) == 0, runtime
+    assert int(runtime.get("witness_cache_inserts") or 0) == 0, runtime
     assert int(runtime.get("source_len") or 0) == 4, runtime
 
-    for prefix in ("initial", "post_unwind", "final"):
+    for prefix in ("initial", "panic", "post_unwind", "final"):
         assert int(runtime.get(f"{prefix}_main_depth") or 0) == 0, runtime
         assert int(runtime.get(f"{prefix}_overflow_depth") or 0) == 0, runtime
         assert int(runtime.get(f"{prefix}_represented_depth") or 0) == 0, runtime
-    assert int(runtime.get("panic_main_depth") or 0) == 1, runtime
-    assert int(runtime.get("panic_overflow_depth") or 0) == 0, runtime
-    assert int(runtime.get("panic_represented_depth") or 0) == 1, runtime
 
     source_pointer = int(runtime.get("source_pointer") or 0)
     producer_seed = int(runtime.get("producer_seed_pointer") or 0)
@@ -671,24 +693,24 @@ def validate_runtime(
 
     for field, expected in (
         ("total_allocations", 3),
-        ("typed_allocations", 3),
-        ("typed_allocated_bytes", 768),
+        ("typed_allocations", 2),
+        ("typed_allocated_bytes", 512),
         ("total_deallocations", 1),
-        ("typed_deallocations", 1),
-        ("typed_cache_hits", 3),
-        ("typed_cache_inserts", 1),
+        ("typed_deallocations", 0),
+        ("typed_cache_hits", 2),
+        ("typed_cache_inserts", 0),
         ("typed_cache_bypasses", 0),
-        ("fallback_allocations", 0),
-        ("fallback_deallocations", 0),
-        ("raw_alloc_no_metadata", 0),
-        ("raw_alloc_no_metadata_bytes", 0),
-        ("raw_dealloc_no_metadata", 0),
+        ("fallback_allocations", 1),
+        ("fallback_deallocations", 1),
+        ("raw_alloc_no_metadata", 1),
+        ("raw_alloc_no_metadata_bytes", 256),
+        ("raw_dealloc_no_metadata", 1),
         ("raw_realloc_no_metadata", 0),
         ("raw_realloc_no_metadata_bytes", 0),
         ("raw_realloc_moved_dealloc_no_metadata", 0),
         ("realloc_recorded_old_metadata_new_allocations", 0),
         ("realloc_recorded_old_metadata_new_allocation_bytes", 0),
-        ("recovery_identity_matches", 1),
+        ("recovery_identity_matches", 0),
         ("recovery_identity_mismatches", 0),
         ("side_cache_corrupt_slots", 0),
         ("semantic_type_stats_dropped_events", 0),
@@ -698,7 +720,7 @@ def validate_runtime(
     module_id = int(audit_evidence["module_id"])
     producer = aggregate_type_rows(
         runtime,
-        type_id=int(audit_evidence["result_clone_type_id"]),
+        type_id=int(audit_evidence["producer_type_id"]),
         module_id=module_id,
     )
     consumer = aggregate_type_rows(
@@ -707,14 +729,14 @@ def validate_runtime(
         module_id=module_id,
     )
     assert producer == {
-        "allocations": 2,
-        "allocated_bytes": 512,
-        "deallocations": 1,
-        "cache_hits": 2,
-        "cache_inserts": 1,
+        "allocations": 1,
+        "allocated_bytes": 256,
+        "deallocations": 0,
+        "cache_hits": 1,
+        "cache_inserts": 0,
         "cache_bypasses": 0,
-        "observed_dealloc_size": 256,
-        "observed_dealloc_align": 8,
+        "observed_dealloc_size": 0,
+        "observed_dealloc_align": 0,
     }, producer
     assert consumer == {
         "allocations": 1,
@@ -727,12 +749,19 @@ def validate_runtime(
         "observed_dealloc_align": 0,
     }, consumer
     return {
-        "scope_depth_transition": {"at_panic": 1, "after_unwind": 0},
+        "scope_depth_transition": {"at_panic": 0, "after_unwind": 0},
         "partial_clone": {"attempts": 3, "completed_elements": 2},
         "cleanup_witness_drops": 1,
-        "partial_cleanup_window": {"typed_deallocations": 1, "cache_inserts": 1},
+        "partial_cleanup_window": {
+            "typed_deallocations": 0,
+            "cache_inserts": 0,
+            "fallback_deallocations": 1,
+        },
         "producer_runtime": producer,
         "consumer_runtime": consumer,
+        "result_clone_used_fallback": True,
+        "result_clone_partial_release_used_fallback": True,
+        "producer_typed_entry_preserved": True,
         "producer_exact_reuse_after_unwind": True,
         "consumer_same_layout_non_reuse": True,
     }
@@ -748,20 +777,55 @@ def validate(
     }
 
 
-def validator_negative_control(
+def expect_rejected(
+    audit: dict[str, object], runtime: dict[str, object], label: str
+) -> str:
+    try:
+        validate(audit, runtime)
+    except AssertionError as error:
+        return str(error) or repr(error)
+    raise AssertionError(f"validator negative control accepted {label}")
+
+
+def validator_negative_controls(
     audit: dict[str, object], runtime: dict[str, object]
 ) -> dict[str, object]:
     non_panicking = copy.deepcopy(runtime)
     non_panicking["panic_observed"] = False
-    try:
-        validate(audit, non_panicking)
-    except AssertionError as error:
-        assert "panic" in str(error).lower(), error
-        return {
-            "non_panicking_partial_clone_fixture_rejected": True,
-            "rejection": str(error),
-        }
-    raise AssertionError("validator negative control accepted a non-panicking clone")
+
+    broad_clone_rewritten = copy.deepcopy(audit)
+    rewritten_rows = [
+        row
+        for row in broad_clone_rewritten.get("rewrite_candidates") or []
+        if isinstance(row, dict)
+        and function_matches(row, RESULT_CLONE_HELPER)
+        and "Clone" in str(row.get("callee") or "")
+        and "Result" in str(row.get("destination_type") or "")
+    ]
+    assert len(rewritten_rows) == 1, rewritten_rows
+    rewritten_rows[0]["rewrite_status"] = "semantic_scope_enter_exit_rewrite_planned"
+    rewritten_rows[0]["lowering_kind"] = "semantic_scope_enter_exit_rewrite"
+
+    missing_fallback = copy.deepcopy(runtime)
+    missing_fallback["fallback_allocations"] = 0
+
+    wrong_depth = copy.deepcopy(runtime)
+    wrong_depth["panic_main_depth"] = 1
+
+    return {
+        "non_panicking_partial_clone_fixture_rejected": expect_rejected(
+            audit, non_panicking, "non-panicking clone"
+        ),
+        "broad_clone_rewrite_rejected": expect_rejected(
+            broad_clone_rewritten, runtime, "applied Result Clone scope"
+        ),
+        "missing_fallback_event_rejected": expect_rejected(
+            audit, missing_fallback, "missing fallback allocation"
+        ),
+        "forged_scope_depth_rejected": expect_rejected(
+            audit, wrong_depth, "forged broad Clone scope depth"
+        ),
+    }
 
 
 def load_runtime(stdout: str) -> dict[str, object]:
@@ -886,7 +950,7 @@ def main() -> int:
         assert len(audit_paths) == 1, audit_paths
         audit = json.loads(audit_paths[0].read_text(encoding="utf-8"))
         runtime = load_runtime(runtime_run.stdout)
-        negative_control = validator_negative_control(audit, runtime)
+        negative_controls = validator_negative_controls(audit, runtime)
         evidence = validate(audit, runtime)
 
     print(
@@ -901,12 +965,13 @@ def main() -> int:
                 "debug_workspace": (
                     str(persistent_workspace) if persistent_workspace else None
                 ),
-                "validator_negative_control": negative_control,
+                "validator_negative_controls": negative_controls,
                 "evidence": evidence,
                 "boundaries": [
-                    "Functional actual-RUSTC_WRAPPER regression for one Ok(Result<Vec<ProducerPayload>, u8>) partial-clone unwind path; no universal Result/Clone coverage claim.",
+                    "Functional actual-RUSTC_WRAPPER regression for one Ok(Result<Vec<ProducerPayload>, u8>) audit-only partial-clone unwind path; no universal Result/Clone coverage claim.",
                     "The generated Rust application uses ordinary Result::clone and Vec APIs and no manual metadata allocation ABI.",
-                    "The panic point observes the compiler-inserted Result scope at depth one; the audited unwind-pop plus post-catch depth zero and typed partial-buffer deallocation establish cleanup execution.",
+                    "The broad Result Clone remains one exact unresolved audit-only row with no inserted scope or unwind pop; panic and post-catch scope depths remain zero.",
+                    "The partial buffer allocation and unwind release use raw fallback while the exact Producer and Consumer typed-cache entries remain independently recoverable.",
                     "Exact Producer cache reuse and same-layout Consumer non-reuse establish the bounded type-isolation identity oracle; no benchmark or performance claim is made.",
                 ],
             },

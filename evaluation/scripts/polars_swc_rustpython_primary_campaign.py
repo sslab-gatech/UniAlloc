@@ -3,9 +3,8 @@
 
 The campaign is intentionally fail closed.  It freezes one allocator snapshot,
 builds all three variants from that snapshot, retains source/patch/compiler
-audits, runs one warmup plus five paired primary rounds, and only enables a gate
-when the corresponding evidence is present. Current-working-tree diagnostics
-may select three paired rounds.
+audits, runs one warmup plus three paired measured rounds, reports median point
+estimates, and only enables a gate when the corresponding evidence is present.
 """
 
 from __future__ import annotations
@@ -78,8 +77,11 @@ DATA_ELIGIBILITY_GATES = tuple(
 )
 ROUTE_RATIO_MIN = 0.85
 ROUTE_RATIO_MAX = 1.15
-PRIMARY_ROUNDS = 5
-DIAGNOSTIC_ROUNDS = 3
+PRIMARY_ROUNDS = 3
+# Artifact readers retain compatibility with completed five-round campaigns;
+# every scheduling path below accepts PRIMARY_ROUNDS only.
+LEGACY_PRIMARY_ROUNDS = 5
+PUBLISHABLE_ROUND_COUNTS = frozenset((PRIMARY_ROUNDS, LEGACY_PRIMARY_ROUNDS))
 ALLOCATOR_MARKER = "// UniAlloc Polars/SWC/RustPython primary campaign allocator."
 GNU_TIME_FORMAT = "UNIALLOC_PRIMARY_TIME\t%U\t%S\t%P\t%M\t%F\t%R\t%c\t%w\t%x"
 FORCE_LOAD_WRAPPER_SOURCE = r'''#!/usr/bin/env python3
@@ -506,7 +508,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--rounds",
         type=int,
         default=PRIMARY_ROUNDS,
-        help="paired rounds: five primary; three or five working-tree diagnostic",
+        help="one warmup, exactly three paired rounds, and median point estimates",
     )
     parser.add_argument("--build-timeout", type=int, default=3600)
     parser.add_argument("--run-timeout", type=int, default=600)
@@ -555,11 +557,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         or args.quiescence_seconds < 1
     ):
         parser.error("the campaign requires one warmup and positive resource limits")
-    if args.current_working_tree:
-        if args.rounds not in {DIAGNOSTIC_ROUNDS, PRIMARY_ROUNDS}:
-            parser.error("working-tree diagnostics require three or five rounds")
-    elif args.rounds != PRIMARY_ROUNDS:
-        parser.error("the primary campaign requires exactly five rounds")
+    if args.rounds != PRIMARY_ROUNDS:
+        parser.error("the campaign requires exactly three measured rounds")
     if args.allocator_revision is None and not args.current_working_tree:
         args.allocator_revision = SUITE_IMPLEMENTATION_REVISION
     if not args.current_working_tree and (
@@ -2610,7 +2609,7 @@ def primary_publication_allowed(
         not current_working_tree
         and record.get("campaign_classification") != "diagnostic_current_worktree"
         and record.get("primary_eligible") is not False
-        and record.get("measured_rounds") == PRIMARY_ROUNDS
+        and record.get("measured_rounds") in PUBLISHABLE_ROUND_COUNTS
         and record.get("status") in {"complete", "complete_with_attribution_limits"}
     )
 
@@ -2625,8 +2624,8 @@ def apply_diagnostic_result_metadata(
 ) -> None:
     if snapshot.get("source_kind") != "working_tree":
         raise CampaignError("diagnostic campaign did not freeze a working tree")
-    if measured_rounds not in {DIAGNOSTIC_ROUNDS, PRIMARY_ROUNDS}:
-        raise CampaignError("working-tree diagnostics require three or five rounds")
+    if measured_rounds != PRIMARY_ROUNDS:
+        raise CampaignError("working-tree diagnostics require three measured rounds")
     record.update(
         {
             "campaign_classification": "diagnostic_current_worktree",

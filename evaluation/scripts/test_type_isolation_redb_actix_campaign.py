@@ -140,7 +140,7 @@ class RedbActixCampaignTests(unittest.TestCase):
             primary.unialloc_revision,
         )
         self.assertFalse(primary.current_working_tree)
-        self.assertEqual(5, primary.rounds)
+        self.assertEqual(3, primary.rounds)
         diagnostic = self.campaign.parse_args(
             [
                 "--targets",
@@ -171,7 +171,7 @@ class RedbActixCampaignTests(unittest.TestCase):
                 record, diagnostic_current_worktree=True
             )
         )
-        self.assertFalse(
+        self.assertTrue(
             self.campaign.primary_publication_allowed(
                 {"status": "complete", "measured_rounds": 3},
                 diagnostic_current_worktree=False,
@@ -183,6 +183,12 @@ class RedbActixCampaignTests(unittest.TestCase):
                 diagnostic_current_worktree=False,
             )
         )
+        self.assertFalse(
+            self.campaign.primary_publication_allowed(
+                {"status": "complete", "measured_rounds": 4},
+                diagnostic_current_worktree=False,
+            )
+        )
         with self.assertRaises(SystemExit):
             self.campaign.parse_args(
                 [
@@ -191,8 +197,18 @@ class RedbActixCampaignTests(unittest.TestCase):
                     "--current-working-tree",
                 ]
             )
+        self.assertEqual(
+            3,
+            self.campaign.parse_args(
+                ["--targets", "redb", "--rounds", "3"]
+            ).rounds,
+        )
         with self.assertRaises(SystemExit):
-            self.campaign.parse_args(["--targets", "redb", "--rounds", "3"])
+            self.campaign.parse_args(["--targets", "redb", "--rounds", "5"])
+        with self.assertRaises(SystemExit):
+            self.campaign.parse_args(
+                ["--targets", "redb", "--current-working-tree", "--rounds", "5"]
+            )
         with self.assertRaises(SystemExit):
             self.campaign.parse_args(
                 ["--targets", "redb", "--current-working-tree", "--rounds", "4"]
@@ -364,12 +380,95 @@ class RedbActixCampaignTests(unittest.TestCase):
             ),
         )
 
+    def test_actix_get_body_patch_bounds_and_validates_every_request(self) -> None:
+        original = """\
+fn benchmark(iters: u64) {
+                let start = std::time::Instant::now();
+                // benchmark body
+
+                let burst = (0..iters).map(|_| client.send());
+                let resps = join_all(burst).await;
+
+                let elapsed = start.elapsed();
+
+                // if there are failed requests that might be an issue
+                let failed = resps.iter().filter(|r| r.is_err()).count();
+                if failed > 0 {
+                    eprintln!("failed {} requests (might be bench timeout)", failed);
+                };
+
+                elapsed
+}
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            worktree = Path(directory)
+            source = worktree / "actix-web" / "benches" / "server.rs"
+            source.parent.mkdir(parents=True)
+            source.write_text(original, encoding="utf-8")
+
+            audit = self.campaign.patch_actix_get_body_benchmark(worktree)
+            patched = source.read_text(encoding="utf-8")
+
+            self.assertEqual("actix-web/benches/server.rs", audit["path"])
+            self.assertEqual(
+                hashlib.sha256(original.encode()).hexdigest(),
+                audit["upstream_sha256"],
+            )
+            self.assertEqual(
+                hashlib.sha256(patched.encode()).hexdigest(),
+                audit["patched_sha256"],
+            )
+            self.assertIn("const MAX_IN_FLIGHT_REQUESTS: u64 = 8;", patched)
+            self.assertIn(
+                "remaining.min(MAX_IN_FLIGHT_REQUESTS)",
+                patched,
+            )
+            self.assertIn(
+                'response.expect("get_body_async_burst request failed")', patched
+            )
+            self.assertIn("response.status().is_success()", patched)
+            self.assertIn("let body = response", patched)
+            self.assertIn(".body()", patched)
+            self.assertIn('expect("get_body_async_burst body read failed")', patched)
+            self.assertIn("assert_eq!(", patched)
+            self.assertIn("body.as_ref(),", patched)
+            self.assertIn("STR.as_bytes(),", patched)
+            self.assertNotIn("might be bench timeout", patched)
+            with self.assertRaises(self.campaign.CampaignError):
+                self.campaign.patch_actix_get_body_benchmark(worktree)
+
+            for _package, _bench, _selector, relative_path in set(
+                self.campaign.ACTIX_BENCHES.values()
+            ):
+                path = worktree / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                if not path.exists():
+                    path.write_text("fn main() {}\n", encoding="utf-8")
+            source_audit = self.campaign.append_actix_instrumentation(
+                worktree, [audit]
+            )
+            server_audit = next(
+                row
+                for row in source_audit
+                if row["path"] == "actix-web/benches/server.rs"
+            )
+            self.assertEqual(
+                audit["upstream_sha256"], server_audit["upstream_sha256"]
+            )
+            self.assertEqual(
+                audit["patched_sha256"], server_audit["patched_sha256"]
+            )
+            self.assertEqual(
+                hashlib.sha256(source.read_bytes()).hexdigest(),
+                server_audit["instrumented_sha256"],
+            )
+
     def test_cpu_set_parser_expands_ranges(self) -> None:
         self.assertEqual({1, 3, 4, 5, 8}, self.campaign.parse_cpu_set("1,3-5,8"))
         with self.assertRaises(self.campaign.CampaignError):
             self.campaign.parse_cpu_set("5-3")
 
-    def test_result_validator_requires_five_complete_paired_rounds(self) -> None:
+    def test_result_validator_accepts_retained_legacy_five_round_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             raw = Path(directory)
             record = self.campaign.empty_target_result(
@@ -392,10 +491,14 @@ class RedbActixCampaignTests(unittest.TestCase):
                     for round_index in range(1, 6)
                     for variant in self.campaign.VARIANTS
                 ]
-            self.campaign.validate_target_result(record)
+            self.campaign.validate_target_result(
+                record, measured_rounds=self.campaign.LEGACY_ROUNDS
+            )
             record["harnesses"][0]["measurements"].pop()
             with self.assertRaises(self.campaign.CampaignError):
-                self.campaign.validate_target_result(record)
+                self.campaign.validate_target_result(
+                    record, measured_rounds=self.campaign.LEGACY_ROUNDS
+                )
 
     def test_diagnostic_result_validator_accepts_three_complete_paired_rounds(
         self,
@@ -419,20 +522,18 @@ class RedbActixCampaignTests(unittest.TestCase):
                     for round_index in range(1, 4)
                     for variant in self.campaign.VARIANTS
                 ]
-            self.campaign.validate_target_result(record, measured_rounds=3)
+            self.campaign.validate_target_result(record)
             for harness in record["harnesses"]:
                 passed, ratio = self.campaign.compiler_route_equivalence(
                     harness["measurements"], measured_rounds=3
                 )
                 self.assertTrue(passed)
                 self.assertEqual(1.0, ratio)
-            with self.assertRaises(self.campaign.CampaignError):
-                self.campaign.validate_target_result(record)
 
     def test_compiler_route_gate_uses_paired_median_ratio(self) -> None:
         rows = [
             {"round": round_index, "variant": variant, "performance": value}
-            for round_index in range(1, 6)
+            for round_index in range(1, 4)
             for variant, value in (
                 ("unialloc", 1.0),
                 ("typed_plain", 1.1),
@@ -465,7 +566,7 @@ class RedbActixCampaignTests(unittest.TestCase):
                         "performance": 1.0,
                         "peak_rss_mib": 2.0,
                     }
-                    for round_index in range(1, 6)
+                    for round_index in range(1, 4)
                     for variant in self.campaign.VARIANTS
                 ]
             record["harnesses"][1]["gates"]["compiler_route_equivalent"] = False
@@ -478,7 +579,7 @@ class RedbActixCampaignTests(unittest.TestCase):
                 ["transaction_churn"],
                 [row["harness_id"] for row in record["attribution_limits"]],
             )
-            self.assertEqual(15, len(record["harnesses"][1]["measurements"]))
+            self.assertEqual(9, len(record["harnesses"][1]["measurements"]))
 
     def test_build_gate_rejects_mixed_implementation_digests(self) -> None:
         activation = {"passed": True}

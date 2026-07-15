@@ -6,6 +6,28 @@ This directory turns the paper claims in a sibling `../rust-alloc-paper` checkou
 
 - `config/paper_claims.json`: benchmark sets, allocator baselines, paper-data locations, and claim thresholds.
 - `config/type_isolation_primary_suite.json`: current-version target and harness membership, comparison families, eligibility gates, and hierarchical aggregation.
+- `config/rustsec_heap_security_corpus.json`: pinned RustSec/Rudra heap-safety classifications and preregistered UniAlloc mechanism hypotheses.
+- `config/rustsec_heap_candidate_inventory.json`: generated full-database RustSec screening inventory plus pinned Rudra-PoC coverage.
+- `config/rustsec_temporal_reclaim_review.json`: manual allocator-ownership review of temporal/reclaim candidates and the first expansion wave.
+- `config/rustsec_heap_harnesses.json`: byte-pinned repository materializations, controls, tools, and oracles for 27 scenarios.
+- `config/rustsec_heap_expansion_harnesses.json`: five-case executable expansion catalog with five published/upstream witnesses and two derived reuse probes.
+- `config/rustsec_heap_strong_batch_{a..f}_harnesses.json`: terminal integration catalogs for the 53 reviewed strong candidates.
+- `config/rustsec_heap_neon_node_harnesses.json`: Node/V8-hosted N-API catalog for the RSH-064 Neon witness.
+- `config/rustsec_heap_complete_scope.json`: generated 49-row evaluable efficacy ledger plus four audit-only exclusions with retained reasons.
+- `config/rustsec_heap_mechanism_results.json`: strict 62-row mechanism-result ledger covering 49 executable cases.
+- `config/rustsec_heap_mechanism_amendments.json`: reviewed post-integration scenario/mechanism amendments keyed to exact case and scenario identities.
+- `config/rustsec_heap_primitive_overrides.json`: reviewed terminal-witness primitive labels with evidence provenance.
+- `scripts/inventory_rustsec_heap_candidates.py`: commit-checked full RustSec and Rudra-PoC inventory generator.
+- `scripts/run_rustsec_heap_harness.py`: contained materialization/build/native-run path.
+- `scripts/run_rustsec_heap_experiment.py`: matched system/UniAlloc/typed-policy and feature-matched reclaim matrix orchestrator with Cargo-metadata provenance attestation.
+- `scripts/run_rustsec_heap_sweep.py`: provenance-bound full-catalog preflight and execution wrapper.
+- `scripts/run_rsh064_neon_witness.py`: pinned Neon addon runner using a real Node/V8 host.
+- `scripts/run_rustsec_complete_scope.py`: historical all-53 replay, blocker-reattempt, and attempts-audit verifier.
+- `scripts/summarize_rustsec_heap_expansion.py`: fail-closed merger for split system/typed expansion matrices.
+- `scripts/export_rustsec_mechanism_results.py`: strict repeated reclaim and derived-reuse result exporter.
+- `scripts/export_rustsec_typeiso_source_results.py`: coverage-gated Type Isolation source-sweep result exporter.
+- `scripts/build_rustsec_security_scope.py`: fail-closed 49-case efficacy-scope builder with reviewed exclusions preserved separately.
+- `scripts/plot_rustsec_security_scope.py`: dependency-free SVG/CSV presentation exporter.
 - `scripts/evaluate.py`: dependency doctor, paper-data importer, local runner, semantic coverage collector, result summarizer, and claim checker.
 - `scripts/realworld_type_isolation_matrix.py`: source-pinned Rust application allocator, Type Isolation, feature-closure, and mimalloc THP matrix.
 - `scripts/rsedis_thp_matrix.py`: fresh-server mimalloc THP on/off and gperftools TCMalloc comparison with process-level RSS and huge-page counters.
@@ -52,6 +74,397 @@ evidence outside the current primary aggregate.
 The allocator/THP appendix pack under
 `../docs/figures/allocator-feature-thp-20260714/` contains three measured-target
 detail figures. It remains outside the primary two-tier presentation path.
+
+## RustSec/Rudra heap-security corpus
+
+The review identified 53 strong candidates. The final evaluable efficacy scope
+contains the 49 candidates with executable vulnerable oracles and controls.
+RSH-054, RSH-056, RSH-059, and RSH-073 remain in the attempts audit with
+evidence-backed exclusion reasons and stay outside the efficacy denominator.
+The exclusive case-level partition is 31 other-feature-only, 11 Type-Isolation-
+only, 1 multiple-mechanism, 3 matched no-signal, and 3 inconclusive/unresolved
+cases. The no-signal set is RSH-049, RSH-050, and RSH-075; the unresolved set
+is RSH-003, RSH-006, and RSH-019. The strict positive count is **43/49**. The
+generated case report records 32 `detected`, 11 `mitigated`, 3 `no_signal`,
+and 3 `inconclusive` cases.
+The underlying mechanism ledger contains 62 rows: 32 `detected`, 12
+`mitigated`, 12 `no_signal`, and 6 `inconclusive`. It contains 44 positive
+mechanism rows across 43 unique cases: 31 `reclaim_checks`, 1 recovery-layout
+validation, and 12 Type Isolation rows. RSH-002 is the sole overlap. Thirteen
+cases retain two mechanism or scenario rows. The authoritative report is in
+`../docs/rustsec-security-scope-evaluation.md` and
+the historical reviewed-candidate figure is in
+`../docs/figures/rustsec-security-scope-20260714/`.
+The per-case attempt status, root-cause synopsis, and strict outcome for all 53
+rows are in `../docs/rustsec-all-53-live-evaluation.md`.
+
+All 12 Type Isolation-positive cases are preregistered, manually attributed
+derived cross-identity reuse edges. Their strict true-positive scope is the
+tested allocator decision: `typed_plain` permits the exploit-enabling address
+reuse, while Type Isolation withholds it and emits the matching bound denial.
+Each strict row validates the matching treatment denial and report binding.
+All 12 rows record `compiler_automatic_victim_coverage=false` and
+`source_vulnerability_detection_validated=false`. Published and upstream source
+witnesses retain a separate denominator, and the full automatic
+source-vulnerability Type Isolation true-positive count is **0**.
+
+RSH-064 is executable through a pinned Neon N-API addon loaded by Node. The
+vulnerable source reproduces the stale external-buffer read across all five
+allocator variants; the patched crate rejects the source through its added
+`'static` bound. Its source Type Isolation row remains inconclusive because the
+compiler audit records zero applied critical rewrites, and its supporting
+`reclaim_checks` arm has no signal because the witness performs one free followed
+by a stale read. A separate derived cross-identity reuse experiment supplies the
+bounded, manually attributed Type Isolation mitigation row used by the
+case-level partition. The source witness retains its independent inconclusive
+automatic-detection classification.
+
+RSH-031 supplies the additional policy-independent exact diagnostic. Its
+recovery-layout matrix reports the allocation/deallocation layout mismatch in
+every vulnerable typed arm and in zero patched arms, with a pinned upstream
+Miri baseline. It contributes zero Type Isolation credit. RSH-065 and RSH-069
+carry explicit synthetic-reduction caveats within the 12 manual Type Isolation
+edges.
+
+All 12 strict Type Isolation matrices bind to one frozen isolated WIP evidence
+snapshot with UniAlloc implementation digest
+`ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2`.
+This digest identifies the captured evidence snapshot. The current
+shared-session working tree and current HEAD have separate live provenance.
+The complete report keeps
+`replay_arm_implementation_digest_counts` separate from
+`strict_typeiso_evidence_implementation_digest_counts` so historical replay
+provenance and Type Isolation snapshot provenance remain distinct.
+
+The scope freezes RustSec advisory-db at
+`9f3e138091487e69144f536d36976e427a7a3307` and Rudra-PoC at
+`6226dd030fffbed5601099cb0e24f73e4150a7f5`. Its primary witness labels are 30
+double free, 19 use after free, 2 uninitialized drop, 1 invalid free, and 1
+out-of-bounds read. Every result remains exploratory with `claim_grade=false`.
+
+The feature-matched reclaim comparison uses six logical arms per scenario:
+`vulnerable,patched x system,reclaim_plain,reclaim_checks`, with three
+requested repetitions. The original direct campaign covers 42 scenarios, 168
+arms, 492 runtime executions, and 4 expected matched compile-rejection arms. Cargo
+metadata resolves `reclaim_plain` to `['stats']` and `reclaim_checks` to
+`['reclaim_checks', 'stats']`; those direct arms use implementation digest
+`36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847`.
+The deterministic RSH-013 refresh uses implementation digest
+`b9bd5442c557b3d39c34cf391e8c32388ba84ea643e6adc91ea4987d85adbc5a`.
+The original direct exporter accepts all 29 vulnerable check-arm exact signals;
+the exact signal remains absent from every `reclaim_plain` and patched arm.
+Supplemental strict RSH-001 and RSH-060 experiments raise the final
+reclaim-positive case count to 31.
+RSH-013 now uses a deterministic terminal `drop(values)` so corrupted string
+formatting cannot preempt the allocator lifecycle. RSH-020 uses a fail-closed
+double-panic parser: it accepts repeated identical source checkpoints followed
+by the standard destructor-cleanup abort, while distinct checkpoints remain
+ambiguous. After the supplemental experiments are merged, the complete
+mechanism ledger retains 12 no-signal rows and 6 inconclusive rows: 5 Type
+Isolation source rows behind compiler-coverage gates and the RSH-006 reclaim
+row without a normalized source-bound fault/checkpoint fingerprint.
+
+The feature campaign is retained in
+`../docs/evidence/rustsec-reclaim-checks-20260714/feature-matched-campaign.json`.
+Its strict merged inputs and output fragments are
+`summary-feature-matched-*.json` and
+`mechanism-results-feature-matched-*.json` in the same directory.
+
+Rebuild the terminal scope with every reviewed amendment included:
+
+```bash
+args=(
+  --catalog evaluation/config/rustsec_heap_harnesses.json
+  --catalog evaluation/config/rustsec_heap_expansion_harnesses.json
+  --catalog evaluation/config/rustsec_heap_neon_node_harnesses.json
+)
+for batch in a b c d e f; do
+  args+=(--catalog "evaluation/config/rustsec_heap_strong_batch_${batch}_harnesses.json")
+  args+=(--status "evaluation/config/rustsec_heap_strong_batch_${batch}_status.json")
+done
+
+uv run python evaluation/scripts/build_rustsec_security_scope.py \
+  "${args[@]}" \
+  --primitive-overrides evaluation/config/rustsec_heap_primitive_overrides.json \
+  --mechanism-amendments evaluation/config/rustsec_heap_mechanism_amendments.json \
+  --mechanism-results evaluation/config/rustsec_heap_mechanism_results.json \
+  --output evaluation/config/rustsec_heap_complete_scope.json \
+  --require-terminal-integration
+```
+
+Verify the historical live-attempt inputs and regenerate the 49-case efficacy
+view plus its separate four-case exclusion audit. The frozen all-53 report
+continues to preserve every reviewed integration attempt:
+
+```bash
+uv run python evaluation/scripts/run_rustsec_complete_scope.py \
+  --scope evaluation/config/rustsec_heap_complete_scope.json \
+  --base-scope docs/evidence/rustsec-all-53-live-20260714/scope-before-rsh064.json \
+  --executable-replay docs/evidence/rustsec-all-53-live-20260714/executable-replay-48.json \
+  --blocked-attempts docs/evidence/rustsec-all-53-live-20260714/blocked-attempts/summary.json \
+  --supplemental-executable docs/evidence/rustsec-all-53-live-20260714/rsh064/experiment.json \
+  --output-json docs/evidence/rustsec-all-53-live-20260714/evaluable-49-report.json \
+  --output-csv docs/evidence/rustsec-all-53-live-20260714/evaluable-49-cases.csv
+```
+
+The 40-case classification corpus is a purposive, source-ready pilot. The
+complete pinned database contains 1,140 advisory records, and the expanded
+screen identifies 53 currently strong Rust-global temporal/reclaim research
+candidates, including 36 absent from the pilot. The complete funnel, manual
+classification, exclusion reasons, and 19-case first expansion wave are in
+`../docs/rustsec-heap-corpus-expansion.md`.
+
+Regenerate the full screening inventory before changing the curated corpus:
+
+```bash
+uv run python evaluation/scripts/inventory_rustsec_heap_candidates.py \
+  --rustsec-db /path/to/advisory-db \
+  --rudra-poc /path/to/Rudra-PoC \
+  --output evaluation/config/rustsec_heap_candidate_inventory.json
+uv run python -m unittest -v \
+  evaluation/scripts/test_inventory_rustsec_heap_candidates.py
+```
+
+The frozen classification pilot contains 40 advisories. Its source-pinned
+inventory contains 45 scenarios across all 40 distinct advisories, or 100%
+source availability at the advisory level:
+
+- 18 external source PoCs from the pinned Rudra-PoC snapshot;
+- 27 scenarios in 22 repository bundles: 24 mechanically adapted
+  (`mechanical_adapter`) scenarios grounded in published, upstream, or advisory
+  sources and 3 derived (`derived_adapter`) scenarios. Two derived scenarios
+  exercise cross-identity reuse and one is a minimal calamine CFB adapter.
+
+Scenarios and advisories use separate denominators. Multi-scenario cases and
+separately derived adapters raise the source-pinned scenario count above the 40
+source-covered advisories. All 40 advisories now have a source-pinned path, and
+the five extra scenarios bring the source-pinned scenario count to 45. The corpus
+preregisters three reuse hypotheses in total; two have repository reuse-derived
+sources. The third derived adapter in the pilot is a calamine CFB fixture.
+Published witnesses establish source-vulnerability baselines and
+allocator-visible diagnostics. Exact-type reuse efficacy uses a separate,
+coverage-qualified derived denominator.
+
+The mutable live harness catalog adds the supplemental
+`RSH-031-derived-layout-validation` adapter outside the frozen sweep. Its
+current inventory is 46 source-pinned scenarios: 18 Rudra source PoCs plus 28
+repository scenarios in 22 bundles, comprising 24 mechanical and 4 derived
+adapters. The historical sweep denominator remains 27 repository scenarios.
+
+The executable expansion adds 5 advisory IDs and 7 repository scenarios: 5
+published/upstream witnesses and 2 derived reuse probes. Across the current
+pilot catalog and expansion catalog, the repository records 45 advisory IDs,
+53 source-pinned scenarios, and 35 repository scenarios in 27 bundles. The
+frozen sweep, supplemental layout-validation adapter, and expansion retain
+separate experiment matrices and outcome denominators.
+
+The pilot harness catalog remains `claim_grade=false`. The frozen final sweep
+reproduced the 27 repository-materializable baselines and patched controls and
+retained their matched-arm artifacts. Exact critical-site compiler/runtime
+coverage remains unvalidated, and the 18 Rudra-PoC-only programs remain
+source-only inventory.
+
+Audit the manifests and repository bundle:
+
+```bash
+python3 evaluation/scripts/audit_rustsec_heap_corpus.py
+python3 evaluation/scripts/audit_rustsec_heap_corpus.py \
+  --rustsec-db /path/to/advisory-db \
+  --rudra-poc /path/to/Rudra-PoC \
+  --output evaluation/results/rustsec_heap_corpus_audit.json
+python3 -m unittest -v evaluation/scripts/test_rustsec_heap_corpus.py
+```
+
+List, materialize, or compile-check a repository scenario:
+
+```bash
+python3 evaluation/scripts/run_rustsec_heap_harness.py --action list
+python3 evaluation/scripts/run_rustsec_heap_harness.py \
+  --action materialize --scenario RSH-002-published --variant vulnerable \
+  --allow-download --work-dir /tmp/unialloc-rsh-002-vulnerable
+python3 evaluation/scripts/run_rustsec_heap_harness.py \
+  --action check --scenario RSH-002-published --variant vulnerable \
+  --allow-download
+```
+
+Native execution requires explicit unsafe opt-in and uses a network-disabled,
+read-only, capability-dropped, resource-limited run container:
+
+```bash
+python3 evaluation/scripts/run_rustsec_heap_harness.py \
+  --action run-native --scenario RSH-016-advisory --variant vulnerable \
+  --allow-download --execute-unsafe --timeout 30
+```
+
+Run the matched allocator matrix through the separate experiment orchestrator.
+`list` is the default read-only action. `preflight` materializes and validates
+every selected arm without compiling or executing the witness:
+
+```bash
+python3 evaluation/scripts/run_rustsec_heap_experiment.py --action list
+python3 evaluation/scripts/run_rustsec_heap_experiment.py \
+  --action preflight \
+  --scenario RSH-002-derived-reuse \
+  --variants system,unialloc,typed_plain,typeiso \
+  --archive-variants vulnerable,patched \
+  --repetitions 2 \
+  --cache "${XDG_CACHE_HOME:-$HOME/.cache}/unialloc/rustsec-heap" \
+  --allow-download \
+  --output-dir evaluation/raw/rustsec-heap-preflight
+```
+
+`run` requires the explicit unsafe-execution opt-in. It records each build and
+run command, allowlisted environment, source/lock/tool hashes, per-repetition
+logs, compiler audits, runtime statistics, and result classification under one
+dedicated output directory:
+
+```bash
+python3 evaluation/scripts/run_rustsec_heap_experiment.py \
+  --action run \
+  --scenario RSH-002-derived-reuse \
+  --variants system,unialloc,typed_plain,typeiso \
+  --archive-variants vulnerable,patched \
+  --repetitions 10 \
+  --cache "${XDG_CACHE_HOME:-$HOME/.cache}/unialloc/rustsec-heap" \
+  --allow-download \
+  --output-dir evaluation/raw/rustsec-heap-rsh002 \
+  --execute-unsafe
+```
+
+`RSH-002-derived-reuse` carries an explicit manual identity annotation for the
+victim allocation and reclaim. The treatment wrapper emits
+`UNIALLOC_SECURITY_REUSE_DENIAL` immediately after the distinct replacement
+allocation, before the stale object is dropped. The matrix validator binds the
+reported requested `(type_id, module_id, callsite)` to the unique compiler audit
+row for `Box<Replacement>` and records the retained victim identity plus exact
+layout. This row evaluates the allocator's cross-identity reuse policy;
+automatic victim-site compiler coverage remains a separate gate. The patched
+control also exercises the safe version of the same reuse decision, allowing
+the result to distinguish reuse-edge enforcement from vulnerability-specific
+detection.
+
+Run the five-case expansion through the same orchestrator with its explicit
+catalog:
+
+```bash
+python3 evaluation/scripts/run_rustsec_heap_experiment.py \
+  --catalog evaluation/config/rustsec_heap_expansion_harnesses.json \
+  --action list
+
+python3 evaluation/scripts/run_rustsec_heap_experiment.py \
+  --catalog evaluation/config/rustsec_heap_expansion_harnesses.json \
+  --action run --scenario RSH-041-advisory \
+  --variants system --archive-variants vulnerable,patched \
+  --output-dir /tmp/rustsec-expansion-rsh041-system \
+  --allow-download --execute-unsafe --jobs 4 --repetitions 3
+
+python3 evaluation/scripts/run_rustsec_heap_experiment.py \
+  --catalog evaluation/config/rustsec_heap_expansion_harnesses.json \
+  --action run --scenario RSH-041-advisory \
+  --variants typed_plain,typeiso --archive-variants vulnerable,patched \
+  --output-dir /tmp/rustsec-expansion-rsh041-typed \
+  --allow-download --execute-unsafe --jobs 4 --repetitions 3
+```
+
+The completed expansion reproduced all five vulnerable system baselines and
+all five matched patched controls. Three double-reclaim witnesses emitted the
+same pointer-already-released signal under `typed_plain` and `typeiso`, assigning
+that observation to common UniAlloc tracking. The two published UAF witnesses
+produced no Type-Isolation-specific signal. The separately derived RSH-041 and
+RSH-042 probes both observed `typed_plain` address reuse 3/3 and `typeiso`
+non-reuse plus a matching denial 3/3. Both derived probes use manual victim
+identity attribution, so automatic compiler coverage and source-level
+vulnerability detection remain outside their result.
+
+The complete matrices and compact summaries are retained at
+`../docs/evidence/rustsec-security-expansion-20260714/`. Summarize split
+published matrices with repeated `CASE=path` inputs:
+
+```bash
+python3 evaluation/scripts/summarize_rustsec_heap_expansion.py \
+  --catalog evaluation/config/rustsec_heap_expansion_harnesses.json \
+  --experiment RSH-041=/path/to/system/experiment.json \
+  --experiment RSH-041=/path/to/typed/experiment.json \
+  --output /tmp/rustsec-expansion-summary.json
+```
+
+Run all 27 frozen-pilot repository scenarios through the hardened sweep
+wrapper. The wrapper validates the complete Cartesian arm matrix, removes stale
+result manifests on fresh runs, binds successful resume state to result and
+input hashes, isolates worker failures, and invalidates the summary if the
+catalog, runner, sweep script, or UniAlloc implementation changes during the
+run:
+
+```bash
+CARGO_HOME="$HOME/.cache/unialloc/rustsec-heap/cargo" \
+uv run python evaluation/scripts/run_rustsec_heap_sweep.py \
+  --action preflight \
+  --cache "$HOME/.cache/unialloc/rustsec-heap" \
+  --output-dir evaluation/raw/rustsec-heap-full-preflight \
+  --scenario-jobs 1 \
+  --jobs 4 \
+  --repetitions 2 \
+  --build-timeout 1200 \
+  --run-timeout 600
+
+CARGO_HOME="$HOME/.cache/unialloc/rustsec-heap/cargo" \
+uv run python evaluation/scripts/run_rustsec_heap_sweep.py \
+  --action run \
+  --cache "$HOME/.cache/unialloc/rustsec-heap" \
+  --output-dir evaluation/raw/rustsec-heap-full-sweep \
+  --scenario-jobs 1 \
+  --jobs 4 \
+  --repetitions 2 \
+  --build-timeout 1200 \
+  --run-timeout 600 \
+  --execute-unsafe
+```
+
+`scenario-jobs=1` is the provenance-clean default and prevents scenario-level
+cache competition. `--allow-download` requires that sequential setting. The
+2026-07-14 final run completed all 27 scenarios and all 216 terminal arms, with
+352 runtime executions, 32 expected compile-rejection arms, 8 preregistered
+topology exclusions, and 0 unexpected arms. All 27 vulnerable system oracles
+and all 27 patched system controls reproduced. See
+`docs/evidence/rustsec-security-evaluation-20260714/` for the result hashes and
+the non-claim-grade interpretation boundary.
+
+The system arm runs the cataloged ASan or Miri oracle. Allocator arms run as
+native diagnostics so sanitizer/interpreter behavior cannot be mistaken for an
+allocator effect. `typed_plain` and `typeiso` use one force-loaded UniAlloc
+rlib across both the subject crate and harness; the runner rejects a mixed
+direct-dependency/force-loaded identity. The runner also detects subject-owned
+`#[global_allocator]` topology. The `system` arm preserves that allocator;
+allocator-substitution arms are marked as expected unsupported when adding a
+second allocator would make ownership ambiguous. This is the intended RSH-030
+shape because the fixed subject owns MiMalloc. RSH-028 separately excludes only
+the direct raw-UniAlloc route because its exact historical libc pin conflicts
+with UniAlloc's exact libc dependency; both force-loaded policy arms remain
+supported. Historical-Miri system arms preserve Rust's default allocator, and
+the runner records any compatibility flags removed for the pinned old compiler.
+Each Type Isolation arm build starts from a reset target so compiler audits
+regenerate instead of reusing stale audit files. Clean allocator runs must
+include valid UniAlloc runtime statistics; abnormal early exits record
+statistics as unavailable. Historical crate build scripts and memory-unsafe
+witnesses execute on the host in this path. Run the command inside a disposable
+VM for the claim-grade containment boundary.
+
+The audit verifies upstream snapshot pins, RustSec/Rudra metadata, vulnerable
+version ranges, archive metadata and cross-references, repository
+source/lock/patch hashes, cross-manifest case identity, frozen taxonomy floors,
+and claim boundaries. Experiment compiler audits validate target-crate presence
+and force-load topology. Critical-site coverage is a separate efficacy gate.
+All arms in the frozen 27-scenario pilot sweep and all ten input matrices for
+the five published expansion scenarios stay `efficacy_eligible=false`. The two derived expansion probes report
+manually attributed policy-edge evidence and retain `claim_grade=false`. The
+runner verifies the byte count and SHA-256 of each actual cached or
+downloaded crate archive before extraction. The native runner does not provide
+ASan or Miri; those scenarios require the cataloged dedicated environment and
+remain separate ground-truth arms because instrumentation can change allocator
+behavior. See
+`harnesses/rustsec_heap/README.md` for the integrity and containment contract,
+and `docs/type-isolation-security-evaluation.md` for the mechanism matrix and
+matched-arm protocol.
 
 ## Quick start
 

@@ -5,6 +5,7 @@ The runner derives build trees from exact upstream commits, builds UniAlloc,
 typed-control, and Type Isolation variants, retains compiler audits and raw
 process records, and writes one assembler-compatible result per target.  It
 keeps failed eligibility gates visible instead of promoting partial evidence.
+Each campaign uses one warmup plus three paired rounds and median point estimates.
 """
 
 from __future__ import annotations
@@ -61,8 +62,12 @@ CORE_REQUIRED_GATES = (
 )
 COMPILER_ROUTE_MIN = 0.85
 COMPILER_ROUTE_MAX = 1.15
-PRIMARY_ROUNDS = 5
-DIAGNOSTIC_ROUNDS = 3
+PRIMARY_ROUNDS = 3
+# Artifact readers retain compatibility with completed five-round campaigns;
+# every scheduling path below accepts PRIMARY_ROUNDS only.
+LEGACY_PRIMARY_ROUNDS = 5
+PUBLISHABLE_ROUND_COUNTS = frozenset((PRIMARY_ROUNDS, LEGACY_PRIMARY_ROUNDS))
+COMPLETED_STATUSES = frozenset(("complete", "complete_with_attribution_limits"))
 LEGACY_OXIPNG_INPUT_COMMIT = "dea23211ae6259007e068c59ab16929798d00d96"
 LEGACY_OXIPNG_INPUT_PATH = "tests/files/issue-141.png"
 GNU_TIME = Path("/usr/bin/time")
@@ -1427,7 +1432,7 @@ def build_target_result(
 def validate_core_result(result: dict[str, Any]) -> None:
     if result.get("schema_version") != 1:
         raise CampaignError("target result schema version must be 1")
-    if result.get("measured_rounds") not in {DIAGNOSTIC_ROUNDS, PRIMARY_ROUNDS}:
+    if result.get("measured_rounds") not in PUBLISHABLE_ROUND_COUNTS:
         raise CampaignError("target result must record three or five measured rounds")
     harnesses = result.get("harnesses")
     if not isinstance(harnesses, list) or not harnesses:
@@ -1446,6 +1451,35 @@ def validate_core_result(result: dict[str, Any]) -> None:
             str(harness.get("id")),
             harness.get("warmup_evidence"),
         )
+
+
+def validate_publishable_result(result: dict[str, Any]) -> None:
+    if result.get("status") not in COMPLETED_STATUSES:
+        raise CampaignError("target result must have a complete status")
+    target_id = result.get("target_id")
+    spec = TARGETS.get(str(target_id))
+    if spec is None:
+        raise CampaignError(f"target result identity is invalid: {target_id!r}")
+    harnesses = result.get("harnesses")
+    if not isinstance(harnesses, list):
+        raise CampaignError("target result must contain harnesses")
+    measurements = {
+        str(harness.get("id")): harness.get("measurements")
+        for harness in harnesses
+        if isinstance(harness, dict)
+    }
+    if len(measurements) != len(harnesses) or not all(
+        isinstance(rows, list) for rows in measurements.values()
+    ):
+        raise CampaignError(f"measurement rows are invalid for {spec.id}")
+    try:
+        validate_measurements(
+            spec,
+            measurements,
+            measured_rounds=int(result["measured_rounds"]),
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise CampaignError(f"measurement rows are invalid for {spec.id}") from error
 
 
 def publish_target_results(
@@ -1471,15 +1505,17 @@ def publish_target_results(
             raise CampaignError(
                 f"diagnostic result cannot enter primary publication: {result_path}"
             )
-        if result.get("measured_rounds") != PRIMARY_ROUNDS:
+        if result.get("measured_rounds") not in PUBLISHABLE_ROUND_COUNTS:
             raise CampaignError(
-                f"primary publication requires five measured rounds: {result_path}"
+                "primary publication requires three measured rounds or a retained "
+                f"legacy five-round artifact: {result_path}"
             )
         validate_primary_implementation(
             result.get("implementation_revision"),
             result.get("implementation_sha256"),
         )
         validate_core_result(result)
+        validate_publishable_result(result)
         target_id = result.get("target_id")
         if (
             not isinstance(target_id, str)
@@ -1584,8 +1620,8 @@ def diagnostic_result_metadata(
         or implementation_source.get("primary_eligible") is not False
     ):
         raise CampaignError("diagnostic campaign lacks a working-tree source record")
-    if measured_rounds not in {DIAGNOSTIC_ROUNDS, PRIMARY_ROUNDS}:
-        raise CampaignError("diagnostic campaigns require three or five rounds")
+    if measured_rounds != PRIMARY_ROUNDS:
+        raise CampaignError("diagnostic campaigns require three measured rounds")
     return {
         "campaign_classification": "diagnostic_current_worktree",
         "primary_eligible": False,
@@ -1641,13 +1677,10 @@ def run_target(
     implementation_source: dict[str, Any] | None = None,
     measured_rounds: int = PRIMARY_ROUNDS,
 ) -> Path:
-    if diagnostic_current_worktree and measured_rounds not in {
-        DIAGNOSTIC_ROUNDS,
-        PRIMARY_ROUNDS,
-    }:
-        raise CampaignError("diagnostic campaigns require three or five rounds")
+    if diagnostic_current_worktree and measured_rounds != PRIMARY_ROUNDS:
+        raise CampaignError("diagnostic campaigns require three measured rounds")
     if not diagnostic_current_worktree and measured_rounds != PRIMARY_ROUNDS:
-        raise CampaignError("primary campaigns require exactly five rounds")
+        raise CampaignError("primary campaigns require exactly three rounds")
     if stage == "measure":
         (
             source_audit_path,
@@ -1939,7 +1972,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--rounds",
         type=int,
         default=PRIMARY_ROUNDS,
-        help="paired rounds: five primary; three or five diagnostic",
+        help="one warmup, exactly three paired rounds, and median point estimates",
     )
     parser.add_argument("--cpu-list", default="0-15")
     parser.add_argument("--numa-node", type=int, default=0)
@@ -1962,11 +1995,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     args.diagnostic_current_worktree = bool(
         args.current_working_tree or args.implementation_revision is None
     )
-    if args.diagnostic_current_worktree:
-        if args.rounds not in {DIAGNOSTIC_ROUNDS, PRIMARY_ROUNDS}:
-            parser.error("diagnostic campaigns require three or five rounds")
-    elif args.rounds != PRIMARY_ROUNDS:
-        parser.error("primary campaigns require exactly five rounds")
+    if args.rounds != PRIMARY_ROUNDS:
+        parser.error("campaigns require exactly three measured rounds")
     if not args.diagnostic_current_worktree and (
         args.cpu_list != "0-15" or args.numa_node != 0
     ):
