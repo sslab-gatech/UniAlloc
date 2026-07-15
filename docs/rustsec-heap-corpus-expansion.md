@@ -2,20 +2,26 @@
 
 ## Final terminal update
 
-The expanded review covers **53 strong heap-participating, Rust-global allocator
-candidates**. The final efficacy denominator contains **49** executable
-witness/control integrations. RSH-054, RSH-056, RSH-059, and RSH-073 retain
-evidence-backed audit-only exclusions. The executable partition contains 31
-other-feature-only cases, 11 TypeIso measured-reuse-edge-only cases, 1 measured reuse edge plus other feature
-case, 3 matched no-signal cases, and 3 inconclusive or unresolved cases.
+The expanded review initially screened **53 candidates**. Post-source
+inspection reclassified RSH-006 as a stack-lifetime case: the
+vulnerability-relevant dangling target/lifetime path has no
+`GlobalAlloc`-mediated allocation, reclaim, or reuse edge. The corrected scope
+retains **52 heap-relevant candidates**, comprising **48 executable**
+witness/control integrations and **4 audit-only** exclusions (RSH-054,
+RSH-056, RSH-059, and RSH-073). The executable partition contains 31
+other-feature-only cases, 11 TypeIso measured-reuse-edge-only cases, 1 measured
+reuse edge plus other feature case, 3 matched no-signal cases, and 2
+mechanism-boundary cases.
 
-Allocator mechanisms provide qualified coverage for **43/49** executable
+Allocator mechanisms provide qualified coverage for **43/48** executable
 candidates: 31 exact duplicate-reclaim detections, 1 exact recovery-layout
 validation, and 12 compiler-bound causal mitigations of measured cross-identity
 reuse edges, with RSH-002 counted once. Eleven of the Type Isolation rows are
 TypeIso measured-reuse-edge-only; RSH-002 overlaps with `reclaim_checks`. This ratio describes
 the integrated allocator mechanisms and witnesses. Type Isolation automatic
-source-level vulnerability detections remain **0/12**.
+source-level vulnerability detections remain **0/12**. The retained UAF scope
+contains **18 candidates**, including **17 executable** cases; allocator
+mechanisms cover **14/17** executable UAF cases.
 
 The 12 Type Isolation experiments comprise two
 `derived_vulnerability_edge` scopes (RSH-008 and RSH-041) and ten
@@ -85,9 +91,10 @@ artifacts.
 
 The scope freezes RustSec advisory-db at
 `9f3e138091487e69144f536d36976e427a7a3307` and Rudra-PoC at
-`6226dd030fffbed5601099cb0e24f73e4150a7f5`. Its primary witness taxonomy is 30
-double-free, 19 use-after-free, 2 uninitialized-drop, 1 invalid-free, and 1
-out-of-bounds-read advisory.
+`6226dd030fffbed5601099cb0e24f73e4150a7f5`. The corrected 52-case heap scope
+contains 30 double-free, 18 use-after-free, 2 uninitialized-drop, 1
+invalid-free, and 1 out-of-bounds-read advisory. The initial 53-row screen adds
+the subsequently excluded stack-lifetime RSH-006 row.
 
 The feature-attribution campaign evaluates 42 reclaim scenarios with the six
 logical arms `vulnerable,patched x system,reclaim_plain,reclaim_checks` and
@@ -102,18 +109,21 @@ Cargo metadata resolves `reclaim_plain` to `stats` and `reclaim_checks` to
 signals, zero plain-arm signals, and zero patched signals. Supplemental RSH-001
 and RSH-060 experiments raise the final reclaim-detection count to 31. RSH-013
 uses deterministic terminal `drop(values)`, and RSH-020 uses a fail-closed
-double-panic parser. The final merged ledger retains 12 reclaim no-signal rows,
-1 evidence-inconclusive reclaim row, and 5 inconclusive Type Isolation source
-rows. Case-level reconciliation applies the distinct derived Type Isolation
-and recovery-layout evidence before assigning one outcome per case.
+double-panic parser. The frozen pre-correction merged ledger retains 12 reclaim
+no-signal rows, the historical evidence-inconclusive RSH-006 reclaim row, and 5
+inconclusive Type Isolation source rows. Corrected case-level reconciliation
+excludes RSH-006, then applies the distinct derived Type Isolation and
+recovery-layout evidence before assigning one outcome per case.
 
 The campaign manifest and derived records are retained as
 `docs/evidence/rustsec-reclaim-checks-20260714/feature-matched-campaign.json`,
 `summary-feature-matched-*.json`, and
 `mechanism-results-feature-matched-*.json`.
 
-The authoritative result, commands, claim boundary, and figure are in
+The authoritative corrected result, commands, claim boundary, and figures are in
 [`rustsec-security-scope-evaluation.md`](rustsec-security-scope-evaluation.md).
+Editable set figures and exact case membership are under
+[`figures/rustsec-security-sets-20260715/`](figures/rustsec-security-sets-20260715/).
 The sections below preserve the discovery and staged-integration rationale.
 
 ## Discovery and initial expansion record
@@ -134,10 +144,12 @@ substantially larger allocator-security program:
 | Independent temporal/reclaim review units after one duplicate alias merge | 83 |
 | Clear Rust-global allocator candidates from the strict screen | 50 |
 | Additional strong candidates exposed by pinned Rudra source/PoCs | 3 |
-| Reviewed strong candidates | **53** |
+| Initially screened candidates | **53** |
 | Strong candidates already present in the 40-case corpus | 17 |
 | Strong candidates missing from the 40-case corpus | **36** |
-| Final evaluable efficacy scope | **49** |
+| Post-source-audit stack-lifetime exclusion | **1** |
+| Retained heap-relevant candidates | **52** |
+| Final evaluable heap efficacy scope | **48** |
 | Audit-only exclusions with retained reasons | **4** |
 | Strong candidates still pending integration | **0** |
 
@@ -228,10 +240,12 @@ titles are too generic for the strict screen:
 - `RUSTSEC-2020-0105` (`abi_stable`);
 - `RUSTSEC-2021-0009` (`basic_dsp_matrix`).
 
-The review supports **53 strong research candidates**. This is a candidate
-count. Population-level detection and mitigation numerators remain unmeasured.
-The completed campaign provides a 49-case executable efficacy denominator and
-retains four non-evaluable candidates as audit-only exclusions.
+The review initially admitted **53 research candidates**. Post-source audit
+removes stack-lifetime RSH-006 from heap allocator efficacy accounting, leaving
+**52 heap-relevant candidates**. Population-level detection and mitigation
+numerators remain unmeasured. The completed campaign provides a **48-case**
+executable heap efficacy denominator and retains four non-evaluable candidates
+as audit-only exclusions.
 
 ## Rudra-PoC expansion opportunity
 
@@ -353,8 +367,9 @@ Every exit receives a reason code such as `foreign_allocator`,
 `stack_only`, `no_public_reproducer`, `patched_control_unavailable`,
 `compiler_identity_unresolved`, or `mechanism_ineligible`.
 Only rows that reach an executable vulnerable oracle and control enter the
-49-case efficacy denominator; earlier exits remain in the 53-candidate attempts
-audit.
+48-case corrected heap efficacy denominator. The frozen 53-row attempts audit
+and pre-correction 49-case execution files remain retained as historical
+provenance.
 
 Three complementary denominator units are required:
 

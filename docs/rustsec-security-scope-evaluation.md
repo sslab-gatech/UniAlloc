@@ -1,6 +1,6 @@
 # RustSec Security-Scope Evaluation
 
-## Reconciled terminal result
+## Corrected post-source-audit result
 
 This evaluation freezes RustSec advisory-db at commit
 `9f3e138091487e69144f536d36976e427a7a3307` and Rudra-PoC at commit
@@ -8,58 +8,71 @@ This evaluation freezes RustSec advisory-db at commit
 artifacts are exploratory (`claim_grade=false`), machine-auditable, and bounded
 to the integrated witnesses.
 
-The review identified **53 strong candidates**. The final efficacy denominator
-contains the **49 candidates** with executable vulnerable oracles and controls.
-Four candidates retain terminal audit reasons outside that denominator:
+The review initially screened **53 candidates**. A post-source audit excludes
+RSH-006 from heap allocator efficacy because its dangling target and
+vulnerability-relevant lifetime path are stack storage with no
+`GlobalAlloc`-mediated allocation, reclaim, or reuse edge. The
+corrected study scope retains **52 heap-relevant candidates**: **48** with
+executable vulnerable oracles and controls, plus **4** audit-only exclusions.
+The frozen 53-row screen and 49-executable report remain historical execution
+provenance.
 
 | Disposition | Advisories | Meaning |
 |---|---:|---|
-| Final evaluable efficacy scope | **49** | The repository contains a pinned runnable witness with the required controls |
+| Initial screened scope | **53** | Frozen pre-correction review ledger |
+| Post-source-audit stack-only exclusion | **1** | RSH-006 exercises a dangling stack target with no `GlobalAlloc`-mediated vulnerability edge |
+| Retained heap-relevant scope | **52** | Current presentation and mechanism-analysis universe |
+| Final evaluable heap efficacy scope | **48** | The repository contains a pinned runnable witness with the required controls |
 | Audit-only exclusion | **4** | No root-cause-specific executable reproduction or required native dependency is available; the attempts and reason remain retained |
 | Unreviewed or pending | **0** | Every reviewed candidate has an evaluable result or an evidence-backed exclusion |
 
-The strict ledger assigns one final attribution to each of the 49 executable
+The corrected ledger assigns one final disposition to each of the 48 executable
 advisories:
 
 | Final case attribution | Advisories | Evidence contract |
 |---|---:|---|
-| Other allocator feature only | **31** | Thirty reclaim-check cases and the RSH-031 recovery-layout case have an exact policy-independent diagnostic and no qualified Type Isolation reuse-edge result |
+| Other allocator feature only | **31** | Thirty reclaim-only cases and the RSH-031 recovery-layout case have an exact policy-independent diagnostic and no qualified Type Isolation reuse-edge result |
 | TypeIso measured reuse edge only | **11** | A compiler-bound derived or source-shaped cross-identity reuse edge collided in system and `typed_plain`, then Type Isolation withheld that exact retained pointer in 3/3 repetitions |
 | Measured edge + other feature | **1** | RSH-002 has a distinct exact `reclaim_checks` detection and a bounded Type Isolation reuse-edge mitigation |
 | No exact allocator signal observed | **3** | RSH-049, RSH-050, and RSH-075 completed every registered matched mechanism experiment without a qualified allocator signal |
-| Inconclusive or unresolved attribution | **3** | RSH-003 and RSH-019 exercise concurrency/lifetime races outside the evaluated allocator contracts; RSH-006 lacks a source-bound fingerprint |
+| Mechanism boundary | **2** | RSH-003 and RSH-019 exercise same-object or pre-reuse concurrency/lifetime races outside the evaluated allocator contracts |
 
 These rows partition the final efficacy denominator:
-**31 + 11 + 1 + 3 + 3 = 49**. Allocator mechanisms provide qualified coverage
-for **43/49** executable candidates. This number combines 31 exact
+**31 + 11 + 1 + 3 + 2 = 48**. Allocator mechanisms provide qualified coverage
+for **43/48** executable candidates. This number combines 31 exact
 `reclaim_checks` detections, 1 exact recovery-layout validation, and 12 bounded
 Type Isolation reuse-edge mitigations, with RSH-002 counted once. It is an
 evaluated-case mechanism-coverage ratio. Its scope excludes source-vulnerability
 detection rates and ecosystem protection rates.
 
-The generated case report records 32 `detected`, 11 `mitigated`, 3
-`no_signal`, and 3 `inconclusive` cases. The underlying mechanism ledger has 62
-rows: 32 `detected`, 12 `mitigated`, 12 `no_signal`, and 6 `inconclusive`.
-Thirteen cases retain more than one scenario/mechanism row. The Type Isolation
-rows use `mitigated` for the measured reuse decision only; their automatic
+The frozen generated 49-case report records 32 `detected`, 11 `mitigated`, 3
+`no_signal`, and 3 `inconclusive` cases. Its underlying 62-row mechanism ledger
+preserves scenario-level execution provenance, including the now-excluded
+RSH-006 row. The corrected presentation derives the 48-case partition above
+through the hash-bound post-source-audit correction. The Type Isolation rows
+use `mitigated` for the measured reuse decision only; their automatic
 source-level vulnerability-detection count is **0/12**, every row records
 `vulnerability_specific_detection_signal=false`, and every artifact remains
 `claim_grade=false`. The four audit-only exclusions remain visible in the
 reviewed-candidate funnel and stay outside every efficacy numerator and
 denominator.
 
-![RustSec reviewed-candidate efficacy scope](figures/rustsec-security-scope-20260714/rustsec-security-scope.svg)
+![Corrected RustSec allocator-mechanism sets](figures/rustsec-security-sets-20260715/rustsec-security-sets-overview.svg)
 
 Figure label boundary: the TypeIso-only segment means **measured reuse edge
-only**; the overlap segment means **measured reuse edge plus other feature**.
+only**; the overlap segment means **measured reuse edge plus reclaim checks**.
+Editable full-scope and UAF-specific SVGs, PNG/PDF fallbacks, exact case
+membership, and presentation notes are under
+[`figures/rustsec-security-sets-20260715/`](figures/rustsec-security-sets-20260715/).
 
 Machine-readable outputs:
 
 - `docs/evidence/rustsec-typeiso-automatic-20260715/derived-reuse-summary.json`
 - `evaluation/config/rustsec_heap_complete_scope.json`
+- `evaluation/config/rustsec_heap_posthoc_scope_corrections.json`
 - `evaluation/config/rustsec_heap_mechanism_results.json`
-- `docs/figures/rustsec-security-scope-20260714/summary.json`
-- `docs/figures/rustsec-security-scope-20260714/rustsec-security-scope.csv`
+- `docs/figures/rustsec-security-sets-20260715/rustsec-security-sets-data.json`
+- `docs/figures/rustsec-security-sets-20260715/rustsec-security-set-membership.csv`
 - `docs/rustsec-all-53-live-evaluation.md`
 
 ## Selection funnel
@@ -71,17 +84,21 @@ Machine-readable outputs:
 | `memory-corruption` category | 253 |
 | Active high-recall manual-review rows | 439 |
 | Independent temporal/reclaim review units | 83 |
-| Reviewed strong Rust-global allocator candidates | **53** |
-| Final evaluable efficacy scope | **49** |
+| Initially screened candidates | **53** |
+| Post-source-audit stack-only exclusion | **1** |
+| Retained heap-relevant candidates | **52** |
+| Final evaluable heap efficacy scope | **48** |
 | Audit-only exclusions | **4** |
 | Conditional candidates outside the strong scope | 7 |
 | Evidence-backed exclusions outside the strong scope | 26 |
 
-The 53 reviewed candidates combine 50 clear temporal/reclaim review results
-with 3 additional duplicate-reclaim candidates grounded in the pinned Rudra
-source. Executability and control availability reduce the efficacy denominator
-to 49. This is a purposive mechanism-evaluation scope. Rust ecosystem
-prevalence and population-level protection rates remain unmeasured.
+The initial 53-row screen combined 50 temporal/reclaim review results with 3
+additional duplicate-reclaim candidates grounded in the pinned Rudra source.
+Source inspection then established that RSH-006's dangling target is stack
+storage. Removing that row leaves 52 heap-relevant candidates; executability
+and control availability produce the 48-case efficacy denominator. This is a
+purposive mechanism-evaluation scope. Rust ecosystem prevalence and
+population-level protection rates remain unmeasured.
 
 ## Vulnerability primitives
 
@@ -89,19 +106,26 @@ The chart uses the primary symptom exercised by the integrated witness. Nine
 reviewed overrides preserve the evidence and reason for cases where advisory
 metadata and the terminal witness symptom differ.
 
-| Primary primitive | 53 reviewed candidates | 49-case efficacy scope |
-|---|---:|---:|
-| Double free | **30** | **27** |
-| Use after free | **19** | **18** |
-| Uninitialized drop | **2** | **2** |
-| Invalid free | **1** | **1** |
-| Out-of-bounds read | **1** | **1** |
+| Primary primitive | Initial 53-row screen | Retained 52-case heap scope | 48-case efficacy scope |
+|---|---:|---:|---:|
+| Double free | **30** | **30** | **27** |
+| Use after free | **18** | **18** | **17** |
+| Uninitialized drop | **2** | **2** | **2** |
+| Invalid free | **1** | **1** | **1** |
+| Out-of-bounds read | **1** | **1** | **1** |
+| Stack-lifetime dangling target | **1** | **0** | **0** |
 
 The nine reviewed overrides, including the source-backed classification for the
 audit-excluded `abi_stable` case, live in
 `evaluation/config/rustsec_heap_primitive_overrides.json`. RSH-002 and RSH-018
 remain explicit multi-primitive cases, and the ledger selects one primary chart
 label while retaining their scenario-level evidence.
+
+The retained UAF set contains **18** candidates: **17 executable** plus
+audit-only RSH-059. Allocator mechanisms cover **14/17** executable UAF cases.
+The covered set contains 11 TypeIso-only cases, overlap case RSH-002, and
+reclaim-only cases RSH-053 and RSH-057. RSH-075 has no allocator signal;
+RSH-003 and RSH-019 are mechanism-boundary cases.
 
 ## Type Isolation result
 
@@ -225,8 +249,8 @@ Cargo metadata attestation proves the intended one-feature difference:
 | `reclaim_plain` | `stats` |
 | `reclaim_checks` | `reclaim_checks`, `stats` |
 
-The strict reclaim ledger contains **31 detected**, **12 no-signal**, and **1
-inconclusive** scenario row. The exact allocator
+The frozen pre-correction reclaim ledger contains **31 detected**, **12
+no-signal**, and **1 inconclusive** scenario row. The exact allocator
 diagnostic appears in all 31 vulnerable `reclaim_checks` arms and in zero
 vulnerable `reclaim_plain` or patched arms. RSH-013 replaces its nondeterministic `dbg!(values)` observation
 with a deterministic terminal `drop(values)`: the system arm reports ASan
@@ -240,11 +264,13 @@ RSH-060 adds an advisory-derived partial-yield-then-panic detection.
 The 12 reclaim no-signal rows remain mechanism-specific negative controls.
 Several of those cases now have a separate Type Isolation reuse-edge mitigation or recovery-layout
 validation. The final case-level no-signal set is RSH-049, RSH-050, and RSH-075.
-RSH-006 remains evidence-inconclusive because its matched
-SIGSEGV lacks a normalized source-bound fault/checkpoint fingerprint. RSH-052,
-RSH-055, and RSH-065 through RSH-069 receive positive case attribution from
-their separate Type Isolation scenarios; RSH-031 receives its positive case
-attribution from recovery-layout validation.
+The historical ledger records RSH-006 as inconclusive because its matched
+SIGSEGV lacks a normalized source-bound fault/checkpoint fingerprint. The
+post-source audit classifies its target as stack storage and excludes it from
+the corrected heap efficacy scope. RSH-052, RSH-055, and RSH-065 through
+RSH-069 receive positive case attribution from their separate Type Isolation
+scenarios; RSH-031 receives its positive case attribution from recovery-layout
+validation.
 
 The feature contract is deliberately narrow:
 
@@ -313,8 +339,8 @@ are under
 
 Each exclusion retains a `BLOCKER.md`, source bytes, lockfiles, catalog/status
 provenance, and a machine-readable `scope_exclusion` reason. These four rows
-remain in the historical all-53 attempts audit and stay outside every efficacy
-numerator and denominator.
+remain in the historical all-53 attempts audit and stay outside every corrected
+efficacy numerator and denominator.
 
 ## Reproduction
 
@@ -340,12 +366,18 @@ uv run python evaluation/scripts/build_rustsec_security_scope.py \
   --require-terminal-integration
 ```
 
-Regenerate the figure:
+Regenerate the frozen pre-correction figure:
 
 ```bash
 uv run python evaluation/scripts/plot_rustsec_security_scope.py \
   --scope evaluation/config/rustsec_heap_complete_scope.json \
   --output docs/figures/rustsec-security-scope-20260714
+```
+
+Regenerate the corrected presentation figures and machine-readable membership:
+
+```bash
+uv run python evaluation/scripts/plot_rustsec_security_sets.py --rasterize
 ```
 
 Re-execute the Node/V8-hosted Neon witness:
@@ -359,8 +391,8 @@ uv run python evaluation/scripts/run_rsh064_neon_witness.py \
   --output-dir evaluation/raw/rustsec-rsh064-neon-20260714
 ```
 
-Audit the historical all-53 attempt inputs and emit the current 49-case
-efficacy CSV plus a JSON report with a separate four-case exclusion audit.
+Audit the historical all-53 attempt inputs and emit the frozen 49-case
+execution CSV plus a JSON report with a separate four-case exclusion audit.
 Present binaries are rehashed; cleaned binaries remain explicit archived-digest
 records, and every current strict-result evidence artifact is rehashed:
 
@@ -385,3 +417,7 @@ reuse-edge mitigations use three-repetition causal matrices. Their source-level
 vulnerability-detection count remains zero, their vulnerability-specific
 detector signal remains false, and every artifact remains exploratory with
 `claim_grade=false`.
+
+The 49-case command above reproduces historical execution provenance. The
+hash-bound post-source-audit correction and presentation generator derive the
+current 48-case heap efficacy denominator without rewriting that frozen ledger.

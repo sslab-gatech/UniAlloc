@@ -15,6 +15,9 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 AUDIT_PATH = ROOT / "evaluation" / "scripts" / "audit_rustsec_heap_corpus.py"
 MANIFEST_PATH = ROOT / "evaluation" / "config" / "rustsec_heap_security_corpus.json"
+CORRECTIONS_PATH = (
+    ROOT / "evaluation" / "config" / "rustsec_heap_posthoc_scope_corrections.json"
+)
 HARNESS_CATALOG_PATH = ROOT / "evaluation" / "config" / "rustsec_heap_harnesses.json"
 DOCUMENTATION_PATH = ROOT / "docs" / "type-isolation-security-evaluation.md"
 HARNESS_ROOT = ROOT / "evaluation" / "harnesses" / "rustsec_heap"
@@ -28,6 +31,9 @@ spec.loader.exec_module(audit)
 class RustSecHeapCorpusAuditTests(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        self.corrections = json.loads(
+            CORRECTIONS_PATH.read_text(encoding="utf-8")
+        )
         self.harness_catalog = json.loads(
             HARNESS_CATALOG_PATH.read_text(encoding="utf-8")
         )
@@ -157,9 +163,12 @@ class RustSecHeapCorpusAuditTests(unittest.TestCase):
         self.assertIn("black_box(stale_value_address)", vulnerable_source)
         self.assertNotIn('println!("{value}")', vulnerable_source)
 
-    def test_documented_catalog_matches_manifest(self) -> None:
+    def test_documented_catalog_matches_manifest_and_scope_corrections(self) -> None:
         documentation = DOCUMENTATION_PATH.read_text(encoding="utf-8")
         profiles = self.manifest["mechanism_profiles"]
+        corrections = {
+            row["case_id"]: row for row in self.corrections["exclusions"]
+        }
         catalog_heading = "## Complete frozen 40-case pilot catalog"
         self.assertEqual(documentation.count(catalog_heading), 1)
         catalog_section = documentation.split(catalog_heading, maxsplit=1)[1]
@@ -173,25 +182,36 @@ class RustSecHeapCorpusAuditTests(unittest.TestCase):
         self.assertEqual(len(documented_rows), len(self.manifest["cases"]))
         for case in self.manifest["cases"]:
             profile = profiles[case["assessment_profile"]]
-            if (
+            correction = corrections.get(case["case_id"])
+            if correction is not None:
+                self.assertEqual(
+                    correction["original_primitive"],
+                    case["taxonomy"]["primary_primitive"],
+                )
+                primitive = correction["corrected_primitive"]
+                effect = "excluded from heap allocator efficacy after source audit"
+            elif (
                 profile["derived_type_isolation_experiment_effect"]
                 == "conditional_reuse_edge_mitigation"
             ):
+                primitive = case["taxonomy"]["primary_primitive"]
                 effect = (
                     "published: no direct; derived A-to-B: conditional "
                     "reuse-edge block"
                 )
             elif profile["unialloc_boundary_effect"] == "conditional_detection":
+                primitive = case["taxonomy"]["primary_primitive"]
                 effect = (
                     "Type Isolation: no direct; UniAlloc boundary: "
                     "conditional detection"
                 )
             else:
+                primitive = case["taxonomy"]["primary_primitive"]
                 effect = "expected no direct effect"
             expected = (
                 f"| {case['case_id']} | "
                 f"[{case['advisory_id']}]({case['advisory']['rustsec_url']}) / "
-                f"`{case['crate']}` | `{case['taxonomy']['primary_primitive']}` | "
+                f"`{case['crate']}` | `{primitive}` | "
                 f"{effect} | `{case['execution']['readiness']}` |"
             )
             self.assertIn(expected, documented_rows)

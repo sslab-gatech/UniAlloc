@@ -29,6 +29,12 @@ TERMINAL_HASH_MANIFEST = (
     ROOT
     / "docs/evidence/rustsec-security-complete-20260714/terminal-artifact-hashes.json"
 )
+POST_SOURCE_CORRECTIONS = (
+    ROOT / "evaluation/config/rustsec_heap_posthoc_scope_corrections.json"
+)
+SECURITY_SET_BUNDLE = ROOT / "docs/figures/rustsec-security-sets-20260715"
+SECURITY_SET_DATA = SECURITY_SET_BUNDLE / "rustsec-security-sets-data.json"
+SECURITY_SET_MANIFEST = SECURITY_SET_BUNDLE / "artifact-manifest.json"
 TYPEISO_AUTOMATIC_ROOT = (
     ROOT / "docs/evidence/rustsec-typeiso-automatic-20260715"
 )
@@ -138,6 +144,23 @@ EXPECTED_TERMINAL_MANIFEST_COUNTS = {
     "no_allocator_signal_observed": 3,
     "case_unresolved_allocator_mechanism": 3,
     "integrated_incomplete_or_inconclusive": 3,
+}
+EXPECTED_POST_SOURCE_AUDIT_COUNTS = {
+    "initial_screened_candidates": 53,
+    "post_source_audit_exclusions": 1,
+    "retained_heap_candidates": 52,
+    "executable_heap_cases": 48,
+    "audit_only_cases": 4,
+    "covered_executable_cases": 43,
+    "type_isolation_cases": 12,
+    "reclaim_check_cases": 31,
+    "type_isolation_reclaim_overlap_cases": 1,
+    "recovery_layout_cases": 1,
+    "no_allocator_signal_cases": 3,
+    "mechanism_boundary_cases": 2,
+    "retained_uaf_cases": 18,
+    "executable_uaf_cases": 17,
+    "covered_executable_uaf_cases": 14,
 }
 
 
@@ -476,6 +499,61 @@ class RustSecFinalClaimConsistencyTests(unittest.TestCase):
         terminal = load(TERMINAL_HASH_MANIFEST)
         for key, value in EXPECTED_TERMINAL_MANIFEST_COUNTS.items():
             self.assertEqual(terminal["counts"].get(key), value, key)
+        self.assertEqual(
+            terminal["counts"]["terminal_artifacts"], len(terminal_paths)
+        )
+        self.assertEqual(
+            terminal["frozen_execution_scope"],
+            {
+                "status": "historical_pre_source_audit_correction",
+                "counts": {
+                    "initial_screened_candidates": 53,
+                    "executable_cases": 49,
+                    "audit_only_cases": 4,
+                    "unresolved_cases": 3,
+                },
+            },
+        )
+        current = terminal["post_source_audit_presentation"]
+        self.assertEqual(current["status"], "current_exploratory_presentation")
+        self.assertEqual(current["counts"], EXPECTED_POST_SOURCE_AUDIT_COUNTS)
+        self.assertEqual(
+            current["scope_correction"],
+            {
+                "path": POST_SOURCE_CORRECTIONS.relative_to(ROOT).as_posix(),
+                "sha256": sha256_file(POST_SOURCE_CORRECTIONS),
+            },
+        )
+        self.assertEqual(
+            current["bundle_manifest"],
+            {
+                "path": SECURITY_SET_MANIFEST.relative_to(ROOT).as_posix(),
+                "sha256": sha256_file(SECURITY_SET_MANIFEST),
+            },
+        )
+        current_paths = {
+            POST_SOURCE_CORRECTIONS.relative_to(ROOT).as_posix(),
+            "evaluation/scripts/plot_rustsec_security_sets.py",
+            "evaluation/scripts/test_plot_rustsec_security_sets.py",
+            *(
+                path.relative_to(ROOT).as_posix()
+                for path in SECURITY_SET_BUNDLE.iterdir()
+                if path.is_file()
+            ),
+        }
+        self.assertTrue(current_paths <= terminal_paths, sorted(current_paths - terminal_paths))
+
+        security_sets = load(SECURITY_SET_DATA)
+        full = security_sets["full_scope"]
+        uaf = security_sets["uaf_scope"]
+        self.assertEqual(security_sets["screened_candidate_count"], 53)
+        self.assertEqual(security_sets["retained_heap_candidate_count"], 52)
+        self.assertEqual(full["executable_case_count"], 48)
+        self.assertEqual(full["audit_only_count"], 4)
+        self.assertEqual(full["positive_union_count"], 43)
+        self.assertEqual(uaf["retained_case_count"], 18)
+        self.assertEqual(uaf["executable_case_count"], 17)
+        self.assertEqual(uaf["positive_union_count"], 14)
         self.assertEqual(
             terminal["strict_typeiso_evidence_implementation_digest_counts"],
             load(REPORT)["counts"][

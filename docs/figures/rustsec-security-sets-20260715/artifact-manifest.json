@@ -1,0 +1,66 @@
+{
+  "artifacts": [
+    {
+      "bytes": 3558,
+      "path": "README.md",
+      "sha256": "8ddf71c37062bd56b6878fcd31b5d4117ab55d3b718d3d395b8bed12157f5419"
+    },
+    {
+      "bytes": 5956,
+      "path": "rustsec-security-set-membership.csv",
+      "sha256": "e89eee334ab20e1cb9bd6f9276076666bd65cd1e30fe06e73f07016624d443db"
+    },
+    {
+      "bytes": 32758,
+      "path": "rustsec-security-sets-data.json",
+      "sha256": "9dd53ba266c19be981510aa0426de8351b7b925ad101630d7970d3611c84a611"
+    },
+    {
+      "bytes": 309537,
+      "path": "rustsec-security-sets-full.pdf",
+      "sha256": "ae2307e70c99740dbb66c95b06c43f104a26ad38188880d11e01f875023a0d5a"
+    },
+    {
+      "bytes": 559698,
+      "path": "rustsec-security-sets-full.png",
+      "sha256": "29215f1ae0fbf3f27dcf3a00c88e4b2058279f9090013f28866ac628aedc05a4"
+    },
+    {
+      "bytes": 6150,
+      "path": "rustsec-security-sets-full.svg",
+      "sha256": "03cadd2b879da40868a61b7851b4f2068e63966d8bfd00ed84e57fddffaa887b"
+    },
+    {
+      "bytes": 327772,
+      "path": "rustsec-security-sets-overview.pdf",
+      "sha256": "a17144a84c6e3c72eef26ff6bb22562951eba33c995213ec39f0c02d4cc98e97"
+    },
+    {
+      "bytes": 462287,
+      "path": "rustsec-security-sets-overview.png",
+      "sha256": "988cf1cf17ed76e5a4f9fa3b0ce9e02edd62ccba9938f2388f59e8ed4a05c90f"
+    },
+    {
+      "bytes": 8075,
+      "path": "rustsec-security-sets-overview.svg",
+      "sha256": "dbc863baea59ba839b3c59a6609cb0aef69034b157d3271ca4c95a3af8a91f1c"
+    },
+    {
+      "bytes": 296918,
+      "path": "rustsec-security-sets-uaf.pdf",
+      "sha256": "0db8da7c25be0da5465942c7beb940b2909c12859ba0ae3d27a0c8ac4769b47b"
+    },
+    {
+      "bytes": 510881,
+      "path": "rustsec-security-sets-uaf.png",
+      "sha256": "6a5cdd22441a617f9a322d2cc8c845a15543d80418b377b1dd1b5dfae1a528e4"
+    },
+    {
+      "bytes": 5959,
+      "path": "rustsec-security-sets-uaf.svg",
+      "sha256": "50e965cf2fd3090a65badf0c3767af7bbef92af309c78073fee48fb557f54fca"
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-security-set-diagrams"
+}

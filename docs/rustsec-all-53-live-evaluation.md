@@ -1,34 +1,44 @@
-# Live Evaluation of All 53 RustSec Heap Candidates
+# Historical Live Evaluation of the Initial 53-Candidate RustSec Screen
 
-## Answer and scope
+## Current correction and historical scope
 
-All **53** rows are manually reviewed **heap-participating strong candidates**.
-For each row, either Rust's global allocator owns the relevant storage or a
-heap-owning payload reaches the unsafe transition exercised by the witness.
-This selection statement establishes allocator relevance. Allocator-visible
-duplicate-free and cross-type-reuse coverage are evaluated separately.
+The original campaign screened **53** rows and admitted **49** to its executable
+ledger. A post-source audit reclassifies RSH-006 as a **stack-lifetime dangling
+target**: its dangling target and vulnerability-relevant lifetime path have no
+`GlobalAlloc`-mediated allocation, reclaim, or reuse edge. The current
+heap allocator efficacy scope therefore retains **52 heap-relevant
+candidates**: **48 executable** plus **4 audit-only** exclusions. The original
+53-row screen, 49 completed rows, and RSH-006 execution remain frozen
+historical provenance.
 
-The final efficacy denominator is **49**. RSH-054, RSH-056, RSH-059, and
+The current efficacy denominator is **48**. RSH-054, RSH-056, RSH-059, and
 RSH-073 lack a root-cause-specific executable reproduction or required native
 dependency. Their attempts and exclusion reasons remain in this 53-row audit,
 and they stay outside every efficacy numerator and denominator.
 
-The primary witness taxonomy is:
+The corrected initial-screen and retained-scope taxonomy is:
 
-| Primary primitive | Cases | Typical failure shape |
-|---|---:|---|
-| Double free | **30** | Duplicated ownership is reclaimed twice, commonly after panic or unwind |
-| Use after free | **19** | A stale pointer, reference, projection, or external view survives drop, reallocation, or a race |
-| Uninitialized drop | **2** | Error handling drops fabricated or uninitialized heap-owning state |
-| Invalid free | **1** | Allocation and deallocation use incompatible layouts |
-| Out-of-bounds read | **1** | A wrong-length iterator exposes a freed or invalid slot |
+| Primary primitive | Initial 53-row screen | Retained 52-case heap scope | Typical failure shape |
+|---|---:|---:|---|
+| Double free | **30** | **30** | Duplicated ownership is reclaimed twice, commonly after panic or unwind |
+| Use after free | **18** | **18** | A stale pointer, reference, projection, or external view survives drop, reallocation, or a race |
+| Uninitialized drop | **2** | **2** | Error handling drops fabricated or uninitialized heap-owning state |
+| Invalid free | **1** | **1** | Allocation and deallocation use incompatible layouts |
+| Out-of-bounds read | **1** | **1** | A wrong-length iterator exposes a freed or invalid slot |
+| Stack-lifetime dangling target | **1** | **0** | RSH-006 moves a borrowed stack target outside `GlobalAlloc` mediation |
 
 RSH-002 and RSH-018 exercise more than one symptom. The table uses one reviewed
-primary label while retaining the scenario oracle in the final column.
+primary label; the per-case ledger retains each representative scenario oracle.
+
+The retained UAF scope contains **18** candidates: **17 executable** plus
+audit-only RSH-059. Allocator mechanisms cover **14/17** executable UAF cases.
+The editable set figures and exact membership records are under
+[`figures/rustsec-security-sets-20260715/`](figures/rustsec-security-sets-20260715/).
 
 ## What was run
 
-Every candidate received a terminal attempt on 2026-07-14:
+Every candidate in the frozen initial screen received a terminal attempt on
+2026-07-14:
 
 - **48** previously executable cases were re-executed from hash-verified frozen
   binaries: 98 live arms completed across the reclaim and Type Isolation
@@ -43,6 +53,10 @@ Every candidate received a terminal attempt on 2026-07-14:
   automatic compiler-edge mode with the manual metadata helper disabled. The
   rerun uses six matched arms and three fresh processes per arm; the durable
   records are under `docs/evidence/rustsec-typeiso-automatic-20260715/`.
+
+These runs produced the historical 49-completed-row ledger. Removing RSH-006
+after the storage-domain audit yields the current 48-case heap efficacy
+denominator. Its execution record remains provenance.
 
 The 48-case binary replay preserves the implementation digests recorded by the
 original experiments. The earlier manually annotated Type Isolation matrices
@@ -59,23 +73,25 @@ work.
 
 | Strict disposition | Cases | Interpretation |
 |---|---:|---|
-| Other allocator feature only | **31** | Thirty reclaim detections and the RSH-031 recovery-layout validation provide the qualified allocator coverage |
+| Other allocator feature only | **31** | Thirty reclaim-only detections and the RSH-031 recovery-layout validation provide qualified allocator coverage |
 | TypeIso measured reuse edge only | **11** | A compiler-bound derived or source-shaped cross-identity reuse edge collided in controls and was withheld in `typeiso` |
 | Measured edge + other feature | **1** | RSH-002 has a separate reclaim detection and bounded Type Isolation reuse-edge mitigation |
 | No exact allocator signal | **3** | RSH-049, RSH-050, and RSH-075 completed every registered matched mechanism experiment without a qualified allocator signal |
-| Unresolved or inconclusive attribution | **3** | Two source witnesses exercise concurrency/lifetime races outside the evaluated allocator contracts; one matched abnormal-signal result lacks a source-bound fingerprint |
+| Mechanism boundary | **2** | RSH-003 and RSH-019 exercise same-object or pre-reuse concurrency/lifetime races outside the evaluated allocator contracts |
 
 These rows partition the final efficacy scope:
-**31 + 11 + 1 + 3 + 3 = 49**. Allocator mechanisms provide qualified coverage
-for **43/49** executable candidates: 31 exact duplicate-reclaim detections, 1
+**31 + 11 + 1 + 3 + 2 = 48**. Allocator mechanisms provide qualified coverage
+for **43/48** executable candidates: 31 exact duplicate-reclaim detections, 1
 recovery-layout validation, and 12 bounded Type Isolation reuse-edge
 mitigations, with RSH-002 counted once. This ratio describes the evaluated
 allocator mechanisms and witnesses. Source-level vulnerability detection by
 Type Isolation remains **0/12**.
 
-The generated case report records 32 `detected`, 11 `mitigated`, 3 `no_signal`,
-and 3 `inconclusive` cases. The 62-row mechanism ledger preserves those
-machine states at scenario granularity. Every Type Isolation row records
+The frozen generated 49-case report records 32 `detected`, 11 `mitigated`, 3
+`no_signal`, and 3 `inconclusive` cases. The 62-row mechanism ledger preserves
+those historical machine states at scenario granularity, including RSH-006.
+The hash-bound post-source-audit correction derives the current 48-case
+partition above. Every Type Isolation row records
 `source_vulnerability_detection_validated=false`,
 `vulnerability_specific_detection_signal=false`, and `claim_grade=false`.
 RSH-013 uses a deterministic terminal `drop(values)` so corrupted-string
@@ -132,23 +148,25 @@ supply active new-site evidence. Results are retained under
 
 - **3 no-signal cases:** RSH-049, RSH-050, and RSH-075 have complete matched
   experiments and no qualified allocator signal.
-- **3 unresolved or inconclusive cases:** RSH-003 and RSH-019 exercise
-  same-object concurrency/lifetime races before a required allocator reuse
-  event. RSH-006 has a matched SIGSEGV without a normalized source-bound
-  fault/checkpoint fingerprint; source analysis indicates a stack-lifetime
-  boundary, while empirical no-signal attribution remains withheld.
+- **2 mechanism-boundary cases:** RSH-003 and RSH-019 exercise same-object or
+  pre-reuse concurrency/lifetime races before a required allocator reuse event.
+- **1 post-source-audit scope correction:** RSH-006's dangling target is stack
+  storage. Its vulnerability-relevant lifetime path has no allocation,
+  reclaim, or reuse edge mediated by `GlobalAlloc` and contributes to no
+  current heap efficacy numerator or denominator. Its matched SIGSEGV remains
+  in the frozen execution ledger as provenance.
 - **5 retained source-evidence gaps:** RSH-001, RSH-003, RSH-008, RSH-019,
   and RSH-064 preserve their source-witness Type Isolation rows. Separate
   experiments give RSH-001 an exact reclaim detection and RSH-008/RSH-064 bounded derived
-  Type Isolation reuse-edge mitigations, so only RSH-003 and RSH-019 remain
-  unresolved at the case level. Every one of the 12 Type Isolation rows is an
+  Type Isolation reuse-edge mitigations; RSH-003 and RSH-019 remain outside
+  the evaluated allocator mechanisms at the case level. Every one of the 12 Type Isolation rows is an
   automatic compiler-bound derived or source-shaped edge with manual metadata
   disabled; automatic source-level vulnerability detections remain at zero.
 - **4 audit-only exclusions:** RSH-054 lacks a published root-specific PoC; RSH-056
   reaches an earlier independent Miri failure; RSH-059 requires a native
   YottaDB installation and initialized database; RSH-073 requires the MetaCall
   core library and headers. These reviewed candidates remain in the attempts
-  audit and outside the 49-case efficacy denominator.
+  audit and outside the 48-case efficacy denominator.
 
 RSH-064 supplies a concrete boundary example. Neon 0.10.0 exposes stale
 external ArrayBuffer bytes in a live Node/V8 context, and Neon 0.10.1 rejects
@@ -163,10 +181,12 @@ compiler contract.
 
 ## Per-case ledger
 
-The root-cause synopsis comes from the representative catalog oracle. Excluded
-rows use the retained terminal audit reason. `Executed` means the registered
-witness or live frozen binary was run; mechanism outcomes continue to obey the
-stricter control and compiler-coverage gates.
+The table preserves the frozen campaign attempts and applies the RSH-006
+storage-domain correction in its current classification. The root-cause
+synopsis comes from the representative catalog oracle. Excluded rows use the
+retained terminal audit reason. `Executed` means the registered witness or live
+frozen binary was run; mechanism outcomes continue to obey the stricter
+control and compiler-coverage gates.
 
 | Case | Advisory | Package | Primitive | Attempt | Mechanism | Strict outcome | Root-cause / witnessed failure synopsis |
 |---|---|---|---|---|---|---|---|
@@ -180,10 +200,10 @@ stricter control and compiler-coverage gates.
 | RSH-052 | RUSTSEC-2019-0023 | `string-interner` | use after free | executed | Type Isolation | bounded reuse-edge mitigation | The source-shaped exact `String -> Box<str>` transfer is compiler-bound; its derived edge collides in system/plain and has its exact witness pointer withheld in Type Isolation, while the source reclaim row remains no signal |
 | RSH-011 | RUSTSEC-2019-0034 | `http` | double free | executed | `reclaim_checks` | detected | AddressSanitizer reports attempting double-free when a forgotten HeaderMap Drain leaves a moved Box entry owned by the map |
 | RSH-002 | RUSTSEC-2020-0007 | `bitvec` | use after free | executed | `reclaim_checks` + Type Isolation | detected + bounded reuse-edge mitigation | The published path triggers the exact reclaim diagnostic, and the separate derived edge is automatically bound through generic `Vec::with_capacity<T>` runtime identity before Type Isolation withholds the exact witness pointer from its cross-identity replacement; the later duplicate-reclaim abort remains a separate boundary |
-| RSH-003 | RUSTSEC-2020-0017 | `internment` | use after free | executed | Type Isolation | unresolved | AddressSanitizer reports heap-use-after-free in ArcIntern::drop; the same-object concurrency race precedes a required cross-identity reuse event |
+| RSH-003 | RUSTSEC-2020-0017 | `internment` | use after free | executed | allocator mechanism boundary | outside current mechanism contract | AddressSanitizer reports heap-use-after-free in ArcIntern::drop; the same-object concurrency race precedes a required cross-identity reuse event |
 | RSH-053 | RUSTSEC-2020-0038 | `ordnung` | use after free | executed | `reclaim_checks` | detected | Miri reports undefined behavior from a dangling reference (use-after-free) when CompactVec drops duplicated ownership after the invalid-index panic |
 | RSH-005 | RUSTSEC-2020-0047 | `array-queue` | double free | executed | `reclaim_checks` | detected | AddressSanitizer reports attempting double-free when the stale front Box is returned by the final pop_back |
-| RSH-006 | RUSTSEC-2020-0091 | `arc-swap` | use after free | executed | `reclaim_checks` | inconclusive | The matched vulnerable plain/check arms terminate with the same normalized SIGSEGV, but the result lacks a normalized source-bound fault/checkpoint fingerprint; source analysis indicates a stack-lifetime boundary, so empirical no-signal attribution is withheld |
+| RSH-006 | RUSTSEC-2020-0091 | `arc-swap` | stack-lifetime dangling target | historical execution; excluded after source audit | — | outside corrected heap scope | Source inspection finds a moved borrowed stack target whose vulnerability-relevant lifetime path has no `GlobalAlloc`-mediated allocation, reclaim, or reuse edge; the frozen matched plain/check arms and normalized SIGSEGV remain execution provenance |
 | RSH-054 | RUSTSEC-2020-0105 | `abi_stable` | double free | excluded after reattempt | — | outside efficacy scope | No published PoC; the reachable `RVec::retain` adapter yields only the injected predicate panic, without a root-specific duplicate-reclaim finding. |
 | RSH-055 | RUSTSEC-2020-0145 | `heapless` | use after free | executed | Type Isolation | bounded reuse-edge mitigation | The compiler-attributed one-word consumed-slot `Vec<u64>`-to-`Replacement` edge collides in system/plain and has its exact witness pointer withheld in Type Isolation |
 | RSH-056 | RUSTSEC-2021-0005 | `glsl-layout` | double free | excluded after reattempt | — | outside efficacy scope | No published PoC; ASan reaches only the injected panic, while Miri stops earlier on an independent uninitialized `[f32; 2]` diagnostic. |
@@ -212,7 +232,7 @@ stricter control and compiler-coverage gates.
 | RSH-070 | RUSTSEC-2025-0024 | `crossbeam-channel` | double free | executed | `reclaim_checks` | detected | AddressSanitizer reports double-free after discard_all_messages and Channel::drop reclaim the same list block |
 | RSH-071 | RUSTSEC-2025-0044 | `slice-ring-buffer` | double free | executed | `reclaim_checks` | detected | AddressSanitizer reports double-free when cloned IntoIter values both reclaim the same String elements |
 | RSH-018 | RUSTSEC-2025-0053 | `arenavec` | double free | executed | `reclaim_checks` | detected | AddressSanitizer reports double-free |
-| RSH-019 | RUSTSEC-2026-0005 | `oneshot` | use after free | executed | Type Isolation | unresolved | Miri reports undefined behavior from the concurrency race during the 64-seed sweep; allocation identity supplies no synchronization edge |
+| RSH-019 | RUSTSEC-2026-0005 | `oneshot` | use after free | executed | allocator mechanism boundary | outside current mechanism contract | Miri reports undefined behavior from the concurrency race during the 64-seed sweep; allocation identity supplies no synchronization edge |
 | RSH-020 | RUSTSEC-2026-0103 | `thin-vec` | double free | executed | `reclaim_checks` | detected | AddressSanitizer reports attempting double-free; the fail-closed parser recognizes the stable repeated source panic followed by the standard destructor-cleanup abort in the plain ablation |
 | RSH-072 | RUSTSEC-2026-0122 | `rkyv` | double free | executed | `reclaim_checks` | detected | AddressSanitizer reports double-free when panic-unsafe InlineVec::clear leaves a dropped Box counted as live |
 | RSH-042 | RUSTSEC-2026-0128 | `emap` | use after free | executed | Type Isolation | bounded reuse-edge mitigation | The compiler-attributed primitive `Vec<u8>` victim and Replacement addresses collide after Keys::next in system/plain and split with exact retained-pointer equality in Type Isolation |
@@ -228,13 +248,16 @@ stricter control and compiler-coverage gates.
 
 The tracked historical attempts bundle is
 [`evidence/rustsec-all-53-live-20260714/`](evidence/rustsec-all-53-live-20260714/).
-It retains every reviewed candidate and failed integration attempt. The final
-49-case efficacy source of truth is
-`evaluation/config/rustsec_heap_complete_scope.json`; its four
-`excluded_cases` retain the same audit reasons. Strict per-mechanism records
-remain in `evaluation/config/rustsec_heap_mechanism_results.json`.
+It retains every reviewed candidate and failed integration attempt. The frozen
+49-case execution source is `evaluation/config/rustsec_heap_complete_scope.json`;
+its four `excluded_cases` retain the same audit reasons. The hash-bound current
+scope correction is
+`evaluation/config/rustsec_heap_posthoc_scope_corrections.json`. Strict
+per-mechanism records remain in
+`evaluation/config/rustsec_heap_mechanism_results.json`, and corrected set
+membership is under `docs/figures/rustsec-security-sets-20260715/`.
 
-Rebuild the current 49-case efficacy JSON and CSV from the reconciled scope,
+Rebuild the frozen 49-case execution JSON and CSV from the reconciled scope,
 the frozen 48-case replay, the historical reattempt audit, and the current
 RSH-064 experiment. The JSON keeps four exclusions and the RSH-064 transition
 in separate audit sections:
@@ -250,11 +273,17 @@ uv run python evaluation/scripts/run_rustsec_complete_scope.py \
   --output-csv docs/evidence/rustsec-all-53-live-20260714/evaluable-49-cases.csv
 ```
 
+Apply the post-source-audit correction and regenerate the current set figures:
+
+```bash
+uv run python evaluation/scripts/plot_rustsec_security_sets.py --rasterize
+```
+
 The tracked attempts report validates `valid=true`, 53 unique reviewed rows,
 49 completed cases, 4 audit-only exclusions, 103 live allocator arms, and 23
 exclusion probes. The historical reattempt artifact also retains 14 RSH-064
 probes from the stage before its promotion. These attempt counts provide audit
-coverage; the efficacy denominator remains 49.
+coverage. The post-source-audit efficacy denominator is 48.
 
 All results are exploratory (`claim_grade=false`). The corpus is purposive and
 supports mechanism evaluation. RustSec prevalence and an ecosystem-wide

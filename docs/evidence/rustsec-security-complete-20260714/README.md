@@ -1,8 +1,20 @@
 # Complete RustSec Strong-Candidate Integration Evidence
 
-The reconciled review contains 53 strong candidates. The final efficacy scope
-contains 49 executable cases; RSH-054, RSH-056, RSH-059, and RSH-073 are
-audit-only exclusions with retained evidence.
+> **Frozen pre-correction provenance.** This 2026-07-14 bundle preserves the
+> original 53-row screen, 49-case execution ledger, and **43/49** historical
+> result. Post-source audit reclassifies RSH-006 as stack-lifetime and excludes
+> it from heap allocator efficacy accounting. The current view is 52 retained
+> heap-relevant candidates, 48 executable plus 4 audit-only, and **43/48**
+> covered; the retained UAF view is 18 candidates, 17 executable, and **14/17**
+> covered. See `docs/rustsec-security-scope-evaluation.md` and
+> `docs/figures/rustsec-security-sets-20260715/`.
+
+The frozen review contains 53 initially screened candidates. Its historical
+efficacy scope contains 49 executable cases; RSH-054, RSH-056, RSH-059, and
+RSH-073 are audit-only exclusions with retained evidence. RSH-006 remains in
+this bundle for replay provenance. Its vulnerability-relevant dangling
+target/lifetime path has no `GlobalAlloc`-mediated allocation, reclaim, or
+reuse edge.
 
 The repository catalogs are:
 
@@ -19,12 +31,12 @@ evaluation/config/rustsec_heap_neon_node_harnesses.json
 ```
 
 Batch status catalogs preserve all failed integration attempts and their source
-evidence. `evaluation/config/rustsec_heap_complete_scope.json` is the generated
-49-case efficacy ledger; its `excluded_cases` array retains the four audit-only
-reasons. `docs/figures/rustsec-security-scope-20260714/` preserves the
-current reviewed-candidate presentation bundle.
+evidence. `evaluation/config/rustsec_heap_complete_scope.json` is the frozen
+pre-correction 49-case execution ledger; its `excluded_cases` array retains the
+four audit-only reasons. `docs/figures/rustsec-security-scope-20260714/`
+preserves the historical reviewed-candidate presentation bundle.
 
-The exclusive case-level partition contains 31 other-feature-only cases, 11
+The frozen exclusive case-level partition contains 31 other-feature-only cases, 11
 Type-Isolation-only cases, 1 multiple-mechanism case, 3 matched no-signal
 cases (RSH-049, RSH-050, and RSH-075), and 3 inconclusive/unresolved cases
 (RSH-003, RSH-006, and RSH-019), with a strict positive count of **43/49**.
@@ -35,7 +47,7 @@ contains 62 rows: 32 `detected`, 12 `mitigated`, 12 `no_signal`, and 6
 reclaim checks, 1 recovery-layout validation, and 12 Type Isolation edges.
 RSH-002 is the sole overlap. Thirteen cases retain two rows, so source,
 derived, and supplemental mechanism evidence remain auditable while each
-advisory receives one case-level disposition. The four
+advisory receives one historical case-level disposition. The four
 audit-only exclusions remain in the 53-candidate attempts audit and stay
 outside every efficacy numerator and denominator. The complete matched campaign inventory is
 `docs/evidence/rustsec-reclaim-checks-20260714/feature-matched-campaign.json`.
@@ -85,7 +97,7 @@ upstream Miri baseline establishes the allocation/deallocation mismatch, and
 the derived native matrix emits the exact recovery-layout diagnostic only in
 the vulnerable typed arms. This row contributes zero Type Isolation credit.
 
-The scope gate is:
+The frozen pre-correction scope gate is:
 
 ```bash
 args=(

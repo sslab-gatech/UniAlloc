@@ -1,9 +1,9 @@
 {
   "artifacts": [
     {
-      "bytes": 6803,
+      "bytes": 7573,
       "path": "docs/evidence/rustsec-all-53-live-20260714/README.md",
-      "sha256": "d46b25f8187056edfc7aa1f2e69d2106c5c127771318ed24b0734776be85874e"
+      "sha256": "d4b070c40b4672de707c46e47b535daa77f0ae7a89b9f992734c53528f61cad0"
     },
     {
       "bytes": 32077,
@@ -16,9 +16,9 @@
       "sha256": "b0a3cc9626e5b85f5a36c346b8a918e7190c3fe44bf2e36b48b49f691a88bd18"
     },
     {
-      "bytes": 52490,
+      "bytes": 52620,
       "path": "docs/evidence/rustsec-all-53-live-20260714/artifact-hashes.json",
-      "sha256": "c629a64a2bb47f2783b4f892df23a61639e4e034183c42e8e25973c76ef148b7"
+      "sha256": "4f80ef9486692a5b06e48147d5c8d3b07259acadf9269ed81cf95a191eca8500"
     },
     {
       "bytes": 3416,
@@ -1391,9 +1391,9 @@
       "sha256": "609a417ecd720cb97bb40f2827ee9d24783fb0045e78d6d69157e52cdfad7387"
     },
     {
-      "bytes": 6425,
+      "bytes": 7012,
       "path": "docs/evidence/rustsec-reclaim-checks-20260714/README.md",
-      "sha256": "743c91c3cc84f4c8d62b70091c720528c2c492e7aebfab88d5eaf545a0dee206"
+      "sha256": "994053ce6f87fd1966e6362f85dfd6df53a36d35442d6346e7d9ac885072abed"
     },
     {
       "bytes": 81550,
@@ -2656,9 +2656,9 @@
       "sha256": "3dd1cf2b11625b97d0f757a0c62612f7e2db3a60871039e05f5d8e7da269c99c"
     },
     {
-      "bytes": 6271,
+      "bytes": 7098,
       "path": "docs/evidence/rustsec-security-complete-20260714/README.md",
-      "sha256": "1d5a2892d2c4ea99dd6b2aec1516cb1543310325cd120f1ac4904681224a4fb8"
+      "sha256": "884ce32fd811e515aae1722c11867b43f3b47dada0a9caaf2ce3ef4ac3cf2f41"
     },
     {
       "bytes": 60655,
@@ -2801,9 +2801,9 @@
       "sha256": "0866395a60d89022b722e95734ce32aaa8cde0c5b6de679318d09ad23fa34421"
     },
     {
-      "bytes": 8146,
+      "bytes": 8716,
       "path": "docs/evidence/rustsec-security-expansion-20260714/README.md",
-      "sha256": "72380f018dae4c02aeb6fef94a59387e2e6bb067150e05a0d2e36e8352664864"
+      "sha256": "168e629d15f85b86fa4e13d12cbd55729164caa0718607440638c85898612e03"
     },
     {
       "bytes": 15550,
@@ -7421,34 +7421,99 @@
       "sha256": "dc649b16ae3a8e4ac0c78e6a44fef05e6360391a6c05da43eb8bd3576b03be15"
     },
     {
-      "bytes": 26468,
+      "bytes": 3558,
+      "path": "docs/figures/rustsec-security-sets-20260715/README.md",
+      "sha256": "8ddf71c37062bd56b6878fcd31b5d4117ab55d3b718d3d395b8bed12157f5419"
+    },
+    {
+      "bytes": 2088,
+      "path": "docs/figures/rustsec-security-sets-20260715/artifact-manifest.json",
+      "sha256": "41fb8d9bbf4330105344fb06f502e8c104120914f99d6bdb608b8a953a902e1c"
+    },
+    {
+      "bytes": 5956,
+      "path": "docs/figures/rustsec-security-sets-20260715/rustsec-security-set-membership.csv",
+      "sha256": "e89eee334ab20e1cb9bd6f9276076666bd65cd1e30fe06e73f07016624d443db"
+    },
+    {
+      "bytes": 32758,
+      "path": "docs/figures/rustsec-security-sets-20260715/rustsec-security-sets-data.json",
+      "sha256": "9dd53ba266c19be981510aa0426de8351b7b925ad101630d7970d3611c84a611"
+    },
+    {
+      "bytes": 309537,
+      "path": "docs/figures/rustsec-security-sets-20260715/rustsec-security-sets-full.pdf",
+      "sha256": "ae2307e70c99740dbb66c95b06c43f104a26ad38188880d11e01f875023a0d5a"
+    },
+    {
+      "bytes": 559698,
+      "path": "docs/figures/rustsec-security-sets-20260715/rustsec-security-sets-full.png",
+      "sha256": "29215f1ae0fbf3f27dcf3a00c88e4b2058279f9090013f28866ac628aedc05a4"
+    },
+    {
+      "bytes": 6150,
+      "path": "docs/figures/rustsec-security-sets-20260715/rustsec-security-sets-full.svg",
+      "sha256": "03cadd2b879da40868a61b7851b4f2068e63966d8bfd00ed84e57fddffaa887b"
+    },
+    {
+      "bytes": 327772,
+      "path": "docs/figures/rustsec-security-sets-20260715/rustsec-security-sets-overview.pdf",
+      "sha256": "a17144a84c6e3c72eef26ff6bb22562951eba33c995213ec39f0c02d4cc98e97"
+    },
+    {
+      "bytes": 462287,
+      "path": "docs/figures/rustsec-security-sets-20260715/rustsec-security-sets-overview.png",
+      "sha256": "988cf1cf17ed76e5a4f9fa3b0ce9e02edd62ccba9938f2388f59e8ed4a05c90f"
+    },
+    {
+      "bytes": 8075,
+      "path": "docs/figures/rustsec-security-sets-20260715/rustsec-security-sets-overview.svg",
+      "sha256": "dbc863baea59ba839b3c59a6609cb0aef69034b157d3271ca4c95a3af8a91f1c"
+    },
+    {
+      "bytes": 296918,
+      "path": "docs/figures/rustsec-security-sets-20260715/rustsec-security-sets-uaf.pdf",
+      "sha256": "0db8da7c25be0da5465942c7beb940b2909c12859ba0ae3d27a0c8ac4769b47b"
+    },
+    {
+      "bytes": 510881,
+      "path": "docs/figures/rustsec-security-sets-20260715/rustsec-security-sets-uaf.png",
+      "sha256": "6a5cdd22441a617f9a322d2cc8c845a15543d80418b377b1dd1b5dfae1a528e4"
+    },
+    {
+      "bytes": 5959,
+      "path": "docs/figures/rustsec-security-sets-20260715/rustsec-security-sets-uaf.svg",
+      "sha256": "50e965cf2fd3090a65badf0c3767af7bbef92af309c78073fee48fb557f54fca"
+    },
+    {
+      "bytes": 28331,
       "path": "docs/rustsec-all-53-live-evaluation.md",
-      "sha256": "e3586db4da2cfecf1075d3d1ba0dcf1e2fe4929748d2b8188052e3ccd8706422"
+      "sha256": "83fadb7dfac64840f126051c5694b5344519f509a9d9ed16387ecc4a200fc587"
     },
     {
-      "bytes": 19165,
+      "bytes": 20099,
       "path": "docs/rustsec-heap-corpus-expansion.md",
-      "sha256": "ac72522c0ef1580a68019ad25bc3235b4e9915cf4e106a2bc1a394853bb21ab3"
+      "sha256": "94ea8971967b4684900094c2b38e579fe14f7b39d707e3ae97b499fa8dd1ba41"
     },
     {
-      "bytes": 21236,
+      "bytes": 22193,
       "path": "docs/rustsec-inconclusive-root-cause-review.md",
-      "sha256": "4c3eae15aa9a6f29e9806097179d2929b9a5f7513233892a0daedf61c44087d3"
+      "sha256": "d4689a82e9772eb59edf24fa0351a30f03b6e3aa41a3e43ea5803f8dfa32e67b"
     },
     {
-      "bytes": 20662,
+      "bytes": 22908,
       "path": "docs/rustsec-security-scope-evaluation.md",
-      "sha256": "a7401bf3b6b8b9da25fb1ca07e17bacdc75cc27d699628de213bc1e9345a0ef4"
+      "sha256": "e32b6cbe10fe86debb05535e6921897fe8d3fc0ce994571494f735f46850aaa1"
     },
     {
-      "bytes": 72216,
+      "bytes": 73865,
       "path": "docs/type-isolation-security-evaluation.md",
-      "sha256": "a5d77238d7fdd7ed1ca95d8b4ee57d8545c82f9b80da23e8b878f3c00dfc30a0"
+      "sha256": "b788cf43491bf4e66424f44583f45685e25232e29b8a0ac693d566c7be5e7d73"
     },
     {
-      "bytes": 130588,
+      "bytes": 131362,
       "path": "evaluation/README.md",
-      "sha256": "bbf09175375df3ae5a848fd869d81fbfb2dad0171fde52462aa0b0afb179ee3b"
+      "sha256": "bf22a1f4a26aac43263770ba20ba51ae20848747a24605dca72621077af3a18d"
     },
     {
       "bytes": 394043,
@@ -7484,6 +7549,11 @@
       "bytes": 8144,
       "path": "evaluation/config/rustsec_heap_neon_node_harnesses.json",
       "sha256": "3bcd1c6956af5d79474bbed5989021e573acee8dafcd682419dbc9697e39065e"
+    },
+    {
+      "bytes": 2225,
+      "path": "evaluation/config/rustsec_heap_posthoc_scope_corrections.json",
+      "sha256": "7cfa8a0d86f4625a3af8547fe152bf083fc59b948a36dcd12167eda450081d0a"
     },
     {
       "bytes": 7948,
@@ -9056,6 +9126,11 @@
       "sha256": "aa2be6035d92e7b28110e61f670b8b5d90f59b044b1accdf2f0fcf0ad9848754"
     },
     {
+      "bytes": 46307,
+      "path": "evaluation/scripts/plot_rustsec_security_sets.py",
+      "sha256": "8dbc1abe89b9a8bb1346aef4b6dc04541ed6e83252e4abf5b765793ddfa72cce"
+    },
+    {
       "bytes": 16382,
       "path": "evaluation/scripts/run_rsh031_layout_mismatch.py",
       "sha256": "384082326491516c10788e984eeacbb9d5c3c0a9feff3face627b051950b101e"
@@ -9136,6 +9211,11 @@
       "sha256": "d83d2732dc0237154a959b6b5277ed155fa33847b755f7d10603ab0c288b60c3"
     },
     {
+      "bytes": 10477,
+      "path": "evaluation/scripts/test_plot_rustsec_security_sets.py",
+      "sha256": "136cd5215bdd430557253685dc3d8b31188a5208292db9ab2a9209560e6042d5"
+    },
+    {
       "bytes": 3663,
       "path": "evaluation/scripts/test_rsh002_typeiso_edge.py",
       "sha256": "6cca4362e7a56467f64060303a4fe5415a891665b6ed06e36648520ba69c186e"
@@ -9211,14 +9291,14 @@
       "sha256": "b2203da90230f016d9df1f2679bc97d1b1f2bb33ad2e05d4f7e49060ca120488"
     },
     {
-      "bytes": 29341,
+      "bytes": 32600,
       "path": "evaluation/scripts/test_rustsec_final_claim_consistency.py",
-      "sha256": "3aa3911e3eba983b36105752f79c79e7a144a9382b47e66f52f6f065d6445687"
+      "sha256": "5efee2c38e997000ce4b544f7c2b6f9724af71b3369f30b9062c46ead1358ce1"
     },
     {
-      "bytes": 27815,
+      "bytes": 28737,
       "path": "evaluation/scripts/test_rustsec_heap_corpus.py",
-      "sha256": "022f2b8454fc736a623b959ff76662b0b78c52846ed3151cf0847a8304d7da64"
+      "sha256": "6594d1642dd71573bccf49deebfd93c032d0ad62d7c4685cfa3e6f7735383a78"
     },
     {
       "bytes": 10148,
@@ -9242,7 +9322,7 @@
     }
   ],
   "automatic_typeiso_bundle_inventory_contract": "Every regular file retained under docs/evidence/rustsec-typeiso-automatic-20260715 is listed exactly once in artifacts with its current byte length and SHA-256.",
-  "claim_boundary": "This manifest pins the exploratory 49-case efficacy view, four audit-only exclusions, all retained RustSec security artifacts and harness inputs, and the content-addressed compiler-pass performance screen. The 12 Type Isolation mitigation rows validate causal mitigation of compiler-bound measured cross-identity reuse edges; vulnerability-specific detection and full-source automatic vulnerability detection each have zero credited cases. Historical replay-arm digests, the automatic strict-matrix implementation digest, and the archived frozen implementation are separate provenance domains and do not assert equality with current HEAD.",
+  "claim_boundary": "This manifest pins two exploratory provenance epochs. The frozen execution epoch preserves the original 53-row screen, 49 executable rows, four audit-only exclusions, and the historical mechanism ledger. The current post-source-audit presentation excludes stack-lifetime RSH-006 and reports 52 heap-relevant cases, 48 executable cases, and four audit-only cases. Top-level legacy counts describe the frozen execution epoch; post_source_audit_presentation contains the current presentation counts and hash bindings. Type Isolation credit remains limited to compiler-bound measured cross-identity reuse edges; full-source automatic vulnerability detections remain zero.",
   "claim_grade": false,
   "counts": {
     "automatic_full_source_vulnerability_detection_cases": 0,
@@ -9280,9 +9360,46 @@
     "strict_positive_mechanism_rows": 44,
     "strong_candidates": 53,
     "synthetic_type_isolation_reduction_cases": 2,
-    "terminal_artifacts": 1848,
+    "terminal_artifacts": 1864,
     "type_isolation_edge_covered": 12,
     "type_isolation_source_inconclusive": 5
+  },
+  "frozen_execution_scope": {
+    "counts": {
+      "audit_only_cases": 4,
+      "executable_cases": 49,
+      "initial_screened_candidates": 53,
+      "unresolved_cases": 3
+    },
+    "status": "historical_pre_source_audit_correction"
+  },
+  "post_source_audit_presentation": {
+    "bundle_manifest": {
+      "path": "docs/figures/rustsec-security-sets-20260715/artifact-manifest.json",
+      "sha256": "41fb8d9bbf4330105344fb06f502e8c104120914f99d6bdb608b8a953a902e1c"
+    },
+    "counts": {
+      "audit_only_cases": 4,
+      "covered_executable_cases": 43,
+      "covered_executable_uaf_cases": 14,
+      "executable_heap_cases": 48,
+      "executable_uaf_cases": 17,
+      "initial_screened_candidates": 53,
+      "mechanism_boundary_cases": 2,
+      "no_allocator_signal_cases": 3,
+      "post_source_audit_exclusions": 1,
+      "reclaim_check_cases": 31,
+      "recovery_layout_cases": 1,
+      "retained_heap_candidates": 52,
+      "retained_uaf_cases": 18,
+      "type_isolation_cases": 12,
+      "type_isolation_reclaim_overlap_cases": 1
+    },
+    "scope_correction": {
+      "path": "evaluation/config/rustsec_heap_posthoc_scope_corrections.json",
+      "sha256": "7cfa8a0d86f4625a3af8547fe152bf083fc59b948a36dcd12167eda450081d0a"
+    },
+    "status": "current_exploratory_presentation"
   },
   "replay_arm_implementation_digest_counts": {
     "159806869e12b58903f0f941b016ff60fed6e53a842cca35b5434f54a3d9da09": 8,

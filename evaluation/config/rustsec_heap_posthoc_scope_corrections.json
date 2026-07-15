@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "source": "unialloc-rustsec-post-source-audit-scope-corrections",
+  "claim_grade": false,
+  "base_scope": {
+    "path": "evaluation/config/rustsec_heap_complete_scope.json",
+    "sha256": "b699fccd2e0b6e432ce63909d15e80755ab4487633bae8f5f7a07958dbc375d3"
+  },
+  "exclusions": [
+    {
+      "case_id": "RSH-006",
+      "advisory_id": "RUSTSEC-2020-0091",
+      "package": "arc-swap",
+      "action": "exclude_from_heap_allocator_efficacy_denominator",
+      "reason_code": "stack_only_dangling_target",
+      "original_primitive": "use_after_free",
+      "corrected_primitive": "stack_lifetime_dangling_target",
+      "reason": "Source audit shows that MapGuard retains a pointer into a movable stack-local guard. Moving the guard invalidates the vulnerability-relevant stack target without a GlobalAlloc-mediated allocation, reclaim, or reuse edge.",
+      "evidence_paths": [
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-006/main.rs",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-006/origin.rs",
+        "docs/rustsec-inconclusive-root-cause-review.md"
+      ]
+    }
+  ],
+  "mechanism_boundaries": [
+    {
+      "case_id": "RSH-003",
+      "advisory_id": "RUSTSEC-2020-0017",
+      "package": "internment",
+      "classification": "same_object_or_pre_reuse_concurrency",
+      "reason": "The stale access can occur before any replacement allocation, and any later replacement has the same exact concrete identity. Exact reuse isolation cannot create the missing synchronization edge.",
+      "evidence_paths": [
+        "evaluation/harnesses/rustsec_heap/RSH-003/main.rs",
+        "docs/rustsec-inconclusive-root-cause-review.md"
+      ]
+    },
+    {
+      "case_id": "RSH-019",
+      "advisory_id": "RUSTSEC-2026-0005",
+      "package": "oneshot",
+      "classification": "same_object_or_pre_reuse_concurrency",
+      "reason": "Sender deallocation races Receiver access to the same Channel object before any allocator reuse decision. Exact reuse isolation cannot add the required happens-before relation.",
+      "evidence_paths": [
+        "evaluation/harnesses/rustsec_heap/RSH-019/main.rs",
+        "docs/rustsec-inconclusive-root-cause-review.md"
+      ]
+    }
+  ]
+}

@@ -1,13 +1,22 @@
 # RustSec heap-security expansion evidence (2026-07-14)
 
+> **Frozen pre-correction provenance.** This bundle preserves the original
+> 49-case execution accounting and **43/49** historical result. Post-source
+> audit reclassifies RSH-006 as stack-lifetime and excludes it from heap
+> allocator efficacy accounting. The current view is 52 retained heap-relevant
+> candidates, 48 executable plus 4 audit-only, and **43/48** covered; the
+> retained UAF view is 18 candidates, 17 executable, and **14/17** covered. See
+> `docs/rustsec-security-scope-evaluation.md` and
+> `docs/figures/rustsec-security-sets-20260715/`.
+
 This directory freezes the first executable expansion beyond the original
 40-advisory pilot. It contains five new advisory IDs, five published or upstream
 witness scenarios, and two separately derived cross-type reuse scenarios.
 Published witnesses and derived policy probes use separate denominators.
 
-## Reconciled terminal corpus context
+## Frozen pre-correction terminal corpus context
 
-The final 49-case efficacy scope contains 31 other-feature-only cases, 11
+The frozen 49-case efficacy scope contains 31 other-feature-only cases, 11
 Type-Isolation-only cases, 1 multiple-mechanism case, 3 matched no-signal cases
 (RSH-049, RSH-050, and RSH-075), and 3 inconclusive/unresolved cases (RSH-003,
 RSH-006, and RSH-019). The strict positive count is **43/49**. The generated

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="60" y="56" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#172033">Use-after-free coverage sets</text>
+<text x="60" y="89" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" fill="#58667A">18 retained heap-relevant UAF cases · 17 executable + 1 audit-only · RSH-006 stack-only correction excluded</text>
+<rect x="50" y="120" width="1500" height="690" rx="28" fill="#FFFFFF" stroke="#172033" stroke-width="3"/>
+<text x="82" y="159" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#172033">Retained heap-relevant UAF cases · 18</text>
+<rect x="82" y="182" width="1160" height="570" rx="24" fill="#F8FAFD" stroke="#C9D2DF" stroke-width="2"/>
+<text x="110" y="219" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" fill="#172033">Executable UAF reproductions · 17</text>
+<rect x="1263" y="182" width="255" height="570" rx="24" fill="#F8FAFD" stroke="#C9D2DF" stroke-width="2"/>
+<text x="1390" y="223" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#172033">Audit-only</text>
+<text x="1390" y="253" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="400" fill="#58667A"><tspan x="1390" dy="0">No valid executable</tspan><tspan x="1390" dy="20">witness</tspan></text>
+<text x="1390" y="400" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="800" fill="#9B4B46">1</text>
+<text x="1390" y="438" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="400" fill="#58667A">outside efficacy denominator</text>
+<text x="1390" y="650" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="400" fill="#58667A"><tspan x="1390" dy="0">RSH-059</tspan></text>
+<circle cx="445" cy="481" r="238" fill="#CFE0FF" fill-opacity="0.78" stroke="#2F6FDB" stroke-width="4"/>
+<circle cx="759" cy="481" r="176" fill="#F9D4AE" fill-opacity="0.72" stroke="#C96A16" stroke-width="4"/>
+<text x="350" y="300" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#2F6FDB">Type Isolation · 12</text>
+<text x="350" y="327" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="400" fill="#58667A">cross-identity reuse edges</text>
+<text x="370" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="800" fill="#2F6FDB">11</text>
+<text x="370" y="534" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#2F6FDB">TypeIso only</text>
+<text x="619" y="462" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="52" font-weight="800" fill="#172033">1</text>
+<text x="619" y="494" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#172033">both</text>
+<text x="803" y="354" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" fill="#C96A16">Reclaim · 3</text>
+<text x="803" y="381" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400" fill="#58667A">duplicate reclaim</text>
+<text x="810" y="500" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="58" font-weight="800" fill="#C96A16">2</text>
+<text x="810" y="534" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#C96A16">reclaim only</text>
+<rect x="966" y="338" width="230" height="126" rx="18" fill="#E9EDF2" stroke="#667085" stroke-width="2"/>
+<text x="1081" y="372" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#172033">Foreign allocator</text>
+<text x="1081" y="420" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="800" fill="#667085">1</text>
+<text x="1081" y="446" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400" fill="#58667A">completed no-signal</text>
+<rect x="966" y="500" width="230" height="138" rx="18" fill="#F8E9B5" stroke="#9A6B00" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="1081" y="535" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#172033">Pre-reuse race</text>
+<text x="1081" y="584" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="800" fill="#9A6B00">2</text>
+<text x="1081" y="614" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400" fill="#58667A">needs temporal/concurrency</text>
+<rect x="115" y="665" width="255" height="62" rx="15" fill="#172033" stroke="#172033" stroke-width="2"/>
+<text x="242" y="696" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800" fill="#FFFFFF">14/17 covered</text>
+<text x="242" y="718" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="400" fill="#E8EDF5">by TypeIso or reclaim checks</text>
+<text x="60" y="850" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="400" fill="#58667A">Uncovered executable UAF controls: RSH-003 and RSH-019 are same-object/pre-reuse races; RSH-075 uses SQLite&#x27;s C allocator.</text>
+<text x="1540" y="878" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400" fill="#7C8798">RSH-006 is excluded because the dangling target is stack storage, outside the heap allocator scope.</text>
+</svg>

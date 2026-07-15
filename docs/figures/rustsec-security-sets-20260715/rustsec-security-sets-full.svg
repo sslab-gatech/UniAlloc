@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="60" y="56" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#172033">RustSec heap security coverage sets</text>
+<text x="60" y="89" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" fill="#58667A">53 screened · 1 stack-only case removed after source audit · 52 retained heap cases</text>
+<rect x="50" y="120" width="1500" height="690" rx="28" fill="#FFFFFF" stroke="#172033" stroke-width="3"/>
+<text x="82" y="159" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#172033">Retained heap-relevant cases · 52</text>
+<rect x="82" y="182" width="1135" height="570" rx="24" fill="#F8FAFD" stroke="#C9D2DF" stroke-width="2"/>
+<text x="110" y="219" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" fill="#172033">Executable reproductions · 48</text>
+<rect x="1238" y="182" width="280" height="570" rx="24" fill="#F8FAFD" stroke="#C9D2DF" stroke-width="2"/>
+<text x="1378" y="223" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#172033">Audit-only</text>
+<text x="1378" y="253" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="400" fill="#58667A"><tspan x="1378" dy="0">No valid executable</tspan><tspan x="1378" dy="20">witness</tspan></text>
+<text x="1378" y="400" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="800" fill="#9B4B46">4</text>
+<text x="1378" y="438" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="400" fill="#58667A">outside efficacy denominator</text>
+<text x="1378" y="630" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400" fill="#58667A"><tspan x="1378" dy="0">RSH-054</tspan><tspan x="1378" dy="20">RSH-056</tspan><tspan x="1378" dy="20">RSH-059</tspan><tspan x="1378" dy="20">RSH-073</tspan></text>
+<circle cx="382" cy="481" r="214" fill="#CFE0FF" fill-opacity="0.78" stroke="#2F6FDB" stroke-width="4"/>
+<circle cx="668" cy="481" r="252" fill="#F9D4AE" fill-opacity="0.72" stroke="#C96A16" stroke-width="4"/>
+<text x="300" y="310" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#2F6FDB">Type Isolation · 12</text>
+<text x="300" y="336" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400" fill="#58667A">measured reuse-edge mitigation</text>
+<text x="290" y="494" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="61" font-weight="800" fill="#2F6FDB">11</text>
+<text x="290" y="525" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#2F6FDB">TypeIso only</text>
+<text x="522" y="459" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="52" font-weight="800" fill="#172033">1</text>
+<text x="522" y="490" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#172033">both</text>
+<text x="754" y="310" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#C96A16">Reclaim checks · 31</text>
+<text x="754" y="336" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="400" fill="#58667A">exact duplicate-reclaim detection</text>
+<text x="760" y="494" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="61" font-weight="800" fill="#C96A16">30</text>
+<text x="760" y="525" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#C96A16">reclaim only</text>
+<circle cx="1009" cy="342" r="69" fill="#E3D8FA" fill-opacity="0.9" stroke="#7150B9" stroke-width="4"/>
+<text x="1009" y="327" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" fill="#7150B9">Layout</text>
+<text x="1009" y="372" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#7150B9">1</text>
+<rect x="928" y="448" width="244" height="117" rx="18" fill="#E9EDF2" stroke="#667085" stroke-width="2"/>
+<text x="1050" y="480" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#172033">No allocator signal</text>
+<text x="1050" y="530" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="800" fill="#667085">3</text>
+<rect x="928" y="590" width="244" height="117" rx="18" fill="#F8E9B5" stroke="#9A6B00" stroke-width="2" stroke-dasharray="8 6"/>
+<text x="1050" y="622" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#172033">Mechanism boundary</text>
+<text x="1050" y="672" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="800" fill="#9A6B00">2</text>
+<rect x="100" y="665" width="242" height="62" rx="15" fill="#172033" stroke="#172033" stroke-width="2"/>
+<text x="221" y="696" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="800" fill="#FFFFFF">43/48 covered</text>
+<text x="221" y="718" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="400" fill="#E8EDF5">by measured allocator mechanisms</text>
+<text x="60" y="850" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="400" fill="#58667A">Overlap is case-level: RSH-002 has both a Type Isolation reuse-edge mitigation and an exact reclaim-check detection.</text>
+<text x="1540" y="878" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400" fill="#7C8798">TypeIso credit is bounded to compiler-bound cross-identity reuse edges; full source detections remain 0.</text>
+</svg>

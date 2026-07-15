@@ -1,10 +1,19 @@
 # Reclaim-Checks Evidence Bundle
 
+> **Frozen pre-correction provenance.** This bundle preserves the 49-case
+> execution ledger and **43/49** historical result, including an inconclusive
+> RSH-006 row. Post-source audit excludes RSH-006 from heap allocator efficacy
+> accounting. The current view is 52 retained heap-relevant candidates, 48
+> executable plus 4 audit-only, and **43/48** covered; the retained UAF view is
+> 18 candidates, 17 executable, and **14/17** covered. See
+> `docs/rustsec-security-scope-evaluation.md` and
+> `docs/figures/rustsec-security-sets-20260715/`.
+
 This bundle retains the feature-matched RustSec allocator experiments used by
 `docs/rustsec-security-scope-evaluation.md`. All results are exploratory
 (`claim_grade=false`) and bounded to the integrated witnesses.
 
-## Final strict results
+## Frozen pre-correction strict results
 
 The authoritative merged ledger is
 `evaluation/config/rustsec_heap_mechanism_results.json`:
@@ -85,10 +94,10 @@ double-panic parser: repeated identical source checkpoints followed by the
 standard destructor-cleanup abort form one stable outcome; distinct checkpoints
 remain ambiguous.
 
-RSH-006 remains evidence-inconclusive. Its matched SIGSEGV lacks a normalized
-source-bound fault/checkpoint fingerprint. Source analysis indicates a
-stack-lifetime boundary, while empirical no-signal attribution remains
-withheld.
+RSH-006 remains evidence-inconclusive inside this frozen ledger. Post-source
+analysis establishes a stack-lifetime scope exclusion: the
+vulnerability-relevant dangling target/lifetime path has no
+`GlobalAlloc`-mediated allocation, reclaim, or reuse edge.
 
 ## Files
 

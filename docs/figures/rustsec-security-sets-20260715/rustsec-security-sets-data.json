@@ -1,0 +1,1155 @@
+{
+  "claim_boundary": "Type Isolation counts causal mitigation of compiler-bound measured cross-identity reuse edges, not full source-vulnerability detection. Reclaim and recovery-layout counts require exact diagnostics in matched vulnerable arms with valid controls. Audit-only and post-source-audit exclusions remain outside efficacy denominators.",
+  "claim_grade": false,
+  "executable_heap_case_count": 48,
+  "full_scope": {
+    "audit_only": {
+      "case_ids": [
+        "RSH-054",
+        "RSH-056",
+        "RSH-059",
+        "RSH-073"
+      ],
+      "count": 4
+    },
+    "audit_only_count": 4,
+    "coverage_percent_of_executable": 89.6,
+    "executable_case_count": 48,
+    "executable_case_ids": [
+      "RSH-001",
+      "RSH-002",
+      "RSH-003",
+      "RSH-005",
+      "RSH-008",
+      "RSH-009",
+      "RSH-010",
+      "RSH-011",
+      "RSH-012",
+      "RSH-013",
+      "RSH-014",
+      "RSH-018",
+      "RSH-019",
+      "RSH-020",
+      "RSH-021",
+      "RSH-031",
+      "RSH-041",
+      "RSH-042",
+      "RSH-043",
+      "RSH-044",
+      "RSH-045",
+      "RSH-046",
+      "RSH-047",
+      "RSH-048",
+      "RSH-049",
+      "RSH-050",
+      "RSH-051",
+      "RSH-052",
+      "RSH-053",
+      "RSH-055",
+      "RSH-057",
+      "RSH-058",
+      "RSH-060",
+      "RSH-061",
+      "RSH-062",
+      "RSH-063",
+      "RSH-064",
+      "RSH-065",
+      "RSH-066",
+      "RSH-067",
+      "RSH-068",
+      "RSH-069",
+      "RSH-070",
+      "RSH-071",
+      "RSH-072",
+      "RSH-074",
+      "RSH-075",
+      "RSH-076"
+    ],
+    "mechanism_boundary": {
+      "case_ids": [
+        "RSH-003",
+        "RSH-019"
+      ],
+      "count": 2
+    },
+    "no_allocator_signal": {
+      "case_ids": [
+        "RSH-049",
+        "RSH-050",
+        "RSH-075"
+      ],
+      "count": 3
+    },
+    "positive_union_case_ids": [
+      "RSH-001",
+      "RSH-002",
+      "RSH-005",
+      "RSH-008",
+      "RSH-009",
+      "RSH-010",
+      "RSH-011",
+      "RSH-012",
+      "RSH-013",
+      "RSH-014",
+      "RSH-018",
+      "RSH-020",
+      "RSH-021",
+      "RSH-031",
+      "RSH-041",
+      "RSH-042",
+      "RSH-043",
+      "RSH-044",
+      "RSH-045",
+      "RSH-046",
+      "RSH-047",
+      "RSH-048",
+      "RSH-051",
+      "RSH-052",
+      "RSH-053",
+      "RSH-055",
+      "RSH-057",
+      "RSH-058",
+      "RSH-060",
+      "RSH-061",
+      "RSH-062",
+      "RSH-063",
+      "RSH-064",
+      "RSH-065",
+      "RSH-066",
+      "RSH-067",
+      "RSH-068",
+      "RSH-069",
+      "RSH-070",
+      "RSH-071",
+      "RSH-072",
+      "RSH-074",
+      "RSH-076"
+    ],
+    "positive_union_count": 43,
+    "reclaim_checks": {
+      "case_ids": [
+        "RSH-001",
+        "RSH-002",
+        "RSH-005",
+        "RSH-009",
+        "RSH-010",
+        "RSH-011",
+        "RSH-012",
+        "RSH-013",
+        "RSH-014",
+        "RSH-018",
+        "RSH-020",
+        "RSH-021",
+        "RSH-043",
+        "RSH-044",
+        "RSH-045",
+        "RSH-046",
+        "RSH-047",
+        "RSH-048",
+        "RSH-051",
+        "RSH-053",
+        "RSH-057",
+        "RSH-058",
+        "RSH-060",
+        "RSH-061",
+        "RSH-062",
+        "RSH-063",
+        "RSH-070",
+        "RSH-071",
+        "RSH-072",
+        "RSH-074",
+        "RSH-076"
+      ],
+      "count": 31
+    },
+    "reclaim_checks_only": {
+      "case_ids": [
+        "RSH-001",
+        "RSH-005",
+        "RSH-009",
+        "RSH-010",
+        "RSH-011",
+        "RSH-012",
+        "RSH-013",
+        "RSH-014",
+        "RSH-018",
+        "RSH-020",
+        "RSH-021",
+        "RSH-043",
+        "RSH-044",
+        "RSH-045",
+        "RSH-046",
+        "RSH-047",
+        "RSH-048",
+        "RSH-051",
+        "RSH-053",
+        "RSH-057",
+        "RSH-058",
+        "RSH-060",
+        "RSH-061",
+        "RSH-062",
+        "RSH-063",
+        "RSH-070",
+        "RSH-071",
+        "RSH-072",
+        "RSH-074",
+        "RSH-076"
+      ],
+      "count": 30
+    },
+    "recovery_layout_validation": {
+      "case_ids": [
+        "RSH-031"
+      ],
+      "count": 1
+    },
+    "recovery_layout_validation_only": {
+      "case_ids": [
+        "RSH-031"
+      ],
+      "count": 1
+    },
+    "retained_case_count": 52,
+    "retained_case_ids": [
+      "RSH-001",
+      "RSH-002",
+      "RSH-003",
+      "RSH-005",
+      "RSH-008",
+      "RSH-009",
+      "RSH-010",
+      "RSH-011",
+      "RSH-012",
+      "RSH-013",
+      "RSH-014",
+      "RSH-018",
+      "RSH-019",
+      "RSH-020",
+      "RSH-021",
+      "RSH-031",
+      "RSH-041",
+      "RSH-042",
+      "RSH-043",
+      "RSH-044",
+      "RSH-045",
+      "RSH-046",
+      "RSH-047",
+      "RSH-048",
+      "RSH-049",
+      "RSH-050",
+      "RSH-051",
+      "RSH-052",
+      "RSH-053",
+      "RSH-054",
+      "RSH-055",
+      "RSH-056",
+      "RSH-057",
+      "RSH-058",
+      "RSH-059",
+      "RSH-060",
+      "RSH-061",
+      "RSH-062",
+      "RSH-063",
+      "RSH-064",
+      "RSH-065",
+      "RSH-066",
+      "RSH-067",
+      "RSH-068",
+      "RSH-069",
+      "RSH-070",
+      "RSH-071",
+      "RSH-072",
+      "RSH-073",
+      "RSH-074",
+      "RSH-075",
+      "RSH-076"
+    ],
+    "type_isolation": {
+      "case_ids": [
+        "RSH-002",
+        "RSH-008",
+        "RSH-041",
+        "RSH-042",
+        "RSH-052",
+        "RSH-055",
+        "RSH-064",
+        "RSH-065",
+        "RSH-066",
+        "RSH-067",
+        "RSH-068",
+        "RSH-069"
+      ],
+      "count": 12
+    },
+    "type_isolation_and_reclaim_checks": {
+      "case_ids": [
+        "RSH-002"
+      ],
+      "count": 1
+    },
+    "type_isolation_only": {
+      "case_ids": [
+        "RSH-008",
+        "RSH-041",
+        "RSH-042",
+        "RSH-052",
+        "RSH-055",
+        "RSH-064",
+        "RSH-065",
+        "RSH-066",
+        "RSH-067",
+        "RSH-068",
+        "RSH-069"
+      ],
+      "count": 11
+    }
+  },
+  "mechanism_boundary_classifications": {
+    "case_ids": [
+      "RSH-003",
+      "RSH-019"
+    ],
+    "count": 2,
+    "records": [
+      {
+        "advisory_id": "RUSTSEC-2020-0017",
+        "case_id": "RSH-003",
+        "classification": "same_object_or_pre_reuse_concurrency",
+        "evidence_paths": [
+          "evaluation/harnesses/rustsec_heap/RSH-003/main.rs",
+          "docs/rustsec-inconclusive-root-cause-review.md"
+        ],
+        "package": "internment",
+        "reason": "The stale access can occur before any replacement allocation, and any later replacement has the same exact concrete identity. Exact reuse isolation cannot create the missing synchronization edge."
+      },
+      {
+        "advisory_id": "RUSTSEC-2026-0005",
+        "case_id": "RSH-019",
+        "classification": "same_object_or_pre_reuse_concurrency",
+        "evidence_paths": [
+          "evaluation/harnesses/rustsec_heap/RSH-019/main.rs",
+          "docs/rustsec-inconclusive-root-cause-review.md"
+        ],
+        "package": "oneshot",
+        "reason": "Sender deallocation races Receiver access to the same Channel object before any allocator reuse decision. Exact reuse isolation cannot add the required happens-before relation."
+      }
+    ]
+  },
+  "membership_rows": [
+    {
+      "advisory_id": "RUSTSEC-2019-0016",
+      "case_id": "RSH-001",
+      "package": "chttp",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0007",
+      "case_id": "RSH-002",
+      "package": "bitvec",
+      "presentation_outcome": "type_isolation+reclaim_checks",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0017",
+      "case_id": "RSH-003",
+      "package": "internment",
+      "presentation_outcome": "mechanism_boundary",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0047",
+      "case_id": "RSH-005",
+      "package": "array-queue",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0091",
+      "case_id": "RSH-006",
+      "package": "arc-swap",
+      "presentation_outcome": "stack_only_out_of_heap_scope",
+      "presentation_primitive": "stack_lifetime_dangling_target",
+      "presentation_status": "post_source_audit_exclusion",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0130",
+      "case_id": "RSH-008",
+      "package": "lru",
+      "presentation_outcome": "type_isolation",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0030",
+      "case_id": "RSH-009",
+      "package": "scratchpad",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0049",
+      "case_id": "RSH-010",
+      "package": "through",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2019-0034",
+      "case_id": "RSH-011",
+      "package": "http",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0052",
+      "case_id": "RSH-012",
+      "package": "id-map",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0053",
+      "case_id": "RSH-013",
+      "package": "algorithmica",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0047",
+      "case_id": "RSH-014",
+      "package": "slice-deque",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0053",
+      "case_id": "RSH-018",
+      "package": "arenavec",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0005",
+      "case_id": "RSH-019",
+      "package": "oneshot",
+      "presentation_outcome": "mechanism_boundary",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0103",
+      "case_id": "RSH-020",
+      "package": "thin-vec",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0143",
+      "case_id": "RSH-021",
+      "package": "oneringbuf",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2023-0017",
+      "case_id": "RSH-031",
+      "package": "maligned",
+      "presentation_outcome": "recovery_layout_validation",
+      "presentation_primitive": "invalid_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": true,
+      "source_ledger_primitive": "invalid_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0152",
+      "case_id": "RSH-041",
+      "package": "oneringbuf",
+      "presentation_outcome": "type_isolation",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0128",
+      "case_id": "RSH-042",
+      "package": "emap",
+      "presentation_outcome": "type_isolation",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0131",
+      "case_id": "RSH-043",
+      "package": "bitchomp",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0018",
+      "case_id": "RSH-044",
+      "package": "qwutils",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0033",
+      "case_id": "RSH-045",
+      "package": "stack_dst",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2018-0003",
+      "case_id": "RSH-046",
+      "package": "smallvec",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2018-0009",
+      "case_id": "RSH-047",
+      "package": "crossbeam",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2019-0009",
+      "case_id": "RSH-048",
+      "package": "smallvec",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2019-0010",
+      "case_id": "RSH-049",
+      "package": "libflate",
+      "presentation_outcome": "no_allocator_signal",
+      "presentation_primitive": "uninitialized_drop",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "uninitialized_drop",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2019-0014",
+      "case_id": "RSH-050",
+      "package": "image",
+      "presentation_outcome": "no_allocator_signal",
+      "presentation_primitive": "uninitialized_drop",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "uninitialized_drop",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2019-0021",
+      "case_id": "RSH-051",
+      "package": "linea",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2019-0023",
+      "case_id": "RSH-052",
+      "package": "string-interner",
+      "presentation_outcome": "type_isolation",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0038",
+      "case_id": "RSH-053",
+      "package": "ordnung",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0105",
+      "case_id": "RSH-054",
+      "package": "abi_stable",
+      "presentation_outcome": "no_executable_witness",
+      "presentation_primitive": "double_free",
+      "presentation_status": "audit_only",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0145",
+      "case_id": "RSH-055",
+      "package": "heapless",
+      "presentation_outcome": "type_isolation",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0005",
+      "case_id": "RSH-056",
+      "package": "glsl-layout",
+      "presentation_outcome": "no_executable_witness",
+      "presentation_primitive": "double_free",
+      "presentation_status": "audit_only",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0009",
+      "case_id": "RSH-057",
+      "package": "basic_dsp_matrix",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0010",
+      "case_id": "RSH-058",
+      "package": "containers",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0022",
+      "case_id": "RSH-059",
+      "package": "yottadb",
+      "presentation_outcome": "no_executable_witness",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "audit_only",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0028",
+      "case_id": "RSH-060",
+      "package": "toodee",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "out_of_bounds_read",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "out_of_bounds_read",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0039",
+      "case_id": "RSH-061",
+      "package": "endian_trait",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0040",
+      "case_id": "RSH-062",
+      "package": "arenavec",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0042",
+      "case_id": "RSH-063",
+      "package": "insert_many",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2022-0028",
+      "case_id": "RSH-064",
+      "package": "neon",
+      "presentation_outcome": "type_isolation",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2023-0054",
+      "case_id": "RSH-065",
+      "package": "mail-internals",
+      "presentation_outcome": "type_isolation",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2024-0007",
+      "case_id": "RSH-066",
+      "package": "rust-i18n-support",
+      "presentation_outcome": "type_isolation",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0004",
+      "case_id": "RSH-067",
+      "package": "openssl",
+      "presentation_outcome": "type_isolation",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0016",
+      "case_id": "RSH-068",
+      "package": "pared",
+      "presentation_outcome": "type_isolation",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0022",
+      "case_id": "RSH-069",
+      "package": "openssl",
+      "presentation_outcome": "type_isolation",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": true
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0024",
+      "case_id": "RSH-070",
+      "package": "crossbeam-channel",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0044",
+      "case_id": "RSH-071",
+      "package": "slice-ring-buffer",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0122",
+      "case_id": "RSH-072",
+      "package": "rkyv",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0139",
+      "case_id": "RSH-073",
+      "package": "metacall",
+      "presentation_outcome": "no_executable_witness",
+      "presentation_primitive": "double_free",
+      "presentation_status": "audit_only",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0142",
+      "case_id": "RSH-074",
+      "package": "mutringbuf",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0172",
+      "case_id": "RSH-075",
+      "package": "diesel",
+      "presentation_outcome": "no_allocator_signal",
+      "presentation_primitive": "use_after_free",
+      "presentation_status": "executable",
+      "reclaim_checks": false,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "use_after_free",
+      "type_isolation": false
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0205",
+      "case_id": "RSH-076",
+      "package": "scc",
+      "presentation_outcome": "reclaim_checks",
+      "presentation_primitive": "double_free",
+      "presentation_status": "executable",
+      "reclaim_checks": true,
+      "recovery_layout_validation": false,
+      "source_ledger_primitive": "double_free",
+      "type_isolation": false
+    }
+  ],
+  "post_source_audit_exclusions": {
+    "case_ids": [
+      "RSH-006"
+    ],
+    "count": 1,
+    "records": [
+      {
+        "action": "exclude_from_heap_allocator_efficacy_denominator",
+        "advisory_id": "RUSTSEC-2020-0091",
+        "case_id": "RSH-006",
+        "corrected_primitive": "stack_lifetime_dangling_target",
+        "evidence_paths": [
+          "evaluation/harnesses/rustsec_heap_expansion/RSH-006/main.rs",
+          "evaluation/harnesses/rustsec_heap_expansion/RSH-006/origin.rs",
+          "docs/rustsec-inconclusive-root-cause-review.md"
+        ],
+        "original_primitive": "use_after_free",
+        "package": "arc-swap",
+        "reason": "Source audit shows that MapGuard retains a pointer into a movable stack-local guard. Moving the guard invalidates the vulnerability-relevant stack target without a GlobalAlloc-mediated allocation, reclaim, or reuse edge.",
+        "reason_code": "stack_only_dangling_target"
+      }
+    ]
+  },
+  "retained_heap_candidate_count": 52,
+  "schema_version": 1,
+  "scope_corrections": {
+    "path": "evaluation/config/rustsec_heap_posthoc_scope_corrections.json",
+    "sha256": "7cfa8a0d86f4625a3af8547fe152bf083fc59b948a36dcd12167eda450081d0a"
+  },
+  "screened_candidate_count": 53,
+  "source": "unialloc-rustsec-security-set-diagrams",
+  "source_scope": {
+    "path": "evaluation/config/rustsec_heap_complete_scope.json",
+    "rustsec_commit": "9f3e138091487e69144f536d36976e427a7a3307",
+    "sha256": "b699fccd2e0b6e432ce63909d15e80755ab4487633bae8f5f7a07958dbc375d3"
+  },
+  "uaf_scope": {
+    "audit_only": {
+      "case_ids": [
+        "RSH-059"
+      ],
+      "count": 1
+    },
+    "audit_only_count": 1,
+    "coverage_percent_of_executable": 82.4,
+    "executable_case_count": 17,
+    "executable_case_ids": [
+      "RSH-002",
+      "RSH-003",
+      "RSH-008",
+      "RSH-019",
+      "RSH-041",
+      "RSH-042",
+      "RSH-052",
+      "RSH-053",
+      "RSH-055",
+      "RSH-057",
+      "RSH-064",
+      "RSH-065",
+      "RSH-066",
+      "RSH-067",
+      "RSH-068",
+      "RSH-069",
+      "RSH-075"
+    ],
+    "mechanism_boundary": {
+      "case_ids": [
+        "RSH-003",
+        "RSH-019"
+      ],
+      "count": 2
+    },
+    "no_allocator_signal": {
+      "case_ids": [
+        "RSH-075"
+      ],
+      "count": 1
+    },
+    "positive_union_case_ids": [
+      "RSH-002",
+      "RSH-008",
+      "RSH-041",
+      "RSH-042",
+      "RSH-052",
+      "RSH-053",
+      "RSH-055",
+      "RSH-057",
+      "RSH-064",
+      "RSH-065",
+      "RSH-066",
+      "RSH-067",
+      "RSH-068",
+      "RSH-069"
+    ],
+    "positive_union_count": 14,
+    "reclaim_checks": {
+      "case_ids": [
+        "RSH-002",
+        "RSH-053",
+        "RSH-057"
+      ],
+      "count": 3
+    },
+    "reclaim_checks_only": {
+      "case_ids": [
+        "RSH-053",
+        "RSH-057"
+      ],
+      "count": 2
+    },
+    "recovery_layout_validation": {
+      "case_ids": [],
+      "count": 0
+    },
+    "recovery_layout_validation_only": {
+      "case_ids": [],
+      "count": 0
+    },
+    "retained_case_count": 18,
+    "retained_case_ids": [
+      "RSH-002",
+      "RSH-003",
+      "RSH-008",
+      "RSH-019",
+      "RSH-041",
+      "RSH-042",
+      "RSH-052",
+      "RSH-053",
+      "RSH-055",
+      "RSH-057",
+      "RSH-059",
+      "RSH-064",
+      "RSH-065",
+      "RSH-066",
+      "RSH-067",
+      "RSH-068",
+      "RSH-069",
+      "RSH-075"
+    ],
+    "type_isolation": {
+      "case_ids": [
+        "RSH-002",
+        "RSH-008",
+        "RSH-041",
+        "RSH-042",
+        "RSH-052",
+        "RSH-055",
+        "RSH-064",
+        "RSH-065",
+        "RSH-066",
+        "RSH-067",
+        "RSH-068",
+        "RSH-069"
+      ],
+      "count": 12
+    },
+    "type_isolation_and_reclaim_checks": {
+      "case_ids": [
+        "RSH-002"
+      ],
+      "count": 1
+    },
+    "type_isolation_only": {
+      "case_ids": [
+        "RSH-008",
+        "RSH-041",
+        "RSH-042",
+        "RSH-052",
+        "RSH-055",
+        "RSH-064",
+        "RSH-065",
+        "RSH-066",
+        "RSH-067",
+        "RSH-068",
+        "RSH-069"
+      ],
+      "count": 11
+    }
+  }
+}

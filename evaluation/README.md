@@ -13,8 +13,9 @@ This directory turns the paper claims in a sibling `../rust-alloc-paper` checkou
 - `config/rustsec_heap_expansion_harnesses.json`: five-case executable expansion catalog with five published/upstream witnesses and two derived reuse probes.
 - `config/rustsec_heap_strong_batch_{a..f}_harnesses.json`: terminal integration catalogs for the 53 reviewed strong candidates.
 - `config/rustsec_heap_neon_node_harnesses.json`: Node/V8-hosted N-API catalog for the RSH-064 Neon witness.
-- `config/rustsec_heap_complete_scope.json`: generated 49-row evaluable efficacy ledger plus four audit-only exclusions with retained reasons.
-- `config/rustsec_heap_mechanism_results.json`: strict 62-row mechanism-result ledger covering 49 executable cases.
+- `config/rustsec_heap_complete_scope.json`: frozen pre-correction 49-row execution ledger plus four audit-only exclusions with retained reasons.
+- `config/rustsec_heap_posthoc_scope_corrections.json`: hash-bound source-audit correction that excludes stack-lifetime RSH-006 from heap allocator efficacy accounting.
+- `config/rustsec_heap_mechanism_results.json`: frozen 62-row mechanism-result ledger covering the 49 pre-correction executable cases.
 - `config/rustsec_heap_mechanism_amendments.json`: reviewed post-integration scenario/mechanism amendments keyed to exact case and scenario identities.
 - `config/rustsec_heap_primitive_overrides.json`: reviewed terminal-witness primitive labels with evidence provenance.
 - `scripts/inventory_rustsec_heap_candidates.py`: commit-checked full RustSec and Rudra-PoC inventory generator.
@@ -26,8 +27,9 @@ This directory turns the paper claims in a sibling `../rust-alloc-paper` checkou
 - `scripts/summarize_rustsec_heap_expansion.py`: fail-closed merger for split system/typed expansion matrices.
 - `scripts/export_rustsec_mechanism_results.py`: strict repeated reclaim and derived-reuse result exporter.
 - `scripts/export_rustsec_typeiso_source_results.py`: coverage-gated Type Isolation source-sweep result exporter.
-- `scripts/build_rustsec_security_scope.py`: fail-closed 49-case efficacy-scope builder with reviewed exclusions preserved separately.
-- `scripts/plot_rustsec_security_scope.py`: dependency-free SVG/CSV presentation exporter.
+- `scripts/build_rustsec_security_scope.py`: fail-closed builder for the frozen pre-correction 49-case execution ledger, with reviewed exclusions preserved separately.
+- `scripts/plot_rustsec_security_scope.py`: dependency-free exporter for the historical 49-case presentation.
+- `scripts/plot_rustsec_security_sets.py`: hash-bound exporter for the corrected 48-case full-scope and 17-case executable-UAF set figures.
 - `scripts/evaluate.py`: dependency doctor, paper-data importer, local runner, semantic coverage collector, result summarizer, and claim checker.
 - `scripts/realworld_type_isolation_matrix.py`: source-pinned Rust application allocator, Type Isolation, feature-closure, and mimalloc THP matrix.
 - `scripts/rsedis_thp_matrix.py`: fresh-server mimalloc THP on/off and gperftools TCMalloc comparison with process-level RSS and huge-page counters.
@@ -77,36 +79,39 @@ detail figures. It remains outside the primary two-tier presentation path.
 
 ## RustSec/Rudra heap-security corpus
 
-The review identified 53 strong candidates. The final evaluable efficacy scope
-contains the 49 candidates with executable vulnerable oracles and controls.
-RSH-054, RSH-056, RSH-059, and RSH-073 remain in the attempts audit with
-evidence-backed exclusion reasons and stay outside the efficacy denominator.
-The exclusive case-level partition is 31 other-feature-only, 11 Type-Isolation-
-only, 1 multiple-mechanism, 3 matched no-signal, and 3 inconclusive/unresolved
-cases. The no-signal set is RSH-049, RSH-050, and RSH-075; the unresolved set
-is RSH-003, RSH-006, and RSH-019. The strict positive count is **43/49**. The
-generated case report records 32 `detected`, 11 `mitigated`, 3 `no_signal`,
-and 3 `inconclusive` cases.
-The underlying mechanism ledger contains 62 rows: 32 `detected`, 12
-`mitigated`, 12 `no_signal`, and 6 `inconclusive`. It contains 44 positive
-mechanism rows across 43 unique cases: 31 `reclaim_checks`, 1 recovery-layout
-validation, and 12 Type Isolation rows. RSH-002 is the sole overlap. Thirteen
-cases retain two mechanism or scenario rows. The authoritative report is in
-`../docs/rustsec-security-scope-evaluation.md` and
-the historical reviewed-candidate figure is in
-`../docs/figures/rustsec-security-scope-20260714/`.
-The per-case attempt status, root-cause synopsis, and strict outcome for all 53
-rows are in `../docs/rustsec-all-53-live-evaluation.md`.
+The review initially screened **53 candidates**. Post-source inspection
+reclassified RSH-006 as a stack-lifetime case: the vulnerability-relevant
+dangling target/lifetime path has no `GlobalAlloc`-mediated allocation, reclaim,
+or reuse edge. The corrected heap scope therefore retains **52 candidates**:
+**48 executable** vulnerable-oracle/control integrations plus **4 audit-only**
+exclusions (RSH-054, RSH-056, RSH-059, and RSH-073).
 
-All 12 Type Isolation-positive cases are preregistered, manually attributed
-derived cross-identity reuse edges. Their strict true-positive scope is the
-tested allocator decision: `typed_plain` permits the exploit-enabling address
-reuse, while Type Isolation withholds it and emits the matching bound denial.
-Each strict row validates the matching treatment denial and report binding.
-All 12 rows record `compiler_automatic_victim_coverage=false` and
-`source_vulnerability_detection_validated=false`. Published and upstream source
-witnesses retain a separate denominator, and the full automatic
-source-vulnerability Type Isolation true-positive count is **0**.
+The corrected 48-case partition contains 31 other-feature-only cases, 11
+Type-Isolation-only measured reuse edges, 1 overlap, 3 matched no-signal cases,
+and 2 mechanism-boundary cases. The no-signal set is RSH-049, RSH-050, and
+RSH-075; RSH-003 and RSH-019 exercise same-object or pre-reuse concurrency
+outside the evaluated allocator contracts. Allocator mechanisms provide
+qualified coverage for **43/48** executable candidates: 31 exact
+`reclaim_checks` detections, 1 recovery-layout validation, and 12 bounded Type
+Isolation reuse-edge mitigations, with RSH-002 counted once. The retained UAF
+scope contains **18 candidates**, including **17 executable** cases; mechanisms
+cover **14/17** executable UAF cases.
+
+The 62-row mechanism ledger and generated 49-case report remain frozen
+pre-correction execution provenance. They preserve the RSH-006 inconclusive row
+and their historical **43/49** count. The authoritative corrected report is in
+`../docs/rustsec-security-scope-evaluation.md`; editable set figures, exact
+memberships, and PNG/PDF fallbacks are in
+`../docs/figures/rustsec-security-sets-20260715/`. The historical all-53 attempt
+ledger remains in `../docs/rustsec-all-53-live-evaluation.md`.
+
+All 12 current Type Isolation-positive cases are compiler-bound derived or
+source-shaped cross-identity reuse edges. Their strict true-positive scope is
+the tested allocator decision: `typed_plain` permits the witness address reuse,
+while Type Isolation withholds that exact retained pointer and emits the bound
+denial. Automatic source-level vulnerability detection remains **0/12**; every
+row records `source_vulnerability_detection_validated=false` and
+`vulnerability_specific_detection_signal=false`.
 
 RSH-064 is executable through a pinned Neon N-API addon loaded by Node. The
 vulnerable source reproduces the stale external-buffer read across all five
@@ -114,8 +119,8 @@ allocator variants; the patched crate rejects the source through its added
 `'static` bound. Its source Type Isolation row remains inconclusive because the
 compiler audit records zero applied critical rewrites, and its supporting
 `reclaim_checks` arm has no signal because the witness performs one free followed
-by a stale read. A separate derived cross-identity reuse experiment supplies the
-bounded, manually attributed Type Isolation mitigation row used by the
+by a stale read. A separate compiler-bound derived cross-identity reuse
+experiment supplies the bounded Type Isolation mitigation row used by the
 case-level partition. The source witness retains its independent inconclusive
 automatic-detection classification.
 
@@ -123,24 +128,25 @@ RSH-031 supplies the additional policy-independent exact diagnostic. Its
 recovery-layout matrix reports the allocation/deallocation layout mismatch in
 every vulnerable typed arm and in zero patched arms, with a pinned upstream
 Miri baseline. It contributes zero Type Isolation credit. RSH-065 and RSH-069
-carry explicit synthetic-reduction caveats within the 12 manual Type Isolation
+carry explicit synthetic-reduction caveats within the 12 bounded Type Isolation
 edges.
 
-All 12 strict Type Isolation matrices bind to one frozen isolated WIP evidence
-snapshot with UniAlloc implementation digest
+The frozen manually annotated Type Isolation calibration matrices bind to an
+isolated WIP evidence snapshot with UniAlloc implementation digest
 `ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2`.
-This digest identifies the captured evidence snapshot. The current
-shared-session working tree and current HEAD have separate live provenance.
-The complete report keeps
+The current compiler-bound provenance epoch is
+`../docs/evidence/rustsec-typeiso-automatic-20260715/`. The complete report
+keeps
 `replay_arm_implementation_digest_counts` separate from
 `strict_typeiso_evidence_implementation_digest_counts` so historical replay
 provenance and Type Isolation snapshot provenance remain distinct.
 
 The scope freezes RustSec advisory-db at
 `9f3e138091487e69144f536d36976e427a7a3307` and Rudra-PoC at
-`6226dd030fffbed5601099cb0e24f73e4150a7f5`. Its primary witness labels are 30
-double free, 19 use after free, 2 uninitialized drop, 1 invalid free, and 1
-out-of-bounds read. Every result remains exploratory with `claim_grade=false`.
+`6226dd030fffbed5601099cb0e24f73e4150a7f5`. The corrected 52-case heap scope
+contains 30 double free, 18 use after free, 2 uninitialized drop, 1 invalid
+free, and 1 out-of-bounds read witness. Every result remains exploratory with
+`claim_grade=false`.
 
 The feature-matched reclaim comparison uses six logical arms per scenario:
 `vulnerable,patched x system,reclaim_plain,reclaim_checks`, with three
@@ -159,10 +165,12 @@ RSH-013 now uses a deterministic terminal `drop(values)` so corrupted string
 formatting cannot preempt the allocator lifecycle. RSH-020 uses a fail-closed
 double-panic parser: it accepts repeated identical source checkpoints followed
 by the standard destructor-cleanup abort, while distinct checkpoints remain
-ambiguous. After the supplemental experiments are merged, the complete
-mechanism ledger retains 12 no-signal rows and 6 inconclusive rows: 5 Type
-Isolation source rows behind compiler-coverage gates and the RSH-006 reclaim
-row without a normalized source-bound fault/checkpoint fingerprint.
+ambiguous. The frozen pre-correction mechanism ledger retains 12 no-signal rows
+and 6 inconclusive rows: 5 Type Isolation source rows behind compiler-coverage
+gates and the historical RSH-006 reclaim row. The corrected heap allocator
+efficacy view excludes RSH-006 because its vulnerability-relevant dangling
+target/lifetime path has no `GlobalAlloc`-mediated allocation, reclaim, or
+reuse edge.
 
 The feature campaign is retained in
 `../docs/evidence/rustsec-reclaim-checks-20260714/feature-matched-campaign.json`.
@@ -170,7 +178,8 @@ Its strict merged inputs and output fragments are
 `summary-feature-matched-*.json` and
 `mechanism-results-feature-matched-*.json` in the same directory.
 
-Rebuild the terminal scope with every reviewed amendment included:
+Rebuild the frozen pre-correction execution ledger with every reviewed
+amendment included:
 
 ```bash
 args=(
@@ -192,9 +201,11 @@ uv run python evaluation/scripts/build_rustsec_security_scope.py \
   --require-terminal-integration
 ```
 
-Verify the historical live-attempt inputs and regenerate the 49-case efficacy
-view plus its separate four-case exclusion audit. The frozen all-53 report
-continues to preserve every reviewed integration attempt:
+Verify the historical live-attempt inputs and regenerate the frozen
+pre-correction 49-case view plus its separate four-case exclusion audit. These
+files preserve execution provenance; current presentation accounting applies
+`config/rustsec_heap_posthoc_scope_corrections.json` and uses the corrected
+figures under `../docs/figures/rustsec-security-sets-20260715/`.
 
 ```bash
 uv run python evaluation/scripts/run_rustsec_complete_scope.py \
@@ -208,10 +219,10 @@ uv run python evaluation/scripts/run_rustsec_complete_scope.py \
 ```
 
 The 40-case classification corpus is a purposive, source-ready pilot. The
-complete pinned database contains 1,140 advisory records, and the expanded
-screen identifies 53 currently strong Rust-global temporal/reclaim research
-candidates, including 36 absent from the pilot. The complete funnel, manual
-classification, exclusion reasons, and 19-case first expansion wave are in
+complete pinned database contains 1,140 advisory records. The expanded screen
+initially identified 53 candidates, including 36 absent from the pilot; the
+post-source audit retains 52 heap-relevant candidates. The complete funnel,
+manual classification, exclusion reasons, and 19-case first expansion wave are in
 `../docs/rustsec-heap-corpus-expansion.md`.
 
 Regenerate the full screening inventory before changing the curated corpus:

@@ -1,5 +1,5 @@
 {
-  "claim_boundary": "This manifest authenticates every retained file in the historical all-53 bundle. The reconciled efficacy denominator contains 49 executable cases and four audit-only exclusions. Strict Type Isolation matrices use a separately preserved frozen implementation snapshot; automatic source-level Type Isolation true positives remain zero.",
+  "claim_boundary": "This manifest authenticates every retained file in the frozen pre-correction all-53 bundle. Its internal counts preserve the historical 49-case execution ledger and 43/49 result. Post-source audit excludes stack-lifetime RSH-006 from current heap allocator efficacy accounting; see docs/rustsec-security-scope-evaluation.md and docs/figures/rustsec-security-sets-20260715/. Strict Type Isolation matrices use a separately preserved frozen implementation snapshot.",
   "claim_grade": false,
   "counts": {
     "blocked_case_count": 4,
@@ -13,9 +13,9 @@
   },
   "files": [
     {
-      "bytes": 6803,
+      "bytes": 7573,
       "path": "README.md",
-      "sha256": "d46b25f8187056edfc7aa1f2e69d2106c5c127771318ed24b0734776be85874e"
+      "sha256": "d4b070c40b4672de707c46e47b535daa77f0ae7a89b9f992734c53528f61cad0"
     },
     {
       "bytes": 32077,

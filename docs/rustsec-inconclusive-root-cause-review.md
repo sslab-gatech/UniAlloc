@@ -4,18 +4,25 @@ Date: 2026-07-15
 
 ## Resolution
 
-The reviewed scope contains **53 strong heap-participating, Rust-global
-allocator candidates**. Forty-nine have executable vulnerable witnesses and
-controls. RSH-054, RSH-056, RSH-059, and RSH-073 retain evidence-backed
-audit-only exclusions.
+The original review screened **53 candidate advisories**. Post-source audit
+removes RSH-006 from the heap allocator efficacy denominator: its dangling
+target and vulnerability-relevant lifetime path are stack-local and have no
+`GlobalAlloc`-mediated allocation, reclaim, or reuse edge. The corrected
+heap-relevant scope therefore contains **52 cases**.
+Forty-eight have executable vulnerable witnesses and controls. RSH-054,
+RSH-056, RSH-059, and RSH-073 retain evidence-backed audit-only exclusions.
+The frozen 49-case execution ledger retains RSH-006 as historical audit
+provenance; presentation and efficacy figures apply the hash-bound scope
+correction in
+`evaluation/config/rustsec_heap_posthoc_scope_corrections.json`.
 
-Allocator mechanisms provide qualified coverage for **43/49** executable
+Allocator mechanisms provide qualified coverage for **43/48** executable
 candidates: 31 exact duplicate-reclaim detections, 1 exact recovery-layout
 validation, and 12 compiler-bound causal mitigations of measured cross-identity
 reuse edges, with RSH-002 counted once. Eleven Type Isolation rows provide the
 case's only qualified allocator-mechanism evidence; RSH-002 overlaps with a
 separate `reclaim_checks` detection. Three cases have completed no-signal
-results, and three remain inconclusive or outside the evaluated mechanism
+results, and two remain outside the evaluated mechanism
 contracts.
 
 The former inconclusive queue now has these root-cause-specific dispositions:
@@ -25,7 +32,7 @@ The former inconclusive queue now has these root-cause-specific dispositions:
 - bounded Type Isolation reuse-edge mitigations for RSH-008, RSH-052, RSH-055,
   RSH-064, RSH-065, RSH-066, RSH-067, RSH-068, and RSH-069;
 - completed no-signal results for RSH-049, RSH-050, and RSH-075;
-- evidence-inconclusive attribution for RSH-006; and
+- a post-source-audit stack-only scope exclusion for RSH-006; and
 - allocator-mechanism boundaries for RSH-003 and RSH-019.
 
 RSH-002, RSH-041, and RSH-042 complete the 12-row Type Isolation set. RSH-008
@@ -34,6 +41,13 @@ and RSH-041 use `derived_vulnerability_edge` scope; the other ten use
 source-level vulnerability detections remain **0/12**. Every Type Isolation row
 records `source_vulnerability_detection_validated=false`,
 `vulnerability_specific_detection_signal=false`, and `claim_grade=false`.
+
+The editable presentation figures and their exact case-membership table are in
+`docs/figures/rustsec-security-sets-20260715/`. The overview figure shows the
+full corrected heap scope and the UAF subset. The UAF denominator becomes
+**17 executable cases** after the stack-only correction: 14 have qualified
+Type Isolation or reclaim-check evidence, two are same-object/pre-reuse
+concurrency boundaries, and one is a foreign-allocator no-signal control.
 
 ## Evidence rules
 
@@ -105,7 +119,7 @@ The fail-closed implementations of these rules live in
 | --- | --- | --- | --- |
 | RSH-001 (`chttp`) | A conversion constructs a `Vec` from storage still owned by a temporary `Box<[u8]>`. The temporary releases the pointer, and the returned `Vec` later releases the same pointer. The integrated source is `evaluation/harnesses/rustsec_heap/RSH-001/main.rs`. | One allocation followed by two reclaims of the same address. | **Exact-reclaim detection.** `RSH-001-upstream` produces the bound `reclaim_checks` diagnostic in 3/3 vulnerable check runs with matched plain and patched controls. Evidence is in `docs/evidence/rustsec-rsh001-reclaim-20260714/`. |
 | RSH-003 (`internment`) | Concurrent `ArcIntern` operations race reference-count decrement, container removal, destruction, and access to the same `RefCount<T>`. The stress witness is `evaluation/harnesses/rustsec_heap/RSH-003/main.rs`. | Same-object concurrent UAF can occur before any replacement allocation; later reuse can carry the same concrete identity. | **Allocator-mechanism boundary.** This case requires synchronization, race detection, generation validation, or another temporal-access mechanism. |
-| RSH-006 (`arc-swap`) | `MapGuard` retains a pointer into a temporary stack guard, followed by stack overwrite and dereference. The witness is `evaluation/harnesses/rustsec_heap_expansion/RSH-006/main.rs`. | Source analysis indicates that the target object has no heap allocation/reclaim edge for `GlobalAlloc` to mediate. | **Evidence-inconclusive.** The matched plain/check SIGSEGV lacks a normalized source-bound fault/checkpoint fingerprint. Source analysis supports a stack-lifetime boundary; the empirical evidence does not satisfy the no-signal attribution gate. |
+| RSH-006 (`arc-swap`) | `MapGuard` retains a pointer into a temporary stack guard, followed by stack overwrite and dereference. The witness is `evaluation/harnesses/rustsec_heap_expansion/RSH-006/main.rs`. | The dangling target and vulnerability-relevant lifetime path are stack storage. They have no `GlobalAlloc`-mediated allocation, reclaim, or reuse edge. | **Post-source-audit scope exclusion.** The case remains in the frozen execution audit and is removed from heap allocator efficacy denominators. A MIR move-after-borrow or self-reference detector would be a separate compiler mechanism. |
 | RSH-008 (`lru`) | The published iterator signature permits a `String` reference to outlive the cache entry reclaimed by `pop`. The derived adapter requests an equal-layout, different-identity `Replacement` after reclaim in `evaluation/harnesses/rustsec_heap/RSH-008/derived_reuse.rs`. | The source path contains a stale reference. The derived path isolates a 48-byte, align-8 `LruEntry<u32, String> -> Replacement` reuse decision. | **Compiler-bound causal mitigation of the measured derived reuse edge.** The generic `Box<T>` runtime identity binds the victim with compiler-supplied identity. System and `typed_plain` collide in 3/3 runs; `typeiso` withholds the exact witness pointer in 3/3 runs; patched controls validate safe same-identity reuse. The published source row remains separate. |
 | RSH-019 (`oneshot`) | Sender destruction and receiver poll/drop race over channel state and the stored waker. The witness is `evaluation/harnesses/rustsec_heap/RSH-019/main.rs`. | The same-object race and temporal access precede reuse. | **Allocator-mechanism boundary.** Exact identity cannot create the missing happens-before relation. A concurrency-aware mechanism remains required. |
 | RSH-031 (`maligned`) | The vulnerable `Vec<u8>` path allocates 1,009 bytes at alignment 256 and later submits alignment 1 at Drop. The pinned upstream Miri witness establishes this mismatch. | The same pointer reaches deallocation with a recorded/requested layout mismatch. | **Exact recovery-layout validation.** The derived matrix emits `unialloc_recovery_deallocation_layout_mismatch` in 3/3 vulnerable `typed_plain` and `typeiso` runs and 0/3 patched runs. This policy-independent row contributes zero Type Isolation credit. Evidence is in `docs/evidence/rustsec-rsh031-layout-20260715/`. |

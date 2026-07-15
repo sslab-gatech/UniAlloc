@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="60" y="58" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="#172033">RustSec heap security evaluation: mechanism sets</text>
+<text x="60" y="91" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" fill="#58667A">Post-source-audit view: 53 screened, RSH-006 removed as stack-only, 52 heap-relevant cases retained.</text>
+<rect x="55" y="150" width="720" height="630" rx="26" fill="#FFFFFF" stroke="#172033" stroke-width="2.5"/>
+<text x="91" y="196" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="800" fill="#172033">Full retained heap scope</text>
+<text x="91" y="226" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="400" fill="#58667A">52 reviewed · 48 executable · 4 audit-only</text>
+<rect x="90" y="260" width="650" height="365" rx="20" fill="#F8FAFD" stroke="#C9D2DF" stroke-width="2"/>
+<text x="115" y="294" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#172033">Executable · 48</text>
+<circle cx="245" cy="454" r="130" fill="#CFE0FF" fill-opacity="0.78" stroke="#2F6FDB" stroke-width="4"/>
+<circle cx="397" cy="454" r="145" fill="#F9D4AE" fill-opacity="0.72" stroke="#C96A16" stroke-width="4"/>
+<text x="180" y="444" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="800" fill="#2F6FDB">11</text>
+<text x="180" y="473" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#2F6FDB">TypeIso only</text>
+<text x="321" y="440" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="800" fill="#172033">1</text>
+<text x="321" y="469" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" fill="#172033">both</text>
+<text x="445" y="444" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="800" fill="#C96A16">30</text>
+<text x="445" y="473" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#C96A16">reclaim only</text>
+<rect x="575" y="300" width="140" height="105" rx="16" fill="#E9EDF2" stroke="#667085" stroke-width="2"/>
+<text x="645" y="330" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#172033">No signal</text>
+<text x="645" y="375" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#667085">3</text>
+<rect x="575" y="450" width="140" height="105" rx="16" fill="#F8E9B5" stroke="#9A6B00" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="645" y="480" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#172033">Boundary</text>
+<text x="645" y="525" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#9A6B00">2</text>
+<rect x="565" y="654" width="160" height="96" rx="16" fill="#F4D5D1" stroke="#9B4B46" stroke-width="2"/>
+<text x="645" y="682" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#172033">Audit-only</text>
+<text x="645" y="728" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#9B4B46">4</text>
+<rect x="100" y="676" width="295" height="54" rx="13" fill="#172033" stroke="#172033" stroke-width="2"/>
+<text x="247" y="710" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" fill="#FFFFFF">43/48 executable covered</text>
+<circle cx="550" cy="600" r="24" fill="#E3D8FA" fill-opacity="0.92" stroke="#7150B9" stroke-width="4"/>
+<text x="550" y="597" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700" fill="#7150B9">layout</text>
+<text x="550" y="615" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="800" fill="#7150B9">1</text>
+<rect x="825" y="150" width="720" height="630" rx="26" fill="#FFFFFF" stroke="#172033" stroke-width="2.5"/>
+<text x="861" y="196" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="800" fill="#172033">Use-after-free subset</text>
+<text x="861" y="226" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="400" fill="#58667A">18 reviewed · 17 executable · 1 audit-only</text>
+<rect x="860" y="260" width="650" height="365" rx="20" fill="#F8FAFD" stroke="#C9D2DF" stroke-width="2"/>
+<text x="885" y="294" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#172033">Executable · 17</text>
+<circle cx="1015" cy="454" r="130" fill="#CFE0FF" fill-opacity="0.78" stroke="#2F6FDB" stroke-width="4"/>
+<circle cx="1167" cy="454" r="105" fill="#F9D4AE" fill-opacity="0.72" stroke="#C96A16" stroke-width="4"/>
+<text x="950" y="444" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="800" fill="#2F6FDB">11</text>
+<text x="950" y="473" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#2F6FDB">TypeIso only</text>
+<text x="1091" y="440" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="800" fill="#172033">1</text>
+<text x="1091" y="469" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" fill="#172033">both</text>
+<text x="1215" y="444" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="800" fill="#C96A16">2</text>
+<text x="1215" y="473" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700" fill="#C96A16">reclaim only</text>
+<rect x="1345" y="300" width="140" height="105" rx="16" fill="#E9EDF2" stroke="#667085" stroke-width="2"/>
+<text x="1415" y="330" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#172033">No signal</text>
+<text x="1415" y="375" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#667085">1</text>
+<rect x="1345" y="450" width="140" height="105" rx="16" fill="#F8E9B5" stroke="#9A6B00" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="1415" y="480" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#172033">Boundary</text>
+<text x="1415" y="525" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#9A6B00">2</text>
+<rect x="1335" y="654" width="160" height="96" rx="16" fill="#F4D5D1" stroke="#9B4B46" stroke-width="2"/>
+<text x="1415" y="682" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#172033">Audit-only</text>
+<text x="1415" y="728" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="800" fill="#9B4B46">1</text>
+<rect x="870" y="676" width="295" height="54" rx="13" fill="#172033" stroke="#172033" stroke-width="2"/>
+<text x="1017" y="710" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="800" fill="#FFFFFF">14/17 executable covered</text>
+<text x="60" y="840" text-anchor="start" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="400" fill="#58667A">Circle overlap = the same case has qualified evidence from both mechanisms (RSH-002).</text>
+<text x="1540" y="870" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="400" fill="#7C8798">Editable SVG for PowerPoint · counts derived from the pinned complete-scope ledger and post-source-audit correction.</text>
+</svg>

@@ -1,8 +1,19 @@
 # All-53 Live RustSec Attempt Evidence
 
-This historical bundle records terminal attempts for all 53 manually reviewed
-heap-participating strong candidates on 2026-07-14. It is an attempts audit;
-the final efficacy denominator contains 49 executable cases.
+> **Frozen pre-correction provenance.** This bundle preserves the original
+> 53-row screen, 49-case execution ledger, and **43/49** historical result.
+> Post-source audit reclassifies RSH-006 as stack-lifetime and excludes it from
+> heap allocator efficacy accounting. The current view is 52 retained
+> heap-relevant candidates, 48 executable plus 4 audit-only, and **43/48**
+> covered; the retained UAF view is 18 candidates, 17 executable, and **14/17**
+> covered. See `docs/rustsec-security-scope-evaluation.md` and
+> `docs/figures/rustsec-security-sets-20260715/`.
+
+This historical bundle records terminal attempts for all 53 initially screened
+candidates on 2026-07-14. RSH-006 remains present for replay provenance; its
+vulnerability-relevant dangling target/lifetime path has no
+`GlobalAlloc`-mediated allocation, reclaim, or reuse edge. The frozen
+pre-correction efficacy denominator contains 49 executable cases.
 
 - `executable-replay-48.json`: hash-verified execution of the 48 cases that were
   executable in the frozen scope, covering 98 live arms;
@@ -21,15 +32,16 @@ the final efficacy denominator contains 49 executable cases.
 - `all-53-report.json`: reconciled machine-readable report joining the frozen
   replay, reattempts, and current RSH-064 experiment;
 - `all-53-cases.csv`: one flattened row for each of the 53 candidates.
-- `evaluable-49-report.json`: current efficacy report with the four excluded
+- `evaluable-49-report.json`: frozen pre-correction efficacy report with the four excluded
   rows and the RSH-064 historical transition kept in separate audit sections;
-- `evaluable-49-cases.csv`: current efficacy rows only.
+- `evaluable-49-cases.csv`: frozen pre-correction efficacy rows only.
 - `artifact-hashes.json`: byte length and SHA-256 for every retained file in
   this bundle, including the RSH-064 compiler audits and blocker-probe logs.
 
-RSH-064 became executable during the reattempt stage. The reconciled source of
-truth is `evaluation/config/rustsec_heap_complete_scope.json`: 49 executable
-cases in the final efficacy scope and 4 audit-only exclusions. The exclusive
+RSH-064 became executable during the reattempt stage. The frozen source of
+execution provenance is `evaluation/config/rustsec_heap_complete_scope.json`:
+49 executable cases in the pre-correction efficacy scope and 4 audit-only
+exclusions. The historical exclusive
 case-level partition is 31 other-feature-only, 11 Type-Isolation-only, 1
 multiple-mechanism, 3 matched no-signal (RSH-049, RSH-050, and RSH-075), and 3
 inconclusive/unresolved (RSH-003, RSH-006, and RSH-019). The strict positive
@@ -95,7 +107,7 @@ inside a retained content-addressed output directory.
 See `docs/rustsec-all-53-live-evaluation.md` for the complete 53-row ledger,
 root-cause synopses, and claim boundaries.
 
-Rebuild the current 49-case efficacy view and separate exclusion audit:
+Rebuild the frozen pre-correction 49-case view and separate exclusion audit:
 
 ```bash
 uv run python evaluation/scripts/run_rustsec_complete_scope.py \
