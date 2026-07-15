@@ -296,7 +296,7 @@ class RepositoryPortabilityTests(unittest.TestCase):
         source_paths = (
             EVALUATE_PATH,
             ROOT / "evaluation" / "README.md",
-            ROOT / "docs" / "evaluation-gap-analysis.md",
+            ROOT / "docs" / "allocator-evaluation.md",
             ROOT / "evaluation" / "external" / "faf" / "workload_config.template.json",
             ROOT / "unialloc" / "examples" / "rustc_driver_direct_allocator_abi_probe_generated.rs",
         )

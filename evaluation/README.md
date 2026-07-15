@@ -5,11 +5,53 @@ This directory turns the paper claims in a sibling `../rust-alloc-paper` checkou
 ## What is tracked
 
 - `config/paper_claims.json`: benchmark sets, allocator baselines, paper-data locations, and claim thresholds.
+- `config/type_isolation_primary_suite.json`: current-version target and harness membership, comparison families, eligibility gates, and hierarchical aggregation.
 - `scripts/evaluate.py`: dependency doctor, paper-data importer, local runner, semantic coverage collector, result summarizer, and claim checker.
+- `scripts/realworld_type_isolation_matrix.py`: source-pinned Rust application allocator, Type Isolation, feature-closure, and mimalloc THP matrix.
+- `scripts/rsedis_thp_matrix.py`: fresh-server mimalloc THP on/off and gperftools TCMalloc comparison with process-level RSS and huge-page counters.
+- `scripts/plot_allocator_feature_thp_slides.py`: deterministic Matplotlib exporter for three measured-target allocator/THP appendix figures, long-form plotted data, SVG/PNG/PDF assets, and a hash-bound manifest.
+- `scripts/plot_type_isolation_primary_suite.py`: fail-closed Matplotlib exporter for the complete current-version seven-target overview. It emits title-free horizontal median bars only after every target, harness, source pin, variant, gate, and paired round passes validation.
+- `scripts/plot_two_tier_allocator_evaluation.py`: canonical title-free microbenchmark and macrobenchmark presentation exporter with hierarchical aggregation and explicit RSS work-model boundaries.
 - `paper-targets/`: generated reference summaries from the paper `.dat` files.
 - `raw/`: local benchmark JSONL/CSV artifacts (ignored by git).
 - `results/`: normalized summaries and claim-check JSON (ignored by git).
 - `reports/`: Markdown/LaTeX summaries (ignored by git by default; copy selected final artifacts elsewhere before committing if needed).
+
+## Allocator evaluation structure
+
+The primary committee-facing evaluation follows one stable two-tier rule:
+
+1. **Microbenchmarks** use Rust `std_bench` and report performance plus
+   process-observed peak RSS. Fine-grained leaves are reduced within benchmark
+   families before the eight families receive equal headline weight.
+2. **Macrobenchmarks** use pinned real-world Rust programs and report
+   performance plus peak RSS. Harnesses are reduced within each target before
+   targets receive equal headline weight.
+3. Type Isolation is a UniAlloc variant. `typed_plain` remains the matched
+   compiler-route control, and `typeiso_perf` is UniAlloc + Type Isolation.
+
+The canonical method, results, and source boundaries are in
+`../docs/allocator-evaluation.md`. Regenerate the title-free presentation
+figures with:
+
+```bash
+uv run evaluation/scripts/plot_two_tier_allocator_evaluation.py
+```
+
+The command writes the microbenchmark and macrobenchmark SVG/PNG figures,
+uncapped long-form CSV data, compact presentation data, and a hash-bound
+manifest under `../docs/figures/allocator-evaluation-20260714/`.
+
+The full 468-leaf std-bench matrix and complete seven-target Type Isolation
+suite remain detailed audit evidence. Collections belongs to the
+microbenchmark section. Oxipng, redb, Polars, SWC, RustPython, and Actix Web
+form the six-target macrobenchmark section. The older ripgrep/fd/Oxipng matrix
+uses a different implementation digest and remains historical diagnostic
+evidence outside the current primary aggregate.
+
+The allocator/THP appendix pack under
+`../docs/figures/allocator-feature-thp-20260714/` contains three measured-target
+detail figures. It remains outside the primary two-tier presentation path.
 
 ## Quick start
 
@@ -193,8 +235,11 @@ reproduction remain deferred.
 The routes are:
 
 - `native`: the application's original allocator route;
-- `jemalloc`: jemalloc `0.5.4`;
-- `mimalloc`: mimalloc `0.1.25`;
+- `jemalloc`: `jemallocator 0.5.4` with
+  `jemalloc-sys 0.5.4+5.3.0-patched` and embedded jemalloc `5.3.0-patched`;
+- `mimalloc`: `mimalloc 0.1.25` with resolved
+  `libmimalloc-sys 0.1.49` and embedded mimalloc `3.3.2`; wrapper default
+  features, including secure mode, are disabled;
 - `unialloc`: UniAlloc without compiler semantic rewriting;
 - `typed_plain`: the actual MIR rewrite with type metadata and lowering policy
   flags set to zero;
@@ -209,6 +254,13 @@ serve as route controls. The primary incremental comparison is
 and allocator while differing in the Type Isolation policy flag. The
 `typeiso_perf / native` ratio is an end-to-end comparison that also includes the
 allocator, compiler rewrite, recovery bookkeeping, and policy.
+
+These exact lockfile identities form a mixed-current set. As of 2026-07-14, the
+mimalloc core is current and its thin Rust wrapper has a newer `0.1.52` release;
+the jemallocator wrapper is current in its crate line and upstream jemalloc has
+a newer `5.3.1` release. See
+`../docs/allocator-memory-and-mechanisms.md` for layered provenance, memory
+methodology, mimalloc purge/THP sensitivity, and safe claim wording.
 
 The final runs used `nightly-2026-06-11`, physical CPU 6, NUMA node 0, and
 libc-managed rseq. ripgrep and fd used full inputs with two warmups and 9 and 7

@@ -74,7 +74,7 @@ RSS from being presented as an equal-work allocator-memory improvement.
 ## Final tracked outputs
 
 - Self-contained result: `benchmark-results/type-isolation-primary-v1.json`
-- Evaluation report: `docs/type-isolation-primary-suite-evaluation.md`
+- Canonical evaluation report: `docs/allocator-evaluation.md`
 - Title-free SVG: `docs/figures/type-isolation-primary-suite/type-isolation-primary-suite.svg`
 - Title-free PNG: `docs/figures/type-isolation-primary-suite/type-isolation-primary-suite.png`
 - Uncapped paired-ratio data: `docs/figures/type-isolation-primary-suite/type-isolation-primary-suite-data.csv`

@@ -4,7 +4,7 @@ Canonical source:
 
 - `docs/evidence/cross-allocator-large-page-final-20260714/unialloc-ablation-effects.csv`
 - `docs/evidence/cross-allocator-large-page-final-20260714/summary.json`
-- `docs/lifetime-aware-thp-design-and-presentation.md`
+- `docs/allocator-memory-and-mechanisms.md`
 
 Assets:
 

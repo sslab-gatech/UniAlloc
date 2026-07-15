@@ -6,7 +6,7 @@
 >
 > If the program explicitly requires a full 60-minute talk with questions handled separately, use the 53--55-minute extended version in this document and retain about 5 minutes of buffer.
 >
-> Current Type Isolation figure boundary: use `docs/figures/type-isolation-primary-suite/type-isolation-primary-suite.svg` as the lead figure. The title-free figure contains 14 horizontal harness rows across Collections, Oxipng, redb, Polars, SWC, RustPython, and Actix Web, with aligned execution-cost and peak-RSS panels. The 2026-07-14 readiness audit records `7/7` eligible targets, `34` harnesses, `102` warmups, and `510` measured processes. Policy-only execution cost is `1.0036x` (`+0.36%`) across all harnesses; fixed-work policy-only peak RSS is `1.0006x` (`+0.057%`) across 14 harnesses. Compiler-route equivalence passes `13/34`, so dagger-marked end-to-end rows retain explicit attribution limits. fd remains a compiler-path diagnostic.
+> Current allocator figure boundary: use `docs/figures/allocator-evaluation-20260714/microbenchmarks.svg` and `docs/figures/allocator-evaluation-20260714/macrobenchmarks.svg` as the two lead evaluation figures. Microbenchmarks cover the canonical 468-leaf Rust `std_bench` inventory: 466 leaves have complete seven-way comparisons and 236 pass the timing robustness gate. A separately labeled five-leaf Collections cohort covers Type Isolation. Macrobenchmarks cover 29 harnesses across Oxipng, redb, Polars, SWC, RustPython, and Actix Web. Policy-only macro execution cost is `1.0054x` (`+0.54%`); fixed-work policy-only peak RSS is `1.0006x` (`+0.057%`). Compiler-route-equivalent policy cost is `0.9968x` (`-0.32%`). The detailed seven-target figure and full heatmap remain audit-only backup evidence.
 
 ## 1. One-Sentence Conclusion
 
@@ -286,14 +286,25 @@ Key implementation evidence:
 
 | # | Suggested English title | Purpose of this slide | Figure | Time / likely question |
 |---:|---|---|---|---|
-| 25 | **The evaluation asks feasibility, cost, coverage, and retargeting as separate questions.** | Present RQ→metric→baseline→threat before presenting results; show the same three actual-MIR variants across eligible Rust harnesses | Lead with the complete title-free seven-target SVG; keep the 34-harness table in backup | 1:30; distinguish the exact current-version suite, adaptive-RSS diagnostics, and historical paper methodology |
+| 25 | **Microbenchmarks and real programs answer different allocator questions.** | Define the two-tier method, metric, baseline, hierarchy, and threat before showing results | Place the title-free micro and macro figures side by side; move leaf and harness detail to backup | 1:30; distinguish robust timing, process-observed RSS, fixed-work RSS, and compiler-route attribution |
 | 26 | **The paper reported less than 2% average performance difference in its tested aggregate, with workload-dependent memory retention.** | Historical result 1: specify the tested baselines, workloads, and aggregation; most memory results were comparable, while Collections/Rust-Redis had higher peaks | Two takeaways; put the exact comparison table in B14/B16 | 1:30; footer says paper-reported historical |
 | 27 | **The paper reported 5--14% type-isolation slowdown and 72.17% object coverage under its original setup.** | Address only H2 cost and coverage; move metadata segregation, hugepage, and PAC to backup | Two number tiles plus the coverage boundary; keep other features separate | 1:30; do not describe this as a current reproduction |
 | 28 | **Current functional evidence is source-bound; full paper-performance reproduction is intentionally deferred.** | Show the four-tier evidence ladder and G001→G002 status; this is the credibility slide | Four steps: Historical / Current probe / Historical partial record / Deferred claim | 1:30; the committee may examine the methodology here |
 
-Slide 25 must state the original paper methodology precisely: `nightly-2021-08-04`; six runs per item, reporting the geometric mean of the final five; UniAlloc as the normalization baseline; and MPK/MTE simulation excluded from performance claims. It must also state proactively that the methodology reports no separate uncertainty, confidence interval, or significance analysis, and that six runs plus a geometric mean do not replace statistical uncertainty analysis. Source: `../rust-alloc-paper/eval.tex:63-91`.
+Slide 25 must state the current two-tier hierarchy precisely: paired cell
+medians, within-family micro summaries, within-target macro summaries, and
+equal family or target weight in the headline. It must distinguish robust
+timing, process-observed RSS, fixed-work RSS, and compiler-route attribution.
 
-Slide 26 must list the paper's six baselines in B14/B16: tcmalloc, glibc `malloc`, mimalloc, jemalloc, snmalloc, and Scudo; UniAlloc optional features were disabled, and baselines used default settings (`eval.tex:93-107`). The paper text says only, "On average, UniAlloc differs by less than 2%." Without rechecking the aggregation axis from raw data, describe this only as **the paper's tested aggregate**; do not imply a per-workload or per-baseline upper bound.
+Slide 26 must state the original paper methodology precisely:
+`nightly-2021-08-04`; six runs per item, reporting the geometric mean of the
+final five; UniAlloc as the normalization baseline; and MPK/MTE simulation
+excluded from performance claims. It must list the paper's six baselines in
+B14/B16: tcmalloc, glibc `malloc`, mimalloc, jemalloc, snmalloc, and Scudo;
+UniAlloc optional features were disabled, and baselines used default settings
+(`eval.tex:63-107`). The paper text says only, "On average, UniAlloc differs by
+less than 2%." Describe this as **the paper's tested aggregate** unless the raw
+aggregation axis is rechecked.
 
 The numbers on Slides 26--27 may use only this wording:
 
@@ -345,85 +356,48 @@ components. This remains implementation/probe-tier functional evidence. It
 supports no universal UAF/double-free, forged-metadata, universal compiler-
 coverage, external-platform runtime, or publication-grade performance claim.
 
-#### Current source-bound real-world Type Isolation diagnostic
+#### Current two-tier allocator evaluation
 
-Use this matrix on Slide 28 or a current-source backup slide. Every timing cell
-is `median wall seconds / median peak RSS KiB`. The seven routes are native,
-jemalloc `0.5.4`, mimalloc `0.1.25`, UniAlloc without semantic rewriting,
-actual-MIR `typed_plain`, stats-free `typeiso_perf`, and statistics-enabled
-`typeiso_coverage`. fd's native source already selects jemalloc `0.5.4`, so its
-native and explicit jemalloc rows are route controls.
+Use the canonical figures from `docs/figures/allocator-evaluation-20260714/`.
+The micro figure uses Rust `std_bench`; the macro figure uses real-world Rust
+programs. Type Isolation appears as a UniAlloc variant in both parts.
 
-| Application | Native | jemalloc | mimalloc | UniAlloc | `typed_plain` | `typeiso_perf` | `typeiso_coverage` |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| ripgrep | `0.086309096 / 5120` | `0.086702833 / 6144` | `0.088868793 / 11812` | `0.090066579 / 6144` | `0.092411192 / 6144` | `0.092586986 / 6144` | `0.094015251 / 6144` |
-| fd | `0.136296730 / 6144` | `0.136304143 / 6144` | `0.129672706 / 18872` | `0.167541836 / 6144` | `0.464682945 / 6144` | `0.465833677 / 6144` | `0.491091350 / 6144` |
-| Oxipng | `1.712608439 / 46400` | `1.727841580 / 49088` | `1.634668906 / 71180` | `1.736975509 / 44260` | `1.766903750 / 44508` | `1.754456338 / 44524` | `1.754579386 / 44640` |
+> **Evidence badge:** current source-bound diagnostic; post-measurement
+> presentation-analysis amendment. The amendment changes taxonomy and
+> aggregation only; measured membership, variants, observations, and sampling
+> remain frozen.
 
-`typeiso_coverage` has statistics enabled and is performance-ineligible. Show
-its time and RSS only as artifact-completeness metadata. The primary incremental
-ratio is `typeiso_perf / typed_plain`; the native ratio includes allocator,
-compiler rewrite, recovery, and policy effects.
+The micro headline prevents the 129 `str`, 118 `vec`, and 100 `btree` leaves
+from dominating: it takes the median leaf log-ratio inside each of eight
+families, then gives every family equal weight. Performance uses 236
+seven-way leaves above the 100 ns/iter timer floor. Peak RSS from libtest is a
+process-observed adaptive-work diagnostic and uses hollow marks. The five
+Collections Type Isolation leaves form a separately labeled cohort and are
+never pooled with the 468-leaf external-allocator matrix.
 
-| Application | Type Isolation / typed plain | Incremental time | Type Isolation / native | End-to-end time | Allocation-event coverage |
-|---|---:|---:|---:|---:|---:|
-| ripgrep | `1.001902302050` | `+0.190230%` | `1.072737292950` | `+7.273729%` | `2266/22725 = 9.97%` (`997` bp) |
-| fd | `1.002476380966` | `+0.247638%` | `3.417790558878` | `+241.779056%` | `616262/831549 = 74.11%` (`7411` bp) |
-| Oxipng | `0.992955240488` | `-0.704476%` | `1.024435182057` | `+2.443518%` | `9661/10368 = 93.18%` (`9318` bp) |
+The macro figure contains 29 harnesses across Oxipng, redb, Polars, SWC,
+RustPython, and Actix Web. It takes paired medians per harness, aggregates
+harnesses within each target, and gives every target equal suite weight.
+Policy-only execution cost is `1.0054x` (`+0.54%`); the 11 route-equivalent
+harnesses give `0.9968x` (`-0.32%`). Equal-work policy-only RSS is `1.0006x`
+(`+0.057%`) across 14 harnesses in three targets. Adaptive RSS for SWC,
+RustPython, and Actix Web remains a hollow diagnostic outside the suite RSS
+aggregate. The `2.577x` end-to-end execution ratio includes compiler-route
+cost because 18 of 29 macro harnesses fall outside the preregistered route-
+equivalence interval.
 
-Type Isolation peak-RSS ratios versus typed plain / native are
-`1.000000000000 / 1.200000000000` for ripgrep,
-`1.000000000000 / 1.000000000000` for fd, and
-`1.000359485935 / 0.959568965517` for Oxipng.
-
-The runs use physical CPU 6 and NUMA node 0. ripgrep and fd use full inputs,
-two warmups, and 9 and 7 measured repetitions. Oxipng uses the quick input, one
-warmup, and 5 repetitions. Every variant produces the same application output
-hash. The measured artifact implementation-bundle SHA-256 is
-`7e98e63ce2fbeccc361ea57bd26773ccdb02664b83d772f0475161c980c55929`;
-the pass source SHA-256 is
-`ae7dd0da2368c670323287647c94ce5a90069b6f2e4a3d51b298d48cb9a5ac63`.
-The current runner bundle is
-`94ede1223c7b348639a7041a40a5b1840a6840cc18b4dbcf7d0f7a6ef8bb2cf4`
-after post-measurement binary-reuse validation hardening; allocator and pass
-sources remain unchanged.
-
-Coverage means typed allocation events divided by total allocation events for
-the exact application revision and input. Report it per application. It has no
-source-line, type, byte, or universal-program denominator, and its denominator
-differs from the paper's 72.17% result. The matrix is a measured-source
-diagnostic; the paper reproduction and publication-grade inference remain
-deferred.
-
-The matrix retains default libc-managed rseq and sets no glibc tunable. Linux
-rseq permits this configuration, and the production allocator hot path makes no
-rseq call. The allocator's private rseq self-registration tests alone require
-`GLIBC_TUNABLES=glibc.pthread.rseq=0` at process startup.
-
-Two final implementation changes are relevant in backup discussion. Hosted
-recovery records stay in the pointer-derived home shard and home overflow, with
-legacy exhaustive search available only after legacy non-home state is
-observed; `fixed_heap` preserves bounded cross-shard inline capacity. Generic
-raw allocation misses publish strict lifecycle state once and then complete
-semantic admission through an after-publication path; cache hits, guarded
-mappings, and raw alias rejection retain their original boundaries. Ordinary
-semantic scopes remain conservative for cross-thread recovery, explicit
-`_local` scopes remain local, and exact `Absent` history observations hold an
-eviction lease through admission. The eight-way history fails stop when all
-ways are leased simultaneously.
-
-On the pinned fd full input, these changes move `typed_plain` from
-`0.611635718 s` to `0.464682945 s` (`-24.026192%`) and `typeiso_perf` from
-`0.573481469 s` to `0.465833677 s` (`-18.770928%`), while both remain at
-`6144 KiB` median peak RSS and event coverage remains `74.11%`. The native route
-moves by `-0.218373%`. Treat this as a source-bound directional optimization
-result for one input, with no stable cross-workload speedup claim.
+The older ripgrep/fd/Oxipng matrix uses a different implementation digest and
+cohort. Its compact historical ledger and machine artifact are linked from
+`docs/allocator-evaluation.md`. fd remains excluded from current
+presentation-grade performance aggregation.
 
 Use this safe wording in the main talk:
 
-> **Full paper performance reproduction was intentionally deferred after 20 source-bound historical records. Current claims are limited to functional and mechanism evidence; reduced benchmark numbers are diagnostic only, and no publication-grade percentage claim is made from them.**
+> **Current measurements bound Type Isolation policy cost on six real-world Rust programs. Compiler-route cost, adaptive-work RSS, and historical competitor campaigns remain separate evidence classes.**
 
-Main Slide 28 should show only this stable conclusion and the four-tier ladder. Put live HEAD, probe artifacts, the freeze digest, and the stop record in B18/speaker notes, and refresh them on the defense date.
+Main Slide 28 should show only this stable conclusion and the four-tier ladder.
+Put live HEAD, probe artifacts, the freeze digest, and the stop record in
+B18/speaker notes, and refresh them on the defense date.
 
 Do not compare the raw timings of these 20 historical records. Do not describe diagnostic smoke, plan readiness, or incomplete timing records as performance conclusions. Relevant entry points:
 
@@ -431,7 +405,7 @@ Do not compare the raw timings of these 20 historical records. Do not describe d
 - `evaluation/results/overclaim_worklist.json`
 - `evaluation/results/paper_performance_gap_plan.json` (historical/deferred)
 - `evaluation/results/platform_matrix_audit.json`
-- `docs/evaluation-gap-analysis.md` (the opening supersession note takes priority over the historical queue)
+- `docs/allocator-evaluation.md#historical-g001-boundary`
 - `.omx/handoff/g001-performance-campaign-stop-user-objective-change-20260712T030350Z.json`
 - `/Users/hqzhao/Downloads/UniAlloc-G001-freeze-235549b2/evaluation/raw/source-freeze-required-bound-plan-235549b2-20260711a/final-verification.json`
 - `.omx/ultragoal/ledger.jsonl` (entry point for G001 supersession, G002 functional evidence, and current-source probes)
@@ -723,7 +697,7 @@ Open these files first when building the slides. Copy no factual claims from cha
 | BlogOS fixed-heap publication/final-link contract | `tools/blogos-contract/` (`00a187b`, `a581cb4`; no_std ELF/global allocator/boot init/panic handlers + 5 host state-machine regressions; external boot runtime missing) |
 | Rust-for-Linux final-crate force-link contract | `tools/rust-for-linux-link-contract/`, `kernel/kernel-modules/benchmarking/rust_bench.rs` (`bd9d927`; real bridge and 11 required symbols; external kernel runtime missing) |
 | Constrained-platform ABI layout parity | `tools/rust-for-linux-link-contract/src/abi_layout_contract.rs`, `test_rust_for_linux_link_contract.py` (`315cfc4`; 5 records, 75 offsets/language; local-host C compiler boundary) |
-| Cache/footprint controls | `docs/allocator-memory-footprint.md` (`d87d5e0`, `25d316c`; hosted footprint reduction + matching-saturation correctness repair; diagnostic only) |
+| Cache/footprint controls | `docs/allocator-memory-and-mechanisms.md` (`d87d5e0`, `25d316c`; hosted footprint reduction + matching-saturation correctness repair; diagnostic only) |
 | PAC functionality vs cost boundary | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/pac-current-head-94b2523d8823-20260712T060647Z/`, `docs/evaluation-toolchains.md:272-280` |
 | Hugepage domain/fallback vs backing boundary | `.omx/ultragoal/artifacts/G002-unialloc-functional-correctness-and/hugepage-domain-smoke-20260712a/hugepage-domain-smoke-summary.json`; current domain/fallback PASS, real backing MISSING |
 | Current claim status | `evaluation/results/claim_check_current.json` |
