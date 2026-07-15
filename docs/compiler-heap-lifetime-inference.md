@@ -266,7 +266,7 @@ timing ranks remain outside the evidence contract. Presentation-ready figures:
 - actual physical backing
   ([SVG](figures/cross-allocator-modern-tcmalloc-20260715/actual-backing.svg),
   [PNG](figures/cross-allocator-modern-tcmalloc-20260715/actual-backing.png));
-- endpoint frontier
+- endpoint measurements with cross-family raw timing ranking withheld
   ([SVG](figures/cross-allocator-modern-tcmalloc-20260715/endpoint-frontier.svg),
   [PNG](figures/cross-allocator-modern-tcmalloc-20260715/endpoint-frontier.png)).
 

@@ -4,6 +4,6 @@ Slide-ready PNG and editable SVG figures generated from `docs/evidence/cross-all
 
 - `incremental-effect`: matched on/off performance and resident-memory effects.
 - `actual-backing`: observed physical large-page backing by endpoint.
-- `endpoint-frontier`: endpoint timing and effective resident memory, with mechanism boundaries in the caption.
+- `endpoint-frontier`: endpoint timing and effective resident memory with matched-mode connectors; cross-family raw timing ranking is withheld.
 
 The Google TCMalloc endpoint is identity-verified at the pinned commit. Its measured backing is zero, so the figures exclude a Temeraire/HPAA performance-effect claim.

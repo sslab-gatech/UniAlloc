@@ -194,6 +194,10 @@ def _summary_evidence(
     evidence_contract = _require_mapping(
         root.get("evidence_contract"), "summary.evidence_contract"
     )
+    cross_family_ranking_allowed = _require_bool(
+        evidence_contract.get("cross_family_raw_timing_ranking_allowed"),
+        "summary.evidence_contract.cross_family_raw_timing_ranking_allowed",
+    )
 
     google_note = None
     google_boundary_note = None
@@ -342,6 +346,12 @@ def _summary_evidence(
 
     return {
         "repeat_note": f"{repeats} measured blocks per arm",
+        "cross_family_raw_timing_ranking_allowed": cross_family_ranking_allowed,
+        "cross_family_ranking_note": (
+            None
+            if cross_family_ranking_allowed
+            else "Cross-family raw timing ranking withheld; compare connected matched modes only."
+        ),
         "google_note": google_note,
         "google_boundary_note": google_boundary_note,
         "historical_note": historical_note,
@@ -713,8 +723,15 @@ def _point_shape(
 def render_endpoint_frontier(
     rows: Sequence[Mapping[str, Any]], evidence: Mapping[str, Any]
 ) -> str:
-    title = "Allocator endpoint frontier"
-    subtitle = "Lower-left is better; connected marks are matched modes and bubble area reflects actual large-page backing"
+    cross_family_ranking_allowed = bool(
+        evidence["cross_family_raw_timing_ranking_allowed"]
+    )
+    if cross_family_ranking_allowed:
+        title = "Allocator endpoint frontier"
+        subtitle = "Lower-left is better; connected marks are matched modes and bubble area reflects actual large-page backing"
+    else:
+        title = "Allocator endpoint measurements"
+        subtitle = "Connected marks are matched modes within probe families; bubble area reflects actual large-page backing"
     body = _title_block(title, subtitle)
     plot_left, plot_right = 145.0, 1190.0
     plot_top, plot_bottom = 165.0, 735.0
@@ -747,11 +764,14 @@ def render_endpoint_frontier(
         )
     body.extend(
         [
-            f'    <text x="{(plot_left + plot_right) / 2:.1f}" y="815" font-size="18" font-weight="600" text-anchor="middle">Nanoseconds per touch</text>',
+            f'    <text x="{(plot_left + plot_right) / 2:.1f}" y="798" font-size="18" font-weight="600" text-anchor="middle">Nanoseconds per touch</text>',
             f'    <text x="0" y="0" font-size="18" font-weight="600" text-anchor="middle" transform="translate(42 {(plot_top + plot_bottom) / 2:.1f}) rotate(-90)">Maximum effective resident memory (MiB)</text>',
-            f'    <text x="{plot_left + 18:.1f}" y="{plot_bottom - 18:.1f}" font-size="14" font-weight="700" fill="{MUTED}">preferred direction ↙</text>',
         ]
     )
+    if cross_family_ranking_allowed:
+        body.append(
+            f'    <text x="{plot_left + 18:.1f}" y="{plot_bottom - 18:.1f}" font-size="14" font-weight="700" fill="{MUTED}">preferred direction ↙</text>'
+        )
 
     pair_groups: dict[str, list[Mapping[str, Any]]] = {}
     for row in rows:
@@ -769,7 +789,7 @@ def render_endpoint_frontier(
             f'    <polyline points="{points}" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: {_escape(pair)}</title></polyline>'
         )
 
-    frontier = _pareto_frontier(rows)
+    frontier = _pareto_frontier(rows) if cross_family_ranking_allowed else []
     if len(frontier) >= 2:
         frontier_points = " ".join(
             f'{_scale(float(row["ns_per_touch"]), x_low, x_high, plot_left, plot_right):.2f},'
@@ -893,9 +913,12 @@ def render_endpoint_frontier(
             "  </g>",
         ]
     )
-    body.extend(
-        _footer_lines(_chart_evidence_notes(rows, evidence), start_y=846.0)
-    )
+    footer = []
+    ranking_note = evidence.get("cross_family_ranking_note")
+    if isinstance(ranking_note, str) and ranking_note:
+        footer.append(ranking_note)
+    footer.extend(_chart_evidence_notes(rows, evidence))
+    body.extend(_footer_lines(footer, start_y=829.0))
     return _svg_document(title, subtitle, body)
 
 

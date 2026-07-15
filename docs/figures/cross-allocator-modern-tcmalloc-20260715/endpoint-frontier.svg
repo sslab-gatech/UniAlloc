@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="chart-title chart-description">
-  <title id="chart-title">Allocator endpoint frontier</title>
-  <desc id="chart-description">Lower-left is better; connected marks are matched modes and bubble area reflects actual large-page backing</desc>
+  <title id="chart-title">Allocator endpoint measurements</title>
+  <desc id="chart-description">Connected marks are matched modes within probe families; bubble area reflects actual large-page backing</desc>
   <style>
     text { font-family: Arial, Helvetica, sans-serif; fill: #17202A; }
     .axis { stroke: #566573; stroke-width: 1.5; }
@@ -10,8 +10,8 @@
     .label { font-size: 17px; font-weight: 600; }
   </style>
   <rect id="background" x="0" y="0" width="1600" height="900" fill="#FFFFFF"/>
-  <text x="70" y="62" font-size="34" font-weight="700">Allocator endpoint frontier</text>
-  <text x="70" y="102" font-size="18" fill="#566573">Lower-left is better; connected marks are matched modes and bubble area reflects actual large-page backing</text>
+  <text x="70" y="62" font-size="34" font-weight="700">Allocator endpoint measurements</text>
+  <text x="70" y="102" font-size="18" fill="#566573">Connected marks are matched modes within probe families; bubble area reflects actual large-page backing</text>
   <g id="endpoint-plot">
     <rect x="145.0" y="165.0" width="1045.0" height="570.0" fill="#FAFBFC" stroke="#D5DBDB"/>
     <line class="grid" x1="145.00" y1="165.0" x2="145.00" y2="735.0"/>
@@ -30,13 +30,11 @@
     <text x="131.0" y="360.00" font-size="14" text-anchor="end" fill="#566573">140</text>
     <line class="grid" x1="145.0" y1="165.00" x2="1190.0" y2="165.00"/>
     <text x="131.0" y="170.00" font-size="14" text-anchor="end" fill="#566573">145</text>
-    <text x="667.5" y="815" font-size="18" font-weight="600" text-anchor="middle">Nanoseconds per touch</text>
+    <text x="667.5" y="798" font-size="18" font-weight="600" text-anchor="middle">Nanoseconds per touch</text>
     <text x="0" y="0" font-size="18" font-weight="600" text-anchor="middle" transform="translate(42 450.0) rotate(-90)">Maximum effective resident memory (MiB)</text>
-    <text x="163.0" y="717.0" font-size="14" font-weight="700" fill="#566573">preferred direction ↙</text>
     <polyline points="432.39,426.99 1040.29,690.77" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: mimalloc</title></polyline>
     <polyline points="436.89,299.34 1028.97,449.85" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: jemalloc</title></polyline>
     <polyline points="1043.12,597.70 1051.61,597.70" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: snmalloc</title></polyline>
-    <polyline id="pareto-frontier" points="432.39,426.99 1028.97,449.85 1040.29,690.77 1175.14,698.04" fill="none" stroke="#4D4D4D" stroke-width="3" stroke-dasharray="10 6"><title>Pareto frontier</title></polyline>
     <polygon points="1175.14,690.04 1183.14,698.04 1175.14,706.04 1167.14,698.04" fill="#0072B2" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>glibc: 24.79 ns/touch, 131.0 MiB resident, 0.0 MiB large-page backing; mode=default, pair=glibc</title></polygon>
     <line x1="1175.14" y1="698.04" x2="1147.14" y2="704.00" stroke="#0072B2" stroke-opacity="0.38" stroke-width="1.5"/>
     <text x="1143.14" y="709.00" font-size="14" font-weight="700" text-anchor="end" fill="#0072B2"><title>glibc</title>glibc</text>
@@ -89,6 +87,7 @@
     <text x="1240.0" y="524.0" font-size="13" fill="#566573">Bubble area encodes</text>
     <text x="1240.0" y="542.0" font-size="13" fill="#566573">large-page backing.</text>
   </g>
-  <text x="800" y="846.0" font-size="13" text-anchor="middle" fill="#566573">Google TCMalloc identity: fixed-revision Bazel link-time Temeraire/HPAA; physical backing 0/5 measured samples.</text>
-  <text x="800" y="867.0" font-size="13" text-anchor="middle" fill="#566573">HPAA performance causality requires a matched HPAA-off control.</text>
+  <text x="800" y="829.0" font-size="13" text-anchor="middle" fill="#566573">Cross-family raw timing ranking withheld; compare connected matched modes only.</text>
+  <text x="800" y="850.0" font-size="13" text-anchor="middle" fill="#566573">Google TCMalloc identity: fixed-revision Bazel link-time Temeraire/HPAA; physical backing 0/5 measured samples.</text>
+  <text x="800" y="871.0" font-size="13" text-anchor="middle" fill="#566573">HPAA performance causality requires a matched HPAA-off control.</text>
 </svg>

@@ -46,6 +46,7 @@ def valid_summary() -> dict[str, object]:
             ],
         },
         "evidence_contract": {
+            "cross_family_raw_timing_ranking_allowed": False,
             "google_tcmalloc_identity": (
                 "fixed-revision Bazel link-time Temeraire/HPAA"
             ),
@@ -201,7 +202,8 @@ class CrossAllocatorLargePageChartTests(unittest.TestCase):
             self.assertIn("4.20 ns/touch · 128.0 MiB", endpoint)
             self.assertIn("96.0 MiB large-page backing", endpoint)
             self.assertIn("0.0 MiB large-page backing", endpoint)
-            self.assertIn('id="pareto-frontier"', endpoint)
+            self.assertNotIn('id="pareto-frontier"', endpoint)
+            self.assertIn("Cross-family raw timing ranking withheld", endpoint)
             self.assertIn("Google TCMalloc / Temeraire HPAA", endpoint)
             self.assertIn("physical backing 5/7 measured samples", endpoint)
             self.assertIn("matched HPAA-off control", endpoint)
@@ -217,6 +219,34 @@ class CrossAllocatorLargePageChartTests(unittest.TestCase):
             self.assertIn("Google TCMalloc / Temeraire HPAA", backing)
             self.assertIn("physical backing 5/7 measured samples", backing)
             self.assertIn("matched HPAA-off control", backing)
+
+    def test_pareto_frontier_requires_cross_family_ranking_permission(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            document = valid_summary()
+            summary_path = root / "summary.json"
+            summary_path.write_text(json.dumps(document), encoding="utf-8")
+            output_dir = root / "charts"
+
+            result = run_renderer(summary_path, output_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            endpoint = (output_dir / "endpoint-frontier.svg").read_text(
+                encoding="utf-8"
+            )
+            self.assertNotIn('id="pareto-frontier"', endpoint)
+            self.assertNotIn("<title>Pareto frontier</title>", endpoint)
+            self.assertIn("Cross-family raw timing ranking withheld", endpoint)
+
+            document["evidence_contract"][  # type: ignore[index]
+                "cross_family_raw_timing_ranking_allowed"
+            ] = True
+            summary_path.write_text(json.dumps(document), encoding="utf-8")
+            result = run_renderer(summary_path, output_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            endpoint = (output_dir / "endpoint-frontier.svg").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn('id="pareto-frontier"', endpoint)
 
     def test_gperftools_legacy_is_visible_only_as_historical_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -348,6 +378,12 @@ class CrossAllocatorLargePageChartTests(unittest.TestCase):
             "max_effective_resident_mib"
         ] = -1.0
         invalid_documents.append(negative_endpoint)
+
+        missing_ranking_boundary = valid_summary()
+        del missing_ranking_boundary["evidence_contract"][  # type: ignore[index]
+            "cross_family_raw_timing_ranking_allowed"
+        ]
+        invalid_documents.append(missing_ranking_boundary)
 
         for index, document in enumerate(invalid_documents):
             with self.subTest(index=index), tempfile.TemporaryDirectory() as temporary:
