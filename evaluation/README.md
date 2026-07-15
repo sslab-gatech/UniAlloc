@@ -77,6 +77,30 @@ The allocator/THP appendix pack under
 `../docs/figures/allocator-feature-thp-20260714/` contains three measured-target
 detail figures. It remains outside the primary two-tier presentation path.
 
+## Type Isolation pointer-filter contention
+
+`unialloc/examples/typeiso_pointer_filter_bench.rs` exercises the real
+recovery and retained pointer-filter primitives behind the evaluation-only
+`typeiso_pointer_filter_bench` feature. The paired runner builds two exact Git
+revisions, pins the workers to distinct physical cores on one NUMA node, saves
+every raw sample, and checks the ordinary allocator hot paths before accepting
+a contention optimization:
+
+```bash
+uv run python evaluation/scripts/run_typeiso_pointer_filter_ab.py \
+  --baseline-ref <harness-commit> \
+  --candidate-ref <candidate-commit> \
+  --worker-cpus 22,23 \
+  --coordinator-cpu 24 \
+  --warmups 2 \
+  --rounds 5 \
+  --output-prefix benchmark-results/typeiso-pointer-filter-contention-20260715
+```
+
+The forced same-hash result is a contention stress diagnostic. Admission also
+requires every single-domain, negative-query, raw, and feature-on median to
+remain below the one-percent regression guardrail.
+
 ## RustSec/Rudra heap-security corpus
 
 The review initially screened **53 candidates**. Post-source inspection

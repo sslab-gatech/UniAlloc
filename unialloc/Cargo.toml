@@ -100,6 +100,20 @@ test = false
 bench = false
 required-features = ["lifetime_hugepage"]
 
+[[example]]
+name = "typeiso_pointer_filter_bench"
+path = "examples/typeiso_pointer_filter_bench.rs"
+test = false
+bench = false
+required-features = ["typeiso_pointer_filter_bench"]
+
+[[example]]
+name = "typeiso_allocator_hotpath"
+path = "examples/typeiso_allocator_hotpath.rs"
+test = false
+bench = false
+required-features = ["type_isolation"]
+
 [features]
 default = ["pthread_dtor", "rseq"]
 fixed_heap = []
@@ -150,6 +164,9 @@ allow_mem_leak = []
 # already required by Type Isolation and remains independently ablatable.
 reclaim_checks = []
 type_isolation = []
+# Evaluation-only access to the real Type Isolation pointer-filter primitives.
+# This keeps the benchmark out of default and production feature closures.
+typeiso_pointer_filter_bench = ["type_isolation"]
 # The paper "metadata_segregation" variant must exercise an allocator path with
 # separated size-class/page metadata, not only attach a different semantic flag
 # to the same default slab backend.  Keep the backend switch explicit and
