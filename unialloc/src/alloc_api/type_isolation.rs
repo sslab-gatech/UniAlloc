@@ -4533,7 +4533,25 @@ fn scoped_metadata_is_active(metadata: AllocationMetadata) -> bool {
 
 #[inline]
 fn allocator_metadata_is_effective(metadata: AllocationMetadata) -> bool {
-    metadata.flags != 0 || semantic_stats_any_recording_enabled()
+    metadata.flags != 0
+        || semantic_stats_any_recording_enabled()
+        || lifetime_metadata_policy_is_effective(metadata)
+}
+
+#[inline]
+fn lifetime_metadata_policy_is_effective(metadata: AllocationMetadata) -> bool {
+    #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+    {
+        metadata.callsite != 0
+            && metadata.has_type()
+            && super::lifetime_hugepage::lifetime_hugepage_policy()
+                != super::lifetime_hugepage::LifetimeHugepagePolicy::Disabled
+    }
+    #[cfg(not(all(feature = "lifetime_hugepage", not(feature = "fixed_heap"))))]
+    {
+        let _ = metadata;
+        false
+    }
 }
 
 #[inline]
@@ -7678,11 +7696,11 @@ pub(crate) enum ActiveAllocatorMetadata {
 
 /// Select the allocator meaning of the current compiler scope exactly once.
 ///
-/// Flags-zero metadata proves compiler/runtime transport while deliberately
-/// suppressing both typed policy and process-wide auto metadata. Lifetime and
-/// placement hints remain visible through [`active_allocation_metadata`], but
-/// cannot independently authorize allocator behavior. Enabling aggregate or
-/// per-type statistics promotes the same metadata to `Policy` for accounting.
+/// Flags-zero metadata proves compiler/runtime transport while suppressing
+/// typed-cache policy and process-wide auto metadata. An enabled lifetime
+/// policy promotes an exact `(callsite, type)` scope to `Policy`, allowing the
+/// adaptive observer to consume its lifetime hint and record its outcome.
+/// Aggregate or per-type statistics also promote the metadata for accounting.
 #[inline]
 pub(crate) fn active_allocator_metadata() -> ActiveAllocatorMetadata {
     match active_allocation_metadata() {
