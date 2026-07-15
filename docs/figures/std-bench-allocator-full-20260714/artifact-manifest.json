@@ -1,0 +1,69 @@
+{
+  "generated_artifacts": [
+    {
+      "bytes": 2083865,
+      "path": "benchmark-results/std-bench-allocator-full-20260714.json",
+      "sha256": "b738a192c71bda67ec2e2d989b0b90c33c94e225bcc53f4673c7467dd0c30eea"
+    },
+    {
+      "bytes": 3474773,
+      "path": "docs/figures/std-bench-allocator-full-20260714/std-bench-allocator-full-all-cells.csv",
+      "sha256": "b070b0e26843f26bc7e58ae8853eaaba020761a8565083e85c4a6d8ba6acda9b"
+    },
+    {
+      "bytes": 18691,
+      "path": "docs/figures/std-bench-allocator-full-20260714/allocator-ratio-distribution.svg",
+      "sha256": "db4eef64b9023cdee82526f871e7cb95d55546e672c5b4b56e637921fffe9e40"
+    },
+    {
+      "bytes": 110716,
+      "path": "docs/figures/std-bench-allocator-full-20260714/allocator-ratio-distribution.png",
+      "sha256": "869ae0e3f00b05e778c34fcec208e418d107c560406982fd60d1dff44a647a96"
+    },
+    {
+      "bytes": 67029,
+      "path": "docs/figures/std-bench-allocator-full-20260714/allocator-ratio-heatmap.svg",
+      "sha256": "0f929d2bb3776f0ec8dca8c27638908c2c2a1ade369bf4f0ce349dc8e40f540b"
+    },
+    {
+      "bytes": 159646,
+      "path": "docs/figures/std-bench-allocator-full-20260714/allocator-ratio-heatmap.png",
+      "sha256": "eca867942c157099a925aa287083622f16d8edcb10783e0ff2079c9d842006ae"
+    }
+  ],
+  "generator": {
+    "distribution_png_dimensions": {
+      "height": 1350,
+      "width": 2400
+    },
+    "heatmap_png_dimensions": {
+      "height": 4800,
+      "width": 2100
+    },
+    "path": "evaluation/scripts/plot_std_bench_allocator_full.py",
+    "renderer": "Matplotlib 3.11.0",
+    "sha256": "22e526244de43728509a5fdb92b7d72e487c010f215bfa56e5f1f67ad46e228a"
+  },
+  "matrix": {
+    "allocator_feature_variants": 7,
+    "benchmarks": 468,
+    "censored_cells": 8,
+    "comparable_benchmarks": 466,
+    "complete_cells": 3268,
+    "robust_benchmarks": 236
+  },
+  "schema_version": 2,
+  "source": "rust-std-bench-full-allocator-artifacts",
+  "source_artifacts": [
+    {
+      "bytes": 2114612,
+      "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-full-20260714/summary.json",
+      "sha256": "9b224be377e1719031bdd907ee26fbed71b916fef6cc6b00b3f0fcde0d96cca9"
+    },
+    {
+      "bytes": 34593157,
+      "path": "/home/hanqing/alloc/UniAlloc/evaluation/raw/std-bench-allocator-full-20260714/records.jsonl",
+      "sha256": "e5499bca4d7ebbf722ceeeff881bf905e7e2a2879f2c921fc481f3380a4e286f"
+    }
+  ]
+}

@@ -1281,21 +1281,19 @@ def render_heatmap(
     for _, _, end_index in family_ranges[:-1]:
         axis.axhline(end_index - 0.5, color=WHITE, linewidth=2.2)
     axis.tick_params(axis="both", length=0)
-    axis.set_title(
+    figure.text(
+        0.22,
+        0.978,
         "468-leaf robust ratio map",
-        loc="left",
         fontsize=22,
         fontweight=700,
-        pad=20,
     )
-    axis.text(
-        0,
-        1.007,
+    figure.text(
+        0.22,
+        0.956,
         "log₂(cell median / UniAlloc median) · gray = censored or any seven-way median <100 ns/iter",
-        transform=axis.transAxes,
         fontsize=10.5,
         color=MUTED,
-        va="bottom",
     )
     colorbar = figure.colorbar(image, ax=axis, fraction=0.03, pad=0.025)
     colorbar.ax.yaxis.set_major_formatter(FuncFormatter(log2_tick))
