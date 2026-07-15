@@ -211,14 +211,23 @@ helper `evaluation/scripts/google_tcmalloc_bazel_probe.py` pins
 `12f255231938d30493186b0a037feedd70f5a1c1` (Bazel Central Registry release
 `0.0.0-20250927-12f2552`). It builds target
 `//:cross_allocator_large_page_workload_google_tcmalloc` with the official
-link-time malloc target `@com_google_tcmalloc//tcmalloc`, and records the HPAA
-source hashes, symbol proof, revision, and build options. The current host has
-Bazel 9.2.0, and the generic helper build is **VERIFIED**: the linked binary
-contains the expected Temeraire/HPAA and strong `malloc` symbols, and the
-matched system-control binary uses the same source and compile options. This
-verification establishes the comparator identity and build contract. A
-real-application Google TCMalloc arm remains fail-closed **BLOCKED** until that
-application has a verified binary linked through the same official target.
+link-time malloc target `@com_google_tcmalloc//tcmalloc:tcmalloc`, and records
+the HPAA source hashes, symbol proof, revision, and build options. This is the
+tested 2025 compatibility pin, with Bazel 8.4.2 required exactly. It is
+deliberately separate from upstream-current tracking; current upstream commit
+`5cbf010` has unresolved Bzlmod dependency conflicts with the locally tested
+Bazel 8/9 toolchains. The neutral helper build is **VERIFIED**: the linked
+binary contains the expected Temeraire/HPAA and strong `malloc` symbols, and
+the matched system-control binary uses the same source and compile options.
+This verification establishes the comparator identity and build contract.
+
+Repository real-application runners use the stronger authenticated DSO
+contract documented in [`google-tcmalloc-baseline.md`](google-tcmalloc-baseline.md).
+The validated artifact is uniquely named `libunialloc_google_tcmalloc.so`, has
+SHA-256 `5f99dcf644a7e1e138439fed5d42216c5313ad28e2557f936a250643e0f42081`,
+and must pass revision, HPAA stats, active malloc-provider, mapped-library, and
+per-target identity-marker checks. An unavailable or mismatched modern arm is
+reported **BLOCKED**.
 gperftools 2.18.1 is labeled `gperftools-legacy`, remains a historical control,
 and never serves as a fallback or source of a modern TCMalloc/Temeraire claim.
 The preserved

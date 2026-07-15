@@ -300,14 +300,20 @@ allocator-prior-work performance comparison. The fail-closed helper
 `12f255231938d30493186b0a037feedd70f5a1c1` (Bazel Central Registry release
 `0.0.0-20250927-12f2552`). It builds target
 `//:cross_allocator_large_page_workload_google_tcmalloc` with official
-link-time malloc target `@com_google_tcmalloc//tcmalloc` and records HPAA source
-hashes, symbol proof, revision, and build options. The current host has Bazel
-9.2.0, and the generic helper build is **VERIFIED**: the linked binary contains
-the expected Temeraire/HPAA and strong `malloc` symbols, and the matched
-system-control binary uses the same source and compile options. This
-verification establishes comparator identity and build provenance. A
-real-application modern TCMalloc arm remains fail-closed **BLOCKED** until a
-verified application binary is linked through the same official target.
+link-time malloc target `@com_google_tcmalloc//tcmalloc:tcmalloc` and records
+HPAA source hashes, symbol proof, revision, and build options. This tested 2025
+compatibility pin requires Bazel 8.4.2 exactly. Current upstream commit
+`5cbf010` remains a separate tracking target because its Bzlmod dependencies
+conflict with the locally tested Bazel 8/9 toolchains. The neutral helper build
+is **VERIFIED**: the linked binary contains the expected Temeraire/HPAA and
+strong `malloc` symbols, and the matched system-control binary uses the same
+source and compile options.
+
+Real-application runners authenticate the uniquely named
+`libunialloc_google_tcmalloc.so` artifact with SHA-256
+`5f99dcf644a7e1e138439fed5d42216c5313ad28e2557f936a250643e0f42081`.
+Revision, live HPAA stats, active malloc provider, mapped library, and the
+per-target identity marker all fail closed before timing is accepted.
 gperftools 2.18.1 remains `gperftools-legacy`, is historical evidence only, and
 never substitutes for the Google TCMalloc/Temeraire baseline.
 
