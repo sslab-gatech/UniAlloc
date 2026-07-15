@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -651,6 +652,107 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                 ["Cargo.toml", "redb-source/Cargo.toml"],
                 [row["relative_path"] for row in record["manifests"]],
             )
+
+    def test_generated_oxipng_and_redb_trees_pass_real_cargo_metadata(self) -> None:
+        evaluation_root = campaign.ROOT / "evaluation"
+        with tempfile.TemporaryDirectory(
+            dir=evaluation_root, prefix=".stage-a-metadata-"
+        ) as directory:
+            root = Path(directory)
+            oxipng_checkout = root / "checkout-oxipng"
+            (oxipng_checkout / "src").mkdir(parents=True)
+            (oxipng_checkout / "Cargo.toml").write_text(
+                '[package]\nname="oxipng"\nversion="0.0.0"\nedition="2021"\n',
+                encoding="utf-8",
+            )
+            (oxipng_checkout / "src" / "main.rs").write_text(
+                "fn main() {}\n", encoding="utf-8"
+            )
+            redb_checkout = root / "checkout-redb"
+            (redb_checkout / "src").mkdir(parents=True)
+            (redb_checkout / "Cargo.toml").write_text(
+                (
+                    '[package]\nname="redb"\nversion="0.0.0"\nedition="2021"\n'
+                    '\n[workspace]\nmembers=["."]\n'
+                ),
+                encoding="utf-8",
+            )
+            (redb_checkout / "src" / "lib.rs").write_text(
+                "pub fn marker() {}\n", encoding="utf-8"
+            )
+            with (
+                mock.patch.object(
+                    campaign, "_inject_workspace_dependencies", return_value=[]
+                ),
+                mock.patch.object(
+                    campaign, "_stage_a_dependency", return_value="unialloc = {}"
+                ),
+                mock.patch.object(
+                    campaign.matrix, "find_cached_spin", return_value=root / "spin"
+                ),
+                mock.patch.object(campaign.matrix, "add_spin_patch"),
+            ):
+                oxipng = campaign.prepare_stage_a_source(
+                    "oxipng",
+                    "compiler-prior",
+                    checkout=oxipng_checkout,
+                    raw_dir=root / "raw",
+                    snapshot={"path": str(root / "snapshot")},
+                )
+                redb = campaign.prepare_stage_a_source(
+                    "redb",
+                    "compiler-prior",
+                    checkout=redb_checkout,
+                    raw_dir=root / "raw",
+                    snapshot={"path": str(root / "snapshot")},
+                )
+            for prepared in (oxipng, redb):
+                metadata = subprocess.run(
+                    [
+                        "cargo",
+                        f"+{campaign.TOOLCHAIN}",
+                        "metadata",
+                        "--format-version",
+                        "1",
+                        "--no-deps",
+                        "--manifest-path",
+                        prepared["manifest"],
+                    ],
+                    cwd=Path(prepared["worktree"]),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(0, metadata.returncode, metadata.stderr)
+            oxipng_manifest = Path(oxipng["manifest"]).read_text(encoding="utf-8")
+            self.assertIn("[workspace]", oxipng_manifest)
+            redb_metadata = json.loads(
+                subprocess.run(
+                    [
+                        "cargo",
+                        f"+{campaign.TOOLCHAIN}",
+                        "metadata",
+                        "--format-version",
+                        "1",
+                        "--no-deps",
+                        "--manifest-path",
+                        redb["manifest"],
+                    ],
+                    cwd=Path(redb["worktree"]),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    check=True,
+                ).stdout
+            )
+            target_names = {
+                target["name"]
+                for package in redb_metadata["packages"]
+                for target in package["targets"]
+            }
+            self.assertIn("unialloc-redb-actix-runner", target_names)
+            self.assertFalse((Path(redb["worktree"]) / "redb-source").exists())
 
     def test_polars_generated_manifest_is_in_post_injection_manifest_set(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

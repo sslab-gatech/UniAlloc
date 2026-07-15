@@ -1705,28 +1705,29 @@ def prepare_stage_a_source(
     spin = matrix.find_cached_spin()
     patched_manifests: list[str]
     if target_id == "redb":
-        shutil.rmtree(worktree, ignore_errors=True)
-        redb_source = worktree / "redb-source"
-        _copy_checkout(checkout, redb_source)
+        # Keep the generated runner as a bin target in redb's copied workspace.
+        # A generated outer package containing a nested redb workspace makes
+        # Cargo discover two workspace roots during metadata resolution.
+        _copy_checkout(checkout, worktree)
         patched_manifests = _inject_workspace_dependencies(
-            redb_source,
+            worktree,
             stage_a_target_crates(target_id),
             dependency,
         )
-        (worktree / "src").mkdir(parents=True, exist_ok=True)
-        manifest = (
-            '[package]\nname = "unialloc-redb-actix-runner"\nversion = "0.1.0"\n'
-            'edition = "2024"\nrust-version = "1.89"\npublish = false\n\n'
-            "[dependencies]\n"
-            f"redb = {{ path = {json.dumps(str(redb_source.resolve()))} }}\n"
-            f"{dependency}\n\n[workspace]\n"
-        )
-        (worktree / "Cargo.toml").write_text(manifest, encoding="utf-8")
         matrix.add_spin_patch(worktree / "Cargo.toml", spin)
-        (worktree / "src" / "main.rs").write_text(
+        runner_source = worktree / "src" / "bin" / "unialloc-redb-actix-runner.rs"
+        runner_source.parent.mkdir(parents=True, exist_ok=True)
+        runner_source.write_text(
             amplified_redb_source(), encoding="utf-8"
         )
-        build_command = ["cargo", f"+{TOOLCHAIN}", "build", "--release"]
+        build_command = [
+            "cargo",
+            f"+{TOOLCHAIN}",
+            "build",
+            "--release",
+            "--bin",
+            "unialloc-redb-actix-runner",
+        ]
         artifact_name = "unialloc-redb-actix-runner"
         manifest_path = worktree / "Cargo.toml"
     else:
@@ -1739,6 +1740,7 @@ def prepare_stage_a_source(
         matrix.add_spin_patch(worktree / "Cargo.toml", spin)
         manifest_path = worktree / "Cargo.toml"
         if target_id == "oxipng":
+            matrix.ensure_standalone_workspace(manifest_path)
             _append_instrumentation(worktree / "src" / "main.rs")
             build_command = [
                 "cargo",
@@ -2990,6 +2992,8 @@ def _planned_build_command(
         command = ["cargo", f"+{TOOLCHAIN}", "build", "--release"]
         if target_id == "oxipng":
             command.extend(["--bin", "oxipng"])
+        else:
+            command.extend(["--bin", "unialloc-redb-actix-runner"])
     elif target_id == "polars":
         command = [
             "cargo",
