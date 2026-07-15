@@ -498,12 +498,20 @@ def google_tcmalloc_provenance(args: argparse.Namespace) -> dict[str, Any]:
             path = workspace / str(relative)
             if not path.is_file() or sha256_file(path) != recorded_hash:
                 mismatches.append(f"workspace_hash:{relative}")
+    workspace_build = workspace / "BUILD.bazel"
+    if workspace_build.is_file():
+        expected_malloc_assignment = (
+            f'malloc = "{google_tcmalloc.MALLOC_TARGET}"'
+        )
+        if expected_malloc_assignment not in workspace_build.read_text(encoding="utf-8"):
+            mismatches.append("workspace_malloc_target")
 
     build_command = provenance.get("build_command")
     if not (
         isinstance(build_command, list)
         and len(build_command)
         == len(google_tcmalloc.BUILD_OPTIONS) + len(google_tcmalloc.BAZEL_TARGETS) + 2
+        and build_command[0] == provenance.get("bazel_executable")
         and build_command[1] == "build"
         and build_command[2 : 2 + len(google_tcmalloc.BUILD_OPTIONS)]
         == list(google_tcmalloc.BUILD_OPTIONS)
@@ -541,6 +549,7 @@ def google_tcmalloc_provenance(args: argparse.Namespace) -> dict[str, Any]:
         if not (
             isinstance(aquery_command, list)
             and len(aquery_command) == 4
+            and aquery_command[0] == provenance.get("bazel_executable")
             and aquery_command[1:3] == ["aquery", "--output=textproto"]
             and all(target in aquery_command[3] for target in google_tcmalloc.BAZEL_TARGETS)
         ):

@@ -39,7 +39,7 @@ RULES_CC_MODULE_VERSION = "0.1.5"
 BAZEL_TARGET = "//:cross_allocator_large_page_workload_google_tcmalloc"
 BAZEL_CONTROL_TARGET = "//:cross_allocator_large_page_workload_system"
 BAZEL_TARGETS = (BAZEL_CONTROL_TARGET, BAZEL_TARGET)
-MALLOC_TARGET = "@com_google_tcmalloc//tcmalloc"
+MALLOC_TARGET = "@com_google_tcmalloc//tcmalloc:tcmalloc"
 IMPLEMENTATION_FILES = (
     "tcmalloc/page_allocator.cc",
     "tcmalloc/huge_page_aware_allocator.cc",

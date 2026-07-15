@@ -27,7 +27,10 @@ class GoogleTcmallocBazelProbeTests(unittest.TestCase):
         self.assertEqual(provenance["revision_role"], "compatibility-pin-not-latest")
         self.assertIn("compatibility pin", provenance["pin_policy"])
         self.assertEqual(provenance["repository"], "https://github.com/google/tcmalloc.git")
-        self.assertEqual(provenance["malloc_target"], "@com_google_tcmalloc//tcmalloc")
+        self.assertEqual(
+            provenance["malloc_target"],
+            "@com_google_tcmalloc//tcmalloc:tcmalloc",
+        )
         self.assertEqual(provenance["bazel_target"], helper.BAZEL_TARGET)
         self.assertEqual(provenance["bazel_control_target"], helper.BAZEL_CONTROL_TARGET)
         self.assertEqual(provenance["build_options"], list(helper.BUILD_OPTIONS))
@@ -112,7 +115,9 @@ class GoogleTcmallocBazelProbeTests(unittest.TestCase):
             helper.write_workspace(workspace, checkout)
             build = (workspace / "BUILD.bazel").read_text(encoding="utf-8")
             module = (workspace / "MODULE.bazel").read_text(encoding="utf-8")
-            self.assertIn('malloc = "@com_google_tcmalloc//tcmalloc"', build)
+            self.assertIn(
+                'malloc = "@com_google_tcmalloc//tcmalloc:tcmalloc"', build
+            )
             self.assertIn('load("@rules_cc//cc:cc_binary.bzl", "cc_binary")', build)
             self.assertIn('"-fno-builtin-malloc"', build)
             self.assertIn('name = "cross_allocator_large_page_workload_system"', build)
