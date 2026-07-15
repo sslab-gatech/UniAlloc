@@ -1,0 +1,498 @@
+{
+  "binaries": {
+    "baseline": {
+      "sha256": "597ea9b458c89fa1b62b8e71fc949f3e060f74ce44ac190e9a2aa362e468515a",
+      "size_bytes": 10632008,
+      "source": "git archive of baseline_commit"
+    },
+    "build_profile": "release",
+    "candidate": {
+      "sha256": "e616a2e0a8f8d2953692406232977b2c017a22d85a350266a547e9274d426495",
+      "size_bytes": 10631944,
+      "source": "candidate_source_sha256 above"
+    },
+    "common_benchmark_source_sha256": "f52893b2af73a4ce4758cfd16ed472950e97dd2882e87d033fb31444539b293b",
+    "common_crate_name": "unialloc-lifetime-hot-bench",
+    "rustflags": "-C target-cpu=native"
+  },
+  "candidate": {
+    "baseline_source_sha256": "66f0fde7eb41ffa8897d1e8184b4aec8e0b0a1069e9f25631194a347a2e3b0d0",
+    "candidate_source_sha256": "1ae5ecc89ea57d44ed16598816670d0c9b98beeb0c63d5786c96bb0e88b487e7",
+    "canonical_diff_bytes": 8603,
+    "canonical_diff_command": "git diff --binary --no-ext-diff HEAD -- unialloc/src/alloc_api/lifetime_hugepage.rs",
+    "canonical_diff_sha256": "5436a82439749a066dd6d5ec15943e4717d393b4f4ecc82d9ddf765c842b58a0",
+    "changed_file": "unialloc/src/alloc_api/lifetime_hugepage.rs",
+    "summary": "Store a u8 last-successful region index in existing Extent padding, exact-check identity/cohort/capacity first, retain the complete ordered fallback scan, and publish the hint only after validation or assignment."
+  },
+  "environment": {
+    "boost_enabled": true,
+    "cargo": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+    "configured_max_freq_khz": 3250000,
+    "configured_min_freq_khz": 1500000,
+    "cpu_model": "AMD EPYC 9354 32-Core Processor",
+    "frequency_driver": "acpi-cpufreq",
+    "governor": "schedutil",
+    "host": "swoop",
+    "kernel": "6.8.0-111-generic",
+    "machine": "x86_64",
+    "n3": {
+      "created_at_utc": "2026-07-15T14:50:48Z",
+      "current_freq_khz_after": 3804450,
+      "current_freq_khz_before": 1517172,
+      "loadavg_after": "7.29 7.87 7.16 11/4881 389044",
+      "loadavg_before": "6.97 7.82 7.14 3/4851 387908"
+    },
+    "n5": {
+      "created_at_utc": "2026-07-15T14:51:37Z",
+      "current_freq_khz_after": 3797012,
+      "current_freq_khz_before": 1311762,
+      "loadavg_after": "8.39 8.00 7.24 5/4802 401632",
+      "loadavg_before": "8.25 7.97 7.22 2/4825 400622"
+    },
+    "rustc": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)"
+  },
+  "generated_at_utc": "2026-07-15T14:54:58.659447+00:00",
+  "input_hashes": {
+    "n3_metadata_sha256": "1915b3eca70a6a0f25d7e5907dbe8d69237ea7d6aaf43c77625b7497d6cbeddf",
+    "n3_raw_tsv_sha256": "f388a354b70468e2d619a602d4a325e7685525def4440086eb178541befd105c",
+    "n5_metadata_sha256": "3609ec62979f71f495078d0059b9c14890fc81c524bb62dd13630d0993eb4acf",
+    "n5_raw_tsv_sha256": "aa3783f98c9a9d356cc2c65db423d79d14f25931e812dea611ac8f636ea12ad6"
+  },
+  "measurements": {
+    "n3_prefilter": {
+      "routed_late_region": {
+        "baseline": {
+          "max_ns_per_iter": 110.441,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 108.295,
+          "min_ns_per_iter": 107.315,
+          "minor_fault_samples": [
+            313,
+            311,
+            313
+          ],
+          "samples_ns_per_iter": [
+            107.315,
+            110.441,
+            108.295
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 106.563,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 106.25,
+          "min_ns_per_iter": 101.885,
+          "minor_fault_samples": [
+            308,
+            316,
+            307
+          ],
+          "samples_ns_per_iter": [
+            106.25,
+            106.563,
+            101.885
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.981116395,
+        "paired_round_candidate_improvement_count": 3,
+        "paired_round_runtime_delta_percent": [
+          -0.992406,
+          -3.511377,
+          -5.919017
+        ],
+        "runtime_delta_percent": -1.88836,
+        "sample_ranges_overlap": false
+      },
+      "routed_same_region": {
+        "baseline": {
+          "max_ns_per_iter": 86.761,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 85.062,
+          "min_ns_per_iter": 82.844,
+          "minor_fault_samples": [
+            236,
+            236,
+            232
+          ],
+          "samples_ns_per_iter": [
+            86.761,
+            85.062,
+            82.844
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 83.599,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 83.494,
+          "min_ns_per_iter": 82.54,
+          "minor_fault_samples": [
+            237,
+            237,
+            236
+          ],
+          "samples_ns_per_iter": [
+            82.54,
+            83.494,
+            83.599
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.981566387,
+        "paired_round_candidate_improvement_count": 2,
+        "paired_round_runtime_delta_percent": [
+          -4.865089,
+          -1.843361,
+          0.911351
+        ],
+        "runtime_delta_percent": -1.843361,
+        "sample_ranges_overlap": true
+      },
+      "unknown_bypass": {
+        "baseline": {
+          "max_ns_per_iter": 82.89,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 82.475,
+          "min_ns_per_iter": 81.874,
+          "minor_fault_samples": [
+            217,
+            219,
+            218
+          ],
+          "samples_ns_per_iter": [
+            82.475,
+            82.89,
+            81.874
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 83.483,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 82.661,
+          "min_ns_per_iter": 82.468,
+          "minor_fault_samples": [
+            218,
+            214,
+            217
+          ],
+          "samples_ns_per_iter": [
+            83.483,
+            82.468,
+            82.661
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.002255229,
+        "paired_round_candidate_improvement_count": 1,
+        "paired_round_runtime_delta_percent": [
+          1.222189,
+          -0.509108,
+          0.961233
+        ],
+        "runtime_delta_percent": 0.225523,
+        "sample_ranges_overlap": true
+      }
+    },
+    "n5_confirmation": {
+      "routed_late_region": {
+        "baseline": {
+          "max_ns_per_iter": 127.539,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 110.18,
+          "min_ns_per_iter": 107.504,
+          "minor_fault_samples": [
+            311,
+            310,
+            307,
+            308,
+            311
+          ],
+          "samples_ns_per_iter": [
+            110.18,
+            127.539,
+            119.888,
+            107.894,
+            107.504
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 113.824,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 106.551,
+          "min_ns_per_iter": 101.822,
+          "minor_fault_samples": [
+            314,
+            308,
+            306,
+            315,
+            309
+          ],
+          "samples_ns_per_iter": [
+            113.653,
+            102.86,
+            113.824,
+            101.822,
+            106.551
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.967062988,
+        "paired_round_candidate_improvement_count": 4,
+        "paired_round_runtime_delta_percent": [
+          3.152115,
+          -19.35016,
+          -5.058054,
+          -5.627746,
+          -0.886479
+        ],
+        "runtime_delta_percent": -3.293701,
+        "sample_ranges_overlap": true
+      },
+      "routed_same_region": {
+        "baseline": {
+          "max_ns_per_iter": 84.908,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 82.669,
+          "min_ns_per_iter": 81.49,
+          "minor_fault_samples": [
+            232,
+            237,
+            234,
+            235,
+            236
+          ],
+          "samples_ns_per_iter": [
+            82.033,
+            82.669,
+            81.49,
+            84.908,
+            84.173
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 87.943,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 84.429,
+          "min_ns_per_iter": 82.885,
+          "minor_fault_samples": [
+            235,
+            237,
+            234,
+            236,
+            234
+          ],
+          "samples_ns_per_iter": [
+            84.429,
+            82.885,
+            86.004,
+            87.943,
+            83.287
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.021289722,
+        "paired_round_candidate_improvement_count": 1,
+        "paired_round_runtime_delta_percent": [
+          2.920776,
+          0.261283,
+          5.53933,
+          3.574457,
+          -1.052594
+        ],
+        "runtime_delta_percent": 2.128972,
+        "sample_ranges_overlap": true
+      },
+      "unknown_bypass": {
+        "baseline": {
+          "max_ns_per_iter": 84.468,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 82.618,
+          "min_ns_per_iter": 81.827,
+          "minor_fault_samples": [
+            216,
+            218,
+            218,
+            217,
+            217
+          ],
+          "samples_ns_per_iter": [
+            82.618,
+            84.296,
+            82.351,
+            81.827,
+            84.468
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 85.265,
+          "max_rss_kib_samples": [
+            2048,
+            2048,
+            2048,
+            2048,
+            2048
+          ],
+          "median_ns_per_iter": 83.184,
+          "min_ns_per_iter": 82.881,
+          "minor_fault_samples": [
+            215,
+            217,
+            215,
+            218,
+            218
+          ],
+          "samples_ns_per_iter": [
+            83.249,
+            82.98,
+            85.265,
+            82.881,
+            83.184
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.006850807,
+        "paired_round_candidate_improvement_count": 2,
+        "paired_round_runtime_delta_percent": [
+          0.763756,
+          -1.561165,
+          3.538512,
+          1.288083,
+          -1.520102
+        ],
+        "runtime_delta_percent": 0.685081,
+        "sample_ranges_overlap": true
+      }
+    },
+    "n5_routed_identity_aggregate": {
+      "baseline_median_sum_ns_per_iter": 192.849,
+      "candidate_median_sum_ns_per_iter": 190.98,
+      "geometric_mean_runtime_delta_percent": -0.619343,
+      "paired_round_candidate_improvement_count": 4,
+      "paired_round_sum_runtime_delta_percent": [
+        3.053383,
+        -11.637521,
+        -0.769697,
+        -1.575191,
+        -0.959427
+      ],
+      "runtime_delta_percent": -0.969152,
+      "semantics": "equal-weight sum of the two one-million-iteration routed identity scenarios"
+    },
+    "static_memory": {
+      "all_observed_process_max_rss_kib": 2048,
+      "baseline_extent_descriptor_bytes_64_bit": 2136,
+      "candidate_compile_time_guard": "size_of::<Extent>() <= 2136",
+      "candidate_extent_descriptor_bytes_64_bit": 2136,
+      "rss_delta_kib": 0
+    }
+  },
+  "metric_convention": "runtime_delta_percent = (candidate / baseline - 1) * 100; negative is faster",
+  "protocol": {
+    "confirmation_keep_gate": "retain only for a stable late-region or routed-identity aggregate gain, with unknown_bypass regression <=1%; reject an aggregate gain <=1% with overlapping noise",
+    "confirmation_repetitions": 5,
+    "cpu": 22,
+    "fresh_process_per_variant_scenario_round": true,
+    "numa_node": 0,
+    "prefilter_gate": {
+      "late_region_must_improve": true,
+      "same_region_max_regression_percent": 1.0,
+      "unknown_bypass_max_regression_percent": 1.0
+    },
+    "prefilter_repetitions": 3,
+    "scenario_order": "rotated by round",
+    "scenarios": {
+      "routed_late_region": {
+        "iterations_per_process": 1000000,
+        "preloaded_distinct_identity_regions": 32,
+        "target_region_index": 31
+      },
+      "routed_same_region": {
+        "iterations_per_process": 1000000
+      },
+      "unknown_bypass": {
+        "iterations_per_process": 2000000
+      }
+    },
+    "summary_statistic": "median",
+    "variant_order": "alternating by round",
+    "warmup_processes_per_variant_scenario": 1
+  },
+  "schema_version": 1,
+  "scope": {
+    "baseline_branch": "dev",
+    "baseline_commit": "e8fcc378c14442fe8993d29578f38eeb5df5acc9",
+    "candidate_branch": "codex/roi-lifetime-hot-region-20260715",
+    "claim": "targeted allocator hot-path merge decision only",
+    "general_macrobenchmark_claim": false
+  },
+  "subject": "rejected lifetime Extent hot-region hint",
+  "validation": {
+    "clippy": "passed with 168 pre-existing warnings and no candidate-specific warning",
+    "default_workspace": "passed; unialloc lib 818/818 and std_bench 468/468 included",
+    "diff_check": "passed",
+    "fmt": "passed",
+    "focused_lifetime_unit": "17/17 passed; includes stale unassigned, wrong identity, full, wrong cohort, valid hint, assignment publication, and descriptor guard",
+    "lifetime_feature_suite": "passed; lifetime lib 835/835, semantic_std 12/12, std_bench 470/470, all integration targets green",
+    "lifetime_stats_integration": "20/20 passed",
+    "no_default_lifetime_check": "passed",
+    "type_isolation_lifetime_combined_lib": "931/931 passed",
+    "type_isolation_lifetime_reclaim_checks_combined_lib": "928/928 passed"
+  },
+  "verdict": {
+    "decision": "reject",
+    "late_region_runtime_delta_percent": -3.293701,
+    "reason": "The five-run late-region median improved 3.294%, while the same-region control regressed 2.129%. The equal-work routed-identity aggregate improved only 0.969% with overlapping ranges, and unknown bypass regressed 0.685%. This misses the pre-registered whole-path guardrail.",
+    "routed_identity_aggregate_runtime_delta_percent": -0.969152,
+    "same_region_runtime_delta_percent": 2.128972,
+    "source_action": "candidate allocator source reverted to baseline; evidence retained",
+    "unknown_bypass_runtime_delta_percent": 0.685081
+  }
+}
