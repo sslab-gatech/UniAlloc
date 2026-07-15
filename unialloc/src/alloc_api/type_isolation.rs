@@ -106,6 +106,18 @@ const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 64;
 #[cfg(feature = "fixed_heap")]
 const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 32;
 const GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_MASK: usize = GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT - 1;
+/// Exact-count negative filters for process-visible semantic pointer state.
+///
+/// Global recovery records and retained T/D ownership use separate arrays so
+/// test-only resets cannot erase the other domain. A zero counter proves that
+/// no pointer with the same full-address hash is present; a nonzero counter is
+/// only a conservative slow-path hint. Counters publish before their record and
+/// retire after it, so collisions can add work but can never hide an owner.
+#[cfg(not(feature = "fixed_heap"))]
+const GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS: usize = 8192;
+#[cfg(feature = "fixed_heap")]
+const GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS: usize = 1024;
+const GLOBAL_SEMANTIC_POINTER_FILTER_MASK: usize = GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS - 1;
 /// Keep hosted active lifecycle records below a 37.5% table load.
 ///
 /// A 75% process-wide count can still saturate one 64-slot local probe window:
@@ -3746,6 +3758,8 @@ const GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL: bool =
 static GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE: AtomicBool =
     AtomicBool::new(GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL);
 #[cfg(test)]
+static TEST_RETAINED_ONLY_ADDRESS_LIFECYCLE: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
 static TEST_STRICT_ALLOCATION_PUBLICATIONS: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_SEMANTIC_ALLOCATION_PUBLICATIONS: AtomicUsize = AtomicUsize::new(0);
@@ -3753,6 +3767,34 @@ static TEST_SEMANTIC_ALLOCATION_PUBLICATIONS: AtomicUsize = AtomicUsize::new(0);
 static TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_RETAINED_FILTER_PUBLICATION_PHASE: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+static TEST_POINTER_FILTER_SLOW_PATH_PHASE: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+fn pause_after_retained_filter_publication_for_test() {
+    if TEST_RETAINED_FILTER_PUBLICATION_PHASE
+        .compare_exchange(1, 2, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        while TEST_RETAINED_FILTER_PUBLICATION_PHASE.load(Ordering::Acquire) == 2 {
+            core::hint::spin_loop();
+        }
+    }
+}
+
+#[cfg(test)]
+fn pause_after_pointer_filter_slow_path_for_test() {
+    if TEST_POINTER_FILTER_SLOW_PATH_PHASE
+        .compare_exchange(1, 2, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+    {
+        while TEST_POINTER_FILTER_SLOW_PATH_PHASE.load(Ordering::Acquire) == 2 {
+            core::hint::spin_loop();
+        }
+    }
+}
 
 static GLOBAL_RETAINED_OWNERSHIP_ARBITRATION: [Mutex<()>;
     GLOBAL_RETAINED_OWNERSHIP_ARBITRATION_SHARD_COUNT] = [
@@ -3772,6 +3814,23 @@ pub(crate) fn global_address_lifecycle_tracking_active() -> bool {
         return false;
     }
     GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.load(Ordering::Acquire)
+}
+
+/// Full Live/Released generation history is the `reclaim_checks` contract.
+/// Type Isolation itself needs only exact recovery and retained T/D ownership.
+#[inline]
+fn global_address_generation_tracking_active() -> bool {
+    if cfg!(feature = "reclaim_checks") {
+        return true;
+    }
+    #[cfg(test)]
+    {
+        return !TEST_RETAINED_ONLY_ADDRESS_LIFECYCLE.load(Ordering::Acquire);
+    }
+    #[cfg(not(test))]
+    {
+        false
+    }
 }
 
 /// Return whether process-wide semantic address lifecycle tracking is active.
@@ -4093,6 +4152,10 @@ static AUTO_ALLOCATION_RECORDS: [Mutex<GlobalAutoAllocationRecordTable>;
     Mutex::new(GlobalAutoAllocationRecordTable::empty()),
 ];
 static AUTO_ALLOCATION_RECORD_COUNT: AtomicUsize = AtomicUsize::new(0);
+static GLOBAL_RECOVERY_POINTER_FILTER: [AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
+    [const { AtomicUsize::new(0) }; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS];
+static GLOBAL_RETAINED_POINTER_FILTER: [AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
+    [const { AtomicUsize::new(0) }; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS];
 #[cfg(test)]
 static TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
@@ -4306,6 +4369,64 @@ pub fn semantic_runtime_slow_path_enabled() -> bool {
         return true;
     }
     let mut runtime_flags = global_flags & !SLOW_PATH_SCOPED_METADATA_MASK;
+    if runtime_flags & SLOW_PATH_AUTO_METADATA != 0 && auto_metadata_allocations_exhausted() {
+        runtime_flags &= !SLOW_PATH_AUTO_METADATA;
+    }
+    runtime_flags != 0
+}
+
+#[inline]
+unsafe fn current_thread_fast_recovery_maybe_tracks_pointer(ptr: *mut u8) -> bool {
+    if ptr.is_null() || !current_thread_fast_auto_allocation_records_active() {
+        return false;
+    }
+    let ptr_key = ptr as usize;
+    if FAST_AUTO_ALLOCATION_RECORD_INLINE.ptr == ptr_key {
+        return true;
+    }
+    let start = fast_auto_allocation_record_slot(ptr);
+    let mut offset = 0usize;
+    while offset < FAST_AUTO_ALLOCATION_RECORD_PROBE_LIMIT {
+        let idx = (start + offset) & (FAST_AUTO_ALLOCATION_RECORD_SLOTS - 1);
+        let record = FAST_AUTO_ALLOCATION_RECORDS[idx];
+        if record.is_empty() {
+            break;
+        }
+        if record.ptr == ptr_key {
+            return true;
+        }
+        offset += 1;
+    }
+    false
+}
+
+/// Pointer-specific deallocation/reallocation gate.
+///
+/// A positive result preserves the complete semantic path. A negative result
+/// requires every exact-count recovery/retained filter to be empty for this
+/// address hash and is therefore safe for the ordinary raw backend path.
+#[inline]
+pub(crate) unsafe fn semantic_runtime_slow_path_enabled_for_pointer(ptr: *mut u8) -> bool {
+    let lifecycle_active = global_address_lifecycle_tracking_active();
+    if global_address_generation_tracking_active() && lifecycle_active {
+        return true;
+    }
+    if !lifecycle_active {
+        return semantic_runtime_slow_path_enabled();
+    }
+    let global_flags = SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed);
+    if scoped_metadata_slow_path_enabled(global_flags) {
+        return true;
+    }
+    let pointer_maybe_tracked = current_thread_fast_recovery_maybe_tracks_pointer(ptr)
+        || global_semantic_pointer_maybe_tracked(ptr);
+    if pointer_maybe_tracked {
+        #[cfg(test)]
+        pause_after_pointer_filter_slow_path_for_test();
+        return true;
+    }
+    let mut runtime_flags =
+        global_flags & !(SLOW_PATH_ALLOCATION_RECORDS | SLOW_PATH_SCOPED_METADATA_MASK);
     if runtime_flags & SLOW_PATH_AUTO_METADATA != 0 && auto_metadata_allocations_exhausted() {
         runtime_flags &= !SLOW_PATH_AUTO_METADATA;
     }
@@ -5513,6 +5634,22 @@ unsafe fn insert_auto_allocation_record_overflow(
 }
 
 #[cfg(not(feature = "fixed_heap"))]
+unsafe fn insert_filtered_auto_allocation_record_overflow(
+    shard_idx: usize,
+    overflow: &mut AutoAllocationRecordOverflowTable,
+    record: AutoAllocationRecord,
+) -> AutoAllocationRecordOverflowInsert {
+    // The extra publication is conservative while an update/full result is
+    // resolved under the authoritative shard lock. Only a new record keeps it.
+    increment_global_recovery_pointer_filter(record.ptr as *mut u8);
+    let result = insert_auto_allocation_record_overflow(shard_idx, overflow, record);
+    if result != AutoAllocationRecordOverflowInsert::Inserted {
+        decrement_global_recovery_pointer_filter(record.ptr as *mut u8);
+    }
+    result
+}
+
+#[cfg(not(feature = "fixed_heap"))]
 unsafe fn try_remove_auto_allocation_record_overflow_at(
     shard_idx: usize,
     overflow: &mut AutoAllocationRecordOverflowTable,
@@ -5597,6 +5734,9 @@ fn clear_auto_allocation_records() {
         *table = GlobalAutoAllocationRecordTable::empty();
     }
     AUTO_ALLOCATION_RECORD_COUNT.store(0, Ordering::Relaxed);
+    for count in GLOBAL_RECOVERY_POINTER_FILTER.iter() {
+        count.store(0, Ordering::Release);
+    }
     AUTO_ALLOCATION_RECORD_ACTIVE_SHARDS.store(0, Ordering::Release);
     #[cfg(not(feature = "fixed_heap"))]
     AUTO_ALLOCATION_RECORD_LEGACY_NON_HOME_POSSIBLE.store(false, Ordering::Release);
@@ -6030,6 +6170,8 @@ fn install_global_auto_allocation_inline_record(
         return false;
     }
     if existing.is_available() {
+        // Publish the negative-filter gate before the record becomes visible.
+        increment_global_recovery_pointer_filter(ptr);
         AUTO_ALLOCATION_RECORD_COUNT.fetch_add(1, Ordering::Relaxed);
         increment_global_auto_allocation_record_shard_live_count(shard_idx, table);
     } else {
@@ -6266,7 +6408,7 @@ unsafe fn record_global_auto_allocation_metadata_eligible_sharded(
         // All shard-local inline probe windows were occupied. Spill into the
         // home shard's dynamically sized overflow table.
         let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
-        match insert_auto_allocation_record_overflow(
+        match insert_filtered_auto_allocation_record_overflow(
             home_shard_idx,
             &mut table.overflow,
             auto_allocation_record_for(ptr, layout, metadata),
@@ -6329,7 +6471,7 @@ unsafe fn record_home_auto_allocation_metadata_eligible(
         }
     }
 
-    match insert_auto_allocation_record_overflow(
+    match insert_filtered_auto_allocation_record_overflow(
         home_shard_idx,
         &mut table.overflow,
         auto_allocation_record_for(ptr, layout, metadata),
@@ -6474,6 +6616,8 @@ fn remove_global_auto_allocation_inline_record(
         table.inline[idx] = AutoAllocationRecord::tombstone();
         decrement_global_auto_allocation_record_shard_live_count(shard_idx, table);
     }
+    // Retire the filter only after the authoritative record is gone.
+    decrement_global_recovery_pointer_filter(ptr_key as *mut u8);
 }
 
 fn lookup_global_auto_allocation_record_in_shard(
@@ -6559,6 +6703,9 @@ fn lookup_global_auto_allocation_record_in_shard(
                                 AutoAllocationRecordMismatch::from_record(record),
                             );
                         }
+                        // The overflow slot is no longer authoritative before
+                        // its negative-filter publication is retired.
+                        decrement_global_recovery_pointer_filter(ptr);
                         let removed_last_global =
                             atomic_saturating_decrement(&AUTO_ALLOCATION_RECORD_COUNT) == 0;
                         if removed_last_global {
@@ -12776,6 +12923,73 @@ fn global_type_cache_ownership_hash(ptr: *mut u8) -> usize {
 }
 
 #[inline]
+fn global_semantic_pointer_filter_index(ptr: *mut u8) -> usize {
+    global_type_cache_ownership_hash(ptr) & GLOBAL_SEMANTIC_POINTER_FILTER_MASK
+}
+
+#[inline]
+fn increment_semantic_pointer_filter(
+    filter: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
+    ptr: *mut u8,
+) {
+    if ptr.is_null() {
+        panic!("semantic pointer filter cannot publish null");
+    }
+    // Every count corresponds to an authoritative recovery or retained-owner
+    // record. Hosted overflow mappings are bounded by `isize::MAX`, while the
+    // fixed-heap and retained-owner tables have much smaller hard capacities,
+    // so a valid live set cannot reach `usize::MAX`.
+    let previous = filter[global_semantic_pointer_filter_index(ptr)].fetch_add(1, Ordering::AcqRel);
+    assert_ne!(
+        previous,
+        usize::MAX,
+        "semantic pointer filter count exhausted"
+    );
+}
+
+#[inline]
+fn decrement_semantic_pointer_filter(
+    filter: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
+    ptr: *mut u8,
+) {
+    if ptr.is_null() {
+        panic!("semantic pointer filter cannot retire null");
+    }
+    let previous = filter[global_semantic_pointer_filter_index(ptr)].fetch_sub(1, Ordering::AcqRel);
+    assert_ne!(previous, 0, "semantic pointer filter count underflow");
+}
+
+#[inline]
+fn increment_global_recovery_pointer_filter(ptr: *mut u8) {
+    increment_semantic_pointer_filter(&GLOBAL_RECOVERY_POINTER_FILTER, ptr);
+}
+
+#[inline]
+fn decrement_global_recovery_pointer_filter(ptr: *mut u8) {
+    decrement_semantic_pointer_filter(&GLOBAL_RECOVERY_POINTER_FILTER, ptr);
+}
+
+#[inline]
+fn increment_global_retained_pointer_filter(ptr: *mut u8) {
+    increment_semantic_pointer_filter(&GLOBAL_RETAINED_POINTER_FILTER, ptr);
+}
+
+#[inline]
+fn decrement_global_retained_pointer_filter(ptr: *mut u8) {
+    decrement_semantic_pointer_filter(&GLOBAL_RETAINED_POINTER_FILTER, ptr);
+}
+
+#[inline]
+fn global_semantic_pointer_maybe_tracked(ptr: *mut u8) -> bool {
+    if ptr.is_null() {
+        return false;
+    }
+    let idx = global_semantic_pointer_filter_index(ptr);
+    GLOBAL_RECOVERY_POINTER_FILTER[idx].load(Ordering::Acquire) != 0
+        || GLOBAL_RETAINED_POINTER_FILTER[idx].load(Ordering::Acquire) != 0
+}
+
+#[inline]
 fn global_type_cache_ownership_shard_and_slot(ptr: *mut u8) -> (usize, usize) {
     let hash = global_type_cache_ownership_hash(ptr);
     (
@@ -12797,6 +13011,28 @@ fn address_lifecycle_state_snapshot(state: u8) -> GlobalAddressLifecycleSnapshot
         }
         _ => panic!("address lifecycle state corrupt"),
     }
+}
+
+#[inline]
+fn address_lifecycle_snapshot_requires_retained_filter(
+    snapshot: GlobalAddressLifecycleSnapshot,
+) -> bool {
+    matches!(
+        snapshot,
+        GlobalAddressLifecycleSnapshot::TypeLeased
+            | GlobalAddressLifecycleSnapshot::TypeRetained
+            | GlobalAddressLifecycleSnapshot::DelayedRetained
+    )
+}
+
+#[inline]
+fn address_lifecycle_state_requires_retained_filter(state: u8) -> bool {
+    matches!(
+        state,
+        ADDRESS_LIFECYCLE_TYPE_LEASED
+            | ADDRESS_LIFECYCLE_TYPE_RETAINED
+            | ADDRESS_LIFECYCLE_DELAYED_RETAINED
+    )
 }
 
 #[inline]
@@ -12949,6 +13185,12 @@ fn global_address_lifecycle_observation(ptr: *mut u8) -> GlobalAddressLifecycleO
         }
         offset += 1;
     }
+    if !global_address_generation_tracking_active() {
+        return GlobalAddressLifecycleObservation {
+            snapshot: GlobalAddressLifecycleSnapshot::Absent,
+            epoch: 0,
+        };
+    }
     global_address_generation_history_observation(&table, ptr_key).unwrap_or(
         GlobalAddressLifecycleObservation {
             snapshot: GlobalAddressLifecycleSnapshot::Absent,
@@ -13036,12 +13278,19 @@ fn transition_global_address_lifecycle(
             idx
         }
         None => {
-            let missing = global_address_generation_history_observation(&table, ptr_key).unwrap_or(
+            let missing = if global_address_generation_tracking_active() {
+                global_address_generation_history_observation(&table, ptr_key).unwrap_or(
+                    GlobalAddressLifecycleObservation {
+                        snapshot: GlobalAddressLifecycleSnapshot::Absent,
+                        epoch: 0,
+                    },
+                )
+            } else {
                 GlobalAddressLifecycleObservation {
                     snapshot: GlobalAddressLifecycleSnapshot::Absent,
                     epoch: 0,
-                },
-            );
+                }
+            };
             if expected != missing.snapshot
                 || expected_epoch
                     .map(|epoch| missing.epoch != epoch)
@@ -13085,12 +13334,24 @@ fn transition_global_address_lifecycle(
         );
     }
 
+    let prior_requires_filter = address_lifecycle_snapshot_requires_retained_filter(expected);
+    let target_requires_filter = address_lifecycle_state_requires_retained_filter(target_state);
+    if target_requires_filter && !prior_requires_filter {
+        // Publish before the retained entry so a pointer fast-negative cannot
+        // miss an already-visible T/D owner.
+        increment_global_retained_pointer_filter(ptr);
+        #[cfg(test)]
+        pause_after_retained_filter_publication_for_test();
+    }
+
     if target_state == ADDRESS_LIFECYCLE_PROBE_TOMBSTONE {
-        record_global_address_generation_history(
-            &mut table,
-            ptr_key,
-            GlobalAddressLifecycleSnapshot::Absent,
-        );
+        if global_address_generation_tracking_active() {
+            record_global_address_generation_history(
+                &mut table,
+                ptr_key,
+                GlobalAddressLifecycleSnapshot::Absent,
+            );
+        }
         table.ptrs[idx] = 0;
         table.states[idx] = ADDRESS_LIFECYCLE_PROBE_TOMBSTONE;
         table.entry_epochs[idx] = 0;
@@ -13099,6 +13360,11 @@ fn transition_global_address_lifecycle(
         table.ptrs[idx] = ptr_key;
         table.states[idx] = target_state;
         table.entry_epochs[idx] = epoch;
+    }
+    if prior_requires_filter && !target_requires_filter {
+        // The authoritative lifecycle entry is gone before zero becomes
+        // observable to a raw pointer fast-negative.
+        decrement_global_retained_pointer_filter(ptr);
     }
     Ok(())
 }
@@ -13333,19 +13599,24 @@ fn consume_global_type_cache_ownership_for_allocation(
     // Retire the T generation, then publish the allocation-return generation.
     // These are the same two history advances as the former two-call path, with
     // no observable intermediate state between them.
-    record_global_address_generation_history(
-        &mut table,
-        ptr_key,
-        GlobalAddressLifecycleSnapshot::Absent,
-    );
+    if global_address_generation_tracking_active() {
+        record_global_address_generation_history(
+            &mut table,
+            ptr_key,
+            GlobalAddressLifecycleSnapshot::Absent,
+        );
+    }
     table.ptrs[idx] = 0;
     table.states[idx] = ADDRESS_LIFECYCLE_PROBE_TOMBSTONE;
     table.entry_epochs[idx] = 0;
-    record_global_address_generation_history(
-        &mut table,
-        ptr_key,
-        GlobalAddressLifecycleSnapshot::Absent,
-    );
+    if global_address_generation_tracking_active() {
+        record_global_address_generation_history(
+            &mut table,
+            ptr_key,
+            GlobalAddressLifecycleSnapshot::Absent,
+        );
+    }
+    decrement_global_retained_pointer_filter(ptr);
     GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.fetch_sub(1, Ordering::Release);
     drop(table);
     drop(arbitration);
@@ -13463,6 +13734,9 @@ fn clear_global_type_cache_ownership_for_test() {
     while shard_idx < GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT {
         *GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock() = GlobalTypeCacheOwnershipTable::empty();
         shard_idx += 1;
+    }
+    for count in GLOBAL_RETAINED_POINTER_FILTER.iter() {
+        count.store(0, Ordering::Release);
     }
     GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.store(0, Ordering::Release);
 }
@@ -13761,7 +14035,7 @@ fn publish_authoritative_allocation_return(ptr: *mut u8, accept_existing_live: b
 /// Validate a pointer returned by the raw backend before it is exposed.
 #[inline]
 pub(crate) fn accept_raw_allocation_return(ptr: *mut u8) {
-    if !global_address_lifecycle_tracking_active() {
+    if !global_address_lifecycle_tracking_active() || !global_address_generation_tracking_active() {
         return;
     }
     publish_authoritative_allocation_return(ptr, false);
@@ -13772,6 +14046,9 @@ pub(crate) fn accept_raw_allocation_return(ptr: *mut u8) {
 #[inline]
 fn publish_semantic_allocation_return(ptr: *mut u8) {
     activate_semantic_address_lifecycle_tracking();
+    if !global_address_generation_tracking_active() {
+        return;
+    }
     publish_authoritative_allocation_return(ptr, true);
 }
 
@@ -13952,6 +14229,12 @@ pub(crate) fn observe_global_reclaim(ptr: *mut u8) -> GlobalReclaimObservation {
     }
     let mut history_lease = None;
     let lifecycle = lifecycle.unwrap_or_else(|| {
+        if !global_address_generation_tracking_active() {
+            return GlobalAddressLifecycleObservation {
+                snapshot: GlobalAddressLifecycleSnapshot::Absent,
+                epoch: 0,
+            };
+        }
         match global_address_generation_history_entry(&table, ptr_key) {
             Some((idx, observation)) => {
                 if observation.snapshot == GlobalAddressLifecycleSnapshot::Absent {
@@ -14424,7 +14707,11 @@ unsafe fn terminal_release_retained_raw(
         ptr,
         ownership.expected_snapshot(),
         None,
-        ADDRESS_LIFECYCLE_RELEASED,
+        if global_address_generation_tracking_active() {
+            ADDRESS_LIFECYCLE_RELEASED
+        } else {
+            ADDRESS_LIFECYCLE_PROBE_TOMBSTONE
+        },
     )
     .unwrap_or_else(|_| panic!("terminal retained ownership disappeared early"));
     match ownership {
@@ -14471,7 +14758,11 @@ unsafe fn terminal_release_retained_guarded(
         ptr,
         ownership.expected_snapshot(),
         None,
-        ADDRESS_LIFECYCLE_RELEASED,
+        if global_address_generation_tracking_active() {
+            ADDRESS_LIFECYCLE_RELEASED
+        } else {
+            ADDRESS_LIFECYCLE_PROBE_TOMBSTONE
+        },
     )
     .unwrap_or_else(|_| panic!("terminal guarded ownership disappeared early"));
     match ownership {
@@ -18661,6 +18952,24 @@ mod tests {
     impl Drop for LifecycleTrackingOverride {
         fn drop(&mut self) {
             GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.store(self.previous, Ordering::Release);
+        }
+    }
+
+    #[cfg(not(feature = "reclaim_checks"))]
+    struct RetainedOnlyLifecycleOverride;
+
+    #[cfg(not(feature = "reclaim_checks"))]
+    impl RetainedOnlyLifecycleOverride {
+        fn active() -> Self {
+            assert!(!TEST_RETAINED_ONLY_ADDRESS_LIFECYCLE.swap(true, Ordering::AcqRel));
+            Self
+        }
+    }
+
+    #[cfg(not(feature = "reclaim_checks"))]
+    impl Drop for RetainedOnlyLifecycleOverride {
+        fn drop(&mut self) {
+            TEST_RETAINED_ONLY_ADDRESS_LIFECYCLE.store(false, Ordering::Release);
         }
     }
 
@@ -22894,6 +23203,219 @@ mod tests {
     }
 
     #[test]
+    fn global_semantic_pointer_filter_refcounts_recovery_colliders() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_F117)
+            .with_module(0xC0DE_F117)
+            .with_callsite(0xA110_F117)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let first = 0x1000usize as *mut u8;
+        let filter_idx = global_semantic_pointer_filter_index(first);
+        let mut candidate = 0x1008usize;
+        let second = loop {
+            let ptr = candidate as *mut u8;
+            if global_semantic_pointer_filter_index(ptr) == filter_idx {
+                break ptr;
+            }
+            candidate = candidate.checked_add(8).unwrap();
+        };
+
+        assert!(!global_semantic_pointer_maybe_tracked(first));
+        assert!(!global_semantic_pointer_maybe_tracked(second));
+        assert!(unsafe { record_global_auto_allocation_metadata(first, layout, metadata) });
+        assert!(global_semantic_pointer_maybe_tracked(first));
+        assert!(global_semantic_pointer_maybe_tracked(second));
+        assert!(unsafe { record_global_auto_allocation_metadata(second, layout, metadata) });
+
+        assert_eq!(
+            recover_global_auto_allocation_record_metadata(first, layout, true),
+            Some(metadata)
+        );
+        assert!(
+            global_semantic_pointer_maybe_tracked(second),
+            "removing one colliding record must not create a filter false negative"
+        );
+        assert_eq!(
+            recover_global_auto_allocation_record_metadata(second, layout, true),
+            Some(metadata)
+        );
+        assert!(!global_semantic_pointer_maybe_tracked(first));
+    }
+
+    #[test]
+    fn global_semantic_pointer_filter_tracks_retained_ownership_until_release() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+
+        let ptr = 0x2800usize as *mut u8;
+        assert!(!global_semantic_pointer_maybe_tracked(ptr));
+        assert_eq!(
+            register_global_type_cache_ownership(ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        assert!(global_semantic_pointer_maybe_tracked(ptr));
+        assert!(unregister_global_type_cache_ownership(ptr));
+        assert!(!global_semantic_pointer_maybe_tracked(ptr));
+    }
+
+    #[cfg(all(not(feature = "reclaim_checks"), not(feature = "quarantine")))]
+    #[test]
+    fn retained_filter_publishes_before_type_owner_entry() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _retained_only = RetainedOnlyLifecycleOverride::active();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        assert!(!global_semantic_pointer_maybe_tracked(ptr));
+
+        TEST_RETAINED_FILTER_PUBLICATION_PHASE.store(1, Ordering::Release);
+        let ptr_addr = ptr as usize;
+        let owner =
+            thread::spawn(move || register_global_type_cache_ownership(ptr_addr as *mut u8));
+        while TEST_RETAINED_FILTER_PUBLICATION_PHASE.load(Ordering::Acquire) != 2 {
+            core::hint::spin_loop();
+        }
+        assert!(
+            global_semantic_pointer_maybe_tracked(ptr),
+            "the negative filter must publish before the retained entry"
+        );
+
+        TEST_POINTER_FILTER_SLOW_PATH_PHASE.store(1, Ordering::Release);
+        let ptr_addr = ptr as usize;
+        let foreign = thread::spawn(move || {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+                GlobalAlloc::dealloc(&RustAllocator::new(), ptr_addr as *mut u8, layout);
+            }))
+        });
+        while TEST_POINTER_FILTER_SLOW_PATH_PHASE.load(Ordering::Acquire) != 2 {
+            core::hint::spin_loop();
+        }
+
+        TEST_RETAINED_FILTER_PUBLICATION_PHASE.store(3, Ordering::Release);
+        assert_eq!(
+            owner.join().expect("retained owner publication thread"),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        TEST_POINTER_FILTER_SLOW_PATH_PHASE.store(3, Ordering::Release);
+        assert!(
+            foreign
+                .join()
+                .expect("foreign retained-filter reclaim thread")
+                .is_err(),
+            "a foreign raw free queued behind filter publication must fail-stop"
+        );
+        TEST_RETAINED_FILTER_PUBLICATION_PHASE.store(0, Ordering::Release);
+        TEST_POINTER_FILTER_SLOW_PATH_PHASE.store(0, Ordering::Release);
+
+        assert!(global_type_cache_contains_ptr(ptr));
+        assert!(global_semantic_pointer_maybe_tracked(ptr));
+        assert_eq!(GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.load(Ordering::Acquire), 1);
+        assert!(unregister_global_type_cache_ownership(ptr));
+        assert!(!global_semantic_pointer_maybe_tracked(ptr));
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+    }
+
+    #[cfg(all(not(feature = "reclaim_checks"), not(feature = "quarantine")))]
+    #[test]
+    fn retained_only_filter_skips_unrelated_raw_global_alloc_lifecycle_work() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _retained_only = RetainedOnlyLifecycleOverride::active();
+
+        let alloc = RustAllocator::new();
+        let typed_layout =
+            Layout::from_size_align(3 * size_of::<usize>(), align_of::<usize>()).unwrap();
+        let typed_metadata = AllocationMetadata::for_type(0xC003_F118)
+            .with_module(0xC0DE_F118)
+            .with_callsite(0xA110_F118)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let typed = unsafe { alloc.alloc_with_recovery_metadata(typed_layout, typed_metadata) };
+        assert!(!typed.is_null());
+        assert!(global_semantic_pointer_maybe_tracked(typed));
+
+        let raw_layout = Layout::from_size_align(192, align_of::<usize>()).unwrap();
+        let probes_before = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
+        let admissions_before = TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.load(Ordering::Relaxed);
+        let raw = unsafe { GlobalAlloc::alloc(&alloc, raw_layout) };
+        assert!(!raw.is_null());
+        assert_eq!(
+            TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed),
+            probes_before,
+            "an unrelated raw allocation must bypass lifecycle publication"
+        );
+        assert!(
+            !global_semantic_pointer_maybe_tracked(raw),
+            "test raw pointer unexpectedly collided with the tracked semantic filter bucket"
+        );
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, raw, raw_layout);
+        }
+        assert_eq!(
+            TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed),
+            probes_before,
+            "an unrelated raw pointer must bypass lifecycle lookup after semantic activation"
+        );
+        assert_eq!(
+            TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.load(Ordering::Relaxed),
+            admissions_before,
+            "an unrelated raw pointer must bypass retained-ownership admission"
+        );
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, typed, typed_layout);
+        }
+        assert!(
+            TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed) > probes_before,
+            "the matching recovery pointer must retain the semantic reclaim path"
+        );
+        assert!(global_semantic_pointer_maybe_tracked(typed));
+        unsafe {
+            clear_type_cache_for_test();
+            clear_auto_allocation_records();
+        }
+    }
+
+    #[test]
     fn auto_allocation_record_shard_live_count_keeps_active_until_last_remove() {
         let _guard = test_guard();
         unsafe {
@@ -23006,6 +23528,7 @@ mod tests {
         if seed_overflow {
             #[cfg(not(feature = "fixed_heap"))]
             unsafe {
+                increment_global_recovery_pointer_filter(old_ptr);
                 let overflow =
                     auto_allocation_record_overflow_for_test(&[auto_allocation_record_for(
                         old_ptr,
@@ -24378,6 +24901,8 @@ mod tests {
             .with_lifetime_hint(0x22);
 
         unsafe {
+            increment_global_recovery_pointer_filter(first_ptr);
+            increment_global_recovery_pointer_filter(second_ptr);
             let overflow = auto_allocation_record_overflow_for_test(&[
                 auto_allocation_record_for(first_ptr, layout, first_metadata),
                 auto_allocation_record_for(second_ptr, layout, second_metadata),

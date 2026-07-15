@@ -19,7 +19,7 @@ use crate::alloc_api::type_isolation::{
     semantic_fallback_attribution_record_raw_realloc_moved_dealloc_no_metadata,
     semantic_fallback_attribution_record_raw_realloc_no_metadata,
     semantic_fallback_attribution_record_realloc_recorded_old_metadata_new_allocation,
-    semantic_realloc_can_reuse_in_place, semantic_runtime_slow_path_enabled,
+    semantic_realloc_can_reuse_in_place, semantic_runtime_slow_path_enabled_for_pointer,
     semantic_stats_recording_enabled, take_auto_deallocation_metadata,
     verify_memory_tagged_reallocation_source, with_auto_allocation_recovery_recording,
     without_auto_allocation_recovery_recording, ActiveAllocatorMetadata, AllocationMetadata,
@@ -602,6 +602,10 @@ impl RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
+        if !semantic_runtime_slow_path_enabled_for_pointer(ptr) {
+            let _ = self.dealloc_raw_backend(ptr, layout);
+            return;
+        }
         let admission = begin_global_raw_reclaim(ptr);
         let _ = release_global_raw_reclaim(self, layout, admission);
     }
@@ -822,7 +826,7 @@ impl RustAllocator {
         if layout.size() == 0 {
             return self.alloc_raw(new_layout);
         }
-        if !global_address_lifecycle_tracking_active() {
+        if !semantic_runtime_slow_path_enabled_for_pointer(ptr) {
             return self.realloc_raw_from_admission(
                 GlobalRawReclaimAdmission::Untracked(ptr),
                 layout,
@@ -1132,11 +1136,8 @@ unsafe impl GlobalAlloc for RustAllocator {
             let _ = self.dealloc_raw_backend(ptr, layout);
             return;
         }
-        let semantic_slow_path = semantic_runtime_slow_path_enabled();
-        if !cfg!(feature = "quarantine")
-            && !semantic_slow_path
-            && !global_address_lifecycle_tracking_active()
-        {
+        let semantic_slow_path = semantic_runtime_slow_path_enabled_for_pointer(ptr);
+        if !cfg!(feature = "quarantine") && !semantic_slow_path {
             let _ = self.dealloc_raw_backend(ptr, layout);
             return;
         }
@@ -1210,11 +1211,8 @@ unsafe impl GlobalAlloc for RustAllocator {
             }
         }
 
-        let semantic_slow_path = semantic_runtime_slow_path_enabled();
-        if !cfg!(feature = "quarantine")
-            && !semantic_slow_path
-            && !global_address_lifecycle_tracking_active()
-        {
+        let semantic_slow_path = semantic_runtime_slow_path_enabled_for_pointer(ptr);
+        if !cfg!(feature = "quarantine") && !semantic_slow_path {
             return self.realloc_raw_from_admission(
                 GlobalRawReclaimAdmission::Untracked(ptr),
                 layout,
