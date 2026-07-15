@@ -284,10 +284,17 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
             fd.force_load_lock_packages,
             ("fd-find", "ignore", "walkdir", "same-file", "globset"),
         )
-        matrix.validate_force_load_lock_targets(
-            fd,
-            ROOT / "evaluation" / "external" / "_checkouts" / fd.checkout / "Cargo.lock",
-        )
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_path = pathlib.Path(tmp) / "Cargo.lock"
+            packages = "\n".join(
+                f'[[package]]\nname = "{name}"\nversion = "0.0.0"\n'
+                for name in fd.force_load_lock_packages
+            )
+            lock_path.write_text(
+                f"version = 3\n\n{packages}",
+                encoding="utf-8",
+            )
+            matrix.validate_force_load_lock_targets(fd, lock_path)
 
     def test_force_load_features_match_each_typeiso_variant(self) -> None:
         self.assertEqual(
