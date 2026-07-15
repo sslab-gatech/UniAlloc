@@ -29,12 +29,14 @@ include!(concat!(env!("OUT_DIR"), "/sizeclass_consts.rs"));
 /// cached nodes before a flush).
 ///
 /// Keep the fast lock-free local reuse path, but bound retained memory.  A size
-/// class flushes once it keeps roughly 256KiB of objects or 4096 objects,
-/// whichever comes first.  After a flush, the cache keeps a smaller hot set
-/// (see `THREAD_CACHE_TARGET_*`) and returns the suffix to the slab allocator.
+/// class flushes once it keeps roughly 256KiB of objects or 16384 objects,
+/// whichever comes first.  The object guard still bounds the two smallest
+/// classes, while classes of 16 bytes and above can use the full byte budget.
+/// After a flush, the cache keeps a smaller hot set (see
+/// `THREAD_CACHE_TARGET_*`) and returns the suffix to the slab allocator.
 const THREAD_CACHE_FLUSH_BYTES: usize = 256 * 1024;
 const THREAD_CACHE_TARGET_BYTES: usize = 64 * 1024;
-const THREAD_CACHE_FLUSH_OBJECTS_MAX: usize = 4096;
+const THREAD_CACHE_FLUSH_OBJECTS_MAX: usize = 16 * 1024;
 const THREAD_CACHE_TARGET_OBJECTS_MAX: usize = 1024;
 /// Largest generated class guaranteed to contain multiple objects per span.
 const THREAD_CACHE_MULTI_SLOT_FAST_MAX_BYTES: usize = 8 * 1024;
@@ -3904,6 +3906,30 @@ mod tests {
             THREAD_CACHE_FLUSH_OBJECTS_MAX + 1,
             rounded_size
         ));
+    }
+
+    #[test]
+    fn thread_cache_keeps_a_byte_bounded_24_byte_working_set_local() {
+        let rounded_size = 24;
+        let working_set_objects = 10_000;
+        let byte_limit = THREAD_CACHE_FLUSH_BYTES / rounded_size;
+
+        assert!(working_set_objects * rounded_size <= THREAD_CACHE_FLUSH_BYTES);
+        assert_eq!(
+            thread_cache_object_limit(
+                rounded_size,
+                THREAD_CACHE_FLUSH_BYTES,
+                THREAD_CACHE_FLUSH_OBJECTS_MAX,
+            ),
+            byte_limit,
+            "the object guard must not pre-empt the retained-byte budget for a bounded 24-byte working set"
+        );
+        assert!(!thread_cache_should_flush(
+            working_set_objects,
+            rounded_size
+        ));
+        assert!(!thread_cache_should_flush(byte_limit, rounded_size));
+        assert!(thread_cache_should_flush(byte_limit + 1, rounded_size));
     }
 
     #[test]
