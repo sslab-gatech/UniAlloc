@@ -275,10 +275,104 @@ class RenderRealworldAllocatorReportTests(unittest.TestCase):
                 "## Profile priority",
                 "base typed compiler/runtime path",
                 "tcmalloc-library-hash",
+                "--gperftools-legacy-library /usr/lib/libtcmalloc.so",
+                "gperftools_legacy",
                 "Output-equivalence SHA-256",
                 "Workload input SHA-256",
             ):
                 self.assertIn(expected, markdown)
+
+    def test_reproduction_command_uses_modern_google_tcmalloc_prefix(self) -> None:
+        document = campaign("ripgrep")
+        document["tcmalloc_runtime"] = {
+            "variant": "tcmalloc",
+            "label": "google-tcmalloc-modern-hpaa-adaptive-subrelease",
+            "library": "/opt/unialloc-tcmalloc/lib/libunialloc_google_tcmalloc.so",
+            "library_sha256": "modern-library-hash",
+            "identity": {
+                "allocator_family": "google/tcmalloc",
+                "variant": "modern-hpaa-adaptive-subrelease",
+                "provenance_path": "/opt/unialloc-tcmalloc/google-tcmalloc-provenance.json",
+            },
+        }
+        command = renderer.reproduction_command(
+            {
+                "app": "ripgrep",
+                "configuration": {
+                    "variants": list(document["variants"]),
+                    "quick": False,
+                    "warmups": 2,
+                    "repetitions": 3,
+                    "toolchain": "nightly-test",
+                    "run_output_retained": True,
+                },
+                "provenance": {
+                    "measurement_affinity": document["measurement_affinity"],
+                    "tcmalloc_runtime": document["tcmalloc_runtime"],
+                    "builds": document["builds"],
+                },
+                "workload": document["workloads"]["ripgrep"],
+                "input_path": "/tmp/results.json",
+            }
+        )
+        self.assertIn(
+            "--google-tcmalloc-prefix /opt/unialloc-tcmalloc", command
+        )
+        self.assertIn("tcmalloc", command)
+        self.assertNotIn("gperftools_legacy", command)
+        self.assertNotIn("--tcmalloc-library", command)
+
+    def test_modern_report_requires_target_process_identity_markers(self) -> None:
+        document = campaign("ripgrep")
+        revision = "12f255231938d30493186b0a037feedd70f5a1c1"
+        document["tcmalloc_runtime"] = {
+            "variant": "tcmalloc",
+            "label": "google-tcmalloc-modern-hpaa-adaptive-subrelease",
+            "library": "/opt/tcmalloc/lib/libunialloc_google_tcmalloc.so",
+            "library_sha256": "modern-library-hash",
+            "identity": {
+                "allocator_family": "google/tcmalloc",
+                "variant": "modern-hpaa-adaptive-subrelease",
+                "upstream_revision": revision,
+                "provenance_path": "/opt/tcmalloc/google-tcmalloc-provenance.json",
+            },
+            "runtime_requirements": {
+                "revision": revision,
+                "hpaa_active": 1,
+                "malloc_provider_is_self": 1,
+                "exact_mapped_path": "/opt/tcmalloc/lib/libunialloc_google_tcmalloc.so",
+            },
+        }
+        for row in document["measurements"]:
+            expected = 1 if row["variant"] == "tcmalloc" else 0
+            row["google_tcmalloc_identity_marker_count"] = expected
+            row["google_tcmalloc_target_identity_verified"] = True
+        tcmalloc = next(
+            row for row in document["builds"] if row["variant"] == "tcmalloc"
+        )
+        tcmalloc["preload_proof"].update(
+            {
+                "artifact_preflight_only": True,
+                "target_binary_sha256": tcmalloc["binary_sha256"],
+                "runtime_identity": {
+                    "revision": revision,
+                    "hpaa_active": 1,
+                    "malloc_provider_is_self": 1,
+                    "exact_library_mapped": True,
+                },
+            }
+        )
+
+        renderer.validate_campaign_measurements(document, "ripgrep")
+        renderer.build_provenance(document)
+
+        modern_row = next(
+            row for row in document["measurements"] if row["variant"] == "tcmalloc"
+        )
+        modern_row["google_tcmalloc_identity_marker_count"] = 0
+        modern_row["google_tcmalloc_target_identity_verified"] = False
+        with self.assertRaisesRegex(renderer.ReportError, "target-bound"):
+            renderer.validate_campaign_measurements(document, "ripgrep")
 
     def test_rejects_unsuccessful_campaign(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

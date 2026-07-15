@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import argparse
 import copy
-import ctypes.util
 import glob
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -30,6 +30,28 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parents[2]
 
+
+def _load_google_tcmalloc_support() -> Any:
+    """Load the local modern google/tcmalloc authenticator by repository path."""
+
+    try:
+        import google_tcmalloc_support as support
+
+        return support
+    except ModuleNotFoundError:
+        support_path = Path(__file__).resolve().with_name("google_tcmalloc_support.py")
+        spec = importlib.util.spec_from_file_location(
+            "_unialloc_paper_driver_google_tcmalloc_support", support_path
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"could not load modern google/tcmalloc support from {support_path}")
+        support = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(support)
+        return support
+
+
+GOOGLE_TCMALLOC = _load_google_tcmalloc_support()
+
 BENCH_LINE = re.compile(
     r"^test (?P<name>\S+)\s+\.\.\. bench:\s+"
     r"(?P<ns>[0-9][0-9,]*(?:\.[0-9]+)?)\s+ns/iter"
@@ -41,6 +63,7 @@ ALLOCATOR_FEATURES = {
     "jemalloc": "bench_jemalloc",
     "mimalloc": "bench_mimalloc",
     "tcmalloc": "bench_tcmalloc",
+    "gperftools_legacy": "bench_gperftools_legacy",
     "snmalloc": "bench_snmalloc",
     "ptmalloc": "bench_ptmalloc",
     "scudo": "bench_scudo",
@@ -66,22 +89,12 @@ SEMANTIC_HARNESS_SENTINEL_PREFIXES = (
     "zzz_semantic_auto_metadata_",
 )
 
-TCMALLOC_LIBRARY_NAMES = (
-    "libtcmalloc.dylib",
-    "libtcmalloc.so",
-    "libtcmalloc.so.4",
-    "libtcmalloc.a",
-    "libtcmalloc_minimal.dylib",
-    "libtcmalloc_minimal.so",
-    "libtcmalloc_minimal.so.4",
-    "libtcmalloc_minimal.a",
+GOOGLE_TCMALLOC_PREFIX_ENV = "UNIALLOC_GOOGLE_TCMALLOC_PREFIX"
+GOOGLE_TCMALLOC_LEGACY_DIR_ENVS = (
+    "UNIALLOC_TCMALLOC_LIB_DIR",
+    "TCMALLOC_LIB_DIR",
 )
-
-TCMALLOC_LIBRARY_DIR_GLOBS = (
-    "evaluation/deps/tcmalloc/lib",
-    "evaluation/raw/local-tcmalloc-dep-build-*/prefix/lib",
-    "evaluation/raw/local-tcmalloc-dep-build-*/lib",
-)
+DEFAULT_GOOGLE_TCMALLOC_PREFIX = ROOT / "evaluation/deps/tcmalloc"
 
 CMAKE_BIN_GLOBS = (
     "evaluation/deps/cmake/bin/cmake",
@@ -612,24 +625,51 @@ def prepend_preload_library(existing: Optional[str], library: Path) -> str:
     return " ".join([lib, *parts])
 
 
-def resolve_tcmalloc_library_dir(value: Optional[str]) -> Optional[Path]:
-    if not value:
-        return None
+def normalize_repository_path(value: str) -> Path:
     path = Path(value).expanduser()
     if not path.is_absolute():
-        path = (ROOT / path).resolve()
-    if not path.is_dir():
+        path = ROOT / path
+    return path.resolve(strict=False)
+
+
+def google_tcmalloc_library_dirs(value: str, *, prefix: bool) -> List[Path]:
+    """Translate canonical prefixes and deprecated lib-dir inputs to candidates."""
+
+    path = normalize_repository_path(value)
+    if prefix:
+        return [path / "lib"]
+    candidates = [path, path / "lib"]
+    return list(dict.fromkeys(candidates))
+
+
+def authenticate_google_tcmalloc_input(
+    value: str, *, prefix: bool
+) -> Tuple[Optional[Path], Optional[Dict[str, Any]], List[str]]:
+    errors: List[str] = []
+    for lib_dir in google_tcmalloc_library_dirs(value, prefix=prefix):
+        try:
+            identity = GOOGLE_TCMALLOC.validate_library_dir(lib_dir)
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            subprocess.SubprocessError,
+        ) as exc:
+            errors.append(f"{lib_dir}: {exc}")
+            continue
+        return lib_dir.resolve(strict=True), dict(identity), errors
+    return None, None, errors
+
+
+def resolve_tcmalloc_library_dir(value: Optional[str]) -> Optional[Path]:
+    """Compatibility resolver that accepts only authenticated modern artifacts."""
+
+    if not value:
         return None
-    for name in TCMALLOC_LIBRARY_NAMES:
-        if (path / name).exists():
-            return path
-    return None
-
-
-def library_files_in_dir(path: Optional[Path]) -> List[str]:
-    if not path:
-        return []
-    return sorted(name for name in TCMALLOC_LIBRARY_NAMES if (path / name).exists())
+    lib_dir, _identity, _errors = authenticate_google_tcmalloc_input(
+        value, prefix=False
+    )
+    return lib_dir
 
 
 def path_mtime(path: Path) -> float:
@@ -640,30 +680,62 @@ def path_mtime(path: Path) -> float:
 
 
 def discover_tcmalloc_library_dir() -> Optional[Path]:
-    candidates: List[Path] = []
-    for pattern in TCMALLOC_LIBRARY_DIR_GLOBS:
-        candidates.extend(ROOT.glob(pattern))
-    for path in sorted(candidates, key=lambda item: (path_mtime(item), str(item)), reverse=True):
-        resolved = resolve_tcmalloc_library_dir(str(path))
-        if resolved:
-            return resolved
-    return None
+    """Discover only the build helper's canonical, provenance-bound prefix."""
+
+    if not DEFAULT_GOOGLE_TCMALLOC_PREFIX.exists():
+        return None
+    lib_dir, _identity, _errors = authenticate_google_tcmalloc_input(
+        str(DEFAULT_GOOGLE_TCMALLOC_PREFIX), prefix=True
+    )
+    return lib_dir
 
 
 def tcmalloc_library_probe(args: argparse.Namespace) -> Dict[str, Any]:
-    explicit = args.tcmalloc_lib_dir or os.environ.get("UNIALLOC_TCMALLOC_LIB_DIR") or os.environ.get("TCMALLOC_LIB_DIR")
-    explicit_resolved = resolve_tcmalloc_library_dir(explicit)
-    discovered = discover_tcmalloc_library_dir()
-    resolved = explicit_resolved or discovered
+    canonical = getattr(args, "google_tcmalloc_prefix", None) or os.environ.get(
+        GOOGLE_TCMALLOC_PREFIX_ENV
+    )
+    source: Optional[str] = None
+    value: Optional[str] = None
+    prefix = True
+    if canonical:
+        source = GOOGLE_TCMALLOC_PREFIX_ENV
+        value = str(canonical)
+    else:
+        deprecated_arg = getattr(args, "tcmalloc_lib_dir", None)
+        if deprecated_arg:
+            source = "--tcmalloc-lib-dir"
+            value = str(deprecated_arg)
+            prefix = False
+        else:
+            for env_name in GOOGLE_TCMALLOC_LEGACY_DIR_ENVS:
+                if os.environ.get(env_name):
+                    source = env_name
+                    value = str(os.environ[env_name])
+                    prefix = False
+                    break
+    if value is None and DEFAULT_GOOGLE_TCMALLOC_PREFIX.exists():
+        source = "canonical_repo_prefix"
+        value = str(DEFAULT_GOOGLE_TCMALLOC_PREFIX)
+        prefix = True
+
+    resolved: Optional[Path] = None
+    identity: Optional[Dict[str, Any]] = None
+    errors: List[str] = []
+    if value is not None:
+        resolved, identity, errors = authenticate_google_tcmalloc_input(
+            value, prefix=prefix
+        )
     return {
-        "ctypes_find_library_tcmalloc": ctypes.util.find_library("tcmalloc"),
-        "ctypes_find_library_tcmalloc_minimal": ctypes.util.find_library("tcmalloc_minimal"),
+        "ok": bool(resolved and identity),
+        "allocator_family_required": "google/tcmalloc",
+        "variant_required": "modern-hpaa-adaptive-subrelease",
+        "configured_prefix": str(resolved.parent) if resolved else None,
         "configured_library_dir": str(resolved) if resolved else None,
-        "configured_library_dir_input": explicit,
-        "configured_library_dir_source": (
-            "explicit" if explicit_resolved else "repo_auto_discovery" if discovered else None
-        ),
-        "configured_library_files": library_files_in_dir(resolved),
+        "configured_input": value,
+        "configured_input_source": source,
+        "deprecated_input": bool(source in {"--tcmalloc-lib-dir", *GOOGLE_TCMALLOC_LEGACY_DIR_ENVS}),
+        "identity": identity,
+        "validation_errors": errors,
     }
 
 
@@ -1779,16 +1851,20 @@ def cargo_subprocess_env(args: argparse.Namespace) -> Dict[str, str]:
             compiler_site_replay.get("recovery_scope") or "thread-local"
         )
     if args.allocator == "tcmalloc":
-        lib_dir = (
-            resolve_tcmalloc_library_dir(
-                args.tcmalloc_lib_dir or env.get("UNIALLOC_TCMALLOC_LIB_DIR") or env.get("TCMALLOC_LIB_DIR")
-            )
-            or discover_tcmalloc_library_dir()
-        )
-        if lib_dir:
-            env["UNIALLOC_TCMALLOC_LIB_DIR"] = str(lib_dir)
+        probe = tcmalloc_library_probe(args)
+        lib_dir_value = probe.get("configured_library_dir")
+        prefix_value = probe.get("configured_prefix")
+        if probe.get("ok") and lib_dir_value and prefix_value:
+            lib_dir = Path(str(lib_dir_value))
+            env[GOOGLE_TCMALLOC_PREFIX_ENV] = str(prefix_value)
             env["LIBRARY_PATH"] = prepend_path(env.get("LIBRARY_PATH"), lib_dir)
-            env["DYLD_LIBRARY_PATH"] = prepend_path(env.get("DYLD_LIBRARY_PATH"), lib_dir)
+            env["LD_LIBRARY_PATH"] = prepend_path(
+                env.get("LD_LIBRARY_PATH"), lib_dir
+            )
+            env["DYLD_LIBRARY_PATH"] = prepend_path(
+                env.get("DYLD_LIBRARY_PATH"), lib_dir
+            )
+    if args.allocator == "gperftools_legacy":
         cmake_bin = (
             resolve_cmake_bin(args.cmake_bin or env.get("UNIALLOC_CMAKE_BIN") or env.get("CMAKE_BIN"))
             or discover_cmake_bin()
@@ -1816,10 +1892,11 @@ def env_delta_for_record(env: Dict[str, str]) -> Dict[str, str]:
     keys = (
         "UNIALLOC_STD_BENCH_DISABLE_TYPE_STATS",
         "UNIALLOC_STD_BENCH_DISABLE_AGGREGATE_STATS",
-        "UNIALLOC_TCMALLOC_LIB_DIR",
+        GOOGLE_TCMALLOC_PREFIX_ENV,
         "UNIALLOC_CMAKE_BIN",
         "UNIALLOC_SCUDO_RUNTIME_LIBRARY",
         "LIBRARY_PATH",
+        "LD_LIBRARY_PATH",
         "DYLD_LIBRARY_PATH",
         "LD_PRELOAD",
         "RUSTFLAGS",
@@ -2393,16 +2470,16 @@ def validate_args(args: argparse.Namespace) -> Optional[int]:
         )
     if args.allocator == "tcmalloc":
         probe = tcmalloc_library_probe(args)
-        if not probe.get("ctypes_find_library_tcmalloc") and not probe.get("configured_library_dir"):
+        if probe.get("ok") is not True:
             return emit_error(
-                "tcmalloc link library was not found on this host",
+                "modern google/tcmalloc artifact failed provenance and HPAA authentication",
                 code=2,
                 allocator=args.allocator,
                 host_system=platform.system(),
                 library_probe=probe,
                 hint=(
-                    "install/provide libtcmalloc, or set UNIALLOC_TCMALLOC_LIB_DIR / "
-                    "--tcmalloc-lib-dir to a directory containing libtcmalloc"
+                    "run evaluation/scripts/build_google_tcmalloc.py and set "
+                    "UNIALLOC_GOOGLE_TCMALLOC_PREFIX to its --prefix directory"
                 ),
             )
     if args.allocator not in ALLOCATOR_FEATURES:
@@ -2533,7 +2610,9 @@ def run(args: argparse.Namespace) -> int:
             }
         )
     if args.allocator == "tcmalloc":
-        metadata["tcmalloc_library_probe"] = tcmalloc_library_probe(args)
+        probe = tcmalloc_library_probe(args)
+        metadata["google_tcmalloc_library_probe"] = probe
+        metadata["tcmalloc_library_probe"] = probe
     if args.allocator == "scudo":
         planned_execution = scudo_execution_runtime_record(
             scudo_execution_probe(args),
@@ -2936,9 +3015,23 @@ def main(argv: Optional[List[str]] = None) -> int:
         ),
     )
     parser.add_argument(
+        "--google-tcmalloc-prefix",
+        default=os.environ.get(GOOGLE_TCMALLOC_PREFIX_ENV),
+        help=(
+            "Prefix produced by build_google_tcmalloc.py; also configurable via "
+            "UNIALLOC_GOOGLE_TCMALLOC_PREFIX"
+        ),
+    )
+    parser.add_argument(
         "--tcmalloc-lib-dir",
-        default=os.environ.get("UNIALLOC_TCMALLOC_LIB_DIR") or os.environ.get("TCMALLOC_LIB_DIR"),
-        help="Directory containing libtcmalloc; also configurable via UNIALLOC_TCMALLOC_LIB_DIR",
+        default=(
+            os.environ.get("UNIALLOC_TCMALLOC_LIB_DIR")
+            or os.environ.get("TCMALLOC_LIB_DIR")
+        ),
+        help=(
+            "Deprecated compatibility input. The directory is accepted only when "
+            "modern google/tcmalloc provenance and HPAA authentication succeeds."
+        ),
     )
     parser.add_argument(
         "--cmake-bin",

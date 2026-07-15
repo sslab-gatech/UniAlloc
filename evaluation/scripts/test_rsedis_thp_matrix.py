@@ -9,6 +9,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from evaluation.scripts import rsedis_thp_matrix as matrix
 
@@ -25,6 +26,7 @@ class EnvironmentTests(unittest.TestCase):
                 "MIMALLOC_VERBOSE": "1",
                 "TCMALLOC_MEMFS_MALLOC_PATH": "/mnt/huge",
                 "TCMALLOC_SAMPLE_PARAMETER": "1",
+                "UNIALLOC_GOOGLE_TCMALLOC_PREFIX": "/tmp/prefix",
                 "MALLOC_CONF": "dirty_decay_ms:0",
             }
         )
@@ -38,6 +40,7 @@ class EnvironmentTests(unittest.TestCase):
                 "MIMALLOC_VERBOSE",
                 "TCMALLOC_MEMFS_MALLOC_PATH",
                 "TCMALLOC_SAMPLE_PARAMETER",
+                "UNIALLOC_GOOGLE_TCMALLOC_PREFIX",
                 "MALLOC_CONF",
             },
         )
@@ -63,6 +66,9 @@ class EnvironmentTests(unittest.TestCase):
         tcmalloc = matrix.make_runtime_cell(
             "tcmalloc_default", source_environment=base, **paths
         )
+        legacy = matrix.make_runtime_cell(
+            "gperftools_legacy", source_environment=base, **paths
+        )
         self.assertEqual(default.environment["MIMALLOC_ALLOW_THP"], "1")
         self.assertEqual(off.environment["MIMALLOC_ALLOW_THP"], "0")
         for cell in (default, off):
@@ -71,9 +77,60 @@ class EnvironmentTests(unittest.TestCase):
             self.assertNotIn("LD_PRELOAD", cell.environment)
             self.assertFalse(any(key.startswith("TCMALLOC_") for key in cell.environment))
         self.assertEqual(tcmalloc.environment["LD_PRELOAD"], "/tmp/libtcmalloc.so")
-        self.assertEqual(tcmalloc.environment["TCMALLOC_MEMFS_MALLOC_PATH"], "")
+        self.assertNotIn("TCMALLOC_MEMFS_MALLOC_PATH", tcmalloc.environment)
         self.assertFalse(any(key.startswith("MIMALLOC_") for key in tcmalloc.environment))
         self.assertNotIn("TCMALLOC_SAMPLE_PARAMETER", tcmalloc.environment)
+        self.assertEqual(legacy.environment["LD_PRELOAD"], "/tmp/libtcmalloc.so")
+        self.assertEqual(legacy.environment["TCMALLOC_MEMFS_MALLOC_PATH"], "")
+
+    def test_modern_tcmalloc_rejects_gperftools_lookalike(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = Path(directory)
+            (prefix / "lib").mkdir()
+            (prefix / "lib/libtcmalloc.so.4").write_bytes(b"gperftools")
+            with self.assertRaisesRegex(
+                RuntimeError, "modern google/tcmalloc authentication failed"
+            ):
+                matrix.google_tcmalloc_runtime_evidence(prefix)
+
+    def test_google_tcmalloc_marker_requires_an_exact_line(self) -> None:
+        marker = matrix.GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER.encode()
+        self.assertEqual(
+            matrix.exact_identity_marker_count(
+                marker, matrix.GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER
+            ),
+            1,
+        )
+        self.assertEqual(
+            matrix.exact_identity_marker_count(
+                b"prefix " + marker,
+                matrix.GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER,
+            ),
+            0,
+        )
+
+    def test_modern_tcmalloc_binds_shared_support_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = Path(directory)
+            lib_dir = prefix / "lib"
+            lib_dir.mkdir()
+            library = lib_dir / "libunialloc_google_tcmalloc.so"
+            library.write_bytes(b"modern")
+            identity = {
+                "realpath": str(library.resolve()),
+                "sha256": "a" * 64,
+                "allocator_family": "google/tcmalloc",
+            }
+            with mock.patch.object(
+                matrix.GOOGLE_TCMALLOC,
+                "validate_library_dir",
+                return_value=identity,
+            ) as validate:
+                evidence = matrix.google_tcmalloc_runtime_evidence(prefix)
+
+        validate.assert_called_once_with(lib_dir.resolve())
+        self.assertEqual(evidence["allocator_family"], "google/tcmalloc")
+        self.assertEqual(evidence["library"], str(library.resolve()))
 
 
 class ParsingTests(unittest.TestCase):
@@ -226,8 +283,8 @@ class CliTests(unittest.TestCase):
                         str(executable),
                         "--system-rsedis-binary",
                         str(executable),
-                        "--gperftools-library",
-                        str(library),
+                        "--google-tcmalloc-prefix",
+                        str(root),
                         "--raw-dir",
                         str(raw),
                     ]

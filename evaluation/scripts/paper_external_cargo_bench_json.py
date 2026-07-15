@@ -42,6 +42,28 @@ except ModuleNotFoundError as exc:
     _paper_workload_driver = importlib.util.module_from_spec(_driver_spec)
     _driver_spec.loader.exec_module(_paper_workload_driver)
 
+
+def _load_google_tcmalloc_support() -> Any:
+    try:
+        import google_tcmalloc_support as support
+
+        return support
+    except ModuleNotFoundError as exc:
+        if exc.name != "google_tcmalloc_support":
+            raise
+        support_path = Path(__file__).resolve().with_name("google_tcmalloc_support.py")
+        spec = importlib.util.spec_from_file_location(
+            "_unialloc_external_cargo_google_tcmalloc_support", support_path
+        )
+        if spec is None or spec.loader is None:  # pragma: no cover - installation failure
+            raise ImportError(f"could not load google/tcmalloc support from {support_path}") from exc
+        support = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(support)
+        return support
+
+
+_GOOGLE_TCMALLOC = _load_google_tcmalloc_support()
+
 BENCH_LINE = re.compile(
     r"^test (?P<name>\S+)\s+\.\.\. bench:\s+"
     r"(?P<ns>[0-9][0-9,]*(?:\.[0-9]+)?)\s+ns/iter"
@@ -57,6 +79,7 @@ ALLOCATOR_FEATURES = {
     "jemalloc": "bench_jemalloc",
     "mimalloc": "bench_mimalloc",
     "tcmalloc": "bench_tcmalloc",
+    "gperftools-legacy": "bench_gperftools_legacy",
     "snmalloc": "bench_snmalloc",
     "scudo": "bench_scudo",
 }
@@ -66,6 +89,8 @@ ALLOCATOR_OLD_NIGHTLY_PIN_MARKER = "# UniAlloc evaluation external cargo old-nig
 ALLOCATOR_BENCH_OVERLAY_MARKER = "// UniAlloc evaluation external cargo allocator overlay."
 ALLOCATOR_BENCH_OVERLAY_END_MARKER = "// End UniAlloc evaluation external cargo allocator overlay."
 SCUDO_RUNTIME_IDENTITY_MARKER = _paper_workload_driver.SCUDO_RUNTIME_IDENTITY_MARKER
+GOOGLE_TCMALLOC_PREFIX_ENV = "UNIALLOC_GOOGLE_TCMALLOC_PREFIX"
+GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER = _GOOGLE_TCMALLOC.RUNTIME_IDENTITY_MARKER
 
 POLARS_JSONPATH_STALE_GIT_DEP = (
     'jsonpath_lib = { version = "0.3.0", optional = true, '
@@ -506,6 +531,44 @@ def discover_tcmalloc_include_dirs(repo_root: Path) -> List[Path]:
     return result
 
 
+def modern_google_tcmalloc_requested(args: argparse.Namespace, command: Iterable[str]) -> bool:
+    return (
+        allocator_feature(args.allocator) == "bench_tcmalloc"
+        or "bench_tcmalloc" in cargo_command_features(command)
+    )
+
+
+def validate_google_tcmalloc_prefix(env: Dict[str, str]) -> Dict[str, Any]:
+    """Authenticate the one modern artifact accepted by external Cargo runs."""
+
+    repo_root = repo_root_from_script()
+    configured = str(env.get(GOOGLE_TCMALLOC_PREFIX_ENV) or "").strip()
+    default_prefix = repo_root / "evaluation" / "deps" / "tcmalloc"
+    if configured:
+        prefix = Path(configured).expanduser()
+        source = GOOGLE_TCMALLOC_PREFIX_ENV
+    elif default_prefix.exists():
+        prefix = default_prefix
+        source = "canonical_repo_prefix"
+    else:
+        raise RuntimeError(
+            "modern google/tcmalloc requires UNIALLOC_GOOGLE_TCMALLOC_PREFIX; "
+            "build it with evaluation/scripts/build_google_tcmalloc.py"
+        )
+    prefix = prefix.resolve(strict=True)
+    identity = dict(_GOOGLE_TCMALLOC.validate_library_dir(prefix / "lib"))
+    return {
+        "schema_version": 1,
+        "source": "paper-external-cargo-bench-json-google-tcmalloc-preflight",
+        "ok": True,
+        "configured_input_source": source,
+        "configured_prefix": str(prefix),
+        "configured_library_dir": str((prefix / "lib").resolve(strict=True)),
+        "identity": identity,
+        "runtime_identity_marker": GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER,
+    }
+
+
 POLARS_GROUPBY_REQUIRED_CSV_COLUMNS = ["id1", "id2", "id3", "id4", "id5", "id6", "v1", "v2", "v3"]
 RPOLARS_PAPER_CARGO_BENCH_TARGETS = {"bench", "csv", "groupby", "collect", "take", "sort"}
 RPOLARS_CANONICAL_GROUPBY_CSV_NAME = "G1_1e7_1e2_5_0.csv"
@@ -926,6 +989,21 @@ def configure_dependency_env(args: argparse.Namespace, env: Dict[str, str]) -> D
     elif cmake_bins:
         record["available_cmake_bins"] = [str(path) for path in cmake_bins]
     if allocator == "tcmalloc":
+        preflight = getattr(args, "_google_tcmalloc_preflight", None)
+        if not isinstance(preflight, dict) or preflight.get("ok") is not True:
+            raise RuntimeError("modern google/tcmalloc was not authenticated before environment setup")
+        lib_dir = Path(str(preflight["configured_library_dir"]))
+        prefix = Path(str(preflight["configured_prefix"]))
+        record["library_path_prefixes"] = prepend_env_path(env, "LIBRARY_PATH", [lib_dir])
+        record["library_path_prefixes_runtime"] = prepend_env_path(
+            env,
+            "LD_LIBRARY_PATH",
+            [lib_dir],
+        )
+        env[GOOGLE_TCMALLOC_PREFIX_ENV] = str(prefix)
+        record["google_tcmalloc_preflight"] = preflight
+        record["google_tcmalloc_link_mode"] = "rust-link-attribute-c-abi"
+    elif allocator == "gperftools-legacy":
         lib_dirs = discover_tcmalloc_lib_dirs(repo_root)
         include_dirs = discover_tcmalloc_include_dirs(repo_root)
         record["library_path_prefixes"] = prepend_env_path(env, "LIBRARY_PATH", lib_dirs)
@@ -944,8 +1022,8 @@ def configure_dependency_env(args: argparse.Namespace, env: Dict[str, str]) -> D
         if library_flags:
             env["LDFLAGS"] = (library_flags + " " + env.get("LDFLAGS", "")).strip()
             record["ldflags_prefix"] = library_flags
-        record["tcmalloc_lib_dirs"] = [str(path) for path in lib_dirs]
-        record["tcmalloc_include_dirs"] = [str(path) for path in include_dirs]
+        record["gperftools_legacy_lib_dirs"] = [str(path) for path in lib_dirs]
+        record["gperftools_legacy_include_dirs"] = [str(path) for path in include_dirs]
     local_toolchain = read_local_rust_toolchain(real_workload_dir)
     inherited_toolchain = os.environ.get("RUSTUP_TOOLCHAIN", "")
     effective_toolchain = inherited_toolchain or local_toolchain
@@ -1171,6 +1249,23 @@ def verify_scudo_runtime_identity(args: argparse.Namespace, stderr_text: Any) ->
     execution["request_sources"] = list(getattr(args, "_external_scudo_request_sources", []))
     setattr(args, "_external_scudo_execution_record", execution)
     return execution
+
+
+def verify_google_tcmalloc_runtime_identity(
+    args: argparse.Namespace,
+    stderr_text: Any,
+) -> Dict[str, Any]:
+    marker_seen = GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER in str(stderr_text or "")
+    setattr(args, "_google_tcmalloc_runtime_verified", marker_seen)
+    preflight = getattr(args, "_google_tcmalloc_preflight", None)
+    return {
+        "schema_version": 1,
+        "source": "paper-external-cargo-bench-json-google-tcmalloc-runtime-identity",
+        "ok": marker_seen and isinstance(preflight, dict) and preflight.get("ok") is True,
+        "runtime_identity_verified": marker_seen,
+        "runtime_identity_marker": GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER,
+        "artifact_preflight": preflight,
+    }
 
 
 def scudo_runtime_guard_source_probe(real_workload_dir: Path, command: List[str]) -> Dict[str, Any]:
@@ -1691,6 +1786,29 @@ def allocator_semantics_record(args: argparse.Namespace) -> Dict[str, Any]:
             blockers.append(
                 "bench_ptmalloc routes to std::alloc::System on this host, not Linux/glibc ptmalloc paper evidence"
             )
+    elif feature == "bench_tcmalloc":
+        preflight = getattr(args, "_google_tcmalloc_preflight", None)
+        runtime_verified = getattr(args, "_google_tcmalloc_runtime_verified", False) is True
+        implementation_kind = (
+            "verified_modern_google_tcmalloc_c_abi"
+            if runtime_verified
+            else "planned_modern_google_tcmalloc_c_abi"
+        )
+        paper_allocator_equivalent = runtime_verified
+        if runtime_verified:
+            notes.append(
+                "constructor verified the pinned google/tcmalloc revision, HPAA state, and malloc provider"
+            )
+        else:
+            blockers.append(
+                "modern google/tcmalloc runtime identity marker has not been verified before accepting timing"
+            )
+        if not isinstance(preflight, dict) or preflight.get("ok") is not True:
+            blockers.append("modern google/tcmalloc artifact provenance is not authenticated")
+    elif feature == "bench_gperftools_legacy":
+        implementation_kind = "explicit_gperftools_legacy_crate"
+        paper_allocator_equivalent = allocator == "gperftools-legacy"
+        notes.append("historical crates.io tcmalloc 0.3.0 wrapper is isolated under gperftools-legacy")
     elif feature == "bench_scudo":
         execution = getattr(args, "_external_scudo_execution_record", None)
         execution = execution if isinstance(execution, dict) else {}
@@ -1735,6 +1853,18 @@ def allocator_semantics_record(args: argparse.Namespace) -> Dict[str, Any]:
         "claim_grade_blockers": blockers,
         "notes": notes,
     }
+    if feature == "bench_tcmalloc":
+        preflight = getattr(args, "_google_tcmalloc_preflight", None)
+        record.update(
+            {
+                "runtime_identity_verified": getattr(
+                    args, "_google_tcmalloc_runtime_verified", False
+                )
+                is True,
+                "runtime_identity_marker": GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER,
+                "google_tcmalloc_preflight": preflight,
+            }
+        )
     if feature == "bench_scudo":
         execution = getattr(args, "_external_scudo_execution_record", None)
         if isinstance(execution, dict):
@@ -1974,6 +2104,19 @@ def ensure_feature_line(text: str, name: str, deps: List[str]) -> tuple[str, boo
     start, _end = bounds
     insert_at = start + len("[features]")
     return text[:insert_at] + "\n" + line + text[insert_at:], True
+
+
+def ensure_exact_adapter_feature_line(text: str, name: str, deps: List[str]) -> tuple[str, bool]:
+    """Install or upgrade one adapter-owned `bench_*` feature exactly."""
+
+    line = f'{name} = [{", ".join(json.dumps(dep) for dep in deps)}]'
+    pattern = re.compile(rf"(?m)^\s*{re.escape(name)}\s*=.*$")
+    match = pattern.search(text)
+    if match is None:
+        return ensure_feature_line(text, name, deps)
+    if match.group(0).strip() == line:
+        return text, False
+    return text[: match.start()] + line + text[match.end() :], True
 
 
 def selected_package_name(command: List[str]) -> str:
@@ -2226,6 +2369,7 @@ def ensure_allocator_cargo_overlay(
     unialloc_path = os.path.relpath(repo_root / "unialloc", cargo_toml.parent)
     text = cargo_toml.read_text(encoding="utf-8")
     next_text = text
+    existing_adapter_overlay = ALLOCATOR_CARGO_OVERLAY_MARKER in next_text
     if ALLOCATOR_CARGO_OVERLAY_MARKER not in next_text:
         next_text = next_text.rstrip() + f"\n\n{ALLOCATOR_CARGO_OVERLAY_MARKER}\n"
     dependency_blocks = {
@@ -2238,8 +2382,12 @@ def ensure_allocator_cargo_overlay(
         "bench_mimalloc": {
             "mimalloc": '[dependencies.mimalloc]\nversion = "0.1.25"\ndefault-features = false\noptional = true\n',
         },
-        "bench_tcmalloc": {
-            "tcmalloc": '[dependencies.tcmalloc]\nversion = "0.3.0"\noptional = true\n',
+        "bench_tcmalloc": {},
+        "bench_gperftools_legacy": {
+            "gperftools-tcmalloc": (
+                '[dependencies.gperftools-tcmalloc]\npackage = "tcmalloc"\n'
+                'version = "0.3.0"\noptional = true\n'
+            ),
         },
         "bench_snmalloc": {
             "snmalloc-rs": '[dependencies.snmalloc-rs]\nversion = "=0.2.27"\noptional = true\n',
@@ -2248,6 +2396,16 @@ def ensure_allocator_cargo_overlay(
         "bench_scudo": {},
     }
     added_dependencies: List[str] = []
+    removed_dependencies: List[str] = []
+    if requested_feature in {"bench_tcmalloc", "bench_gperftools_legacy"} and existing_adapter_overlay:
+        legacy_block = '[dependencies.tcmalloc]\nversion = "0.3.0"\noptional = true\n'
+        next_text, removed = remove_exact_dependency_table_block(
+            next_text,
+            "tcmalloc",
+            legacy_block,
+        )
+        if removed:
+            removed_dependencies.append("tcmalloc")
     for name, block in dependency_blocks.get(requested_feature, {}).items():
         if not cargo_toml_has_dependency(next_text, name):
             next_text = next_text.rstrip() + "\n\n" + block
@@ -2287,7 +2445,8 @@ def ensure_allocator_cargo_overlay(
         "bench_jemalloc": ["jemallocator"],
         "bench_ptmalloc": [],
         "bench_mimalloc": ["mimalloc"],
-        "bench_tcmalloc": ["tcmalloc"],
+        "bench_tcmalloc": [],
+        "bench_gperftools_legacy": ["gperftools-tcmalloc"],
         "bench_snmalloc": ["snmalloc-rs"],
         "bench_scudo": [],
     }
@@ -2295,7 +2454,10 @@ def ensure_allocator_cargo_overlay(
     routed_features = [requested_feature] if requested_feature else list(feature_deps)
     for feature in routed_features:
         deps = feature_deps.get(feature, [])
-        next_text, changed = ensure_feature_line(next_text, feature, deps)
+        if feature in {"bench_tcmalloc", "bench_gperftools_legacy"}:
+            next_text, changed = ensure_exact_adapter_feature_line(next_text, feature, deps)
+        else:
+            next_text, changed = ensure_feature_line(next_text, feature, deps)
         if changed:
             added_features.append(feature)
     if next_text != text:
@@ -2310,6 +2472,7 @@ def ensure_allocator_cargo_overlay(
             "requested_feature": requested_feature or None,
             "effective_rust_toolchain_for_overlay": effective_toolchain or None,
             "added_dependencies": added_dependencies,
+            "removed_dependencies": removed_dependencies,
             "added_features": added_features,
             "added_old_nightly_pins": added_old_nightly_pins,
             "removed_old_nightly_pins": removed_old_nightly_pins,
@@ -2346,6 +2509,19 @@ def crate_root_overlay_insertion_index(text: str) -> int:
 
 
 def allocator_bench_overlay_text() -> str:
+    google_tcmalloc_adapter = _GOOGLE_TCMALLOC.rust_allocator_adapter_source(
+        feature="bench_tcmalloc",
+        static_name="TCMALLOC_EXTERNAL_CARGO_BENCH_ALLOCATOR",
+        conflicting_features=(
+            "bench_ourself",
+            "bench_ptmalloc",
+            "bench_jemalloc",
+            "bench_mimalloc",
+            "bench_gperftools_legacy",
+            "bench_snmalloc",
+            "bench_scudo",
+        ),
+    ).rstrip()
     return f"""
 {ALLOCATOR_BENCH_OVERLAY_MARKER}
 #[cfg(feature = "bench_ourself")]
@@ -2364,9 +2540,11 @@ static JEMALLOC_EXTERNAL_CARGO_BENCH_ALLOCATOR: JemallocExternalCargoBenchAlloca
 #[global_allocator]
 static MIMALLOC_EXTERNAL_CARGO_BENCH_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-#[cfg(feature = "bench_tcmalloc")]
+{google_tcmalloc_adapter}
+
+#[cfg(feature = "bench_gperftools_legacy")]
 #[global_allocator]
-static TCMALLOC_EXTERNAL_CARGO_BENCH_ALLOCATOR: tcmalloc::TCMalloc = tcmalloc::TCMalloc;
+static GPERFTOOLS_EXTERNAL_CARGO_BENCH_ALLOCATOR: gperftools_tcmalloc::TCMalloc = gperftools_tcmalloc::TCMalloc;
 
 #[cfg(feature = "bench_snmalloc")]
 #[global_allocator]
@@ -2384,6 +2562,7 @@ static SYSTEM_EXTERNAL_CARGO_BENCH_ALLOCATOR: std::alloc::System = std::alloc::S
         feature = "bench_jemalloc",
         feature = "bench_mimalloc",
         feature = "bench_tcmalloc",
+        feature = "bench_gperftools_legacy",
         feature = "bench_snmalloc"
     )
 ))]
@@ -3313,6 +3492,8 @@ def run(args: argparse.Namespace) -> int:
     command = [str(part) for part in args.command]
     args.allocator_routing_record = None
     args.dependency_env_record = None
+    args._google_tcmalloc_preflight = None
+    args._google_tcmalloc_runtime_verified = False
     if not command:
         emit(failure_record(args, command, "missing child cargo bench command"))
         return 2
@@ -3320,6 +3501,31 @@ def run(args: argparse.Namespace) -> int:
     real_workload_dir = Path(args.real_workload_dir).expanduser().resolve() if args.real_workload_dir else Path.cwd().resolve()
     requested_scudo_sources = scudo_request_sources(args, command)
     args._external_scudo_request_sources = requested_scudo_sources
+    requested_google_tcmalloc = modern_google_tcmalloc_requested(args, command)
+    if "bench_tcmalloc" in cargo_command_features(command) and allocator_feature(args.allocator) != "bench_tcmalloc":
+        emit(
+            failure_record(
+                args,
+                command,
+                "bench_tcmalloc cargo feature conflicts with the non-google/tcmalloc allocator selector",
+                extra={"measurement_eligible": False, "child_started": False},
+            )
+        )
+        return 2
+    if requested_google_tcmalloc and not args.allocator_feature_routing:
+        emit(
+            failure_record(
+                args,
+                command,
+                "bench_tcmalloc requires allocator feature routing so the revision-bound C-ABI guard is installed",
+                extra={
+                    "allocator_feature_routing_required": True,
+                    "measurement_eligible": False,
+                    "child_started": False,
+                },
+            )
+        )
+        return 2
     if command_requests_scudo_feature(command) and allocator_feature(args.allocator) != "bench_scudo":
         emit(
             failure_record(
@@ -3401,6 +3607,19 @@ def run(args: argparse.Namespace) -> int:
             record["scudo_execution_probe"] = scudo_execution
         emit(record)
         return 0
+    if requested_google_tcmalloc:
+        try:
+            args._google_tcmalloc_preflight = validate_google_tcmalloc_prefix(os.environ)
+        except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+            emit(
+                failure_record(
+                    args,
+                    command,
+                    f"modern google/tcmalloc artifact authentication failed: {exc}",
+                    extra={"measurement_eligible": False, "child_started": False},
+                )
+            )
+            return 2
     mutation_journal = FileMutationJournal(real_workload_dir) if args.allocator_feature_routing else None
 
     def finish(record: Dict[str, Any], code: int) -> int:
@@ -3602,6 +3821,32 @@ def run(args: argparse.Namespace) -> int:
             if routing_record is not None:
                 routing_record["allocator_semantics"] = allocator_semantics_record(args)
                 routing_record["scudo_execution_probe"] = verified_scudo_execution
+        verified_google_tcmalloc: Optional[Dict[str, Any]] = None
+        if requested_google_tcmalloc and not child_timed_out and child_returncode == 0:
+            verified_google_tcmalloc = verify_google_tcmalloc_runtime_identity(args, child_stderr)
+            if not verified_google_tcmalloc.get("ok"):
+                failure = failure_record(
+                    args,
+                    target_command,
+                    "google/tcmalloc child exited successfully without the revision-bound HPAA identity marker; timing was rejected",
+                    child_returncode=child_returncode,
+                    extra={
+                        "cargo_bench_target": target or None,
+                        "cargo_bench_targets": requested_targets,
+                        "google_tcmalloc_runtime_identity": verified_google_tcmalloc,
+                        "required_runtime_identity_marker": GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER,
+                        "measurement_eligible": False,
+                        "child_started": True,
+                        "target_records": target_records,
+                    },
+                )
+                append_evidence(failure, all_evidence)
+                if evidence_dir is not None:
+                    failure["raw_evidence_dir"] = str(evidence_dir)
+                return finish(failure, 1)
+            if routing_record is not None:
+                routing_record["allocator_semantics"] = allocator_semantics_record(args)
+                routing_record["google_tcmalloc_runtime_identity"] = verified_google_tcmalloc
         criterion_rows = parse_criterion_estimates(
             criterion_dir,
             started_at=started_at,
@@ -3638,6 +3883,9 @@ def run(args: argparse.Namespace) -> int:
             target_record["reproducibility_flags"] = reproducibility_flags
         if verified_scudo_execution is not None:
             target_record["scudo_execution_probe"] = verified_scudo_execution
+            target_record["allocator_semantics"] = allocator_semantics_record(args)
+        if verified_google_tcmalloc is not None:
+            target_record["google_tcmalloc_runtime_identity"] = verified_google_tcmalloc
             target_record["allocator_semantics"] = allocator_semantics_record(args)
         if scudo_guard_probe is not None:
             target_record["scudo_runtime_guard_probe"] = scudo_guard_probe

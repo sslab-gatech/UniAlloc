@@ -4,6 +4,7 @@
     feature = "bench_jemalloc",
     feature = "bench_mimalloc",
     feature = "bench_tcmalloc",
+    feature = "bench_gperftools_legacy",
     feature = "bench_snmalloc"
 ))]
 compile_error!("bench_scudo must be the only enabled bench allocator feature");

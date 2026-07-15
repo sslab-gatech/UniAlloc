@@ -34,8 +34,17 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Iterable
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+SUPPORT_SPEC = importlib.util.spec_from_file_location(
+    "unialloc_google_tcmalloc_support", SCRIPT_DIR / "google_tcmalloc_support.py"
+)
+assert SUPPORT_SPEC is not None and SUPPORT_SPEC.loader is not None
+google_tcmalloc = importlib.util.module_from_spec(SUPPORT_SPEC)
+SUPPORT_SPEC.loader.exec_module(google_tcmalloc)
 
 SCUDO_MARKER = "unialloc: verified Scudo runtime identity\n"
+GOOGLE_TCMALLOC_MARKER = google_tcmalloc.RUNTIME_IDENTITY_MARKER
+GOOGLE_TCMALLOC_LIBRARY = google_tcmalloc.LIBRARY_NAME
 ALLOCATOR_SELECTORS = frozenset(
     {
         "bench_ourself",
@@ -47,6 +56,7 @@ ALLOCATOR_SELECTORS = frozenset(
         "bench_scudo",
     }
 )
+ALL_ALLOCATOR_SELECTORS = ALLOCATOR_SELECTORS | {"bench_gperftools_legacy"}
 
 
 @dataclass(frozen=True)
@@ -157,6 +167,8 @@ def clean_environment() -> dict[str, str]:
         "TCMALLOC_LIB_DIR",
         "UNIALLOC_SCUDO_RUNTIME_LIBRARY",
         "UNIALLOC_TCMALLOC_LIB_DIR",
+        "UNIALLOC_GOOGLE_TCMALLOC_LIBRARY",
+        "UNIALLOC_GOOGLE_TCMALLOC_PREFIX",
     }
     prefixes = ("MIMALLOC_", "TCMALLOC_")
     for name in list(env):
@@ -176,6 +188,10 @@ def build_environment(
         if tcmalloc_lib_dir is None:
             raise RuntimeError("TCMalloc requires --tcmalloc-lib-dir")
         env["UNIALLOC_TCMALLOC_LIB_DIR"] = str(tcmalloc_lib_dir)
+        env["UNIALLOC_GOOGLE_TCMALLOC_PREFIX"] = str(tcmalloc_lib_dir.parent)
+        env["UNIALLOC_GOOGLE_TCMALLOC_LIBRARY"] = str(
+            (tcmalloc_lib_dir / GOOGLE_TCMALLOC_LIBRARY).resolve()
+        )
         env["LIBRARY_PATH"] = prepend_path(env.get("LIBRARY_PATH"), tcmalloc_lib_dir)
         env["LD_LIBRARY_PATH"] = prepend_path(
             env.get("LD_LIBRARY_PATH"), tcmalloc_lib_dir
@@ -194,6 +210,10 @@ def runtime_environment(
         if tcmalloc_lib_dir is None:
             raise RuntimeError("TCMalloc requires --tcmalloc-lib-dir")
         env["UNIALLOC_TCMALLOC_LIB_DIR"] = str(tcmalloc_lib_dir)
+        env["UNIALLOC_GOOGLE_TCMALLOC_PREFIX"] = str(tcmalloc_lib_dir.parent)
+        env["UNIALLOC_GOOGLE_TCMALLOC_LIBRARY"] = str(
+            (tcmalloc_lib_dir / GOOGLE_TCMALLOC_LIBRARY).resolve()
+        )
         env["LD_LIBRARY_PATH"] = prepend_path(
             env.get("LD_LIBRARY_PATH"), tcmalloc_lib_dir
         )
@@ -248,22 +268,12 @@ def validate_tcmalloc_dir(path: Path | None) -> Path:
     if path is None:
         raise RuntimeError("--tcmalloc-lib-dir is required for the TCMalloc variant")
     resolved = path.expanduser().resolve(strict=True)
-    candidates = [resolved / name for name in ("libtcmalloc.so.4", "libtcmalloc.so")]
-    if not any(candidate.exists() for candidate in candidates):
-        raise RuntimeError(f"no full TCMalloc shared runtime found in {resolved}")
+    google_tcmalloc.validate_library_dir(resolved)
     return resolved
 
 
 def tcmalloc_runtime_identity(path: Path) -> dict[str, Any]:
-    candidates = [path / name for name in ("libtcmalloc.so.4", "libtcmalloc.so")]
-    library = next(candidate for candidate in candidates if candidate.exists())
-    realpath = library.resolve(strict=True)
-    return {
-        "path": str(library),
-        "realpath": str(realpath),
-        "size_bytes": realpath.stat().st_size,
-        "sha256": sha256_file(realpath),
-    }
+    return google_tcmalloc.validate_library_dir(path)
 
 
 def parse_cargo_executable(stdout: bytes) -> Path:
@@ -385,7 +395,7 @@ def build_variant(
     )
     metadata = json.loads(metadata_proc.stdout)
     resolved_features = resolved_unialloc_features(metadata, source_root)
-    selected = ALLOCATOR_SELECTORS.intersection(resolved_features)
+    selected = ALL_ALLOCATOR_SELECTORS.intersection(resolved_features)
     if selected != {variant.feature}:
         raise RuntimeError(
             f"{variant.allocator}: expected only {variant.feature}, resolved {sorted(selected)}"
@@ -419,9 +429,17 @@ def parse_inventory(stdout: bytes) -> list[str]:
     return names
 
 
-def scudo_marker_count(stderr: bytes) -> int:
+def identity_marker_count(stderr: bytes, marker: str) -> int:
     lines = stderr.decode("utf-8", errors="replace").splitlines(keepends=True)
-    return sum(line == SCUDO_MARKER for line in lines)
+    return sum(line == marker for line in lines)
+
+
+def scudo_marker_count(stderr: bytes) -> int:
+    return identity_marker_count(stderr, SCUDO_MARKER)
+
+
+def google_tcmalloc_marker_count(stderr: bytes) -> int:
+    return identity_marker_count(stderr, GOOGLE_TCMALLOC_MARKER)
 
 
 def inventory_variant(
@@ -444,6 +462,7 @@ def inventory_variant(
         stderr=subprocess.PIPE,
     )
     marker_count = scudo_marker_count(proc.stderr)
+    tcmalloc_marker_count = google_tcmalloc_marker_count(proc.stderr)
     if proc.returncode != 0:
         raise RuntimeError(
             f"{variant.allocator} inventory failed ({proc.returncode}): "
@@ -453,6 +472,15 @@ def inventory_variant(
         raise RuntimeError(f"Scudo inventory emitted {marker_count} identity markers")
     if variant.allocator != "scudo" and marker_count != 0:
         raise RuntimeError(f"{variant.allocator} unexpectedly emitted a Scudo marker")
+    if variant.allocator == "tcmalloc" and tcmalloc_marker_count != 1:
+        raise RuntimeError(
+            "TCMalloc inventory emitted "
+            f"{tcmalloc_marker_count} google/tcmalloc identity markers"
+        )
+    if variant.allocator != "tcmalloc" and tcmalloc_marker_count != 0:
+        raise RuntimeError(
+            f"{variant.allocator} unexpectedly emitted a google/tcmalloc marker"
+        )
     names = parse_inventory(proc.stdout)
     missing = sorted(set(BENCHMARKS) - set(names))
     if missing:
@@ -471,9 +499,11 @@ def inventory_variant(
     (build_dir / "ldd.txt").write_bytes(ldd)
     if variant.allocator == "tcmalloc":
         assert tcmalloc_lib_dir is not None
-        if str(tcmalloc_lib_dir) not in ldd.decode("utf-8", errors="replace"):
+        ldd_text = ldd.decode("utf-8", errors="replace")
+        expected = str((tcmalloc_lib_dir / GOOGLE_TCMALLOC_LIBRARY).resolve())
+        if GOOGLE_TCMALLOC_LIBRARY not in ldd_text or expected not in ldd_text:
             raise RuntimeError(
-                "TCMalloc binary did not resolve through the pinned runtime directory"
+                "TCMalloc binary did not resolve the pinned google/tcmalloc artifact"
             )
     return names, {
         "benchmark_count": len(names),
@@ -482,12 +512,19 @@ def inventory_variant(
         "list_sha256": sha256_bytes(proc.stdout),
         "stderr_sha256": sha256_bytes(proc.stderr),
         "scudo_identity_marker_count": marker_count,
+        "google_tcmalloc_identity_marker_count": tcmalloc_marker_count,
         "ldd_sha256": sha256_bytes(ldd),
         "runtime_env_contract": {
             "glibc_tunables_present": "GLIBC_TUNABLES" in env,
             "ld_preload": env.get("LD_PRELOAD"),
             "scudo_runtime_library": env.get("UNIALLOC_SCUDO_RUNTIME_LIBRARY"),
             "tcmalloc_lib_dir": env.get("UNIALLOC_TCMALLOC_LIB_DIR"),
+            "google_tcmalloc_prefix": env.get(
+                "UNIALLOC_GOOGLE_TCMALLOC_PREFIX"
+            ),
+            "google_tcmalloc_library": env.get(
+                "UNIALLOC_GOOGLE_TCMALLOC_LIBRARY"
+            ),
         },
     }
 
@@ -624,6 +661,7 @@ def run_one(
     stdout_path.write_bytes(stdout)
     stderr_path.write_bytes(stderr)
     marker_count = scudo_marker_count(stderr)
+    tcmalloc_marker_count = google_tcmalloc_marker_count(stderr)
     record: dict[str, Any] = {
         "schema_version": 1,
         "diagnostic_label": "current-toolchain allocation-heavy std_bench subset; non-paper-exact",
@@ -646,6 +684,7 @@ def run_one(
         "glibc_tunables_present": "GLIBC_TUNABLES" in env,
         "libc_rseq_policy": "glibc default; GLIBC_TUNABLES absent",
         "scudo_identity_marker_count": marker_count,
+        "google_tcmalloc_identity_marker_count": tcmalloc_marker_count,
         "scudo_runtime_library": env.get("UNIALLOC_SCUDO_RUNTIME_LIBRARY"),
         "start_loadavg": start_loadavg,
         "end_loadavg": None,
@@ -679,8 +718,13 @@ def run_one(
         )
     else:
         record["benchmark_line_count"] = len(matches)
-    marker_valid = (
+    scudo_marker_valid = (
         marker_count == 1 if variant.allocator == "scudo" else marker_count == 0
+    )
+    tcmalloc_marker_valid = (
+        tcmalloc_marker_count == 1
+        if variant.allocator == "tcmalloc"
+        else tcmalloc_marker_count == 0
     )
     record["valid"] = bool(
         not timed_out
@@ -690,7 +734,8 @@ def run_one(
         and record.get("time_exit_status") == 0
         and not record.get("time_parse_error")
         and record.get("glibc_tunables_present") is False
-        and marker_valid
+        and scudo_marker_valid
+        and tcmalloc_marker_valid
     )
     write_json(run_dir / "record.json", record)
     return record
@@ -928,6 +973,9 @@ def validate_clean_source(source_root: Path) -> str:
 
 
 def default_tcmalloc_dir() -> Path | None:
+    prefix = os.environ.get("UNIALLOC_GOOGLE_TCMALLOC_PREFIX")
+    if prefix:
+        return Path(prefix) / "lib"
     configured = os.environ.get("UNIALLOC_TCMALLOC_LIB_DIR") or os.environ.get(
         "TCMALLOC_LIB_DIR"
     )
@@ -1070,9 +1118,7 @@ def run_campaign(args: argparse.Namespace) -> dict[str, Any]:
         "scudo_runtime_authenticity": scudo_authenticity,
         "tcmalloc_runtime": {
             "library_dir": str(tcmalloc_lib_dir),
-            "files": sorted(
-                path.name for path in tcmalloc_lib_dir.glob("libtcmalloc.so*")
-            ),
+            "files": [GOOGLE_TCMALLOC_LIBRARY],
             "identity": tcmalloc_identity,
         },
     }

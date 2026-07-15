@@ -13,26 +13,55 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import importlib.util
 import json
 import math
 import os
 import re
 import signal
+import shutil
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
-SCHEMA_VERSION = 1
+def _load_google_tcmalloc_support() -> Any:
+    try:
+        import google_tcmalloc_support as support
+
+        return support
+    except ModuleNotFoundError:
+        support_path = Path(__file__).resolve().with_name("google_tcmalloc_support.py")
+        spec = importlib.util.spec_from_file_location(
+            "_unialloc_rsedis_google_tcmalloc_support", support_path
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"could not load google/tcmalloc support from {support_path}")
+        support = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(support)
+        return support
+
+
+GOOGLE_TCMALLOC = _load_google_tcmalloc_support()
+GOOGLE_TCMALLOC_PREFIX_ENV = "UNIALLOC_GOOGLE_TCMALLOC_PREFIX"
+GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER = GOOGLE_TCMALLOC.RUNTIME_IDENTITY_MARKER
+SCHEMA_VERSION = 2
 VARIANTS = (
     "mimalloc_thp_default",
     "mimalloc_thp_off",
     "tcmalloc_default",
 )
+GPERFTOOLS_LEGACY_VARIANTS = (
+    "mimalloc_thp_default",
+    "mimalloc_thp_off",
+    "gperftools_legacy",
+)
+ALL_VARIANTS = frozenset((*VARIANTS, "gperftools_legacy"))
 BASELINE_VARIANT = "mimalloc_thp_default"
 ALLOCATOR_ENV_KEYS = (
     "LD_PRELOAD",
@@ -41,6 +70,7 @@ ALLOCATOR_ENV_KEYS = (
     "MIMALLOC_ALLOW_LARGE_OS_PAGES",
     "MIMALLOC_RESERVE_HUGE_OS_PAGES",
     "TCMALLOC_MEMFS_MALLOC_PATH",
+    GOOGLE_TCMALLOC_PREFIX_ENV,
 )
 
 
@@ -60,6 +90,121 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def google_tcmalloc_runtime_evidence(prefix: Path) -> dict[str, Any]:
+    lib_dir = prefix.expanduser().resolve(strict=False) / "lib"
+    try:
+        identity = dict(GOOGLE_TCMALLOC.validate_library_dir(lib_dir))
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        subprocess.SubprocessError,
+    ) as exc:
+        raise RuntimeError(f"modern google/tcmalloc authentication failed: {exc}") from exc
+    return {
+        "allocator_family": "google/tcmalloc",
+        "variant": "modern-hpaa-adaptive-subrelease",
+        "library": str(identity["realpath"]),
+        "identity": identity,
+    }
+
+
+def prove_google_tcmalloc_runtime(
+    library: Path, *, timeout_seconds: float = 30.0
+) -> dict[str, Any]:
+    """Prove revision, HPAA, active malloc provider, and exact mapped DSO."""
+
+    compiler = shutil.which("cc")
+    if compiler is None:
+        raise RuntimeError("cc is required for the google/tcmalloc runtime proof")
+    source = r'''
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+typedef const char* (*revision_fn)(void);
+typedef int (*check_fn)(void);
+int main(void) {
+  const char* expected = getenv("UNIALLOC_GOOGLE_TCMALLOC_LIBRARY");
+  const char* expected_revision = getenv("UNIALLOC_GOOGLE_TCMALLOC_REVISION");
+  Dl_info provider = {0};
+  char provider_real[PATH_MAX] = {0}, expected_real[PATH_MAX] = {0};
+  void* active_malloc = dlsym(RTLD_DEFAULT, "malloc");
+  void* handle = expected ? dlopen(expected, RTLD_NOW | RTLD_NOLOAD) : NULL;
+  revision_fn revision = handle ? (revision_fn)dlsym(handle, "unialloc_google_tcmalloc_revision") : NULL;
+  check_fn hpaa = handle ? (check_fn)dlsym(handle, "unialloc_google_tcmalloc_hpaa_active") : NULL;
+  check_fn provider_check = handle ? (check_fn)dlsym(handle, "unialloc_google_tcmalloc_malloc_provider_is_self") : NULL;
+  int mapped = active_malloc && dladdr(active_malloc, &provider) && provider.dli_fname &&
+      realpath(provider.dli_fname, provider_real) && expected && realpath(expected, expected_real) &&
+      strcmp(provider_real, expected_real) == 0;
+  const char* actual_revision = revision ? revision() : "";
+  int hpaa_active = hpaa ? hpaa() : 0;
+  int provider_is_self = provider_check ? provider_check() : 0;
+  printf("{\"revision\":\"%s\",\"hpaa_active\":%d,\"malloc_provider_is_self\":%d,\"exact_library_mapped\":%s}\n",
+         actual_revision, hpaa_active, provider_is_self, mapped ? "true" : "false");
+  return mapped && hpaa_active == 1 && provider_is_self == 1 && expected_revision &&
+         strcmp(actual_revision, expected_revision) == 0 ? 0 : 86;
+}
+'''
+    resolved = library.expanduser().resolve(strict=True)
+    with tempfile.TemporaryDirectory(prefix="unialloc-rsedis-tcmalloc-probe-") as tmp:
+        root = Path(tmp)
+        source_path = root / "probe.c"
+        binary = root / "probe"
+        source_path.write_text(source, encoding="utf-8")
+        compile_result = subprocess.run(
+            [compiler, str(source_path), "-ldl", "-o", str(binary)],
+            cwd=root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout_seconds,
+        )
+        if compile_result.returncode != 0:
+            raise RuntimeError(
+                "google/tcmalloc runtime probe compilation failed: "
+                + compile_result.stderr.decode("utf-8", errors="replace")[-1000:]
+            )
+        env, _removed = clean_allocator_environment()
+        env.update(
+            {
+                "LD_PRELOAD": str(resolved),
+                "UNIALLOC_GOOGLE_TCMALLOC_LIBRARY": str(resolved),
+                "UNIALLOC_GOOGLE_TCMALLOC_REVISION": GOOGLE_TCMALLOC.UPSTREAM_REVISION,
+            }
+        )
+        result = subprocess.run(
+            [binary],
+            cwd=root,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout_seconds,
+        )
+    try:
+        runtime_identity = json.loads(result.stdout.decode().splitlines()[-1])
+    except (IndexError, UnicodeDecodeError, json.JSONDecodeError):
+        runtime_identity = None
+    expected = {
+        "revision": GOOGLE_TCMALLOC.UPSTREAM_REVISION,
+        "hpaa_active": 1,
+        "malloc_provider_is_self": 1,
+        "exact_library_mapped": True,
+    }
+    proof = {
+        "success": result.returncode == 0 and runtime_identity == expected,
+        "exit_code": result.returncode,
+        "library": str(resolved),
+        "runtime_identity": runtime_identity,
+        "stdout_sha256": hashlib.sha256(result.stdout).hexdigest(),
+        "stderr_sha256": hashlib.sha256(result.stderr).hexdigest(),
+    }
+    if not proof["success"]:
+        raise RuntimeError(f"google/tcmalloc runtime proof failed: {proof}")
+    return proof
+
+
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -76,6 +221,7 @@ def clean_allocator_environment(
         if (
             key == "LD_PRELOAD"
             or key == "GLIBC_TUNABLES"
+            or key == GOOGLE_TCMALLOC_PREFIX_ENV
             or key in {"MALLOC_CONF", "MALLOC_CONF_"}
             or key.startswith("MIMALLOC_")
             or key.startswith("TCMALLOC_")
@@ -99,7 +245,7 @@ def make_runtime_cell(
     tcmalloc_library: Path,
     source_environment: Mapping[str, str] | None = None,
 ) -> RuntimeCell:
-    if variant not in VARIANTS:
+    if variant not in ALL_VARIANTS:
         raise ValueError(f"unknown runtime cell: {variant}")
     env, removed = clean_allocator_environment(source_environment)
     if variant.startswith("mimalloc_"):
@@ -112,21 +258,20 @@ def make_runtime_cell(
         )
         binary = mimalloc_binary
     else:
-        env.update(
-            {
-                "LD_PRELOAD": str(tcmalloc_library),
-                # An empty value explicitly selects the gperftools default path:
-                # no memfs-backed allocator arena is requested by this runner.
-                "TCMALLOC_MEMFS_MALLOC_PATH": "",
-            }
-        )
+        env["LD_PRELOAD"] = str(tcmalloc_library)
+        if variant == "gperftools_legacy":
+            # Preserve the historical gperftools behavior only under its
+            # explicit legacy cell name.
+            env["TCMALLOC_MEMFS_MALLOC_PATH"] = ""
         binary = system_binary
     return RuntimeCell(variant, binary, env, removed)
 
 
-def rotated_order(round_index: int) -> tuple[str, ...]:
-    offset = round_index % len(VARIANTS)
-    return VARIANTS[offset:] + VARIANTS[:offset]
+def rotated_order(
+    round_index: int, variants: tuple[str, ...] = VARIANTS
+) -> tuple[str, ...]:
+    offset = round_index % len(variants)
+    return variants[offset:] + variants[:offset]
 
 
 def run_command(
@@ -379,6 +524,11 @@ def command_excerpt(result: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def exact_identity_marker_count(stderr: bytes, marker: str) -> int:
+    lines = stderr.decode("utf-8", errors="replace").splitlines(keepends=True)
+    return sum(line == marker for line in lines)
+
+
 def run_one(
     args: argparse.Namespace,
     cell: RuntimeCell,
@@ -391,7 +541,7 @@ def run_one(
     label = f"round-{round_index:02d}-order-{order_index:02d}-{cell.name}"
     run_dir = args.raw_dir / "runs" / label
     run_dir.mkdir(parents=True, exist_ok=False)
-    port = args.base_port + round_index * len(VARIANTS) + order_index
+    port = args.base_port + round_index * len(args.variants) + order_index
     config_path = run_dir / "rsedis.conf"
     config_path.write_text(
         "bind 127.0.0.1\n"
@@ -425,6 +575,8 @@ def run_one(
     combined_rps: float | None = None
     stop: dict[str, Any] = {}
     error: str | None = None
+    tcmalloc_identity_marker_count = 0
+    tcmalloc_target_identity_verified = False
     started = time.perf_counter_ns()
     try:
         process = subprocess.Popen(
@@ -436,6 +588,13 @@ def run_one(
             start_new_session=True,
         )
         ready, ping_result = wait_ready(args, port, process)
+        tcmalloc_identity_marker_count = exact_identity_marker_count(
+            stderr_path.read_bytes(), GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER
+        )
+        expected_tcmalloc_markers = 1 if cell.name == "tcmalloc_default" else 0
+        tcmalloc_target_identity_verified = (
+            tcmalloc_identity_marker_count == expected_tcmalloc_markers
+        )
         key = f"unialloc:thp:{round_index}:{cell.name}"
         value = f"value-{round_index}-{cell.name}"
         set_result: dict[str, Any] = {}
@@ -451,8 +610,10 @@ def run_one(
         }
         correctness["passed"] = all(correctness.values())
         idle_snapshot = process_snapshot(process.pid) if ready else {}
-        proof = maps_proof(args.raw_dir, run_dir, process, cell, args.gperftools_library)
-        if ready and correctness["passed"]:
+        proof = maps_proof(
+            args.raw_dir, run_dir, process, cell, args.tcmalloc_library
+        )
+        if ready and correctness["passed"] and tcmalloc_target_identity_verified:
             client_env, _ = clean_allocator_environment()
             benchmark_command = [
                 str(args.numactl),
@@ -523,13 +684,17 @@ def run_one(
             and environment["MIMALLOC_RESERVE_HUGE_OS_PAGES"] == "0"
             and environment["LD_PRELOAD"] is None
             or cell.name == "tcmalloc_default"
-            and environment["LD_PRELOAD"] == str(args.gperftools_library)
+            and environment["LD_PRELOAD"] == str(args.tcmalloc_library)
+            and environment["TCMALLOC_MEMFS_MALLOC_PATH"] is None
+            and all(environment[key] is None for key in ALLOCATOR_ENV_KEYS if key.startswith("MIMALLOC_"))
+            or cell.name == "gperftools_legacy"
+            and environment["LD_PRELOAD"] == str(args.tcmalloc_library)
             and environment["TCMALLOC_MEMFS_MALLOC_PATH"] == ""
             and all(environment[key] is None for key in ALLOCATOR_ENV_KEYS if key.startswith("MIMALLOC_"))
         )
     )
     maps_ok = bool(proof.get("nonempty")) and bool(proof.get("executable_matches"))
-    if cell.name == "tcmalloc_default":
+    if cell.name in {"tcmalloc_default", "gperftools_legacy"}:
         maps_ok = maps_ok and bool(proof.get("tcmalloc_library_mapped"))
     evidence_ok = required_memory_evidence_present(idle_snapshot) and required_memory_evidence_present(post_snapshot)
     success = (
@@ -541,6 +706,7 @@ def run_one(
         and environment_ok
         and maps_ok
         and evidence_ok
+        and tcmalloc_target_identity_verified
     )
     record = {
         "schema_version": SCHEMA_VERSION,
@@ -567,6 +733,8 @@ def run_one(
         "environment_contract_passed": environment_ok,
         "memory_evidence_complete": evidence_ok,
         "maps_proof_passed": maps_ok,
+        "google_tcmalloc_identity_marker_count": tcmalloc_identity_marker_count,
+        "google_tcmalloc_target_identity_verified": tcmalloc_target_identity_verified,
         "config_path": str(config_path.relative_to(args.raw_dir)),
         "config_sha256": sha256_file(config_path),
         "server_stdout_path": str(stdout_path.relative_to(args.raw_dir)),
@@ -638,6 +806,7 @@ def paired_comparisons(
     *,
     warmups: int,
     repetitions: int,
+    variants: tuple[str, ...] = VARIANTS,
 ) -> list[dict[str, Any]]:
     indexed = {
         (int(record["round_index"]), str(record["variant"])): record
@@ -645,7 +814,7 @@ def paired_comparisons(
         if record.get("phase") == "measured" and record.get("success") is True
     }
     output: list[dict[str, Any]] = []
-    for variant in VARIANTS:
+    for variant in variants:
         if variant == BASELINE_VARIANT:
             continue
         rows: list[dict[str, float]] = []
@@ -735,7 +904,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mimalloc-rsedis-binary", required=True, type=executable_path)
     parser.add_argument("--system-rsedis-binary", required=True, type=executable_path)
-    parser.add_argument("--gperftools-library", required=True, type=file_path)
+    parser.add_argument(
+        "--tcmalloc-cell",
+        choices=("tcmalloc_default", "gperftools_legacy"),
+        default="tcmalloc_default",
+    )
+    parser.add_argument(
+        "--google-tcmalloc-prefix",
+        type=lambda value: Path(value).expanduser().resolve(),
+        default=os.environ.get(GOOGLE_TCMALLOC_PREFIX_ENV),
+        help="prefix produced by build_google_tcmalloc.py",
+    )
+    parser.add_argument(
+        "--gperftools-legacy-library",
+        type=file_path,
+        help="historical shared library used only with --tcmalloc-cell gperftools_legacy",
+    )
     parser.add_argument("--raw-dir", required=True, type=lambda value: Path(value).expanduser().resolve())
     parser.add_argument("--redis-benchmark", default="/usr/bin/redis-benchmark", type=executable_path)
     parser.add_argument("--redis-cli", default="/usr/bin/redis-cli", type=executable_path)
@@ -753,6 +937,26 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--startup-timeout-seconds", type=float, default=10.0)
     parser.add_argument("--benchmark-timeout-seconds", type=float, default=120.0)
     args = parser.parse_args(argv)
+    if args.google_tcmalloc_prefix is not None:
+        args.google_tcmalloc_prefix = Path(
+            args.google_tcmalloc_prefix
+        ).expanduser().resolve()
+    if args.tcmalloc_cell == "tcmalloc_default" and args.google_tcmalloc_prefix is None:
+        parser.error(
+            "--google-tcmalloc-prefix is required for the modern tcmalloc_default cell"
+        )
+    if (
+        args.tcmalloc_cell == "gperftools_legacy"
+        and args.gperftools_legacy_library is None
+    ):
+        parser.error(
+            "--gperftools-legacy-library is required for gperftools_legacy"
+        )
+    args.variants = (
+        VARIANTS
+        if args.tcmalloc_cell == "tcmalloc_default"
+        else GPERFTOOLS_LEGACY_VARIANTS
+    )
     if args.startup_timeout_seconds <= 0 or args.benchmark_timeout_seconds <= 0:
         parser.error("timeouts must be positive")
     if args.raw_dir.exists() and any(args.raw_dir.iterdir()):
@@ -772,19 +976,35 @@ def host_evidence() -> dict[str, Any]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.tcmalloc_cell == "tcmalloc_default":
+        tcmalloc_runtime = google_tcmalloc_runtime_evidence(
+            args.google_tcmalloc_prefix
+        )
+        args.tcmalloc_library = Path(tcmalloc_runtime["library"])
+        tcmalloc_runtime["runtime_proof"] = prove_google_tcmalloc_runtime(
+            args.tcmalloc_library
+        )
+    else:
+        args.tcmalloc_library = args.gperftools_legacy_library.resolve(strict=True)
+        tcmalloc_runtime = {
+            "allocator_family": "gperftools",
+            "variant": "gperftools_legacy",
+            "library": str(args.tcmalloc_library),
+            "library_sha256": sha256_file(args.tcmalloc_library),
+        }
     args.raw_dir.mkdir(parents=True, exist_ok=True)
     cells = {
         variant: make_runtime_cell(
             variant,
             mimalloc_binary=args.mimalloc_rsedis_binary,
             system_binary=args.system_rsedis_binary,
-            tcmalloc_library=args.gperftools_library,
+            tcmalloc_library=args.tcmalloc_library,
         )
-        for variant in VARIANTS
+        for variant in args.variants
     }
     config = {
         "schema_version": SCHEMA_VERSION,
-        "variants": list(VARIANTS),
+        "variants": list(args.variants),
         "baseline_variant": BASELINE_VARIANT,
         "warmups": args.warmups,
         "measured_repetitions": args.repetitions,
@@ -806,10 +1026,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "path": str(args.system_rsedis_binary),
                 "sha256": sha256_file(args.system_rsedis_binary),
             },
-            "gperftools_tcmalloc": {
-                "path": str(args.gperftools_library),
-                "sha256": sha256_file(args.gperftools_library),
-            },
+            args.tcmalloc_cell: tcmalloc_runtime,
         },
         "cell_environments": {
             variant: allocator_environment_snapshot(cell.environment)
@@ -820,7 +1037,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_json(args.raw_dir / "config.json", config)
     records: list[dict[str, Any]] = []
     for round_index in range(args.warmups + args.repetitions):
-        for order_index, variant in enumerate(rotated_order(round_index)):
+        for order_index, variant in enumerate(
+            rotated_order(round_index, args.variants)
+        ):
             record = run_one(
                 args,
                 cells[variant],
@@ -831,15 +1050,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     write_json(args.raw_dir / "records.json", records)
     summaries = [
         summarize_variant(variant, records, repetitions=args.repetitions)
-        for variant in VARIANTS
+        for variant in args.variants
     ]
     comparisons = paired_comparisons(
         records,
         warmups=args.warmups,
         repetitions=args.repetitions,
+        variants=args.variants,
     )
     validation = {
-        "exactly_three_runtime_cells": {record["variant"] for record in records} == set(VARIANTS),
+        "exactly_three_runtime_cells": {
+            record["variant"] for record in records
+        }
+        == set(args.variants),
         "all_runs_successful": all(record["success"] for record in records),
         "all_measured_cells_complete": all(summary["all_successful"] for summary in summaries),
         "all_paired_comparisons_complete": all(row["all_rounds_paired"] for row in comparisons),

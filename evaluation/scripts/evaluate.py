@@ -111,6 +111,28 @@ REPOSITORY_SOURCE_INCLUDED_IGNORED_GLOBS = {
 }
 
 
+def _load_google_tcmalloc_support() -> Any:
+    """Load the repository-local modern google/tcmalloc authenticator."""
+
+    try:
+        import google_tcmalloc_support as support
+
+        return support
+    except ModuleNotFoundError:
+        support_path = Path(__file__).resolve().with_name("google_tcmalloc_support.py")
+        spec = importlib.util.spec_from_file_location(
+            "_unialloc_evaluate_google_tcmalloc_support", support_path
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"could not load modern google/tcmalloc support from {support_path}")
+        support = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(support)
+        return support
+
+
+GOOGLE_TCMALLOC = _load_google_tcmalloc_support()
+
+
 def _load_paper_workload_driver_helper() -> Tuple[Optional[Any], Optional[str]]:
     """Load the canonical local allocator runner without depending on sys.path shape."""
 
@@ -155,6 +177,7 @@ FEATURE_TO_ALLOCATOR = {
     "bench_ptmalloc": "ptmalloc" if platform.system() == "Linux" else "default",
     "bench_mimalloc": "mimalloc",
     "bench_tcmalloc": "tcmalloc",
+    "bench_gperftools_legacy": "gperftools_legacy",
     "bench_snmalloc": "snmalloc",
     "bench_scudo": "scudo",
 }
@@ -164,27 +187,18 @@ COLLECTIONS_ALLOCATOR_FEATURES = {
     "jemalloc": "bench_jemalloc",
     "mimalloc": "bench_mimalloc",
     "tcmalloc": "bench_tcmalloc",
+    "gperftools_legacy": "bench_gperftools_legacy",
     "snmalloc": "bench_snmalloc",
     "ptmalloc": "bench_ptmalloc",
     "scudo": "bench_scudo",
 }
 
-TCMALLOC_LIBRARY_NAMES = (
-    "libtcmalloc.dylib",
-    "libtcmalloc.so",
-    "libtcmalloc.so.4",
-    "libtcmalloc.a",
-    "libtcmalloc_minimal.dylib",
-    "libtcmalloc_minimal.so",
-    "libtcmalloc_minimal.so.4",
-    "libtcmalloc_minimal.a",
+GOOGLE_TCMALLOC_PREFIX_ENV = "UNIALLOC_GOOGLE_TCMALLOC_PREFIX"
+GOOGLE_TCMALLOC_LEGACY_DIR_ENVS = (
+    "UNIALLOC_TCMALLOC_LIB_DIR",
+    "TCMALLOC_LIB_DIR",
 )
-
-TCMALLOC_LIBRARY_DIR_GLOBS = (
-    "evaluation/deps/tcmalloc/lib",
-    "evaluation/raw/local-tcmalloc-dep-build-*/prefix/lib",
-    "evaluation/raw/local-tcmalloc-dep-build-*/lib",
-)
+DEFAULT_GOOGLE_TCMALLOC_PREFIX = EVAL / "deps/tcmalloc"
 
 CMAKE_BIN_GLOBS = (
     "evaluation/deps/cmake/bin/cmake",
@@ -1120,6 +1134,16 @@ def allocator_feature_support(allocator: str) -> Dict[str, Any]:
                     "bench_scudo is mapped, but neither the Rust Scudo sanitizer route nor a "
                     "Scudo standalone runtime for LD_PRELOAD is available"
                 )
+        elif allocator == "tcmalloc":
+            execution_probe = tcmalloc_library_probe()
+            if execution_probe.get("ok") is True:
+                notes.append(
+                    "bench_tcmalloc is bound to an authenticated modern google/tcmalloc HPAA artifact"
+                )
+            else:
+                blockers.append(
+                    "bench_tcmalloc requires the provenance-bound modern google/tcmalloc HPAA artifact"
+                )
     elif allocator == "ptmalloc" and platform.system() != "Linux":
         blockers.append(
             f"bench_ptmalloc maps to {FEATURE_TO_ALLOCATOR.get('bench_ptmalloc')} on {platform.system()}; Linux ptmalloc evidence requires a Linux/glibc run"
@@ -1137,8 +1161,10 @@ def allocator_feature_support(allocator: str) -> Dict[str, Any]:
         "claim_grade_mapping_blockers": unique_strings(blockers),
         "notes": unique_strings(notes),
     }
-    if execution_probe is not None:
+    if execution_probe is not None and allocator == "scudo":
         result["scudo_execution_probe"] = execution_probe
+    elif execution_probe is not None and allocator == "tcmalloc":
+        result["google_tcmalloc_library_probe"] = execution_probe
     return result
 
 
@@ -1426,6 +1452,8 @@ def normalize_sample_allocator(value: Any) -> str:
         "bench_ptmalloc": "ptmalloc",
         "bench_mimalloc": "mimalloc",
         "bench_tcmalloc": "tcmalloc",
+        "bench_gperftools_legacy": "gperftools_legacy",
+        "gperftools": "gperftools_legacy",
         "bench_snmalloc": "snmalloc",
         "bench_scudo": "scudo",
     }
@@ -9631,73 +9659,68 @@ def path_mtime(path: Path) -> float:
         return 0.0
 
 
-def tcmalloc_library_files(path: Optional[Path]) -> List[str]:
-    if not path:
-        return []
-    return sorted(name for name in TCMALLOC_LIBRARY_NAMES if (path / name).exists())
+def google_tcmalloc_library_dirs(value: str, *, prefix: bool) -> List[Path]:
+    path = normalize_optional_path(value)
+    assert path is not None
+    if prefix:
+        return [path / "lib"]
+    return list(dict.fromkeys([path, path / "lib"]))
 
 
-def tcmalloc_library_dir_is_usable(path: Optional[Path]) -> bool:
-    return bool(path and path.is_dir() and tcmalloc_library_files(path))
-
-
-def discover_tcmalloc_library_candidates() -> List[Dict[str, Any]]:
-    candidates: List[Dict[str, Any]] = []
-    seen = set()
-    for pattern in TCMALLOC_LIBRARY_DIR_GLOBS:
-        for path in ROOT.glob(pattern):
-            key = str(path.resolve())
-            if key in seen:
-                continue
-            seen.add(key)
-            files = tcmalloc_library_files(path)
-            candidates.append(
-                {
-                    "source": "repo_auto_discovery",
-                    "pattern": pattern,
-                    "path": str(path),
-                    "exists": path.exists(),
-                    "is_dir": path.is_dir(),
-                    "library_files": files,
-                    "usable": bool(path.is_dir() and files),
-                    "mtime": path_mtime(path),
-                }
-            )
-    return sorted(candidates, key=lambda item: (float(item.get("mtime") or 0.0), str(item.get("path") or "")), reverse=True)
+def authenticate_google_tcmalloc_input(
+    value: str, *, prefix: bool
+) -> Tuple[Optional[Path], Optional[Dict[str, Any]], List[str]]:
+    errors: List[str] = []
+    for lib_dir in google_tcmalloc_library_dirs(value, prefix=prefix):
+        try:
+            identity = GOOGLE_TCMALLOC.validate_library_dir(lib_dir)
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            subprocess.SubprocessError,
+        ) as exc:
+            errors.append(f"{lib_dir}: {exc}")
+            continue
+        return lib_dir.resolve(strict=True), dict(identity), errors
+    return None, None, errors
 
 
 def tcmalloc_library_probe() -> Dict[str, Any]:
-    configured_candidates: List[Dict[str, Any]] = []
-    selected: Optional[Path] = None
-    for env_key in ("UNIALLOC_TCMALLOC_LIB_DIR", "TCMALLOC_LIB_DIR"):
-        raw = os.environ.get(env_key)
-        path = normalize_optional_path(raw)
-        files = sorted(name for name in TCMALLOC_LIBRARY_NAMES if path and (path / name).exists())
-        candidate = {
-            "env_key": env_key,
-            "value": raw,
-            "path": str(path) if path else None,
-            "exists": bool(path and path.exists()),
-            "is_dir": bool(path and path.is_dir()),
-            "library_files": files,
-        }
-        configured_candidates.append(candidate)
-        if selected is None and tcmalloc_library_dir_is_usable(path):
-            selected = path
-    discovered_candidates = discover_tcmalloc_library_candidates()
-    if selected is None:
-        for candidate in discovered_candidates:
-            if candidate.get("usable"):
-                selected = Path(str(candidate.get("path"))).resolve()
+    source: Optional[str] = None
+    value = os.environ.get(GOOGLE_TCMALLOC_PREFIX_ENV)
+    prefix = True
+    if value:
+        source = GOOGLE_TCMALLOC_PREFIX_ENV
+    else:
+        for env_name in GOOGLE_TCMALLOC_LEGACY_DIR_ENVS:
+            if os.environ.get(env_name):
+                source = env_name
+                value = os.environ[env_name]
+                prefix = False
                 break
+    if value is None and DEFAULT_GOOGLE_TCMALLOC_PREFIX.exists():
+        source = "canonical_repo_prefix"
+        value = str(DEFAULT_GOOGLE_TCMALLOC_PREFIX)
+
+    selected: Optional[Path] = None
+    identity: Optional[Dict[str, Any]] = None
+    errors: List[str] = []
+    if value is not None:
+        selected, identity, errors = authenticate_google_tcmalloc_input(
+            value, prefix=prefix
+        )
     return {
-        "ctypes_find_library_tcmalloc": ctypes.util.find_library("tcmalloc"),
-        "ctypes_find_library_tcmalloc_minimal": ctypes.util.find_library("tcmalloc_minimal"),
-        "driver_required_library_name": "tcmalloc",
-        "configured_candidates": configured_candidates,
-        "auto_discovery_candidates": discovered_candidates,
+        "ok": bool(selected and identity),
+        "allocator_family_required": "google/tcmalloc",
+        "variant_required": "modern-hpaa-adaptive-subrelease",
+        "configured_input": value,
+        "configured_input_source": source,
+        "deprecated_input": bool(source in GOOGLE_TCMALLOC_LEGACY_DIR_ENVS),
+        "configured_prefix": str(selected.parent) if selected else None,
         "configured_library_dir": str(selected) if selected else None,
-        "configured_library_files": tcmalloc_library_files(selected),
+        "identity": identity,
+        "validation_errors": errors,
     }
 
 
@@ -9851,9 +9874,18 @@ def local_collections_dependency_env(cell: Dict[str, Any]) -> Dict[str, str]:
     if allocator == "tcmalloc":
         probe = tcmalloc_library_probe()
         lib_dir = probe.get("configured_library_dir")
-        if lib_dir:
-            env["UNIALLOC_TCMALLOC_LIB_DIR"] = str(lib_dir)
-    if allocator not in {"snmalloc", "tcmalloc"}:
+        prefix = probe.get("configured_prefix")
+        if probe.get("ok") and lib_dir and prefix:
+            library_path = Path(str(lib_dir))
+            env[GOOGLE_TCMALLOC_PREFIX_ENV] = str(prefix)
+            env["LIBRARY_PATH"] = prepend_env_path(
+                os.environ.get("LIBRARY_PATH"), library_path
+            )
+            env["LD_LIBRARY_PATH"] = prepend_env_path(
+                os.environ.get("LD_LIBRARY_PATH"), library_path
+            )
+        return env
+    if allocator != "snmalloc":
         return env
     cmake_probe = cmake_binary_probe()
     cmake_bin = cmake_probe.get("configured_cmake_bin")
@@ -9873,7 +9905,7 @@ def local_collections_dependency_env_removed(cell: Dict[str, Any]) -> List[str]:
 
 def tcmalloc_library_available() -> bool:
     probe = tcmalloc_library_probe()
-    return bool(probe.get("ctypes_find_library_tcmalloc") or probe.get("configured_library_dir"))
+    return probe.get("ok") is True
 
 
 def scudo_toolchain_available() -> bool:
@@ -9969,13 +10001,25 @@ def local_collections_driver_support(
     allocator = str(cell.get("allocator") or "")
     if benchmark != "Collections":
         return False, "only the paper Collections row has an in-tree std_bench driver"
-    supported = {"unialloc", "jemalloc", "mimalloc", "tcmalloc", "snmalloc", "ptmalloc", "scudo"}
+    supported = {
+        "unialloc",
+        "jemalloc",
+        "mimalloc",
+        "tcmalloc",
+        "gperftools_legacy",
+        "snmalloc",
+        "ptmalloc",
+        "scudo",
+    }
     if allocator not in supported:
         return False, f"allocator has no local Collections driver mapping: {allocator}"
     if allocator == "ptmalloc" and platform.system() != "Linux" and not allow_host_allocator_mismatch:
         return False, "ptmalloc paper evidence requires a Linux/glibc host"
     if allocator == "tcmalloc" and not tcmalloc_library_available():
-        return False, "tcmalloc link library was not found on this host"
+        return (
+            False,
+            "modern google/tcmalloc artifact failed provenance and HPAA authentication",
+        )
     if allocator == "scudo" and not scudo_execution_available():
         return (
             False,
@@ -10097,10 +10141,15 @@ def shell_probe(
     env.setdefault("GLIBC_TUNABLES", "glibc.pthread.rseq=0")
     for key, value in (env_overrides or {}).items():
         env[str(key)] = str(value)
-    tcmalloc_dir = env.get("UNIALLOC_TCMALLOC_LIB_DIR")
-    if tcmalloc_dir:
-        env["LIBRARY_PATH"] = prepend_env_path(env.get("LIBRARY_PATH"), Path(tcmalloc_dir))
-        env["DYLD_LIBRARY_PATH"] = prepend_env_path(env.get("DYLD_LIBRARY_PATH"), Path(tcmalloc_dir))
+    tcmalloc_prefix = env.get(GOOGLE_TCMALLOC_PREFIX_ENV)
+    if tcmalloc_prefix:
+        tcmalloc_dir = Path(tcmalloc_prefix) / "lib"
+        env["LIBRARY_PATH"] = prepend_env_path(
+            env.get("LIBRARY_PATH"), tcmalloc_dir
+        )
+        env["LD_LIBRARY_PATH"] = prepend_env_path(
+            env.get("LD_LIBRARY_PATH"), tcmalloc_dir
+        )
     cmake_bin = env.get("UNIALLOC_CMAKE_BIN")
     if cmake_bin:
         env["PATH"] = prepend_env_path(env.get("PATH"), Path(cmake_bin).parent)
@@ -10242,8 +10291,15 @@ def build_collections_allocator_preflight_audit(
         }
         if allocator == "tcmalloc":
             record["library_probe"] = tcmalloc_library_probe()
-            record["build_dependency_probe"] = {"cmake": cmake_binary_probe()}
-            record["package_probe"] = {"homebrew_gperftools": homebrew_package_probe("gperftools")}
+            record["build_dependency_probe"] = {
+                "builder": "evaluation/scripts/build_google_tcmalloc.py",
+                "prefix_env": GOOGLE_TCMALLOC_PREFIX_ENV,
+                "bazel_version": GOOGLE_TCMALLOC.BAZEL_VERSION,
+            }
+            record["package_probe"] = {
+                "allocator_family": "google/tcmalloc",
+                "legacy_gperftools_allowed_under": "gperftools_legacy",
+            }
         elif allocator == "scudo":
             execution_probe = scudo_execution_probe()
             record["library_probe"] = {
@@ -10303,11 +10359,10 @@ def build_collections_allocator_preflight_audit(
             blockers.append("snmalloc fresh build requires cmake")
         if allocator == "ptmalloc" and platform.system() != "Linux" and not allow_host_allocator_mismatch:
             blockers.append("ptmalloc requires Linux/glibc host provenance for paper Collections evidence")
-        if allocator == "tcmalloc" and not (
-            record.get("library_probe", {}).get("ctypes_find_library_tcmalloc")
-            or record.get("library_probe", {}).get("configured_library_dir")
-        ):
-            blockers.append("local dynamic linker cannot resolve libtcmalloc")
+        if allocator == "tcmalloc" and record.get("library_probe", {}).get("ok") is not True:
+            blockers.append(
+                "modern google/tcmalloc provenance, HPAA, and symbol authentication failed"
+            )
         link_probe = record.get("link_probe")
         if isinstance(link_probe, dict) and not link_probe.get("ok"):
             blockers.append("narrow cargo bench link probe failed")
@@ -10369,7 +10424,10 @@ def build_collections_allocator_preflight_audit(
         "notes": [
             "This audit explains local Collections allocator feasibility; it is not performance evidence.",
             "ptmalloc paper evidence requires Linux/glibc host provenance unless a run is explicitly marked as a non-claim smoke run.",
-            "tcmalloc must resolve and link libtcmalloc before local std_bench cells can be treated as runnable.",
+            (
+                "tcmalloc must pass the pinned modern google/tcmalloc provenance, symbol, "
+                "and HPAA checks before local std_bench cells can be treated as runnable."
+            ),
             (
                 "scudo is runnable when the canonical execution probe selects either the Rust "
                 "sanitizer route or a concrete compiler-rt standalone runtime for LD_PRELOAD; "
@@ -10550,8 +10608,11 @@ def paper_performance_cell_capability(
         return {
             "kind": "missing_allocator_dependency",
             "locally_runnable": False,
-            "claim_grade_blocker": "tcmalloc system library or wrapper support required on this host",
-            "reason": reason or "tcmalloc link library was not found on this host",
+            "claim_grade_blocker": (
+                "authenticated modern google/tcmalloc HPAA artifact required on this host"
+            ),
+            "reason": reason
+            or "modern google/tcmalloc provenance and HPAA authentication failed",
         }
     return {
         "kind": "unsupported_local_collections_allocator",
@@ -28704,6 +28765,9 @@ extern crate alloc;
 #[cfg(feature = "bench_scudo")]
 compile_error!("compiler semantic benchmarks are UniAlloc-only and cannot produce Scudo timing");
 
+#[cfg(feature = "bench_tcmalloc")]
+mod google_tcmalloc;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "bench_jemalloc")] {
         use jemallocator::Jemalloc;
@@ -28714,9 +28778,13 @@ cfg_if::cfg_if! {
         #[global_allocator]
         static MIMALLOC: MiMalloc = MiMalloc;
     } else if #[cfg(feature = "bench_tcmalloc")] {
-        use tcmalloc::TCMalloc;
+        use google_tcmalloc::GoogleTcmalloc;
         #[global_allocator]
-        static TCMALLOC: TCMalloc = TCMalloc;
+        static TCMALLOC: GoogleTcmalloc = GoogleTcmalloc;
+    } else if #[cfg(feature = "bench_gperftools_legacy")] {
+        use gperftools_tcmalloc::TCMalloc;
+        #[global_allocator]
+        static GPERFTOOLS_TCMALLOC: TCMalloc = TCMalloc;
     } else if #[cfg(feature = "bench_snmalloc")] {
         #[global_allocator]
         static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;

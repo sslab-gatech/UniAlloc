@@ -318,6 +318,7 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
     def test_system_and_tcmalloc_are_explicit_realworld_variants(self) -> None:
         self.assertIn("system", matrix.VARIANTS)
         self.assertIn("tcmalloc", matrix.VARIANTS)
+        self.assertIn("gperftools_legacy", matrix.VARIANTS)
         with self.assertRaises(matrix.MatrixError):
             matrix.dependency_for_variant("system")
         with self.assertRaises(matrix.MatrixError):
@@ -333,8 +334,9 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
             "allocator_route": "rust-system",
         }
         runtime = {
-            "label": "gperftools-tcmalloc-2.18.1-full-preload",
-            "library": "/tmp/libtcmalloc.so.4.6.5",
+            "variant": "tcmalloc",
+            "label": "google-tcmalloc-modern-hpaa-adaptive-subrelease",
+            "library": "/tmp/libunialloc_google_tcmalloc.so",
             "library_sha256": "library-hash",
         }
         aliased = matrix.tcmalloc_build_record(system, runtime)
@@ -346,8 +348,85 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
 
         prefix = matrix.allocator_runtime_prefix("tcmalloc", runtime)
         self.assertEqual(prefix[:7], ["env", "-u", "HEAPPROFILE", "-u", "CPUPROFILE", "-u", "MALLOCSTATS"])
-        self.assertEqual(prefix[-1], "LD_PRELOAD=/tmp/libtcmalloc.so.4.6.5")
+        self.assertEqual(
+            prefix[-1], "LD_PRELOAD=/tmp/libunialloc_google_tcmalloc.so"
+        )
         self.assertEqual(matrix.allocator_runtime_prefix("unialloc", runtime), [])
+
+    def test_tcmalloc_runtime_rejects_gperftools_lookalike(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            prefix = pathlib.Path(tmp)
+            (prefix / "lib").mkdir()
+            (prefix / "lib/libtcmalloc.so.4").write_bytes(b"gperftools")
+            with self.assertRaisesRegex(
+                matrix.MatrixError, "modern google/tcmalloc authentication failed"
+            ):
+                matrix.tcmalloc_runtime_evidence(prefix)
+
+    def test_tcmalloc_preload_proof_requires_the_target_binary(self) -> None:
+        with self.assertRaisesRegex(
+            (matrix.MatrixError, FileNotFoundError), "target binary|No such file"
+        ):
+            matrix.prove_tcmalloc_preload(
+                pathlib.Path("/definitely/missing-target-binary"),
+                {
+                    "variant": "tcmalloc",
+                    "library": "/definitely/missing-modern-tcmalloc.so",
+                },
+                timeout=1,
+            )
+
+    def test_google_tcmalloc_marker_requires_an_exact_line(self) -> None:
+        marker = matrix.GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER.encode()
+        self.assertEqual(
+            matrix.exact_identity_marker_count(
+                marker, matrix.GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER
+            ),
+            1,
+        )
+        self.assertEqual(
+            matrix.exact_identity_marker_count(
+                b"prefix " + marker,
+                matrix.GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER,
+            ),
+            0,
+        )
+        modern = matrix.google_tcmalloc_target_identity_evidence("tcmalloc", marker)
+        self.assertTrue(modern["google_tcmalloc_target_identity_verified"])
+        self.assertEqual(modern["google_tcmalloc_identity_marker_count"], 1)
+        contaminated = matrix.google_tcmalloc_target_identity_evidence(
+            "system", marker
+        )
+        self.assertFalse(
+            contaminated["google_tcmalloc_target_identity_verified"]
+        )
+
+    def test_tcmalloc_runtime_binds_support_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            prefix = pathlib.Path(tmp)
+            lib_dir = prefix / "lib"
+            lib_dir.mkdir()
+            library = lib_dir / "libunialloc_google_tcmalloc.so"
+            library.write_bytes(b"modern")
+            identity = {
+                "realpath": str(library.resolve()),
+                "sha256": "a" * 64,
+                "allocator_family": "google/tcmalloc",
+            }
+            with mock.patch.object(
+                matrix.GOOGLE_TCMALLOC,
+                "validate_library_dir",
+                return_value=identity,
+            ) as validate:
+                runtime = matrix.tcmalloc_runtime_evidence(prefix)
+
+        validate.assert_called_once_with(lib_dir.resolve())
+        self.assertEqual(runtime["variant"], "tcmalloc")
+        self.assertEqual(runtime["library"], str(library.resolve()))
+        self.assertEqual(
+            runtime["runtime_requirements"]["revision"],
+            matrix.GOOGLE_TCMALLOC.UPSTREAM_REVISION,
+        )
 
     def test_quick_mode_uses_one_warmup_and_three_measurements(self) -> None:
         args = matrix.parse_args(["--quick"])

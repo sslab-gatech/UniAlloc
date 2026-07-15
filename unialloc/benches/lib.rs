@@ -10,6 +10,8 @@ extern crate test;
 #[macro_use]
 extern crate alloc;
 
+#[cfg(feature = "bench_tcmalloc")]
+mod google_tcmalloc;
 #[cfg(feature = "bench_scudo")]
 mod scudo_runtime;
 
@@ -23,9 +25,13 @@ cfg_if::cfg_if! {
         #[global_allocator]
         static MIMALLOC: MiMalloc = MiMalloc;
     } else if #[cfg(feature = "bench_tcmalloc")] {
-        use tcmalloc::TCMalloc;
+        use google_tcmalloc::GoogleTcmalloc;
         #[global_allocator]
-        static TCMALLOC: TCMalloc = TCMalloc;
+        static TCMALLOC: GoogleTcmalloc = GoogleTcmalloc;
+    } else if #[cfg(feature = "bench_gperftools_legacy")] {
+        use gperftools_tcmalloc::TCMalloc;
+        #[global_allocator]
+        static GPERFTOOLS_TCMALLOC: TCMalloc = TCMalloc;
     } else if #[cfg(feature = "bench_snmalloc")] {
         #[global_allocator]
         static ALLOC: snmalloc_rs::SnMalloc = snmalloc_rs::SnMalloc;

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import pathlib
@@ -20,6 +21,7 @@ import signal
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 import tomllib
 from dataclasses import dataclass
@@ -27,6 +29,30 @@ from typing import Any, Iterable, Sequence
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+def _load_google_tcmalloc_support() -> Any:
+    try:
+        import google_tcmalloc_support as support
+
+        return support
+    except ModuleNotFoundError:
+        support_path = pathlib.Path(__file__).resolve().with_name(
+            "google_tcmalloc_support.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "_unialloc_realworld_google_tcmalloc_support", support_path
+        )
+        if spec is None or spec.loader is None:
+            raise ImportError(f"could not load google/tcmalloc support from {support_path}")
+        support = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(support)
+        return support
+
+
+GOOGLE_TCMALLOC = _load_google_tcmalloc_support()
+GOOGLE_TCMALLOC_PREFIX_ENV = "UNIALLOC_GOOGLE_TCMALLOC_PREFIX"
+GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER = GOOGLE_TCMALLOC.RUNTIME_IDENTITY_MARKER
 DEFAULT_RAW_DIR = ROOT / "evaluation" / "raw" / "realworld-type-isolation-matrix"
 DEFAULT_CHECKOUT_ROOT = ROOT / "evaluation" / "external" / "_checkouts"
 DEFAULT_WRAPPER = DEFAULT_RAW_DIR / "tools" / "unialloc-rustc-wrapper"
@@ -126,6 +152,7 @@ BASE_VARIANTS = (
     "jemalloc",
     "mimalloc",
     "tcmalloc",
+    "gperftools_legacy",
     "unialloc",
     "typed_plain",
     "typeiso_perf",
@@ -148,6 +175,7 @@ VARIANTS = (
     "mimalloc",
     "mimalloc_no_thp",
     "tcmalloc",
+    "gperftools_legacy",
     "unialloc",
     *UNIALLOC_FEATURE_VARIANTS,
     "typed_plain",
@@ -157,7 +185,9 @@ VARIANTS = (
 # Feature-isolation and runtime-policy variants are opt-in so existing invocations
 # retain the same default matrix and cost.
 DEFAULT_VARIANTS = tuple(
-    variant for variant in BASE_VARIANTS if variant != "tcmalloc"
+    variant
+    for variant in BASE_VARIANTS
+    if variant not in {"tcmalloc", "gperftools_legacy"}
 )
 TYPEISO_VARIANTS = frozenset(("typed_plain", "typeiso_perf", "typeiso_coverage"))
 MIMALLOC_VARIANTS = frozenset(("mimalloc", "mimalloc_no_thp"))
@@ -324,9 +354,26 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="worker threads used by the Oxipng workload",
     )
     parser.add_argument(
+        "--google-tcmalloc-prefix",
+        type=pathlib.Path,
+        default=os.environ.get(GOOGLE_TCMALLOC_PREFIX_ENV),
+        help=(
+            "prefix produced by build_google_tcmalloc.py; required for the modern "
+            "tcmalloc variant"
+        ),
+    )
+    parser.add_argument(
         "--tcmalloc-library",
         type=pathlib.Path,
-        help="absolute gperftools libtcmalloc shared library used with LD_PRELOAD",
+        help=(
+            "deprecated modern compatibility input; its containing lib directory "
+            "must pass google/tcmalloc provenance and HPAA validation"
+        ),
+    )
+    parser.add_argument(
+        "--gperftools-legacy-library",
+        type=pathlib.Path,
+        help="explicit historical gperftools shared library for gperftools_legacy",
     )
     parser.add_argument("--build-timeout", type=int, default=1800)
     parser.add_argument("--run-timeout", type=int, default=300)
@@ -364,8 +411,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         parser.error("--fd-path-repetitions must be positive")
     if args.oxipng_threads < 1:
         parser.error("--oxipng-threads must be positive")
-    if "tcmalloc" in args.variants and args.tcmalloc_library is None:
-        parser.error("--tcmalloc-library is required for the tcmalloc variant")
+    if (
+        "tcmalloc" in args.variants
+        and args.google_tcmalloc_prefix is None
+        and args.tcmalloc_library is None
+    ):
+        parser.error(
+            "--google-tcmalloc-prefix is required for the modern tcmalloc variant"
+        )
+    if (
+        "gperftools_legacy" in args.variants
+        and args.gperftools_legacy_library is None
+    ):
+        parser.error(
+            "--gperftools-legacy-library is required for gperftools_legacy"
+        )
     return args
 
 
@@ -803,13 +863,58 @@ def measurement_command_prefix(
     return prefix
 
 
-def tcmalloc_runtime_evidence(library: pathlib.Path) -> dict[str, Any]:
+def tcmalloc_runtime_evidence(
+    prefix: pathlib.Path | None = None,
+    library: pathlib.Path | None = None,
+) -> dict[str, Any]:
+    """Authenticate the exact modern google/tcmalloc DSO used by LD_PRELOAD."""
+
+    if prefix is not None:
+        lib_dir = prefix.expanduser().resolve(strict=False) / "lib"
+    elif library is not None:
+        lib_dir = library.expanduser().resolve(strict=False).parent
+    else:
+        raise MatrixError("missing modern google/tcmalloc prefix")
+    try:
+        identity = dict(GOOGLE_TCMALLOC.validate_library_dir(lib_dir))
+    except (
+        OSError,
+        RuntimeError,
+        ValueError,
+        subprocess.SubprocessError,
+    ) as exc:
+        raise MatrixError(f"modern google/tcmalloc authentication failed: {exc}") from exc
+    resolved = pathlib.Path(str(identity["realpath"])).resolve(strict=True)
+    if library is not None and library.expanduser().resolve(strict=True) != resolved:
+        raise MatrixError(
+            "deprecated --tcmalloc-library does not name the authenticated modern DSO"
+        )
+    return {
+        "variant": "tcmalloc",
+        "label": "google-tcmalloc-modern-hpaa-adaptive-subrelease",
+        "library": str(resolved),
+        "library_name": resolved.name,
+        "library_size_bytes": resolved.stat().st_size,
+        "library_sha256": identity["sha256"],
+        "activation": "system-api-ld-preload-with-runtime-identity-guard",
+        "identity": identity,
+        "runtime_requirements": {
+            "revision": GOOGLE_TCMALLOC.UPSTREAM_REVISION,
+            "hpaa_active": 1,
+            "malloc_provider_is_self": 1,
+            "exact_mapped_path": str(resolved),
+        },
+    }
+
+
+def gperftools_legacy_runtime_evidence(library: pathlib.Path) -> dict[str, Any]:
     resolved = library.expanduser().resolve()
     if not resolved.is_file():
-        raise MatrixError(f"missing TCMalloc shared library: {resolved}")
+        raise MatrixError(f"missing legacy gperftools shared library: {resolved}")
     if ".so" not in resolved.name:
-        raise MatrixError(f"TCMalloc runtime must be a shared library: {resolved}")
+        raise MatrixError(f"legacy gperftools runtime must be a shared library: {resolved}")
     evidence: dict[str, Any] = {
+        "variant": "gperftools_legacy",
         "label": "gperftools-tcmalloc-full-preload",
         "library": str(resolved),
         "library_name": resolved.name,
@@ -852,7 +957,7 @@ def allocator_runtime_prefix(
             "env",
             *(f"{name}={value}" for name, value in runtime_overrides.items()),
         ]
-    if variant != "tcmalloc":
+    if variant not in {"tcmalloc", "gperftools_legacy"}:
         return []
     if not isinstance(tcmalloc_runtime, dict):
         raise MatrixError("missing TCMalloc runtime evidence")
@@ -894,9 +999,12 @@ def tcmalloc_build_record(
 ) -> dict[str, Any]:
     if system_build.get("variant") != "system" or not system_build.get("success"):
         raise MatrixError("TCMalloc requires a successful System allocator build")
+    variant = str(tcmalloc_runtime.get("variant") or "")
+    if variant not in {"tcmalloc", "gperftools_legacy"}:
+        raise MatrixError(f"unknown TCMalloc runtime variant: {variant}")
     return {
         **system_build,
-        "variant": "tcmalloc",
+        "variant": variant,
         "base_build_variant": "system",
         "original_allocator": "system",
         "allocator_route": "system-api-ld-preload",
@@ -910,26 +1018,112 @@ def prove_tcmalloc_preload(
     *,
     timeout: int,
 ) -> dict[str, Any]:
+    binary = binary.expanduser().resolve(strict=True)
+    if not binary.is_file() or not os.access(binary, os.X_OK):
+        raise MatrixError(f"TCMalloc target binary is not executable: {binary}")
     library = pathlib.Path(str(tcmalloc_runtime["library"])).resolve()
-    dynamic_linker = pathlib.Path("/lib64/ld-linux-x86-64.so.2")
-    if not dynamic_linker.is_file():
-        raise MatrixError(f"missing dynamic linker for preload proof: {dynamic_linker}")
     env = os.environ.copy()
     for name in ("HEAPPROFILE", "CPUPROFILE", "MALLOCSTATS"):
         env.pop(name, None)
     env["LD_PRELOAD"] = str(library)
-    result = execute(
-        [dynamic_linker, "--list", binary],
-        cwd=binary.parent,
-        env=env,
-        timeout=timeout,
-    )
+    modern = tcmalloc_runtime.get("variant") == "tcmalloc"
+    compile_record: dict[str, Any] | None = None
+    if modern:
+        env["UNIALLOC_GOOGLE_TCMALLOC_LIBRARY"] = str(library)
+        env["UNIALLOC_GOOGLE_TCMALLOC_REVISION"] = GOOGLE_TCMALLOC.UPSTREAM_REVISION
+        compiler = shutil.which("cc")
+        if compiler is None:
+            raise MatrixError("cc is required for the google/tcmalloc runtime proof")
+        runtime_probe = r'''
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+typedef const char* (*revision_fn)(void);
+typedef int (*check_fn)(void);
+int main(void) {
+  const char* expected = getenv("UNIALLOC_GOOGLE_TCMALLOC_LIBRARY");
+  const char* expected_revision = getenv("UNIALLOC_GOOGLE_TCMALLOC_REVISION");
+  Dl_info provider = {0};
+  char provider_real[PATH_MAX] = {0};
+  char expected_real[PATH_MAX] = {0};
+  void* active_malloc = dlsym(RTLD_DEFAULT, "malloc");
+  void* handle = expected ? dlopen(expected, RTLD_NOW | RTLD_NOLOAD) : NULL;
+  revision_fn revision = handle ? (revision_fn)dlsym(handle, "unialloc_google_tcmalloc_revision") : NULL;
+  check_fn hpaa = handle ? (check_fn)dlsym(handle, "unialloc_google_tcmalloc_hpaa_active") : NULL;
+  check_fn provider_check = handle ? (check_fn)dlsym(handle, "unialloc_google_tcmalloc_malloc_provider_is_self") : NULL;
+  int mapped = active_malloc && dladdr(active_malloc, &provider) && provider.dli_fname &&
+      realpath(provider.dli_fname, provider_real) && expected && realpath(expected, expected_real) &&
+      strcmp(provider_real, expected_real) == 0;
+  const char* actual_revision = revision ? revision() : "";
+  int hpaa_active = hpaa ? hpaa() : 0;
+  int provider_is_self = provider_check ? provider_check() : 0;
+  printf("{\"revision\":\"%s\",\"hpaa_active\":%d,\"malloc_provider_is_self\":%d,\"exact_library_mapped\":%s}\n",
+         actual_revision, hpaa_active, provider_is_self, mapped ? "true" : "false");
+  return mapped && hpaa_active == 1 && provider_is_self == 1 && expected_revision &&
+         strcmp(actual_revision, expected_revision) == 0 ? 0 : 86;
+}
+'''
+        with tempfile.TemporaryDirectory(prefix="unialloc-google-tcmalloc-probe-") as tmp:
+            probe_source = pathlib.Path(tmp) / "probe.c"
+            probe_binary = pathlib.Path(tmp) / "probe"
+            probe_source.write_text(runtime_probe, encoding="utf-8")
+            compile_env = dict(env)
+            compile_env.pop("LD_PRELOAD", None)
+            compiled = execute(
+                [compiler, str(probe_source), "-ldl", "-o", str(probe_binary)],
+                cwd=pathlib.Path(tmp),
+                env=compile_env,
+                timeout=timeout,
+            )
+            compile_record = {
+                "command": compiled["command"],
+                "exit_code": compiled["exit_code"],
+                "timed_out": compiled["timed_out"],
+                "stdout_sha256": sha256_bytes(compiled["stdout"]),
+                "stderr_sha256": sha256_bytes(compiled["stderr"]),
+            }
+            if compiled["exit_code"] != 0 or compiled["timed_out"]:
+                raise MatrixError(
+                    f"google/tcmalloc runtime proof compilation failed: {compile_record}"
+                )
+            result = execute(
+                [probe_binary],
+                cwd=pathlib.Path(tmp),
+                env=env,
+                timeout=timeout,
+            )
+    else:
+        dynamic_linker = pathlib.Path("/lib64/ld-linux-x86-64.so.2")
+        if not dynamic_linker.is_file():
+            raise MatrixError(
+                f"missing dynamic linker for legacy preload proof: {dynamic_linker}"
+            )
+        result = execute(
+            [dynamic_linker, "--list", binary],
+            cwd=binary.parent,
+            env=env,
+            timeout=timeout,
+        )
     stdout = result["stdout"].decode("utf-8", errors="replace")
-    success = (
-        result["exit_code"] == 0
-        and not result["timed_out"]
-        and str(library) in stdout
-    )
+    runtime_identity: dict[str, Any] | None = None
+    if modern:
+        try:
+            runtime_identity = json.loads(stdout.splitlines()[-1])
+        except (IndexError, json.JSONDecodeError):
+            runtime_identity = None
+    success = result["exit_code"] == 0 and not result["timed_out"]
+    if modern:
+        success = success and runtime_identity == {
+            "revision": GOOGLE_TCMALLOC.UPSTREAM_REVISION,
+            "hpaa_active": 1,
+            "malloc_provider_is_self": 1,
+            "exact_library_mapped": True,
+        }
+    else:
+        success = success and str(library) in stdout
     proof = {
         "success": success,
         "command": result["command"],
@@ -938,6 +1132,16 @@ def prove_tcmalloc_preload(
         "stdout_sha256": sha256_bytes(result["stdout"]),
         "stderr_sha256": sha256_bytes(result["stderr"]),
         "resolved_library": str(library),
+        "target_binary": str(binary),
+        "target_binary_sha256": sha256_file(binary),
+        "target_runtime_guard": (
+            "every measured target process must emit the DSO constructor identity marker"
+            if modern
+            else "dynamic linker maps the explicit legacy preload library"
+        ),
+        "artifact_preflight_only": modern,
+        "runtime_identity": runtime_identity,
+        "runtime_probe_compile": compile_record,
     }
     if not success:
         raise MatrixError(f"TCMalloc preload proof failed for {binary}: {proof}")
@@ -1039,6 +1243,25 @@ def parse_stats_json(stderr: str) -> dict[str, Any] | None:
         if isinstance(candidate, dict):
             parsed = candidate
     return parsed
+
+
+def exact_identity_marker_count(stderr: bytes, marker: str) -> int:
+    lines = stderr.decode("utf-8", errors="replace").splitlines(keepends=True)
+    return sum(line == marker for line in lines)
+
+
+def google_tcmalloc_target_identity_evidence(
+    variant: str, stderr: bytes
+) -> dict[str, Any]:
+    count = exact_identity_marker_count(
+        stderr, GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER
+    )
+    expected = 1 if variant == "tcmalloc" else 0
+    return {
+        "google_tcmalloc_identity_marker_count": count,
+        "google_tcmalloc_expected_identity_marker_count": expected,
+        "google_tcmalloc_target_identity_verified": count == expected,
+    }
 
 
 def summarize_audits(audit_dir: pathlib.Path) -> dict[str, Any]:
@@ -1982,7 +2205,15 @@ def summarize_measurements(measurements: Sequence[dict[str, Any]]) -> list[dict[
                     row["wall_ratio_vs_typed_plain"] = row["median_wall_seconds"] / typed_plain["median_wall_seconds"]
                     row["rss_ratio_vs_typed_plain"] = row["median_peak_rss_kib"] / typed_plain["median_peak_rss_kib"]
                 current_rows = rows_by_variant.get(str(row["variant"]), [])
-                for comparator in ("system", "native", "mimalloc", "tcmalloc", "unialloc", "typed_plain"):
+                for comparator in (
+                    "system",
+                    "native",
+                    "mimalloc",
+                    "tcmalloc",
+                    "gperftools_legacy",
+                    "unialloc",
+                    "typed_plain",
+                ):
                     reference_rows = rows_by_variant.get(comparator)
                     if comparator == row["variant"] or not reference_rows:
                         continue
@@ -2073,11 +2304,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     sysroot = rustc_sysroot(args.toolchain)
     warmups, repetitions = measurement_counts(args)
     affinity_prefix = measurement_command_prefix(args.cpu_list, args.numa_node)
-    tcmalloc_runtime = (
-        tcmalloc_runtime_evidence(args.tcmalloc_library)
-        if "tcmalloc" in args.variants and args.tcmalloc_library is not None
-        else None
-    )
+    preload_runtimes: dict[str, dict[str, Any]] = {}
+    if "tcmalloc" in args.variants:
+        preload_runtimes["tcmalloc"] = tcmalloc_runtime_evidence(
+            args.google_tcmalloc_prefix,
+            args.tcmalloc_library,
+        )
+    if "gperftools_legacy" in args.variants:
+        preload_runtimes["gperftools_legacy"] = gperftools_legacy_runtime_evidence(
+            args.gperftools_legacy_library
+        )
     result_path = raw_dir / "results.json"
     result: dict[str, Any] = {
         "schema_version": 2,
@@ -2099,7 +2335,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "numa_node": args.numa_node,
             "command_prefix": affinity_prefix,
         },
-        "tcmalloc_runtime": tcmalloc_runtime,
+        "tcmalloc_runtime": preload_runtimes.get("tcmalloc"),
+        "gperftools_legacy_runtime": preload_runtimes.get("gperftools_legacy"),
         "allocator_runtime_configurations": {
             variant: {
                 "environment_overrides": allocator_runtime_environment_overrides(
@@ -2145,6 +2382,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         for variant in args.variants:
             base_variant = {
                 "tcmalloc": "system",
+                "gperftools_legacy": "system",
                 "mimalloc_no_thp": "mimalloc",
             }.get(variant, variant)
             base_key = (app, base_variant)
@@ -2162,16 +2400,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                     reuse_binary=args.reuse_binaries,
                 )
             build = base_builds[base_key]
-            if variant == "tcmalloc":
-                assert tcmalloc_runtime is not None
-                build = tcmalloc_build_record(build, tcmalloc_runtime)
+            if variant in {"tcmalloc", "gperftools_legacy"}:
+                runtime = preload_runtimes[variant]
+                build = tcmalloc_build_record(build, runtime)
                 build["preload_proof"] = prove_tcmalloc_preload(
                     pathlib.Path(build["binary"]),
-                    tcmalloc_runtime,
+                    runtime,
                     timeout=args.run_timeout,
                 )
                 persist_result(
-                    raw_dir / "binaries" / app / "tcmalloc" / "build.json", build
+                    raw_dir / "binaries" / app / variant / "build.json", build
                 )
             elif variant == "mimalloc_no_thp":
                 build = mimalloc_no_thp_build_record(build)
@@ -2222,7 +2460,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 command_prefix = [
                     *affinity_prefix,
-                    *allocator_runtime_prefix(variant, tcmalloc_runtime),
+                    *allocator_runtime_prefix(
+                        variant, preload_runtimes.get(variant)
+                    ),
                 ]
                 measured = run_measured(
                     command,
@@ -2240,6 +2480,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                     (run_dir / "stderr.bin").write_bytes(stderr)
                 if measured["exit_code"] != 0 or measured["timed_out"]:
                     raise MatrixError(f"workload failed for {app}/{variant}: {measured}")
+                target_identity = google_tcmalloc_target_identity_evidence(
+                    variant, stderr
+                )
+                measured.update(target_identity)
+                if target_identity["google_tcmalloc_target_identity_verified"] is not True:
+                    raise MatrixError(
+                        f"workload {app}/{variant} emitted "
+                        f"{target_identity['google_tcmalloc_identity_marker_count']} "
+                        "modern google/tcmalloc identity markers; expected "
+                        f"{target_identity['google_tcmalloc_expected_identity_marker_count']}"
+                    )
                 output_sha = sha256_file(output_file) if output_file is not None else measured["stdout_sha256"]
                 stats = parse_stats_json(stderr.decode("utf-8", errors="replace"))
                 if variant == "typeiso_coverage":

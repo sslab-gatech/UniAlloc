@@ -381,18 +381,19 @@ The tracked result embeds all measured rows, runtime preflights, source and bina
 ```bash
 python3 evaluation/scripts/realworld_type_isolation_matrix.py \
   --apps oxipng \
-  --variants system,mimalloc,mimalloc_no_thp,tcmalloc,unialloc_no_optional,unialloc_rseq,unialloc_pthread_dtor,unialloc_hugepage,unialloc_separate_sc,unialloc_type_isolation,unialloc_metadata_segregation,unialloc_pac,unialloc,typed_plain,typeiso_perf \
+  --variants system,mimalloc,mimalloc_no_thp,gperftools_legacy,unialloc_no_optional,unialloc_rseq,unialloc_pthread_dtor,unialloc_hugepage,unialloc_separate_sc,unialloc_type_isolation,unialloc_metadata_segregation,unialloc_pac,unialloc,typed_plain,typeiso_perf \
   --quick --oxipng-threads 4 --warmups 1 --repetitions 5 \
   --toolchain nightly-2026-06-11 --cpu-list 20-23 --numa-node 0 \
   --jobs 32 \
-  --tcmalloc-library /home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5 \
+  --gperftools-legacy-library /home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5 \
   --discard-run-output \
   --raw-dir evaluation/raw/rust-alloc-paper-feature-thp-20260714/oxipng
 
 python3 evaluation/scripts/rsedis_thp_matrix.py \
   --mimalloc-rsedis-binary evaluation/raw/rust-alloc-paper-rsedis-current-20260714/binaries/mimalloc/rsedis \
   --system-rsedis-binary evaluation/raw/rust-alloc-paper-rsedis-current-20260714/binaries/system_ptmalloc/rsedis \
-  --gperftools-library /home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5 \
+  --tcmalloc-cell gperftools_legacy \
+  --gperftools-legacy-library /home/hanqing/.local/state/unialloc/runs/g001-minimal-235549b2-20260711T155042Z/evidence/pilot-controller/repairs/tcmalloc-full-runtime-v1-20260711T1717Z-attempt2/lib/libtcmalloc.so.4.6.5 \
   --raw-dir evaluation/raw/rust-alloc-paper-feature-thp-20260714/rsedis \
   --warmups 1 --repetitions 5 --requests 100000 --clients 50 \
   --data-size 64 --server-cpus 64-67 --client-cpus 68-71 --numa-node 0

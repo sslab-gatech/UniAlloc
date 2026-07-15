@@ -46,6 +46,7 @@ ALLOCATOR_FEATURES = {
     "ptmalloc": "bench_ptmalloc",
     "mimalloc": "bench_mimalloc",
     "tcmalloc": "bench_tcmalloc",
+    "gperftools-legacy": "bench_gperftools_legacy",
     "snmalloc": "bench_snmalloc",
     "scudo": "bench_scudo",
 }
@@ -102,6 +103,11 @@ def _load_rredis_runner() -> Tuple[Optional[Any], Optional[str]]:
 
 
 _RREDIS_RUNNER, _RREDIS_RUNNER_IMPORT_ERROR = _load_rredis_runner()
+GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER = (
+    _RREDIS_RUNNER._GOOGLE_TCMALLOC.RUNTIME_IDENTITY_MARKER
+    if _RREDIS_RUNNER is not None and _RREDIS_RUNNER._GOOGLE_TCMALLOC is not None
+    else "unialloc: verified modern google/tcmalloc HPAA identity\n"
+)
 
 TEXT_RPS_RE = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9_./ -]+?)\s*:\s*(?P<rps>[0-9][0-9,]*(?:\.[0-9]+)?)\s+requests\s+per\s+second\b",
@@ -131,6 +137,27 @@ def allocator_feature(allocator: Any) -> str:
 
 def scudo_allocator_requested(allocator: Any) -> bool:
     return allocator_feature(allocator) == "bench_scudo"
+
+
+def google_tcmalloc_allocator_requested(allocator: Any) -> bool:
+    return allocator_feature(allocator) == "bench_tcmalloc"
+
+
+def verify_google_tcmalloc_server_contract(
+    args: argparse.Namespace,
+    command: List[str],
+    cwd: str,
+) -> Dict[str, Any]:
+    if not google_tcmalloc_allocator_requested(args.allocator):
+        return {"required": False, "ok": True, "blockers": []}
+    if _RREDIS_RUNNER is None:
+        return {
+            "required": True,
+            "ok": False,
+            "blockers": [f"canonical RRedis runner is unavailable: {_RREDIS_RUNNER_IMPORT_ERROR}"],
+        }
+    record = _RREDIS_RUNNER.google_tcmalloc_server_contract(Path(cwd), command)
+    return {**record, "required": True}
 
 
 def verify_scudo_runner_attestation(
@@ -448,6 +475,19 @@ def allocator_semantics_record(
             blockers.append(
                 "RRedis bench_ptmalloc routes to std::alloc::System on this host, not Linux/glibc ptmalloc paper evidence"
             )
+    elif feature == "bench_tcmalloc":
+        runtime_verified = getattr(args, "_google_tcmalloc_runtime_verified", False) is True
+        implementation_kind = (
+            "verified_modern_google_tcmalloc_c_abi"
+            if runtime_verified
+            else "planned_modern_google_tcmalloc_c_abi"
+        )
+        paper_allocator_equivalent = runtime_verified
+        if not runtime_verified:
+            blockers.append("modern google/tcmalloc server runtime identity is not verified")
+    elif feature == "bench_gperftools_legacy":
+        implementation_kind = "explicit_gperftools_legacy_crate"
+        paper_allocator_equivalent = allocator == "gperftools-legacy"
     elif feature == "bench_scudo":
         execution = scudo_setup.get("execution") if isinstance(scudo_setup, dict) else None
         runtime_verified = bool(isinstance(execution, dict) and execution.get("runtime_verified") is True)
@@ -481,6 +521,16 @@ def allocator_semantics_record(
         "claim_grade_blockers": blockers,
         "notes": notes,
     }
+    if feature == "bench_tcmalloc":
+        record.update(
+            {
+                "runtime_identity_verified": getattr(
+                    args, "_google_tcmalloc_runtime_verified", False
+                )
+                is True,
+                "runtime_identity_marker": GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER,
+            }
+        )
     if feature == "bench_scudo" and isinstance(scudo_setup, dict):
         execution = scudo_setup.get("execution")
         if isinstance(execution, dict):
@@ -589,7 +639,8 @@ class BoundedPipeCapture:
         self.total_bytes = 0
         self._tail = bytearray()
         self._scudo_marker_seen = False
-        self._scudo_marker_line_buffer = b""
+        self._google_tcmalloc_marker_seen = False
+        self._marker_line_buffer = b""
         self.thread = threading.Thread(target=self._drain, daemon=True)
 
     def start(self) -> None:
@@ -607,15 +658,18 @@ class BoundedPipeCapture:
                     break
                 if isinstance(chunk, str):
                     chunk = chunk.encode("utf-8", errors="replace")
-                marker = SCUDO_RUNTIME_IDENTITY_MARKER.encode("utf-8")
-                marker_scan = self._scudo_marker_line_buffer + chunk
+                scudo_marker = SCUDO_RUNTIME_IDENTITY_MARKER.encode("utf-8")
+                google_tcmalloc_marker = GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER.encode("utf-8")
+                marker_scan = self._marker_line_buffer + chunk
                 lines = marker_scan.splitlines(keepends=True)
                 if lines and not lines[-1].endswith((b"\n", b"\r")):
-                    self._scudo_marker_line_buffer = lines.pop()
+                    self._marker_line_buffer = lines.pop()
                 else:
-                    self._scudo_marker_line_buffer = b""
-                if marker in lines:
+                    self._marker_line_buffer = b""
+                if scudo_marker in lines:
                     self._scudo_marker_seen = True
+                if google_tcmalloc_marker in lines:
+                    self._google_tcmalloc_marker_seen = True
                 self.total_bytes += len(chunk)
                 self._tail.extend(chunk)
                 if len(self._tail) > self.max_bytes:
@@ -641,6 +695,10 @@ class BoundedPipeCapture:
     def scudo_runtime_identity_marker_seen(self) -> bool:
         return self._scudo_marker_seen
 
+    @property
+    def google_tcmalloc_runtime_identity_marker_seen(self) -> bool:
+        return self._google_tcmalloc_marker_seen
+
     def text_tail(self, limit: int = 4000) -> str:
         data = self.bytes()[-max(1, int(limit)) :]
         return data.decode("utf-8", errors="replace")
@@ -659,6 +717,21 @@ def wait_for_scudo_runtime_identity_marker(
             return True
         time.sleep(0.01)
     return stderr_capture.scudo_runtime_identity_marker_seen
+
+
+def wait_for_google_tcmalloc_runtime_identity_marker(
+    stderr_capture: Optional[BoundedPipeCapture],
+    *,
+    timeout: float = 1.0,
+) -> bool:
+    if stderr_capture is None:
+        return False
+    deadline = time.monotonic() + max(0.0, float(timeout))
+    while time.monotonic() < deadline:
+        if stderr_capture.google_tcmalloc_runtime_identity_marker_seen:
+            return True
+        time.sleep(0.01)
+    return stderr_capture.google_tcmalloc_runtime_identity_marker_seen
 
 
 def server_log_metadata(
@@ -1289,12 +1362,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     if server_command and server_command[0] == "--":
         server_command = server_command[1:]
     cwd = os.getcwd()
+    args._google_tcmalloc_runtime_verified = False
     server_env, scudo_setup = prepare_scudo_server_execution(
         args,
         command=server_command,
         cwd=cwd,
     )
     scudo_attestation = verify_scudo_runner_attestation(args, server_command, cwd)
+    google_tcmalloc_contract = verify_google_tcmalloc_server_contract(
+        args, server_command, cwd
+    )
     benchmark_path, benchmark_probe = resolve_redis_benchmark_binary(str(args.redis_benchmark_bin))
     payload = build_common_payload(
         args,
@@ -1305,6 +1382,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     if scudo_attestation.get("required"):
         payload["scudo_runner_attestation"] = scudo_attestation
+    if google_tcmalloc_contract.get("required"):
+        payload["google_tcmalloc_server_contract"] = google_tcmalloc_contract
     evidence_dir = resolve_evidence_dir(str(args.evidence_dir or ""), args)
     if scudo_setup.get("requested") and evidence_dir is None:
         evidence_dir = Path(tempfile.mkdtemp(prefix="paper-redis-benchmark-scudo-evidence-"))
@@ -1353,6 +1432,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "success": False,
                 "error": "Scudo runner attestation failed: "
                 + "; ".join(str(item) for item in scudo_attestation.get("blockers", [])),
+            }
+        )
+        return emit(payload, SCUDO_CONFIGURATION_ERROR)
+    if not google_tcmalloc_contract.get("ok"):
+        payload.update(
+            {
+                "success": False,
+                "error": "google/tcmalloc server contract failed: "
+                + "; ".join(
+                    str(item) for item in google_tcmalloc_contract.get("blockers", [])
+                ),
             }
         )
         return emit(payload, SCUDO_CONFIGURATION_ERROR)
@@ -1453,6 +1543,45 @@ def main(argv: Optional[List[str]] = None) -> int:
                 args,
                 payload,
                 scudo_setup,
+                benchmark_path=benchmark_path,
+            )
+
+        if google_tcmalloc_contract.get("required"):
+            marker_seen = wait_for_google_tcmalloc_runtime_identity_marker(stderr_capture)
+            payload["google_tcmalloc_runtime_identity_marker_seen"] = marker_seen
+            if not marker_seen:
+                process_group_terminated, child_code = terminate_process_group(
+                    proc, float(args.grace_seconds)
+                )
+                payload.update(
+                    {
+                        "success": False,
+                        "error": (
+                            "google/tcmalloc server became ready without the revision-bound HPAA "
+                            "identity marker; redis-benchmark timing was not started"
+                        ),
+                        "process_group_terminated": process_group_terminated,
+                        "server_exit_code": child_code,
+                    }
+                )
+                payload.update(
+                    server_log_metadata(
+                        stdout_capture,
+                        stderr_capture,
+                        max_server_log_bytes=max_server_log_bytes,
+                        server_tail_bytes=server_tail_bytes,
+                        keep_server_logs=bool(args.keep_server_logs),
+                        evidence_dir=evidence_dir,
+                    )
+                )
+                append_evidence(payload, payload.pop("evidence", []))
+                return emit(payload, 86)
+            args._google_tcmalloc_runtime_verified = True
+            allocator_semantics = allocator_semantics_record(args, scudo_setup)
+            payload["allocator_semantics"] = allocator_semantics
+            payload["claim_grade_contract"] = current_source_claim_contract(
+                args,
+                allocator_semantics=allocator_semantics,
                 benchmark_path=benchmark_path,
             )
 

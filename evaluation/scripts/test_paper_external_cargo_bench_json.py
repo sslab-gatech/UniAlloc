@@ -17,6 +17,8 @@ import io
 import json
 import pathlib
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -594,6 +596,92 @@ class CargoBenchJsonRawEvidenceTests(unittest.TestCase):
         assert record is not None
         self.assertFalse(record["claim_grade"], record)
         self.assertIn("row count", record["not_claim_grade_reason"])
+
+    def test_modern_tcmalloc_overlay_uses_shared_revision_bound_c_abi_adapter(self) -> None:
+        overlay = wrapper.allocator_bench_overlay_text()
+        generated = wrapper._GOOGLE_TCMALLOC.rust_allocator_adapter_source(
+            feature="bench_tcmalloc",
+            static_name="TCMALLOC_EXTERNAL_CARGO_BENCH_ALLOCATOR",
+            conflicting_features=(
+                "bench_ourself",
+                "bench_ptmalloc",
+                "bench_jemalloc",
+                "bench_mimalloc",
+                "bench_gperftools_legacy",
+                "bench_snmalloc",
+                "bench_scudo",
+            ),
+        ).rstrip()
+        self.assertIn(generated, overlay)
+        self.assertIn(wrapper._GOOGLE_TCMALLOC.REVISION_SYMBOL, overlay)
+        self.assertIn("unialloc_google_tcmalloc_hpaa_active() != 1", overlay)
+        self.assertIn("unialloc_google_tcmalloc_malloc_provider_is_self() != 1", overlay)
+        self.assertNotIn(": tcmalloc::TCMalloc", overlay)
+        self.assertIn("gperftools_tcmalloc::TCMalloc", overlay)
+
+    def test_modern_tcmalloc_manifest_upgrade_removes_active_crates_io_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            checkout = pathlib.Path(tmp)
+            bench = checkout / "benches" / "micro.rs"
+            bench.parent.mkdir()
+            bench.write_text("fn main() {}\n", encoding="utf-8")
+            manifest = checkout / "Cargo.toml"
+            manifest.write_text(
+                '[package]\nname = "fixture"\nversion = "0.1.0"\n\n'
+                + wrapper.ALLOCATOR_CARGO_OVERLAY_MARKER
+                + '\n\n[dependencies.tcmalloc]\nversion = "0.3.0"\noptional = true\n\n'
+                + '[features]\nbench_tcmalloc = ["tcmalloc"]\n',
+                encoding="utf-8",
+            )
+            surface = {
+                "resolved": True,
+                "package_manifest": str(manifest),
+                "manifest_package": "fixture",
+                "package": None,
+                "bench_name": "micro",
+                "bench_source": str(bench),
+            }
+            record = wrapper.ensure_allocator_cargo_overlay(
+                checkout,
+                ["cargo", "bench", "--bench", "micro"],
+                surface,
+                requested_feature="bench_tcmalloc",
+            )
+            text = manifest.read_text(encoding="utf-8")
+
+        self.assertTrue(record["prepared"], record)
+        self.assertNotIn("[dependencies.tcmalloc]", text)
+        self.assertIn("bench_tcmalloc = []", text)
+        self.assertNotIn('bench_tcmalloc = ["tcmalloc"]', text)
+
+    def test_generated_modern_tcmalloc_adapter_compiles_as_rust_2018_source(self) -> None:
+        rustc = shutil.which("rustc")
+        if rustc is None:
+            self.skipTest("rustc is unavailable")
+        source = wrapper._GOOGLE_TCMALLOC.rust_allocator_adapter_source(
+            feature="bench_tcmalloc",
+            static_name="TEST_GOOGLE_TCMALLOC",
+        ) + "\nfn main() {}\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            path = root / "adapter.rs"
+            path.write_text(source, encoding="utf-8")
+            subprocess.run(
+                [
+                    rustc,
+                    "--edition=2018",
+                    "--emit=metadata",
+                    "--cfg",
+                    'feature="bench_tcmalloc"',
+                    str(path),
+                    "-o",
+                    str(root / "adapter.rmeta"),
+                ],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
 
 
 if __name__ == "__main__":

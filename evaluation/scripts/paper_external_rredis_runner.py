@@ -39,15 +39,42 @@ ALLOCATOR_FEATURES = {
     "ptmalloc": "bench_ptmalloc",
     "mimalloc": "bench_mimalloc",
     "tcmalloc": "bench_tcmalloc",
+    "gperftools-legacy": "bench_gperftools_legacy",
     "snmalloc": "bench_snmalloc",
     "scudo": "bench_scudo",
 }
 
 RREDIS_CARGO_OVERLAY_MARKER = "# UniAlloc evaluation allocator feature overlay."
 RREDIS_MAIN_OVERLAY_MARKER = "// UniAlloc evaluation allocator feature overlay."
+RREDIS_MAIN_OVERLAY_END_MARKER = "// End UniAlloc evaluation allocator feature overlay."
 RREDIS_SCUDO_GUARD_MARKER = "// UniAlloc evaluation verified Scudo runtime guard."
 SCUDO_CONFIGURATION_ERROR = 78
 SCUDO_RUNNER_ATTESTATION_OPTION = "--scudo-runner-attestation-json"
+GOOGLE_TCMALLOC_PREFIX_ENV = "UNIALLOC_GOOGLE_TCMALLOC_PREFIX"
+
+
+def _load_google_tcmalloc_support() -> tuple[Optional[Any], Optional[str]]:
+    try:
+        import google_tcmalloc_support as support
+
+        return support, None
+    except Exception as direct_exc:
+        support_path = Path(__file__).resolve().with_name("google_tcmalloc_support.py")
+        try:
+            spec = importlib.util.spec_from_file_location(
+                "_unialloc_rredis_google_tcmalloc_support",
+                support_path,
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError(f"could not create module spec for {support_path}")
+            support = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(support)
+            return support, None
+        except Exception as fallback_exc:
+            return None, f"direct import failed: {direct_exc}; local import failed: {fallback_exc}"
+
+
+_GOOGLE_TCMALLOC, _GOOGLE_TCMALLOC_IMPORT_ERROR = _load_google_tcmalloc_support()
 
 
 def _load_paper_workload_driver() -> tuple[Optional[Any], Optional[str]]:
@@ -219,6 +246,43 @@ def scudo_allocator_requested(allocator: str) -> bool:
     return allocator_feature(allocator) == "bench_scudo"
 
 
+def google_tcmalloc_allocator_requested(allocator: str) -> bool:
+    return allocator_feature(allocator) == "bench_tcmalloc"
+
+
+def google_tcmalloc_preflight() -> Dict[str, Any]:
+    if _GOOGLE_TCMALLOC is None:
+        raise RuntimeError(
+            f"google/tcmalloc support is unavailable: {_GOOGLE_TCMALLOC_IMPORT_ERROR}"
+        )
+    repo_root = repo_root_from_runner()
+    configured = str(os.environ.get(GOOGLE_TCMALLOC_PREFIX_ENV) or "").strip()
+    default_prefix = repo_root / "evaluation" / "deps" / "tcmalloc"
+    if configured:
+        prefix = Path(configured).expanduser()
+        source = GOOGLE_TCMALLOC_PREFIX_ENV
+    elif default_prefix.exists():
+        prefix = default_prefix
+        source = "canonical_repo_prefix"
+    else:
+        raise RuntimeError(
+            "modern google/tcmalloc requires UNIALLOC_GOOGLE_TCMALLOC_PREFIX; "
+            "build it with evaluation/scripts/build_google_tcmalloc.py"
+        )
+    prefix = prefix.resolve(strict=True)
+    identity = dict(_GOOGLE_TCMALLOC.validate_library_dir(prefix / "lib"))
+    return {
+        "schema_version": 1,
+        "source": "paper-external-rredis-runner-google-tcmalloc-preflight",
+        "ok": True,
+        "configured_input_source": source,
+        "configured_prefix": str(prefix),
+        "configured_library_dir": str((prefix / "lib").resolve(strict=True)),
+        "identity": identity,
+        "runtime_identity_marker": _GOOGLE_TCMALLOC.RUNTIME_IDENTITY_MARKER,
+    }
+
+
 def delegated_server_command(wrapper_args: List[str]) -> List[str]:
     try:
         separator = wrapper_args.index("--")
@@ -298,7 +362,12 @@ def prepend_env_path(env: Dict[str, str], key: str, values: List[Path]) -> None:
     env[key] = os.pathsep.join(prefixes + ([existing] if existing else []))
 
 
-def external_workload_env(scudo_preflight: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+def external_workload_env(
+    scudo_preflight: Optional[Dict[str, Any]] = None,
+    *,
+    allocator: str = "",
+    google_tcmalloc: Optional[Dict[str, Any]] = None,
+) -> Dict[str, str]:
     env = os.environ.copy()
     # Old Rsedis builds run through the repo-pinned 2022 nightly.  Without an
     # explicit sparse registry protocol, Cargo can spend minutes updating the
@@ -326,15 +395,24 @@ def external_workload_env(scudo_preflight: Optional[Dict[str, Any]] = None) -> D
         Path("/opt/homebrew/opt/gperftools/include"),
     ]
     prepend_env_path(env, "PATH", candidate_bins)
-    prepend_env_path(env, "LIBRARY_PATH", candidate_libs)
-    prepend_env_path(env, "DYLD_FALLBACK_LIBRARY_PATH", candidate_libs)
-    include_flags = " ".join(f"-I{path}" for path in candidate_includes if path.exists())
-    library_flags = " ".join(f"-L{path}" for path in candidate_libs if path.exists())
-    if include_flags:
-        env["CFLAGS"] = (include_flags + " " + env.get("CFLAGS", "")).strip()
-        env["CXXFLAGS"] = (include_flags + " " + env.get("CXXFLAGS", "")).strip()
-    if library_flags:
-        env["LDFLAGS"] = (library_flags + " " + env.get("LDFLAGS", "")).strip()
+    if allocator_feature(allocator) == "bench_gperftools_legacy":
+        prepend_env_path(env, "LIBRARY_PATH", candidate_libs)
+        prepend_env_path(env, "DYLD_FALLBACK_LIBRARY_PATH", candidate_libs)
+        include_flags = " ".join(f"-I{path}" for path in candidate_includes if path.exists())
+        library_flags = " ".join(f"-L{path}" for path in candidate_libs if path.exists())
+        if include_flags:
+            env["CFLAGS"] = (include_flags + " " + env.get("CFLAGS", "")).strip()
+            env["CXXFLAGS"] = (include_flags + " " + env.get("CXXFLAGS", "")).strip()
+        if library_flags:
+            env["LDFLAGS"] = (library_flags + " " + env.get("LDFLAGS", "")).strip()
+    if allocator_feature(allocator) == "bench_tcmalloc":
+        if not isinstance(google_tcmalloc, dict) or google_tcmalloc.get("ok") is not True:
+            raise RuntimeError("modern google/tcmalloc environment requires an authenticated artifact")
+        lib_dir = Path(str(google_tcmalloc["configured_library_dir"]))
+        prefix = Path(str(google_tcmalloc["configured_prefix"]))
+        prepend_env_path(env, "LIBRARY_PATH", [lib_dir])
+        prepend_env_path(env, "LD_LIBRARY_PATH", [lib_dir])
+        env[GOOGLE_TCMALLOC_PREFIX_ENV] = str(prefix)
     execution = scudo_preflight.get("execution") if isinstance(scudo_preflight, dict) else None
     if isinstance(execution, dict) and scudo_preflight.get("ok"):
         mode = str(execution.get("selected_mode") or "")
@@ -390,7 +468,8 @@ version = "0.1.25"
 default-features = false
 optional = true
 
-[dependencies.tcmalloc]
+[dependencies.gperftools-tcmalloc]
+package = "tcmalloc"
 version = "0.3.0"
 optional = true
 
@@ -419,13 +498,42 @@ bench_ourself = ["unialloc"]
 bench_jemalloc = ["jemallocator"]
 bench_ptmalloc = []
 bench_mimalloc = ["mimalloc"]
-bench_tcmalloc = ["tcmalloc"]
+bench_tcmalloc = []
+bench_gperftools_legacy = ["gperftools-tcmalloc"]
 bench_snmalloc = ["snmalloc-rs"]
 bench_scudo = []
 """
     text = cargo_toml.read_text(encoding="utf-8")
     if RREDIS_CARGO_OVERLAY_MARKER in text:
         next_text = text
+        legacy_tcmalloc_block = (
+            '[dependencies.tcmalloc]\nversion = "0.3.0"\noptional = true\n'
+        )
+        modern_legacy_block = (
+            '[dependencies.gperftools-tcmalloc]\npackage = "tcmalloc"\n'
+            'version = "0.3.0"\noptional = true\n'
+        )
+        if legacy_tcmalloc_block in next_text:
+            next_text = next_text.replace(legacy_tcmalloc_block, modern_legacy_block, 1)
+        elif "[dependencies.gperftools-tcmalloc]" not in next_text:
+            next_text = next_text.rstrip() + "\n\n" + modern_legacy_block
+        next_text = re.sub(
+            r'(?m)^\s*bench_tcmalloc\s*=.*$',
+            'bench_tcmalloc = []',
+            next_text,
+            count=1,
+        )
+        if not re.search(r"(?m)^\s*bench_gperftools_legacy\s*=", next_text):
+            features = section_bounds(next_text, "[features]")
+            if features is None:
+                next_text = next_text.rstrip() + '\n\n[features]\nbench_gperftools_legacy = ["gperftools-tcmalloc"]\n'
+            else:
+                insert_at = features[0] + len("[features]")
+                next_text = (
+                    next_text[:insert_at]
+                    + '\nbench_gperftools_legacy = ["gperftools-tcmalloc"]'
+                    + next_text[insert_at:]
+                )
         snmalloc_header = "[dependencies.snmalloc-rs]"
         snmalloc_bounds = section_bounds(next_text, snmalloc_header)
         if snmalloc_bounds is not None:
@@ -617,20 +725,25 @@ def scudo_guard_at_crate_root(text: str, guard: Optional[str] = None) -> bool:
     return text[insert_at : insert_at + len(expected)] == expected
 
 
-def ensure_allocator_main_overlay(real_workload_dir: Path) -> Dict[str, Any]:
-    main_rs = real_workload_dir / "src" / "main.rs"
-    record: Dict[str, Any] = {
-        "schema_version": 1,
-        "source": "paper-external-rredis-runner-allocator-main-overlay",
-        "main_rs": str(main_rs),
-        "changed": False,
-        "prepared": False,
-    }
-    if not main_rs.exists():
-        record["error"] = f"missing Rsedis main.rs: {main_rs}"
-        return record
-    overlay = f"""
-{RREDIS_MAIN_OVERLAY_MARKER}
+def rredis_allocator_main_overlay() -> str:
+    if _GOOGLE_TCMALLOC is None:
+        raise RuntimeError(
+            f"google/tcmalloc support is unavailable: {_GOOGLE_TCMALLOC_IMPORT_ERROR}"
+        )
+    google_tcmalloc_adapter = _GOOGLE_TCMALLOC.rust_allocator_adapter_source(
+        feature="bench_tcmalloc",
+        static_name="RREDIS_TCMALLOC",
+        conflicting_features=(
+            "bench_ourself",
+            "bench_jemalloc",
+            "bench_ptmalloc",
+            "bench_mimalloc",
+            "bench_gperftools_legacy",
+            "bench_snmalloc",
+            "bench_scudo",
+        ),
+    ).rstrip()
+    return f'''{RREDIS_MAIN_OVERLAY_MARKER}
 #[cfg(feature = "bench_ourself")]
 use unialloc::UniAlloc as RRedisUniAlloc;
 #[cfg(feature = "bench_ourself")]
@@ -647,9 +760,11 @@ static RREDIS_JEMALLOC: RRedisJemalloc = RRedisJemalloc;
 #[global_allocator]
 static RREDIS_MIMALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-#[cfg(feature = "bench_tcmalloc")]
+{google_tcmalloc_adapter}
+
+#[cfg(feature = "bench_gperftools_legacy")]
 #[global_allocator]
-static RREDIS_TCMALLOC: tcmalloc::TCMalloc = tcmalloc::TCMalloc;
+static RREDIS_GPERFTOOLS_LEGACY: gperftools_tcmalloc::TCMalloc = gperftools_tcmalloc::TCMalloc;
 
 #[cfg(feature = "bench_snmalloc")]
 #[global_allocator]
@@ -662,7 +777,52 @@ static RREDIS_PTMALLOC_SYSTEM_ALLOCATOR: std::alloc::System = std::alloc::System
 #[cfg(feature = "bench_scudo")]
 #[global_allocator]
 static RREDIS_SCUDO_SYSTEM_ALLOCATOR: std::alloc::System = std::alloc::System;
-"""
+{RREDIS_MAIN_OVERLAY_END_MARKER}
+'''
+
+
+def replace_rredis_allocator_main_overlay(text: str, overlay: str) -> tuple[str, Dict[str, Any]]:
+    count = text.count(RREDIS_MAIN_OVERLAY_MARKER)
+    record: Dict[str, Any] = {"replaced": False, "marker_count": count}
+    if count != 1:
+        record["error"] = f"expected exactly one RRedis allocator overlay marker, found {count}"
+        return text, record
+    start = text.find(RREDIS_MAIN_OVERLAY_MARKER)
+    end_marker = text.find(RREDIS_MAIN_OVERLAY_END_MARKER, start)
+    if end_marker >= 0:
+        end = end_marker + len(RREDIS_MAIN_OVERLAY_END_MARKER)
+        record["previous_overlay_kind"] = "versioned"
+    else:
+        legacy_tail = (
+            "static RREDIS_SCUDO_SYSTEM_ALLOCATOR: std::alloc::System = "
+            "std::alloc::System;"
+        )
+        tail = text.find(legacy_tail, start)
+        if tail < 0:
+            record["error"] = "unrecognized RRedis allocator overlay; refusing ambiguous replacement"
+            return text, record
+        end = tail + len(legacy_tail)
+        record["previous_overlay_kind"] = "crates-io-tcmalloc-legacy"
+    while end < len(text) and text[end] in "\r\n":
+        end += 1
+    next_text = text[:start] + overlay + text[end:]
+    record["replaced"] = True
+    return next_text, record
+
+
+def ensure_allocator_main_overlay(real_workload_dir: Path) -> Dict[str, Any]:
+    main_rs = real_workload_dir / "src" / "main.rs"
+    record: Dict[str, Any] = {
+        "schema_version": 1,
+        "source": "paper-external-rredis-runner-allocator-main-overlay",
+        "main_rs": str(main_rs),
+        "changed": False,
+        "prepared": False,
+    }
+    if not main_rs.exists():
+        record["error"] = f"missing Rsedis main.rs: {main_rs}"
+        return record
+    overlay = rredis_allocator_main_overlay()
     text = main_rs.read_text(encoding="utf-8")
     guard = rredis_scudo_runtime_guard_overlay()
     next_text = text
@@ -676,19 +836,47 @@ static RREDIS_SCUDO_SYSTEM_ALLOCATOR: std::alloc::System = std::alloc::System;
     if not scudo_guard_at_crate_root(next_text, guard):
         record["error"] = "canonical Scudo runtime guard could not be installed at the active crate root"
         return record
-    if RREDIS_MAIN_OVERLAY_MARKER in text:
-        if next_text != text:
-            main_rs.write_text(next_text, encoding="utf-8")
-            record["changed"] = True
-        record.update(
-            {
-                "prepared": True,
-                "scudo_runtime_identity_guard": True,
-                "scudo_guard_at_crate_root": True,
-                "stale_scudo_guard_occurrences_removed": stale_guard_occurrences,
-            }
-        )
-        return record
+    if RREDIS_MAIN_OVERLAY_MARKER in next_text:
+        if overlay not in next_text:
+            next_text, upgrade = replace_rredis_allocator_main_overlay(next_text, overlay)
+            record["overlay_upgrade"] = upgrade
+            if not upgrade.get("replaced"):
+                # A marker inside a comment/string is an inactive forgery, not
+                # an owned overlay range. Retire only that marker token, then
+                # install the exact current block through the normal path.
+                next_text = next_text.replace(
+                    RREDIS_MAIN_OVERLAY_MARKER,
+                    "// Inactive UniAlloc allocator overlay marker.",
+                )
+                record["inactive_overlay_markers_retired"] = upgrade.get("marker_count", 0)
+            else:
+                if next_text != text:
+                    main_rs.write_text(next_text, encoding="utf-8")
+                    record["changed"] = True
+                record.update(
+                    {
+                        "prepared": True,
+                        "exact_google_tcmalloc_overlay": overlay in next_text,
+                        "scudo_runtime_identity_guard": True,
+                        "scudo_guard_at_crate_root": True,
+                        "stale_scudo_guard_occurrences_removed": stale_guard_occurrences,
+                    }
+                )
+                return record
+        else:
+            if next_text != text:
+                main_rs.write_text(next_text, encoding="utf-8")
+                record["changed"] = True
+            record.update(
+                {
+                    "prepared": True,
+                    "exact_google_tcmalloc_overlay": True,
+                    "scudo_runtime_identity_guard": True,
+                    "scudo_guard_at_crate_root": True,
+                    "stale_scudo_guard_occurrences_removed": stale_guard_occurrences,
+                }
+            )
+            return record
     anchor = "pub mod release;\n"
     if anchor in next_text:
         next_text = next_text.replace(anchor, anchor + overlay, 1)
@@ -948,6 +1136,68 @@ def scudo_cargo_target_contract(real_workload_dir: Path, server_command: List[st
         "selected_package": selected_package,
         "selected_binary": selected_bin,
         "guarded_entrypoint": str(guarded_entrypoint),
+        "blockers": blockers,
+    }
+
+
+def google_tcmalloc_server_contract(
+    real_workload_dir: Path,
+    server_command: List[str],
+) -> Dict[str, Any]:
+    """Recompute source, feature, and artifact identity before Redis timing."""
+
+    blockers: List[str] = []
+    target = scudo_cargo_target_contract(real_workload_dir, server_command)
+    blockers.extend(str(item) for item in target.get("blockers", []) if str(item).strip())
+    try:
+        separator = server_command.index("--", 1)
+    except ValueError:
+        separator = len(server_command)
+    cargo_arguments = server_command[:separator]
+    features: List[str] = []
+    for index, token in enumerate(cargo_arguments):
+        if token == "--features" and index + 1 < len(cargo_arguments):
+            features.extend(cargo_arguments[index + 1].replace(",", " ").split())
+        elif token.startswith("--features="):
+            features.extend(token.partition("=")[2].replace(",", " ").split())
+    if "bench_tcmalloc" not in features:
+        blockers.append("modern google/tcmalloc cargo run does not enable bench_tcmalloc")
+    if "bench_gperftools_legacy" in features:
+        blockers.append("modern google/tcmalloc cargo run also enables bench_gperftools_legacy")
+
+    main_rs = real_workload_dir.resolve() / "src" / "main.rs"
+    overlay = rredis_allocator_main_overlay()
+    overlay_sha256 = hashlib.sha256(overlay.encode("utf-8")).hexdigest()
+    main_sha256: Optional[str] = None
+    exact_overlay = False
+    if not main_rs.is_file():
+        blockers.append(f"missing RRedis entrypoint: {main_rs}")
+    else:
+        text = main_rs.read_text(encoding="utf-8")
+        main_sha256 = file_sha256(main_rs)
+        exact_overlay = text.count(overlay) == 1
+        if not exact_overlay:
+            blockers.append("RRedis entrypoint lacks the exact revision-bound google/tcmalloc overlay")
+    try:
+        artifact = google_tcmalloc_preflight()
+    except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+        artifact = {"ok": False, "error": str(exc)}
+        blockers.append(f"modern google/tcmalloc artifact authentication failed: {exc}")
+    return {
+        "schema_version": 1,
+        "source": "paper-external-rredis-google-tcmalloc-server-contract",
+        "ok": not blockers,
+        "allocator_feature": "bench_tcmalloc",
+        "cargo_target_contract": target,
+        "features": sorted(set(features)),
+        "main_rs": str(main_rs),
+        "main_rs_sha256": main_sha256,
+        "overlay_sha256": overlay_sha256,
+        "exact_overlay_verified": exact_overlay,
+        "artifact_preflight": artifact,
+        "runtime_identity_marker": (
+            _GOOGLE_TCMALLOC.RUNTIME_IDENTITY_MARKER if _GOOGLE_TCMALLOC is not None else None
+        ),
         "blockers": blockers,
     }
 
@@ -1213,6 +1463,43 @@ def main(argv: Optional[List[str]] = None) -> int:
     allocator = selected_allocator(wrapper_args)
     feature = allocator_feature(allocator)
     scudo_preflight: Optional[Dict[str, Any]] = None
+    google_preflight: Optional[Dict[str, Any]] = None
+    if google_tcmalloc_allocator_requested(allocator) and not known.prepare_only:
+        if not canonical_scudo_wrapper(redis_wrapper):
+            emit(
+                {
+                    "schema_version": 1,
+                    "source": "paper-external-rredis-runner-google-tcmalloc-preflight",
+                    "success": False,
+                    "allocator_selector": allocator,
+                    "allocator_feature": feature,
+                    "error": (
+                        "modern google/tcmalloc evaluation requires the canonical Redis load or "
+                        "redis-benchmark wrapper so the constructor marker is verified before timing"
+                    ),
+                }
+            )
+            return SCUDO_CONFIGURATION_ERROR
+        try:
+            google_preflight = google_tcmalloc_preflight()
+        except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
+            google_preflight = {
+                "schema_version": 1,
+                "source": "paper-external-rredis-runner-google-tcmalloc-preflight",
+                "ok": False,
+                "error": str(exc),
+            }
+        emit(
+            {
+                **google_preflight,
+                "success": google_preflight.get("ok") is True,
+                "allocator_selector": allocator,
+                "allocator_feature": feature,
+                "workload_timing_started": False,
+            }
+        )
+        if google_preflight.get("ok") is not True:
+            return SCUDO_CONFIGURATION_ERROR
     if scudo_allocator_requested(allocator) and not known.prepare_only:
         if not canonical_scudo_wrapper(redis_wrapper):
             emit(
@@ -1299,7 +1586,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     return subprocess.run(
         command,
         cwd=str(real_workload_dir),
-        env=external_workload_env(scudo_preflight),
+        env=external_workload_env(
+            scudo_preflight,
+            allocator=allocator,
+            google_tcmalloc=google_preflight,
+        ),
     ).returncode
 
 

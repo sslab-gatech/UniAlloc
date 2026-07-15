@@ -53,6 +53,7 @@ evaluation/raw/**
 evaluation/results/**
 evaluation/reports/**
 evaluation/paper-targets/**
+evaluation/deps/**
 evaluation/external/_checkouts/**
 evaluation/external/_deps/**
 evaluation/external/*/workload_config.local.json

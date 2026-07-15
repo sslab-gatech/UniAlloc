@@ -869,6 +869,110 @@ class ExternalRedisScudoRuntimeTests(unittest.TestCase):
             os.close(write_fd)
             capture.join()
 
+    def test_modern_tcmalloc_and_legacy_gperftools_have_distinct_features(self) -> None:
+        for module in (redis_load, redis_benchmark, rredis_runner):
+            with self.subTest(module=module.__name__):
+                self.assertEqual(module.allocator_feature("tcmalloc"), "bench_tcmalloc")
+                self.assertEqual(
+                    module.allocator_feature("gperftools-legacy"),
+                    "bench_gperftools_legacy",
+                )
+
+    def test_rredis_overlay_reuses_shared_modern_tcmalloc_adapter(self) -> None:
+        overlay = rredis_runner.rredis_allocator_main_overlay()
+        generated = rredis_runner._GOOGLE_TCMALLOC.rust_allocator_adapter_source(
+            feature="bench_tcmalloc",
+            static_name="RREDIS_TCMALLOC",
+            conflicting_features=(
+                "bench_ourself",
+                "bench_jemalloc",
+                "bench_ptmalloc",
+                "bench_mimalloc",
+                "bench_gperftools_legacy",
+                "bench_snmalloc",
+                "bench_scudo",
+            ),
+        ).rstrip()
+        self.assertIn(generated, overlay)
+        self.assertNotIn(": tcmalloc::TCMalloc", overlay)
+        self.assertIn("gperftools_tcmalloc::TCMalloc", overlay)
+        self.assertIn(rredis_runner._GOOGLE_TCMALLOC.REVISION_SYMBOL, overlay)
+
+    def test_rredis_manifest_routes_modern_tcmalloc_without_crates_io_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            checkout = pathlib.Path(temp_dir)
+            (checkout / "src").mkdir()
+            (checkout / "src" / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
+            manifest = checkout / "Cargo.toml"
+            manifest.write_text(
+                '[package]\nname = "rredis-fixture"\nversion = "0.1.0"\n',
+                encoding="utf-8",
+            )
+            record = rredis_runner.ensure_allocator_cargo_overlay(checkout, ROOT)
+            text = manifest.read_text(encoding="utf-8")
+
+        self.assertTrue(record["prepared"], record)
+        self.assertNotIn("[dependencies.tcmalloc]", text)
+        self.assertIn("[dependencies.gperftools-tcmalloc]", text)
+        self.assertIn("bench_tcmalloc = []", text)
+        self.assertIn(
+            'bench_gperftools_legacy = ["gperftools-tcmalloc"]',
+            text,
+        )
+
+    def test_google_tcmalloc_server_contract_binds_exact_overlay_and_feature(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            checkout = pathlib.Path(temp_dir)
+            (checkout / "src").mkdir()
+            (checkout / "Cargo.toml").write_text(
+                '[package]\nname = "guarded-rredis"\nversion = "0.1.0"\nedition = "2018"\n'
+                '\n[features]\ndefault = []\nbench_tcmalloc = []\n',
+                encoding="utf-8",
+            )
+            (checkout / "src" / "main.rs").write_text("fn main() {}\n", encoding="utf-8")
+            prepared = rredis_runner.ensure_allocator_main_overlay(checkout)
+            fake_preflight = {
+                "ok": True,
+                "configured_prefix": "/tmp/google-tcmalloc",
+                "configured_library_dir": "/tmp/google-tcmalloc/lib",
+                "identity": {"allocator_family": "google/tcmalloc"},
+            }
+            with mock.patch.object(
+                rredis_runner,
+                "google_tcmalloc_preflight",
+                return_value=fake_preflight,
+            ):
+                contract = rredis_runner.google_tcmalloc_server_contract(
+                    checkout,
+                    ["cargo", "run", "--features", "bench_tcmalloc"],
+                )
+
+        self.assertTrue(prepared["prepared"], prepared)
+        self.assertTrue(contract["ok"], contract)
+        self.assertTrue(contract["exact_overlay_verified"], contract)
+        self.assertEqual(contract["artifact_preflight"], fake_preflight)
+
+    def test_google_tcmalloc_marker_capture_survives_tail_truncation(self) -> None:
+        for module in (redis_load, redis_benchmark):
+            marker = module.GOOGLE_TCMALLOC_RUNTIME_IDENTITY_MARKER.encode("utf-8")
+
+            class ChunkPipe:
+                def __init__(self):
+                    self.chunks = [marker[:13], marker[13:], b"x" * 100]
+
+                def read(self, _size):
+                    return self.chunks.pop(0) if self.chunks else b""
+
+                def close(self):
+                    return None
+
+            capture = module.BoundedPipeCapture(ChunkPipe(), max_bytes=8)
+            capture.start()
+            capture.join()
+            with self.subTest(module=module.__name__):
+                self.assertTrue(capture.google_tcmalloc_runtime_identity_marker_seen)
+                self.assertNotIn(marker, capture.bytes())
+
 
 if __name__ == "__main__":
     unittest.main()

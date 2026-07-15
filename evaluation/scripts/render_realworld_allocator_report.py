@@ -108,6 +108,16 @@ def require_list(value: Any, label: str) -> list[Any]:
     return value
 
 
+def is_modern_google_tcmalloc_runtime(runtime: Mapping[str, Any]) -> bool:
+    identity = runtime.get("identity")
+    return bool(
+        runtime.get("variant") == "tcmalloc"
+        and isinstance(identity, Mapping)
+        and identity.get("allocator_family") == "google/tcmalloc"
+        and identity.get("variant") == "modern-hpaa-adaptive-subrelease"
+    )
+
+
 def require_close(actual: Any, expected: Any, label: str) -> None:
     if not math.isclose(
         float(actual),
@@ -128,6 +138,8 @@ def validate_campaign_measurements(document: Mapping[str, Any], app: str) -> Non
     repetitions = int(document.get("repetitions", -1))
     if warmups < 0 or repetitions < 1:
         raise ReportError(f"campaign {app} has invalid sample counts")
+    runtime = require_mapping(document.get("tcmalloc_runtime"), "tcmalloc_runtime")
+    modern_tcmalloc = is_modern_google_tcmalloc_runtime(runtime)
 
     rows_by_variant: dict[str, list[Mapping[str, Any]]] = {
         variant: [] for variant in variants
@@ -146,6 +158,16 @@ def validate_campaign_measurements(document: Mapping[str, Any], app: str) -> Non
             or row.get("timed_out") is not False
         ):
             raise ReportError(f"campaign {app} has an unsuccessful measurement")
+        if modern_tcmalloc:
+            expected_markers = 1 if variant == "tcmalloc" else 0
+            if (
+                row.get("google_tcmalloc_identity_marker_count")
+                != expected_markers
+                or row.get("google_tcmalloc_target_identity_verified") is not True
+            ):
+                raise ReportError(
+                    f"campaign {app}/{variant} lacks target-bound google/tcmalloc identity"
+                )
         output_hash = row.get("output_sha256")
         if not isinstance(output_hash, str) or not output_hash:
             raise ReportError(f"campaign {app} has a missing output hash")
@@ -361,6 +383,25 @@ def build_provenance(campaign: Mapping[str, Any]) -> list[dict[str, Any]]:
         )
         if preload_proof.get("success") is not True:
             raise ReportError("TCMalloc preload proof is unsuccessful")
+        runtime = require_mapping(campaign.get("tcmalloc_runtime"), "tcmalloc_runtime")
+        if is_modern_google_tcmalloc_runtime(runtime):
+            requirements = require_mapping(
+                runtime.get("runtime_requirements"), "TCMalloc runtime requirements"
+            )
+            expected_runtime_identity = {
+                "revision": requirements.get("revision"),
+                "hpaa_active": 1,
+                "malloc_provider_is_self": 1,
+                "exact_library_mapped": True,
+            }
+            if preload_proof.get("runtime_identity") != expected_runtime_identity:
+                raise ReportError("modern TCMalloc artifact preflight identity is stale")
+            if (
+                preload_proof.get("artifact_preflight_only") is not True
+                or preload_proof.get("target_binary_sha256")
+                != tcmalloc.get("binary_sha256")
+            ):
+                raise ReportError("modern TCMalloc preflight is not target-bound")
     return [records[variant] for variant in configured_variants]
 
 
@@ -648,13 +689,21 @@ def reproduction_command(campaign: Mapping[str, Any]) -> str:
         if index + 1 < len(command):
             jobs = str(command[index + 1])
             break
+    variants = [str(value) for value in configuration["variants"]]
+    identity = tcmalloc.get("identity")
+    modern_tcmalloc = is_modern_google_tcmalloc_runtime(tcmalloc)
+    if not modern_tcmalloc:
+        variants = [
+            "gperftools_legacy" if value == "tcmalloc" else value
+            for value in variants
+        ]
     command = [
         "python3",
         "evaluation/scripts/realworld_type_isolation_matrix.py",
         "--apps",
         str(campaign["app"]),
         "--variants",
-        ",".join(str(value) for value in configuration["variants"]),
+        ",".join(variants),
         "--quick" if configuration.get("quick") else "--full",
         "--warmups",
         str(configuration["warmups"]),
@@ -675,7 +724,13 @@ def reproduction_command(campaign: Mapping[str, Any]) -> str:
         command.extend(["--numa-node", str(affinity["numa_node"])])
     if jobs is not None:
         command.extend(["--jobs", jobs])
-    command.extend(["--tcmalloc-library", str(tcmalloc["library"])])
+    if modern_tcmalloc:
+        provenance_path = pathlib.Path(str(identity["provenance_path"]))
+        command.extend(["--google-tcmalloc-prefix", str(provenance_path.parent)])
+    else:
+        command.extend(
+            ["--gperftools-legacy-library", str(tcmalloc["library"])]
+        )
     if configuration.get("run_output_retained") is False:
         command.append("--discard-run-output")
     raw_dir = pathlib.Path(str(campaign["input_path"])).parent
@@ -695,10 +750,11 @@ def render_markdown(evidence: Mapping[str, Any], title: str) -> str:
         "",
         "- These are warm-cache, CPU- and NUMA-pinned measurements on a shared host.",
         "- Peak RSS is GNU time `%M`, covering the complete measured process.",
-        "- TCMalloc uses an identical Rust System binary plus gperftools `LD_PRELOAD`; "
+        "- Each TCMalloc row retains its campaign identity. Modern rows require the "
+        "pinned Google TCMalloc revision, HPAA, active malloc provider, and exact mapped "
+        "DSO; historical rows reproduce through the explicit `gperftools_legacy` path.",
+        "- TCMalloc uses an identical Rust System binary plus authenticated `LD_PRELOAD`; "
         "mimalloc uses its native Rust `GlobalAlloc` wrapper and a statically linked core.",
-        "- The TCMalloc proof verifies that the exact shared library is mapped; exported "
-        "allocator-symbol validation remains a separate manual check.",
         "- The runner inherits its parent environment; same-host reruns should start from "
         "a clean allocator environment.",
         "- Cross-application geometric means are directional summaries; per-application "
@@ -772,8 +828,8 @@ def render_markdown(evidence: Mapping[str, Any], title: str) -> str:
         (
             "## Same-host reproduction",
             "",
-            "These commands reuse the audited TCMalloc shared library and pinned "
-            "toolchain at their recorded absolute paths on this host.",
+            "These commands preserve each campaign's recorded TCMalloc identity and "
+            "pinned toolchain at their recorded absolute paths on this host.",
             "",
         )
     )

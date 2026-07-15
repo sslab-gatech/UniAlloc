@@ -1,5 +1,7 @@
 # Allocator evaluation
 
+> **Baseline identity update (2026-07-15):** new `bench_tcmalloc` runs use the pinned modern Google TCMalloc HPAA artifact documented in [google-tcmalloc-baseline.md](google-tcmalloc-baseline.md). All results below that cite gperftools or the legacy runtime hash retain their historical gperftools identity until rerun.
+
 > **Evidence status:** current source-bound diagnostic. The microbenchmark
 > matrix measures the bounded large-run and thread-cache optimization at
 > commit `1c8ff12d5b61`. The macrobenchmark observations and estimator
@@ -440,10 +442,10 @@ The command family is preserved by
 ```bash
 python3 evaluation/scripts/realworld_type_isolation_matrix.py \
   --apps APP \
-  --variants system,jemalloc,mimalloc,tcmalloc,unialloc,typed_plain,typeiso_perf \
+  --variants system,jemalloc,mimalloc,gperftools_legacy,unialloc,typed_plain,typeiso_perf \
   --warmups 1 --repetitions 7 --toolchain nightly-2026-06-11 \
   --cpu-list 20 --numa-node 0 --jobs 32 \
-  --tcmalloc-library "$TCMALLOC_LIBRARY" --discard-run-output \
+  --gperftools-legacy-library "$GPERFTOOLS_LIBRARY" --discard-run-output \
   --raw-dir "evaluation/raw/realworld-rust-allocator-20260714/APP"
 ```
 

@@ -8,6 +8,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -28,6 +29,8 @@ class CampaignHelpersTest(unittest.TestCase):
         self.assertEqual(
             {item.feature for item in campaign.VARIANTS}, campaign.ALLOCATOR_SELECTORS
         )
+        self.assertIn("bench_gperftools_legacy", campaign.ALL_ALLOCATOR_SELECTORS)
+        self.assertNotIn("bench_gperftools_legacy", campaign.ALLOCATOR_SELECTORS)
 
     def test_parse_cargo_executable_uses_bench_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -50,6 +53,37 @@ class CampaignHelpersTest(unittest.TestCase):
         self.assertEqual(campaign.scudo_marker_count(marker), 1)
         self.assertEqual(campaign.scudo_marker_count(b"prefix " + marker), 0)
         self.assertEqual(campaign.scudo_marker_count(marker + marker), 2)
+
+    def test_google_tcmalloc_marker_requires_exact_line(self) -> None:
+        marker = campaign.GOOGLE_TCMALLOC_MARKER.encode()
+        self.assertEqual(campaign.google_tcmalloc_marker_count(marker), 1)
+        self.assertEqual(
+            campaign.google_tcmalloc_marker_count(b"prefix " + marker), 0
+        )
+        self.assertEqual(
+            campaign.google_tcmalloc_marker_count(marker + marker), 2
+        )
+
+    def test_modern_tcmalloc_prefix_is_canonical_runner_input(self) -> None:
+        with mock.patch.dict(
+            "os.environ",
+            {"UNIALLOC_GOOGLE_TCMALLOC_PREFIX": "/tmp/google-tcmalloc"},
+            clear=True,
+        ):
+            self.assertEqual(
+                campaign.default_tcmalloc_dir(),
+                Path("/tmp/google-tcmalloc/lib"),
+            )
+
+    def test_tcmalloc_environment_records_prefix_and_exact_library(self) -> None:
+        variant = next(item for item in campaign.VARIANTS if item.allocator == "tcmalloc")
+        lib_dir = Path("/tmp/google-tcmalloc/lib")
+        env = campaign.build_environment(variant, Path("/tmp/target"), lib_dir)
+        self.assertEqual(env["UNIALLOC_GOOGLE_TCMALLOC_PREFIX"], "/tmp/google-tcmalloc")
+        self.assertEqual(
+            env["UNIALLOC_GOOGLE_TCMALLOC_LIBRARY"],
+            f"/tmp/google-tcmalloc/lib/{campaign.GOOGLE_TCMALLOC_LIBRARY}",
+        )
 
     def test_summary_uses_three_sample_cell_medians_and_ratio_geomean(self) -> None:
         records = []
