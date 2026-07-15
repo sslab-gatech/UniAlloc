@@ -1251,25 +1251,53 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                 cached["dependency_compatibility"]["provenance_digest"],
             )
 
-    def test_rustpython_snapshot_rewrites_both_libc_requirements(self) -> None:
+    def test_rustpython_snapshot_rewrites_target_locked_libc_and_num_cpus(
+        self,
+    ) -> None:
         rules = campaign.TARGET_SNAPSHOT_DEPENDENCY_REWRITES["rustpython"]
         manifest = (
             '[dependencies]\nlibc = { version = "=0.2.183", '
             "default-features = false }\n"
             '\n[build-dependencies]\nlibc = "=0.2.183"\n'
+            'num_cpus = "=1.13.0"\n'
         )
         rewritten, records = campaign._rewrite_snapshot_dependency_requirements(
-            manifest, rules, {"libc": "0.2.186"}
+            manifest, rules, {"libc": "0.2.186", "num_cpus": "1.17.0"}
         )
-        self.assertEqual(2, len(records))
+        self.assertEqual(3, len(records))
         self.assertEqual(2, rewritten.count('"=0.2.186"'))
+        self.assertEqual(1, rewritten.count('"=1.17.0"'))
         self.assertNotIn('"=0.2.183"', rewritten)
+        self.assertNotIn('"=1.13.0"', rewritten)
         with self.assertRaises(campaign.CampaignContractError):
             campaign._rewrite_snapshot_dependency_requirements(
                 '[dependencies]\nlibc = "^0.2"\n',
                 rules,
-                {"libc": "0.2.186"},
+                {"libc": "0.2.186", "num_cpus": "1.17.0"},
             )
+
+    def test_runtime_instrumentation_preserves_inner_docs_and_attributes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "router.rs"
+            original = (
+                "//! Actix router benchmark.\n"
+                "#![allow(clippy::needless_borrow)]\n\n"
+                "fn benchmark_router() {}\n"
+            )
+            source.write_text(original, encoding="utf-8")
+            campaign._append_instrumentation(source)
+            rewritten = source.read_text(encoding="utf-8")
+            self.assertTrue(rewritten.startswith(original.rstrip() + "\n\n"))
+            self.assertLess(
+                rewritten.index("#![allow(clippy::needless_borrow)]"),
+                rewritten.index("UNIALLOC_LIFETIME_EXPERIMENT_INITIALIZER"),
+            )
+            self.assertLess(
+                rewritten.index("fn benchmark_router()"),
+                rewritten.index("UNIALLOC_LIFETIME_EXPERIMENT_INITIALIZER"),
+            )
+            with self.assertRaises(campaign.CampaignContractError):
+                campaign._append_instrumentation(source)
 
     def test_post_injection_manifests_and_lock_are_retained_by_hash(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

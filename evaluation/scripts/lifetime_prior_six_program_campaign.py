@@ -157,6 +157,12 @@ TARGET_SNAPSHOT_DEPENDENCY_REWRITES: dict[str, tuple[dict[str, Any], ...]] = {
             "sections": ("dependencies", "build-dependencies"),
             "expected_occurrences": 2,
         },
+        {
+            "package": "num_cpus",
+            "old_version": "1.13.0",
+            "sections": ("build-dependencies",),
+            "expected_occurrences": 1,
+        },
     ),
 }
 
@@ -1743,8 +1749,9 @@ def _append_instrumentation(path: Path, *, remove: str | None = None) -> None:
         if remove not in text_value:
             raise CampaignContractError(f"expected allocator source marker is absent: {path}")
         text_value = text_value.replace(remove, "", 1)
+    instrumentation = allocator_instrumentation_source().strip()
     path.write_text(
-        allocator_instrumentation_source().lstrip() + "\n" + text_value.lstrip(),
+        text_value.rstrip() + "\n\n" + instrumentation + "\n",
         encoding="utf-8",
     )
 
