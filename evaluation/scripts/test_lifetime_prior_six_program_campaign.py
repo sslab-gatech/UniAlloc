@@ -1,0 +1,943 @@
+#!/usr/bin/env python3
+"""Contract tests for the six-program Rust lifetime-prior campaign."""
+
+from __future__ import annotations
+
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = ROOT / "evaluation" / "scripts" / "lifetime_prior_six_program_campaign.py"
+spec = importlib.util.spec_from_file_location("lifetime_prior_six_program_campaign", SCRIPT)
+assert spec is not None and spec.loader is not None
+campaign = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = campaign
+spec.loader.exec_module(campaign)
+
+
+def write_audit(
+    root: Path,
+    *,
+    enabled: bool,
+    basis: str,
+    hint: int,
+    confidence: int = 0,
+    crate_name: str | None = None,
+    rewrite_status: str = "actual_semantic_scope_enter_exit_rewrite_applied",
+    body_clone_returned: bool = True,
+    actual_semantic_rewrite: bool = True,
+) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "audit.json").write_text(
+        json.dumps(
+            {
+                "rustc_args": (
+                    ["rustc", "--crate-name", crate_name]
+                    if crate_name is not None
+                    else []
+                ),
+                "compiler_pass": {
+                    "automatic_rust_lifetime_prior_enabled": enabled,
+                    "actual_semantic_scope_rewrite_requested": True,
+                    "actual_semantic_scope_rewrite": actual_semantic_rewrite,
+                    "body_clone_returned_to_rustc": body_clone_returned,
+                    "continue_compilation": True,
+                },
+                "rewrite_candidates": [
+                    {
+                        "lifetime_hint_basis": basis,
+                        "lifetime_hint": hint,
+                        "lifetime_hint_confidence": confidence,
+                        "rewrite_status": rewrite_status,
+                        "lowering_kind": "semantic_scope_enter_exit_rewrite",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def runtime_stats(arm) -> dict[str, object]:
+    stats: dict[str, object] = {
+        field: 0 for field in campaign.runtime_lifetime.RUNTIME_REQUIRED_FIELDS
+    }
+    for field in (
+        "all_mappings_released",
+        "adaptive_observation_recording",
+        "adaptive_force_track_all",
+    ):
+        stats[field] = False
+    stats.update(
+        {
+            "policy": arm.expected_policy,
+            "backend": 1 if arm.expected_policy in {5, 8} else 0,
+            "adaptive_observation_recording": True,
+            "adaptive_force_track_all": arm.force_track,
+        }
+    )
+    return stats
+
+
+def smaps_text(*, rss: int, anon_hugepages: int) -> str:
+    values = {
+        "Rss": rss,
+        "Pss": max(0, rss - 1),
+        "Anonymous": max(0, rss - 2),
+        "Private_Clean": 1,
+        "Private_Dirty": max(0, rss - 3),
+        "Shared_Clean": 2,
+        "Shared_Dirty": 0,
+        "AnonHugePages": anon_hugepages,
+        "ShmemPmdMapped": 0,
+        "FilePmdMapped": 0,
+        "Shared_Hugetlb": 0,
+        "Private_Hugetlb": 0,
+    }
+    return "\n".join(f"{field}: {value} kB" for field, value in values.items())
+
+
+class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
+    def test_arm_matrix_keeps_prior_opt_in_and_diagnostic_separate(self) -> None:
+        campaign.validate_arm_contract()
+        self.assertEqual(4, len(campaign.PERFORMANCE_ARMS))
+        self.assertEqual(2, len(campaign.SCREENING_ARMS))
+        self.assertEqual(
+            ["all-unknown", "compiler-prior"],
+            [arm.build_group for arm in campaign.SCREENING_ARMS],
+        )
+        self.assertTrue(campaign.SCREENING_ARM.force_track)
+        self.assertFalse(campaign.SCREENING_ARM.performance_arm)
+        for arm in campaign.ARMS:
+            with self.subTest(arm=arm.name):
+                environment = campaign.arm_build_environment(arm)
+                self.assertEqual(
+                    arm.automatic_rust_lifetime_prior,
+                    campaign.AUTO_PRIOR_ENV in environment,
+                )
+                if arm.automatic_rust_lifetime_prior:
+                    self.assertEqual("1", environment[campaign.AUTO_PRIOR_ENV])
+
+    def test_six_target_manifest_reuses_exact_runner_contracts(self) -> None:
+        campaign.validate_target_contracts()
+        manifest = campaign.build_campaign_manifest()
+        self.assertEqual(set(campaign.TARGET_ORDER), set(manifest["targets"]))
+        self.assertEqual(
+            campaign.collections_oxipng.TARGETS["oxipng"].commit,
+            manifest["targets"]["oxipng"]["source_commit"],
+        )
+        self.assertEqual(
+            list(campaign.psr.TARGET_SPECS["polars"].target_crates),
+            manifest["targets"]["polars"]["target_crates"],
+        )
+        self.assertEqual(
+            list(campaign.redb_actix.TARGETS["actix_web"].target_crates),
+            manifest["targets"]["actix_web"]["target_crates"],
+        )
+        self.assertTrue(
+            all(row["screening_ready"] for row in manifest["targets"].values())
+        )
+        self.assertEqual({"oxipng", "redb"}, {
+            target_id
+            for target_id, row in manifest["targets"].items()
+            if row["performance_ready"]
+        })
+        self.assertEqual(
+            {"polars", "swc", "rustpython", "actix_web"},
+            set(manifest["performance_blockers"]),
+        )
+
+    def test_oxipng_calibration_retains_measured_identity_and_estimates(self) -> None:
+        record = campaign.calibration_record(campaign.TARGETS["oxipng"])
+        assert record is not None
+        self.assertEqual(8, record["work_units"])
+        self.assertEqual(10.87, record["elapsed_seconds"])
+        self.assertEqual(42_276, record["peak_rss_kib"])
+        self.assertFalse(record["claim_grade"])
+        self.assertEqual(campaign.OXIPNG_INPUT_SHA256, record["input_sha256"])
+        self.assertAlmostEqual(
+            86.96, record["estimated_seconds_by_work_units"]["64"], places=2
+        )
+        self.assertAlmostEqual(
+            173.92, record["estimated_seconds_by_work_units"]["128"], places=2
+        )
+
+    def test_work_derivation_rounds_up_and_enforces_hard_cap(self) -> None:
+        calibration = campaign.Calibration("test", 8, 10.0, None, False, "test")
+        plan = campaign.derive_work_units(
+            calibration, target_seconds=40.0, granularity=8
+        )
+        self.assertEqual(32, plan["work_units"])
+        self.assertEqual(40.0, plan["estimated_seconds"])
+        with self.assertRaises(campaign.CampaignContractError):
+            campaign.derive_work_units(
+                calibration,
+                target_seconds=601.0,
+                granularity=8,
+            )
+
+    def test_stage_duration_contract_is_fail_closed(self) -> None:
+        campaign.validate_stage_duration("screening", 20.0)
+        campaign.validate_stage_duration("screening", 60.0)
+        campaign.validate_stage_duration("performance", 120.0)
+        campaign.validate_stage_duration("performance", 300.0)
+        for stage, value in (("screening", 19.9), ("performance", 301.0)):
+            with self.subTest(stage=stage, value=value):
+                with self.assertRaises(campaign.CampaignContractError):
+                    campaign.validate_stage_duration(stage, value)
+
+    def test_screening_summary_and_long_opportunity_gate(self) -> None:
+        rows = [
+            {
+                "requested_size": 4096,
+                "long_requested_bytes": 2 * campaign.MIB,
+                "short_requested_bytes": campaign.MIB,
+                "censored_requested_bytes": 0,
+                "allocation_requested_bytes": 3 * campaign.MIB,
+                "latest_prediction": 2,
+            },
+            {
+                "requested_size": 64,
+                "long_requested_bytes": 0,
+                "short_requested_bytes": campaign.MIB,
+                "censored_requested_bytes": 64,
+                "allocation_requested_bytes": campaign.MIB + 64,
+                "latest_prediction": 1,
+            },
+        ]
+        summary = campaign.summarize_screening_sites(rows)
+        self.assertEqual(2 * campaign.MIB, summary["long_requested_bytes"])
+        self.assertEqual(campaign.MIB, summary["confirmed_short_requested_bytes"])
+        self.assertAlmostEqual(0.5, summary["candidate_long_byte_density"])
+        gate = campaign.opportunity_gate(summary)
+        self.assertTrue(gate["passed"])
+        self.assertTrue(gate["long_cohort_passed"])
+        self.assertFalse(gate["confirmed_short_passed"])
+
+    def test_confirmed_short_bytes_can_admit_stage_b(self) -> None:
+        gate = campaign.opportunity_gate(
+            {
+                "long_requested_bytes": 0,
+                "confirmed_short_requested_bytes": 8 * campaign.MIB,
+            }
+        )
+        self.assertTrue(gate["passed"])
+        self.assertTrue(gate["confirmed_short_passed"])
+
+    def test_compiler_audit_digest_and_prior_mode_are_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_audit(
+                root,
+                enabled=True,
+                basis="automatic_rust_lifetime_prior_return_long",
+                hint=2,
+                confidence=70,
+            )
+            summary = campaign.summarize_compiler_prior_audits(root)
+            self.assertTrue(summary["automatic_rust_lifetime_prior_enabled"])
+            self.assertEqual(1, summary["classified_candidate_count"])
+            self.assertEqual(64, len(summary["audit_digest"]))
+            campaign.validate_build_audit_for_arm(
+                campaign.ARM_BY_NAME["adaptive-ordinary-compiler-prior"], summary
+            )
+            with self.assertRaises(campaign.CampaignContractError):
+                campaign.validate_build_audit_for_arm(
+                    campaign.ARM_BY_NAME["adaptive-ordinary-all-unknown"], summary
+                )
+
+    def test_compiler_audit_rejects_missing_or_mixed_prior_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_audit(root / "on", enabled=True, basis="unknown", hint=0)
+            write_audit(root / "off", enabled=False, basis="unknown", hint=0)
+            with self.assertRaises(campaign.CampaignContractError):
+                campaign.summarize_compiler_prior_audits(root)
+
+    def test_compiler_audit_requires_every_requested_target_crate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_audit(
+                root,
+                enabled=True,
+                basis="automatic_rust_lifetime_prior_return_long",
+                hint=2,
+                confidence=70,
+                crate_name="execution",
+            )
+            summary = campaign.summarize_compiler_prior_audits(root)
+            campaign.validate_build_audit_for_arm(
+                campaign.SCREENING_ARM, summary, ("execution",)
+            )
+            with self.assertRaises(campaign.CampaignContractError):
+                campaign.validate_build_audit_for_arm(
+                    campaign.SCREENING_ARM,
+                    summary,
+                    ("execution", "rustpython_vm"),
+                )
+
+    def test_compiler_audit_requires_applied_rewrite_and_body_clone(self) -> None:
+        for body_clone, semantic_rewrite, status in (
+            (False, True, "actual_semantic_scope_enter_exit_rewrite_applied"),
+            (True, False, "actual_semantic_scope_enter_exit_rewrite_applied"),
+            (True, True, "semantic_scope_enter_exit_rewrite_planned"),
+        ):
+            with self.subTest(
+                body_clone=body_clone,
+                semantic_rewrite=semantic_rewrite,
+                status=status,
+            ), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                write_audit(
+                    root,
+                    enabled=True,
+                    basis="automatic_rust_lifetime_prior_return_long",
+                    hint=2,
+                    confidence=70,
+                    crate_name="execution",
+                    rewrite_status=status,
+                    body_clone_returned=body_clone,
+                    actual_semantic_rewrite=semantic_rewrite,
+                )
+                summary = campaign.summarize_compiler_prior_audits(root)
+                with self.assertRaises(campaign.CampaignContractError):
+                    campaign.validate_build_audit_for_arm(
+                        campaign.SCREENING_ARM, summary, ("execution",)
+                    )
+
+    def test_compiler_prior_requires_complete_hint_transport(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_audit(
+                root,
+                enabled=True,
+                basis="automatic_rust_lifetime_prior_return_long",
+                hint=2,
+                confidence=70,
+                crate_name="execution",
+            )
+            summary = campaign.summarize_compiler_prior_audits(root)
+            summary["classified_candidate_count"] = 2
+            with self.assertRaises(campaign.CampaignContractError):
+                campaign.validate_build_audit_for_arm(
+                    campaign.SCREENING_ARM, summary, ("execution",)
+                )
+
+    def test_exact_join_rejects_duplicate_tuples_and_marks_zero_coverage(self) -> None:
+        runtime = {
+            field: index + 1
+            for index, field in enumerate(campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS)
+        }
+        with self.assertRaises(campaign.CampaignContractError):
+            campaign.join_compiler_runtime_sites(
+                {"rows": []}, [runtime, dict(runtime)]
+            )
+        compiler = {
+            **runtime,
+            "runtime_join_key_complete": True,
+            "lifetime_hint": 2,
+            "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+        }
+        with self.assertRaises(campaign.CampaignContractError):
+            campaign.join_compiler_runtime_sites(
+                {"rows": [compiler, dict(compiler)]}, [runtime]
+            )
+        unmatched = dict(runtime)
+        unmatched["callsite"] += 1000
+        result = campaign.join_compiler_runtime_sites(
+            {"rows": [compiler]}, [unmatched]
+        )
+        self.assertEqual("no-static-coverage", result["status"])
+        self.assertEqual(0.0, result["match_coverage"])
+        self.assertFalse(result["runtime_join_rewrite_success"])
+
+    def test_unknown_rewrite_match_cannot_substitute_for_prior_coverage(self) -> None:
+        runtime = {
+            field: index + 1
+            for index, field in enumerate(campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS)
+        }
+        unknown = {
+            **runtime,
+            "runtime_join_key_complete": True,
+            "lifetime_hint": 0,
+            "lifetime_hint_basis": "default_unknown",
+        }
+        long_unmatched = {
+            **runtime,
+            "callsite": runtime["callsite"] + 100,
+            "runtime_join_key_complete": True,
+            "lifetime_hint": 2,
+            "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+        }
+        short_incomplete = {
+            **runtime,
+            "runtime_join_key_complete": False,
+            "lifetime_hint": 1,
+            "lifetime_hint_basis": (
+                "automatic_rust_lifetime_prior_all_path_local_release_short"
+            ),
+        }
+        result = campaign.join_compiler_runtime_sites(
+            {"rows": [unknown, long_unmatched, short_incomplete]}, [runtime]
+        )
+        self.assertTrue(result["generic_runtime_join_rewrite_success"])
+        self.assertEqual(2, result["applied_prior_classified_count"])
+        self.assertEqual(0, result["matched_applied_prior_site_count"])
+        self.assertEqual("no-static-coverage", result["status"])
+        self.assertFalse(result["static_coverage_claim_eligible"])
+
+    def test_all_unknown_only_marks_static_coverage_not_measured(self) -> None:
+        state = campaign.target_static_coverage_state(
+            {
+                "all-unknown": {
+                    "compiler_runtime_exact_join": {
+                        "static_coverage_claim_eligible": True
+                    }
+                }
+            }
+        )
+        self.assertEqual("not-measured", state["measurement_status"])
+        self.assertEqual("complete-static-coverage-not-measured", state["status"])
+        self.assertFalse(state["claim_eligible"])
+
+    def test_fragmentation_parser_requires_complete_accounting(self) -> None:
+        row = {field: 0 for field in campaign.REQUIRED_FRAGMENTATION_FIELDS}
+        row.update(
+            {
+                "extent_bytes": 2 * campaign.MIB,
+                "current_extents": 1,
+                "peak_extents": 2,
+                "current_ordinary_extents": 1,
+                "peak_ordinary_extents": 2,
+                "live_objects": 2,
+                "live_slot_bytes": 4096,
+                "retained_bytes": 2 * campaign.MIB,
+                "retained_slack_bytes": 2 * campaign.MIB - 4096,
+                "stranded_bytes": 2 * campaign.MIB - 4096,
+            }
+        )
+        stderr = campaign.FRAGMENTATION_PREFIX + json.dumps(row)
+        self.assertEqual(row, campaign.parse_fragmentation(stderr))
+        row["stranded_bytes"] -= 1
+        with self.assertRaises(campaign.CampaignContractError):
+            campaign.parse_fragmentation(
+                campaign.FRAGMENTATION_PREFIX + json.dumps(row)
+            )
+
+    def test_smaps_parser_and_pair_gate_validate_each_sample(self) -> None:
+        ordinary = [
+            campaign.parse_smaps_rollup(
+                smaps_text(rss=1000, anon_hugepages=0), elapsed_seconds=1.0
+            )
+        ]
+        thp = [
+            campaign.parse_smaps_rollup(
+                smaps_text(rss=2000, anon_hugepages=2048), elapsed_seconds=1.0
+            )
+        ]
+        gate = campaign.validate_thp_pair_backing(ordinary, thp)
+        self.assertTrue(gate["passed"])
+        failed = campaign.validate_thp_pair_backing(ordinary, ordinary)
+        self.assertFalse(failed["passed"])
+        self.assertIn("no resident AnonHugePages", failed["reasons"][0])
+
+    def test_thp_pair_gate_never_uses_max_to_mask_an_unbacked_sample(self) -> None:
+        ordinary = [
+            campaign.parse_smaps_rollup(
+                smaps_text(rss=1000, anon_hugepages=0), elapsed_seconds=float(index)
+            )
+            for index in range(2)
+        ]
+        thp = [
+            campaign.parse_smaps_rollup(
+                smaps_text(rss=2000, anon_hugepages=value),
+                elapsed_seconds=float(index),
+            )
+            for index, value in enumerate((2048, 0))
+        ]
+        gate = campaign.validate_thp_pair_backing(ordinary, thp)
+        self.assertFalse(gate["passed"])
+        self.assertEqual(1, gate["eligible_pair_count"])
+        self.assertEqual(1, gate["excluded_pair_count"])
+        self.assertTrue(gate["pair_eligibility"][0]["eligible"])
+        self.assertFalse(gate["pair_eligibility"][1]["eligible"])
+
+    def test_runtime_evidence_distinguishes_policy_and_backing(self) -> None:
+        diagnostic = campaign.SCREENING_ARM
+        stats = runtime_stats(diagnostic)
+        campaign.validate_runtime_evidence(diagnostic, stats, [])
+        stats["policy"] = 5
+        with self.assertRaises(campaign.CampaignContractError):
+            campaign.validate_runtime_evidence(diagnostic, stats, [])
+        stats = runtime_stats(diagnostic)
+        stats["thp_extent_mappings"] = 1
+        with self.assertRaises(campaign.CampaignContractError):
+            campaign.validate_runtime_evidence(diagnostic, stats, [])
+
+    def test_redb_command_has_an_explicit_fixed_repeat_count(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "redb-driver"
+            binary.write_text("binary", encoding="utf-8")
+            command = campaign.redb_command(
+                binary=binary, work_dir=root / "work", work_units=128
+            )
+        self.assertEqual("delete_reinsert", command[-3])
+        self.assertEqual("128", command[-1])
+
+    def test_generated_drivers_retain_state_and_accept_fixed_work(self) -> None:
+        redb = campaign.amplified_redb_source()
+        self.assertIn("for _ in 0..work_units", redb)
+        self.assertIn("let output_digest = table_digest(&database);", redb)
+        self.assertLess(redb.index("let database = new_database"), redb.index("for _ in"))
+        polars = campaign.amplified_polars_source()
+        self.assertIn("retained_frame: Option<&DataFrame>", polars)
+        self.assertIn("for work_index in 0..work_units", polars)
+        self.assertLess(polars.index("Some(input_frame()?)"), polars.index("for work_index"))
+
+    def test_runtime_hook_smoke_exercises_policy8_force_track_hooks(self) -> None:
+        source = campaign.runtime_hook_smoke_source()
+        self.assertIn("AdaptiveRuntimeOrdinary", source)
+        self.assertIn("lifetime_hugepage_adaptive_site_force_track_all_enable", source)
+        self.assertIn(campaign.RUNTIME_ARM_ENV, source)
+        self.assertIn("UNIALLOC_LIFETIME_SMOKE=ok", source)
+
+    def test_stage_a_cli_supports_space_saving_measured_subset(self) -> None:
+        args = campaign.parse_args(
+            [
+                "--stage-a",
+                "--dry-run",
+                "--targets",
+                "polars,actix_web",
+                "--build-groups",
+                "compiler-prior",
+            ]
+        )
+        self.assertEqual(("polars", "actix_web"), args.targets)
+        self.assertEqual(("compiler-prior",), args.build_groups)
+
+    def test_manifest_marks_stage_a_as_cross_clock_opportunity_only(self) -> None:
+        screening = campaign.build_campaign_manifest()["stages"]["screening"]
+        self.assertEqual(
+            "process_wide_requested_generation_bytes",
+            screening["stage_a_pressure_basis"],
+        )
+        self.assertEqual(
+            "eligible_exact_site_payload_capacity",
+            screening["production_pressure_basis"],
+        )
+        self.assertFalse(screening["cross_clock_accuracy_claim"])
+
+    def test_stage_a_classifier_summary_refuses_production_accuracy(self) -> None:
+        stats = runtime_stats(campaign.SCREENING_ARM)
+        stats.update(
+            {
+                "static_hint_tp": 7,
+                "static_hint_tn": 2,
+                "static_hint_fp": 1,
+                "static_hint_fn": 0,
+                "static_hint_abstained": 3,
+                "adaptive_promotions": 1,
+                "adaptive_demotions": 0,
+                "adaptive_prior_corrections": 1,
+            }
+        )
+        summary = campaign.runtime_classification_summary(stats)
+        self.assertEqual(0.9, summary["stage_a_pressure_clock_accuracy"])
+        self.assertIsNone(summary["production_accuracy"])
+        self.assertFalse(summary["production_accuracy_claim_eligible"])
+        self.assertFalse(summary["cross_clock_accuracy_claim"])
+
+    def test_rustpython_runtime_context_uses_retained_assets_and_libpython(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime_cwd = Path(directory)
+            build = {
+                "runtime_cwd": str(runtime_cwd),
+                "runtime_dependency": {"library_directory": "/verified/libpython"},
+            }
+            cwd, environment = campaign.stage_a_runtime_context(
+                "rustpython", build, campaign.SCREENING_ARM
+            )
+            self.assertEqual(runtime_cwd, cwd)
+            self.assertEqual(
+                "/verified/libpython",
+                environment["LD_LIBRARY_PATH"].split(":", 1)[0],
+            )
+        with self.assertRaises(campaign.CampaignContractError):
+            campaign.stage_a_runtime_context(
+                "rustpython", {}, campaign.SCREENING_ARM
+            )
+
+    def test_swc_build_preserves_verified_compatibility_flags(self) -> None:
+        flags = campaign.stage_a_rustflags("swc", "compiler-prior")
+        self.assertIn("-Zshare-generics=y", flags)
+        self.assertIn("-C target-feature=+sse2", flags)
+        self.assertIn("-Wl,-z,nodelete", flags)
+        self.assertNotIn(
+            "share-generics", campaign.stage_a_rustflags("polars", "compiler-prior")
+        )
+
+    def test_post_injection_manifests_and_lock_are_retained_by_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            worktree = root / "work"
+            manifest = worktree / "Cargo.toml"
+            child = worktree / "crate" / "Cargo.toml"
+            child.parent.mkdir(parents=True)
+            manifest.write_text("[workspace]\n", encoding="utf-8")
+            child.write_text("[package]\nname='x'\n", encoding="utf-8")
+            (worktree / "Cargo.lock").write_text("version = 4\n", encoding="utf-8")
+            record = campaign.retain_post_injection_build_inputs(
+                {
+                    "manifest": "Cargo.toml",
+                    "patched_manifests": ["crate/Cargo.toml"],
+                },
+                worktree=worktree,
+                build_dir=root / "build",
+            )
+            self.assertEqual(2, record["manifest_count"])
+            self.assertEqual(
+                ["Cargo.toml", "crate/Cargo.toml"],
+                [row["relative_path"] for row in record["manifests"]],
+            )
+            self.assertTrue(Path(record["retained_cargo_lock"]).is_file())
+            self.assertEqual(
+                record["cargo_lock_sha256"], record["retained_cargo_lock_sha256"]
+            )
+            self.assertTrue(
+                campaign.validate_retained_post_injection_build_inputs(record)
+            )
+            Path(record["retained_cargo_lock"]).write_text(
+                "version = 3\n", encoding="utf-8"
+            )
+            self.assertFalse(
+                campaign.validate_retained_post_injection_build_inputs(record)
+            )
+
+    def test_nested_injection_root_normalizes_relative_manifest_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            worktree = Path(directory) / "build-work" / "redb"
+            nested = worktree / "redb-source"
+            nested.mkdir(parents=True)
+            (nested / "Cargo.toml").write_text("[package]\n", encoding="utf-8")
+            (worktree / "Cargo.toml").write_text("[workspace]\n", encoding="utf-8")
+            (worktree / "Cargo.lock").write_text("version = 4\n", encoding="utf-8")
+            with mock.patch.object(
+                campaign.matrix,
+                "inject_unialloc_workspace_crates",
+                return_value=[Path("Cargo.toml")],
+            ):
+                patched = campaign._inject_workspace_dependencies(
+                    nested, ("redb",), "unialloc = {}"
+                )
+            self.assertEqual([str((nested / "Cargo.toml").resolve())], patched)
+            record = campaign.retain_post_injection_build_inputs(
+                {
+                    "manifest": "Cargo.toml",
+                    "patched_manifests": patched,
+                },
+                worktree=worktree,
+                build_dir=Path(directory) / "build",
+            )
+            self.assertEqual(
+                ["Cargo.toml", "redb-source/Cargo.toml"],
+                [row["relative_path"] for row in record["manifests"]],
+            )
+
+    def test_polars_generated_manifest_is_in_post_injection_manifest_set(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            checkout = root / "checkout"
+            checkout.mkdir()
+            (checkout / "Cargo.toml").write_text("[workspace]\n", encoding="utf-8")
+            with (
+                mock.patch.object(
+                    campaign, "_inject_workspace_dependencies", return_value=[]
+                ),
+                mock.patch.object(
+                    campaign, "_stage_a_dependency", return_value="unialloc = {}"
+                ),
+                mock.patch.object(
+                    campaign.matrix, "find_cached_spin", return_value=root / "spin"
+                ),
+                mock.patch.object(campaign.matrix, "add_spin_patch"),
+            ):
+                prepared = campaign.prepare_stage_a_source(
+                    "polars",
+                    "compiler-prior",
+                    checkout=checkout,
+                    raw_dir=root / "raw",
+                    snapshot={"path": str(root / "snapshot")},
+                )
+            generated = (
+                root
+                / "raw"
+                / "build-work"
+                / "polars"
+                / "compiler-prior"
+                / "crates"
+                / "polars-unialloc-primary"
+                / "Cargo.toml"
+            ).resolve()
+            self.assertIn(str(generated), prepared["patched_manifests"])
+
+    def test_evaluator_provenance_hashes_runner_and_helpers(self) -> None:
+        provenance = campaign.campaign_evaluator_provenance()
+        self.assertEqual(64, len(provenance["digest"]))
+        self.assertEqual(
+            campaign.sha256_file(Path(campaign.__file__)),
+            provenance["files"]["stage_a_runner"]["sha256"],
+        )
+        self.assertIn("realworld_matrix_helper", provenance["files"])
+
+    def test_single_process_guard_observes_descendants(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = campaign.execute_monitored_process(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import subprocess,sys,time; "
+                        "child=subprocess.Popen([sys.executable,'-c','import time;time.sleep(.25)']); "
+                        "time.sleep(.3); child.wait()"
+                    ),
+                ],
+                cwd=root,
+                env=dict(os.environ),
+                artifact_dir=root / "run",
+                timeout=2,
+                sample_interval=0.01,
+            )
+            self.assertFalse(result["single_process_guard"]["passed"])
+            self.assertGreaterEqual(
+                result["single_process_guard"]["observed_descendant_count"], 1
+            )
+
+    def test_preflight_retains_other_sources_when_one_checkout_fails(self) -> None:
+        def source(target_id, _root):
+            if target_id == "redb":
+                raise campaign.CampaignContractError("redb unavailable")
+            return {
+                "target_id": target_id,
+                "checkout": "/tmp/polars",
+                "source_commit": campaign.TARGETS[target_id].source_commit,
+            }
+
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+            campaign, "ensure_pinned_checkout", side_effect=source
+        ):
+            plan = campaign.stage_a_preflight(
+                targets=("redb", "polars"),
+                raw_dir=Path(directory),
+                checkout_root=Path(directory) / "checkouts",
+                work_units=campaign.STAGE_A_FIXED_WORK_UNITS,
+                measurement_seconds=30.0,
+                build_groups=("compiler-prior",),
+                jobs=1,
+            )
+        self.assertFalse(plan["success"])
+        self.assertIn("redb", plan["source_failures"])
+        self.assertIn("polars", plan["sources"])
+        self.assertFalse(plan["run_commands"]["redb"]["commands_generated"])
+        self.assertIn("compiler-prior", plan["run_commands"]["polars"])
+
+    def test_preflight_does_not_plan_oxipng_run_after_source_failure(self) -> None:
+        def source(target_id, _root):
+            if target_id == "oxipng":
+                raise campaign.CampaignContractError("oxipng unavailable")
+            return {
+                "target_id": target_id,
+                "checkout": "/tmp/polars",
+                "source_commit": campaign.TARGETS[target_id].source_commit,
+            }
+
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+            campaign, "ensure_pinned_checkout", side_effect=source
+        ):
+            plan = campaign.stage_a_preflight(
+                targets=("oxipng", "polars"),
+                raw_dir=Path(directory),
+                checkout_root=Path(directory) / "checkouts",
+                work_units=campaign.STAGE_A_FIXED_WORK_UNITS,
+                measurement_seconds=30.0,
+                build_groups=("compiler-prior",),
+                jobs=1,
+            )
+        self.assertFalse(plan["success"])
+        self.assertFalse(
+            plan["run_commands"]["oxipng"]["commands_generated"]
+        )
+        self.assertIn("compiler-prior", plan["run_commands"]["polars"])
+
+    def test_campaign_continues_after_build_failure_and_retries_duration_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            raw = Path(directory)
+            preflight = {
+                "sources": {
+                    target: {
+                        "target_id": target,
+                        "checkout": f"/tmp/{target}",
+                        "source_commit": campaign.TARGETS[target].source_commit,
+                    }
+                    for target in ("redb", "polars")
+                },
+                "source_failures": {},
+                "oxipng_input": None,
+            }
+
+            def build(target_id, *_args, **_kwargs):
+                if target_id == "redb":
+                    raise campaign.BuildBlocked("synthetic redb failure")
+                return {"target_id": target_id}
+
+            run_count = 0
+
+            def run(target_id, build_group, **kwargs):
+                nonlocal run_count
+                self.assertEqual("polars", target_id)
+                self.assertEqual("compiler-prior", build_group)
+                run_count += 1
+                return {
+                    "wall_seconds": 5.0 if run_count == 1 else 30.0,
+                    "work_units": kwargs["work_units"],
+                    "procfs": {"peak_rss_kib": 1},
+                    "runtime_site_summary": {
+                        "long_requested_bytes": 0,
+                        "confirmed_short_requested_bytes": 0,
+                    },
+                    "compiler_runtime_exact_join": {
+                        "runtime_join_rewrite_success": True,
+                        "static_coverage_claim_eligible": True,
+                        "status": "complete-static-coverage",
+                    },
+                }
+
+            snapshot = {
+                "unialloc_implementation_sha256": "0" * 64,
+                "allocator_revision": None,
+            }
+            with (
+                mock.patch.object(
+                    campaign, "stage_a_preflight", return_value=preflight
+                ),
+                mock.patch.object(
+                    campaign.psr, "snapshot_allocator", return_value=snapshot
+                ),
+                mock.patch.object(
+                    campaign.psr,
+                    "build_mir_driver",
+                    return_value=raw / "wrapper",
+                ),
+                mock.patch.object(
+                    campaign,
+                    "compile_run_runtime_hook_smoke",
+                    return_value={"success": True},
+                ),
+                mock.patch.object(
+                    campaign, "build_stage_a_binary", side_effect=build
+                ),
+                mock.patch.object(campaign, "run_stage_a_sample", side_effect=run),
+            ):
+                result = campaign.run_stage_a_campaign(
+                    targets=("redb", "polars"),
+                    raw_dir=raw,
+                    checkout_root=raw / "checkouts",
+                    work_units={"redb": 128, "polars": 88},
+                    measurement_seconds=30.0,
+                    jobs=1,
+                    build_timeout=60,
+                    run_timeout=60,
+                    sample_interval=0.01,
+                    reuse=False,
+                    allocator_revision=None,
+                    build_groups=("compiler-prior",),
+                    calibrate_fixed_work=False,
+                )
+            self.assertEqual(
+                "blocked_by_real_build_failure", result["targets"]["redb"]["status"]
+            )
+            self.assertEqual("complete", result["targets"]["polars"]["status"])
+            self.assertEqual(2, run_count)
+            retry = result["targets"]["polars"]["fixed_work_duration_retry"]
+            self.assertTrue(retry["performed"])
+            self.assertEqual(88, retry["first_work_units"])
+            self.assertEqual(704, retry["retry_work_units"])
+
+    def test_all_six_have_executable_stage_a_command_shapes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "adapter"
+            binary.write_text("binary", encoding="utf-8")
+            for target_id in ("swc", "rustpython", "actix_web"):
+                with self.subTest(target=target_id):
+                    command = campaign.screening_command(
+                        target_id,
+                        binary=binary,
+                        work_dir=root / target_id,
+                        measurement_seconds=30.0,
+                    )
+                    self.assertIn("--measurement-time", command)
+                    self.assertEqual(
+                        "30.000", command[command.index("--measurement-time") + 1]
+                    )
+            polars = campaign.screening_command(
+                "polars", binary=binary, work_dir=root / "polars", work_units=88
+            )
+            self.assertEqual("filter_retain", polars[-2])
+            self.assertEqual("88", polars[-1])
+
+    def test_oxipng_command_materializes_exact_unique_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "oxipng"
+            binary.write_text("binary", encoding="utf-8")
+            source = root / "issue-141.png"
+            source.write_bytes(b"pinned-test-input")
+            original = campaign.OXIPNG_INPUT_SHA256
+            campaign.OXIPNG_INPUT_SHA256 = hashlib.sha256(source.read_bytes()).hexdigest()
+            try:
+                command = campaign.planned_fixed_work_command(
+                    "oxipng",
+                    binary=binary,
+                    work_dir=root / "run",
+                    work_units=8,
+                    input_path=source,
+                )
+            finally:
+                campaign.OXIPNG_INPUT_SHA256 = original
+            inputs = sorted((root / "run" / "inputs").glob("*.png"))
+            self.assertEqual(8, len(inputs))
+            self.assertEqual(8, len(set(path.name for path in inputs)))
+            self.assertEqual("--dir", command[-10])
+
+    def test_blocked_adapters_fail_closed_and_retain_planned_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / "adapter"
+            binary.write_text("binary", encoding="utf-8")
+            with self.assertRaises(campaign.AdapterBlocked):
+                campaign.planned_fixed_work_command(
+                    "swc", binary=binary, work_dir=root, work_units=10
+                )
+            command = campaign.planned_fixed_work_command(
+                "swc",
+                binary=binary,
+                work_dir=root,
+                work_units=10,
+                allow_blocked_adapter=True,
+            )
+            self.assertIn("--unialloc-fixed-work-units", command)
+            self.assertIn("large_fixer", command)
+
+
+if __name__ == "__main__":
+    unittest.main()
