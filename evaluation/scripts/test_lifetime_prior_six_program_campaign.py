@@ -35,8 +35,21 @@ def write_audit(
     rewrite_status: str = "actual_semantic_scope_enter_exit_rewrite_applied",
     body_clone_returned: bool = True,
     actual_semantic_rewrite: bool = True,
+    runtime_key: dict[str, int] | None = None,
 ) -> None:
     root.mkdir(parents=True, exist_ok=True)
+    candidate = {
+        "lifetime_hint_basis": basis,
+        "lifetime_hint": hint,
+        "lifetime_hint_confidence": confidence,
+        "rewrite_status": rewrite_status,
+        "lowering_kind": "semantic_scope_enter_exit_rewrite",
+    }
+    if runtime_key is not None:
+        candidate["lifetime_analysis_features"] = {
+            "runtime_join_key_complete": True,
+            "runtime_join_key": runtime_key,
+        }
     (root / "audit.json").write_text(
         json.dumps(
             {
@@ -52,15 +65,7 @@ def write_audit(
                     "body_clone_returned_to_rustc": body_clone_returned,
                     "continue_compilation": True,
                 },
-                "rewrite_candidates": [
-                    {
-                        "lifetime_hint_basis": basis,
-                        "lifetime_hint": hint,
-                        "lifetime_hint_confidence": confidence,
-                        "rewrite_status": rewrite_status,
-                        "lowering_kind": "semantic_scope_enter_exit_rewrite",
-                    }
-                ],
+                "rewrite_candidates": [candidate],
             }
         ),
         encoding="utf-8",
@@ -254,6 +259,61 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                 campaign.validate_build_audit_for_arm(
                     campaign.ARM_BY_NAME["adaptive-ordinary-all-unknown"], summary
                 )
+
+    def test_generic_and_numeric_scope_rewrites_share_applied_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_audit(
+                root / "generic",
+                enabled=True,
+                basis="automatic_rust_lifetime_prior_return_long",
+                hint=2,
+                confidence=70,
+                crate_name="execution",
+                rewrite_status="actual_semantic_scope_generic_type_rewrite_applied",
+                runtime_key={
+                    "callsite": 1,
+                    "type_id": 2,
+                    "module_id": 3,
+                    "requested_size_bytes": 4096,
+                    "requested_align_bytes": 8,
+                },
+            )
+            write_audit(
+                root / "numeric",
+                enabled=True,
+                basis=(
+                    "automatic_rust_lifetime_prior_all_path_local_release_short"
+                ),
+                hint=1,
+                confidence=85,
+                crate_name="execution",
+                rewrite_status="actual_semantic_scope_enter_exit_rewrite_applied",
+                runtime_key={
+                    "callsite": 11,
+                    "type_id": 12,
+                    "module_id": 13,
+                    "requested_size_bytes": 8192,
+                    "requested_align_bytes": 16,
+                },
+            )
+            summary = campaign.summarize_compiler_prior_audits(root)
+            exported = campaign.export_compiler_site_features(root)
+            self.assertEqual(2, summary["classified_candidate_count"])
+            self.assertEqual(2, summary["applied_allocation_candidate_count"])
+            self.assertEqual(2, summary["applied_prior_hinted_candidate_count"])
+            self.assertEqual(2, exported["site_count"])
+            self.assertEqual(2, exported["applied_prior_hinted_count"])
+            self.assertEqual(
+                {
+                    "actual_semantic_scope_enter_exit_rewrite_applied",
+                    "actual_semantic_scope_generic_type_rewrite_applied",
+                },
+                {row["rewrite_status"] for row in exported["rows"]},
+            )
+            campaign.validate_build_audit_for_arm(
+                campaign.SCREENING_ARM, summary, ("execution",)
+            )
 
     def test_compiler_audit_rejects_missing_or_mixed_prior_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -586,6 +646,41 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
             "share-generics", campaign.stage_a_rustflags("polars", "compiler-prior")
         )
 
+    def test_compiler_build_contract_retains_release_symbols(self) -> None:
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            mock.patch.object(
+                campaign.matrix, "rustc_sysroot", return_value=Path("/sysroot")
+            ),
+            mock.patch.object(
+                campaign.matrix,
+                "typeiso_environment",
+                side_effect=lambda environment, **_kwargs: dict(environment),
+            ),
+        ):
+            root = Path(directory)
+            environment = campaign._compiler_build_environment(
+                "compiler-prior",
+                wrapper=root / "wrapper",
+                audit_dir=root / "audits",
+                pass_log_dir=root / "logs",
+                target_dir=root / "target",
+                target_crates=("oxipng",),
+                temporary_dir=root / "tmp",
+            )
+            environment["RUSTFLAGS"] = campaign.stage_a_rustflags(
+                "oxipng", "compiler-prior"
+            )
+            provenance = campaign.compiler_build_environment_provenance(environment)
+        self.assertEqual("false", environment[campaign.RELEASE_STRIP_ENV])
+        self.assertEqual("false", provenance["cargo_profile_release_strip"])
+        self.assertTrue(provenance["release_symbols_retained"])
+        self.assertEqual("1", provenance["automatic_rust_lifetime_prior"])
+        with self.assertRaises(campaign.CampaignContractError):
+            campaign.compiler_build_environment_provenance(
+                {campaign.RELEASE_STRIP_ENV: "true"}
+            )
+
     def test_post_injection_manifests_and_lock_are_retained_by_hash(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -849,6 +944,11 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         self.assertFalse(plan["success"])
         self.assertIn("redb", plan["source_failures"])
         self.assertIn("polars", plan["sources"])
+        self.assertEqual(
+            {campaign.RELEASE_STRIP_ENV: "false"},
+            plan["release_symbol_retention_environment"],
+        )
+        self.assertTrue(plan["activation_proof_requires_retained_symbols"])
         self.assertFalse(plan["run_commands"]["redb"]["commands_generated"])
         self.assertIn("compiler-prior", plan["run_commands"]["polars"])
 

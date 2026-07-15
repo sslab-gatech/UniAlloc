@@ -62,6 +62,7 @@ HARD_PROCESS_CAP_SECONDS = 600.0
 DEFAULT_LONG_COHORT_BYTES = 2 * MIB
 DEFAULT_CONFIRMED_SHORT_BYTES = 8 * MIB
 AUTO_PRIOR_ENV = "UNIALLOC_AUTO_RUST_LIFETIME_PRIOR"
+RELEASE_STRIP_ENV = "CARGO_PROFILE_RELEASE_STRIP"
 RUNTIME_ARM_ENV = "UNIALLOC_LIFETIME_EXPERIMENT_ARM"
 FRAGMENTATION_PREFIX = "UNIALLOC_LIFETIME_FRAGMENTATION="
 OXIPNG_INPUT_SHA256 = (
@@ -97,6 +98,13 @@ PRIOR_CLASSIFIED_BASIS_CONTRACT = {
     "automatic_rust_lifetime_prior_return_long": (2, 70),
     "automatic_rust_lifetime_prior_escape_long": (2, 70),
 }
+APPLIED_ALLOCATION_SCOPE_STATUSES = frozenset(
+    {
+        "actual_allocator_call_replacement_applied",
+        "actual_semantic_scope_enter_exit_rewrite_applied",
+        "actual_semantic_scope_generic_type_rewrite_applied",
+    }
+)
 
 
 class CampaignContractError(RuntimeError):
@@ -741,10 +749,7 @@ def summarize_compiler_prior_audits(root: Path) -> dict[str, Any]:
                 if hint in {1, 2}:
                     classified_candidates += 1
             rewrite_status = str(raw.get("rewrite_status") or "")
-            applied_allocation = rewrite_status in {
-                "actual_allocator_call_replacement_applied",
-                "actual_semantic_scope_enter_exit_rewrite_applied",
-            }
+            applied_allocation = rewrite_status in APPLIED_ALLOCATION_SCOPE_STATUSES
             if applied_allocation:
                 applied_allocation_candidates += 1
                 if basis.startswith("automatic_rust_lifetime_prior_") and hint in {
@@ -1959,10 +1964,7 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
             if not isinstance(candidate, dict):
                 continue
             rewrite_status = str(candidate.get("rewrite_status") or "")
-            if rewrite_status not in {
-                "actual_allocator_call_replacement_applied",
-                "actual_semantic_scope_enter_exit_rewrite_applied",
-            }:
+            if rewrite_status not in APPLIED_ALLOCATION_SCOPE_STATUSES:
                 continue
             features = candidate.get("lifetime_analysis_features")
             if not isinstance(features, dict):
@@ -2052,6 +2054,7 @@ def _compiler_build_environment(
         {
             "CARGO_TARGET_DIR": str(target_dir.resolve()),
             "CARGO_INCREMENTAL": "0",
+            RELEASE_STRIP_ENV: "false",
             "TMPDIR": str(temporary_dir.resolve()),
             "RUSTFLAGS": f"--cfg unialloc_lifetime_prior_{build_group.replace('-', '_')}",
             "POLARS_MAX_THREADS": "1",
@@ -2071,6 +2074,19 @@ def _compiler_build_environment(
     )
     env.update(arm_build_environment(ARM_BY_NAME[STAGE_A_ARM_BY_BUILD_GROUP[build_group]]))
     return env
+
+
+def compiler_build_environment_provenance(env: Mapping[str, str]) -> dict[str, Any]:
+    release_strip = env.get(RELEASE_STRIP_ENV)
+    if release_strip != "false":
+        raise CampaignContractError("Stage-A release symbol retention is disabled")
+    return {
+        "source": "unialloc-stage-a-compiler-build-environment-v1",
+        "cargo_profile_release_strip": release_strip,
+        "release_symbols_retained": True,
+        "rustflags": env.get("RUSTFLAGS"),
+        "automatic_rust_lifetime_prior": env.get(AUTO_PRIOR_ENV),
+    }
 
 
 def stage_a_rustflags(target_id: str, build_group: str) -> str:
@@ -2189,6 +2205,14 @@ def build_stage_a_binary(
             == expected_generated_source_sha256
             and cached.get("automatic_rust_lifetime_prior")
             == (build_group == "compiler-prior")
+            and cached.get("compiler_build_environment", {}).get(
+                "cargo_profile_release_strip"
+            )
+            == "false"
+            and cached.get("compiler_build_environment", {}).get(
+                "release_symbols_retained"
+            )
+            is True
             and binary.is_file()
             and cached.get("binary_sha256") == sha256_file(binary)
             and compiler_sites_path.is_file()
@@ -2224,6 +2248,7 @@ def build_stage_a_binary(
         temporary_dir=temporary_dir,
     )
     env["RUSTFLAGS"] = stage_a_rustflags(target_id, build_group)
+    compiler_build_environment = compiler_build_environment_provenance(env)
     metadata = matrix.execute(
         ["cargo", f"+{TOOLCHAIN}", "metadata", "--format-version", "1"],
         cwd=worktree,
@@ -2303,6 +2328,7 @@ def build_stage_a_binary(
         "target_id": target_id,
         "build_group": build_group,
         "automatic_rust_lifetime_prior": build_group == "compiler-prior",
+        "compiler_build_environment": compiler_build_environment,
         "compiler_prior_applied_hint_provenance": (
             compiler_prior_applied if build_group == "compiler-prior" else None
         ),
@@ -3199,6 +3225,8 @@ def stage_a_preflight(
             group: ({AUTO_PRIOR_ENV: "1"} if group == "compiler-prior" else {})
             for group in build_groups
         },
+        "release_symbol_retention_environment": {RELEASE_STRIP_ENV: "false"},
+        "activation_proof_requires_retained_symbols": True,
         "runtime_policy": 8,
         "runtime_force_track_all": True,
         "stage_a_pressure_basis": "process_wide_requested_generation_bytes",
