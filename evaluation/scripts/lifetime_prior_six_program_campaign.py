@@ -133,6 +133,16 @@ GENERIC_RESOLUTION_KEY_FIELDS = (
     "requested_size",
     "align",
 )
+RUNTIME_OUTCOME_AGGREGATE_FIELDS = (
+    "allocation_count",
+    "allocation_requested_bytes",
+    "long_outcomes",
+    "short_outcomes",
+    "censored_outcomes",
+    "long_requested_bytes",
+    "short_requested_bytes",
+    "censored_requested_bytes",
+)
 TARGET_SNAPSHOT_DEPENDENCY_REWRITES: dict[str, tuple[dict[str, Any], ...]] = {
     "swc": (
         {
@@ -3223,6 +3233,50 @@ def runtime_classification_summary(stats: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _aggregate_runtime_outcomes(
+    rows: Sequence[Mapping[str, Any]], *, scope: str
+) -> dict[str, Any]:
+    """Sum deduplicated runtime outcome evidence, or fail the block closed."""
+    identities: set[tuple[Any, ...]] = set()
+    invalid_rows = 0
+    for row in rows:
+        identity = tuple(
+            row.get(field) for field in runtime_lifetime.RUNTIME_SITE_KEY_FIELDS
+        )
+        if identity in identities:
+            raise CampaignContractError(
+                f"{scope} outcome evidence repeats one runtime exact site tuple"
+            )
+        identities.add(identity)
+        if any(
+            not _plain_integer(row.get(field)) or row[field] < 0
+            for field in RUNTIME_OUTCOME_AGGREGATE_FIELDS
+        ):
+            invalid_rows += 1
+    evidence_complete = invalid_rows == 0
+    return {
+        "scope": scope,
+        "deduplicated_by": list(runtime_lifetime.RUNTIME_SITE_KEY_FIELDS),
+        "site_count": len(rows),
+        "short_prior_site_count": sum(
+            int(row.get("latest_static_prior") == 1) for row in rows
+        ),
+        "long_prior_site_count": sum(
+            int(row.get("latest_static_prior") == 2) for row in rows
+        ),
+        "evidence_complete": evidence_complete,
+        "missing_or_invalid_field_site_count": invalid_rows,
+        **{
+            field: (
+                sum(int(row[field]) for row in rows)
+                if evidence_complete
+                else None
+            )
+            for field in RUNTIME_OUTCOME_AGGREGATE_FIELDS
+        },
+    }
+
+
 def join_compiler_runtime_sites(
     compiler_export: Mapping[str, Any], runtime_rows: Sequence[Mapping[str, Any]]
 ) -> dict[str, Any]:
@@ -3507,6 +3561,17 @@ def join_compiler_runtime_sites(
             else "partial-static-coverage"
         )
     )
+    matched_applied_prior_runtime = [
+        row["runtime"]
+        for row in joined
+        if row["matched"] and row["applied_prior_hint"]
+    ]
+    executed_static_prior_runtime = [
+        row
+        for row in runtime_by_key.values()
+        if _plain_integer(row.get("latest_static_prior"))
+        and row["latest_static_prior"] in {1, 2}
+    ]
     return {
         "source": "unialloc-compiler-runtime-exact-site-join-v2",
         "status": static_status,
@@ -3535,6 +3600,14 @@ def join_compiler_runtime_sites(
         "generic_resolved_site_count": generic_resolved,
         "generic_rejected_or_unobserved_site_count": generic_total - generic_resolved,
         "resolution_status_counts": dict(sorted(resolution_counts.items())),
+        "matched_applied_prior_outcomes": _aggregate_runtime_outcomes(
+            matched_applied_prior_runtime,
+            scope="resolved-compiler-applied-prior-key5",
+        ),
+        "executed_static_prior_outcomes": _aggregate_runtime_outcomes(
+            executed_static_prior_runtime,
+            scope="all-runtime-key5-with-latest-static-prior",
+        ),
         "applied_prior_classified_count": applied_prior_total,
         "applied_prior_complete_key_count": applied_prior_complete,
         "applied_prior_incomplete_key_count": applied_prior_incomplete,

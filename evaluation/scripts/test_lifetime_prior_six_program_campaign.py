@@ -194,6 +194,13 @@ def generic_runtime_row(
         "requested_size": requested_size,
         "align": align,
         "allocation_count": allocation_count,
+        "allocation_requested_bytes": allocation_count * requested_size,
+        "long_outcomes": allocation_count,
+        "short_outcomes": 0,
+        "censored_outcomes": 0,
+        "long_requested_bytes": allocation_count * requested_size,
+        "short_requested_bytes": 0,
+        "censored_requested_bytes": 0,
         "predictor_key_ambiguous": predictor_key_ambiguous,
         "latest_static_prior": latest_static_prior,
     }
@@ -615,6 +622,42 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         self.assertEqual(0, joined["audit_type_id_sentinel"])
         self.assertEqual(17, joined["resolved_runtime_exact_key"]["type_id"])
         self.assertTrue(result["claim_scope"]["adaptive_site_key_unchanged"])
+        outcomes = result["matched_applied_prior_outcomes"]
+        self.assertTrue(outcomes["evidence_complete"])
+        self.assertEqual(1, outcomes["site_count"])
+        self.assertEqual(3, outcomes["allocation_count"])
+        self.assertEqual(3, outcomes["long_outcomes"])
+
+    def test_join_separates_matched_from_all_executed_prior_outcomes(self) -> None:
+        compiler = generic_compiler_row()
+        matched = generic_runtime_row()
+        executed_only = generic_runtime_row(
+            type_id=29,
+            callsite=31,
+            requested_size=8,
+            allocation_count=3973,
+            latest_static_prior=1,
+        )
+        executed_only.update(
+            {
+                "long_outcomes": 0,
+                "short_outcomes": 3973,
+                "long_requested_bytes": 0,
+                "short_requested_bytes": 3973 * 8,
+            }
+        )
+        result = campaign.join_compiler_runtime_sites(
+            {"rows": [compiler]}, [matched, executed_only]
+        )
+        matched_outcomes = result["matched_applied_prior_outcomes"]
+        executed_outcomes = result["executed_static_prior_outcomes"]
+        self.assertEqual(1, matched_outcomes["site_count"])
+        self.assertEqual(3, matched_outcomes["allocation_count"])
+        self.assertEqual(3, matched_outcomes["long_outcomes"])
+        self.assertEqual(2, executed_outcomes["site_count"])
+        self.assertEqual(3976, executed_outcomes["allocation_count"])
+        self.assertEqual(3, executed_outcomes["long_outcomes"])
+        self.assertEqual(3973, executed_outcomes["short_outcomes"])
 
     def test_numeric_join_never_falls_back_to_generic_key4(self) -> None:
         runtime = generic_runtime_row(type_id=17)
