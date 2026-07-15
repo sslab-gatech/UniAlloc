@@ -471,7 +471,7 @@ def validate_plain_clone_audit_only(
         "replacement_resolution_status": "rustc_middle_heap_object_type_not_solved",
         "metadata_pairing_contract": "audit_only_unresolved_heap_object_type",
         "semantic_object_type": "<unknown-heap-object-type>",
-        "type_id_basis": "rustc_middle_type_solver_failed_callsite_fallback",
+        "type_id_basis": "rustc_type_identity_unresolved_recovery_only",
     }
     for index, row in enumerate(rows):
         row_label = (
