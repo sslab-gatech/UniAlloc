@@ -1,0 +1,23 @@
+=== nightly-2022-07-01 miri component
+miri-x86_64-unknown-linux-gnu (installed)
+miri 0.1.0 (ff62c3a 2022-06-30)
+=== nightly miri component
+miri-x86_64-unknown-linux-gnu
+error: 'cargo-miri' is not installed for the toolchain 'nightly-x86_64-unknown-linux-gnu'.
+help: run `rustup component add --toolchain nightly-x86_64-unknown-linux-gnu miri` to install it
+=== node/npm
+=== native package probes
+pkg-config yottadb exit=1
+Package yottadb was not found in the pkg-config search path.
+Perhaps you should add the directory containing `yottadb.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'yottadb', required by 'virtual:world', not found
+modversion exit=1
+pkg-config metacall exit=1
+Package metacall was not found in the pkg-config search path.
+Perhaps you should add the directory containing `metacall.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'metacall', required by 'virtual:world', not found
+modversion exit=1
+=== native files
+=== neon cached

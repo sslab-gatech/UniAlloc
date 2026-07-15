@@ -1,0 +1,716 @@
+{
+  "baseline_results": [
+    {
+      "adapter_kind": "exact_published_witness",
+      "advisory_content_sha256": "d09d54281421f8cbf5dd57de28e39d397af6e269f1720eeec5902d243ba8715e",
+      "advisory_id": "RUSTSEC-2021-0049",
+      "case_id": "RSH-010",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "through",
+      "dependencies": {
+        "patched": {
+          "base_version": "0.1.0",
+          "kind": "scenario_local_patches"
+        },
+        "vulnerable": {
+          "bytes": 1134,
+          "kind": "crates_io_archive",
+          "package": "through",
+          "sha256": "2c4672fd4325fc09e44bf8ea12a1143ee168896e133d3d0a33cc9db4998bcdc6",
+          "upstream_commit": "3182bb216c25f3e09e8d676bfd9c253a1c4ed263",
+          "url": "https://static.crates.io/crates/through/through-0.1.0.crate",
+          "version": "0.1.0"
+        }
+      },
+      "experiment": {
+        "allocator_variants": [
+          "system"
+        ],
+        "arms": [
+          {
+            "allocator_variant": "system",
+            "archive_variant": "vulnerable",
+            "artifact_fingerprint": null,
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_double_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_double_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              1
+            ],
+            "tool_finding_count": 1
+          },
+          {
+            "allocator_variant": "system",
+            "archive_variant": "patched",
+            "artifact_fingerprint": null,
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": null,
+              "kind": "safe_rust_panic",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "run_nonzero",
+                "rust_panic_or_assertion",
+                "no_sanitizer_finding"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              -6
+            ],
+            "tool_finding_count": 0
+          }
+        ],
+        "orchestration_success": true,
+        "path": "/tmp/strong-batch-e-system-runs/RSH-010-rudra/experiment.json",
+        "repetitions": 1,
+        "sha256": "3c590b5332157fb570ec9420d8fdeb39b6b2abdfd741e80890f1e9e75480cbcf",
+        "unexpected_arm_count": 0
+      },
+      "oracle": {
+        "patched_control": "the local fail-closed guard reaches the intentional panic then aborts without an AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports attempting double-free when through unwinds through duplicated String ownership"
+      },
+      "origin_content_sha256": "3438bed3895ef3fedd61f325da6ea1f1f8f52c9dc7ec1aa30dd9562f44824bbe",
+      "origin_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0140-through.rs",
+      "preflight": {
+        "all_planned_arms_supported": true,
+        "path": "/tmp/strong-batch-e-system-runs/RSH-010-rudra/preflight.json",
+        "planned_arm_count": 2,
+        "sha256": "d2e680d06e3e6c4c0668d9665aa2fc552957fa6a82eff3fba105d57894d3c336"
+      },
+      "provenance": "rudra_poc_exact",
+      "repository_artifacts": {
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-010/Cargo.lock.patched": "14ff0a30e9e59bf563fae8089c0f8371dc8b06d9d366bf7feadabe582fe9bc0e",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-010/Cargo.lock.vulnerable": "14ff0a30e9e59bf563fae8089c0f8371dc8b06d9d366bf7feadabe582fe9bc0e",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-010/main.rs": "fb0580c25c135bebd9ab3edeb44120d6de5974862272d59aefd85a2b4243a854",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-010/origin.rs": "3438bed3895ef3fedd61f325da6ea1f1f8f52c9dc7ec1aa30dd9562f44824bbe",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-010/patches/abort-on-unwind.diff": "fe080d224d3c8070e51b743605b367447c63eccef2a8c56d7db62e381e20e240"
+      },
+      "scenario_id": "RSH-010-rudra",
+      "status": "executable_baseline_reproduced"
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_content_sha256": "6925d422ce6ae6407804edbd9938da9499924033ba3f596afeb83fc76203b7e3",
+      "advisory_id": "RUSTSEC-2019-0034",
+      "case_id": "RSH-011",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "http",
+      "dependencies": {
+        "patched": {
+          "bytes": 102946,
+          "kind": "crates_io_archive",
+          "package": "http",
+          "sha256": "2790658cddc82e82b08e25176c431d7015a0adeb1718498715cbd20138a0bf68",
+          "upstream_commit": "4a5b64d22a2db9e2a4de112cef5b93372b8ac5ed",
+          "url": "https://static.crates.io/crates/http/http-0.1.20.crate",
+          "version": "0.1.20"
+        },
+        "vulnerable": {
+          "bytes": 101834,
+          "kind": "crates_io_archive",
+          "package": "http",
+          "sha256": "d7e06e336150b178206af098a055e3621e8336027e2b4d126bda0bc64824baaf",
+          "upstream_commit": "9c05e391e00474abaa8c14a86bcb0fc5eff1120e",
+          "url": "https://static.crates.io/crates/http/http-0.1.19.crate",
+          "version": "0.1.19"
+        }
+      },
+      "experiment": {
+        "allocator_variants": [
+          "system"
+        ],
+        "arms": [
+          {
+            "allocator_variant": "system",
+            "archive_variant": "vulnerable",
+            "artifact_fingerprint": null,
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_double_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_double_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              1
+            ],
+            "tool_finding_count": 1
+          },
+          {
+            "allocator_variant": "system",
+            "archive_variant": "patched",
+            "artifact_fingerprint": null,
+            "build_exit_code": 0,
+            "clean_exit_count": 1,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": null,
+              "kind": "clean_exit",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "clean_exit",
+                "no_sanitizer_finding"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              0
+            ],
+            "tool_finding_count": 0
+          }
+        ],
+        "orchestration_success": true,
+        "path": "/tmp/strong-batch-e-system-runs/RSH-011-rudra/experiment.json",
+        "repetitions": 1,
+        "sha256": "0f17256c318ba424e71f2fcf60c6fd9b03fbc9f73fa6816fc1372da367dcab16",
+        "unexpected_arm_count": 0
+      },
+      "oracle": {
+        "patched_control": "http 0.1.20 exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports attempting double-free when a forgotten HeaderMap Drain leaves a moved Box entry owned by the map"
+      },
+      "origin_content_sha256": "7c41964a39b93f9ad4f9e17b84cde66abf2c864aae796192761bb8f30bcfc65f",
+      "origin_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0001-http.rs",
+      "preflight": {
+        "all_planned_arms_supported": true,
+        "path": "/tmp/strong-batch-e-system-runs/RSH-011-rudra/preflight.json",
+        "planned_arm_count": 2,
+        "sha256": "1d5ba69a83bd1d7815ad3f1c2e14c6e1a8ad4219bfc2f3c66d9433e62b58cfaf"
+      },
+      "provenance": "rudra_poc_mechanical_payload_adapter",
+      "repository_artifacts": {
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-011/Cargo.lock.patched": "61075a9513148f67d7d3d66ce18e504ad460325c3ba81b362c723cfb499e65a6",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-011/Cargo.lock.vulnerable": "f7fea9893cc620702b19352720a8aec17ce152894b5f3d7657602c0cf5bba2ec",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-011/main.rs": "e482d7da77cf16df74439f8245f245c9fb90d0c6a0fdf2ee58c3329563950003",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-011/origin.rs": "7c41964a39b93f9ad4f9e17b84cde66abf2c864aae796192761bb8f30bcfc65f"
+      },
+      "scenario_id": "RSH-011-rudra",
+      "status": "executable_baseline_reproduced"
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_content_sha256": "3633ddfd27917fb01f2caff6b9de5ff0d56ee3f5dc975a18b8b4dd6cf484cba5",
+      "advisory_id": "RUSTSEC-2021-0052",
+      "case_id": "RSH-012",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "id-map",
+      "dependencies": {
+        "patched": {
+          "bytes": 6339,
+          "kind": "crates_io_archive",
+          "package": "id-map",
+          "sha256": "533ee05f329c1d2d79d6594be1afdc97ff81c8edeef7ca06f4b1fa050094f342",
+          "upstream_commit": "8bb71495509b160f4c2d6dbc695bf83206c92e58",
+          "url": "https://static.crates.io/crates/id-map/id-map-0.2.2.crate",
+          "version": "0.2.2"
+        },
+        "vulnerable": {
+          "bytes": 6622,
+          "kind": "crates_io_archive",
+          "package": "id-map",
+          "sha256": "0b835569819d5a5b93d93cb85caec35e7cb5ff01e08107142581a66175f6c6d1",
+          "url": "https://static.crates.io/crates/id-map/id-map-0.2.1.crate",
+          "version": "0.2.1"
+        }
+      },
+      "experiment": {
+        "allocator_variants": [
+          "system"
+        ],
+        "arms": [
+          {
+            "allocator_variant": "system",
+            "archive_variant": "vulnerable",
+            "artifact_fingerprint": null,
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_double_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_double_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              1
+            ],
+            "tool_finding_count": 1
+          },
+          {
+            "allocator_variant": "system",
+            "archive_variant": "patched",
+            "artifact_fingerprint": null,
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": null,
+              "kind": "safe_rust_panic",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "run_nonzero",
+                "rust_panic_or_assertion",
+                "no_sanitizer_finding"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              101
+            ],
+            "tool_finding_count": 0
+          }
+        ],
+        "orchestration_success": true,
+        "path": "/tmp/strong-batch-e-system-runs/RSH-012-rudra-clone-from/experiment.json",
+        "repetitions": 1,
+        "sha256": "ede7bcb60be67d8e3710e2b12216b00e92cb345b56fd80ba4a203bc524ec01f0",
+        "unexpected_arm_count": 0
+      },
+      "oracle": {
+        "patched_control": "id-map 0.2.2 reaches only the intentional panic without an AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports attempting double-free when clone_from panics after dropping the destination Box while its id remains live"
+      },
+      "origin_content_sha256": "81e0e70e5d60562fd6e1b0e89b32082e6ff928a9fa1a7084d7c53b773d686644",
+      "origin_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0157-id-map.rs",
+      "preflight": {
+        "all_planned_arms_supported": true,
+        "path": "/tmp/strong-batch-e-system-runs/RSH-012-rudra-clone-from/preflight.json",
+        "planned_arm_count": 2,
+        "sha256": "3c8aeee45ce850a4072114187a6dcbeb14d7acc12296b51380466e3fd927a964"
+      },
+      "provenance": "rudra_poc_mechanical_payload_adapter",
+      "repository_artifacts": {
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-012/Cargo.lock.patched": "263c689586c64874ee165da9fbea416d754905386aa1ed487e12e4d0f77b84ed",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-012/Cargo.lock.vulnerable": "d123038bf84728f87e2be2baa1069a811a43ec8083c09ec7a3825df93a97ef26",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-012/main.rs": "5c2404dfbbf5b3768a89905fcd994e5330a912983931dcec3b7ad6cac64fdb35",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-012/origin.rs": "81e0e70e5d60562fd6e1b0e89b32082e6ff928a9fa1a7084d7c53b773d686644"
+      },
+      "scenario_id": "RSH-012-rudra-clone-from",
+      "status": "executable_baseline_reproduced"
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_content_sha256": "0206776166fa42dddb69237ab999c1a383d1fc6cc57db5b07f7b624491955a66",
+      "advisory_id": "RUSTSEC-2021-0053",
+      "case_id": "RSH-013",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "algorithmica",
+      "dependencies": {
+        "patched": {
+          "base_version": "0.1.8",
+          "kind": "scenario_local_patches"
+        },
+        "vulnerable": {
+          "bytes": 5800,
+          "kind": "crates_io_archive",
+          "package": "algorithmica",
+          "sha256": "8e733167888f733e95e8882c338afe3d205959f73fda487bb3b731c60df13f47",
+          "upstream_commit": "17e3fb53fd6abc2e8f0728c0f5b1acf0fe76a680",
+          "url": "https://static.crates.io/crates/algorithmica/algorithmica-0.1.8.crate",
+          "version": "0.1.8"
+        }
+      },
+      "experiment": {
+        "allocator_variants": [
+          "system",
+          "reclaim_plain",
+          "reclaim_checks"
+        ],
+        "arms": [
+          {
+            "allocator_variant": "system",
+            "archive_variant": "vulnerable",
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_double_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_double_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "native_diagnostic_signatures": {},
+            "run_exit_codes": [
+              1,
+              1,
+              1
+            ],
+            "tool_finding_signatures": {
+              "asan_double_free": 3
+            }
+          },
+          {
+            "allocator_variant": "reclaim_plain",
+            "archive_variant": "vulnerable",
+            "build_exit_code": 0,
+            "clean_exit_count": 3,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_double_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_double_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": false,
+            "native_diagnostic_signatures": {},
+            "run_exit_codes": [
+              0,
+              0,
+              0
+            ],
+            "tool_finding_signatures": {}
+          },
+          {
+            "allocator_variant": "reclaim_checks",
+            "archive_variant": "vulnerable",
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_double_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_double_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": false,
+            "native_diagnostic_signatures": {
+              "unialloc_pointer_already_released_check": 3
+            },
+            "run_exit_codes": [
+              101,
+              101,
+              101
+            ],
+            "tool_finding_signatures": {}
+          },
+          {
+            "allocator_variant": "system",
+            "archive_variant": "patched",
+            "build_exit_code": 0,
+            "clean_exit_count": 3,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": null,
+              "kind": "clean_exit",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "clean_exit",
+                "no_sanitizer_finding"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "native_diagnostic_signatures": {},
+            "run_exit_codes": [
+              0,
+              0,
+              0
+            ],
+            "tool_finding_signatures": {}
+          },
+          {
+            "allocator_variant": "reclaim_plain",
+            "archive_variant": "patched",
+            "build_exit_code": 0,
+            "clean_exit_count": 3,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": null,
+              "kind": "clean_exit",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "clean_exit",
+                "no_sanitizer_finding"
+              ]
+            },
+            "expected_oracle_observed": false,
+            "native_diagnostic_signatures": {},
+            "run_exit_codes": [
+              0,
+              0,
+              0
+            ],
+            "tool_finding_signatures": {}
+          },
+          {
+            "allocator_variant": "reclaim_checks",
+            "archive_variant": "patched",
+            "build_exit_code": 0,
+            "clean_exit_count": 3,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": null,
+              "kind": "clean_exit",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "clean_exit",
+                "no_sanitizer_finding"
+              ]
+            },
+            "expected_oracle_observed": false,
+            "native_diagnostic_signatures": {},
+            "run_exit_codes": [
+              0,
+              0,
+              0
+            ],
+            "tool_finding_signatures": {}
+          }
+        ],
+        "orchestration_success": true,
+        "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/feature-matched/RSH-013-rudra-deterministic-experiment.json",
+        "repetitions": 3,
+        "sha256": "e433d9ce5abfa55a2dd785d4ba5acf219a732475fad35c6551de52dec8c2a46d",
+        "unexpected_arm_count": 0
+      },
+      "oracle": {
+        "patched_control": "the local ownership-safe sort control exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports attempting double-free after merge_sort duplicates String ownership with ptr::read"
+      },
+      "origin_content_sha256": "3940899c6226bd3991cd9ad49aa26057db0fbb60114b30b29e789665ed15dd02",
+      "origin_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0163-algorithmica.rs",
+      "preflight": {
+        "all_planned_arms_supported": true,
+        "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/feature-matched/RSH-013-rudra-deterministic-preflight.json",
+        "planned_arm_count": 6,
+        "sha256": "529d647a5aa870b58e19eebe7b9077b64bee6e3e263d6fea5e62810b263eb4dd"
+      },
+      "provenance": "rudra_poc_lifecycle_stable_adaptation",
+      "repository_artifacts": {
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-013/Cargo.lock.patched": "211fd55c4c9b3fca498668c3f67d808e97203f2739a97643d040bf298169f102",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-013/Cargo.lock.vulnerable": "211fd55c4c9b3fca498668c3f67d808e97203f2739a97643d040bf298169f102",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-013/main.rs": "0a161a5a40574c3d3b28b583b383ec302955aa5ea6a39545c117795a2118df73",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-013/origin.rs": "3940899c6226bd3991cd9ad49aa26057db0fbb60114b30b29e789665ed15dd02",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-013/patches/ownership-safe-sort.diff": "a0132ac463862bd995d2d40d2e7faecdbccf91924aae67e32efe4554bf840a23"
+      },
+      "scenario_id": "RSH-013-rudra",
+      "status": "executable_baseline_reproduced"
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_content_sha256": "86684f8acd9dedf268bacf1c008065bfba72eb2201a61901eeb123891aa86428",
+      "advisory_id": "RUSTSEC-2021-0047",
+      "case_id": "RSH-014",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "slice-deque",
+      "dependencies": {
+        "patched": {
+          "base_version": "0.3.0",
+          "kind": "scenario_local_patches"
+        },
+        "vulnerable": {
+          "bytes": 56827,
+          "kind": "crates_io_archive",
+          "package": "slice-deque",
+          "sha256": "31ef6ee280cdefba6d2d0b4b78a84a1c1a3f3a4cec98c2d4231c8bc225de0f25",
+          "upstream_commit": "fda940e2505a771cd190a2859c3e9b6fe1abd041",
+          "url": "https://static.crates.io/crates/slice-deque/slice-deque-0.3.0.crate",
+          "version": "0.3.0"
+        }
+      },
+      "experiment": {
+        "allocator_variants": [
+          "system"
+        ],
+        "arms": [
+          {
+            "allocator_variant": "system",
+            "archive_variant": "vulnerable",
+            "artifact_fingerprint": null,
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_double_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_double_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              1
+            ],
+            "tool_finding_count": 1
+          },
+          {
+            "allocator_variant": "system",
+            "archive_variant": "patched",
+            "artifact_fingerprint": null,
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": null,
+              "kind": "safe_rust_panic",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "run_nonzero",
+                "rust_panic_or_assertion",
+                "no_sanitizer_finding"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              101
+            ],
+            "tool_finding_count": 0
+          }
+        ],
+        "orchestration_success": true,
+        "path": "/tmp/strong-batch-e-system-runs/RSH-014-rudra/experiment.json",
+        "repetitions": 1,
+        "sha256": "6f4f7b667ef909828902750a1274c265f421d46b644f376af1ba101a8bc3ed33",
+        "unexpected_arm_count": 0
+      },
+      "oracle": {
+        "patched_control": "the local panic-safety control reaches only the intentional panic without an AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports attempting double-free after DrainFilter advances past a predicate panic and restores duplicate Box ownership"
+      },
+      "origin_content_sha256": "c98c06853f15a3d23a57497b56bfdad4878478f729d4966d32514379be5a1533",
+      "origin_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0145-slice-deque.rs",
+      "preflight": {
+        "all_planned_arms_supported": true,
+        "path": "/tmp/strong-batch-e-system-runs/RSH-014-rudra/preflight.json",
+        "planned_arm_count": 2,
+        "sha256": "a0881fbf70f0297aeafee05d6309767c136bc23515ff584361da96e225de6d8d"
+      },
+      "provenance": "rudra_poc_mechanical_payload_adapter",
+      "repository_artifacts": {
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-014/Cargo.lock.patched": "ba506e006fcd84eabafa5392bbf56be56e5d7fa9f9c8b487f0eabce440a3ba3b",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-014/Cargo.lock.vulnerable": "ba506e006fcd84eabafa5392bbf56be56e5d7fa9f9c8b487f0eabce440a3ba3b",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-014/main.rs": "ad597dc4db186410c699cdf01a1cf8d84595510dd384ba2b02441f46fd969d1d",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-014/origin.rs": "c98c06853f15a3d23a57497b56bfdad4878478f729d4966d32514379be5a1533",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-014/patches/drain-filter-panic-safety.diff": "4dfd9e848b18da03407b93d0aa5f08f54e2493c64b183c085f6bbff06a6ecc9e"
+      },
+      "scenario_id": "RSH-014-rudra",
+      "status": "executable_baseline_reproduced"
+    }
+  ],
+  "blocked_cases": [],
+  "catalog": {
+    "counts": {
+      "blocked_case_count": 0,
+      "distinct_advisory_count": 5,
+      "executable_case_count": 5,
+      "published_scenario_count": 5,
+      "repository_scenario_count": 5,
+      "scope_case_count": 5
+    },
+    "list_output_path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/catalog-snapshots/rustsec_heap_strong_batch_e_current-list.json",
+    "list_output_sha256": "8e912fcf2f1436a6272eb9264f89c00d83b6cabfd978e4bdb9f2a1da1aecdc76",
+    "parser_validation": "passed",
+    "path": "evaluation/config/rustsec_heap_strong_batch_e_harnesses.json",
+    "sha256": "0b456f770462ba878a49d91a92545f0adc8c9cf3b0e0165d3edcdf47d6dd4ce6"
+  },
+  "caveats": [
+    {
+      "case_id": "RSH-010",
+      "code": "local_fail_closed_control",
+      "detail": "through 0.1.0 was yanked without a fixed release. The hash-pinned control aborts during closure-panic unwind before duplicated caller ownership can be reclaimed."
+    },
+    {
+      "case_id": "RSH-012",
+      "code": "advisory_version_metadata_lags_release",
+      "detail": "The pinned advisory still records patched = [], while crates.io id-map 0.2.2 is a published hash-pinned control from upstream commit 8bb71495509b160f4c2d6dbc695bf83206c92e58; its parent fix commit removes all unsafe code and closes issue 3."
+    },
+    {
+      "case_id": "RSH-013",
+      "code": "local_patched_control",
+      "detail": "algorithmica has no published fixed release. The hash-pinned control replaces both public merge-sort entry points with ownership-safe slice sorting. The executable witness uses a lifecycle-stable terminal drop instead of formatting corrupted String contents."
+    },
+    {
+      "case_id": "RSH-014",
+      "code": "local_patched_control",
+      "detail": "slice-deque has no published fixed release. The hash-pinned control advances after the predicate and backshifts the untouched tail during DrainFilter drop."
+    }
+  ],
+  "claim_boundary": [
+    "These one-repetition system-allocator runs validate five vulnerable/patched ground-truth pairs.",
+    "All five vulnerable arms produced the preregistered AddressSanitizer double-free signature; all five patched arms satisfied their no-sanitizer controls.",
+    "These runs do not measure UniAlloc, typed_plain, reclaim_checks, or typeiso efficacy.",
+    "The results are integration-grade and remain non-claim-grade until matched allocator variants and preregistered repetitions are executed."
+  ],
+  "schema_version": 1,
+  "scope": {
+    "assigned_case_ids": [
+      "RSH-010",
+      "RSH-011",
+      "RSH-012",
+      "RSH-013",
+      "RSH-014"
+    ],
+    "baseline_reproduced_count": 5,
+    "baseline_unexpected_arm_count": 0,
+    "blocked_case_count": 0,
+    "executable_case_count": 5,
+    "scoped_advisory_count": 5
+  },
+  "source": "unialloc-strong-rustsec-batch-e-integration-status",
+  "toolchain": {
+    "asan_options": [
+      "detect_leaks=0",
+      "disable_coredump=1"
+    ],
+    "name": "nightly-2026-06-11",
+    "oracles": [
+      "AddressSanitizer"
+    ],
+    "rustc": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)",
+    "target": "x86_64-unknown-linux-gnu"
+  }
+}

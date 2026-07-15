@@ -1,0 +1,869 @@
+{
+  "archive_variants": [
+    "vulnerable",
+    "patched"
+  ],
+  "arms": [
+    {
+      "allocator_provenance": {
+        "compiler_wrapper_sha256": null,
+        "direct_cargo_configuration": null,
+        "direct_cargo_unialloc": false,
+        "force_loaded_unialloc": false,
+        "force_rlib_sha256": null,
+        "force_wrapper_sha256": null,
+        "single_unialloc_identity_enforced": true,
+        "unialloc_implementation_sha256": "49d66828a317ad1164fc15f309b46aece054c73c25066378c768e133948d846f"
+      },
+      "allocator_topology": {
+        "allocator_variant": "system",
+        "allocator_wrapper_policy": "preserve_rust_default_for_miri",
+        "claim_grade": false,
+        "default_system_allocator_preserved": true,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "rust_default_allocator",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": false
+      },
+      "allocator_variant": "system",
+      "archive_variant": "vulnerable",
+      "binary_artifact": null,
+      "build": null,
+      "case_id": "RSH-057",
+      "claim_boundary": "This arm records reproduction and detector observations only. It does not establish mitigation, detection coverage, or exploit prevention.",
+      "claim_grade": false,
+      "crate": "basic_dsp_matrix",
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {
+        "MIRIFLAGS": "-Zmiri-ignore-leaks"
+      },
+      "efficacy_blockers": [
+        "critical_site_coverage_not_validated"
+      ],
+      "efficacy_eligible": false,
+      "execution_mode": "miri",
+      "execution_status": "completed",
+      "fingerprint": "a3bc678187834ffc9817da8428b3a55e00d7521f87e3306f124ba526f6986d55",
+      "fingerprint_payload": {
+        "allocator_variant": "system",
+        "archive_sha256": "6071b80ed880f219b36f64d3758e755badd42d2998a436713b3ec74a18a77f75",
+        "archive_variant": "vulnerable",
+        "base_lock_sha256": "34720013188163014e5e4d0b3b59e545d59ffe167a7c18c8c7843efb21f7997d",
+        "cargo_config_sha256": "5f03abfa0a8e36fab914c9ef77c50c497990186e1ba1bd31035cc0208f032422",
+        "catalog_sha256": "49dd0f4397df66b9d46828e5da1b3be5608d081f4e2d12de9f39c293eeee7c78",
+        "effective_lock_sha256": "34720013188163014e5e4d0b3b59e545d59ffe167a7c18c8c7843efb21f7997d",
+        "effective_manifest_sha256": "262908d78fd6f486281d2325b730a82455bf1d22d9bdc31e059f15a16d3ec4bc",
+        "materializer_sha256": "ea1de13aa79777a5d273b9e314850ae966d0ec036b9a99fe33d0c7232fe425a7",
+        "orchestrator_sha256": "7981732efbe19c89e89d1bbfdfa4e936d899330c66a7c626e6eaf265fd66ca0d",
+        "realworld_driver_sha256": "c0b1b1eedc0d95d8ac702c83699f7231845a5a9eea9e1e3b3efb5b6fe6be23c4",
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs"
+        ],
+        "scenario_id": "RSH-057-rudra-derived",
+        "schema_version": 1,
+        "source_sha256": "15c73f4548aadbe8ff5a00ff8b5e90a76196f81cdcd32c01b432827864305ca6",
+        "target_crates": [
+          "basic_dsp_matrix",
+          "rsh_057_harness"
+        ],
+        "toolchain": {
+          "cargo": {
+            "command": [
+              "cargo",
+              "+nightly-2026-06-11",
+              "-V"
+            ],
+            "exit_code": 0,
+            "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+            "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+          },
+          "name": "nightly-2026-06-11",
+          "rustc": {
+            "command": [
+              "rustc",
+              "+nightly-2026-06-11",
+              "-vV"
+            ],
+            "exit_code": 0,
+            "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+            "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+          },
+          "target": "x86_64-unknown-linux-gnu"
+        },
+        "transformed_sources": {
+          "original_source_sha256": "15c73f4548aadbe8ff5a00ff8b5e90a76196f81cdcd32c01b432827864305ca6",
+          "witness_module_sha256": "f85bb102eef4f9168d604a51fd41de94b33b03ee675d0ca6ac843dd774f047d7",
+          "wrapper_source_sha256": "96cd08246e1227a94120a821827a735f56c6067f5278666c8b6042aa7181bf43"
+        },
+        "unialloc_implementation_sha256": "49d66828a317ad1164fc15f309b46aece054c73c25066378c768e133948d846f"
+      },
+      "full_rebuild_required": true,
+      "ground_truth_arm": true,
+      "lock_resolution": null,
+      "materialization": {
+        "archive_bytes": 11939,
+        "archive_path": "/tmp/strong-batch-b-cache/archives/basic_dsp_matrix-0.9.0.crate",
+        "archive_sha256": "6071b80ed880f219b36f64d3758e755badd42d2998a436713b3ec74a18a77f75",
+        "cargo_lock_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-057/Cargo.lock.vulnerable",
+        "cargo_lock_sha256": "34720013188163014e5e4d0b3b59e545d59ffe167a7c18c8c7843efb21f7997d",
+        "case_id": "RSH-057",
+        "claim_grade": false,
+        "dependency_package": "basic_dsp_matrix",
+        "dependency_version": "0.9.0",
+        "oracle": {
+          "patched_control": "basic_dsp_matrix 0.9.2 reaches only the intentional panic without a Miri finding",
+          "tool": "miri",
+          "vulnerable": "Miri reports undefined behavior from a dangling reference (use-after-free) when TransformContent unwinds after duplicating array-element ownership"
+        },
+        "required_environment": {
+          "MIRIFLAGS": "-Zmiri-ignore-leaks"
+        },
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs"
+        ],
+        "scenario_id": "RSH-057-rudra-derived",
+        "schema_version": 1,
+        "source": "unialloc-rustsec-heap-materialization",
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-057/main.rs",
+        "source_sha256": "15c73f4548aadbe8ff5a00ff8b5e90a76196f81cdcd32c01b432827864305ca6",
+        "subject_directory": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0",
+        "variant": "vulnerable",
+        "work_directory": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work"
+      },
+      "oracle_validation": {
+        "boundary": "A clean exit or absent tool finding does not establish mitigation; matched repeated baseline/treatment evidence is required.",
+        "claim_grade": false,
+        "diagnostic_only": false,
+        "expected_contract": {
+          "compile_error_codes": [],
+          "expected_finding_signature": "miri_undefined_behavior",
+          "kind": "miri_undefined_behavior",
+          "parse_status": "parsed",
+          "required_evidence": [
+            "miri_undefined_behavior",
+            "run_nonzero"
+          ]
+        },
+        "expected_description": "Miri reports undefined behavior from a dangling reference (use-after-free) when TransformContent unwinds after duplicating array-element ownership",
+        "expected_oracle_observed": true,
+        "matched_compile_error_codes": [],
+        "mitigation_inferred": false,
+        "native_diagnostic_signatures": [],
+        "oracle_role": "catalog_oracle",
+        "repetition_observations": [
+          {
+            "address_reuse_observed": false,
+            "claim_grade": false,
+            "clean_exit": false,
+            "exit_code": 1,
+            "mitigation_inferred": false,
+            "native_diagnostic_signature": null,
+            "repetition": 1,
+            "rust_panic_or_assertion_observed": true,
+            "sanitizer_finding_observed": true,
+            "timed_out": false,
+            "tool_finding_signature": "miri_undefined_behavior"
+          }
+        ],
+        "status": "tool_finding_observed",
+        "tool_finding_signatures": [
+          "miri_undefined_behavior"
+        ]
+      },
+      "pass_audit_summary": {
+        "audit_file_count": 0,
+        "audit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "claim_grade_file_count": 0,
+        "crate_names": [],
+        "direct_allocator_rewrites_applied": 0,
+        "direct_layout_allocator_rewrites_applied": 0,
+        "semantic_deallocation_like_rewrites_applied": 0,
+        "semantic_drop_rewrites_applied": 0,
+        "semantic_ownership_transfer_rewrites_applied": 0,
+        "semantic_rewrites_applied": 0,
+        "semantic_scope_rewrites_applied": 0,
+        "total_compiler_rewrites_applied": 0,
+        "unresolved_file_count": 0
+      },
+      "pass_audit_validation": {
+        "claim_grade": false,
+        "compiler_rewrite_counts": {
+          "direct_allocator_rewrites_applied": 0,
+          "direct_layout_allocator_rewrites_applied": 0,
+          "semantic_ownership_transfer_rewrites_applied": 0,
+          "semantic_rewrites_applied": 0,
+          "total_compiler_rewrites_applied": 0
+        },
+        "critical_site_coverage_validated": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated",
+          "no_compiler_rewrite_observed"
+        ],
+        "efficacy_eligible": false,
+        "rewrite_route": "none",
+        "status": "not_applicable",
+        "valid": null,
+        "validation_scope": "target_crate_presence_and_force_load_topology_only"
+      },
+      "pass_audits": [],
+      "pass_logs": [],
+      "platform_constraints": {},
+      "repetition_summary": {
+        "address_reuse_observation_count": 0,
+        "claim_grade": false,
+        "clean_exit_count": 0,
+        "executed": 1,
+        "exit_codes": [
+          1
+        ],
+        "mitigation_inferred": false,
+        "native_diagnostic_signal_count": 0,
+        "requested": 1,
+        "timed_out_count": 0,
+        "tool_finding_count": 1
+      },
+      "repetitions_requested": 1,
+      "required_environment": {
+        "MIRIFLAGS": "-Zmiri-ignore-leaks"
+      },
+      "reuse_denial_evidence": {
+        "claim_grade": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "run": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "miri",
+          "run",
+          "--offline",
+          "--locked",
+          "--manifest-path",
+          "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/project/Cargo.toml"
+        ],
+        "cwd": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/project",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "MIRIFLAGS": "-Zmiri-ignore-leaks",
+          "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "MIRIFLAGS",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 1,
+        "stderr": "   Compiling autocfg v1.5.1\n   Compiling version_check v0.9.5\n   Compiling proc-macro2 v1.0.106\n   Compiling quote v1.0.46\n   Compiling unicode-ident v1.0.24\n   Compiling syn v1.0.109\n   Compiling maybe-uninit v2.0.0\n   Compiling cfg-if v0.1.10\n   Compiling lazy_static v1.5.0\n   Compiling proc-macro-hack v0.5.20+deprecated\n   Compiling libc v0.2.186\n   Compiling const_fn v0.4.12\n   Compiling scopeguard v1.2.0\n   Compiling strength_reduce v0.2.4\n   Compiling arrayvec v0.5.2\n   Compiling standback v0.2.17\n   Compiling time v0.2.27\n   Compiling crossbeam-utils v0.7.2\n   Compiling num-traits v0.2.19\n   Compiling memoffset v0.5.6\n   Compiling crossbeam-epoch v0.8.2\n   Compiling crossbeam-queue v0.2.3\n   Compiling crossbeam-channel v0.4.4\n   Compiling num-integer v0.1.46\n   Compiling num-complex v0.3.1\n   Compiling num_cpus v1.17.0\n   Compiling crossbeam-deque v0.7.4\n   Compiling crossbeam v0.7.3\n   Compiling transpose v0.2.3\n   Compiling rustfft v4.1.0\n   Compiling time-macros-impl v0.1.2\n   Compiling displaydoc v0.1.7\n   Compiling linreg v0.2.0\n   Compiling time-macros v0.1.1\n   Compiling basic_dsp_vector v0.9.0\n   Compiling basic_dsp_matrix v0.9.0 (/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0)\nwarning: unused import: `self::elementary::*`\n --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/general/mod.rs:5:9\n  |\n5 | pub use self::elementary::*;\n  |         ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused import: `self::statistics::*`\n --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/general/mod.rs:7:9\n  |\n7 | pub use self::statistics::*;\n  |         ^^^^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::general::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:18:9\n   |\n18 | pub use self::general::*;\n   |         ^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::rededicate::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:20:9\n   |\n20 | pub use self::rededicate::*;\n   |         ^^^^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::complex::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:22:9\n   |\n22 | pub use self::complex::*;\n   |         ^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::real::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:24:9\n   |\n24 | pub use self::real::*;\n   |         ^^^^^^^^^^^^^\n\nwarning: unused import: `self::time_freq::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:26:9\n   |\n26 | pub use self::time_freq::*;\n   |         ^^^^^^^^^^^^^^^^^^\n\nwarning: `basic_dsp_matrix` (lib) generated 7 warnings (run `cargo fix --lib -p basic_dsp_matrix` to apply 7 suggestions)\n   Compiling rsh-057-harness v0.0.0 (/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/project)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.52s\n     Running `/home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/bin/cargo-miri runner /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/target/miri/x86_64-unknown-linux-gnu/debug/rsh-057-harness`\n\nthread 'main' (1000) panicked at src/witness.rs:54:9:\npublished TransformContent conversion panic point\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nnote: in Miri, you may have to set `MIRIFLAGS=-Zmiri-env-forward=RUST_BACKTRACE` for the environment variable to have an effect\nerror: Undefined Behavior: constructing invalid value of type &mut [f32]: encountered a dangling reference (use-after-free)\n   --> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:820:24\n    |\n820 |     unsafe { drop_glue(&mut *to_drop) }\n    |                        ^^^^^^^^^^^^^ Undefined Behavior occurred here\n    |\n    = help: this indicates a bug in the program: it performed an invalid operation, and caused Undefined Behavior\n    = help: see https://doc.rust-lang.org/nightly/reference/behavior-considered-undefined.html for further information\n    = note: stack backtrace:\n            0: std::ptr::drop_in_place::<[f32]>\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:820:24: 820:37\n            1: std::ptr::mut_ptr::<impl *mut [f32]>::drop_in_place\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mut_ptr.rs:1382:18: 1382:37\n            2: <std::vec::Vec<f32> as std::ops::Drop>::drop\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4297:13: 4297:67\n            3: std::ptr::drop_glue::<std::vec::Vec<f32>> - shim(Some(std::vec::Vec<f32>))\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1: 827:25\n            4: std::ptr::drop_glue::<witness::DropDetector> - shim(Some(witness::DropDetector))\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1: 827:25\n            5: std::ptr::drop_glue::<[witness::DropDetector]> - shim(Some([witness::DropDetector]))\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1: 827:25\n            6: std::ptr::drop_glue::<[witness::DropDetector; 2]> - shim(Some([witness::DropDetector; 2]))\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1: 827:25\n            7: <[witness::DropDetector; 2] as basic_dsp_matrix::TransformContent<witness::DropDetector, basic_dsp_vector::DspVec<witness::DropDetector, f32, basic_dsp_vector::meta::Real, basic_dsp_vector::meta::Time>>>::transform::<{closure@<[witness::DropDetector; 2] as basic_dsp_matrix::ToRealTimeMatrix<basic_dsp_vector::DspVec<witness::DropDetector, f32, basic_dsp_vector::meta::Real, basic_dsp_vector::meta::Time>, f32>>::to_real_time_mat::{closure#0}}>\n                at /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:241:5: 241:6\n            8: basic_dsp_matrix::to_from_mat_conversions::to_mat_2xn::<witness::DropDetector, {closure@<[witness::DropDetector; 2] as basic_dsp_matrix::ToRealTimeMatrix<basic_dsp_vector::DspVec<witness::DropDetector, f32, basic_dsp_vector::meta::Real, basic_dsp_vector::meta::Time>, f32>>::to_real_time_mat::{closure#0}}, basic_dsp_vector::DspVec<witness::DropDetector, f32, basic_dsp_vector::meta::Real, basic_dsp_vector::meta::Time>, f32>\n                at /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/to_from_mat_conversions.rs:127:16: 127:44\n            9: <[witness::DropDetector; 2] as basic_dsp_matrix::ToRealTimeMatrix<basic_dsp_vector::DspVec<witness::DropDetector, f32, basic_dsp_vector::meta::Real, basic_dsp_vector::meta::Time>, f32>>::to_real_time_mat\n                at /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/to_from_mat_conversions.rs:305:9: 305:51\n            10: witness::run\n                at src/witness.rs:64:13: 67:33\n            11: main\n                at src/main.rs:4:5: 4:19\n\nnote: some details are omitted, run with `MIRIFLAGS=-Zmiri-backtrace=full` for a verbose backtrace\n\nerror: aborting due to 1 previous error\n\n",
+        "stderr_path": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/artifacts/run-001.stderr",
+        "stderr_sha256": "9483c4fd5ddfe43f51b94f9f9059074c72570651af7abfd799864a481ac24989",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/artifacts/run-001.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 3.711090738
+      },
+      "runs": [
+        {
+          "command": [
+            "cargo",
+            "+nightly-2026-06-11",
+            "miri",
+            "run",
+            "--offline",
+            "--locked",
+            "--manifest-path",
+            "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/project/Cargo.toml"
+          ],
+          "cwd": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/project",
+          "environment": {
+            "CARGO_INCREMENTAL": "0",
+            "CARGO_TARGET_DIR": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/target",
+            "HOME": "/home/hanqing",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "LOGNAME": "hanqing",
+            "MIRIFLAGS": "-Zmiri-ignore-leaks",
+            "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+            "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs",
+            "SHELL": "/usr/bin/zsh",
+            "TERM": "xterm-256color",
+            "USER": "hanqing"
+          },
+          "environment_allowlist": [
+            "CARGO_INCREMENTAL",
+            "CARGO_TARGET_DIR",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LOGNAME",
+            "MIRIFLAGS",
+            "PATH",
+            "RUSTFLAGS",
+            "SHELL",
+            "TERM",
+            "USER"
+          ],
+          "exit_code": 1,
+          "stderr": "   Compiling autocfg v1.5.1\n   Compiling version_check v0.9.5\n   Compiling proc-macro2 v1.0.106\n   Compiling quote v1.0.46\n   Compiling unicode-ident v1.0.24\n   Compiling syn v1.0.109\n   Compiling maybe-uninit v2.0.0\n   Compiling cfg-if v0.1.10\n   Compiling lazy_static v1.5.0\n   Compiling proc-macro-hack v0.5.20+deprecated\n   Compiling libc v0.2.186\n   Compiling const_fn v0.4.12\n   Compiling scopeguard v1.2.0\n   Compiling strength_reduce v0.2.4\n   Compiling arrayvec v0.5.2\n   Compiling standback v0.2.17\n   Compiling time v0.2.27\n   Compiling crossbeam-utils v0.7.2\n   Compiling num-traits v0.2.19\n   Compiling memoffset v0.5.6\n   Compiling crossbeam-epoch v0.8.2\n   Compiling crossbeam-queue v0.2.3\n   Compiling crossbeam-channel v0.4.4\n   Compiling num-integer v0.1.46\n   Compiling num-complex v0.3.1\n   Compiling num_cpus v1.17.0\n   Compiling crossbeam-deque v0.7.4\n   Compiling crossbeam v0.7.3\n   Compiling transpose v0.2.3\n   Compiling rustfft v4.1.0\n   Compiling time-macros-impl v0.1.2\n   Compiling displaydoc v0.1.7\n   Compiling linreg v0.2.0\n   Compiling time-macros v0.1.1\n   Compiling basic_dsp_vector v0.9.0\n   Compiling basic_dsp_matrix v0.9.0 (/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0)\nwarning: unused import: `self::elementary::*`\n --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/general/mod.rs:5:9\n  |\n5 | pub use self::elementary::*;\n  |         ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused import: `self::statistics::*`\n --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/general/mod.rs:7:9\n  |\n7 | pub use self::statistics::*;\n  |         ^^^^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::general::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:18:9\n   |\n18 | pub use self::general::*;\n   |         ^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::rededicate::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:20:9\n   |\n20 | pub use self::rededicate::*;\n   |         ^^^^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::complex::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:22:9\n   |\n22 | pub use self::complex::*;\n   |         ^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::real::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:24:9\n   |\n24 | pub use self::real::*;\n   |         ^^^^^^^^^^^^^\n\nwarning: unused import: `self::time_freq::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:26:9\n   |\n26 | pub use self::time_freq::*;\n   |         ^^^^^^^^^^^^^^^^^^\n\nwarning: `basic_dsp_matrix` (lib) generated 7 warnings (run `cargo fix --lib -p basic_dsp_matrix` to apply 7 suggestions)\n   Compiling rsh-057-harness v0.0.0 (/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/project)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.52s\n     Running `/home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/bin/cargo-miri runner /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/target/miri/x86_64-unknown-linux-gnu/debug/rsh-057-harness`\n\nthread 'main' (1000) panicked at src/witness.rs:54:9:\npublished TransformContent conversion panic point\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nnote: in Miri, you may have to set `MIRIFLAGS=-Zmiri-env-forward=RUST_BACKTRACE` for the environment variable to have an effect\nerror: Undefined Behavior: constructing invalid value of type &mut [f32]: encountered a dangling reference (use-after-free)\n   --> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:820:24\n    |\n820 |     unsafe { drop_glue(&mut *to_drop) }\n    |                        ^^^^^^^^^^^^^ Undefined Behavior occurred here\n    |\n    = help: this indicates a bug in the program: it performed an invalid operation, and caused Undefined Behavior\n    = help: see https://doc.rust-lang.org/nightly/reference/behavior-considered-undefined.html for further information\n    = note: stack backtrace:\n            0: std::ptr::drop_in_place::<[f32]>\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:820:24: 820:37\n            1: std::ptr::mut_ptr::<impl *mut [f32]>::drop_in_place\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mut_ptr.rs:1382:18: 1382:37\n            2: <std::vec::Vec<f32> as std::ops::Drop>::drop\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:4297:13: 4297:67\n            3: std::ptr::drop_glue::<std::vec::Vec<f32>> - shim(Some(std::vec::Vec<f32>))\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1: 827:25\n            4: std::ptr::drop_glue::<witness::DropDetector> - shim(Some(witness::DropDetector))\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1: 827:25\n            5: std::ptr::drop_glue::<[witness::DropDetector]> - shim(Some([witness::DropDetector]))\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1: 827:25\n            6: std::ptr::drop_glue::<[witness::DropDetector; 2]> - shim(Some([witness::DropDetector; 2]))\n                at /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1: 827:25\n            7: <[witness::DropDetector; 2] as basic_dsp_matrix::TransformContent<witness::DropDetector, basic_dsp_vector::DspVec<witness::DropDetector, f32, basic_dsp_vector::meta::Real, basic_dsp_vector::meta::Time>>>::transform::<{closure@<[witness::DropDetector; 2] as basic_dsp_matrix::ToRealTimeMatrix<basic_dsp_vector::DspVec<witness::DropDetector, f32, basic_dsp_vector::meta::Real, basic_dsp_vector::meta::Time>, f32>>::to_real_time_mat::{closure#0}}>\n                at /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/lib.rs:241:5: 241:6\n            8: basic_dsp_matrix::to_from_mat_conversions::to_mat_2xn::<witness::DropDetector, {closure@<[witness::DropDetector; 2] as basic_dsp_matrix::ToRealTimeMatrix<basic_dsp_vector::DspVec<witness::DropDetector, f32, basic_dsp_vector::meta::Real, basic_dsp_vector::meta::Time>, f32>>::to_real_time_mat::{closure#0}}, basic_dsp_vector::DspVec<witness::DropDetector, f32, basic_dsp_vector::meta::Real, basic_dsp_vector::meta::Time>, f32>\n                at /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/to_from_mat_conversions.rs:127:16: 127:44\n            9: <[witness::DropDetector; 2] as basic_dsp_matrix::ToRealTimeMatrix<basic_dsp_vector::DspVec<witness::DropDetector, f32, basic_dsp_vector::meta::Real, basic_dsp_vector::meta::Time>, f32>>::to_real_time_mat\n                at /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/work/subject/basic_dsp_matrix-0.9.0/src/to_from_mat_conversions.rs:305:9: 305:51\n            10: witness::run\n                at src/witness.rs:64:13: 67:33\n            11: main\n                at src/main.rs:4:5: 4:19\n\nnote: some details are omitted, run with `MIRIFLAGS=-Zmiri-backtrace=full` for a verbose backtrace\n\nerror: aborting due to 1 previous error\n\n",
+          "stderr_path": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "9483c4fd5ddfe43f51b94f9f9059074c72570651af7abfd799864a481ac24989",
+          "stdout": "",
+          "stdout_path": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/vulnerable/system/artifacts/run-001.stdout",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "wall_seconds": 3.711090738
+        }
+      ],
+      "runtime_stats": null,
+      "runtime_stats_by_repetition": [],
+      "runtime_stats_validation": {
+        "claim_grade": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated"
+        ],
+        "efficacy_eligible": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs"
+        ]
+      },
+      "scenario_id": "RSH-057-rudra-derived",
+      "schema_version": 1,
+      "source": "unialloc-rustsec-heap-experiment",
+      "source_provenance": {
+        "archive_sha256": "6071b80ed880f219b36f64d3758e755badd42d2998a436713b3ec74a18a77f75",
+        "base_lock_sha256": "34720013188163014e5e4d0b3b59e545d59ffe167a7c18c8c7843efb21f7997d",
+        "effective_lock_sha256": "34720013188163014e5e4d0b3b59e545d59ffe167a7c18c8c7843efb21f7997d",
+        "original_source_sha256": "15c73f4548aadbe8ff5a00ff8b5e90a76196f81cdcd32c01b432827864305ca6",
+        "source_sha256": "15c73f4548aadbe8ff5a00ff8b5e90a76196f81cdcd32c01b432827864305ca6",
+        "witness_module_sha256": "f85bb102eef4f9168d604a51fd41de94b33b03ee675d0ca6ac843dd774f047d7",
+        "wrapper_source_sha256": "96cd08246e1227a94120a821827a735f56c6067f5278666c8b6042aa7181bf43"
+      },
+      "target_crates": [
+        "basic_dsp_matrix",
+        "rsh_057_harness"
+      ],
+      "target_reset": true,
+      "target_reset_reasons": [
+        "fingerprint_changed"
+      ],
+      "tool": "miri",
+      "toolchain": {
+        "cargo": {
+          "command": [
+            "cargo",
+            "+nightly-2026-06-11",
+            "-V"
+          ],
+          "exit_code": 0,
+          "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+          "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+        },
+        "name": "nightly-2026-06-11",
+        "rustc": {
+          "command": [
+            "rustc",
+            "+nightly-2026-06-11",
+            "-vV"
+          ],
+          "exit_code": 0,
+          "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+          "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+        },
+        "target": "x86_64-unknown-linux-gnu"
+      }
+    },
+    {
+      "allocator_provenance": {
+        "compiler_wrapper_sha256": null,
+        "direct_cargo_configuration": null,
+        "direct_cargo_unialloc": false,
+        "force_loaded_unialloc": false,
+        "force_rlib_sha256": null,
+        "force_wrapper_sha256": null,
+        "single_unialloc_identity_enforced": true,
+        "unialloc_implementation_sha256": "49d66828a317ad1164fc15f309b46aece054c73c25066378c768e133948d846f"
+      },
+      "allocator_topology": {
+        "allocator_variant": "system",
+        "allocator_wrapper_policy": "preserve_rust_default_for_miri",
+        "claim_grade": false,
+        "default_system_allocator_preserved": true,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "rust_default_allocator",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": false
+      },
+      "allocator_variant": "system",
+      "archive_variant": "patched",
+      "binary_artifact": null,
+      "build": null,
+      "case_id": "RSH-057",
+      "claim_boundary": "This arm records reproduction and detector observations only. It does not establish mitigation, detection coverage, or exploit prevention.",
+      "claim_grade": false,
+      "crate": "basic_dsp_matrix",
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {
+        "MIRIFLAGS": "-Zmiri-ignore-leaks"
+      },
+      "efficacy_blockers": [
+        "critical_site_coverage_not_validated"
+      ],
+      "efficacy_eligible": false,
+      "execution_mode": "miri",
+      "execution_status": "completed",
+      "fingerprint": "19b39e43927a3bfaa4adb76d487707d200085df843abc613b72dc262edf50487",
+      "fingerprint_payload": {
+        "allocator_variant": "system",
+        "archive_sha256": "5a49fdbbccf27f92fb6552ff838cc1189c2dcde619611ce86d6f5a7b628d52d8",
+        "archive_variant": "patched",
+        "base_lock_sha256": "95ef073c6eb223afcf8c3dff70e5bd2a84f8b5eb92bf829f72a827ad92439748",
+        "cargo_config_sha256": "5f03abfa0a8e36fab914c9ef77c50c497990186e1ba1bd31035cc0208f032422",
+        "catalog_sha256": "49dd0f4397df66b9d46828e5da1b3be5608d081f4e2d12de9f39c293eeee7c78",
+        "effective_lock_sha256": "95ef073c6eb223afcf8c3dff70e5bd2a84f8b5eb92bf829f72a827ad92439748",
+        "effective_manifest_sha256": "bdc77675aba190175532b6db0f8c0415081912fac7ab36816bb6126962f30321",
+        "materializer_sha256": "ea1de13aa79777a5d273b9e314850ae966d0ec036b9a99fe33d0c7232fe425a7",
+        "orchestrator_sha256": "7981732efbe19c89e89d1bbfdfa4e936d899330c66a7c626e6eaf265fd66ca0d",
+        "realworld_driver_sha256": "c0b1b1eedc0d95d8ac702c83699f7231845a5a9eea9e1e3b3efb5b6fe6be23c4",
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs"
+        ],
+        "scenario_id": "RSH-057-rudra-derived",
+        "schema_version": 1,
+        "source_sha256": "15c73f4548aadbe8ff5a00ff8b5e90a76196f81cdcd32c01b432827864305ca6",
+        "target_crates": [
+          "basic_dsp_matrix",
+          "rsh_057_harness"
+        ],
+        "toolchain": {
+          "cargo": {
+            "command": [
+              "cargo",
+              "+nightly-2026-06-11",
+              "-V"
+            ],
+            "exit_code": 0,
+            "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+            "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+          },
+          "name": "nightly-2026-06-11",
+          "rustc": {
+            "command": [
+              "rustc",
+              "+nightly-2026-06-11",
+              "-vV"
+            ],
+            "exit_code": 0,
+            "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+            "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+          },
+          "target": "x86_64-unknown-linux-gnu"
+        },
+        "transformed_sources": {
+          "original_source_sha256": "15c73f4548aadbe8ff5a00ff8b5e90a76196f81cdcd32c01b432827864305ca6",
+          "witness_module_sha256": "f85bb102eef4f9168d604a51fd41de94b33b03ee675d0ca6ac843dd774f047d7",
+          "wrapper_source_sha256": "96cd08246e1227a94120a821827a735f56c6067f5278666c8b6042aa7181bf43"
+        },
+        "unialloc_implementation_sha256": "49d66828a317ad1164fc15f309b46aece054c73c25066378c768e133948d846f"
+      },
+      "full_rebuild_required": true,
+      "ground_truth_arm": true,
+      "lock_resolution": null,
+      "materialization": {
+        "archive_bytes": 11766,
+        "archive_path": "/tmp/strong-batch-b-cache/archives/basic_dsp_matrix-0.9.2.crate",
+        "archive_sha256": "5a49fdbbccf27f92fb6552ff838cc1189c2dcde619611ce86d6f5a7b628d52d8",
+        "cargo_lock_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-057/Cargo.lock.patched",
+        "cargo_lock_sha256": "95ef073c6eb223afcf8c3dff70e5bd2a84f8b5eb92bf829f72a827ad92439748",
+        "case_id": "RSH-057",
+        "claim_grade": false,
+        "dependency_package": "basic_dsp_matrix",
+        "dependency_version": "0.9.2",
+        "oracle": {
+          "patched_control": "basic_dsp_matrix 0.9.2 reaches only the intentional panic without a Miri finding",
+          "tool": "miri",
+          "vulnerable": "Miri reports undefined behavior from a dangling reference (use-after-free) when TransformContent unwinds after duplicating array-element ownership"
+        },
+        "required_environment": {
+          "MIRIFLAGS": "-Zmiri-ignore-leaks"
+        },
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs"
+        ],
+        "scenario_id": "RSH-057-rudra-derived",
+        "schema_version": 1,
+        "source": "unialloc-rustsec-heap-materialization",
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-057/main.rs",
+        "source_sha256": "15c73f4548aadbe8ff5a00ff8b5e90a76196f81cdcd32c01b432827864305ca6",
+        "subject_directory": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2",
+        "variant": "patched",
+        "work_directory": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work"
+      },
+      "oracle_validation": {
+        "boundary": "A clean exit or absent tool finding does not establish mitigation; matched repeated baseline/treatment evidence is required.",
+        "claim_grade": false,
+        "diagnostic_only": false,
+        "expected_contract": {
+          "compile_error_codes": [],
+          "expected_finding_signature": null,
+          "kind": "safe_rust_panic",
+          "parse_status": "parsed",
+          "required_evidence": [
+            "run_nonzero",
+            "rust_panic_or_assertion",
+            "no_sanitizer_finding"
+          ]
+        },
+        "expected_description": "basic_dsp_matrix 0.9.2 reaches only the intentional panic without a Miri finding",
+        "expected_oracle_observed": true,
+        "matched_compile_error_codes": [],
+        "mitigation_inferred": false,
+        "native_diagnostic_signatures": [],
+        "oracle_role": "catalog_oracle",
+        "repetition_observations": [
+          {
+            "address_reuse_observed": false,
+            "claim_grade": false,
+            "clean_exit": false,
+            "exit_code": 101,
+            "mitigation_inferred": false,
+            "native_diagnostic_signature": null,
+            "repetition": 1,
+            "rust_panic_or_assertion_observed": true,
+            "sanitizer_finding_observed": false,
+            "timed_out": false,
+            "tool_finding_signature": null
+          }
+        ],
+        "status": "patched_safe_panic_control_observed",
+        "tool_finding_signatures": []
+      },
+      "pass_audit_summary": {
+        "audit_file_count": 0,
+        "audit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "claim_grade_file_count": 0,
+        "crate_names": [],
+        "direct_allocator_rewrites_applied": 0,
+        "direct_layout_allocator_rewrites_applied": 0,
+        "semantic_deallocation_like_rewrites_applied": 0,
+        "semantic_drop_rewrites_applied": 0,
+        "semantic_ownership_transfer_rewrites_applied": 0,
+        "semantic_rewrites_applied": 0,
+        "semantic_scope_rewrites_applied": 0,
+        "total_compiler_rewrites_applied": 0,
+        "unresolved_file_count": 0
+      },
+      "pass_audit_validation": {
+        "claim_grade": false,
+        "compiler_rewrite_counts": {
+          "direct_allocator_rewrites_applied": 0,
+          "direct_layout_allocator_rewrites_applied": 0,
+          "semantic_ownership_transfer_rewrites_applied": 0,
+          "semantic_rewrites_applied": 0,
+          "total_compiler_rewrites_applied": 0
+        },
+        "critical_site_coverage_validated": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated",
+          "no_compiler_rewrite_observed"
+        ],
+        "efficacy_eligible": false,
+        "rewrite_route": "none",
+        "status": "not_applicable",
+        "valid": null,
+        "validation_scope": "target_crate_presence_and_force_load_topology_only"
+      },
+      "pass_audits": [],
+      "pass_logs": [],
+      "platform_constraints": {},
+      "repetition_summary": {
+        "address_reuse_observation_count": 0,
+        "claim_grade": false,
+        "clean_exit_count": 0,
+        "executed": 1,
+        "exit_codes": [
+          101
+        ],
+        "mitigation_inferred": false,
+        "native_diagnostic_signal_count": 0,
+        "requested": 1,
+        "timed_out_count": 0,
+        "tool_finding_count": 0
+      },
+      "repetitions_requested": 1,
+      "required_environment": {
+        "MIRIFLAGS": "-Zmiri-ignore-leaks"
+      },
+      "reuse_denial_evidence": {
+        "claim_grade": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "run": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "miri",
+          "run",
+          "--offline",
+          "--locked",
+          "--manifest-path",
+          "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/project/Cargo.toml"
+        ],
+        "cwd": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/project",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "MIRIFLAGS": "-Zmiri-ignore-leaks",
+          "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "MIRIFLAGS",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 101,
+        "stderr": "   Compiling autocfg v1.5.1\n   Compiling version_check v0.9.5\n   Compiling proc-macro2 v1.0.106\n   Compiling unicode-ident v1.0.24\n   Compiling quote v1.0.46\n   Compiling syn v1.0.109\n   Compiling maybe-uninit v2.0.0\n   Compiling cfg-if v0.1.10\n   Compiling lazy_static v1.5.0\n   Compiling proc-macro-hack v0.5.20+deprecated\n   Compiling libc v0.2.186\n   Compiling scopeguard v1.2.0\n   Compiling const_fn v0.4.12\n   Compiling strength_reduce v0.2.4\n   Compiling arrayvec v0.5.2\n   Compiling standback v0.2.17\n   Compiling time v0.2.27\n   Compiling crossbeam-utils v0.7.2\n   Compiling num-traits v0.2.19\n   Compiling memoffset v0.5.6\n   Compiling crossbeam-epoch v0.8.2\n   Compiling crossbeam-channel v0.4.4\n   Compiling crossbeam-queue v0.2.3\n   Compiling num_cpus v1.17.0\n   Compiling num-integer v0.1.46\n   Compiling num-complex v0.3.1\n   Compiling crossbeam-deque v0.7.4\n   Compiling crossbeam v0.7.3\n   Compiling transpose v0.2.3\n   Compiling rustfft v4.1.0\n   Compiling time-macros-impl v0.1.2\n   Compiling displaydoc v0.1.7\n   Compiling linreg v0.2.0\n   Compiling time-macros v0.1.1\n   Compiling basic_dsp_vector v0.9.0\n   Compiling basic_dsp_matrix v0.9.2 (/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2)\nwarning: unused import: `self::elementary::*`\n --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/general/mod.rs:5:9\n  |\n5 | pub use self::elementary::*;\n  |         ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused import: `self::statistics::*`\n --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/general/mod.rs:7:9\n  |\n7 | pub use self::statistics::*;\n  |         ^^^^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::general::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/lib.rs:21:9\n   |\n21 | pub use self::general::*;\n   |         ^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::rededicate::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/lib.rs:23:9\n   |\n23 | pub use self::rededicate::*;\n   |         ^^^^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::complex::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/lib.rs:25:9\n   |\n25 | pub use self::complex::*;\n   |         ^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::real::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/lib.rs:27:9\n   |\n27 | pub use self::real::*;\n   |         ^^^^^^^^^^^^^\n\nwarning: unused import: `self::time_freq::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/lib.rs:29:9\n   |\n29 | pub use self::time_freq::*;\n   |         ^^^^^^^^^^^^^^^^^^\n\nwarning: `basic_dsp_matrix` (lib) generated 7 warnings (run `cargo fix --lib -p basic_dsp_matrix` to apply 7 suggestions)\n   Compiling rsh-057-harness v0.0.0 (/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/project)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.57s\n     Running `/home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/bin/cargo-miri runner /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/target/miri/x86_64-unknown-linux-gnu/debug/rsh-057-harness`\n\nthread 'main' (1000) panicked at src/witness.rs:54:9:\npublished TransformContent conversion panic point\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nnote: in Miri, you may have to set `MIRIFLAGS=-Zmiri-env-forward=RUST_BACKTRACE` for the environment variable to have an effect\n",
+        "stderr_path": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/artifacts/run-001.stderr",
+        "stderr_sha256": "01e03a6f26840f866640f974297ac430a1692d72958c4446d81090975da1d43b",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/artifacts/run-001.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 3.764886167
+      },
+      "runs": [
+        {
+          "command": [
+            "cargo",
+            "+nightly-2026-06-11",
+            "miri",
+            "run",
+            "--offline",
+            "--locked",
+            "--manifest-path",
+            "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/project/Cargo.toml"
+          ],
+          "cwd": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/project",
+          "environment": {
+            "CARGO_INCREMENTAL": "0",
+            "CARGO_TARGET_DIR": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/target",
+            "HOME": "/home/hanqing",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "LOGNAME": "hanqing",
+            "MIRIFLAGS": "-Zmiri-ignore-leaks",
+            "PATH": "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+            "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs",
+            "SHELL": "/usr/bin/zsh",
+            "TERM": "xterm-256color",
+            "USER": "hanqing"
+          },
+          "environment_allowlist": [
+            "CARGO_INCREMENTAL",
+            "CARGO_TARGET_DIR",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LOGNAME",
+            "MIRIFLAGS",
+            "PATH",
+            "RUSTFLAGS",
+            "SHELL",
+            "TERM",
+            "USER"
+          ],
+          "exit_code": 101,
+          "stderr": "   Compiling autocfg v1.5.1\n   Compiling version_check v0.9.5\n   Compiling proc-macro2 v1.0.106\n   Compiling unicode-ident v1.0.24\n   Compiling quote v1.0.46\n   Compiling syn v1.0.109\n   Compiling maybe-uninit v2.0.0\n   Compiling cfg-if v0.1.10\n   Compiling lazy_static v1.5.0\n   Compiling proc-macro-hack v0.5.20+deprecated\n   Compiling libc v0.2.186\n   Compiling scopeguard v1.2.0\n   Compiling const_fn v0.4.12\n   Compiling strength_reduce v0.2.4\n   Compiling arrayvec v0.5.2\n   Compiling standback v0.2.17\n   Compiling time v0.2.27\n   Compiling crossbeam-utils v0.7.2\n   Compiling num-traits v0.2.19\n   Compiling memoffset v0.5.6\n   Compiling crossbeam-epoch v0.8.2\n   Compiling crossbeam-channel v0.4.4\n   Compiling crossbeam-queue v0.2.3\n   Compiling num_cpus v1.17.0\n   Compiling num-integer v0.1.46\n   Compiling num-complex v0.3.1\n   Compiling crossbeam-deque v0.7.4\n   Compiling crossbeam v0.7.3\n   Compiling transpose v0.2.3\n   Compiling rustfft v4.1.0\n   Compiling time-macros-impl v0.1.2\n   Compiling displaydoc v0.1.7\n   Compiling linreg v0.2.0\n   Compiling time-macros v0.1.1\n   Compiling basic_dsp_vector v0.9.0\n   Compiling basic_dsp_matrix v0.9.2 (/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2)\nwarning: unused import: `self::elementary::*`\n --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/general/mod.rs:5:9\n  |\n5 | pub use self::elementary::*;\n  |         ^^^^^^^^^^^^^^^^^^^\n  |\n  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused import: `self::statistics::*`\n --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/general/mod.rs:7:9\n  |\n7 | pub use self::statistics::*;\n  |         ^^^^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::general::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/lib.rs:21:9\n   |\n21 | pub use self::general::*;\n   |         ^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::rededicate::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/lib.rs:23:9\n   |\n23 | pub use self::rededicate::*;\n   |         ^^^^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::complex::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/lib.rs:25:9\n   |\n25 | pub use self::complex::*;\n   |         ^^^^^^^^^^^^^^^^\n\nwarning: unused import: `self::real::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/lib.rs:27:9\n   |\n27 | pub use self::real::*;\n   |         ^^^^^^^^^^^^^\n\nwarning: unused import: `self::time_freq::*`\n  --> /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/subject/basic_dsp_matrix-0.9.2/src/lib.rs:29:9\n   |\n29 | pub use self::time_freq::*;\n   |         ^^^^^^^^^^^^^^^^^^\n\nwarning: `basic_dsp_matrix` (lib) generated 7 warnings (run `cargo fix --lib -p basic_dsp_matrix` to apply 7 suggestions)\n   Compiling rsh-057-harness v0.0.0 (/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/work/project)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.57s\n     Running `/home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/bin/cargo-miri runner /tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/target/miri/x86_64-unknown-linux-gnu/debug/rsh-057-harness`\n\nthread 'main' (1000) panicked at src/witness.rs:54:9:\npublished TransformContent conversion panic point\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\nnote: in Miri, you may have to set `MIRIFLAGS=-Zmiri-env-forward=RUST_BACKTRACE` for the environment variable to have an effect\n",
+          "stderr_path": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "01e03a6f26840f866640f974297ac430a1692d72958c4446d81090975da1d43b",
+          "stdout": "",
+          "stdout_path": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/arms/patched/system/artifacts/run-001.stdout",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "wall_seconds": 3.764886167
+        }
+      ],
+      "runtime_stats": null,
+      "runtime_stats_by_repetition": [],
+      "runtime_stats_validation": {
+        "claim_grade": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated"
+        ],
+        "efficacy_eligible": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs"
+        ]
+      },
+      "scenario_id": "RSH-057-rudra-derived",
+      "schema_version": 1,
+      "source": "unialloc-rustsec-heap-experiment",
+      "source_provenance": {
+        "archive_sha256": "5a49fdbbccf27f92fb6552ff838cc1189c2dcde619611ce86d6f5a7b628d52d8",
+        "base_lock_sha256": "95ef073c6eb223afcf8c3dff70e5bd2a84f8b5eb92bf829f72a827ad92439748",
+        "effective_lock_sha256": "95ef073c6eb223afcf8c3dff70e5bd2a84f8b5eb92bf829f72a827ad92439748",
+        "original_source_sha256": "15c73f4548aadbe8ff5a00ff8b5e90a76196f81cdcd32c01b432827864305ca6",
+        "source_sha256": "15c73f4548aadbe8ff5a00ff8b5e90a76196f81cdcd32c01b432827864305ca6",
+        "witness_module_sha256": "f85bb102eef4f9168d604a51fd41de94b33b03ee675d0ca6ac843dd774f047d7",
+        "wrapper_source_sha256": "96cd08246e1227a94120a821827a735f56c6067f5278666c8b6042aa7181bf43"
+      },
+      "target_crates": [
+        "basic_dsp_matrix",
+        "rsh_057_harness"
+      ],
+      "target_reset": true,
+      "target_reset_reasons": [
+        "fingerprint_changed"
+      ],
+      "tool": "miri",
+      "toolchain": {
+        "cargo": {
+          "command": [
+            "cargo",
+            "+nightly-2026-06-11",
+            "-V"
+          ],
+          "exit_code": 0,
+          "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+          "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+        },
+        "name": "nightly-2026-06-11",
+        "rustc": {
+          "command": [
+            "rustc",
+            "+nightly-2026-06-11",
+            "-vV"
+          ],
+          "exit_code": 0,
+          "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+          "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+        },
+        "target": "x86_64-unknown-linux-gnu"
+      }
+    }
+  ],
+  "claim_boundary": "Per-arm exit status is never a mitigation classification. Claim-grade evaluation requires preregistered repetitions, matched controls, and coverage validation.",
+  "claim_grade": false,
+  "created_at_unix": 1784066347,
+  "orchestration_success": true,
+  "preflight_path": "/tmp/strong-batch-b-system-runs/RSH-057-rudra-derived/preflight.json",
+  "repetitions_requested": 1,
+  "scenario_id": "RSH-057-rudra-derived",
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-experiment-matrix",
+  "toolchain": {
+    "cargo": {
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "-V"
+      ],
+      "exit_code": 0,
+      "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+      "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+    },
+    "name": "nightly-2026-06-11",
+    "rustc": {
+      "command": [
+        "rustc",
+        "+nightly-2026-06-11",
+        "-vV"
+      ],
+      "exit_code": 0,
+      "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+      "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+    },
+    "target": "x86_64-unknown-linux-gnu"
+  },
+  "type_isolation_reuse_edge_evaluation": {
+    "claim_grade": false,
+    "status": "not_applicable",
+    "validated": null
+  },
+  "typeiso_toolchain": null,
+  "unexpected_arm_count": 0,
+  "unsafe_execution_requested": true,
+  "variants": [
+    "system"
+  ]
+}

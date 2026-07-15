@@ -1,0 +1,676 @@
+{
+  "blocked_cases": [],
+  "cases": [
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2020-0047",
+      "case_id": "RSH-005",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "array-queue",
+      "experiment_path": "/tmp/strong-batch-d-run/RSH-005-rudra-heap-adapter/experiment.json",
+      "experiment_sha256": "1c6294335e339021d234e4a88a7ca868770198e299653dbc6ce09fb5bd71e6e6",
+      "fix_evidence": {
+        "commit": "d8931b7b33cf8c638079ab67df073d9b606ded19",
+        "patch_sha256": "a7a0120a8ad685eb6e38e9c477b66bd378790e8bcf202b106c7d0636330abba5",
+        "url": "https://github.com/raviqqe/array-queue/commit/d8931b7b33cf8c638079ab67df073d9b606ded19"
+      },
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-005/Cargo.lock.patched",
+          "sha256": "29fddd5379b6bea9098afcd33a2c136d24f484d61232a5a0d94b0ad1289e4bde"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-005/Cargo.lock.vulnerable",
+          "sha256": "544e51c5741047506dcf4d316d5c342e3e00215dca4ba497c955a2231df6a882"
+        }
+      },
+      "materialization_logs": [
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-005-rudra-heap-adapter-vulnerable.json",
+          "sha256": "76d3c059a95e9d3fe4b30e2cdc81cd881dbc848fb352d6a741bf252996c72069",
+          "variant": "vulnerable"
+        },
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-005-rudra-heap-adapter-patched.json",
+          "sha256": "81975d8fa3021b77ed9633625519ce62757308dded1dcbd0539705fea3f55cb3",
+          "variant": "patched"
+        }
+      ],
+      "notes": [
+        "Rudra-PoC 0017 is preserved byte-for-byte as origin.rs. The heap Box adapter exercises the same ring-index bug in the later 0.4.0 release; upstream PR 7 first ships in 0.4.1."
+      ],
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "clean_tool_runs_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-005-rudra-heap-adapter/arms/patched/system/result.json",
+          "result_sha256": "50d1c595b4ca114cb934fe9422891a1fd8a7a9a39b17cab107a1b02b170ba21a",
+          "run_exit_code": 0,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-005-rudra-heap-adapter/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-005-rudra-heap-adapter/arms/vulnerable/system/result.json",
+          "result_sha256": "d1d3499fe18db11359c9c94353e4051fbbed918191ac0d63ee53342c20f9522d",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-005-rudra-heap-adapter/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "4dd918ba2315af7c924a3ea97aa5bf684011379f8f3431760845bc7d8b257fd0",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_double_free"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "array-queue 0.4.1 runs the same wrapped schedule and exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports attempting double-free when the stale front Box is returned by the final pop_back"
+      },
+      "origin_content_sha256": "f9e5143c30f28a409bd8e03784e09b5df3f79cf7541ecd944d055ebe3c25eafb",
+      "origin_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0017-array-queue.rs",
+      "patched_dependency": {
+        "bytes": 5678,
+        "kind": "crates_io_archive",
+        "package": "array-queue",
+        "sha256": "4fb31ef484e56373b8838ad7cab519c66982512eccc4aeeecba0d28c0ffd10b8",
+        "upstream_commit": "2c4dcc95f20ad58dc9293722c58bba701fa8cd3f",
+        "url": "https://static.crates.io/crates/array-queue/array-queue-0.4.1.crate",
+        "version": "0.4.1"
+      },
+      "preflight_path": "/tmp/strong-batch-d-run/RSH-005-rudra-heap-adapter/preflight.json",
+      "preflight_sha256": "000363302af834ddd18f4621a0db3c7d8ea606b7c51d3b10e0fbb83f7fa666fc",
+      "provenance": "rudra_poc_heap_payload_adapter",
+      "required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "scenario_id": "RSH-005-rudra-heap-adapter",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-005/main.rs",
+      "source_sha256": "7ae2f1f76a1c4596ebea9e7dd5209851667271693913fb12dafccd4e3596c2fd",
+      "terminal_status": "executable_and_validated",
+      "tool": "asan",
+      "vulnerable_dependency": {
+        "bytes": 5775,
+        "kind": "crates_io_archive",
+        "package": "array-queue",
+        "sha256": "88f16b064898f39d79d2d3f0ab3d7f302025d68925740109ad3e3c7244dae430",
+        "upstream_commit": "728fe1bdffb04896d218e962d989a2ae6bf1ea92",
+        "url": "https://static.crates.io/crates/array-queue/array-queue-0.4.0.crate",
+        "version": "0.4.0"
+      }
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2020-0091",
+      "case_id": "RSH-006",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "arc-swap",
+      "experiment_path": "/tmp/strong-batch-d-run/RSH-006-rudra/experiment.json",
+      "experiment_sha256": "17b64e478827ab455efbf5310dd52a786a048fea9ac85ac7a342511494bcec97",
+      "fix_evidence": {
+        "commit": "dfeb84bfce2be11327749c152b3c8f4ea4304e12",
+        "patch_sha256": "9ad26144448fa02c2e401fdbee0d6128634b7df34489e618bbebc8c643274e57",
+        "url": "https://github.com/vorner/arc-swap/commit/dfeb84bfce2be11327749c152b3c8f4ea4304e12"
+      },
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-006/Cargo.lock.patched",
+          "sha256": "9dd311bb56b16c034459730576290032ac19b9cafba72cb9bdbe67b09ffa605a"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-006/Cargo.lock.vulnerable",
+          "sha256": "23e3d9fbe27b06d9c4b09c2542a4dba070002ebdd048eb119fd55b166c9617f3"
+        }
+      },
+      "materialization_logs": [
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-006-rudra-vulnerable.json",
+          "sha256": "75faebb3763cea24e9fcd5e74706fc24764564e6d801d97cbec5fcbbc18cc29a",
+          "variant": "vulnerable"
+        },
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-006-rudra-patched.json",
+          "sha256": "899d7100ce052472da0c47d0f558cae6988ac66f778a0cfba3bbaab12bee4db8",
+          "variant": "patched"
+        }
+      ],
+      "notes": [
+        "Rudra-PoC 0059 executable body is preserved mechanically. Miri is the ground-truth tool because this is a dangling stack reference rather than allocator reuse."
+      ],
+      "observations": {
+        "patched": {
+          "build_exit_code": null,
+          "expected_oracle_observed": true,
+          "oracle_status": "clean_tool_runs_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-006-rudra/arms/patched/system/result.json",
+          "result_sha256": "4b333b785e79ecd5e3bbf0b771a97d304e6c29bdcd1d9c38e752f777aa63d3a1",
+          "run_exit_code": 0,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-006-rudra/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "4e2bea8c8c7e87fe440412778e03b49e467550a015ac279a1707b5c6f793999b",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": null,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-006-rudra/arms/vulnerable/system/result.json",
+          "result_sha256": "7035149da0b0d675136719727b786d7afa83a6f36dc737478b47b8624ab78110",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-006-rudra/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "9183ee2afd4f06cee8e47cda00f4cb9581648f26dda5eb736aa81f696c3763cc",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "miri_undefined_behavior"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "arc-swap 1.1.0 completes the same projection and exits 0 with no Miri finding",
+        "tool": "miri",
+        "vulnerable": "Miri reports Undefined Behavior from a dangling reference when access::Map constructs the loaded guard"
+      },
+      "origin_content_sha256": "915d156df801aaeed767030c680c1ff9b488213de97ea19059553ecbf7840ecb",
+      "origin_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0059-arc-swap.rs",
+      "patched_dependency": {
+        "bytes": 56882,
+        "kind": "crates_io_archive",
+        "package": "arc-swap",
+        "sha256": "ec5a4539a733493f412c4d0bb962748ea1f90f3dfdba9ff3ee18acbefc3b33f0",
+        "upstream_commit": "b45ec18ce6845d4a15643d112395db3fab6de557",
+        "url": "https://static.crates.io/crates/arc-swap/arc-swap-1.1.0.crate",
+        "version": "1.1.0"
+      },
+      "preflight_path": "/tmp/strong-batch-d-run/RSH-006-rudra/preflight.json",
+      "preflight_sha256": "705a41b21d0ec3bde20eb2f29639f98ecf8ff5f5d4c8bac87ae2e671e1b0250c",
+      "provenance": "rudra_poc",
+      "required_environment": {},
+      "scenario_id": "RSH-006-rudra",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-006/main.rs",
+      "source_sha256": "a9df7eea8717324cef53e52001fc82c31e381a098fc27f7b76be68fb6ba3b445",
+      "terminal_status": "executable_and_validated",
+      "tool": "miri",
+      "vulnerable_dependency": {
+        "bytes": 54456,
+        "kind": "crates_io_archive",
+        "package": "arc-swap",
+        "sha256": "0688b520bcc7498f6ca8fa006e8031d353e3fd4f51bd4a50fb03cc4230b28bd2",
+        "upstream_commit": "8b70d693786a89f1d9ebcbb130f5a0dae3ae7965",
+        "url": "https://static.crates.io/crates/arc-swap/arc-swap-1.0.0.crate",
+        "version": "1.0.0"
+      }
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2021-0030",
+      "case_id": "RSH-009",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "scratchpad",
+      "experiment_path": "/tmp/strong-batch-d-run/RSH-009-rudra-heap-adapter/experiment.json",
+      "experiment_sha256": "7fe7ffb459a1a45f71d939f607a044eae1d26006093d43daee05c2d0bfbdc069",
+      "fix_evidence": {
+        "commit": "18abedadaa77646cce6f2ca2149c0119a2e4f428",
+        "patch_sha256": "8276c738e6453cef45afe47051ed4a2115fd027234c35e01a8f8d7fb338c186d",
+        "url": "https://github.com/okready/scratchpad/commit/18abedadaa77646cce6f2ca2149c0119a2e4f428"
+      },
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-009/Cargo.lock.patched",
+          "sha256": "3b0c416c3779d1b21efdc1fe3950befb349eb3c6e81a8b37e7d65e81d0ac97f5"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-009/Cargo.lock.vulnerable",
+          "sha256": "9e949459d7efc252f8ade84df6a4cd8a4ad7642ab1139ca054f3ae0ab0431d92"
+        }
+      },
+      "materialization_logs": [
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-009-rudra-heap-adapter-vulnerable.json",
+          "sha256": "30f82528b3f62015923584572c4c33f748b29d94dc15a1be015878e3caf7f2fd",
+          "variant": "vulnerable"
+        },
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-009-rudra-heap-adapter-patched.json",
+          "sha256": "50dc199c75c565783e5659703238ead8d72cb384601cd2c76332d50dc9c7e32b",
+          "variant": "patched"
+        }
+      ],
+      "notes": [
+        "Rudra-PoC 0141 is preserved byte-for-byte as origin.rs. Replacing the logging-only payload with Box makes the published duplicate drop ASan-visible."
+      ],
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "patched_safe_panic_control_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-009-rudra-heap-adapter/arms/patched/system/result.json",
+          "result_sha256": "52d75925a9ff427ef4a89832f2b34de4d703a1116eee4840a0dee99888e6e309",
+          "run_exit_code": 101,
+          "rust_panic_or_assertion_observed": true,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-009-rudra-heap-adapter/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "9d4b2e6c73394ddf980ffb54e207abb056ba6478a5cbd221e27cb27f881ac22b",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-009-rudra-heap-adapter/arms/vulnerable/system/result.json",
+          "result_sha256": "f8776326252c5d82d9678e9f0006bc314c8823e535cb0ecc7e7cc8a64dc41433",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": true,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-009-rudra-heap-adapter/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "6abac9d228208afde387be368dfb35a56d61b87678e4969f29d035fdc1a4db16",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_double_free"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "scratchpad 1.3.1 reaches an intentional panic with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports attempting double-free while unwinding from the supplied move_elements closure panic"
+      },
+      "origin_content_sha256": "170b326ef9228e6855f8eccc0eaf9bac2cc18662c745a75ec561a26fc518e135",
+      "origin_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0141-scratchpad.rs",
+      "patched_dependency": {
+        "bytes": 54383,
+        "kind": "crates_io_archive",
+        "package": "scratchpad",
+        "sha256": "05c42d7468eaafe45491f0e7f83338604e78ba2eb1555f111009f2b545e9bc1d",
+        "upstream_commit": "c97b1855e98bbcf12ec1b746bf4f5fce5c865b9c",
+        "url": "https://static.crates.io/crates/scratchpad/scratchpad-1.3.1.crate",
+        "version": "1.3.1"
+      },
+      "preflight_path": "/tmp/strong-batch-d-run/RSH-009-rudra-heap-adapter/preflight.json",
+      "preflight_sha256": "be82d524b178ec7d9704d11774a431b52876a2181a3acf33233f9ad0ebbad3fb",
+      "provenance": "rudra_poc_heap_payload_adapter",
+      "required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "scenario_id": "RSH-009-rudra-heap-adapter",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-009/main.rs",
+      "source_sha256": "c5111fc2fe1c145c741cfd8200cef910d9292785030070370a888fbe44b24979",
+      "terminal_status": "executable_and_validated",
+      "tool": "asan",
+      "vulnerable_dependency": {
+        "bytes": 52797,
+        "kind": "crates_io_archive",
+        "package": "scratchpad",
+        "sha256": "befd8192baa9939f3ecad2173d9bb4213c9433a770f4c275af611cd7e1bccb07",
+        "upstream_commit": "49e8c5991a220b6dcccfdabe82120eb28bc2ed8f",
+        "url": "https://static.crates.io/crates/scratchpad/scratchpad-1.3.0.crate",
+        "version": "1.3.0"
+      }
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2026-0142",
+      "case_id": "RSH-074",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "mutringbuf",
+      "experiment_path": "/tmp/strong-batch-d-run/RSH-074-rustsec/experiment.json",
+      "experiment_sha256": "5bbb0080b776b77e4529a86e2b599844d8073c24594427929ab3c6b5564bb5d9",
+      "fix_evidence": {
+        "adapted_patch_sha256": "4cf60802b688c5b7e99e5bda1b19c90693ed6ce70d9fe5d2a5cf207bc1549a1a",
+        "commit": "47bf506edccba840de8e6ae078430a5fbd6d9714",
+        "url": "https://github.com/skilvingr/rust-oneringbuf/commit/47bf506edccba840de8e6ae078430a5fbd6d9714"
+      },
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-074/Cargo.lock.patched",
+          "sha256": "2a93930a194d15a35efab190e8ab0dd3af4cc7c388e0a4e18e48e5caeba2d12f"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-074/Cargo.lock.vulnerable",
+          "sha256": "2a93930a194d15a35efab190e8ab0dd3af4cc7c388e0a4e18e48e5caeba2d12f"
+        }
+      },
+      "materialization_logs": [
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-074-rustsec-vulnerable.json",
+          "sha256": "22fc719874ef20da4861c7582244cb4c33d22e0c2aa6278c0af28e33e026804c",
+          "variant": "vulnerable"
+        },
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-074-rustsec-patched.json",
+          "sha256": "bc5e22cc635c7a25cf70697fc4b40d337877906881a5503018d3f9b4b5f19c55",
+          "variant": "patched"
+        }
+      ],
+      "notes": [
+        "The RustSec payload uses mutringbuf 1.0.0 public names. No patched mutringbuf release exists; the patched control is a hash-pinned path/name adaptation of oneringbuf upstream fix 47bf506."
+      ],
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "clean_tool_runs_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-074-rustsec/arms/patched/system/result.json",
+          "result_sha256": "46a13660343ec4fdb2a4a85727b3ce6de3e96363931fd9e2d4e597c091e9c043",
+          "run_exit_code": 0,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-074-rustsec/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-074-rustsec/arms/vulnerable/system/result.json",
+          "result_sha256": "7ff0d96abbaff4d73150d0cd37a4486c28d2cf954943dbda6fac1388a0219fe7",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-074-rustsec/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "449adc2b56ce5306bd6d4b1b1800b6ba25e2a75fb2ef6c5810dc7ba056b5d13a",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_double_free"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "the hash-pinned upstream ownership fix drops the same ring and exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports double-free when the vmem-backed ring drops bit-copied Vec ownership already released with the source Box"
+      },
+      "origin_content_sha256": "f6960932d3d0e3b6074f93f36ddc04fc91e99deef3a7f8a1ae5f33fd67613133",
+      "origin_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/mutringbuf/RUSTSEC-2026-0142.md",
+      "patched_dependency": {
+        "base_version": "1.0.0",
+        "kind": "scenario_local_patches",
+        "upstream_fix_commit": "47bf506edccba840de8e6ae078430a5fbd6d9714",
+        "upstream_fix_url": "https://github.com/skilvingr/rust-oneringbuf/commit/47bf506edccba840de8e6ae078430a5fbd6d9714"
+      },
+      "preflight_path": "/tmp/strong-batch-d-run/RSH-074-rustsec/preflight.json",
+      "preflight_sha256": "9f0ee7552cb0b99408573f907358a6550d36ae3f7353d0b24f64ce03a1921705",
+      "provenance": "rustsec_inline_mechanical_public_api_adapter",
+      "required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0:disable_coredump=1"
+      },
+      "scenario_id": "RSH-074-rustsec",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-074/main.rs",
+      "source_sha256": "e6542cc0aacb6dd53bab94f460253d0f0a8b815b85f94c0bd6182bd4cb1e7fac",
+      "terminal_status": "executable_and_validated",
+      "tool": "asan",
+      "vulnerable_dependency": {
+        "bytes": 47181,
+        "kind": "crates_io_archive",
+        "package": "mutringbuf",
+        "sha256": "ed8dbbb1d38e66c78a0d6ff3f439ac47ba153dcdbaa1d26e4162ee9f5781f938",
+        "upstream_commit": "83951059bc945cafe86f0fa5755b87d51f708d4d",
+        "url": "https://static.crates.io/crates/mutringbuf/mutringbuf-1.0.0.crate",
+        "version": "1.0.0"
+      }
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2026-0172",
+      "case_id": "RSH-075",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "diesel",
+      "experiment_path": "/tmp/strong-batch-d-run/RSH-075-upstream-regression/experiment.json",
+      "experiment_sha256": "ce4fa55f549a17799be451f80888c03a42f7be342f5b84b7f80ab1de95469950",
+      "fix_evidence": {
+        "commit": "1bc2ea46d9840e8d9af844239d3c84f37fe7d84b",
+        "origin_patch_sha256": "ecaf0f4ed3912f956afd4a2ac68b889c6fd3f2bb6be9a927f667e5082cfe97e3",
+        "url": "https://github.com/diesel-rs/diesel/commit/1bc2ea46d9840e8d9af844239d3c84f37fe7d84b"
+      },
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-075/Cargo.lock.patched",
+          "sha256": "bda3956f161af1a758bf33afdfe628469b1a1f003c152356689df7ea8c9976d7"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-075/Cargo.lock.vulnerable",
+          "sha256": "0d629dc2ff0b23d9fb328cf7026b3f0b3bb54356b14e40371fc4a7f7755cfc9b"
+        }
+      },
+      "materialization_logs": [
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-075-upstream-regression-vulnerable.json",
+          "sha256": "32feb492bcab71343443596f72119ea2e3c254dd0d18b86a95421e2f3cd499de",
+          "variant": "vulnerable"
+        },
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-075-upstream-regression-patched.json",
+          "sha256": "03f0af53efdcb04a027639923336e77f33be6a616d2820f284a8dc96520b73bf",
+          "variant": "patched"
+        }
+      ],
+      "notes": [
+        "The witness is the standalone ordering from upstream regression fix 1bc2ea4. detect_odr_violation=0 is applied to both arms to suppress duplicate bundled-SQLite globals and expose the advisory heap UAF."
+      ],
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "clean_tool_runs_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-075-upstream-regression/arms/patched/system/result.json",
+          "result_sha256": "a30e142ac63fc0d27468da3ad77ebd0c08ad204330fb1acaa9c9253b4222b277",
+          "run_exit_code": 0,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-075-upstream-regression/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-075-upstream-regression/arms/vulnerable/system/result.json",
+          "result_sha256": "4bce9fa7cd57d2eaefd979188cd894705df6664ef96ecac33473879a1cbdbb8e",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-075-upstream-regression/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "8cd5867df4417f57036b54af6ca76ceab819f1112cac27ebad73b736b43da4d2",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_heap_use_after_free"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "Diesel 2.3.10 owns a copy of the serialized bytes, returns the expected rows, and exits 0 with no AddressSanitizer finding",
+        "tool": "asan_c_and_rust",
+        "vulnerable": "AddressSanitizer reports heap-use-after-free in SQLite memdbRead after the caller-owned serialized database buffer is dropped and the connection queries it"
+      },
+      "origin_content_sha256": "ecaf0f4ed3912f956afd4a2ac68b889c6fd3f2bb6be9a927f667e5082cfe97e3",
+      "origin_url": "https://github.com/diesel-rs/diesel/commit/1bc2ea46d9840e8d9af844239d3c84f37fe7d84b.patch",
+      "patched_dependency": {
+        "bytes": 445593,
+        "kind": "crates_io_archive",
+        "package": "diesel",
+        "sha256": "29fe29a87fb84c631ffb3ba21798c4b1f3a964701ba78f0dce4bf8668562ec88",
+        "upstream_commit": "7b4f88861420ba7902f2cf7ef7f7c36a0e34face",
+        "url": "https://static.crates.io/crates/diesel/diesel-2.3.10.crate",
+        "version": "2.3.10"
+      },
+      "preflight_path": "/tmp/strong-batch-d-run/RSH-075-upstream-regression/preflight.json",
+      "preflight_sha256": "ff4c4c025629c15e36713751906e22776a2ff701d13f85119d895423ee3a94bc",
+      "provenance": "upstream_fix_regression_test_standalone_adapter",
+      "required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0:detect_odr_violation=0:disable_coredump=1"
+      },
+      "scenario_id": "RSH-075-upstream-regression",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-075/main.rs",
+      "source_sha256": "7b6666f9daa4784955844676135e24779824358520cfa0a5c4712490f75add97",
+      "terminal_status": "executable_and_validated",
+      "tool": "asan_c_and_rust",
+      "vulnerable_dependency": {
+        "bytes": 442357,
+        "kind": "crates_io_archive",
+        "package": "diesel",
+        "sha256": "9940fb8467a0a06312218ed384185cb8536aa10d8ec017d0ce7fad2c1bd882d5",
+        "upstream_commit": "2e7eb3567574f6d8660e97ab83abac1b71631e63",
+        "url": "https://static.crates.io/crates/diesel/diesel-2.3.9.crate",
+        "version": "2.3.9"
+      }
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2026-0205",
+      "case_id": "RSH-076",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "scc",
+      "experiment_path": "/tmp/strong-batch-d-run/RSH-076-upstream-reduction/experiment.json",
+      "experiment_sha256": "2f46970072af0d0e5a63c81340e25b1bd855625ef2320a0d488df5afaec31c5a",
+      "fix_evidence": {
+        "commit": "49fae93447789877c7529e2114dde048e711a8c5",
+        "merge_commit": "b053aca690f244b5a0fe9d16c6085040d5d8ccaa",
+        "patch_sha256": "03a3859b7024f6fd550f04f2d93a8dd2689e9d0b3f184b0adb73902f24a54a07",
+        "url": "https://codeberg.org/wvwwvwwv/scalable-concurrent-containers/commit/49fae93447789877c7529e2114dde048e711a8c5"
+      },
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-076/Cargo.lock.patched",
+          "sha256": "5fd638f091237dab041860e1b0547a1e5a2d3fb2489a9e2f4e33e0039c8fc53a"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-076/Cargo.lock.vulnerable",
+          "sha256": "a11927e798522f7b8f872dd7945ffdc741512b6ed03f90f5707cf1154bc3f99c"
+        }
+      },
+      "materialization_logs": [
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-076-upstream-reduction-vulnerable.json",
+          "sha256": "23fe151741310176169914a119695b74e690ec9f662be0d639683f1b15af2970",
+          "variant": "vulnerable"
+        },
+        {
+          "path": "/tmp/strong-batch-d-materialize-logs/RSH-076-upstream-reduction-patched.json",
+          "sha256": "20cc6beb5e0516f4283256d6afac7428e16bc5593ffe5c9030b5d15f16d9e3e7",
+          "variant": "patched"
+        }
+      ],
+      "notes": [
+        "The witness is a mechanical heap-owning adapter for upstream issue 232; its comparator panic and public TreeIndex path match the published exception-safety edge."
+      ],
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "clean_tool_runs_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-076-upstream-reduction/arms/patched/system/result.json",
+          "result_sha256": "8158f917d933664e3241bcc6fd84dcdc63cf5c266d025626370fe5c80d8cbb98",
+          "run_exit_code": 0,
+          "rust_panic_or_assertion_observed": true,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-076-upstream-reduction/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "e587e2ad999ecb20a5f729fdb3861e88bb446b6d68ac90c24b1a3f4eb254afc9",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-d-run/RSH-076-upstream-reduction/arms/vulnerable/system/result.json",
+          "result_sha256": "cdf8de56dccae5807ae94fdfe8e60929e1aa0ca6f9f7a645c3d9273d6a4b8e7e",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": true,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-d-run/RSH-076-upstream-reduction/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "063a1380679b5cfc603483e26dab5c9548bc1afa17f51532fc1afdc2dffea58d",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_double_free"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "scc 3.8.4 reaches the same caught comparator panic, drops the TreeIndex, and exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports double-free when TreeIndex drop reclaims a Box owner bit-copied before the user comparator panicked"
+      },
+      "origin_content_sha256": "95d53018fe4c23cf8d4e039b1a0f27857f06dcec3488941c416740b695ff786e",
+      "origin_url": "https://codeberg.org/wvwwvwwv/scalable-concurrent-containers/issues/232",
+      "patched_dependency": {
+        "bytes": 142326,
+        "kind": "crates_io_archive",
+        "package": "scc",
+        "sha256": "7800bc2c7e91b26aeae70c2ab6eaa653efc133104b7756e674c99304adff3fdb",
+        "upstream_commit": "151ebbf063bdd8f8d92eb48cb2f659bbdfcf3371",
+        "url": "https://static.crates.io/crates/scc/scc-3.8.4.crate",
+        "version": "3.8.4"
+      },
+      "preflight_path": "/tmp/strong-batch-d-run/RSH-076-upstream-reduction/preflight.json",
+      "preflight_sha256": "1335b0664f56b880f37e7e57d45b1a22b2feb8dece20cbcca63d1b068b0f18be",
+      "provenance": "upstream_issue_mechanical_heap_owner_adapter",
+      "required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0:disable_coredump=1"
+      },
+      "scenario_id": "RSH-076-upstream-reduction",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-076/main.rs",
+      "source_sha256": "9d33fa702227e455399cd9e7e33c0cf80806d7e2aa86d390ef842efadfe0407b",
+      "terminal_status": "executable_and_validated",
+      "tool": "asan",
+      "vulnerable_dependency": {
+        "bytes": 141795,
+        "kind": "crates_io_archive",
+        "package": "scc",
+        "sha256": "5581cd5dd2cb79cbe9d8137071d67f62f0db926e83a07b4d14561c5b7d423776",
+        "upstream_commit": "3ac210342ca20640494b34b4b5b5b15bad6469b6",
+        "url": "https://static.crates.io/crates/scc/scc-3.8.3.crate",
+        "version": "3.8.3"
+      }
+    }
+  ],
+  "catalog": {
+    "path": "/tmp/strong-batch-d-catalog.json",
+    "sha256": "75a45a294c637238230645b589e7853c9bc0ce0e967e06e5b9ba14f145f3ad92"
+  },
+  "claim_boundary": "These one-repetition sanitizer and Miri runs establish executable vulnerable/patched ground truth. They do not constitute claim-grade allocator mitigation evidence.",
+  "counts": {
+    "assigned": 6,
+    "blocked": 0,
+    "executable": 6,
+    "materialized_arms": 12,
+    "validated_patched": 6,
+    "validated_vulnerable": 6
+  },
+  "generated_at_unix": 1784067646,
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-strong-batch-d-status",
+  "validation": {
+    "commands": {
+      "list": "python3 evaluation/scripts/run_rustsec_heap_harness.py --catalog /tmp/strong-batch-d-catalog.json --action list",
+      "materialize_template": "python3 evaluation/scripts/run_rustsec_heap_harness.py --catalog /tmp/strong-batch-d-catalog.json --action materialize --scenario <scenario> --variant <vulnerable|patched> --cache /tmp/strong-batch-d-cache --work-dir <dir> --allow-download",
+      "run_template": "python3 evaluation/scripts/run_rustsec_heap_experiment.py --catalog /tmp/strong-batch-d-catalog.json --action run --scenario <scenario> --variants system --archive-variants vulnerable,patched --output-dir <dir> --cache /tmp/strong-batch-d-cache --allow-download --execute-unsafe --jobs 1 --repetitions 1 --build-timeout 1200 --run-timeout 60"
+    },
+    "integrity_report_path": "/tmp/strong-batch-d-hashes.json",
+    "integrity_report_sha256": "274defd5d9873214a5d8d4e9d59986fa77bda2d2f66b30b4deff58b179bb1830",
+    "materialization_logs_root": "/tmp/strong-batch-d-materialize-logs",
+    "materialization_root": "/tmp/strong-batch-d-materialize",
+    "official_runner_exit_codes_path": "/tmp/strong-batch-d-run/exit-codes.tsv",
+    "official_runner_exit_codes_sha256": "6bc377c852c1b3022d1fb18075101f960542747593369727333aa63c17204387",
+    "repetitions_per_arm": 1,
+    "run_root": "/tmp/strong-batch-d-run",
+    "target": "x86_64-unknown-linux-gnu",
+    "toolchain": "nightly-2026-06-11"
+  }
+}

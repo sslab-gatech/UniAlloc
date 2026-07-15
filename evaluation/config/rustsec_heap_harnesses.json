@@ -1,0 +1,1584 @@
+{
+  "cases": [
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-001",
+      "crate": "chttp",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-001/Cargo.lock.patched",
+          "sha256": "c91313c9443d08d243ab1bdc330e55861dc20e8a71a1d80de061b5caa877f1c4"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-001/Cargo.lock.vulnerable",
+          "sha256": "97120e3a0dd02b9d09ab5a2a5256f5860e3be662e2a842fae920176661482930"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 12917,
+        "kind": "crates_io_archive",
+        "package": "chttp",
+        "sha256": "100bd60b91a39fbc0b07a3802d752050256ddb4a67c5407425a55b40371451ed",
+        "upstream_commit": "961754dd50c3c14ab5e4806fef0f34d7226d818d",
+        "url": "https://static.crates.io/crates/chttp/chttp-0.1.3.crate",
+        "version": "0.1.3"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "release",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "upstream 0.1.3 exits 0 with no sanitizer finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports attempting double-free in free when the converted Vec drops"
+          },
+          "origin_url": "https://github.com/sagebind/isahc/issues/2",
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-001-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-001/main.rs",
+          "source_sha256": "2ccb115802e04ce7bc05a7b45ac80c47084d5ec9c80b4a4166ca70a2dd384318",
+          "subject_patches": [
+            {
+              "apply_variants": [
+                "vulnerable",
+                "patched"
+              ],
+              "kind": "hashed_subject_patch",
+              "label": "visibility and TLS-independent build adapter",
+              "path": "evaluation/harnesses/rustsec_heap/RSH-001/patches/expose-buffer.patch",
+              "resulting_source_files_by_variant": {
+                "patched": {
+                  "Cargo.toml": "6be9402523878adacff7e24a6fcd721292f48179db1a29bb9beae7b587a1eefc",
+                  "src/lib.rs": "38cee4fb11f504bfe06f478ce453a7556f8d739fd036922ba3651140a4842347"
+                },
+                "vulnerable": {
+                  "Cargo.toml": "296e7618860f8c95bff5f1aeaac64161a77e13fc26feafe4e25e749a5fee938f",
+                  "src/lib.rs": "38cee4fb11f504bfe06f478ce453a7556f8d739fd036922ba3651140a4842347"
+                }
+              },
+              "sha256": "b35c7e8634962e51d8191ba97b494caaea51328b816c3a0279eabc5735529d7f"
+            }
+          ]
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 12757,
+        "kind": "crates_io_archive",
+        "package": "chttp",
+        "sha256": "d8e3ad8845e4f6f7518f6c92c29f1d6d65903838fd467dbdfa35a5e3ab3b265b",
+        "upstream_commit": "1f9ad562a5fe9cffde9cfa47bf2d0646e40e3159",
+        "url": "https://static.crates.io/crates/chttp/chttp-0.1.2.crate",
+        "version": "0.1.2"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-002",
+      "crate": "bitvec",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-002/Cargo.lock.patched",
+          "sha256": "e8cf86b1a5b4075d78e744678f5a8c7c10be0658961e49557a0ba9e6df73a7ad"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-002/Cargo.lock.vulnerable",
+          "sha256": "b017592e511d6ba9955d4410290ba638b216cfc193ce1d00eb6846ed4e4345a8"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 105529,
+        "kind": "crates_io_archive",
+        "package": "bitvec",
+        "sha256": "41262f11d771fd4a61aa3ce019fca363b4b6c282fca9da2a31186d3965a47a5c",
+        "upstream_commit": "b8c2ec36dce7aa57445cafba2c4bbb4ba2d664d0",
+        "url": "https://static.crates.io/crates/bitvec/bitvec-0.17.4.crate",
+        "version": "0.17.4"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "exit 0 with no sanitizer finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports double-free"
+          },
+          "origin_content_sha256": "0d16a928fd9d95c463a23aa36036aa085dc389e45eb4c1a0e5fe2b8c1966f6b3",
+          "origin_url": "https://github.com/kulp/bitvec-debugging/tree/57eb755d58fa0c1ff2243525646e8aed7f1819bb",
+          "provenance": "linked_repository",
+          "required_environment": {},
+          "rustflags": [
+            "-Ainvalid_reference_casting"
+          ],
+          "scenario_id": "RSH-002-published",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-002/main.rs",
+          "source_sha256": "41cbb39482ac77bdcbe3ae77c6b51180faa30b027b2c94f1d9b45c05ab97ebfe"
+        },
+        {
+          "adapter_kind": "derived_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "derived_reuse_experiment",
+          "compiler_target_crates": [
+            "rsh-002-harness"
+          ],
+          "compiler_target_exclusion": {
+            "claim_boundary": "The experiment validates allocator policy under manual victim attribution and records automatic compiler victim coverage as unvalidated.",
+            "compiler_automatic_victim_coverage": false,
+            "reason": "The derived adapter supplies the vulnerable BitVec allocation and reclaim identity manually; the compiler audit binds the distinct harness replacement site.",
+            "subject_crate": "bitvec"
+          },
+          "oracle": {
+            "patched_control": "same address grooming exits 0",
+            "tool": "asan",
+            "vulnerable": "old address equals Replacement address and stale invalid free is reported"
+          },
+          "origin_url": "https://github.com/ferrilab/bitvec/issues/55",
+          "patched_source": {
+            "source_path": "evaluation/harnesses/rustsec_heap/RSH-002/derived_reuse_patched.rs",
+            "source_sha256": "ce184d4b223762d935f6f3bf71800290206a3bd5d320be5e41b983059a687055"
+          },
+          "provenance": "derived_adapter",
+          "required_environment": {
+            "ASAN_OPTIONS": "quarantine_size_mb=0:thread_local_quarantine_size_kb=0"
+          },
+          "rustflags": [
+            "-Ainvalid_reference_casting"
+          ],
+          "scenario_id": "RSH-002-derived-reuse",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-002/derived_reuse.rs",
+          "source_sha256": "d6ebecf4f322b65a5405f873d4cddfe160fb361c61f46940ba7e22808cd4f324",
+          "type_isolation_edge_annotation": {
+            "annotation_scope": [
+              "BitVec::with_capacity victim allocation",
+              "BitVec-to-BitBox victim reclaim"
+            ],
+            "claim_scope": "derived RSH-002 cross-identity A-to-B reuse edge only",
+            "expected_layout": {
+              "align": 8,
+              "size": 1016
+            },
+            "kind": "manual_exact_vulnerability_edge_identity",
+            "replacement_semantic_type_fragment": "Box<witness::Replacement",
+            "replacement_source_file_fragment": "src/witness.rs:",
+            "schema_version": 1,
+            "victim_module_id": 5932164307604209666,
+            "victim_type_id": 5932164307604209665
+          }
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 105418,
+        "kind": "crates_io_archive",
+        "package": "bitvec",
+        "sha256": "fea3f6954750547b48aa42185a8fd6ef09e3ecaff57901e386d5f0df79b3b99d",
+        "upstream_commit": "e3b5ca225743a28dc851e207c0b8180caa4b18f9",
+        "url": "https://static.crates.io/crates/bitvec/bitvec-0.17.3.crate",
+        "version": "0.17.3"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-003",
+      "crate": "internment",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-003/Cargo.lock.patched",
+          "sha256": "49a5ef44f83c534424db0d0c7393b0495b90ba6aebb16f4ca32e5a8921e0211c"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-003/Cargo.lock.vulnerable",
+          "sha256": "fa31d8a1e6ca99b0615df55241713a4a5d9bda21c35fdeea0ccb16dae77f927a"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 21395,
+        "kind": "crates_io_archive",
+        "package": "internment",
+        "sha256": "4e674c13abf4b23da884931b189fa03f4df086f024e7360b2109a2ec84cbb3cf",
+        "upstream_commit": "c0dbdd20b2c551bae0f69243f0565ffc6f6b0262",
+        "url": "https://static.crates.io/crates/internment/internment-0.4.0.crate",
+        "version": "0.4.0"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "upstream 0.4.0 exits 0 with no sanitizer finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports heap-use-after-free in ArcIntern::drop"
+          },
+          "origin_url": "https://github.com/droundy/internment/pull/14",
+          "provenance": "upstream_patch_regression",
+          "required_environment": {
+            "ASAN_OPTIONS": "detect_leaks=0"
+          },
+          "rustflags": [],
+          "scenario_id": "RSH-003-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-003/main.rs",
+          "source_sha256": "e19c1807003a3b9df900332d940b1def3ebe8dc408aa4a5a33cbd7bac62e0bc4"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 16451,
+        "kind": "crates_io_archive",
+        "package": "internment",
+        "sha256": "7e5cba670f596a69e619cb796bcf609cb32c0ba4415d1e809104b8b832130d79",
+        "upstream_commit": "35966593c5708bdef989902a68eab09ebba2e698",
+        "url": "https://static.crates.io/crates/internment/internment-0.3.13.crate",
+        "version": "0.3.13"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {
+          "futures": "=0.3.31",
+          "pin-project": "=0.4.30"
+        },
+        "vulnerable_extra_dependencies": {
+          "futures": "=0.3.31",
+          "pin-project": "=0.4.30"
+        }
+      },
+      "case_id": "RSH-004",
+      "crate": "actix-codec",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-004/Cargo.lock.patched",
+          "sha256": "26a2bc85f159316e07747399ceccba7bae985093c1403056849c0bd30e97e826"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-004/Cargo.lock.vulnerable",
+          "sha256": "278e3691952fceffb3e3978aad7efedbae6b92fd442f7e192d67c0e4b991a3b5"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 9426,
+        "kind": "crates_io_archive",
+        "package": "actix-codec",
+        "sha256": "cc061297f0e673f84bbbc25f878120800ce47bb3922158b976e0fca904731f04",
+        "upstream_commit": "119dc39f5b8b0532b1e96e83f66b6f900ca74de1",
+        "url": "https://static.crates.io/crates/actix-codec/actix-codec-0.3.0-beta.1.crate",
+        "version": "0.3.0-beta.1"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "pinned Framed control exits 0 under Miri",
+            "tool": "miri",
+            "vulnerable": "Miri reports invalidated retag after Framed is moved"
+          },
+          "origin_url": "https://github.com/actix/actix-net/issues/91",
+          "patched_source": {
+            "source_path": "evaluation/harnesses/rustsec_heap/RSH-004/patched.rs",
+            "source_sha256": "007824a2d29b7b4bd668a3632ccae225c2a299352ec93e9e2c2fb68e0bab1b44"
+          },
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-004-published",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-004/main.rs",
+          "source_sha256": "c2bf6fe056ca8bec315b5abfa9464b8b31761a077b5cb93495269888b18c6902"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 9307,
+        "kind": "crates_io_archive",
+        "package": "actix-codec",
+        "sha256": "09e55f0a5c2ca15795035d90c46bd0e73a5123b72f68f12596d6ba5282051380",
+        "upstream_commit": "32202188cc25359b0360f19583d23eb52564cf3d",
+        "url": "https://static.crates.io/crates/actix-codec/actix-codec-0.2.0.crate",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-008",
+      "crate": "lru",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-008/Cargo.lock.patched",
+          "sha256": "933463943e6a7a9d202299c2e350a3c53c3f22d6980b51bf5772ff706b72592e"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-008/Cargo.lock.vulnerable",
+          "sha256": "2c1014cf295ae26025794cec2c64b6c402d59f9588d5b496022057264114f47a"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 11699,
+        "kind": "crates_io_archive",
+        "package": "lru",
+        "sha256": "469898e909a1774d844793b347135a0cd344ca2f69d082013ecb8061a2229a3a",
+        "upstream_commit": "6fbecc23dff27ace041331745e9aab8739a2c2c7",
+        "url": "https://static.crates.io/crates/lru/lru-0.7.1.crate",
+        "version": "0.7.1"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "source rejected with E0502",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports heap-use-after-free"
+          },
+          "origin_content_sha256": "33da195ebc4730967dff84369486d924610a3f6976d088a794b3c240814118b0",
+          "origin_url": "https://github.com/jeromefroe/lru-rs/issues/120",
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-008-published",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-008/main.rs",
+          "source_sha256": "b03170ee45c9d7e321c630caae4e7fddd26e56e57b846ca9e5cb5355901c9f6f"
+        },
+        {
+          "adapter_kind": "derived_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "derived_reuse_experiment",
+          "compiler_target_crates": [
+            "rsh-008-harness"
+          ],
+          "compiler_target_exclusion": {
+            "claim_boundary": "The experiment validates allocator policy under manual victim attribution and records automatic compiler victim coverage as unvalidated.",
+            "compiler_automatic_victim_coverage": false,
+            "reason": "The derived adapter supplies the vulnerable LruEntry allocation and reclaim identity manually; the compiler audit binds the distinct harness replacement site.",
+            "subject_crate": "lru"
+          },
+          "oracle": {
+            "patched_control": "same address grooming exits 0",
+            "tool": "native_address_trace",
+            "vulnerable": "stale value and Replacement addresses are equal during clean reuse grooming"
+          },
+          "origin_url": "https://github.com/jeromefroe/lru-rs/issues/120",
+          "patched_source": {
+            "source_path": "evaluation/harnesses/rustsec_heap/RSH-008/derived_reuse_patched.rs",
+            "source_sha256": "c93dbe4f4748cd67a9e3fa4a76a16894558d532f491382756a251cc9f14a995d"
+          },
+          "provenance": "derived_adapter",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-008-derived-reuse",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-008/derived_reuse.rs",
+          "source_sha256": "913cb07efae1dce241ebbfd6b2ec4ad460fb250aef2a3bfc069e1bf76dcb2f67",
+          "type_isolation_edge_annotation": {
+            "annotation_scope": [
+              "LruCache::put Box<LruEntry<u32, String>> victim allocation",
+              "LruCache::pop Box<LruEntry<u32, String>> victim reclaim"
+            ],
+            "claim_scope": "derived RSH-008 LruEntry-to-Replacement cross-identity reuse edge only",
+            "expected_layout": {
+              "align": 8,
+              "size": 48
+            },
+            "kind": "manual_exact_vulnerability_edge_identity",
+            "replacement_semantic_type_fragment": "Box<witness::Replacement",
+            "replacement_source_file_fragment": "src/witness.rs:",
+            "schema_version": 1,
+            "victim_module_id": 5932164333374013442,
+            "victim_type_id": 5932164333374013441
+          }
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 11672,
+        "kind": "crates_io_archive",
+        "package": "lru",
+        "sha256": "6c748cfe47cb8da225c37595b3108bea1c198c84aaae8ea0ba76d01dda9fc803",
+        "upstream_commit": "09f68c63755b35f9cf5cb5d6765cf8dc080f9ea3",
+        "url": "https://static.crates.io/crates/lru/lru-0.7.0.crate",
+        "version": "0.7.0"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": false,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-015",
+      "crate": "arrow2",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-015/Cargo.lock.patched",
+          "sha256": "6c793092aa52ecd564cb3d2839357bc0fd1652eec1b31b621056d77a28570090"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-015/Cargo.lock.vulnerable",
+          "sha256": "99d7b822916d0be600cb9439075ec17cbc730d844300b035ee9c9e1626eee841"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 640819,
+        "kind": "crates_io_archive",
+        "package": "arrow2",
+        "sha256": "36cf490284453aad7556bbb0874b25a8bdd66ef2e9f43a0c5c42646374a44a38",
+        "upstream_commit": "45eed51a65a868e37289bcc2dc6c8f907c449069",
+        "url": "https://static.crates.io/crates/arrow2/arrow2-0.7.1.crate",
+        "version": "0.7.1"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "allocator_boundary_detection_candidate",
+          "oracle": {
+            "patched_control": "Clone API absent; source rejected with E0599",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports heap-use-after-free during duplicate release"
+          },
+          "origin_content_sha256": "7f6d2bf7d94b1c02a2b0943762bb58a1b40b27a510155202ed34ec41ee378bb7",
+          "origin_url": "https://github.com/jorgecarleitao/arrow2/issues/880",
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-015-published",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-015/main.rs",
+          "source_sha256": "9db0e0000ce3e9e9f7d5c1a6c28a55f43fe7a926bb62ab087f9e572f6cbbb140"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 640998,
+        "kind": "crates_io_archive",
+        "package": "arrow2",
+        "sha256": "d873e2775c3d87a4e8d77aa544cbd43f34a0779d5164c59e7c6a1dd0678eb395",
+        "upstream_commit": "5fc843d8ca0c53b37ab589b35c78b899cacc96dd",
+        "url": "https://static.crates.io/crates/arrow2/arrow2-0.7.0.crate",
+        "version": "0.7.0"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": false,
+        "features": [
+          "collections"
+        ],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-016",
+      "crate": "bumpalo",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-016/Cargo.lock.patched",
+          "sha256": "d547521ad82273ef0a8647eefbbada33c251a4c04d4be3643380ab0f3fb740bc"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-016/Cargo.lock.vulnerable",
+          "sha256": "2a8ad587f42b565288d3e159c9485a5ee3441ea0db1cebcfaf2bc7fa248e6c1e"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 81207,
+        "kind": "crates_io_archive",
+        "package": "bumpalo",
+        "sha256": "572f695136211188308f16ad2ca5c851a712c464060ae6974944458eb83880ba",
+        "upstream_commit": "10492c6a566e5ea1230bbfbaa0e1335f288ba448",
+        "url": "https://static.crates.io/crates/bumpalo/bumpalo-3.11.1.crate",
+        "version": "3.11.1"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "source rejected with E0505",
+            "tool": "native_value_oracle",
+            "vulnerable": "observed arena bytes differ from 0x01 and assertion fails"
+          },
+          "origin_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/bumpalo/RUSTSEC-2022-0078.md",
+          "provenance": "rustsec_inline",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-016-advisory",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-016/main.rs",
+          "source_sha256": "7ab7a15781e8be424aa938103bcea9c40b9a5656255662902c212fce91a6bde2"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 80945,
+        "kind": "crates_io_archive",
+        "package": "bumpalo",
+        "sha256": "c1ad822118d20d2c234f427000d5acc36eabe1e29a348c89b63dd60b13f28e5d",
+        "upstream_commit": "9f8f3b808585b9f645250aadd3f054b8c9036f4e",
+        "url": "https://static.crates.io/crates/bumpalo/bumpalo-3.11.0.crate",
+        "version": "3.11.0"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-017",
+      "crate": "secp256k1",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-017/Cargo.lock.patched",
+          "sha256": "22438a2f8d678b05129ebe09046145becdca0a4d6102a22fd6abd1b223cf43ba"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-017/Cargo.lock.vulnerable",
+          "sha256": "aca8616af2c223a29c11d8ef848cd3cbf11d478ae3bf889dc8ab555c6ff8f266"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 66261,
+        "kind": "crates_io_archive",
+        "package": "secp256k1",
+        "sha256": "d9512ffd81e3a3503ed401f79c33168b9148c75038956039166cd750eaa037c3",
+        "upstream_commit": "959bd2553606247cabe104764e867455226fb129",
+        "url": "https://static.crates.io/crates/secp256k1/secp256k1-0.24.2.crate",
+        "version": "0.24.2"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "source rejected with E0597",
+            "tool": "asan_c_and_rust",
+            "vulnerable": "AddressSanitizer reports heap-use-after-free in instrumented C"
+          },
+          "origin_url": "https://github.com/rust-bitcoin/rust-secp256k1/issues/543",
+          "provenance": "upstream_issue",
+          "required_environment": {
+            "CC": "clang",
+            "CFLAGS": "-fsanitize=address -fno-omit-frame-pointer"
+          },
+          "rustflags": [],
+          "scenario_id": "RSH-017-uaf",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-017/uaf.rs",
+          "source_sha256": "156fd3450031ec917d241dbbf56f55b097e8cdb1b4cfc6560a87bc93608c68b5"
+        },
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "allocator_boundary_detection_candidate",
+          "oracle": {
+            "patched_control": "source rejected with E0599",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports bad free of stack address"
+          },
+          "origin_url": "https://github.com/rust-bitcoin/rust-secp256k1/issues/543",
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-017-invalid-free",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-017/invalid_free.rs",
+          "source_sha256": "496cac3d7b559b74f462051ad867660ed321164b35c12783522e88ee5f21d65c"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 66152,
+        "kind": "crates_io_archive",
+        "package": "secp256k1",
+        "sha256": "ff55dc09d460954e9ef2fa8a7ced735a964be9981fd50e870b2b3b0705e14964",
+        "upstream_commit": "15a8c20427b31778f3e2bbfc34bbb9abfca4b8c7",
+        "url": "https://static.crates.io/crates/secp256k1/secp256k1-0.24.1.crate",
+        "version": "0.24.1"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-018",
+      "crate": "arenavec",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-018/Cargo.lock.patched",
+          "sha256": "7bfe0ee1e67921cdaabb7b97f884e12806e11c7e65979f31a41e2d89b65efdb3"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-018/Cargo.lock.vulnerable",
+          "sha256": "7bfe0ee1e67921cdaabb7b97f884e12806e11c7e65979f31a41e2d89b65efdb3"
+        }
+      },
+      "patched_dependency": {
+        "base_version": "0.1.1",
+        "kind": "scenario_local_patches"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "allocator_boundary_detection_candidate",
+          "local_patched_control": {
+            "kind": "hashed_local_patch",
+            "label": "split ownership transfer",
+            "path": "evaluation/harnesses/rustsec_heap/RSH-018/patches/issue-6.patch",
+            "resulting_source_files": {
+              "src/common.rs": "86f41c185c537924e6f5b1eb7af1491dd1717f1c93eef42f36b8b56347a2bdba"
+            },
+            "sha256": "c6b80e28311ba03a84404fc2c2d5bf72dedeeb271579b760b8456ba0845929ab"
+          },
+          "oracle": {
+            "patched_control": "local ownership-transfer patch exits 0",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports double-free"
+          },
+          "origin_content_sha256": "57c66197c34421157657e764619941080e6aa278d36813425349f7b2dfbe8664",
+          "origin_url": "https://github.com/ibabushkin/arenavec/issues/6",
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-018-split-off",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-018/main.rs",
+          "source_sha256": "69bb3f125656db19fc75580370d89fd6264af970d538d95e27e832e44c999be7"
+        },
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "release",
+          "classification_role": "published_negative_control",
+          "local_patched_control": {
+            "kind": "hashed_local_patch",
+            "label": "unsafe AllocHandle contract",
+            "path": "evaluation/harnesses/rustsec_heap/RSH-018/patches/issue-4.patch",
+            "resulting_source_files": {
+              "src/common.rs": "3683537d85bf5940053c6fee917f15a7661b311bb78630a9c9d1f371893edcdb",
+              "src/rc.rs": "0f8746ba2a9785d1876279a0a9580dbec217609266eec18141678ec609e3e949",
+              "src/region.rs": "055fc8cc85b0363a517df6f0d9a1b153ce53fe412366bd91c14d5b0802bf0773"
+            },
+            "sha256": "372fa7799587d3f61ad173e35bff1b494f47becbafb61c1a0c9891b7fae3752c"
+          },
+          "oracle": {
+            "patched_control": "local unsafe-trait patch rejects source with E0200",
+            "tool": "asan",
+            "vulnerable": "release ASan reports invalid write at forged address"
+          },
+          "origin_content_sha256": "4ab7710560cadb508920080823032045c61feefb7297179e66e6f8fac0131443",
+          "origin_url": "https://github.com/ibabushkin/arenavec/issues/4",
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-018-unsafe-alloc-handle",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-018/unsafe_alloc_handle.rs",
+          "source_sha256": "a5a47f98264842ac3861d132a089c565835837a80993c3eee75747e3f12fc848"
+        },
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "local_patched_control": {
+            "kind": "hashed_local_patch",
+            "label": "arena extension capacity check",
+            "path": "evaluation/harnesses/rustsec_heap/RSH-018/patches/issue-5.patch",
+            "resulting_source_files": {
+              "src/common.rs": "e9549dfbd31549014db84fba6d1d01fc48d611a7cab8e873b95f2e3462e8adb2"
+            },
+            "sha256": "74226780c2d6897842e3aff501a91697f1c226205c70d220bfe1e6c3e33c2677"
+          },
+          "oracle": {
+            "patched_control": "local capacity patch fails safely without ASan finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports heap-buffer-overflow"
+          },
+          "origin_content_sha256": "fc0dd21510fb3b9bcb9c45fedbff092681f89e1dbf44f79727b77a96bdf2aa69",
+          "origin_url": "https://github.com/ibabushkin/arenavec/issues/5",
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-018-reserve-overflow",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-018/reserve_overflow.rs",
+          "source_sha256": "7ea033707e9c6c016eea4857184e28d9a68cb66a61cfe411e54801f636c42c6a"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 61299,
+        "kind": "crates_io_archive",
+        "package": "arenavec",
+        "sha256": "6a3e67a915715bc53e5661cad0da54498e890bb1ffc3ab2d7ad746d81a717633",
+        "upstream_commit": "ce565aea200ba7dc1b297d2f6f2413efa20df1db",
+        "url": "https://static.crates.io/crates/arenavec/arenavec-0.1.1.crate",
+        "version": "0.1.1"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-019",
+      "crate": "oneshot",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-019/Cargo.lock.patched",
+          "sha256": "e030a58f10f65cfcc3e2e5c49c875c0c06a063ff8e51d0959530d7ea2919a8fb"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-019/Cargo.lock.vulnerable",
+          "sha256": "432245e3bda619e68fa87c8af9fbdf9c9cc4dd07545d99269e4743a7b6428123"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 45423,
+        "kind": "crates_io_archive",
+        "package": "oneshot",
+        "sha256": "3ce66197e99546da6c6d991285f605192e794ceae69686c17163844a7bf8fcc2",
+        "upstream_commit": "537d5de4b6a8e1f2cb8224a2a7c91b851f0226d0",
+        "url": "https://static.crates.io/crates/oneshot/oneshot-0.1.12.crate",
+        "version": "0.1.12"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "upstream 0.1.12 passes all 64 Miri seeds",
+            "tool": "miri",
+            "vulnerable": "Miri reports undefined behavior from the concurrency race during the 64-seed sweep"
+          },
+          "origin_url": "https://github.com/faern/oneshot/pull/71",
+          "provenance": "upstream_regression_test",
+          "required_environment": {
+            "MIRIFLAGS": "-Zmiri-many-seeds=0..64 -Zmiri-backtrace=full"
+          },
+          "rustflags": [],
+          "scenario_id": "RSH-019-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-019/main.rs",
+          "source_sha256": "fab9e2dd1dff003f5274eecde655362e9ea0792a08140518f7ac8831240a3947"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 41692,
+        "kind": "crates_io_archive",
+        "package": "oneshot",
+        "sha256": "b4ce411919553d3f9fa53a0880544cda985a112117a0444d5ff1e870a893d6ea",
+        "upstream_commit": "25274e995ee0a702b3e9e1ac81e577f8c3ce0892",
+        "url": "https://static.crates.io/crates/oneshot/oneshot-0.1.11.crate",
+        "version": "0.1.11"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-020",
+      "crate": "thin-vec",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-020/Cargo.lock.patched",
+          "sha256": "21a2e8294f614e1f9e13d51192631ec56539db09689ec66b8e657c9bb0102710"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-020/Cargo.lock.vulnerable",
+          "sha256": "e527805184cacc9650985b53454b6af1a4eb19e1e79cc838d8dd0cb8265fd0b8"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 39013,
+        "kind": "crates_io_archive",
+        "package": "thin-vec",
+        "sha256": "259cdf8ed4e4aca6f1e9d011e10bd53f524a2d0637d7b28450f6c64ac298c4c6",
+        "upstream_commit": "3c96f1e335e695e6f6d43a3d383a9ea9f1f9d586",
+        "url": "https://static.crates.io/crates/thin-vec/thin-vec-0.2.16.crate",
+        "version": "0.2.16"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "allocator_boundary_detection_candidate",
+          "oracle": {
+            "patched_control": "only intentional panic; no sanitizer finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports attempting double-free"
+          },
+          "origin_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/thin-vec/RUSTSEC-2026-0103.md",
+          "provenance": "rustsec_inline",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-020-advisory",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-020/main.rs",
+          "source_sha256": "6ecc715d7b8d6425cd76607a38d78799043f2b5a1d0f7ff643f735f9f46ee81a"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 38659,
+        "kind": "crates_io_archive",
+        "package": "thin-vec",
+        "sha256": "da322882471314edc77fa5232c587bcb87c9df52bfd0d7d4826f8868ead61899",
+        "upstream_commit": "70bcca0960a7e11056fa3281445d08052421dab5",
+        "url": "https://static.crates.io/crates/thin-vec/thin-vec-0.2.15.crate",
+        "version": "0.2.15"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": false,
+        "features": [
+          "vmem"
+        ],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-021",
+      "crate": "oneringbuf",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-021/Cargo.lock.patched",
+          "sha256": "791fab07a451ac53c405b7c1b63f59ebeac99aab052da5b83d461574fd2d4cff"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-021/Cargo.lock.vulnerable",
+          "sha256": "5de09eefc99b44c07c276c017d06bc6fc753a333fdfeaac4512e04ca68ea8b45"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 53849,
+        "kind": "crates_io_archive",
+        "package": "oneringbuf",
+        "sha256": "c7e226c6fe0d458725a815f9b26971de3c1e78f4a0292bd174ca1a9936e41724",
+        "upstream_commit": "5a6f6c2655b55fea2753ed117e41eb53969194ad",
+        "url": "https://static.crates.io/crates/oneringbuf/oneringbuf-0.7.1.crate",
+        "version": "0.7.1"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "allocator_boundary_detection_candidate",
+          "oracle": {
+            "patched_control": "exit 0 with no sanitizer finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports attempting double-free; glibc also aborts"
+          },
+          "origin_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/oneringbuf/RUSTSEC-2026-0143.md",
+          "provenance": "rustsec_inline",
+          "required_environment": {
+            "platform": "unix-vmem"
+          },
+          "rustflags": [],
+          "scenario_id": "RSH-021-advisory",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-021/main.rs",
+          "source_sha256": "6cc440519071c418f4f7029e0bfafad645b97e9e14f3fda34fd698589d51fd3f"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 53852,
+        "kind": "crates_io_archive",
+        "package": "oneringbuf",
+        "sha256": "29cb065720897f8e356cae2fb470653af3f0623ff4583f6790910b08a05b26d4",
+        "upstream_commit": "3965e49ef82ef43907f58c6c0e8f35a196c25e33",
+        "url": "https://static.crates.io/crates/oneringbuf/oneringbuf-0.7.0.crate",
+        "version": "0.7.0"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-022",
+      "crate": "array-queue",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-022/Cargo.lock.patched",
+          "sha256": "b1aca725c5394b2165b69b6720e4be34a0e0a74ec188a6b17d7b6866990d5e96"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-022/Cargo.lock.vulnerable",
+          "sha256": "d61e65914053952beee7b01b002745f982ec9d062de8bcfba173fe2e5d2488ec"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 5775,
+        "kind": "crates_io_archive",
+        "package": "array-queue",
+        "sha256": "88f16b064898f39d79d2d3f0ab3d7f302025d68925740109ad3e3c7244dae430",
+        "upstream_commit": "728fe1bdffb04896d218e962d989a2ae6bf1ea92",
+        "url": "https://static.crates.io/crates/array-queue/array-queue-0.4.0.crate",
+        "version": "0.4.0"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "upstream 0.4.0 control exits 0 without invoking user Clone",
+            "tool": "asan",
+            "vulnerable": "intentional panic followed by sanitizer fault in free"
+          },
+          "origin_url": "https://github.com/raviqqe/array-queue/issues/3",
+          "patched_source": {
+            "source_path": "evaluation/harnesses/rustsec_heap/RSH-022/patched.rs",
+            "source_sha256": "1f3a7c9403efcfec4f8fbaaf9706e69223cb92dd895aea75c03c99951ee8485e"
+          },
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [
+            "--cap-lints=warn"
+          ],
+          "scenario_id": "RSH-022-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-022/main.rs",
+          "source_sha256": "44f3235fad86e699c5c41fe48408ff6eda073e13d4a1a223e1aa79ec798893ad"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 4157,
+        "kind": "crates_io_archive",
+        "package": "array-queue",
+        "sha256": "67d9d35ceaa295d4678e6607eec41c63552d831d31693235693ee7e951e01c21",
+        "upstream_commit": "32fa10f8f15140fb64a4cf36a2a834f876c91056",
+        "url": "https://static.crates.io/crates/array-queue/array-queue-0.3.3.crate",
+        "version": "0.3.3"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": false,
+        "features": [
+          "collections"
+        ],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-024",
+      "crate": "bumpalo",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-024/Cargo.lock.patched",
+          "sha256": "9ad789baa04d9c277c7e9a56deaf6597fc4a3dd9276b3fd3fd7c12cde0efdeeb"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-024/Cargo.lock.vulnerable",
+          "sha256": "815afa304097c32c51dfd42bf1f33ebe23f0d207fd1b249f8614e2e803e70af7"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 120161,
+        "kind": "crates_io_archive",
+        "package": "bumpalo",
+        "sha256": "12ae9db68ad7fac5fe51304d20f016c911539251075a214f8e663babefa35187",
+        "upstream_commit": "02e6d0a9aea6064f642d0b123d940a7e68102b81",
+        "url": "https://static.crates.io/crates/bumpalo/bumpalo-3.2.1.crate",
+        "version": "3.2.1"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "exit 0 with no sanitizer finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports heap-buffer-overflow READ of size 96000"
+          },
+          "origin_url": "https://github.com/Riey/bumpalo/blob/42bbb9593c549af898c32bf96652505b87ced1a7/src/collections/vec.rs",
+          "provenance": "linked_repository",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-024-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-024/main.rs",
+          "source_sha256": "85996963525ef90ea89dd2b4205ce09b10ae498184840bd8ad23e1a987dd84df"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 118891,
+        "kind": "crates_io_archive",
+        "package": "bumpalo",
+        "sha256": "1f359dc14ff8911330a51ef78022d376f25ed00248912803b58f00cb1c27f742",
+        "upstream_commit": "7d0c4ddf81aa8e5693827015ba531bf85d05a21e",
+        "url": "https://static.crates.io/crates/bumpalo/bumpalo-3.2.0.crate",
+        "version": "3.2.0"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": false,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-026",
+      "crate": "calamine",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-026/Cargo.lock.patched",
+          "sha256": "ee2de5348f68cda5cc1baa8de1a73a987fc217995c1fdb596bd8cdf157c1b4cc"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-026/Cargo.lock.vulnerable",
+          "sha256": "45ef107fcdf41069d91eefb320f4b2a5b316635a3563774dc5cea17b66881306"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 60497,
+        "kind": "crates_io_archive",
+        "package": "calamine",
+        "sha256": "c8ee9c2bc7bc6d003c78883b0e576003c6dc0c53a1506288bde10a55dbe9ba24",
+        "upstream_commit": "d71da2406c52869a8081f69aabeceed8fc1fcb75",
+        "url": "https://static.crates.io/crates/calamine/calamine-0.17.0.crate",
+        "version": "0.17.0"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "derived_adapter",
+          "cargo_profile": "release",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "upstream 0.17.0 exits 0 with no sanitizer finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports a 512-byte heap-buffer-overflow write into a 1-byte allocation"
+          },
+          "origin_url": "https://github.com/tafia/calamine/issues/199",
+          "provenance": "derived_adapter",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-026-derived-cfb",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-026/main.rs",
+          "source_sha256": "9fcffabe2475546cfba21c08136177df5c94e1fc054e7a0ff56733d6753ce8a6"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 58838,
+        "kind": "crates_io_archive",
+        "package": "calamine",
+        "sha256": "36b93ee9afe52156da81c32d39cb4c0c1a947b5ea9bc9719e805af9c8e05d40e",
+        "upstream_commit": "7da8aa81bb2a8bebd56d1dad2db2fb427e4bbdfa",
+        "url": "https://static.crates.io/crates/calamine/calamine-0.16.2.crate",
+        "version": "0.16.2"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {
+          "libc": "=0.2.99"
+        },
+        "vulnerable_extra_dependencies": {
+          "libc": "=0.2.99"
+        }
+      },
+      "case_id": "RSH-028",
+      "crate": "nix",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-028/Cargo.lock.patched",
+          "sha256": "9360c852631dbdd1ca0ef49d520dfc66153e24926d95b4a0ca5ad55e542b87ba"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-028/Cargo.lock.vulnerable",
+          "sha256": "6f90e16055bcca68fc6fc1ca71bf5cb5474b8aed153555327cbea4c46d400516"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 227371,
+        "kind": "crates_io_archive",
+        "package": "nix",
+        "sha256": "d3bb9a13fa32bc5aeb64150cd3f32d6cf4c748f8f8a417cce5d2eb976a8370ba",
+        "upstream_commit": "124ed60877c52cb38ad5533815720a278e50876f",
+        "url": "https://static.crates.io/crates/nix/nix-0.22.2.crate",
+        "version": "0.22.2"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "release",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "upstream 0.22.2 exits 0 after the shim observes capacities 8, 16, and 32",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports a 4-byte heap-buffer-overflow write immediately after the group allocation"
+          },
+          "origin_url": "https://github.com/nix-rust/nix/issues/1541",
+          "provenance": "upstream_issue",
+          "required_environment": {
+            "platform": "linux-getgrouplist-abi-shim"
+          },
+          "rustflags": [
+            "--cap-lints=warn"
+          ],
+          "scenario_id": "RSH-028-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-028/main.rs",
+          "source_sha256": "08a73d53e984db4425afe9ee5bdafa8edee96736b128fb4b9d76b204e067148e",
+          "unsupported_allocator_variants": {
+            "unialloc": "RSH-028 pins libc=0.2.99 for the upstream ABI shim while direct UniAlloc depends on libc=0.2.183; use typed_plain/typeiso force-loaded arms or system ASan for this scenario."
+          }
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 227166,
+        "kind": "crates_io_archive",
+        "package": "nix",
+        "sha256": "e7555d6c7164cc913be1ce7f95cbecdabda61eb2ccd89008524af306fb7f5031",
+        "upstream_commit": "b29a85165b0bf494974642cc6ba58a924f143948",
+        "url": "https://static.crates.io/crates/nix/nix-0.22.1.crate",
+        "version": "0.22.1"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": false,
+        "features": [
+          "const_mut_refs"
+        ],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-029",
+      "crate": "linked_list_allocator",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-029/Cargo.lock.patched",
+          "sha256": "652a2962d0f5350d64d5862a68b50712c576c924c93485bd680289cd98477f61"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-029/Cargo.lock.vulnerable",
+          "sha256": "bc22bf6891527dad5cff895a1b28862b1cf1a2d9ad071799c9697ed418eb735d"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 21978,
+        "kind": "crates_io_archive",
+        "package": "linked_list_allocator",
+        "sha256": "e98908d64cd118e4a3fb26803bd2aef3e7796f1d494517c89b8fea19b92b8c12",
+        "upstream_commit": "5eb2bc6e671e15f3953e74e7b108cf59e724c2a0",
+        "url": "https://static.crates.io/crates/linked_list_allocator/linked_list_allocator-0.10.2.crate",
+        "version": "0.10.2"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "upstream 0.10.2 rejects the undersized heap with an assertion and no sanitizer finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports heap-buffer-overflow during heap initialization"
+          },
+          "origin_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/linked_list_allocator/RUSTSEC-2022-0063.md",
+          "provenance": "rustsec_inline",
+          "required_environment": {
+            "RUSTC_BOOTSTRAP": "1"
+          },
+          "rustflags": [],
+          "scenario_id": "RSH-029-advisory",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-029/main.rs",
+          "source_sha256": "8f66bc7e993c52c03bf7a587943d68178d8c832af66b432dd012576fa6d8a83b"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 19851,
+        "kind": "crates_io_archive",
+        "package": "linked_list_allocator",
+        "sha256": "636c3bc929db632724303109c88d5d559a2a60f62243bb041387f03fa081d94a",
+        "upstream_commit": "cdb24ee5ebc9cc8a5801b95f7f574729d278c64a",
+        "url": "https://static.crates.io/crates/linked_list_allocator/linked_list_allocator-0.10.1.crate",
+        "version": "0.10.1"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": false,
+        "features": [
+          "debug"
+        ],
+        "patched_extra_dependencies": {
+          "libmimalloc-sys": "=0.1.35"
+        },
+        "vulnerable_extra_dependencies": {
+          "libmimalloc-sys": "=0.1.28"
+        }
+      },
+      "case_id": "RSH-030",
+      "crate": "mimalloc",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-030/Cargo.lock.patched",
+          "sha256": "7c08846881ca88779b26933359715e17245565b7c79fd2dec11eadfb30ad1641"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-030/Cargo.lock.vulnerable",
+          "sha256": "208bcf1b51b7f344ac89f30057eea762b7bbdff90899d80583a2bd86e27e0260"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 3727,
+        "kind": "crates_io_archive",
+        "package": "mimalloc",
+        "sha256": "fa01922b5ea280a911e323e4d2fd24b7fe5cc4042e0d2cda3c40775cdc4bdc9c",
+        "upstream_commit": "0dc380da37b09c5e11aa6b57022dfdc156d61309",
+        "url": "https://static.crates.io/crates/mimalloc/mimalloc-0.1.39.crate",
+        "version": "0.1.39"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "100000 aligned allocations exit 0",
+            "tool": "native_alignment",
+            "vulnerable": "alignment assertion fails at the tested 4096-byte alignment"
+          },
+          "origin_content_sha256": "3570fd4b40305276b43bcff64ff01fad2ef70a11d1c73c9af672f264104bbcdd",
+          "origin_url": "https://github.com/purpleprotocol/mimalloc_rust/files/10300558/mimalloc.tar.gz",
+          "provenance": "upstream_attachment",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-030-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-030/main.rs",
+          "source_sha256": "d833cf1cf25ac9805aba9a59d69f9749894acfee44457c76db8df279e343bf8d"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 5016,
+        "kind": "crates_io_archive",
+        "package": "mimalloc",
+        "sha256": "9b2374e2999959a7b583e1811a1ddbf1d3a4b9496eceb9746f1192a59d871eca",
+        "upstream_commit": "76fbd4f98ff4f6ccfa2410b1c33910de76d2c5e6",
+        "url": "https://static.crates.io/crates/mimalloc/mimalloc-0.1.32.crate",
+        "version": "0.1.32"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-031",
+      "crate": "maligned",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-031/Cargo.lock.patched",
+          "sha256": "c916c1ded8d3fea4c5e8dd247fd411fa32466cffb97569cc866b2ec0cac4e5f6"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-031/Cargo.lock.vulnerable",
+          "sha256": "c916c1ded8d3fea4c5e8dd247fd411fa32466cffb97569cc866b2ec0cac4e5f6"
+        }
+      },
+      "patched_dependency": {
+        "base_version": "0.2.1",
+        "kind": "scenario_local_patches"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "allocator_boundary_detection_candidate",
+          "local_patched_control": {
+            "kind": "hashed_local_patch",
+            "label": "reject over-aligned Vec",
+            "path": "evaluation/harnesses/rustsec_heap/RSH-031/patches/fail-closed.patch",
+            "resulting_source_files": {
+              "src/heap.rs": "9d9b3db6cdbdefe8f8a1afa4a1b3570a57aa8aed8af05f25390c2ec234aeb80e"
+            },
+            "sha256": "9dcb1162595aec2c5ac376ddcb489f072343eb1972840c1bd3f0ec4640d9cef8"
+          },
+          "oracle": {
+            "patched_control": "fail-closed patched source catches rejection and exits 0",
+            "tool": "miri",
+            "vulnerable": "Miri reports allocation/deallocation layout mismatch"
+          },
+          "oracle_toolchain": "nightly-2022-07-01",
+          "origin_url": "https://github.com/tylerhawkes/maligned/issues/5",
+          "patched_source": {
+            "source_path": "evaluation/harnesses/rustsec_heap/RSH-031/patched.rs",
+            "source_sha256": "6be254543ab5cc392c4ce8ca65ab359da7ed56aedbea422f797a4a8d042db15b"
+          },
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-031-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-031/main.rs",
+          "source_sha256": "07e0beec62fb6ad6d6ec85d7f1bb3ad2bda9ed8382823e1d76c8c4f0115f270b"
+        },
+        {
+          "adapter_kind": "derived_adapter",
+          "cargo_profile": "dev",
+          "claim_scope": "exact same-pointer recovery-record allocation/deallocation layout mismatch",
+          "classification_role": "allocator_boundary_detection_candidate",
+          "mechanism": "recovery_layout_validation",
+          "mechanism_class": "other_allocator_feature",
+          "oracle": {
+            "patched_control": "same recovery identity deallocated with the recorded allocation layout and emits no mismatch diagnostic",
+            "tool": "native_diagnostic",
+            "vulnerable": "exact recovery allocation/deallocation layout-mismatch diagnostic"
+          },
+          "origin_url": "https://github.com/tylerhawkes/maligned/issues/5",
+          "patched_source": {
+            "source_path": "evaluation/harnesses/rustsec_heap/RSH-031/derived_layout_patched.rs",
+            "source_sha256": "edac5b700fdaa7abfb03bc5aae62eea88733d4b3799934f6623b0c11534a753e"
+          },
+          "provenance": "derived_adapter",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-031-derived-layout-validation",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-031/derived_layout_vulnerable.rs",
+          "source_sha256": "be587469c964a2495246af4396eef461a79802d495c24348e1f86ec4968a0dd8",
+          "upstream_baseline_scenario_id": "RSH-031-upstream"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 7900,
+        "kind": "crates_io_archive",
+        "package": "maligned",
+        "sha256": "7e88c3cbe8288f77f293e48a28b3232e3defd203a6d839fa7f68ea4329e83464",
+        "upstream_commit": "f07396e9e7bb724f8a341dc1a12da259de189d8c",
+        "url": "https://static.crates.io/crates/maligned/maligned-0.2.1.crate",
+        "version": "0.2.1"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-032",
+      "crate": "transpose",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-032/Cargo.lock.patched",
+          "sha256": "d359629520a1a4d363433daa326d2bf48acbda94e3eb881f0424ae585f05f7a7"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-032/Cargo.lock.vulnerable",
+          "sha256": "98a627ad84bf16825d674ae2c62e5ad7aa6282c68efe4764638f7fbdd93fb6bf"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 10913,
+        "kind": "crates_io_archive",
+        "package": "transpose",
+        "sha256": "1ad61aed86bc3faea4300c7aee358b4c6d0c8d6ccc36524c96e4c92ccf26e77e",
+        "upstream_commit": "134293e7f7f8e13d342ae625e479e6097b5525db",
+        "url": "https://static.crates.io/crates/transpose/transpose-0.2.3.crate",
+        "version": "0.2.3"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "release",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "checked multiplication rejects with a safe Rust panic",
+            "tool": "asan",
+            "vulnerable": "ASan at opt-level 0 reports AddressSanitizer: DEADLYSIGNAL from a wild high-address out-of-bounds read in transpose_small"
+          },
+          "origin_url": "https://github.com/ejmahler/transpose/issues/11",
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [
+            "-Copt-level=0",
+            "-Coverflow-checks=off",
+            "-Zub-checks=no"
+          ],
+          "scenario_id": "RSH-032-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-032/main.rs",
+          "source_sha256": "e41da435f0c5fb471bf941fde547e3fa10da6bb3fdb6d0161a837433fdf2f68d"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 10816,
+        "kind": "crates_io_archive",
+        "package": "transpose",
+        "sha256": "e6522d49d03727ffb138ae4cbc1283d3774f0d10aa7f9bf52e6784c45daf9b23",
+        "upstream_commit": "e70dd159f1881d86aa50ee01586d04e7a83d8dbe",
+        "url": "https://static.crates.io/crates/transpose/transpose-0.2.2.crate",
+        "version": "0.2.2"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-033",
+      "crate": "scratchpad",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-033/Cargo.lock.patched",
+          "sha256": "7dd7dc3cd8fb7a3c0b0e0148c5ace18e759120ae996b178e4dc8ed7cbbe3e2c2"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-033/Cargo.lock.vulnerable",
+          "sha256": "7dd7dc3cd8fb7a3c0b0e0148c5ace18e759120ae996b178e4dc8ed7cbbe3e2c2"
+        }
+      },
+      "patched_dependency": {
+        "base_version": "1.3.1",
+        "kind": "scenario_local_patches"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "local_patched_control": {
+            "kind": "hashed_local_patch",
+            "label": "unsafe Tracking contract",
+            "path": "evaluation/harnesses/rustsec_heap/RSH-033/patches/unsafe-tracking.patch",
+            "resulting_source_files": {
+              "src/traits.rs": "d5c2b4bcaf0cbb867472abf3a51937327680d51be9d34e6731972e376aa1b457"
+            },
+            "sha256": "2f2d3540ec08e7042adcaa23fde7b752b86dcee95e854576d03f69ef8af9c35a"
+          },
+          "oracle": {
+            "patched_control": "local unsafe-trait patch rejects safe impl with E0200",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports 16-byte heap-buffer-overflow write"
+          },
+          "origin_url": "https://github.com/okready/scratchpad/issues/2",
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [
+            "--cap-lints=warn"
+          ],
+          "scenario_id": "RSH-033-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-033/main.rs",
+          "source_sha256": "9fa616b6caca8272436ed0906d44567c5745cc2071f20a3a60738e3586f480e1"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 54383,
+        "kind": "crates_io_archive",
+        "package": "scratchpad",
+        "sha256": "05c42d7468eaafe45491f0e7f83338604e78ba2eb1555f111009f2b545e9bc1d",
+        "upstream_commit": "c97b1855e98bbcf12ec1b746bf4f5fce5c865b9c",
+        "url": "https://static.crates.io/crates/scratchpad/scratchpad-1.3.1.crate",
+        "version": "1.3.1"
+      }
+    },
+    {
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-040",
+      "crate": "direct_ring_buffer",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-040/Cargo.lock.patched",
+          "sha256": "154cb4e50cd5de7b6fd66ff9a70f3fdc73443fd4adca87b64480718026b4971f"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap/RSH-040/Cargo.lock.vulnerable",
+          "sha256": "4e2069008e585be4f3655a03fc11075bb5444c1acbce1221a250909c7504d839"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 21388,
+        "kind": "crates_io_archive",
+        "package": "direct_ring_buffer",
+        "sha256": "e0b9212b19eacffa40733308a20824eb9bf71af6c267e2d7cf9ffeea996faa14",
+        "upstream_commit": "112cc6258f131977adb7ce14755ccd7ceaf05dca",
+        "url": "https://static.crates.io/crates/direct_ring_buffer/direct_ring_buffer-0.2.2.crate",
+        "version": "0.2.2"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "exit 0 under Miri",
+            "tool": "miri",
+            "vulnerable": "Miri reports UB while forming mutable bool slice"
+          },
+          "origin_url": "https://github.com/ain1084/direct_ring_buffer/issues/1",
+          "provenance": "upstream_issue",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-040-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap/RSH-040/main.rs",
+          "source_sha256": "f309515c120517f6a6ba81d554a82b5b7e56888c8b3dee542f7be6536e7d0bcb"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 13347,
+        "kind": "crates_io_archive",
+        "package": "direct_ring_buffer",
+        "sha256": "830a664297d100e42f267829ada79a94fa2611f731d48e1af2b1b86ba6e354f2",
+        "upstream_commit": "09022f60ac0970c999bd89d8ec4e697f978f8794",
+        "url": "https://static.crates.io/crates/direct_ring_buffer/direct_ring_buffer-0.2.1.crate",
+        "version": "0.2.1"
+      }
+    }
+  ],
+  "claim_boundary": "Pinned sources, archives, controls, and preregistered oracles establish execution readiness only. Matched allocator arms, compiler/runtime coverage, raw artifacts, and repeated outcomes remain required for efficacy claims.",
+  "claim_grade": false,
+  "counts": {
+    "derived_adapter_scenario_count": 4,
+    "derived_reuse_scenario_count": 2,
+    "harness_case_count": 22,
+    "pinned_rudra_source_scenario_count": 18,
+    "published_or_upstream_scenario_count": 24,
+    "repository_scenario_count": 28,
+    "source_ready_distinct_advisory_count": 40,
+    "total_source_ready_scenario_count": 46
+  },
+  "created_at": "2026-07-14",
+  "execution_policy": {
+    "build": "Fetch locked dependencies first, then compile with network disabled in a disposable container.",
+    "run": "Use a read-only disposable container with no network, no added capabilities, no-new-privileges, an unprivileged UID, CPU/memory/PID limits, and a TERM-to-KILL timeout with host-side forced cleanup.",
+    "unsafe_opt_in_required": true
+  },
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-harness-bundle",
+  "toolchain": {
+    "compile_smoke_image": "rust:1.85-slim@sha256:9f841bbe9e7d8e37ceb96ed907265a3a0df7f44e3737d0b100e7907a679acb36",
+    "sanitizer_rustc": "1.98.0-nightly (485ec3fbc 2026-06-10)",
+    "sanitizer_toolchain": "nightly-2026-06-11",
+    "validated_target": "x86_64-unknown-linux-gnu"
+  }
+}

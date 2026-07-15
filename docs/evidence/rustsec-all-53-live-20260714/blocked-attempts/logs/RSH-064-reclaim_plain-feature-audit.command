@@ -1,0 +1,1 @@
+zsh -lc cargo\ +nightly-2026-06-11\ metadata\ --format-version=1\ --manifest-path\ \'/tmp/unialloc-blocked-reattempt-20260714/projects/RSH-064/reclaim_plain/Cargo.toml\'\ \|\ jq\ -c\ \'.resolve.nodes\[\]\ \|\ select\(.id\ \|\ contains\(\"/home/hanqing/alloc/UniAlloc/unialloc#\"\)\)\ \|\ \{id\,features\}\' 

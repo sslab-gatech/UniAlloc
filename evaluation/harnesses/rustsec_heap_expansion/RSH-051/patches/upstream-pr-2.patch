@@ -1,0 +1,34 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index cdcf3b46f987a01c068a5ec100ea38d92d6288b1..931b089d2c5639340e8097c38a1fa1b66e4b8fac 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -172,11 +172,11 @@ impl<A, M: ArrayLength<A>, N: ArrayLength<GenericArray<A, M>>> Matrix<A, M, N> {
+     #[inline] fn map_elements<B, F: FnMut(A) -> B>(self, mut f: F) -> Matrix<B, M, N>
+       where M: ArrayLength<B>, N: ArrayLength<GenericArray<B, M>> {
+         let Matrix(a) = self;
++        let wrapper = mem::ManuallyDrop::new(a);
+         let mut c: GenericArray<GenericArray<B, M>, N> = unsafe { mem::uninitialized() };
+         for i in 0..N::to_usize() { for j in 0..M::to_usize() { unsafe {
+-            ptr::write(&mut c[i][j], f(ptr::read(&a[i][j])))
+-        } } }
+-        mem::forget(a);
++            ptr::write(&mut c[i][j], f(ptr::read(&wrapper[i][j])))
++        }}}
+         Matrix(c)
+     }
+ }
+@@ -189,11 +189,12 @@ fn zip_elements<A, B, C, M, N, F: FnMut(A, B) -> C>(Matrix(a): Matrix<A, M, N>,
+         N: ArrayLength<GenericArray<A, M>> + ArrayLength<GenericArray<B, M>> +
+            ArrayLength<GenericArray<C, M>> {
+     let mut c: GenericArray<GenericArray<C, M>, N> = unsafe { mem::uninitialized() };
++    let mut wrapper = mem::ManuallyDrop::new(c);
+     for i in 0..N::to_usize() { for j in 0..M::to_usize() { unsafe {
+-        ptr::write(&mut c[i][j], f(ptr::read(&a[i][j]), ptr::read(&b[i][j])))
++        ptr::write(&mut wrapper[i][j], f(ptr::read(&a[i][j]), ptr::read(&b[i][j])))
+     } } }
+     mem::forget((a, b));
+-    Matrix(c)
++    Matrix(mem::ManuallyDrop::into_inner(wrapper))
+ }
+ 
+ impl<A: Copy + Zero, M: ArrayLength<A>, N: ArrayLength<GenericArray<A, M>>> Matrix<A, M, N> {

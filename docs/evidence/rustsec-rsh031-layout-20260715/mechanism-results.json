@@ -1,0 +1,74 @@
+{
+  "boundary": "The derived pair validates allocator mechanism coverage; the pinned upstream Miri arm supplies source-vulnerability ground truth. The layout signal is policy-independent and is not attributed to TypeIso.",
+  "claim_grade": false,
+  "counts": {
+    "detected": 1,
+    "inconclusive": 0,
+    "mitigated": 0,
+    "no_signal": 0,
+    "results": 1,
+    "true_positive": 1
+  },
+  "layout_validation_input": {
+    "bytes": 15279,
+    "path": "docs/evidence/rustsec-rsh031-layout-20260715/experiment.json",
+    "sha256": "0cf146e0d250da377e7be41b9a2811db871174b46de36b5a1adba17da6fd4271"
+  },
+  "minimum_repetitions": 3,
+  "results": [
+    {
+      "advisory_id": "RUSTSEC-2023-0017",
+      "allocator_signal_signatures": {
+        "unialloc_recovery_deallocation_layout_mismatch": 3
+      },
+      "baseline_finding_signatures": {
+        "miri_undefined_behavior": 3
+      },
+      "case_id": "RSH-031",
+      "checks": {
+        "matched_arms_present": true,
+        "minimum_repetitions_met": true,
+        "patched_typed_plain_control_signal_free": true,
+        "patched_typeiso_control_signal_free": true,
+        "signal_independent_of_type_isolation_policy": true,
+        "strict_matrix_valid": true,
+        "upstream_miri_baseline_bound": true,
+        "vulnerable_typed_plain_exact_signal_in_all_repetitions": true,
+        "vulnerable_typeiso_exact_signal_in_all_repetitions": true
+      },
+      "claim_scope": "exact same-pointer recovery-record allocation/deallocation layout mismatch on the RSH-031 Vec Drop edge",
+      "evidence": {
+        "bytes": 15279,
+        "path": "docs/evidence/rustsec-rsh031-layout-20260715/experiment.json",
+        "sha256": "0cf146e0d250da377e7be41b9a2811db871174b46de36b5a1adba17da6fd4271"
+      },
+      "ground_truth_evidence": {
+        "bytes": 341155,
+        "path": "docs/evidence/rustsec-rsh031-layout-20260715/upstream-miri-experiment.json",
+        "sha256": "0ef1b51e968a67d35f34eaf27e38a21f8a4a8a5606e5879668dfdd30012db8fe"
+      },
+      "ground_truth_validation": {
+        "patched_clean_exit_count": 3,
+        "reason": "matched_miri_source_controls",
+        "valid": true,
+        "vulnerable_finding_count": 3
+      },
+      "mechanism": "recovery_layout_validation",
+      "negative_boundary": null,
+      "outcome": "detected",
+      "positive_scope": "allocation_deallocation_layout_mismatch_edge",
+      "reason": "matched_exact_recovery_layout_diagnostic",
+      "repetitions": 3,
+      "result_semantics": "exact_diagnostic_true_positive",
+      "scenario_id": "RSH-031-derived-layout-validation",
+      "true_positive": true
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rsh031-recovery-layout-mechanism-results",
+  "upstream_ground_truth_input": {
+    "bytes": 341155,
+    "path": "docs/evidence/rustsec-rsh031-layout-20260715/upstream-miri-experiment.json",
+    "sha256": "0ef1b51e968a67d35f34eaf27e38a21f8a4a8a5606e5879668dfdd30012db8fe"
+  }
+}

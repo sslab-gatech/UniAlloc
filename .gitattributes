@@ -1,0 +1,8 @@
+# Preserve byte-for-byte RustSec evidence and upstream patch snapshots. Their
+# hashes are part of the evaluation provenance, so diff whitespace cleanup must
+# not rewrite captured command output, CRLF streams, or historical patch bytes.
+docs/evidence/rustsec-*/** -whitespace
+docs/figures/rustsec-*/** -whitespace
+evaluation/harnesses/rustsec_heap/**/patches/* -whitespace
+evaluation/harnesses/rustsec_heap_expansion/**/patches/* -whitespace
+evaluation/harnesses/rustsec_heap_expansion/RSH-054/upstream_drain_filter.rs -whitespace

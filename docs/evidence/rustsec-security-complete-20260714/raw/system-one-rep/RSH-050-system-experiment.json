@@ -1,0 +1,974 @@
+{
+  "archive_variants": [
+    "vulnerable",
+    "patched"
+  ],
+  "arms": [
+    {
+      "allocator_provenance": {
+        "compiler_wrapper_sha256": null,
+        "direct_cargo_configuration": null,
+        "direct_cargo_unialloc": false,
+        "force_loaded_unialloc": false,
+        "force_rlib_sha256": null,
+        "force_wrapper_sha256": null,
+        "single_unialloc_identity_enforced": true,
+        "unialloc_implementation_sha256": "13a1acd09b910ca43a67f6ae4a8477fb6db6092ede99dc4252dfa1bc6e098b1e"
+      },
+      "allocator_topology": {
+        "allocator_variant": "system",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "system",
+      "archive_variant": "vulnerable",
+      "binary_artifact": {
+        "bytes": 2134584,
+        "path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness",
+        "sha256": "1e8320cfbe0144cc52fef36c817768937fdc182103ee13c97dad3ed4f5d766eb"
+      },
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--offline",
+          "--locked",
+          "--manifest-path",
+          "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/project/Cargo.toml",
+          "--jobs",
+          "1",
+          "--release",
+          "--target",
+          "x86_64-unknown-linux-gnu"
+        ],
+        "cwd": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/project",
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "ASAN_OPTIONS",
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 0,
+        "stderr": "warning: ../subject/image-0.21.2/Cargo.toml: `package.edition` is unspecified, defaulting to `2015` while the latest is `2024`\nwarning: `image` (manifest) generated 1 warning\n   Compiling autocfg v1.5.1\n   Compiling num-traits v0.2.19\n   Compiling num-integer v0.1.46\n   Compiling num-rational v0.2.4\n   Compiling num-iter v0.1.46\n   Compiling scoped_threadpool v0.1.9\n   Compiling byteorder v1.5.0\n   Compiling lzw v0.10.0\n   Compiling image v0.21.2 (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2)\nwarning: unexpected `cfg` condition value: `cargo-clippy`\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/lib.rs:10:13\n   |\n10 | #![cfg_attr(feature = \"cargo-clippy\", allow(many_single_char_names))]\n   |             ^^^^^^^^^^^^^^^^^^^^^^^^\n   |\n   = note: expected values for `feature` are: `benchmarks`, `bmp`, `default`, `dxt`, `gif`, `gif_codec`, `hdr`, `ico`, `jpeg`, `jpeg-decoder`, `jpeg_rayon`, `png`, `png_codec`, `pnm`, `scoped_threadpool`, `tga`, `tiff`, and `webp`\n   = help: consider adding `cargo-clippy` as a feature in `Cargo.toml`\n   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration\n   = note: `#[warn(unexpected_cfgs)]` on by default\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:27:23\n   |\n27 |         let decoder = try!(HDRDecoder::new(r));\n   |                       ^^^\n   |\n   = note: `#[warn(deprecated)]` on by default\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:38:23\n   |\n38 |         let decoder = try!(HDRDecoder::with_strictness(r, false));\n   |                       ^^^\n\nwarning: unnecessary qualification\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:53:39\n   |\n53 |                 let len = img.len() * mem::size_of::<Rgb<u8>>(); // length in bytes\n   |                                       ^^^^^^^^^^^^^^^^^^^^^^^\n   |\nnote: the lint level is defined here\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/lib.rs:6:9\n   |\n 6 | #![warn(unused_qualifications)]\n   |         ^^^^^^^^^^^^^^^^^^^^^\nhelp: remove the unnecessary path segments\n   |\n53 -                 let len = img.len() * mem::size_of::<Rgb<u8>>(); // length in bytes\n53 +                 let len = img.len() * size_of::<Rgb<u8>>(); // length in bytes\n   |\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:232:17\n    |\n232 |                 try!(r.read_exact(&mut signature));\n    |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:239:17\n    |\n239 |                 try!(read_line_u8(r));\n    |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:246:23\n    |\n246 |                 match try!(read_line_u8(r)) {\n    |                       ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:262:25\n    |\n262 |                         try!(attributes.update_header_info(&line, strict));\n    |                         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:268:37\n    |\n268 |         let (width, height) = match try!(read_line_u8(&mut reader)) {\n    |                                     ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:275:17\n    |\n275 |                 try!(parse_dimensions_line(&dimensions, strict))\n    |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:307:13\n    |\n307 |             try!(read_scanline(&mut self.r, chunk));\n    |             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:336:13\n    |\n336 |             try!(pool.scoped(|scope| {\n    |             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:342:21\n    |\n342 |                     try!(read_scanline(&mut self.r, &mut buf[..]));\n    |                     ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:467:14\n    |\n467 |     let fb = try!(read_rgbe(r));\n    |              ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:472:9\n    |\n472 |         try!(decode_component(r, width, |offset, value| buf[offset].c[0] = value));\n    |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:473:9\n    |\n473 |         try!(decode_component(r, width, |offset, value| buf[offset].c[1] = value));\n    |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:474:9\n    |\n474 |         try!(decode_component(r, width, |offset, value| buf[offset].c[2] = value));\n    |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:475:9\n    |\n475 |         try!(decode_component(r, width, |offset, value| buf[offset].e = value));\n    |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:478:9\n    |\n478 |         try!(decode_old_rle(r, fb, buf));\n    |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:486:5\n    |\n486 |     try!(r.read_exact(&mut buf[..]));\n    |     ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:502:22\n    |\n502 |             let rl = try!(read_byte(r));\n    |                      ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:511:17\n    |\n511 |                 try!(r.read_exact(&mut buf[0..rl as usize]));\n    |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:526:29\n    |\n526 |                 let value = try!(read_byte(r));\n    |                             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:575:19\n    |\n575 |         let pix = try!(read_rgbe(r));\n    |                   ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:611:5\n    |\n611 |     try!(r.read_exact(&mut buf[..]));\n    |     ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:770:18\n    |\n770 |     let c1_tag = try!(\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:775:18\n    |\n775 |     let c1_str = try!(\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:780:18\n    |\n780 |     let c2_tag = try!(\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:785:18\n    |\n785 |     let c2_str = try!(\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:800:26\n    |\n800 |             let height = try!(c1_str.parse::<u32>().into_image_error(err));\n    |                          ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:801:25\n    |\n801 |             let width = try!(c2_str.parse::<u32>().into_image_error(err));\n    |                         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:912:32\n    |\n912 |     let mut r = BufReader::new(try!(File::open(path)));\n    |                                ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:913:13\n    |\n913 |     let w = try!(r.read_u32::<LE>()) as usize;\n    |             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:914:13\n    |\n914 |     let h = try!(r.read_u32::<LE>()) as usize;\n    |             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:915:13\n    |\n915 |     let c = try!(r.read_u32::<LE>()) as usize;\n    |             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:920:18\n    |\n920 |         let cr = try!(r.read_f32::<LE>());\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:921:18\n    |\n921 |         let cg = try!(r.read_f32::<LE>());\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:922:18\n    |\n922 |         let cb = try!(r.read_f32::<LE>());\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/encoder.rs:21:9\n   |\n21 |         try!(w.write_all(SIGNATURE));\n   |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/encoder.rs:22:9\n   |\n22 |         try!(w.write_all(b\"\\n\"));\n   |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/encoder.rs:23:9\n   |\n23 |         try!(w.write_all(b\"# Rust HDR encoder\\n\"));\n   |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/encoder.rs:24:9\n   |\n24 |         try!(w.write_all(b\"FORMAT=32-bit_rle_rgbe\\n\\n\"));\n   |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/encoder.rs:25:9\n   |\n25 |         try!(w.write_all(format!(\"-Y {} +X {}\\n\", height, width).as_bytes()));\n   |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/encoder.rs:29:17\n   |\n29 |                 try!(write_rgbe8(w, to_rgbe8(pix)));\n   |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/encoder.rs:57:17\n   |\n57 |                 try!(write_rgbe8(w, marker)); // New RLE encoding marker\n   |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/encoder.rs:60:17\n   |\n60 |                 try!(w.write_all(&rle_buf[..]));\n   |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/encoder.rs:63:17\n   |\n63 |                 try!(w.write_all(&rle_buf[..]));\n   |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/encoder.rs:66:17\n   |\n66 |                 try!(w.write_all(&rle_buf[..]));\n   |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/encoder.rs:69:17\n   |\n69 |                 try!(w.write_all(&rle_buf[..]));\n   |                 ^^^\n\nwarning: anonymous parameters are deprecated and will be removed in the next edition\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/color.rs:239:30\n    |\n239 |     fn from_color(&mut self, &Other);\n    |                              ^^^^^^ help: try naming the parameter or explicitly ignoring it: `_: &Other`\n    |\n    = warning: this is accepted in the current edition (Rust 2015) but is a hard error in Rust 2018!\n    = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2018/trait-fn-parameters.html>\n    = note: `#[warn(anonymous_parameters)]` (part of `#[warn(rust_2018_compatibility)]`) on by default\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:549:13\n    |\n549 |             image::ImageOutputFormat::Unsupported(msg) => {\n    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n549 -             image::ImageOutputFormat::Unsupported(msg) => {\n549 +             ImageOutputFormat::Unsupported(msg) => {\n    |\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:631:15\n    |\n631 |     let buf = try!(codec.read_image());\n    |               ^^^\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:742:27\n    |\n742 |         \"jpg\" | \"jpeg\" => image::ImageFormat::JPEG,\n    |                           ^^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n742 -         \"jpg\" | \"jpeg\" => image::ImageFormat::JPEG,\n742 +         \"jpg\" | \"jpeg\" => ImageFormat::JPEG,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:743:18\n    |\n743 |         \"png\" => image::ImageFormat::PNG,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n743 -         \"png\" => image::ImageFormat::PNG,\n743 +         \"png\" => ImageFormat::PNG,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:744:18\n    |\n744 |         \"gif\" => image::ImageFormat::GIF,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n744 -         \"gif\" => image::ImageFormat::GIF,\n744 +         \"gif\" => ImageFormat::GIF,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:745:19\n    |\n745 |         \"webp\" => image::ImageFormat::WEBP,\n    |                   ^^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n745 -         \"webp\" => image::ImageFormat::WEBP,\n745 +         \"webp\" => ImageFormat::WEBP,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:746:27\n    |\n746 |         \"tif\" | \"tiff\" => image::ImageFormat::TIFF,\n    |                           ^^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n746 -         \"tif\" | \"tiff\" => image::ImageFormat::TIFF,\n746 +         \"tif\" | \"tiff\" => ImageFormat::TIFF,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:747:18\n    |\n747 |         \"tga\" => image::ImageFormat::TGA,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n747 -         \"tga\" => image::ImageFormat::TGA,\n747 +         \"tga\" => ImageFormat::TGA,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:748:18\n    |\n748 |         \"bmp\" => image::ImageFormat::BMP,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n748 -         \"bmp\" => image::ImageFormat::BMP,\n748 +         \"bmp\" => ImageFormat::BMP,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:749:18\n    |\n749 |         \"ico\" => image::ImageFormat::ICO,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n749 -         \"ico\" => image::ImageFormat::ICO,\n749 +         \"ico\" => ImageFormat::ICO,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:750:18\n    |\n750 |         \"hdr\" => image::ImageFormat::HDR,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n750 -         \"hdr\" => image::ImageFormat::HDR,\n750 +         \"hdr\" => ImageFormat::HDR,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:751:42\n    |\n751 |         \"pbm\" | \"pam\" | \"ppm\" | \"pgm\" => image::ImageFormat::PNM,\n    |                                          ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n751 -         \"pbm\" | \"pam\" | \"ppm\" | \"pgm\" => image::ImageFormat::PNM,\n751 +         \"pbm\" | \"pam\" | \"ppm\" | \"pgm\" => ImageFormat::PNM,\n    |\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:791:36\n    |\n791 |     let fout = &mut BufWriter::new(try!(File::create(path)));\n    |                                    ^^^\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:848:9\n    |\n848 |         image::ImageFormat::HDR => decoder_to_image(try!(hdr::HDRAdapter::new(BufReader::new(r)))),\n    |         ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n848 -         image::ImageFormat::HDR => decoder_to_image(try!(hdr::HDRAdapter::new(BufReader::new(r)))),\n848 +         ImageFormat::HDR => decoder_to_image(try!(hdr::HDRAdapter::new(BufReader::new(r)))),\n    |\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:883:42\n    |\n883 |     load_from_memory_with_format(buffer, try!(guess_format(buffer)))\n    |                                          ^^^\n\nwarning: unnecessary qualification\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/utils/mod.rs:43:39\n   |\n43 |     let mut new = vec![0; vec.len() * mem::size_of::<u16>()];\n   |                                       ^^^^^^^^^^^^^^^^^^^\n   |\nhelp: remove the unnecessary path segments\n   |\n43 -     let mut new = vec![0; vec.len() * mem::size_of::<u16>()];\n43 +     let mut new = vec![0; vec.len() * size_of::<u16>()];\n   |\n\nwarning: trait objects without an explicit `dyn` are deprecated\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/imageops/sample.rs:37:21\n   |\n37 |     pub kernel: Box<Fn(f32) -> f32 + 'a>,\n   |                     ^^^^^^^^^^^^^^^^^^^\n   |\n   = warning: this is accepted in the current edition (Rust 2015) but is a hard error in Rust 2021!\n   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2021/warnings-promoted-to-error.html>\n   = note: `#[warn(bare_trait_objects)]` (part of `#[warn(rust_2021_compatibility)]`) on by default\nhelp: if this is a dyn-compatible trait, use `dyn`\n   |\n37 |     pub kernel: Box<dyn Fn(f32) -> f32 + 'a>,\n   |                     +++\n\nwarning: trait objects without an explicit `dyn` are deprecated\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/animation.rs:10:19\n   |\n10 |     iterator: Box<Iterator<Item = ImageResult<Frame>> + 'a>\n   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n   |\n   = warning: this is accepted in the current edition (Rust 2015) but is a hard error in Rust 2021!\n   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2021/warnings-promoted-to-error.html>\nhelp: if this is a dyn-compatible trait, use `dyn`\n   |\n10 |     iterator: Box<dyn Iterator<Item = ImageResult<Frame>> + 'a>\n   |                   +++\n\nwarning: trait objects without an explicit `dyn` are deprecated\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/animation.rs:15:30\n   |\n15 |     pub fn new(iterator: Box<Iterator<Item = ImageResult<Frame>> + 'a>) -> Self {\n   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n   |\n   = warning: this is accepted in the current edition (Rust 2015) but is a hard error in Rust 2021!\n   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2021/warnings-promoted-to-error.html>\nhelp: if this is a dyn-compatible trait, use `dyn`\n   |\n15 |     pub fn new(iterator: Box<dyn Iterator<Item = ImageResult<Frame>> + 'a>) -> Self {\n   |                              +++\n\nwarning: trait objects without an explicit `dyn` are deprecated\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/image.rs:93:32\n   |\n93 |     fn cause(&self) -> Option<&Error> {\n   |                                ^^^^^\n   |\n   = warning: this is accepted in the current edition (Rust 2015) but is a hard error in Rust 2021!\n   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2021/warnings-promoted-to-error.html>\nhelp: if this is a dyn-compatible trait, use `dyn`\n   |\n93 |     fn cause(&self) -> Option<&dyn Error> {\n   |                                +++\n\nwarning: use of deprecated method `std::error::Error::description`: use the Display impl or to_string()\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:687:45\n    |\n687 | ...                   parse_error.description()\n    |                                   ^^^^^^^^^^^\n\nwarning: use of deprecated method `std::error::Error::description`: use the Display impl or to_string()\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:702:45\n    |\n702 | ...                   parse_error.description()\n    |                                   ^^^^^^^^^^^\n\nwarning: use of deprecated method `std::error::Error::description`: use the Display impl or to_string()\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:750:29\n    |\n750 |                         err.description()\n    |                             ^^^^^^^^^^^\n\nwarning: use of deprecated method `std::error::Error::description`: use the Display impl or to_string()\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:819:71\n    |\n819 |             ImageError::FormatError(format!(\"{} {}\", description, err.description()))\n    |                                                                       ^^^^^^^^^^^\n\nwarning: use of deprecated method `std::error::Error::description`: use the Display impl or to_string()\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/hdr/decoder.rs:827:71\n    |\n827 |             ImageError::FormatError(format!(\"{} {}\", description, err.description()))\n    |                                                                       ^^^^^^^^^^^\n\nwarning: variable does not need to be mutable\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:473:13\n    |\n473 |         let mut bytes = self.raw_pixels();\n    |             ----^^^^^\n    |             |\n    |             help: remove this `mut`\n    |\n    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default\n\nwarning: variable does not need to be mutable\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:475:13\n    |\n475 |         let mut color = self.color();\n    |             ----^^^^^\n    |             |\n    |             help: remove this `mut`\n\nwarning: unused variable: `w`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:470:9\n    |\n470 |         w: &mut W,\n    |         ^ help: if this is intentional, prefix it with an underscore: `_w`\n    |\n    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused variable: `bytes`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:473:13\n    |\n473 |         let mut bytes = self.raw_pixels();\n    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_bytes`\n\nwarning: unused variable: `width`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:474:14\n    |\n474 |         let (width, height) = self.dimensions();\n    |              ^^^^^ help: if this is intentional, prefix it with an underscore: `_width`\n\nwarning: unused variable: `height`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:474:21\n    |\n474 |         let (width, height) = self.dimensions();\n    |                     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_height`\n\nwarning: unused variable: `color`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:475:13\n    |\n475 |         let mut color = self.color();\n    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_color`\n\nwarning: unused variable: `buf`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:786:5\n    |\n786 |     buf: &[u8],\n    |     ^^^ help: if this is intentional, prefix it with an underscore: `_buf`\n\nwarning: unused variable: `width`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:787:5\n    |\n787 |     width: u32,\n    |     ^^^^^ help: if this is intentional, prefix it with an underscore: `_width`\n\nwarning: unused variable: `height`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:788:5\n    |\n788 |     height: u32,\n    |     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_height`\n\nwarning: unused variable: `color`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:789:5\n    |\n789 |     color: color::ColorType,\n    |     ^^^^^ help: if this is intentional, prefix it with an underscore: `_color`\n\nwarning: unused variable: `fout`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/dynimage.rs:791:9\n    |\n791 |     let fout = &mut BufWriter::new(try!(File::create(path)));\n    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_fout`\n\nwarning: function `copy_memory` is never used\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/lib.rs:117:4\n    |\n117 | fn copy_memory(src: &[u8], mut dst: &mut [u8]) {\n    |    ^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: function `num_components` is never used\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/color.rs:45:8\n   |\n45 | pub fn num_components(c: ColorType) -> usize {\n   |        ^^^^^^^^^^^^^^\n\nwarning: struct `ImageReadBuffer` is never constructed\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/image.rs:204:19\n    |\n204 | pub(crate) struct ImageReadBuffer {\n    |                   ^^^^^^^^^^^^^^^\n\nwarning: associated items `new` and `read` are never used\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/image.rs:213:12\n    |\n212 | impl ImageReadBuffer {\n    | -------------------- associated items in this implementation\n213 |     pub fn new(scanline_bytes: usize, total_bytes: usize) -> Self {\n    |            ^^^\n...\n222 |     pub fn read<F>(&mut self, buf: &mut [u8], mut read_scanline: F) -> io::Result<usize>\n    |            ^^^^\n\nwarning: function `vec_u16_into_u8` is never used\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/utils/mod.rs:37:8\n   |\n37 | pub fn vec_u16_into_u8(vec: Vec<u16>) -> Vec<u8> {\n   |        ^^^^^^^^^^^^^^^\n\nwarning: function `vec_u16_copy_u8` is never used\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/utils/mod.rs:42:8\n   |\n42 | pub fn vec_u16_copy_u8(vec: &Vec<u16>) -> Vec<u8> {\n   |        ^^^^^^^^^^^^^^^\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/buffer.rs:352:19\n    |\n352 |     pub fn pixels(&self) -> Pixels<P> {\n    |                   ^^^^^     ^^^^^^^^^ the same lifetime is hidden here\n    |                   |\n    |                   the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\n    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default\nhelp: use `'_` for type paths\n    |\n352 |     pub fn pixels(&self) -> Pixels<'_, P> {\n    |                                    +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/buffer.rs:361:29\n    |\n361 |     pub fn enumerate_pixels(&self) -> EnumeratePixels<P> {\n    |                             ^^^^^     ^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                             |\n    |                             the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n361 |     pub fn enumerate_pixels(&self) -> EnumeratePixels<'_, P> {\n    |                                                       +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/buffer.rs:461:23\n    |\n461 |     pub fn pixels_mut(&mut self) -> PixelsMut<P> {\n    |                       ^^^^^^^^^     ^^^^^^^^^^^^ the same lifetime is hidden here\n    |                       |\n    |                       the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n461 |     pub fn pixels_mut(&mut self) -> PixelsMut<'_, P> {\n    |                                               +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/buffer.rs:470:33\n    |\n470 |     pub fn enumerate_pixels_mut(&mut self) -> EnumeratePixelsMut<P> {\n    |                                 ^^^^^^^^^     ^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                                 |\n    |                                 the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n470 |     pub fn enumerate_pixels_mut(&mut self) -> EnumeratePixelsMut<'_, P> {\n    |                                                                  +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/image.rs:595:15\n    |\n595 |     fn pixels(&self) -> Pixels<Self> {\n    |               ^^^^^     ^^^^^^^^^^^^ the same lifetime is hidden here\n    |               |\n    |               the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n595 |     fn pixels(&self) -> Pixels<'_, Self> {\n    |                                +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2/src/image.rs:655:19\n    |\n655 |     fn pixels_mut(&mut self) -> MutPixels<Self> {\n    |                   ^^^^^^^^^     ^^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                   |\n    |                   the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n655 |     fn pixels_mut(&mut self) -> MutPixels<'_, Self> {\n    |                                           +++\n\nwarning: `image` (lib) generated 99 warnings (run `cargo fix --lib -p image` to apply 37 suggestions)\n   Compiling rsh-050-harness v0.0.0 (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/project)\n    Finished `release` profile [optimized] target(s) in 8.26s\n",
+        "stderr_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/artifacts/build.stderr",
+        "stderr_sha256": "e231eb34a28fbdff7a23b2b1e03112f577ebbf20f4e8f8aeefd7841cf0d30214",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/artifacts/build.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 8.284964255
+      },
+      "case_id": "RSH-050",
+      "claim_boundary": "This arm records reproduction and detector observations only. It does not establish mitigation, detection coverage, or exploit prevention.",
+      "claim_grade": false,
+      "crate": "image",
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "efficacy_blockers": [
+        "critical_site_coverage_not_validated"
+      ],
+      "efficacy_eligible": false,
+      "execution_mode": "asan",
+      "execution_status": "completed",
+      "fingerprint": "36d217898f389e37d5d6f32ebb63c0d68a97fd6bca728da2e2723ac706523335",
+      "fingerprint_payload": {
+        "allocator_variant": "system",
+        "archive_sha256": "99198e595d012efccf12abf4abc08da2d97be0b0355a2b08d101347527476ba4",
+        "archive_variant": "vulnerable",
+        "base_lock_sha256": "5a7ac081bc5a3b8fee3d8b3152870e03b8d2b26bae6af9d0725e2af59ad7aed0",
+        "cargo_config_sha256": "c29c2607f4e15f5e5f839f9bdef26dfd401230491358f70faaff82494de33004",
+        "catalog_sha256": "3ebacfd4609fa06901d6b0aeb8a4a25ac549ccca578822fb93979b5a085f3659",
+        "effective_lock_sha256": "5a7ac081bc5a3b8fee3d8b3152870e03b8d2b26bae6af9d0725e2af59ad7aed0",
+        "effective_manifest_sha256": "6831c218dc945e583a473bc9963636f618e699cc4812db120265538265ed3b94",
+        "materializer_sha256": "ea1de13aa79777a5d273b9e314850ae966d0ec036b9a99fe33d0c7232fe425a7",
+        "orchestrator_sha256": "7981732efbe19c89e89d1bbfdfa4e936d899330c66a7c626e6eaf265fd66ca0d",
+        "realworld_driver_sha256": "c0b1b1eedc0d95d8ac702c83699f7231845a5a9eea9e1e3b3efb5b6fe6be23c4",
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "scenario_id": "RSH-050-upstream-reduction",
+        "schema_version": 1,
+        "source_sha256": "97b9da70269bbcd00841add5c364ec03d83638cad75aa295ebcd98c96c53b8a5",
+        "target_crates": [
+          "image",
+          "rsh_050_harness"
+        ],
+        "toolchain": {
+          "cargo": {
+            "command": [
+              "cargo",
+              "+nightly-2026-06-11",
+              "-V"
+            ],
+            "exit_code": 0,
+            "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+            "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+          },
+          "name": "nightly-2026-06-11",
+          "rustc": {
+            "command": [
+              "rustc",
+              "+nightly-2026-06-11",
+              "-vV"
+            ],
+            "exit_code": 0,
+            "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+            "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+          },
+          "target": "x86_64-unknown-linux-gnu"
+        },
+        "transformed_sources": {
+          "original_source_sha256": "97b9da70269bbcd00841add5c364ec03d83638cad75aa295ebcd98c96c53b8a5",
+          "witness_module_sha256": "597555d9b1cb336d98a4a377b1936122ebcacc96561bfdcaa6051ab0f6cd26a4",
+          "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+        },
+        "unialloc_implementation_sha256": "13a1acd09b910ca43a67f6ae4a8477fb6db6092ede99dc4252dfa1bc6e098b1e"
+      },
+      "full_rebuild_required": true,
+      "ground_truth_arm": true,
+      "lock_resolution": null,
+      "materialization": {
+        "archive_bytes": 142274,
+        "archive_path": "/tmp/strong-batch-a-cache/archives/image-0.21.2.crate",
+        "archive_sha256": "99198e595d012efccf12abf4abc08da2d97be0b0355a2b08d101347527476ba4",
+        "cargo_lock_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-050/Cargo.lock.vulnerable",
+        "cargo_lock_sha256": "5a7ac081bc5a3b8fee3d8b3152870e03b8d2b26bae6af9d0725e2af59ad7aed0",
+        "case_id": "RSH-050",
+        "claim_grade": false,
+        "dependency_package": "image",
+        "dependency_version": "0.21.2",
+        "oracle": {
+          "patched_control": "image 0.21.3 returns the expected truncated-input error and exits 0 with no AddressSanitizer finding",
+          "tool": "asan",
+          "vulnerable": "AddressSanitizer reports a sanitizer fault (DEADLYSIGNAL/SEGV) while deallocating the uninitialized Box dropped after the HDR scanline error"
+        },
+        "required_environment": {
+          "ASAN_OPTIONS": "detect_leaks=0"
+        },
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "scenario_id": "RSH-050-upstream-reduction",
+        "schema_version": 1,
+        "source": "unialloc-rustsec-heap-materialization",
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-050/main.rs",
+        "source_sha256": "97b9da70269bbcd00841add5c364ec03d83638cad75aa295ebcd98c96c53b8a5",
+        "subject_directory": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work/subject/image-0.21.2",
+        "variant": "vulnerable",
+        "work_directory": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/work"
+      },
+      "oracle_validation": {
+        "boundary": "A clean exit or absent tool finding does not establish mitigation; matched repeated baseline/treatment evidence is required.",
+        "claim_grade": false,
+        "diagnostic_only": false,
+        "expected_contract": {
+          "compile_error_codes": [],
+          "expected_finding_signature": "asan_deadly_fault",
+          "kind": "asan_finding",
+          "parse_status": "parsed",
+          "required_evidence": [
+            "asan_deadly_fault",
+            "run_nonzero"
+          ]
+        },
+        "expected_description": "AddressSanitizer reports a sanitizer fault (DEADLYSIGNAL/SEGV) while deallocating the uninitialized Box dropped after the HDR scanline error",
+        "expected_oracle_observed": true,
+        "matched_compile_error_codes": [],
+        "mitigation_inferred": false,
+        "native_diagnostic_signatures": [],
+        "oracle_role": "catalog_oracle",
+        "repetition_observations": [
+          {
+            "address_reuse_observed": false,
+            "claim_grade": false,
+            "clean_exit": false,
+            "exit_code": 1,
+            "mitigation_inferred": false,
+            "native_diagnostic_signature": null,
+            "repetition": 1,
+            "rust_panic_or_assertion_observed": false,
+            "sanitizer_finding_observed": true,
+            "timed_out": false,
+            "tool_finding_signature": "asan_deadly_fault"
+          }
+        ],
+        "status": "tool_finding_observed",
+        "tool_finding_signatures": [
+          "asan_deadly_fault"
+        ]
+      },
+      "pass_audit_summary": {
+        "audit_file_count": 0,
+        "audit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "claim_grade_file_count": 0,
+        "crate_names": [],
+        "direct_allocator_rewrites_applied": 0,
+        "direct_layout_allocator_rewrites_applied": 0,
+        "semantic_deallocation_like_rewrites_applied": 0,
+        "semantic_drop_rewrites_applied": 0,
+        "semantic_ownership_transfer_rewrites_applied": 0,
+        "semantic_rewrites_applied": 0,
+        "semantic_scope_rewrites_applied": 0,
+        "total_compiler_rewrites_applied": 0,
+        "unresolved_file_count": 0
+      },
+      "pass_audit_validation": {
+        "claim_grade": false,
+        "compiler_rewrite_counts": {
+          "direct_allocator_rewrites_applied": 0,
+          "direct_layout_allocator_rewrites_applied": 0,
+          "semantic_ownership_transfer_rewrites_applied": 0,
+          "semantic_rewrites_applied": 0,
+          "total_compiler_rewrites_applied": 0
+        },
+        "critical_site_coverage_validated": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated",
+          "no_compiler_rewrite_observed"
+        ],
+        "efficacy_eligible": false,
+        "rewrite_route": "none",
+        "status": "not_applicable",
+        "valid": null,
+        "validation_scope": "target_crate_presence_and_force_load_topology_only"
+      },
+      "pass_audits": [],
+      "pass_logs": [],
+      "platform_constraints": {},
+      "repetition_summary": {
+        "address_reuse_observation_count": 0,
+        "claim_grade": false,
+        "clean_exit_count": 0,
+        "executed": 1,
+        "exit_codes": [
+          1
+        ],
+        "mitigation_inferred": false,
+        "native_diagnostic_signal_count": 0,
+        "requested": 1,
+        "timed_out_count": 0,
+        "tool_finding_count": 1
+      },
+      "repetitions_requested": 1,
+      "required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "reuse_denial_evidence": {
+        "claim_grade": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "run": {
+        "command": [
+          "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness"
+        ],
+        "cwd": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release",
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "ASAN_OPTIONS",
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 1,
+        "stderr": "AddressSanitizer:DEADLYSIGNAL\n=================================================================\n==3726859==ERROR: AddressSanitizer: SEGV on unknown address (pc 0x55719e3205c3 bp 0x000000000001 sp 0x7ffface763e0 T0)\n==3726859==The signal is caused by a READ memory access.\n==3726859==Hint: this fault was caused by a dereference of a high value address (see register values below).  Disassemble the provided pc to learn which register was used.\n    #0 0x55719e3205c3 in __asan::Allocator::Deallocate(void*, unsigned long, unsigned long, __sanitizer::BufferedStackTrace*, __asan::AllocType) asan_allocator.cpp\n    #1 0x55719e3abf66 in free (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness+0xe7f66) (BuildId: e196fc350f1496b6d12544772786ec7a17d2578c)\n    #2 0x55719e3e7f6c in <image::hdr::decoder::HDRDecoder<core::io::cursor::Cursor<&[u8]>>>::read_image_transform::<alloc::boxed::Box<u64>, rsh_050_harness::witness::run::{closure#0}> rsh_050_harness.60f9a9618c0c524e-cgu.3\n    #3 0x55719e3e63be in rsh_050_harness::main rsh_050_harness.60f9a9618c0c524e-cgu.2\n    #4 0x55719e3e5e25 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> rsh_050_harness.60f9a9618c0c524e-cgu.2\n    #5 0x55719e3e5e4b in std::rt::lang_start::<()>::{closure#0} rsh_050_harness.60f9a9618c0c524e-cgu.2\n    #6 0x55719e4390c6 in std::rt::lang_start_internal (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness+0x1750c6) (BuildId: e196fc350f1496b6d12544772786ec7a17d2578c)\n    #7 0x55719e3e7b28 in main (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness+0x123b28) (BuildId: e196fc350f1496b6d12544772786ec7a17d2578c)\n    #8 0x7ff316a2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #9 0x7ff316a2a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #10 0x55719e31ef24 in _start (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness+0x5af24) (BuildId: e196fc350f1496b6d12544772786ec7a17d2578c)\n\n==3726859==Register values:\nrax = 0x0000000000000002  rbx = 0x00007ffface76428  rcx = 0x0000000000000003  rdx = 0x0000000000000000  \nrdi = 0xbebebebebebebebe  rsi = 0xbebebebebebebebe  rbp = 0x0000000000000001  rsp = 0x00007ffface763e0  \n r8 = 0x00007ffface76428   r9 = 0x0000000000000001  r10 = 0x0000000000000000  r11 = 0x0000000000000009  \nr12 = 0x000055719e461450  r13 = 0xbebebebebebebeae  r14 = 0xbebebebebebebebe  r15 = 0x0000000000000000  \nAddressSanitizer can not provide additional info.\nSUMMARY: AddressSanitizer: SEGV asan_allocator.cpp in __asan::Allocator::Deallocate(void*, unsigned long, unsigned long, __sanitizer::BufferedStackTrace*, __asan::AllocType)\n==3726859==ABORTING\n",
+        "stderr_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/artifacts/run-001.stderr",
+        "stderr_sha256": "74f9b1b5a317dac521ddcb8ebe1d1f4792caa4ec86b7665f1751f3837edeb698",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/artifacts/run-001.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 0.315540218
+      },
+      "runs": [
+        {
+          "command": [
+            "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness"
+          ],
+          "cwd": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release",
+          "environment": {
+            "ASAN_OPTIONS": "detect_leaks=0",
+            "CARGO_INCREMENTAL": "0",
+            "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target",
+            "HOME": "/home/hanqing",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "LOGNAME": "hanqing",
+            "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+            "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+            "SHELL": "/usr/bin/zsh",
+            "TERM": "xterm-256color",
+            "USER": "hanqing"
+          },
+          "environment_allowlist": [
+            "ASAN_OPTIONS",
+            "CARGO_INCREMENTAL",
+            "CARGO_TARGET_DIR",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LOGNAME",
+            "PATH",
+            "RUSTFLAGS",
+            "SHELL",
+            "TERM",
+            "USER"
+          ],
+          "exit_code": 1,
+          "stderr": "AddressSanitizer:DEADLYSIGNAL\n=================================================================\n==3726859==ERROR: AddressSanitizer: SEGV on unknown address (pc 0x55719e3205c3 bp 0x000000000001 sp 0x7ffface763e0 T0)\n==3726859==The signal is caused by a READ memory access.\n==3726859==Hint: this fault was caused by a dereference of a high value address (see register values below).  Disassemble the provided pc to learn which register was used.\n    #0 0x55719e3205c3 in __asan::Allocator::Deallocate(void*, unsigned long, unsigned long, __sanitizer::BufferedStackTrace*, __asan::AllocType) asan_allocator.cpp\n    #1 0x55719e3abf66 in free (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness+0xe7f66) (BuildId: e196fc350f1496b6d12544772786ec7a17d2578c)\n    #2 0x55719e3e7f6c in <image::hdr::decoder::HDRDecoder<core::io::cursor::Cursor<&[u8]>>>::read_image_transform::<alloc::boxed::Box<u64>, rsh_050_harness::witness::run::{closure#0}> rsh_050_harness.60f9a9618c0c524e-cgu.3\n    #3 0x55719e3e63be in rsh_050_harness::main rsh_050_harness.60f9a9618c0c524e-cgu.2\n    #4 0x55719e3e5e25 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> rsh_050_harness.60f9a9618c0c524e-cgu.2\n    #5 0x55719e3e5e4b in std::rt::lang_start::<()>::{closure#0} rsh_050_harness.60f9a9618c0c524e-cgu.2\n    #6 0x55719e4390c6 in std::rt::lang_start_internal (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness+0x1750c6) (BuildId: e196fc350f1496b6d12544772786ec7a17d2578c)\n    #7 0x55719e3e7b28 in main (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness+0x123b28) (BuildId: e196fc350f1496b6d12544772786ec7a17d2578c)\n    #8 0x7ff316a2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #9 0x7ff316a2a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #10 0x55719e31ef24 in _start (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness+0x5af24) (BuildId: e196fc350f1496b6d12544772786ec7a17d2578c)\n\n==3726859==Register values:\nrax = 0x0000000000000002  rbx = 0x00007ffface76428  rcx = 0x0000000000000003  rdx = 0x0000000000000000  \nrdi = 0xbebebebebebebebe  rsi = 0xbebebebebebebebe  rbp = 0x0000000000000001  rsp = 0x00007ffface763e0  \n r8 = 0x00007ffface76428   r9 = 0x0000000000000001  r10 = 0x0000000000000000  r11 = 0x0000000000000009  \nr12 = 0x000055719e461450  r13 = 0xbebebebebebebeae  r14 = 0xbebebebebebebebe  r15 = 0x0000000000000000  \nAddressSanitizer can not provide additional info.\nSUMMARY: AddressSanitizer: SEGV asan_allocator.cpp in __asan::Allocator::Deallocate(void*, unsigned long, unsigned long, __sanitizer::BufferedStackTrace*, __asan::AllocType)\n==3726859==ABORTING\n",
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "74f9b1b5a317dac521ddcb8ebe1d1f4792caa4ec86b7665f1751f3837edeb698",
+          "stdout": "",
+          "stdout_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/artifacts/run-001.stdout",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "wall_seconds": 0.315540218
+        }
+      ],
+      "runtime_stats": null,
+      "runtime_stats_by_repetition": [],
+      "runtime_stats_validation": {
+        "claim_grade": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated"
+        ],
+        "efficacy_eligible": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ]
+      },
+      "scenario_id": "RSH-050-upstream-reduction",
+      "schema_version": 1,
+      "source": "unialloc-rustsec-heap-experiment",
+      "source_provenance": {
+        "archive_sha256": "99198e595d012efccf12abf4abc08da2d97be0b0355a2b08d101347527476ba4",
+        "base_lock_sha256": "5a7ac081bc5a3b8fee3d8b3152870e03b8d2b26bae6af9d0725e2af59ad7aed0",
+        "effective_lock_sha256": "5a7ac081bc5a3b8fee3d8b3152870e03b8d2b26bae6af9d0725e2af59ad7aed0",
+        "original_source_sha256": "97b9da70269bbcd00841add5c364ec03d83638cad75aa295ebcd98c96c53b8a5",
+        "source_sha256": "97b9da70269bbcd00841add5c364ec03d83638cad75aa295ebcd98c96c53b8a5",
+        "witness_module_sha256": "597555d9b1cb336d98a4a377b1936122ebcacc96561bfdcaa6051ab0f6cd26a4",
+        "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+      },
+      "target_crates": [
+        "image",
+        "rsh_050_harness"
+      ],
+      "target_reset": false,
+      "target_reset_reasons": [
+        "fingerprint_changed"
+      ],
+      "tool": "asan",
+      "toolchain": {
+        "cargo": {
+          "command": [
+            "cargo",
+            "+nightly-2026-06-11",
+            "-V"
+          ],
+          "exit_code": 0,
+          "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+          "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+        },
+        "name": "nightly-2026-06-11",
+        "rustc": {
+          "command": [
+            "rustc",
+            "+nightly-2026-06-11",
+            "-vV"
+          ],
+          "exit_code": 0,
+          "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+          "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+        },
+        "target": "x86_64-unknown-linux-gnu"
+      }
+    },
+    {
+      "allocator_provenance": {
+        "compiler_wrapper_sha256": null,
+        "direct_cargo_configuration": null,
+        "direct_cargo_unialloc": false,
+        "force_loaded_unialloc": false,
+        "force_rlib_sha256": null,
+        "force_wrapper_sha256": null,
+        "single_unialloc_identity_enforced": true,
+        "unialloc_implementation_sha256": "13a1acd09b910ca43a67f6ae4a8477fb6db6092ede99dc4252dfa1bc6e098b1e"
+      },
+      "allocator_topology": {
+        "allocator_variant": "system",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "system",
+      "archive_variant": "patched",
+      "binary_artifact": {
+        "bytes": 2139584,
+        "path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness",
+        "sha256": "c1770e9aeffa150b22f8abf1359e1bd890de279563a9a5100cad3bf1006bdb20"
+      },
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--offline",
+          "--locked",
+          "--manifest-path",
+          "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/project/Cargo.toml",
+          "--jobs",
+          "1",
+          "--release",
+          "--target",
+          "x86_64-unknown-linux-gnu"
+        ],
+        "cwd": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/project",
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "ASAN_OPTIONS",
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 0,
+        "stderr": "warning: ../subject/image-0.21.3/Cargo.toml: `package.edition` is unspecified, defaulting to `2015` while the latest is `2024`\nwarning: `image` (manifest) generated 1 warning\n   Compiling autocfg v1.5.1\n   Compiling num-traits v0.2.19\n   Compiling num-integer v0.1.46\n   Compiling num-rational v0.2.4\n   Compiling num-iter v0.1.46\n   Compiling scoped_threadpool v0.1.9\n   Compiling lzw v0.10.0\n   Compiling byteorder v1.5.0\n   Compiling image v0.21.3 (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3)\nwarning: unexpected `cfg` condition value: `cargo-clippy`\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/lib.rs:10:13\n   |\n10 | #![cfg_attr(feature = \"cargo-clippy\", allow(many_single_char_names))]\n   |             ^^^^^^^^^^^^^^^^^^^^^^^^\n   |\n   = note: expected values for `feature` are: `benchmarks`, `bmp`, `default`, `dxt`, `gif`, `gif_codec`, `hdr`, `ico`, `jpeg`, `jpeg-decoder`, `jpeg_rayon`, `png`, `png_codec`, `pnm`, `scoped_threadpool`, `tga`, `tiff`, and `webp`\n   = help: consider adding `cargo-clippy` as a feature in `Cargo.toml`\n   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration\n   = note: `#[warn(unexpected_cfgs)]` on by default\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:27:23\n   |\n27 |         let decoder = try!(HDRDecoder::new(r));\n   |                       ^^^\n   |\n   = note: `#[warn(deprecated)]` on by default\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:38:23\n   |\n38 |         let decoder = try!(HDRDecoder::with_strictness(r, false));\n   |                       ^^^\n\nwarning: unnecessary qualification\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:53:39\n   |\n53 |                 let len = img.len() * mem::size_of::<Rgb<u8>>(); // length in bytes\n   |                                       ^^^^^^^^^^^^^^^^^^^^^^^\n   |\nnote: the lint level is defined here\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/lib.rs:6:9\n   |\n 6 | #![warn(unused_qualifications)]\n   |         ^^^^^^^^^^^^^^^^^^^^^\nhelp: remove the unnecessary path segments\n   |\n53 -                 let len = img.len() * mem::size_of::<Rgb<u8>>(); // length in bytes\n53 +                 let len = img.len() * size_of::<Rgb<u8>>(); // length in bytes\n   |\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:232:17\n    |\n232 |                 try!(r.read_exact(&mut signature));\n    |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:239:17\n    |\n239 |                 try!(read_line_u8(r));\n    |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:246:23\n    |\n246 |                 match try!(read_line_u8(r)) {\n    |                       ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:262:25\n    |\n262 |                         try!(attributes.update_header_info(&line, strict));\n    |                         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:268:37\n    |\n268 |         let (width, height) = match try!(read_line_u8(&mut reader)) {\n    |                                     ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:275:17\n    |\n275 |                 try!(parse_dimensions_line(&dimensions, strict))\n    |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:307:13\n    |\n307 |             try!(read_scanline(&mut self.r, chunk));\n    |             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:362:13\n    |\n362 |             try!(pool.scoped(|scope| {\n    |             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:365:21\n    |\n365 |                     try!(read_scanline(&mut self.r, &mut buf[..]));\n    |                     ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:517:14\n    |\n517 |     let fb = try!(read_rgbe(r));\n    |              ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:522:9\n    |\n522 |         try!(decode_component(r, width, |offset, value| buf[offset].c[0] = value));\n    |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:523:9\n    |\n523 |         try!(decode_component(r, width, |offset, value| buf[offset].c[1] = value));\n    |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:524:9\n    |\n524 |         try!(decode_component(r, width, |offset, value| buf[offset].c[2] = value));\n    |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:525:9\n    |\n525 |         try!(decode_component(r, width, |offset, value| buf[offset].e = value));\n    |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:528:9\n    |\n528 |         try!(decode_old_rle(r, fb, buf));\n    |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:536:5\n    |\n536 |     try!(r.read_exact(&mut buf[..]));\n    |     ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:552:22\n    |\n552 |             let rl = try!(read_byte(r));\n    |                      ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:561:17\n    |\n561 |                 try!(r.read_exact(&mut buf[0..rl as usize]));\n    |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:576:29\n    |\n576 |                 let value = try!(read_byte(r));\n    |                             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:625:19\n    |\n625 |         let pix = try!(read_rgbe(r));\n    |                   ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:661:5\n    |\n661 |     try!(r.read_exact(&mut buf[..]));\n    |     ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:820:18\n    |\n820 |     let c1_tag = try!(\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:825:18\n    |\n825 |     let c1_str = try!(\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:830:18\n    |\n830 |     let c2_tag = try!(\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:835:18\n    |\n835 |     let c2_str = try!(\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:850:26\n    |\n850 |             let height = try!(c1_str.parse::<u32>().into_image_error(err));\n    |                          ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:851:25\n    |\n851 |             let width = try!(c2_str.parse::<u32>().into_image_error(err));\n    |                         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:962:32\n    |\n962 |     let mut r = BufReader::new(try!(File::open(path)));\n    |                                ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:963:13\n    |\n963 |     let w = try!(r.read_u32::<LE>()) as usize;\n    |             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:964:13\n    |\n964 |     let h = try!(r.read_u32::<LE>()) as usize;\n    |             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:965:13\n    |\n965 |     let c = try!(r.read_u32::<LE>()) as usize;\n    |             ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:970:18\n    |\n970 |         let cr = try!(r.read_f32::<LE>());\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:971:18\n    |\n971 |         let cg = try!(r.read_f32::<LE>());\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:972:18\n    |\n972 |         let cb = try!(r.read_f32::<LE>());\n    |                  ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/encoder.rs:21:9\n   |\n21 |         try!(w.write_all(SIGNATURE));\n   |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/encoder.rs:22:9\n   |\n22 |         try!(w.write_all(b\"\\n\"));\n   |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/encoder.rs:23:9\n   |\n23 |         try!(w.write_all(b\"# Rust HDR encoder\\n\"));\n   |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/encoder.rs:24:9\n   |\n24 |         try!(w.write_all(b\"FORMAT=32-bit_rle_rgbe\\n\\n\"));\n   |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/encoder.rs:25:9\n   |\n25 |         try!(w.write_all(format!(\"-Y {} +X {}\\n\", height, width).as_bytes()));\n   |         ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/encoder.rs:29:17\n   |\n29 |                 try!(write_rgbe8(w, to_rgbe8(pix)));\n   |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/encoder.rs:57:17\n   |\n57 |                 try!(write_rgbe8(w, marker)); // New RLE encoding marker\n   |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/encoder.rs:60:17\n   |\n60 |                 try!(w.write_all(&rle_buf[..]));\n   |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/encoder.rs:63:17\n   |\n63 |                 try!(w.write_all(&rle_buf[..]));\n   |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/encoder.rs:66:17\n   |\n66 |                 try!(w.write_all(&rle_buf[..]));\n   |                 ^^^\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/encoder.rs:69:17\n   |\n69 |                 try!(w.write_all(&rle_buf[..]));\n   |                 ^^^\n\nwarning: anonymous parameters are deprecated and will be removed in the next edition\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/color.rs:239:30\n    |\n239 |     fn from_color(&mut self, &Other);\n    |                              ^^^^^^ help: try naming the parameter or explicitly ignoring it: `_: &Other`\n    |\n    = warning: this is accepted in the current edition (Rust 2015) but is a hard error in Rust 2018!\n    = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2018/trait-fn-parameters.html>\n    = note: `#[warn(anonymous_parameters)]` (part of `#[warn(rust_2018_compatibility)]`) on by default\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:549:13\n    |\n549 |             image::ImageOutputFormat::Unsupported(msg) => {\n    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n549 -             image::ImageOutputFormat::Unsupported(msg) => {\n549 +             ImageOutputFormat::Unsupported(msg) => {\n    |\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:631:15\n    |\n631 |     let buf = try!(codec.read_image());\n    |               ^^^\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:742:27\n    |\n742 |         \"jpg\" | \"jpeg\" => image::ImageFormat::JPEG,\n    |                           ^^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n742 -         \"jpg\" | \"jpeg\" => image::ImageFormat::JPEG,\n742 +         \"jpg\" | \"jpeg\" => ImageFormat::JPEG,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:743:18\n    |\n743 |         \"png\" => image::ImageFormat::PNG,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n743 -         \"png\" => image::ImageFormat::PNG,\n743 +         \"png\" => ImageFormat::PNG,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:744:18\n    |\n744 |         \"gif\" => image::ImageFormat::GIF,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n744 -         \"gif\" => image::ImageFormat::GIF,\n744 +         \"gif\" => ImageFormat::GIF,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:745:19\n    |\n745 |         \"webp\" => image::ImageFormat::WEBP,\n    |                   ^^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n745 -         \"webp\" => image::ImageFormat::WEBP,\n745 +         \"webp\" => ImageFormat::WEBP,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:746:27\n    |\n746 |         \"tif\" | \"tiff\" => image::ImageFormat::TIFF,\n    |                           ^^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n746 -         \"tif\" | \"tiff\" => image::ImageFormat::TIFF,\n746 +         \"tif\" | \"tiff\" => ImageFormat::TIFF,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:747:18\n    |\n747 |         \"tga\" => image::ImageFormat::TGA,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n747 -         \"tga\" => image::ImageFormat::TGA,\n747 +         \"tga\" => ImageFormat::TGA,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:748:18\n    |\n748 |         \"bmp\" => image::ImageFormat::BMP,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n748 -         \"bmp\" => image::ImageFormat::BMP,\n748 +         \"bmp\" => ImageFormat::BMP,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:749:18\n    |\n749 |         \"ico\" => image::ImageFormat::ICO,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n749 -         \"ico\" => image::ImageFormat::ICO,\n749 +         \"ico\" => ImageFormat::ICO,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:750:18\n    |\n750 |         \"hdr\" => image::ImageFormat::HDR,\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n750 -         \"hdr\" => image::ImageFormat::HDR,\n750 +         \"hdr\" => ImageFormat::HDR,\n    |\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:751:42\n    |\n751 |         \"pbm\" | \"pam\" | \"ppm\" | \"pgm\" => image::ImageFormat::PNM,\n    |                                          ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n751 -         \"pbm\" | \"pam\" | \"ppm\" | \"pgm\" => image::ImageFormat::PNM,\n751 +         \"pbm\" | \"pam\" | \"ppm\" | \"pgm\" => ImageFormat::PNM,\n    |\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:791:36\n    |\n791 |     let fout = &mut BufWriter::new(try!(File::create(path)));\n    |                                    ^^^\n\nwarning: unnecessary qualification\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:848:9\n    |\n848 |         image::ImageFormat::HDR => decoder_to_image(try!(hdr::HDRAdapter::new(BufReader::new(r)))),\n    |         ^^^^^^^^^^^^^^^^^^^^^^^\n    |\nhelp: remove the unnecessary path segments\n    |\n848 -         image::ImageFormat::HDR => decoder_to_image(try!(hdr::HDRAdapter::new(BufReader::new(r)))),\n848 +         ImageFormat::HDR => decoder_to_image(try!(hdr::HDRAdapter::new(BufReader::new(r)))),\n    |\n\nwarning: use of deprecated macro `try`: use the `?` operator instead\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:883:42\n    |\n883 |     load_from_memory_with_format(buffer, try!(guess_format(buffer)))\n    |                                          ^^^\n\nwarning: unnecessary qualification\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/utils/mod.rs:43:39\n   |\n43 |     let mut new = vec![0; vec.len() * mem::size_of::<u16>()];\n   |                                       ^^^^^^^^^^^^^^^^^^^\n   |\nhelp: remove the unnecessary path segments\n   |\n43 -     let mut new = vec![0; vec.len() * mem::size_of::<u16>()];\n43 +     let mut new = vec![0; vec.len() * size_of::<u16>()];\n   |\n\nwarning: trait objects without an explicit `dyn` are deprecated\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/imageops/sample.rs:37:21\n   |\n37 |     pub kernel: Box<Fn(f32) -> f32 + 'a>,\n   |                     ^^^^^^^^^^^^^^^^^^^\n   |\n   = warning: this is accepted in the current edition (Rust 2015) but is a hard error in Rust 2021!\n   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2021/warnings-promoted-to-error.html>\n   = note: `#[warn(bare_trait_objects)]` (part of `#[warn(rust_2021_compatibility)]`) on by default\nhelp: if this is a dyn-compatible trait, use `dyn`\n   |\n37 |     pub kernel: Box<dyn Fn(f32) -> f32 + 'a>,\n   |                     +++\n\nwarning: trait objects without an explicit `dyn` are deprecated\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/animation.rs:10:19\n   |\n10 |     iterator: Box<Iterator<Item = ImageResult<Frame>> + 'a>\n   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n   |\n   = warning: this is accepted in the current edition (Rust 2015) but is a hard error in Rust 2021!\n   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2021/warnings-promoted-to-error.html>\nhelp: if this is a dyn-compatible trait, use `dyn`\n   |\n10 |     iterator: Box<dyn Iterator<Item = ImageResult<Frame>> + 'a>\n   |                   +++\n\nwarning: trait objects without an explicit `dyn` are deprecated\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/animation.rs:15:30\n   |\n15 |     pub fn new(iterator: Box<Iterator<Item = ImageResult<Frame>> + 'a>) -> Self {\n   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n   |\n   = warning: this is accepted in the current edition (Rust 2015) but is a hard error in Rust 2021!\n   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2021/warnings-promoted-to-error.html>\nhelp: if this is a dyn-compatible trait, use `dyn`\n   |\n15 |     pub fn new(iterator: Box<dyn Iterator<Item = ImageResult<Frame>> + 'a>) -> Self {\n   |                              +++\n\nwarning: trait objects without an explicit `dyn` are deprecated\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/image.rs:93:32\n   |\n93 |     fn cause(&self) -> Option<&Error> {\n   |                                ^^^^^\n   |\n   = warning: this is accepted in the current edition (Rust 2015) but is a hard error in Rust 2021!\n   = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2021/warnings-promoted-to-error.html>\nhelp: if this is a dyn-compatible trait, use `dyn`\n   |\n93 |     fn cause(&self) -> Option<&dyn Error> {\n   |                                +++\n\nwarning: use of deprecated method `std::error::Error::description`: use the Display impl or to_string()\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:737:45\n    |\n737 | ...                   parse_error.description()\n    |                                   ^^^^^^^^^^^\n\nwarning: use of deprecated method `std::error::Error::description`: use the Display impl or to_string()\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:752:45\n    |\n752 | ...                   parse_error.description()\n    |                                   ^^^^^^^^^^^\n\nwarning: use of deprecated method `std::error::Error::description`: use the Display impl or to_string()\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:800:29\n    |\n800 |                         err.description()\n    |                             ^^^^^^^^^^^\n\nwarning: use of deprecated method `std::error::Error::description`: use the Display impl or to_string()\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:869:71\n    |\n869 |             ImageError::FormatError(format!(\"{} {}\", description, err.description()))\n    |                                                                       ^^^^^^^^^^^\n\nwarning: use of deprecated method `std::error::Error::description`: use the Display impl or to_string()\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/hdr/decoder.rs:877:71\n    |\n877 |             ImageError::FormatError(format!(\"{} {}\", description, err.description()))\n    |                                                                       ^^^^^^^^^^^\n\nwarning: variable does not need to be mutable\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:473:13\n    |\n473 |         let mut bytes = self.raw_pixels();\n    |             ----^^^^^\n    |             |\n    |             help: remove this `mut`\n    |\n    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default\n\nwarning: variable does not need to be mutable\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:475:13\n    |\n475 |         let mut color = self.color();\n    |             ----^^^^^\n    |             |\n    |             help: remove this `mut`\n\nwarning: unused variable: `w`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:470:9\n    |\n470 |         w: &mut W,\n    |         ^ help: if this is intentional, prefix it with an underscore: `_w`\n    |\n    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default\n\nwarning: unused variable: `bytes`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:473:13\n    |\n473 |         let mut bytes = self.raw_pixels();\n    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_bytes`\n\nwarning: unused variable: `width`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:474:14\n    |\n474 |         let (width, height) = self.dimensions();\n    |              ^^^^^ help: if this is intentional, prefix it with an underscore: `_width`\n\nwarning: unused variable: `height`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:474:21\n    |\n474 |         let (width, height) = self.dimensions();\n    |                     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_height`\n\nwarning: unused variable: `color`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:475:13\n    |\n475 |         let mut color = self.color();\n    |             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_color`\n\nwarning: unused variable: `buf`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:786:5\n    |\n786 |     buf: &[u8],\n    |     ^^^ help: if this is intentional, prefix it with an underscore: `_buf`\n\nwarning: unused variable: `width`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:787:5\n    |\n787 |     width: u32,\n    |     ^^^^^ help: if this is intentional, prefix it with an underscore: `_width`\n\nwarning: unused variable: `height`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:788:5\n    |\n788 |     height: u32,\n    |     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_height`\n\nwarning: unused variable: `color`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:789:5\n    |\n789 |     color: color::ColorType,\n    |     ^^^^^ help: if this is intentional, prefix it with an underscore: `_color`\n\nwarning: unused variable: `fout`\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/dynimage.rs:791:9\n    |\n791 |     let fout = &mut BufWriter::new(try!(File::create(path)));\n    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_fout`\n\nwarning: function `copy_memory` is never used\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/lib.rs:117:4\n    |\n117 | fn copy_memory(src: &[u8], mut dst: &mut [u8]) {\n    |    ^^^^^^^^^^^\n    |\n    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: function `num_components` is never used\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/color.rs:45:8\n   |\n45 | pub fn num_components(c: ColorType) -> usize {\n   |        ^^^^^^^^^^^^^^\n\nwarning: struct `ImageReadBuffer` is never constructed\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/image.rs:204:19\n    |\n204 | pub(crate) struct ImageReadBuffer {\n    |                   ^^^^^^^^^^^^^^^\n\nwarning: associated items `new` and `read` are never used\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/image.rs:213:12\n    |\n212 | impl ImageReadBuffer {\n    | -------------------- associated items in this implementation\n213 |     pub fn new(scanline_bytes: usize, total_bytes: usize) -> Self {\n    |            ^^^\n...\n222 |     pub fn read<F>(&mut self, buf: &mut [u8], mut read_scanline: F) -> io::Result<usize>\n    |            ^^^^\n\nwarning: function `vec_u16_into_u8` is never used\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/utils/mod.rs:37:8\n   |\n37 | pub fn vec_u16_into_u8(vec: Vec<u16>) -> Vec<u8> {\n   |        ^^^^^^^^^^^^^^^\n\nwarning: function `vec_u16_copy_u8` is never used\n  --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/utils/mod.rs:42:8\n   |\n42 | pub fn vec_u16_copy_u8(vec: &Vec<u16>) -> Vec<u8> {\n   |        ^^^^^^^^^^^^^^^\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/buffer.rs:352:19\n    |\n352 |     pub fn pixels(&self) -> Pixels<P> {\n    |                   ^^^^^     ^^^^^^^^^ the same lifetime is hidden here\n    |                   |\n    |                   the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\n    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default\nhelp: use `'_` for type paths\n    |\n352 |     pub fn pixels(&self) -> Pixels<'_, P> {\n    |                                    +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/buffer.rs:361:29\n    |\n361 |     pub fn enumerate_pixels(&self) -> EnumeratePixels<P> {\n    |                             ^^^^^     ^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                             |\n    |                             the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n361 |     pub fn enumerate_pixels(&self) -> EnumeratePixels<'_, P> {\n    |                                                       +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/buffer.rs:461:23\n    |\n461 |     pub fn pixels_mut(&mut self) -> PixelsMut<P> {\n    |                       ^^^^^^^^^     ^^^^^^^^^^^^ the same lifetime is hidden here\n    |                       |\n    |                       the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n461 |     pub fn pixels_mut(&mut self) -> PixelsMut<'_, P> {\n    |                                               +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/buffer.rs:470:33\n    |\n470 |     pub fn enumerate_pixels_mut(&mut self) -> EnumeratePixelsMut<P> {\n    |                                 ^^^^^^^^^     ^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                                 |\n    |                                 the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n470 |     pub fn enumerate_pixels_mut(&mut self) -> EnumeratePixelsMut<'_, P> {\n    |                                                                  +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/image.rs:595:15\n    |\n595 |     fn pixels(&self) -> Pixels<Self> {\n    |               ^^^^^     ^^^^^^^^^^^^ the same lifetime is hidden here\n    |               |\n    |               the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n595 |     fn pixels(&self) -> Pixels<'_, Self> {\n    |                                +++\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3/src/image.rs:655:19\n    |\n655 |     fn pixels_mut(&mut self) -> MutPixels<Self> {\n    |                   ^^^^^^^^^     ^^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                   |\n    |                   the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\nhelp: use `'_` for type paths\n    |\n655 |     fn pixels_mut(&mut self) -> MutPixels<'_, Self> {\n    |                                           +++\n\nwarning: `image` (lib) generated 99 warnings (run `cargo fix --lib -p image` to apply 37 suggestions)\n   Compiling rsh-050-harness v0.0.0 (/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/project)\nwarning: use of deprecated method `image::hdr::HDRDecoder::<R>::read_image_transform`: For trivial types `T` this interface is less safe and less efficient than one takingan output slice. Semantics may be confusing for non-trivial types. Consider upgrading to v0.22.\n  --> src/witness.rs:15:26\n   |\n15 |     let result = decoder.read_image_transform(|_| Box::new(0x50_u64));\n   |                          ^^^^^^^^^^^^^^^^^^^^\n   |\n   = note: `#[warn(deprecated)]` on by default\n\nwarning: `rsh-050-harness` (bin \"rsh-050-harness\") generated 1 warning\n    Finished `release` profile [optimized] target(s) in 8.36s\n",
+        "stderr_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/artifacts/build.stderr",
+        "stderr_sha256": "45ef4ea6ce61341dea72fdfe4cfa65c6619cb997e186169ba1ddc9560f0dbc18",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/artifacts/build.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 8.380139386
+      },
+      "case_id": "RSH-050",
+      "claim_boundary": "This arm records reproduction and detector observations only. It does not establish mitigation, detection coverage, or exploit prevention.",
+      "claim_grade": false,
+      "crate": "image",
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "efficacy_blockers": [
+        "critical_site_coverage_not_validated"
+      ],
+      "efficacy_eligible": false,
+      "execution_mode": "asan",
+      "execution_status": "completed",
+      "fingerprint": "790d5f1f5e058aa1d9bd061a541d71931b79012e171eed372939bebcddd1753a",
+      "fingerprint_payload": {
+        "allocator_variant": "system",
+        "archive_sha256": "35371e467cd7b0b3d1d6013d619203658467df12d61b0ca43cd67b743b1965eb",
+        "archive_variant": "patched",
+        "base_lock_sha256": "a8efcc6ae29d0312eef704839c2b6253e7bcec6276cb9223d50deee9f8b118c0",
+        "cargo_config_sha256": "c29c2607f4e15f5e5f839f9bdef26dfd401230491358f70faaff82494de33004",
+        "catalog_sha256": "3ebacfd4609fa06901d6b0aeb8a4a25ac549ccca578822fb93979b5a085f3659",
+        "effective_lock_sha256": "a8efcc6ae29d0312eef704839c2b6253e7bcec6276cb9223d50deee9f8b118c0",
+        "effective_manifest_sha256": "29325c621f4a4257a242c279232ea2162df931564c859bdcefc9aa66bf5b1f2c",
+        "materializer_sha256": "ea1de13aa79777a5d273b9e314850ae966d0ec036b9a99fe33d0c7232fe425a7",
+        "orchestrator_sha256": "7981732efbe19c89e89d1bbfdfa4e936d899330c66a7c626e6eaf265fd66ca0d",
+        "realworld_driver_sha256": "c0b1b1eedc0d95d8ac702c83699f7231845a5a9eea9e1e3b3efb5b6fe6be23c4",
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "scenario_id": "RSH-050-upstream-reduction",
+        "schema_version": 1,
+        "source_sha256": "97b9da70269bbcd00841add5c364ec03d83638cad75aa295ebcd98c96c53b8a5",
+        "target_crates": [
+          "image",
+          "rsh_050_harness"
+        ],
+        "toolchain": {
+          "cargo": {
+            "command": [
+              "cargo",
+              "+nightly-2026-06-11",
+              "-V"
+            ],
+            "exit_code": 0,
+            "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+            "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+          },
+          "name": "nightly-2026-06-11",
+          "rustc": {
+            "command": [
+              "rustc",
+              "+nightly-2026-06-11",
+              "-vV"
+            ],
+            "exit_code": 0,
+            "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+            "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+          },
+          "target": "x86_64-unknown-linux-gnu"
+        },
+        "transformed_sources": {
+          "original_source_sha256": "97b9da70269bbcd00841add5c364ec03d83638cad75aa295ebcd98c96c53b8a5",
+          "witness_module_sha256": "597555d9b1cb336d98a4a377b1936122ebcacc96561bfdcaa6051ab0f6cd26a4",
+          "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+        },
+        "unialloc_implementation_sha256": "13a1acd09b910ca43a67f6ae4a8477fb6db6092ede99dc4252dfa1bc6e098b1e"
+      },
+      "full_rebuild_required": true,
+      "ground_truth_arm": true,
+      "lock_resolution": null,
+      "materialization": {
+        "archive_bytes": 143317,
+        "archive_path": "/tmp/strong-batch-a-cache/archives/image-0.21.3.crate",
+        "archive_sha256": "35371e467cd7b0b3d1d6013d619203658467df12d61b0ca43cd67b743b1965eb",
+        "cargo_lock_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-050/Cargo.lock.patched",
+        "cargo_lock_sha256": "a8efcc6ae29d0312eef704839c2b6253e7bcec6276cb9223d50deee9f8b118c0",
+        "case_id": "RSH-050",
+        "claim_grade": false,
+        "dependency_package": "image",
+        "dependency_version": "0.21.3",
+        "oracle": {
+          "patched_control": "image 0.21.3 returns the expected truncated-input error and exits 0 with no AddressSanitizer finding",
+          "tool": "asan",
+          "vulnerable": "AddressSanitizer reports a sanitizer fault (DEADLYSIGNAL/SEGV) while deallocating the uninitialized Box dropped after the HDR scanline error"
+        },
+        "required_environment": {
+          "ASAN_OPTIONS": "detect_leaks=0"
+        },
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "scenario_id": "RSH-050-upstream-reduction",
+        "schema_version": 1,
+        "source": "unialloc-rustsec-heap-materialization",
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-050/main.rs",
+        "source_sha256": "97b9da70269bbcd00841add5c364ec03d83638cad75aa295ebcd98c96c53b8a5",
+        "subject_directory": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work/subject/image-0.21.3",
+        "variant": "patched",
+        "work_directory": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/work"
+      },
+      "oracle_validation": {
+        "boundary": "A clean exit or absent tool finding does not establish mitigation; matched repeated baseline/treatment evidence is required.",
+        "claim_grade": false,
+        "diagnostic_only": false,
+        "expected_contract": {
+          "compile_error_codes": [],
+          "expected_finding_signature": null,
+          "kind": "clean_exit",
+          "parse_status": "parsed",
+          "required_evidence": [
+            "clean_exit",
+            "no_sanitizer_finding"
+          ]
+        },
+        "expected_description": "image 0.21.3 returns the expected truncated-input error and exits 0 with no AddressSanitizer finding",
+        "expected_oracle_observed": true,
+        "matched_compile_error_codes": [],
+        "mitigation_inferred": false,
+        "native_diagnostic_signatures": [],
+        "oracle_role": "catalog_oracle",
+        "repetition_observations": [
+          {
+            "address_reuse_observed": false,
+            "claim_grade": false,
+            "clean_exit": true,
+            "exit_code": 0,
+            "mitigation_inferred": false,
+            "native_diagnostic_signature": null,
+            "repetition": 1,
+            "rust_panic_or_assertion_observed": false,
+            "sanitizer_finding_observed": false,
+            "timed_out": false,
+            "tool_finding_signature": null
+          }
+        ],
+        "status": "clean_tool_runs_observed",
+        "tool_finding_signatures": []
+      },
+      "pass_audit_summary": {
+        "audit_file_count": 0,
+        "audit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "claim_grade_file_count": 0,
+        "crate_names": [],
+        "direct_allocator_rewrites_applied": 0,
+        "direct_layout_allocator_rewrites_applied": 0,
+        "semantic_deallocation_like_rewrites_applied": 0,
+        "semantic_drop_rewrites_applied": 0,
+        "semantic_ownership_transfer_rewrites_applied": 0,
+        "semantic_rewrites_applied": 0,
+        "semantic_scope_rewrites_applied": 0,
+        "total_compiler_rewrites_applied": 0,
+        "unresolved_file_count": 0
+      },
+      "pass_audit_validation": {
+        "claim_grade": false,
+        "compiler_rewrite_counts": {
+          "direct_allocator_rewrites_applied": 0,
+          "direct_layout_allocator_rewrites_applied": 0,
+          "semantic_ownership_transfer_rewrites_applied": 0,
+          "semantic_rewrites_applied": 0,
+          "total_compiler_rewrites_applied": 0
+        },
+        "critical_site_coverage_validated": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated",
+          "no_compiler_rewrite_observed"
+        ],
+        "efficacy_eligible": false,
+        "rewrite_route": "none",
+        "status": "not_applicable",
+        "valid": null,
+        "validation_scope": "target_crate_presence_and_force_load_topology_only"
+      },
+      "pass_audits": [],
+      "pass_logs": [],
+      "platform_constraints": {},
+      "repetition_summary": {
+        "address_reuse_observation_count": 0,
+        "claim_grade": false,
+        "clean_exit_count": 1,
+        "executed": 1,
+        "exit_codes": [
+          0
+        ],
+        "mitigation_inferred": false,
+        "native_diagnostic_signal_count": 0,
+        "requested": 1,
+        "timed_out_count": 0,
+        "tool_finding_count": 0
+      },
+      "repetitions_requested": 1,
+      "required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "reuse_denial_evidence": {
+        "claim_grade": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "run": {
+        "command": [
+          "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness"
+        ],
+        "cwd": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/target/x86_64-unknown-linux-gnu/release",
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "ASAN_OPTIONS",
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 0,
+        "stderr": "",
+        "stderr_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/artifacts/run-001.stderr",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/artifacts/run-001.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 0.007432612
+      },
+      "runs": [
+        {
+          "command": [
+            "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/target/x86_64-unknown-linux-gnu/release/rsh-050-harness"
+          ],
+          "cwd": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/target/x86_64-unknown-linux-gnu/release",
+          "environment": {
+            "ASAN_OPTIONS": "detect_leaks=0",
+            "CARGO_INCREMENTAL": "0",
+            "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/target",
+            "HOME": "/home/hanqing",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "LOGNAME": "hanqing",
+            "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+            "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+            "SHELL": "/usr/bin/zsh",
+            "TERM": "xterm-256color",
+            "USER": "hanqing"
+          },
+          "environment_allowlist": [
+            "ASAN_OPTIONS",
+            "CARGO_INCREMENTAL",
+            "CARGO_TARGET_DIR",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LOGNAME",
+            "PATH",
+            "RUSTFLAGS",
+            "SHELL",
+            "TERM",
+            "USER"
+          ],
+          "exit_code": 0,
+          "stderr": "",
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "",
+          "stdout_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/artifacts/run-001.stdout",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "wall_seconds": 0.007432612
+        }
+      ],
+      "runtime_stats": null,
+      "runtime_stats_by_repetition": [],
+      "runtime_stats_validation": {
+        "claim_grade": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated"
+        ],
+        "efficacy_eligible": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ]
+      },
+      "scenario_id": "RSH-050-upstream-reduction",
+      "schema_version": 1,
+      "source": "unialloc-rustsec-heap-experiment",
+      "source_provenance": {
+        "archive_sha256": "35371e467cd7b0b3d1d6013d619203658467df12d61b0ca43cd67b743b1965eb",
+        "base_lock_sha256": "a8efcc6ae29d0312eef704839c2b6253e7bcec6276cb9223d50deee9f8b118c0",
+        "effective_lock_sha256": "a8efcc6ae29d0312eef704839c2b6253e7bcec6276cb9223d50deee9f8b118c0",
+        "original_source_sha256": "97b9da70269bbcd00841add5c364ec03d83638cad75aa295ebcd98c96c53b8a5",
+        "source_sha256": "97b9da70269bbcd00841add5c364ec03d83638cad75aa295ebcd98c96c53b8a5",
+        "witness_module_sha256": "597555d9b1cb336d98a4a377b1936122ebcacc96561bfdcaa6051ab0f6cd26a4",
+        "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+      },
+      "target_crates": [
+        "image",
+        "rsh_050_harness"
+      ],
+      "target_reset": false,
+      "target_reset_reasons": [
+        "fingerprint_changed"
+      ],
+      "tool": "asan",
+      "toolchain": {
+        "cargo": {
+          "command": [
+            "cargo",
+            "+nightly-2026-06-11",
+            "-V"
+          ],
+          "exit_code": 0,
+          "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+          "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+        },
+        "name": "nightly-2026-06-11",
+        "rustc": {
+          "command": [
+            "rustc",
+            "+nightly-2026-06-11",
+            "-vV"
+          ],
+          "exit_code": 0,
+          "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+          "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+        },
+        "target": "x86_64-unknown-linux-gnu"
+      }
+    }
+  ],
+  "claim_boundary": "Per-arm exit status is never a mitigation classification. Claim-grade evaluation requires preregistered repetitions, matched controls, and coverage validation.",
+  "claim_grade": false,
+  "created_at_unix": 1784066152,
+  "orchestration_success": true,
+  "preflight_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/preflight.json",
+  "repetitions_requested": 1,
+  "scenario_id": "RSH-050-upstream-reduction",
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-experiment-matrix",
+  "toolchain": {
+    "cargo": {
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "-V"
+      ],
+      "exit_code": 0,
+      "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+      "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+    },
+    "name": "nightly-2026-06-11",
+    "rustc": {
+      "command": [
+        "rustc",
+        "+nightly-2026-06-11",
+        "-vV"
+      ],
+      "exit_code": 0,
+      "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+      "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+    },
+    "target": "x86_64-unknown-linux-gnu"
+  },
+  "type_isolation_reuse_edge_evaluation": {
+    "claim_grade": false,
+    "status": "not_applicable",
+    "validated": null
+  },
+  "typeiso_toolchain": null,
+  "unexpected_arm_count": 0,
+  "unsafe_execution_requested": true,
+  "variants": [
+    "system"
+  ]
+}

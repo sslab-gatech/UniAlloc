@@ -1,0 +1,73 @@
+{
+  "boundary": "Single-host medians bound observed overhead for two pinned workloads. They do not establish a workload-independent zero-overhead claim.",
+  "claim_grade": false,
+  "comparisons": [
+    {
+      "app": "oxipng",
+      "baseline": {
+        "median_peak_rss_kib": 44224.0,
+        "median_wall_seconds": 1.78100798,
+        "rss_mad_kib": 0.0,
+        "variant": "unialloc_no_optional",
+        "wall_mad_seconds": 0.005375498999999895
+      },
+      "delta": {
+        "median_peak_rss_kib": 280.0,
+        "median_peak_rss_percent": 0.6331403762662724,
+        "median_wall_percent": -1.2359305655665787
+      },
+      "output_sha256": "581b84d2185c6c10f9f3eec2cdbc75671136910428c630d347c43e7ec41f6743",
+      "reclaim_checks": {
+        "median_peak_rss_kib": 44504.0,
+        "median_wall_seconds": 1.758995958,
+        "rss_mad_kib": 12.0,
+        "variant": "unialloc_reclaim_checks",
+        "wall_mad_seconds": 0.004902511000000054
+      },
+      "sample_count": 7,
+      "work_amount": 1653611,
+      "work_unit": "bytes"
+    },
+    {
+      "app": "ripgrep",
+      "baseline": {
+        "median_peak_rss_kib": 6144.0,
+        "median_wall_seconds": 0.494212649,
+        "rss_mad_kib": 0.0,
+        "variant": "unialloc_no_optional",
+        "wall_mad_seconds": 0.0028383869999999978
+      },
+      "delta": {
+        "median_peak_rss_kib": 0.0,
+        "median_peak_rss_percent": 0.0,
+        "median_wall_percent": 2.7701284108573976
+      },
+      "output_sha256": "0058dbf865d3eb59778137e11ed6d4baf1b4df7e9df73b090f85ce460a4f2567",
+      "reclaim_checks": {
+        "median_peak_rss_kib": 6144.0,
+        "median_wall_seconds": 0.507902974,
+        "rss_mad_kib": 0.0,
+        "variant": "unialloc_reclaim_checks",
+        "wall_mad_seconds": 0.006274599000000047
+      },
+      "sample_count": 9,
+      "work_amount": 1073741824,
+      "work_unit": "bytes"
+    }
+  ],
+  "feature_contract": "reclaim_checks is opt-in; default and type_isolation-only builds do not enable this lifecycle path",
+  "inputs": [
+    {
+      "bytes": 78883,
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/overhead-standard-results.json",
+      "sha256": "949b539aec12d699b9f7ab40b0c4ab51673c5301e97e987568bd70779d702327"
+    },
+    {
+      "bytes": 68186,
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/overhead-ripgrep-amplified-results.json",
+      "sha256": "9013bf2cf6472008b9c61adf2662bf34c338eb5501f28703a4dc0779660a568d"
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-reclaim-checks-overhead-summary"
+}

@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "source": "unialloc-rustsec-temporal-reclaim-manual-review",
+  "claim_grade": false,
+  "claim_boundary": "This advisory-level review identifies mechanism candidates. It does not establish PoC reproducibility, allocator visibility at runtime, compiler coverage, mitigation, or detection.",
+  "rustsec_commit": "9f3e138091487e69144f536d36976e427a7a3307",
+  "review_protocol": {
+    "automated_input": "Direct use-after-free, dangling-reference, double-free, double-drop, invalid-free, bad-free, or incorrect-deallocation signals in advisory titles and keywords.",
+    "strong_candidate": "The advisory identifies Rust-global storage or a heap-owning Rust payload whose allocation or reclaim can reach UniAlloc.",
+    "conditional_candidate": "The advisory is relevant, while source or PoC inspection is still required to prove ownership of the failing storage and the allocator boundary.",
+    "excluded": "The failing object is owned by foreign/custom/arena storage, stays on the stack, or has no allocator transition observable by UniAlloc.",
+    "required_before_efficacy": [
+      "resolve vulnerable and patched source",
+      "materialize a stable baseline oracle",
+      "prove the failing object reaches UniAlloc",
+      "validate critical allocation and reclaim compiler metadata",
+      "run a mechanism-specific treatment and ablation",
+      "bind the signal to the vulnerable event and keep the patched control clean"
+    ]
+  },
+  "counts": {
+    "temporal_reclaim_advisory_records": 84,
+    "duplicate_alias_records": 1,
+    "independent_review_units": 83,
+    "strict_screen_strong_rust_global_candidates": 50,
+    "supplemental_rudra_source_evidence_candidates": 3,
+    "currently_identified_strong_candidates": 53,
+    "conditional_candidates": 7,
+    "excluded_units": 26,
+    "cross_type_reuse_candidates": 24,
+    "tracked_reclaim_candidates": 33,
+    "reuse_and_reclaim_overlap": 7,
+    "strong_candidates_in_current_corpus": 17,
+    "strong_candidates_missing_from_current_corpus": 36
+  },
+  "duplicate_aliases": [
+    {
+      "canonical_advisory_id": "RUSTSEC-2022-0016",
+      "duplicate_advisory_id": "RUSTSEC-2022-0099",
+      "shared_alias": "GHSA-gwc9-348x-qwv2",
+      "reason": "same package, upstream advisory, CVE, vulnerable mechanism, and patch family"
+    }
+  ],
+  "strong_candidates": {
+    "cross_type_reuse": [
+      "RUSTSEC-2019-0009",
+      "RUSTSEC-2019-0016",
+      "RUSTSEC-2019-0023",
+      "RUSTSEC-2020-0007",
+      "RUSTSEC-2020-0017",
+      "RUSTSEC-2020-0047",
+      "RUSTSEC-2020-0091",
+      "RUSTSEC-2020-0145",
+      "RUSTSEC-2021-0022",
+      "RUSTSEC-2021-0130",
+      "RUSTSEC-2022-0028",
+      "RUSTSEC-2023-0054",
+      "RUSTSEC-2024-0007",
+      "RUSTSEC-2025-0004",
+      "RUSTSEC-2025-0016",
+      "RUSTSEC-2025-0022",
+      "RUSTSEC-2026-0005",
+      "RUSTSEC-2026-0103",
+      "RUSTSEC-2026-0122",
+      "RUSTSEC-2026-0128",
+      "RUSTSEC-2026-0142",
+      "RUSTSEC-2026-0143",
+      "RUSTSEC-2026-0152",
+      "RUSTSEC-2026-0172"
+    ],
+    "tracked_reclaim_or_invalid_free": [
+      "RUSTSEC-2018-0003",
+      "RUSTSEC-2018-0009",
+      "RUSTSEC-2019-0009",
+      "RUSTSEC-2019-0010",
+      "RUSTSEC-2019-0014",
+      "RUSTSEC-2019-0021",
+      "RUSTSEC-2019-0034",
+      "RUSTSEC-2020-0007",
+      "RUSTSEC-2021-0005",
+      "RUSTSEC-2021-0010",
+      "RUSTSEC-2021-0018",
+      "RUSTSEC-2021-0028",
+      "RUSTSEC-2021-0030",
+      "RUSTSEC-2021-0033",
+      "RUSTSEC-2021-0039",
+      "RUSTSEC-2021-0040",
+      "RUSTSEC-2021-0042",
+      "RUSTSEC-2021-0047",
+      "RUSTSEC-2021-0049",
+      "RUSTSEC-2021-0052",
+      "RUSTSEC-2021-0053",
+      "RUSTSEC-2023-0017",
+      "RUSTSEC-2025-0024",
+      "RUSTSEC-2025-0044",
+      "RUSTSEC-2025-0053",
+      "RUSTSEC-2026-0103",
+      "RUSTSEC-2026-0122",
+      "RUSTSEC-2026-0128",
+      "RUSTSEC-2026-0131",
+      "RUSTSEC-2026-0139",
+      "RUSTSEC-2026-0142",
+      "RUSTSEC-2026-0143",
+      "RUSTSEC-2026-0205"
+    ],
+    "overlap": [
+      "RUSTSEC-2019-0009",
+      "RUSTSEC-2020-0007",
+      "RUSTSEC-2026-0103",
+      "RUSTSEC-2026-0122",
+      "RUSTSEC-2026-0128",
+      "RUSTSEC-2026-0142",
+      "RUSTSEC-2026-0143"
+    ],
+    "supplemental_rudra_source_evidence": [
+      "RUSTSEC-2020-0038",
+      "RUSTSEC-2020-0105",
+      "RUSTSEC-2021-0009"
+    ]
+  },
+  "conditional_candidates": [
+    {
+      "advisory_id": "RUSTSEC-2020-0021",
+      "reason_code": "async_buffer_ownership_requires_source_proof"
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0060",
+      "reason_code": "waker_payload_allocator_requires_source_proof"
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0044",
+      "reason_code": "panic_path_victim_storage_requires_source_proof"
+    },
+    {
+      "advisory_id": "RUSTSEC-2022-0002",
+      "reason_code": "concurrent_reference_storage_requires_source_proof"
+    },
+    {
+      "advisory_id": "RUSTSEC-2022-0012",
+      "reason_code": "duplicate_reclaim_path_requires_poc_proof"
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0035",
+      "reason_code": "multiple_primitives_require_witness_split"
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0090",
+      "reason_code": "wasmtime_linker_payload_requires_allocator_proof"
+    }
+  ],
+  "excluded": {
+    "foreign_or_ffi_allocator": [
+      "RUSTSEC-2018-0010",
+      "RUSTSEC-2018-0020",
+      "RUSTSEC-2018-0021",
+      "RUSTSEC-2020-0100",
+      "RUSTSEC-2021-0011",
+      "RUSTSEC-2021-0037",
+      "RUSTSEC-2022-0049",
+      "RUSTSEC-2023-0009",
+      "RUSTSEC-2023-0010",
+      "RUSTSEC-2024-0017",
+      "RUSTSEC-2024-0378",
+      "RUSTSEC-2026-0029",
+      "RUSTSEC-2026-0156",
+      "RUSTSEC-2026-0157"
+    ],
+    "custom_allocator_arena_or_vm": [
+      "RUSTSEC-2021-0110",
+      "RUSTSEC-2021-0155",
+      "RUSTSEC-2022-0016",
+      "RUSTSEC-2022-0070",
+      "RUSTSEC-2022-0075",
+      "RUSTSEC-2022-0078",
+      "RUSTSEC-2022-0100"
+    ],
+    "stack_or_no_allocator_transition": [
+      "RUSTSEC-2020-0048",
+      "RUSTSEC-2020-0049",
+      "RUSTSEC-2021-0128",
+      "RUSTSEC-2023-0078",
+      "RUSTSEC-2026-0079"
+    ]
+  },
+  "first_expansion_wave": {
+    "goal": "Prefer existing pure-Rust PoCs and recent inline triggers before creating fresh harnesses.",
+    "advisory_ids": [
+      "RUSTSEC-2018-0003",
+      "RUSTSEC-2019-0009",
+      "RUSTSEC-2020-0038",
+      "RUSTSEC-2020-0105",
+      "RUSTSEC-2021-0005",
+      "RUSTSEC-2021-0009",
+      "RUSTSEC-2021-0010",
+      "RUSTSEC-2021-0018",
+      "RUSTSEC-2021-0028",
+      "RUSTSEC-2021-0033",
+      "RUSTSEC-2021-0039",
+      "RUSTSEC-2021-0040",
+      "RUSTSEC-2021-0042",
+      "RUSTSEC-2025-0044",
+      "RUSTSEC-2026-0122",
+      "RUSTSEC-2026-0128",
+      "RUSTSEC-2026-0131",
+      "RUSTSEC-2026-0152",
+      "RUSTSEC-2026-0205"
+    ],
+    "environment_deferred": [
+      {
+        "advisory_id": "RUSTSEC-2021-0011",
+        "reason_code": "opencl_runtime_required"
+      }
+    ]
+  }
+}

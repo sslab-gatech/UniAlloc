@@ -1,0 +1,66 @@
+{
+  "actions": [
+    "list",
+    "preflight",
+    "run"
+  ],
+  "allocator_variants": [
+    "system",
+    "unialloc",
+    "reclaim_plain",
+    "reclaim_checks",
+    "typed_plain",
+    "typeiso"
+  ],
+  "archive_variants": [
+    "vulnerable",
+    "patched"
+  ],
+  "claim_grade": false,
+  "counts": {
+    "blocked_case_count": 0,
+    "distinct_advisory_count": 5,
+    "executable_case_count": 5,
+    "published_scenario_count": 5,
+    "repository_scenario_count": 5,
+    "scope_case_count": 5
+  },
+  "scenarios": [
+    {
+      "case_id": "RSH-010",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "through",
+      "scenario_id": "RSH-010-rudra",
+      "tool": "asan"
+    },
+    {
+      "case_id": "RSH-011",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "http",
+      "scenario_id": "RSH-011-rudra",
+      "tool": "asan"
+    },
+    {
+      "case_id": "RSH-012",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "id-map",
+      "scenario_id": "RSH-012-rudra-clone-from",
+      "tool": "asan"
+    },
+    {
+      "case_id": "RSH-013",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "algorithmica",
+      "scenario_id": "RSH-013-rudra",
+      "tool": "asan"
+    },
+    {
+      "case_id": "RSH-014",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "slice-deque",
+      "scenario_id": "RSH-014-rudra",
+      "tool": "asan"
+    }
+  ],
+  "toolchain": "nightly-2026-06-11"
+}

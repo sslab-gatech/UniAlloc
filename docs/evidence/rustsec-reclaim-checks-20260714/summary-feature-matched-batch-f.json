@@ -1,0 +1,4357 @@
+{
+  "boundary": "Classifications report reproduced findings and allocator signals only; clean exits never establish mitigation.",
+  "cases": [
+    {
+      "advisory_id": "RUSTSEC-2025-0016",
+      "arms": [
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "system",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 3,
+          "baseline_finding_signatures": {
+            "asan_heap_use_after_free": 3
+          },
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {},
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_feature_contract_tokens": {},
+            "observed_records": {},
+            "record": null,
+            "required": false,
+            "token": null,
+            "valid": true
+          },
+          "classification": "baseline_reproduced",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_subject_cargo_feature_tokens": {},
+            "observed_subject_cargo_features": {},
+            "observed_unialloc_implementation_sha256": {},
+            "required": false,
+            "subject_cargo_features": null,
+            "subject_cargo_features_sha256": null,
+            "unialloc_implementation_sha256": null,
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 3,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {
+            "missing_or_ambiguous_panic_checkpoint": 3
+          },
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "tool_finding_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-068-parc-project",
+          "scenario_ids": [
+            "RSH-068-parc-project"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": null,
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": null
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_plain",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "215976e8c25ac35d46f11986916f5bfd8761a4f0c0bb3b9d2eaffc67d1bcd434": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": 1
+            },
+            "observed_records": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "stats"
+                ],
+                "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "stats"
+              ],
+              "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+            "valid": true
+          },
+          "classification": "direct_effect_absent",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "f4e6cb031eefdab157c177b0cae5089751af4d628e37f4a6882fb48a3ad54e68": 1
+            },
+            "observed_subject_cargo_features": {
+              "f4e6cb031eefdab157c177b0cae5089751af4d628e37f4a6882fb48a3ad54e68": {
+                "allocator_variant": "reclaim_plain",
+                "catalog_features": [],
+                "crate": "pared",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_plain",
+              "catalog_features": [],
+              "crate": "pared",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "f4e6cb031eefdab157c177b0cae5089751af4d628e37f4a6882fb48a3ad54e68",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 6,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-068-parc-project",
+          "scenario_ids": [
+            "RSH-068-parc-project"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "pared",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_checks",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "6388f0703223d350abccfa9c5f4f02c96469cbd85b1b579d6ebe837cc69f4f84": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": 1
+            },
+            "observed_records": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+            "valid": true
+          },
+          "classification": "direct_effect_absent",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "72e2e7ee4c2295a45298ff8a6ca1812b2fe8555a5fa61840399064f81a4bc611": 1
+            },
+            "observed_subject_cargo_features": {
+              "72e2e7ee4c2295a45298ff8a6ca1812b2fe8555a5fa61840399064f81a4bc611": {
+                "allocator_variant": "reclaim_checks",
+                "catalog_features": [],
+                "crate": "pared",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_checks",
+              "catalog_features": [],
+              "crate": "pared",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "72e2e7ee4c2295a45298ff8a6ca1812b2fe8555a5fa61840399064f81a4bc611",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 6,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-068-parc-project",
+          "scenario_ids": [
+            "RSH-068-parc-project"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "pared",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "system",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {},
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_feature_contract_tokens": {},
+            "observed_records": {},
+            "record": null,
+            "required": false,
+            "token": null,
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_subject_cargo_feature_tokens": {},
+            "observed_subject_cargo_features": {},
+            "observed_unialloc_implementation_sha256": {},
+            "required": false,
+            "subject_cargo_features": null,
+            "subject_cargo_features_sha256": null,
+            "unialloc_implementation_sha256": null,
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 1,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {
+            "E0597": 1
+          },
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 0,
+            "observation_count": 0,
+            "raw_run_count": 0,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "patched_control_compile_rejection_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 0,
+          "scenario_id": "RSH-068-parc-project",
+          "scenario_ids": [
+            "RSH-068-parc-project"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": null,
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": null
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_plain",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "43d85e8cac653e10714ecc357201effde2965d7b31d39524f0e0846bb39514b0": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": 1
+            },
+            "observed_records": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "stats"
+                ],
+                "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "stats"
+              ],
+              "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "f4e6cb031eefdab157c177b0cae5089751af4d628e37f4a6882fb48a3ad54e68": 1
+            },
+            "observed_subject_cargo_features": {
+              "f4e6cb031eefdab157c177b0cae5089751af4d628e37f4a6882fb48a3ad54e68": {
+                "allocator_variant": "reclaim_plain",
+                "catalog_features": [],
+                "crate": "pared",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_plain",
+              "catalog_features": [],
+              "crate": "pared",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "f4e6cb031eefdab157c177b0cae5089751af4d628e37f4a6882fb48a3ad54e68",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {
+            "E0597": 1
+          },
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 0,
+            "observation_count": 0,
+            "raw_run_count": 0,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_diagnostic_compile_rejection_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 0,
+          "scenario_id": "RSH-068-parc-project",
+          "scenario_ids": [
+            "RSH-068-parc-project"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "pared",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_checks",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "900421efb053daeebf79c7df8a1e8fa4280b9d374d6c154b0c5eb40f786cd42a": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": 1
+            },
+            "observed_records": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "72e2e7ee4c2295a45298ff8a6ca1812b2fe8555a5fa61840399064f81a4bc611": 1
+            },
+            "observed_subject_cargo_features": {
+              "72e2e7ee4c2295a45298ff8a6ca1812b2fe8555a5fa61840399064f81a4bc611": {
+                "allocator_variant": "reclaim_checks",
+                "catalog_features": [],
+                "crate": "pared",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_checks",
+              "catalog_features": [],
+              "crate": "pared",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "72e2e7ee4c2295a45298ff8a6ca1812b2fe8555a5fa61840399064f81a4bc611",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {
+            "E0597": 1
+          },
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 0,
+            "observation_count": 0,
+            "raw_run_count": 0,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_diagnostic_compile_rejection_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 0,
+          "scenario_id": "RSH-068-parc-project",
+          "scenario_ids": [
+            "RSH-068-parc-project"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "pared",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        }
+      ],
+      "case_id": "RSH-068",
+      "classification": "baseline_reproduced",
+      "crate": "pared",
+      "experiment_count": 2,
+      "scenario_id": "RSH-068-parc-project",
+      "scenario_ids": [
+        "RSH-068-parc-project"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0022",
+      "arms": [
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "system",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 3,
+          "baseline_finding_signatures": {
+            "asan_heap_use_after_free": 3
+          },
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {},
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_feature_contract_tokens": {},
+            "observed_records": {},
+            "record": null,
+            "required": false,
+            "token": null,
+            "valid": true
+          },
+          "classification": "baseline_reproduced",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_subject_cargo_feature_tokens": {},
+            "observed_subject_cargo_features": {},
+            "observed_unialloc_implementation_sha256": {},
+            "required": false,
+            "subject_cargo_features": null,
+            "subject_cargo_features_sha256": null,
+            "unialloc_implementation_sha256": null,
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 3,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {
+            "missing_or_ambiguous_panic_checkpoint": 3
+          },
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "tool_finding_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-069-md-fetch",
+          "scenario_ids": [
+            "RSH-069-md-fetch"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": null,
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": null
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_plain",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "516b0549f9c3c224cd3656ca3a97df1391569581d8b6662176f489bce7c39314": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": 1
+            },
+            "observed_records": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "stats"
+                ],
+                "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "stats"
+              ],
+              "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+            "valid": true
+          },
+          "classification": "direct_effect_absent",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "fbb3104d06513e51f38af99d6d21097bf41431a6807bb2bcff6e0a3b95655bdc": 1
+            },
+            "observed_subject_cargo_features": {
+              "fbb3104d06513e51f38af99d6d21097bf41431a6807bb2bcff6e0a3b95655bdc": {
+                "allocator_variant": "reclaim_plain",
+                "catalog_features": [],
+                "crate": "openssl",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_plain",
+              "catalog_features": [],
+              "crate": "openssl",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "fbb3104d06513e51f38af99d6d21097bf41431a6807bb2bcff6e0a3b95655bdc",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 3,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {
+              "rust_panic_observed": 3
+            },
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {
+            "rust_panic_observed": 3
+          },
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {
+            "1188f0cbbdb70f6461e816fd7e79ec1cc68b008834502883e3e8c1317d8ba613": {
+              "count": 3,
+              "normalized_outcome": {
+                "critical_checkpoint": {
+                  "panic_message": "freed properties were treated as an empty query",
+                  "panic_source": "src/witness.rs"
+                },
+                "kind": "rust_panic",
+                "returncode": 101,
+                "timed_out": false
+              }
+            }
+          },
+          "native_outcome_fingerprints": {
+            "1188f0cbbdb70f6461e816fd7e79ec1cc68b008834502883e3e8c1317d8ba613": 3
+          },
+          "oracle_statuses": {
+            "native_diagnostic_signal_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-069-md-fetch",
+          "scenario_ids": [
+            "RSH-069-md-fetch"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "openssl",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_checks",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "542dd891df68e8deab6288ccf697a6d2d10a305538772b1fab72565e1a2af580": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": 1
+            },
+            "observed_records": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+            "valid": true
+          },
+          "classification": "direct_effect_absent",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "a02d574f02123d3901329129922dbbf286a942cb5fcc67fb3ab3d24cf18f8230": 1
+            },
+            "observed_subject_cargo_features": {
+              "a02d574f02123d3901329129922dbbf286a942cb5fcc67fb3ab3d24cf18f8230": {
+                "allocator_variant": "reclaim_checks",
+                "catalog_features": [],
+                "crate": "openssl",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_checks",
+              "catalog_features": [],
+              "crate": "openssl",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "a02d574f02123d3901329129922dbbf286a942cb5fcc67fb3ab3d24cf18f8230",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 3,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {
+              "rust_panic_observed": 3
+            },
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {
+            "rust_panic_observed": 3
+          },
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {
+            "1188f0cbbdb70f6461e816fd7e79ec1cc68b008834502883e3e8c1317d8ba613": {
+              "count": 3,
+              "normalized_outcome": {
+                "critical_checkpoint": {
+                  "panic_message": "freed properties were treated as an empty query",
+                  "panic_source": "src/witness.rs"
+                },
+                "kind": "rust_panic",
+                "returncode": 101,
+                "timed_out": false
+              }
+            }
+          },
+          "native_outcome_fingerprints": {
+            "1188f0cbbdb70f6461e816fd7e79ec1cc68b008834502883e3e8c1317d8ba613": 3
+          },
+          "oracle_statuses": {
+            "native_diagnostic_signal_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-069-md-fetch",
+          "scenario_ids": [
+            "RSH-069-md-fetch"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "openssl",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "system",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {},
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_feature_contract_tokens": {},
+            "observed_records": {},
+            "record": null,
+            "required": false,
+            "token": null,
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_subject_cargo_feature_tokens": {},
+            "observed_subject_cargo_features": {},
+            "observed_unialloc_implementation_sha256": {},
+            "required": false,
+            "subject_cargo_features": null,
+            "subject_cargo_features_sha256": null,
+            "unialloc_implementation_sha256": null,
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 3,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "clean_tool_runs_observed": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-069-md-fetch",
+          "scenario_ids": [
+            "RSH-069-md-fetch"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": null,
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": null
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_plain",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "1782e9b39257db102f04501732f36f41e827f50ca63c8c2f60709507e2918b81": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": 1
+            },
+            "observed_records": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "stats"
+                ],
+                "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "stats"
+              ],
+              "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "fbb3104d06513e51f38af99d6d21097bf41431a6807bb2bcff6e0a3b95655bdc": 1
+            },
+            "observed_subject_cargo_features": {
+              "fbb3104d06513e51f38af99d6d21097bf41431a6807bb2bcff6e0a3b95655bdc": {
+                "allocator_variant": "reclaim_plain",
+                "catalog_features": [],
+                "crate": "openssl",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_plain",
+              "catalog_features": [],
+              "crate": "openssl",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "fbb3104d06513e51f38af99d6d21097bf41431a6807bb2bcff6e0a3b95655bdc",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 18,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-069-md-fetch",
+          "scenario_ids": [
+            "RSH-069-md-fetch"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "openssl",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_checks",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "e694b5171a9dbc764e868839450380f5694c5e0af3fefb7f8a69e7e8788259da": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": 1
+            },
+            "observed_records": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "a02d574f02123d3901329129922dbbf286a942cb5fcc67fb3ab3d24cf18f8230": 1
+            },
+            "observed_subject_cargo_features": {
+              "a02d574f02123d3901329129922dbbf286a942cb5fcc67fb3ab3d24cf18f8230": {
+                "allocator_variant": "reclaim_checks",
+                "catalog_features": [],
+                "crate": "openssl",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_checks",
+              "catalog_features": [],
+              "crate": "openssl",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "a02d574f02123d3901329129922dbbf286a942cb5fcc67fb3ab3d24cf18f8230",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 18,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-069-md-fetch",
+          "scenario_ids": [
+            "RSH-069-md-fetch"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "openssl",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        }
+      ],
+      "case_id": "RSH-069",
+      "classification": "baseline_reproduced",
+      "crate": "openssl",
+      "experiment_count": 2,
+      "scenario_id": "RSH-069-md-fetch",
+      "scenario_ids": [
+        "RSH-069-md-fetch"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0024",
+      "arms": [
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "system",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 3,
+          "baseline_finding_signatures": {
+            "asan_double_free": 3
+          },
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {},
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_feature_contract_tokens": {},
+            "observed_records": {},
+            "record": null,
+            "required": false,
+            "token": null,
+            "valid": true
+          },
+          "classification": "baseline_reproduced",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_subject_cargo_feature_tokens": {},
+            "observed_subject_cargo_features": {},
+            "observed_unialloc_implementation_sha256": {},
+            "required": false,
+            "subject_cargo_features": null,
+            "subject_cargo_features_sha256": null,
+            "unialloc_implementation_sha256": null,
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 3,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {
+            "missing_or_ambiguous_panic_checkpoint": 3
+          },
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "tool_finding_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-070-list-drop-race",
+          "scenario_ids": [
+            "RSH-070-list-drop-race"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": null,
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": null
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_plain",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "c9b6830df6151ac94fe9a62e4cc928436f8e557af155c2691c4bcdaac52a0f33": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": 1
+            },
+            "observed_records": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "stats"
+                ],
+                "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "stats"
+              ],
+              "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+            "valid": true
+          },
+          "classification": "direct_effect_absent",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "a8c8bec2921d5c24ca04e8aa9103f42a0ec71c17c084ded727be8a7ddc61cf01": 1
+            },
+            "observed_subject_cargo_features": {
+              "a8c8bec2921d5c24ca04e8aa9103f42a0ec71c17c084ded727be8a7ddc61cf01": {
+                "allocator_variant": "reclaim_plain",
+                "catalog_features": [],
+                "crate": "crossbeam-channel",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_plain",
+              "catalog_features": [],
+              "crate": "crossbeam-channel",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "a8c8bec2921d5c24ca04e8aa9103f42a0ec71c17c084ded727be8a7ddc61cf01",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 21,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-070-list-drop-race",
+          "scenario_ids": [
+            "RSH-070-list-drop-race"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "crossbeam-channel",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 3,
+          "allocator_signal_signatures": {
+            "unialloc_pointer_already_released_check": 3
+          },
+          "allocator_variant": "reclaim_checks",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "6623751a1037b6a70f176534b2b6557b341800abc8e0c2409d6a7473a2aacfac": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": 1
+            },
+            "observed_records": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+            "valid": true
+          },
+          "classification": "allocator_signal_observed",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "ea4d644737db931b1195d913f92aa6c688d7be2f61ac247dc13f340875de2575": 1
+            },
+            "observed_subject_cargo_features": {
+              "ea4d644737db931b1195d913f92aa6c688d7be2f61ac247dc13f340875de2575": {
+                "allocator_variant": "reclaim_checks",
+                "catalog_features": [],
+                "crate": "crossbeam-channel",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_checks",
+              "catalog_features": [],
+              "crate": "crossbeam-channel",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "ea4d644737db931b1195d913f92aa6c688d7be2f61ac247dc13f340875de2575",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 3,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {
+              "unialloc_pointer_already_released_check": 3
+            },
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {
+            "unialloc_pointer_already_released_check": 3
+          },
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {
+            "233e3f37792dfe1a263484fd49f787bccc943e97cb5797a2b5889682b27fc9ab": {
+              "count": 3,
+              "normalized_outcome": {
+                "critical_checkpoint": {
+                  "panic_message": "pointer already released",
+                  "panic_source": "unialloc/src/alloc_api/type_isolation.rs"
+                },
+                "kind": "rust_panic",
+                "returncode": 101,
+                "timed_out": false
+              }
+            }
+          },
+          "native_outcome_fingerprints": {
+            "233e3f37792dfe1a263484fd49f787bccc943e97cb5797a2b5889682b27fc9ab": 3
+          },
+          "oracle_statuses": {
+            "native_diagnostic_signal_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-070-list-drop-race",
+          "scenario_ids": [
+            "RSH-070-list-drop-race"
+          ],
+          "source_revalidated_allocator_signal_signatures": {
+            "unialloc_pointer_already_released_check": 3
+          },
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "crossbeam-channel",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "system",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {},
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_feature_contract_tokens": {},
+            "observed_records": {},
+            "record": null,
+            "required": false,
+            "token": null,
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_subject_cargo_feature_tokens": {},
+            "observed_subject_cargo_features": {},
+            "observed_unialloc_implementation_sha256": {},
+            "required": false,
+            "subject_cargo_features": null,
+            "subject_cargo_features_sha256": null,
+            "unialloc_implementation_sha256": null,
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 3,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "clean_tool_runs_observed": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-070-list-drop-race",
+          "scenario_ids": [
+            "RSH-070-list-drop-race"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": null,
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": null
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_plain",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "b3ee91901398f4e4f7b1ca532059b8e6fec429a5c1c51e69bc505cdbd6e2af2b": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": 1
+            },
+            "observed_records": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "stats"
+                ],
+                "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "stats"
+              ],
+              "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "a8c8bec2921d5c24ca04e8aa9103f42a0ec71c17c084ded727be8a7ddc61cf01": 1
+            },
+            "observed_subject_cargo_features": {
+              "a8c8bec2921d5c24ca04e8aa9103f42a0ec71c17c084ded727be8a7ddc61cf01": {
+                "allocator_variant": "reclaim_plain",
+                "catalog_features": [],
+                "crate": "crossbeam-channel",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_plain",
+              "catalog_features": [],
+              "crate": "crossbeam-channel",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "a8c8bec2921d5c24ca04e8aa9103f42a0ec71c17c084ded727be8a7ddc61cf01",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 21,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-070-list-drop-race",
+          "scenario_ids": [
+            "RSH-070-list-drop-race"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "crossbeam-channel",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_checks",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "045789077114266c48a05470066de12f9d2d00f9401a6831a01270ba6b542089": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": 1
+            },
+            "observed_records": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "ea4d644737db931b1195d913f92aa6c688d7be2f61ac247dc13f340875de2575": 1
+            },
+            "observed_subject_cargo_features": {
+              "ea4d644737db931b1195d913f92aa6c688d7be2f61ac247dc13f340875de2575": {
+                "allocator_variant": "reclaim_checks",
+                "catalog_features": [],
+                "crate": "crossbeam-channel",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_checks",
+              "catalog_features": [],
+              "crate": "crossbeam-channel",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "ea4d644737db931b1195d913f92aa6c688d7be2f61ac247dc13f340875de2575",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 21,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-070-list-drop-race",
+          "scenario_ids": [
+            "RSH-070-list-drop-race"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "crossbeam-channel",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        }
+      ],
+      "case_id": "RSH-070",
+      "classification": "allocator_signal_observed",
+      "crate": "crossbeam-channel",
+      "experiment_count": 2,
+      "scenario_id": "RSH-070-list-drop-race",
+      "scenario_ids": [
+        "RSH-070-list-drop-race"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0044",
+      "arms": [
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "system",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 3,
+          "baseline_finding_signatures": {
+            "asan_double_free": 3
+          },
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {},
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_feature_contract_tokens": {},
+            "observed_records": {},
+            "record": null,
+            "required": false,
+            "token": null,
+            "valid": true
+          },
+          "classification": "baseline_reproduced",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_subject_cargo_feature_tokens": {},
+            "observed_subject_cargo_features": {},
+            "observed_unialloc_implementation_sha256": {},
+            "required": false,
+            "subject_cargo_features": null,
+            "subject_cargo_features_sha256": null,
+            "unialloc_implementation_sha256": null,
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 3,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {
+            "missing_or_ambiguous_panic_checkpoint": 3
+          },
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "tool_finding_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-071-into-iter-clone",
+          "scenario_ids": [
+            "RSH-071-into-iter-clone"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": null,
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": null
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_plain",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "5c916f3defd1e50e23792fa3597c8a2b778f0a466a0c672b8c653a70ead1a5e0": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": 1
+            },
+            "observed_records": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "stats"
+                ],
+                "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "stats"
+              ],
+              "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+            "valid": true
+          },
+          "classification": "direct_effect_absent",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "dc5551845f3d3afd2052a32304eb66de6e7a82cff94ccafcc9d116a0d33d1bab": 1
+            },
+            "observed_subject_cargo_features": {
+              "dc5551845f3d3afd2052a32304eb66de6e7a82cff94ccafcc9d116a0d33d1bab": {
+                "allocator_variant": "reclaim_plain",
+                "catalog_features": [],
+                "crate": "slice-ring-buffer",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_plain",
+              "catalog_features": [],
+              "crate": "slice-ring-buffer",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "dc5551845f3d3afd2052a32304eb66de6e7a82cff94ccafcc9d116a0d33d1bab",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 30,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-071-into-iter-clone",
+          "scenario_ids": [
+            "RSH-071-into-iter-clone"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "slice-ring-buffer",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 3,
+          "allocator_signal_signatures": {
+            "unialloc_pointer_already_released_check": 3
+          },
+          "allocator_variant": "reclaim_checks",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "9ec823b3089aa268ecfc94fc17052e6593813cf0e36e37330b37627d215dafa1": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": 1
+            },
+            "observed_records": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+            "valid": true
+          },
+          "classification": "allocator_signal_observed",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "5003d6b202597f146b989bb282d62bd665a8fb90af63c2270dc78bca5a450eab": 1
+            },
+            "observed_subject_cargo_features": {
+              "5003d6b202597f146b989bb282d62bd665a8fb90af63c2270dc78bca5a450eab": {
+                "allocator_variant": "reclaim_checks",
+                "catalog_features": [],
+                "crate": "slice-ring-buffer",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_checks",
+              "catalog_features": [],
+              "crate": "slice-ring-buffer",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "5003d6b202597f146b989bb282d62bd665a8fb90af63c2270dc78bca5a450eab",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 3,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {
+              "unialloc_pointer_already_released_check": 3
+            },
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {
+            "unialloc_pointer_already_released_check": 3
+          },
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {
+            "233e3f37792dfe1a263484fd49f787bccc943e97cb5797a2b5889682b27fc9ab": {
+              "count": 3,
+              "normalized_outcome": {
+                "critical_checkpoint": {
+                  "panic_message": "pointer already released",
+                  "panic_source": "unialloc/src/alloc_api/type_isolation.rs"
+                },
+                "kind": "rust_panic",
+                "returncode": 101,
+                "timed_out": false
+              }
+            }
+          },
+          "native_outcome_fingerprints": {
+            "233e3f37792dfe1a263484fd49f787bccc943e97cb5797a2b5889682b27fc9ab": 3
+          },
+          "oracle_statuses": {
+            "native_diagnostic_signal_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-071-into-iter-clone",
+          "scenario_ids": [
+            "RSH-071-into-iter-clone"
+          ],
+          "source_revalidated_allocator_signal_signatures": {
+            "unialloc_pointer_already_released_check": 3
+          },
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "slice-ring-buffer",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "system",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {},
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_feature_contract_tokens": {},
+            "observed_records": {},
+            "record": null,
+            "required": false,
+            "token": null,
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_subject_cargo_feature_tokens": {},
+            "observed_subject_cargo_features": {},
+            "observed_unialloc_implementation_sha256": {},
+            "required": false,
+            "subject_cargo_features": null,
+            "subject_cargo_features_sha256": null,
+            "unialloc_implementation_sha256": null,
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 3,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "clean_tool_runs_observed": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-071-into-iter-clone",
+          "scenario_ids": [
+            "RSH-071-into-iter-clone"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": null,
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": null
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_plain",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "5e43a47bd841deee1c15c76d9b0c746dffeced63fa807a3303e205e2d081b083": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": 1
+            },
+            "observed_records": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "stats"
+                ],
+                "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "stats"
+              ],
+              "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "dc5551845f3d3afd2052a32304eb66de6e7a82cff94ccafcc9d116a0d33d1bab": 1
+            },
+            "observed_subject_cargo_features": {
+              "dc5551845f3d3afd2052a32304eb66de6e7a82cff94ccafcc9d116a0d33d1bab": {
+                "allocator_variant": "reclaim_plain",
+                "catalog_features": [],
+                "crate": "slice-ring-buffer",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_plain",
+              "catalog_features": [],
+              "crate": "slice-ring-buffer",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "dc5551845f3d3afd2052a32304eb66de6e7a82cff94ccafcc9d116a0d33d1bab",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 60,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-071-into-iter-clone",
+          "scenario_ids": [
+            "RSH-071-into-iter-clone"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "slice-ring-buffer",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_checks",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "223269e3c04bb7d122ba01b81f5a7c354db9b1170d69fc9374c38b66fe8b8ce4": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": 1
+            },
+            "observed_records": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "5003d6b202597f146b989bb282d62bd665a8fb90af63c2270dc78bca5a450eab": 1
+            },
+            "observed_subject_cargo_features": {
+              "5003d6b202597f146b989bb282d62bd665a8fb90af63c2270dc78bca5a450eab": {
+                "allocator_variant": "reclaim_checks",
+                "catalog_features": [],
+                "crate": "slice-ring-buffer",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_checks",
+              "catalog_features": [],
+              "crate": "slice-ring-buffer",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "5003d6b202597f146b989bb282d62bd665a8fb90af63c2270dc78bca5a450eab",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 60,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-071-into-iter-clone",
+          "scenario_ids": [
+            "RSH-071-into-iter-clone"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "slice-ring-buffer",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        }
+      ],
+      "case_id": "RSH-071",
+      "classification": "allocator_signal_observed",
+      "crate": "slice-ring-buffer",
+      "experiment_count": 2,
+      "scenario_id": "RSH-071-into-iter-clone",
+      "scenario_ids": [
+        "RSH-071-into-iter-clone"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0122",
+      "arms": [
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "system",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 3,
+          "baseline_finding_signatures": {
+            "asan_double_free": 3
+          },
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {},
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_feature_contract_tokens": {},
+            "observed_records": {},
+            "record": null,
+            "required": false,
+            "token": null,
+            "valid": true
+          },
+          "classification": "baseline_reproduced",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_subject_cargo_feature_tokens": {},
+            "observed_subject_cargo_features": {},
+            "observed_unialloc_implementation_sha256": {},
+            "required": false,
+            "subject_cargo_features": null,
+            "subject_cargo_features_sha256": null,
+            "unialloc_implementation_sha256": null,
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 3,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {
+              "rust_panic_observed": 3
+            },
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {
+            "6dfad51c6fd2518508ce69719b05a0690dd751800c396e48d46aff0bbb8a9089": {
+              "count": 3,
+              "normalized_outcome": {
+                "critical_checkpoint": {
+                  "panic_message": "intentional panic from Drop",
+                  "panic_source": "src/witness.rs"
+                },
+                "kind": "rust_panic",
+                "returncode": 1,
+                "timed_out": false
+              }
+            }
+          },
+          "native_outcome_fingerprints": {
+            "6dfad51c6fd2518508ce69719b05a0690dd751800c396e48d46aff0bbb8a9089": 3
+          },
+          "oracle_statuses": {
+            "tool_finding_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-072-inline-vec-clear",
+          "scenario_ids": [
+            "RSH-072-inline-vec-clear"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": null,
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": null
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_plain",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "f646648eb6fdb8ba553118618b90ee4550f986da1038a06635a705661fd518bc": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": 1
+            },
+            "observed_records": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "stats"
+                ],
+                "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "stats"
+              ],
+              "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+            "valid": true
+          },
+          "classification": "direct_effect_absent",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "182663d690643cf5421b766b188e88ef6d02f1d57604e926e79b8b2ed405ac93": 1
+            },
+            "observed_subject_cargo_features": {
+              "182663d690643cf5421b766b188e88ef6d02f1d57604e926e79b8b2ed405ac93": {
+                "allocator_variant": "reclaim_plain",
+                "catalog_features": [],
+                "crate": "rkyv",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_plain",
+              "catalog_features": [],
+              "crate": "rkyv",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "182663d690643cf5421b766b188e88ef6d02f1d57604e926e79b8b2ed405ac93",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 9,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-072-inline-vec-clear",
+          "scenario_ids": [
+            "RSH-072-inline-vec-clear"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "rkyv",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 3,
+          "allocator_signal_signatures": {
+            "unialloc_pointer_already_released_check": 3
+          },
+          "allocator_variant": "reclaim_checks",
+          "archive_variant": "vulnerable",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "3c197cb946a25dc9814f3f42987ec18aa78c65b004e2187a874c34be45d11ef3": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": 1
+            },
+            "observed_records": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+            "valid": true
+          },
+          "classification": "allocator_signal_observed",
+          "clean_exit_count": 0,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "cc5875f985ca9ce5b7ddb98647dd095d60f41f4ddd0e0a00991c97473676c27e": 1
+            },
+            "observed_subject_cargo_features": {
+              "cc5875f985ca9ce5b7ddb98647dd095d60f41f4ddd0e0a00991c97473676c27e": {
+                "allocator_variant": "reclaim_checks",
+                "catalog_features": [],
+                "crate": "rkyv",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_checks",
+              "catalog_features": [],
+              "crate": "rkyv",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "cc5875f985ca9ce5b7ddb98647dd095d60f41f4ddd0e0a00991c97473676c27e",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 3,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {
+              "unialloc_pointer_already_released_check": 3
+            },
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {
+            "unialloc_pointer_already_released_check": 3
+          },
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {
+            "233e3f37792dfe1a263484fd49f787bccc943e97cb5797a2b5889682b27fc9ab": {
+              "count": 3,
+              "normalized_outcome": {
+                "critical_checkpoint": {
+                  "panic_message": "pointer already released",
+                  "panic_source": "unialloc/src/alloc_api/type_isolation.rs"
+                },
+                "kind": "rust_panic",
+                "returncode": 101,
+                "timed_out": false
+              }
+            }
+          },
+          "native_outcome_fingerprints": {
+            "233e3f37792dfe1a263484fd49f787bccc943e97cb5797a2b5889682b27fc9ab": 3
+          },
+          "oracle_statuses": {
+            "native_diagnostic_signal_observed": 1
+          },
+          "patched_clean_count": 0,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-072-inline-vec-clear",
+          "scenario_ids": [
+            "RSH-072-inline-vec-clear"
+          ],
+          "source_revalidated_allocator_signal_signatures": {
+            "unialloc_pointer_already_released_check": 3
+          },
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "rkyv",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 0,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "system",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {},
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_feature_contract_tokens": {},
+            "observed_records": {},
+            "record": null,
+            "required": false,
+            "token": null,
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 0,
+            "observed_subject_cargo_feature_tokens": {},
+            "observed_subject_cargo_features": {},
+            "observed_unialloc_implementation_sha256": {},
+            "required": false,
+            "subject_cargo_features": null,
+            "subject_cargo_features_sha256": null,
+            "unialloc_implementation_sha256": null,
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 3,
+          "experiment_count": 1,
+          "fallback_allocation_count": 0,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "clean_tool_runs_observed": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-072-inline-vec-clear",
+          "scenario_ids": [
+            "RSH-072-inline-vec-clear"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": null,
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": null
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_plain",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "46e002f22f8633aa002545b0bd98fc23d07ee82665508c64264623132bac70da": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": 1
+            },
+            "observed_records": {
+              "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "stats"
+                ],
+                "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "stats"
+              ],
+              "feature_contract_sha256": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "6dc9bd3a4ad2151080dd24f6df025ebd0d3a3048d37deeba9f824e0248e27cc1",
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "182663d690643cf5421b766b188e88ef6d02f1d57604e926e79b8b2ed405ac93": 1
+            },
+            "observed_subject_cargo_features": {
+              "182663d690643cf5421b766b188e88ef6d02f1d57604e926e79b8b2ed405ac93": {
+                "allocator_variant": "reclaim_plain",
+                "catalog_features": [],
+                "crate": "rkyv",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_plain",
+              "catalog_features": [],
+              "crate": "rkyv",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "182663d690643cf5421b766b188e88ef6d02f1d57604e926e79b8b2ed405ac93",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 9,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-072-inline-vec-clear",
+          "scenario_ids": [
+            "RSH-072-inline-vec-clear"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_plain",
+            "catalog_features": [],
+            "crate": "rkyv",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        },
+        {
+          "allocation_stats_observation_count": 3,
+          "allocator_signal_count": 0,
+          "allocator_signal_signatures": {},
+          "allocator_variant": "reclaim_checks",
+          "archive_variant": "patched",
+          "baseline_finding_count": 0,
+          "baseline_finding_signatures": {},
+          "cargo_metadata_attestation": {
+            "cargo_metadata_stdout_sha256": {
+              "eabf0b9fd86958b375024fa38c5c523e3d137ece6ce6b7063cc0f4c550371d4e": 1
+            },
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_feature_contract_tokens": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": 1
+            },
+            "observed_records": {
+              "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963": {
+                "default_feature_resolved": false,
+                "default_features_expected": false,
+                "expected_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+                "manifest_path": "unialloc/Cargo.toml",
+                "package_count": 1,
+                "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+                "package_source": null,
+                "resolve_node_count": 1,
+                "resolved_features": [
+                  "reclaim_checks",
+                  "stats"
+                ],
+                "schema_version": 1
+              }
+            },
+            "record": {
+              "default_feature_resolved": false,
+              "default_features_expected": false,
+              "expected_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "feature_contract_sha256": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+              "manifest_path": "unialloc/Cargo.toml",
+              "package_count": 1,
+              "package_id": "path+file:///home/hanqing/alloc/UniAlloc/unialloc#0.1.0",
+              "package_source": null,
+              "resolve_node_count": 1,
+              "resolved_features": [
+                "reclaim_checks",
+                "stats"
+              ],
+              "schema_version": 1
+            },
+            "required": true,
+            "token": "60407b64b5239530d846a5e842fa258c9222e16ef8a821e425e0613da8e06963",
+            "valid": true
+          },
+          "classification": "insufficient_evidence",
+          "clean_exit_count": 3,
+          "compiler_audit_observation_count": 1,
+          "compiler_rewrite_counts": {
+            "direct_allocator_rewrites_applied": 0,
+            "direct_layout_allocator_rewrites_applied": 0,
+            "semantic_deallocation_like_rewrites_applied": 0,
+            "semantic_drop_rewrites_applied": 0,
+            "semantic_ownership_transfer_rewrites_applied": 0,
+            "semantic_rewrites_applied": 0,
+            "semantic_scope_rewrites_applied": 0,
+            "total_compiler_rewrites_applied": 0
+          },
+          "direct_allocator_provenance": {
+            "failure_counts": {},
+            "observation_count": 1,
+            "observed_subject_cargo_feature_tokens": {
+              "cc5875f985ca9ce5b7ddb98647dd095d60f41f4ddd0e0a00991c97473676c27e": 1
+            },
+            "observed_subject_cargo_features": {
+              "cc5875f985ca9ce5b7ddb98647dd095d60f41f4ddd0e0a00991c97473676c27e": {
+                "allocator_variant": "reclaim_checks",
+                "catalog_features": [],
+                "crate": "rkyv",
+                "default_features_enabled": true,
+                "effective_features": [],
+                "override_allocator_variant": null,
+                "override_applied": false,
+                "override_source": null
+              }
+            },
+            "observed_unialloc_implementation_sha256": {
+              "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847": 1
+            },
+            "required": true,
+            "subject_cargo_features": {
+              "allocator_variant": "reclaim_checks",
+              "catalog_features": [],
+              "crate": "rkyv",
+              "default_features_enabled": true,
+              "effective_features": [],
+              "override_allocator_variant": null,
+              "override_applied": false,
+              "override_source": null
+            },
+            "subject_cargo_features_sha256": "cc5875f985ca9ce5b7ddb98647dd095d60f41f4ddd0e0a00991c97473676c27e",
+            "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847",
+            "valid": true
+          },
+          "eligibility_blockers": [
+            "critical_site_coverage_not_validated",
+            "no_compiler_rewrite_observed"
+          ],
+          "execution_statuses": [
+            "completed"
+          ],
+          "expected_oracle_observation_count": 0,
+          "experiment_count": 1,
+          "fallback_allocation_count": 9,
+          "matched_compile_error_codes": {},
+          "mitigation_inferred": false,
+          "native_diagnostic_count": 0,
+          "native_diagnostic_revalidation": {
+            "current_parser_signatures": {},
+            "failure_counts": {},
+            "matched_observation_count": 3,
+            "observation_count": 3,
+            "raw_run_count": 3,
+            "valid": true
+          },
+          "native_diagnostic_signatures": {},
+          "native_outcome_fingerprint_failures": {},
+          "native_outcome_fingerprint_records": {},
+          "native_outcome_fingerprints": {},
+          "oracle_statuses": {
+            "native_clean_runs_inconclusive": 1
+          },
+          "patched_clean_count": 3,
+          "patched_control_fingerprints": {},
+          "repetition_count": 3,
+          "scenario_id": "RSH-072-inline-vec-clear",
+          "scenario_ids": [
+            "RSH-072-inline-vec-clear"
+          ],
+          "source_revalidated_allocator_signal_signatures": {},
+          "subject_cargo_features": {
+            "allocator_variant": "reclaim_checks",
+            "catalog_features": [],
+            "crate": "rkyv",
+            "default_features_enabled": true,
+            "effective_features": [],
+            "override_allocator_variant": null,
+            "override_applied": false,
+            "override_source": null
+          },
+          "typed_allocation_count": 0,
+          "unialloc_implementation_sha256": "36bc040455f8c5fa6142a91b2321bc9d018aad08764f7d8c8e5554b3e4460847"
+        }
+      ],
+      "case_id": "RSH-072",
+      "classification": "allocator_signal_observed",
+      "crate": "rkyv",
+      "experiment_count": 2,
+      "scenario_id": "RSH-072-inline-vec-clear",
+      "scenario_ids": [
+        "RSH-072-inline-vec-clear"
+      ]
+    }
+  ],
+  "catalog_case_count": 5,
+  "catalog_path": "evaluation/config/rustsec_heap_strong_batch_f_harnesses.json",
+  "catalog_sha256": "c2c9f6804cb1d4344e8df7ba56e3972a8b75269a58a44d5d0c59ba50643453f0",
+  "claim_grade": false,
+  "classification_counts": {
+    "allocator_signal_observed": 3,
+    "baseline_reproduced": 2
+  },
+  "corpus_input": {
+    "bytes": 121186,
+    "path": "evaluation/config/rustsec_heap_security_corpus.json",
+    "sha256": "4627a588b7f9250ea3e540bc6d69e5cb88c2d7d47a8fb652eb7d96a57a98b107"
+  },
+  "experiment_file_count": 10,
+  "experiment_inputs": [
+    {
+      "allocator_selection": "explicit",
+      "bytes": 292592,
+      "case_id": "RSH-068",
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/RSH-068-batch-f-experiment.json",
+      "requested_allocators": [
+        "system"
+      ],
+      "selected_allocators": [
+        "system"
+      ],
+      "sha256": "26abc92a6e20f6775304500a77976b6f32f5ceb9bd83f4c56a7a9790322a95af"
+    },
+    {
+      "allocator_selection": "explicit",
+      "bytes": 447747,
+      "case_id": "RSH-068",
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/feature-matched/RSH-068-parc-project-experiment.json",
+      "requested_allocators": [
+        "reclaim_plain",
+        "reclaim_checks"
+      ],
+      "selected_allocators": [
+        "reclaim_plain",
+        "reclaim_checks"
+      ],
+      "sha256": "81834196e77daa6538fe0824a6b716e2919a006450611756ca8994d47f241a5e"
+    },
+    {
+      "allocator_selection": "explicit",
+      "bytes": 439640,
+      "case_id": "RSH-069",
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/RSH-069-batch-f-experiment.json",
+      "requested_allocators": [
+        "system"
+      ],
+      "selected_allocators": [
+        "system"
+      ],
+      "sha256": "0d80167fc774b6cba7092126c7230f9d48e57f8e92a7c906489e29c15600f96b"
+    },
+    {
+      "allocator_selection": "explicit",
+      "bytes": 725153,
+      "case_id": "RSH-069",
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/feature-matched/RSH-069-md-fetch-experiment.json",
+      "requested_allocators": [
+        "reclaim_plain",
+        "reclaim_checks"
+      ],
+      "selected_allocators": [
+        "reclaim_plain",
+        "reclaim_checks"
+      ],
+      "sha256": "94c9198973743524b3030511264fc53f40f86206f1e5eed41a58609059e7618f"
+    },
+    {
+      "allocator_selection": "explicit",
+      "bytes": 333970,
+      "case_id": "RSH-070",
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/RSH-070-batch-f-experiment.json",
+      "requested_allocators": [
+        "system"
+      ],
+      "selected_allocators": [
+        "system"
+      ],
+      "sha256": "97d4192b1906ef1b0eb257005962ffcb631a9bbb81b844f3322294709201fd56"
+    },
+    {
+      "allocator_selection": "explicit",
+      "bytes": 524554,
+      "case_id": "RSH-070",
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/feature-matched/RSH-070-list-drop-race-experiment.json",
+      "requested_allocators": [
+        "reclaim_plain",
+        "reclaim_checks"
+      ],
+      "selected_allocators": [
+        "reclaim_plain",
+        "reclaim_checks"
+      ],
+      "sha256": "d7d383c5e4057e75a541b0a3c15d369690a3831b49769ec135fe6d397f46c943"
+    },
+    {
+      "allocator_selection": "explicit",
+      "bytes": 480736,
+      "case_id": "RSH-071",
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/RSH-071-batch-f-experiment.json",
+      "requested_allocators": [
+        "system"
+      ],
+      "selected_allocators": [
+        "system"
+      ],
+      "sha256": "4c073cd1c7e22dc836c81b74d913c76943d0dfe34c31583cacb07e7607870752"
+    },
+    {
+      "allocator_selection": "explicit",
+      "bytes": 683822,
+      "case_id": "RSH-071",
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/feature-matched/RSH-071-into-iter-clone-experiment.json",
+      "requested_allocators": [
+        "reclaim_plain",
+        "reclaim_checks"
+      ],
+      "selected_allocators": [
+        "reclaim_plain",
+        "reclaim_checks"
+      ],
+      "sha256": "eda97d8de0ac52dd7ccb78ced374d5b24498ae65779d1737aed941d1877267ab"
+    },
+    {
+      "allocator_selection": "explicit",
+      "bytes": 622607,
+      "case_id": "RSH-072",
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/RSH-072-batch-f-experiment.json",
+      "requested_allocators": [
+        "system"
+      ],
+      "selected_allocators": [
+        "system"
+      ],
+      "sha256": "02d8f859090928c88e948aade09e63f996d465aa0b1fa0c27369d3197bc82ef5"
+    },
+    {
+      "allocator_selection": "explicit",
+      "bytes": 1119162,
+      "case_id": "RSH-072",
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/feature-matched/RSH-072-inline-vec-clear-experiment.json",
+      "requested_allocators": [
+        "reclaim_plain",
+        "reclaim_checks"
+      ],
+      "selected_allocators": [
+        "reclaim_plain",
+        "reclaim_checks"
+      ],
+      "sha256": "7f384d8a6b30a1af3666bfec5450ecb196cc41a2585e81437d8487f781fe2fff"
+    }
+  ],
+  "mitigation_inferred": false,
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-expansion-summary"
+}

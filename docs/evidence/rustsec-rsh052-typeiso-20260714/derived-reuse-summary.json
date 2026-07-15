@@ -1,0 +1,202 @@
+{
+  "boundary": "This artifact validates one manually attributed exploit-enabling cross-identity reuse edge. It does not claim source-level stale-pointer detection or automatic compiler coverage of the victim sites.",
+  "catalog": {
+    "bytes": 23217,
+    "path": "evaluation/config/rustsec_heap_strong_batch_a_harnesses.json",
+    "sha256": "a23d279a71b0f187e8e6a0fd67523c8e7b1fa7f71ccf07f8bcf1e55692426e3e"
+  },
+  "claim_grade": false,
+  "counts": {
+    "compiler_automatic_victim_coverage_count": 0,
+    "derived_reuse_scenario_count": 1,
+    "source_vulnerability_detection_validated_count": 0,
+    "source_vulnerability_mitigation_inferred_count": 0,
+    "validated_cross_identity_reuse_edge_count": 1
+  },
+  "mitigation_inferred": false,
+  "raw_experiment_inputs": [
+    {
+      "bytes": 396436,
+      "case_id": "RSH-052",
+      "path": "docs/evidence/rustsec-rsh052-typeiso-20260714/experiment.json",
+      "sha256": "368668007444322e0239fb4b6292d8dbe2f96ea16ba6547204de0c32bf609d4a"
+    }
+  ],
+  "scenarios": [
+    {
+      "advisory_id": "RUSTSEC-2019-0023",
+      "annotation": {
+        "annotation_scope": [
+          "string-interner get_or_intern 64-byte Box<str> victim allocation",
+          "old StringInterner drop 64-byte Box<str> victim reclaim"
+        ],
+        "claim_scope": "derived RSH-052 old Box<str>-to-Replacement cross-identity reuse edge only",
+        "expected_layout": {
+          "align": 1,
+          "size": 64
+        },
+        "kind": "manual_exact_vulnerability_edge_identity",
+        "replacement_semantic_type_fragment": "Box<witness::Replacement",
+        "replacement_source_file_fragment": "src/witness.rs:",
+        "schema_version": 1,
+        "victim_module_id": 5932164522352574466,
+        "victim_type_id": 5932164522352574465
+      },
+      "arms": [
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 0,
+          "allocator_variant": "typeiso",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 3,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": false,
+          "matching_reuse_denial_event_count": 3,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typeiso",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        }
+      ],
+      "case_id": "RSH-052",
+      "crate": "string-interner",
+      "edge_evaluation": {
+        "annotation": {
+          "annotation_scope": [
+            "string-interner get_or_intern 64-byte Box<str> victim allocation",
+            "old StringInterner drop 64-byte Box<str> victim reclaim"
+          ],
+          "claim_scope": "derived RSH-052 old Box<str>-to-Replacement cross-identity reuse edge only",
+          "expected_layout": {
+            "align": 1,
+            "size": 64
+          },
+          "kind": "manual_exact_vulnerability_edge_identity",
+          "replacement_semantic_type_fragment": "Box<witness::Replacement",
+          "replacement_source_file_fragment": "src/witness.rs:",
+          "schema_version": 1,
+          "victim_module_id": 5932164522352574466,
+          "victim_type_id": 5932164522352574465
+        },
+        "baseline_vulnerability_and_address_reuse_reproduced": true,
+        "boundary": "A validated result shows that exact-identity cache routing denied and reported the exploit-enabling cross-type reuse edge. The source-level stale pointer remains, same-identity reuse remains allowed, and the manual victim annotation is outside automatic compiler coverage.",
+        "claim_grade": false,
+        "claim_scope": "derived RSH-052 old Box<str>-to-Replacement cross-identity reuse edge only",
+        "compiler_automatic_victim_coverage": false,
+        "manual_victim_identity_annotation": true,
+        "missing_required_arms": [],
+        "patched_system_control_reproduced": true,
+        "patched_typeiso_matching_denial_count": 0,
+        "source_vulnerability_detection_validated": false,
+        "status": "cross_identity_reuse_edge_blocked_and_reported",
+        "typed_plain_address_reuse_ablation_reproduced": true,
+        "typeiso_reuse_edge_blocked_and_reported": true,
+        "validated": true,
+        "vulnerability_specific_detection_signal": true
+      },
+      "orchestration_success": true,
+      "patched_scenario_source": {
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-052/derived_reuse_patched.rs",
+        "source_sha256": "514fca43c028c2e3898ac605b25d75b7c57211d38f29444f0547db738fae8e92"
+      },
+      "raw_experiment": {
+        "bytes": 396436,
+        "case_id": "RSH-052",
+        "path": "docs/evidence/rustsec-rsh052-typeiso-20260714/experiment.json",
+        "sha256": "368668007444322e0239fb4b6292d8dbe2f96ea16ba6547204de0c32bf609d4a"
+      },
+      "repetitions_requested": 3,
+      "scenario_id": "RSH-052-derived-reuse",
+      "scenario_source": {
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-052/derived_reuse.rs",
+        "sha256": "cdd44d6c44abe607e279ccad026f1883a134536fbfc51548201995b35df43b71"
+      },
+      "typed_allocator_expected_oracle": true,
+      "unexpected_arm_count": 0
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-rsh052-derived-reuse-summary"
+}

@@ -1,0 +1,36 @@
+timestamp=2026-07-14T20:37:10-04:00
+host=Linux swoop 6.8.0-111-generic #111-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 11 23:16:02 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+cargo=/home/hanqing/.cargo/bin/cargo
+rustc=/home/hanqing/.cargo/bin/rustc
+rustup=/home/hanqing/.cargo/bin/rustup
+pkg-config=/usr/bin/pkg-config
+node=/snap/bin/node
+npm=/usr/local/bin/npm
+cc=/usr/bin/cc
+clang=/usr/bin/clang
+cmake=/usr/bin/cmake
+make=/usr/bin/make
+miri=MISSING
+rustc 1.98.0-nightly (485ec3fbc 2026-06-10)
+binary: rustc
+commit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e
+commit-date: 2026-06-10
+host: x86_64-unknown-linux-gnu
+release: 1.98.0-nightly
+LLVM version: 22.1.6
+cargo 1.98.0-nightly (0b1123a48 2026-06-01)
+stable-x86_64-unknown-linux-gnu (default)
+nightly-x86_64-unknown-linux-gnu
+nightly-2019-09-14-x86_64-unknown-linux-gnu
+nightly-2020-12-23-x86_64-unknown-linux-gnu
+nightly-2021-02-19-x86_64-unknown-linux-gnu
+nightly-2022-07-01-x86_64-unknown-linux-gnu
+nightly-2026-03-13-x86_64-unknown-linux-gnu
+nightly-2026-04-01-x86_64-unknown-linux-gnu
+nightly-2026-04-10-x86_64-unknown-linux-gnu
+nightly-2026-06-11-x86_64-unknown-linux-gnu (active)
+1.64-x86_64-unknown-linux-gnu
+1.64.0-x86_64-unknown-linux-gnu
+1.85.0-x86_64-unknown-linux-gnu
+1.95.0-x86_64-unknown-linux-gnu
+1.8.1

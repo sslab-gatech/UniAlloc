@@ -1,0 +1,14 @@
+[package]
+name = "rsh-064-harness"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+neon = { path = "/tmp/unialloc-blocked-reattempt-20260714/subjects/neon-0.10.0", version = "=0.10.0", default-features = false, features = ["napi-6"] }
+unialloc = { path = "/home/hanqing/alloc/UniAlloc/unialloc", default-features = false, features = ["stats", "reclaim_checks"] }
+
+[patch.crates-io]
+spin = { path = "/home/hanqing/.cargo/registry/src/github.com-1ecc6299db9ec823/spin-0.9.0" }

@@ -1,0 +1,413 @@
+{
+  "boundary": "These results validate two manually attributed, layout-bounded A-to-free-to-B reuse decisions. They do not validate automatic compiler coverage, complete source-vulnerability detection, stale-pointer elimination, or general UAF mitigation.",
+  "catalog": {
+    "bytes": 19028,
+    "path": "evaluation/config/rustsec_heap_expansion_harnesses.json",
+    "sha256": "1a0d7864e533dbe683965ca0dd83a6846dbf052ad4e487925815396f41569551"
+  },
+  "claim_grade": false,
+  "counts": {
+    "compiler_automatic_victim_coverage_count": 0,
+    "derived_reuse_scenario_count": 2,
+    "source_vulnerability_detection_validated_count": 0,
+    "source_vulnerability_mitigation_inferred_count": 0,
+    "validated_cross_identity_reuse_edge_count": 2
+  },
+  "mitigation_inferred": false,
+  "raw_experiment_inputs": [
+    {
+      "bytes": 345808,
+      "case_id": "RSH-041",
+      "path": "docs/evidence/rustsec-security-expansion-20260714/raw/derived/RSH-041-derived-reuse-experiment.json",
+      "sha256": "bb92dbc51b8412c750a459490816651781508089afb846648baf1d38785e51da"
+    },
+    {
+      "bytes": 702739,
+      "case_id": "RSH-042",
+      "path": "docs/evidence/rustsec-security-expansion-20260714/raw/derived/RSH-042-derived-reuse-experiment.json",
+      "sha256": "ec83a267a753de616b6c91166af6e9614ad81e14fdf3eb0fa4b7fd2689882693"
+    }
+  ],
+  "scenarios": [
+    {
+      "advisory_id": "RUSTSEC-2026-0152",
+      "annotation": {
+        "annotation_scope": [
+          "DroppableRef::from boxed LocalHeapRB victim allocation",
+          "second cloned DroppableRef victim reclaim"
+        ],
+        "claim_scope": "derived RSH-041 boxed LocalHeapRB-to-Replacement reuse edge only",
+        "expected_layout": {
+          "align": 8,
+          "size": 40
+        },
+        "kind": "manual_exact_vulnerability_edge_identity",
+        "replacement_semantic_type_fragment": "Box<witness::Replacement",
+        "replacement_source_file_fragment": "src/witness.rs:",
+        "schema_version": 1,
+        "victim_module_id": 5932164578187149314,
+        "victim_type_id": 5932164578187149313
+      },
+      "arms": [
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 0,
+          "allocator_variant": "typeiso",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 3,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": false,
+          "matching_reuse_denial_event_count": 3,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typeiso",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        }
+      ],
+      "case_id": "RSH-041",
+      "crate": "oneringbuf",
+      "edge_evaluation": {
+        "annotation": {
+          "annotation_scope": [
+            "DroppableRef::from boxed LocalHeapRB victim allocation",
+            "second cloned DroppableRef victim reclaim"
+          ],
+          "claim_scope": "derived RSH-041 boxed LocalHeapRB-to-Replacement reuse edge only",
+          "expected_layout": {
+            "align": 8,
+            "size": 40
+          },
+          "kind": "manual_exact_vulnerability_edge_identity",
+          "replacement_semantic_type_fragment": "Box<witness::Replacement",
+          "replacement_source_file_fragment": "src/witness.rs:",
+          "schema_version": 1,
+          "victim_module_id": 5932164578187149314,
+          "victim_type_id": 5932164578187149313
+        },
+        "baseline_vulnerability_and_address_reuse_reproduced": true,
+        "boundary": "A validated result shows that exact-identity cache routing denied and reported the exploit-enabling cross-type reuse edge. The source-level stale pointer remains, same-identity reuse remains allowed, and the manual victim annotation is outside automatic compiler coverage.",
+        "claim_grade": false,
+        "claim_scope": "derived RSH-041 boxed LocalHeapRB-to-Replacement reuse edge only",
+        "compiler_automatic_victim_coverage": false,
+        "manual_victim_identity_annotation": true,
+        "missing_required_arms": [],
+        "patched_system_control_reproduced": true,
+        "patched_typeiso_matching_denial_count": 0,
+        "source_vulnerability_detection_validated": false,
+        "status": "cross_identity_reuse_edge_blocked_and_reported",
+        "typed_plain_address_reuse_ablation_reproduced": true,
+        "typeiso_reuse_edge_blocked_and_reported": true,
+        "validated": true,
+        "vulnerability_specific_detection_signal": true
+      },
+      "orchestration_success": true,
+      "patched_scenario_source": {
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-041/derived_reuse_patched.rs",
+        "source_sha256": "2ef30190d22170685beb9cba470ee726405d4c4a225e2502e3a66431c0f0205b"
+      },
+      "raw_experiment": {
+        "bytes": 345808,
+        "case_id": "RSH-041",
+        "path": "docs/evidence/rustsec-security-expansion-20260714/raw/derived/RSH-041-derived-reuse-experiment.json",
+        "sha256": "bb92dbc51b8412c750a459490816651781508089afb846648baf1d38785e51da"
+      },
+      "repetitions_requested": 3,
+      "scenario_id": "RSH-041-derived-reuse",
+      "scenario_source": {
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-041/derived_reuse.rs",
+        "sha256": "2315a2f2c862a1e138a353a4465bccbd4454f5ef65bcdd8411d5b76c0958c58f"
+      },
+      "typed_allocator_expected_oracle": true,
+      "unexpected_arm_count": 0
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0128",
+      "annotation": {
+        "annotation_scope": [
+          "generic materialize_victim Vec<T> victim-buffer allocation",
+          "generic reclaim_next emap::Keys<V>::next victim-buffer reclaim"
+        ],
+        "claim_scope": "derived RSH-042 cross-identity Vec<u8>-buffer-to-Replacement reuse edge only",
+        "expected_layout": {
+          "align": 1,
+          "size": 64
+        },
+        "kind": "manual_exact_vulnerability_edge_identity",
+        "replacement_semantic_type_fragment": "Box<witness::Replacement",
+        "replacement_source_file_fragment": "src/witness.rs:",
+        "schema_version": 1,
+        "victim_module_id": 5932164479402901506,
+        "victim_type_id": 5932164479402901505
+      },
+      "arms": [
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "unialloc",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 0,
+          "allocator_variant": "typeiso",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 3,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": false,
+          "matching_reuse_denial_event_count": 3,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "unialloc",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typeiso",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        }
+      ],
+      "case_id": "RSH-042",
+      "crate": "emap",
+      "edge_evaluation": {
+        "annotation": {
+          "annotation_scope": [
+            "generic materialize_victim Vec<T> victim-buffer allocation",
+            "generic reclaim_next emap::Keys<V>::next victim-buffer reclaim"
+          ],
+          "claim_scope": "derived RSH-042 cross-identity Vec<u8>-buffer-to-Replacement reuse edge only",
+          "expected_layout": {
+            "align": 1,
+            "size": 64
+          },
+          "kind": "manual_exact_vulnerability_edge_identity",
+          "replacement_semantic_type_fragment": "Box<witness::Replacement",
+          "replacement_source_file_fragment": "src/witness.rs:",
+          "schema_version": 1,
+          "victim_module_id": 5932164479402901506,
+          "victim_type_id": 5932164479402901505
+        },
+        "baseline_vulnerability_and_address_reuse_reproduced": true,
+        "boundary": "A validated result shows that exact-identity cache routing denied and reported the exploit-enabling cross-type reuse edge. The source-level stale pointer remains, same-identity reuse remains allowed, and the manual victim annotation is outside automatic compiler coverage.",
+        "claim_grade": false,
+        "claim_scope": "derived RSH-042 cross-identity Vec<u8>-buffer-to-Replacement reuse edge only",
+        "compiler_automatic_victim_coverage": false,
+        "manual_victim_identity_annotation": true,
+        "missing_required_arms": [],
+        "patched_system_control_reproduced": true,
+        "patched_typeiso_matching_denial_count": 0,
+        "source_vulnerability_detection_validated": false,
+        "status": "cross_identity_reuse_edge_blocked_and_reported",
+        "typed_plain_address_reuse_ablation_reproduced": true,
+        "typeiso_reuse_edge_blocked_and_reported": true,
+        "validated": true,
+        "vulnerability_specific_detection_signal": true
+      },
+      "orchestration_success": true,
+      "patched_scenario_source": {
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-042/derived_reuse_patched.rs",
+        "source_sha256": "0ae34eda462c0222f84d1d81b7db5ac6c63fd8f8cd4f35b7c3ef284005b6a527"
+      },
+      "raw_experiment": {
+        "bytes": 702739,
+        "case_id": "RSH-042",
+        "path": "docs/evidence/rustsec-security-expansion-20260714/raw/derived/RSH-042-derived-reuse-experiment.json",
+        "sha256": "ec83a267a753de616b6c91166af6e9614ad81e14fdf3eb0fa4b7fd2689882693"
+      },
+      "repetitions_requested": 3,
+      "scenario_id": "RSH-042-derived-reuse",
+      "scenario_source": {
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-042/derived_reuse.rs",
+        "sha256": "bd0f7561624771957e32e328bf11de0ccc7677a5daebb5ac4c248e815c6afa4f"
+      },
+      "typed_allocator_expected_oracle": true,
+      "unexpected_arm_count": 0
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-derived-reuse-expansion-summary"
+}

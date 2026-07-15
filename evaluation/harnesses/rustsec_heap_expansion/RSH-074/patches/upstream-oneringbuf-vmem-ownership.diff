@@ -1,0 +1,26 @@
+--- a/src/ring_buffer/storage/heap/mod.rs
++++ b/src/ring_buffer/storage/heap/mod.rs
+@@ -43,12 +43,20 @@
+ impl<T> HeapStorage<T> {
+     #[cfg(feature = "vmem")]
+     fn new(value: Box<[UnsafeSyncCell<T>]>) -> Self {
++        let len = value.len();
+         let r = vmem_helper::new(&value);
+ 
+-        Self {
+-            inner: r,
+-            len: value.len(),
++        // The cells were bit-copied into the mmap region. Transfer their
++        // ownership to that mapping and free only the source allocation.
++        let raw_box = Box::into_raw(value);
++        let raw_data = raw_box as *mut UnsafeSyncCell<T>;
++        unsafe {
++            let layout = core::alloc::Layout::array::<UnsafeSyncCell<T>>(len)
++                .expect("HeapStorage backing layout");
++            alloc::alloc::dealloc(raw_data.cast(), layout);
+         }
++
++        Self { inner: r, len }
+     }
+ 
+     #[cfg(not(feature = "vmem"))]

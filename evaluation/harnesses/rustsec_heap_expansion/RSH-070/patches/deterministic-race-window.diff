@@ -1,0 +1,13 @@
+--- a/src/flavors/list.rs
++++ b/src/flavors/list.rs
+@@ -252,6 +252,10 @@
+                     .compare_exchange(block, new, Ordering::Release, Ordering::Relaxed)
+                     .is_ok()
+                 {
++                    // Deterministic reproduction window from crossbeam#972:
++                    // let a second sender publish and receiver drop observe the
++                    // semi-initialized channel before installing head.block.
++                    std::thread::sleep(std::time::Duration::from_secs(2));
+                     self.head.block.store(new, Ordering::Release);
+                     block = new;
+                 } else {

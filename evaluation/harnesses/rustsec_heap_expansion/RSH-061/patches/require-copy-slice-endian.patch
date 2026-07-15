@@ -1,0 +1,11 @@
+--- a/src/slices.rs
++++ b/src/slices.rs
+@@ -5,7 +5,7 @@
+ use std::ptr;
+ 
+ /// Traverse a slice, performing the `Endian` method on each item in place.
+-impl<'a, T: Endian> Endian for &'a mut [T] {
++impl<'a, T: Endian + Copy> Endian for &'a mut [T] {
+ 	fn from_be(self) -> Self {
+ 		for elt in self.iter_mut() { unsafe {
+ 			ptr::write(elt, ptr::read(elt).from_be());

@@ -1,0 +1,3589 @@
+{
+  "claim_boundary": "The sweep reproduces catalog oracles and records allocator diagnostics. It does not establish mitigation, detection coverage, or exploit prevention.",
+  "claim_grade": false,
+  "critical_site_coverage_validated": false,
+  "date": "2026-07-14",
+  "efficacy_eligible": false,
+  "execution_mode_counts": [
+    {
+      "allocator_variant": "system",
+      "arm_count": 38,
+      "execution_status": "completed",
+      "mode": "asan"
+    },
+    {
+      "allocator_variant": "system",
+      "arm_count": 2,
+      "execution_status": "completed",
+      "mode": "asan_c_and_rust"
+    },
+    {
+      "allocator_variant": "system",
+      "arm_count": 8,
+      "execution_status": "completed",
+      "mode": "miri"
+    },
+    {
+      "allocator_variant": "system",
+      "arm_count": 2,
+      "execution_status": "completed",
+      "mode": "native_address_trace"
+    },
+    {
+      "allocator_variant": "system",
+      "arm_count": 2,
+      "execution_status": "completed",
+      "mode": "native_alignment"
+    },
+    {
+      "allocator_variant": "system",
+      "arm_count": 2,
+      "execution_status": "completed",
+      "mode": "native_value_oracle"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "arm_count": 2,
+      "execution_status": "completed",
+      "mode": "native_address_trace"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "arm_count": 2,
+      "execution_status": "unsupported_allocator_topology",
+      "mode": "native_alignment"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "arm_count": 48,
+      "execution_status": "completed",
+      "mode": "native_diagnostic"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "arm_count": 2,
+      "execution_status": "completed",
+      "mode": "native_value_oracle"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "arm_count": 2,
+      "execution_status": "completed",
+      "mode": "native_address_trace"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "arm_count": 2,
+      "execution_status": "unsupported_allocator_topology",
+      "mode": "native_alignment"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "arm_count": 48,
+      "execution_status": "completed",
+      "mode": "native_diagnostic"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "arm_count": 2,
+      "execution_status": "completed",
+      "mode": "native_value_oracle"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "arm_count": 2,
+      "execution_status": "completed",
+      "mode": "native_address_trace"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "arm_count": 2,
+      "execution_status": "unsupported_allocator_topology",
+      "mode": "native_alignment"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "arm_count": 46,
+      "execution_status": "completed",
+      "mode": "native_diagnostic"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "arm_count": 2,
+      "execution_status": "unsupported_allocator_topology",
+      "mode": "native_diagnostic"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "arm_count": 2,
+      "execution_status": "completed",
+      "mode": "native_value_oracle"
+    }
+  ],
+  "mitigation_inferred": false,
+  "oracle_reproduction": {
+    "patched_system_controls_observed": 27,
+    "vulnerable_system_scenarios_observed": 27
+  },
+  "oracle_status_counts": [
+    {
+      "allocator_variant": "system",
+      "archive_variant": "patched",
+      "arm_count": 15,
+      "status": "clean_tool_runs_observed"
+    },
+    {
+      "allocator_variant": "system",
+      "archive_variant": "patched",
+      "arm_count": 8,
+      "status": "patched_control_compile_rejection_observed"
+    },
+    {
+      "allocator_variant": "system",
+      "archive_variant": "patched",
+      "arm_count": 4,
+      "status": "patched_safe_panic_control_observed"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "arm_count": 13,
+      "status": "native_clean_runs_inconclusive"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "arm_count": 6,
+      "status": "native_diagnostic_compile_rejection_observed"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "arm_count": 5,
+      "status": "native_diagnostic_signal_observed"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "arm_count": 2,
+      "status": "patched_control_compile_rejection_observed"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "arm_count": 1,
+      "status": "unsupported"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "arm_count": 13,
+      "status": "native_clean_runs_inconclusive"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "arm_count": 6,
+      "status": "native_diagnostic_compile_rejection_observed"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "arm_count": 5,
+      "status": "native_diagnostic_signal_observed"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "arm_count": 2,
+      "status": "patched_control_compile_rejection_observed"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "arm_count": 1,
+      "status": "unsupported"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "archive_variant": "patched",
+      "arm_count": 12,
+      "status": "native_clean_runs_inconclusive"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "archive_variant": "patched",
+      "arm_count": 6,
+      "status": "native_diagnostic_compile_rejection_observed"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "archive_variant": "patched",
+      "arm_count": 5,
+      "status": "native_diagnostic_signal_observed"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "archive_variant": "patched",
+      "arm_count": 2,
+      "status": "patched_control_compile_rejection_observed"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "archive_variant": "patched",
+      "arm_count": 2,
+      "status": "unsupported"
+    },
+    {
+      "allocator_variant": "system",
+      "archive_variant": "vulnerable",
+      "arm_count": 27,
+      "status": "tool_finding_observed"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "arm_count": 2,
+      "status": "native_abnormal_exit_inconclusive"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "arm_count": 13,
+      "status": "native_clean_runs_inconclusive"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "arm_count": 9,
+      "status": "native_diagnostic_signal_observed"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "arm_count": 2,
+      "status": "tool_finding_observed"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "arm_count": 1,
+      "status": "unsupported"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "arm_count": 3,
+      "status": "native_abnormal_exit_inconclusive"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "arm_count": 14,
+      "status": "native_clean_runs_inconclusive"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "arm_count": 7,
+      "status": "native_diagnostic_signal_observed"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "arm_count": 2,
+      "status": "tool_finding_observed"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "arm_count": 1,
+      "status": "unsupported"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "archive_variant": "vulnerable",
+      "arm_count": 2,
+      "status": "native_abnormal_exit_inconclusive"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "archive_variant": "vulnerable",
+      "arm_count": 14,
+      "status": "native_clean_runs_inconclusive"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "archive_variant": "vulnerable",
+      "arm_count": 7,
+      "status": "native_diagnostic_signal_observed"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "archive_variant": "vulnerable",
+      "arm_count": 2,
+      "status": "tool_finding_observed"
+    },
+    {
+      "allocator_variant": "unialloc",
+      "archive_variant": "vulnerable",
+      "arm_count": 2,
+      "status": "unsupported"
+    }
+  ],
+  "raw_evidence": {
+    "launch_metadata_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/launch-metadata.final.json",
+    "launch_metadata_sha256": "1acc9f2a47244f9bbef7d4ab8f0a566249b8e68259d18177e07269001c2639c5",
+    "preflight_summary_path": "evaluation/raw/rustsec-heap-full-preflight-final-20260714/sweep-summary.json",
+    "preflight_summary_sha256": "b2a82f65e7e82811af26de8d2351105bd6e7a4788bf89fd296208e97722d9e45",
+    "source_audit_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/source-audit.final.json",
+    "source_audit_sha256": "3ebe211a8a61054d076c7ac5f93116e159a761f8d75f37ec5b48e95e996ef690",
+    "sweep_summary_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/sweep-summary.json",
+    "sweep_summary_sha256": "2e38d8ad34f6de8bdedd4e099ae29fa34eba0f15e08f7d1652bb2398d73d11e9"
+  },
+  "scenarios": [
+    {
+      "assessment_profile": "reuse_dependent_uaf",
+      "case_id": "RSH-001",
+      "crate": "chttp",
+      "dimension": "temporal",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 30,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 30,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "use_after_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-001-upstream/experiment.json",
+      "result_sha256": "737a8ca4549adb77ed5e9ad39f687c91e80fdc4babc17214e7dc8c0c40fa2246",
+      "scenario_id": "RSH-001-upstream",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 31,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 31,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "reuse_dependent_uaf",
+      "case_id": "RSH-002",
+      "crate": "bitvec",
+      "dimension": "temporal",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "use_after_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-002-derived-reuse/experiment.json",
+      "result_sha256": "86a2bc4a9c392f5359d505e9585d02ad0186ca0e1e3e2ce57face948879340ab",
+      "scenario_id": "RSH-002-derived-reuse",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "reuse_dependent_uaf",
+      "case_id": "RSH-002",
+      "crate": "bitvec",
+      "dimension": "temporal",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "use_after_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-002-published/experiment.json",
+      "result_sha256": "36854ae2ab40b5551ec258add9f9259547c2bab83e7d44c8940e0f1500b28ced",
+      "scenario_id": "RSH-002-published",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "concurrency_unsoundness",
+      "case_id": "RSH-003",
+      "crate": "internment",
+      "dimension": "concurrency",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "use_after_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-003-upstream/experiment.json",
+      "result_sha256": "c2d29f9b0c49cfdfbba09c35dcebbbcbeb5c449dbf85a2ee38d0cce0892a5628",
+      "scenario_id": "RSH-003-upstream",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "language_invariant_violation",
+      "case_id": "RSH-004",
+      "crate": "actix-codec",
+      "dimension": "provenance",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "use_after_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-004-published/experiment.json",
+      "result_sha256": "c2eaf2624eaa52a6368bfd41eb062cd6f70589904d5e7ed241fc205c1bcd2871",
+      "scenario_id": "RSH-004-published",
+      "tool": "miri",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "reuse_dependent_uaf",
+      "case_id": "RSH-008",
+      "crate": "lru",
+      "dimension": "temporal",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "use_after_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-008-derived-reuse/experiment.json",
+      "result_sha256": "d0df685d62201a7a7dc6701daa29ea970149ab968bcea2858fd7980a31b0c3da",
+      "scenario_id": "RSH-008-derived-reuse",
+      "tool": "native_address_trace",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 6,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 2
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 6,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 2
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 2,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        }
+      }
+    },
+    {
+      "assessment_profile": "reuse_dependent_uaf",
+      "case_id": "RSH-008",
+      "crate": "lru",
+      "dimension": "temporal",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "use_after_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-008-published/experiment.json",
+      "result_sha256": "07f93fad07b7c96fc4c6d928d09b60a9d33f6f75c9f4ff5eeacc760a9ce47e84",
+      "scenario_id": "RSH-008-published",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 7,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 7,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "allocator_visible_double_free",
+      "case_id": "RSH-015",
+      "crate": "arrow2",
+      "dimension": "reclaim",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 779,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 779,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "double_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-015-published/experiment.json",
+      "result_sha256": "cabdc27f31cb8de1d6720248dea97fc66e6e38735a8abc4ded15015ad09e625c",
+      "scenario_id": "RSH-015-published",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 780,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 780,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_abnormal_exit_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "foreign_allocator_boundary",
+      "case_id": "RSH-016",
+      "crate": "bumpalo",
+      "dimension": "temporal",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "use_after_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-016-advisory/experiment.json",
+      "result_sha256": "ea737e705c4fbbbd96502b4cbf057c28418c7d40265c075e988a06c396d95b56",
+      "scenario_id": "RSH-016-advisory",
+      "tool": "native_value_oracle",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 7,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 2
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 7,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 2
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        }
+      }
+    },
+    {
+      "assessment_profile": "invalid_deallocation",
+      "case_id": "RSH-017",
+      "crate": "secp256k1",
+      "dimension": "reclaim",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "invalid_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-017-invalid-free/experiment.json",
+      "result_sha256": "69373b503923e4b4fde55beeb700d80ded418ac2f55608655749b981ae9140e4",
+      "scenario_id": "RSH-017-invalid-free",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "invalid_deallocation",
+      "case_id": "RSH-017",
+      "crate": "secp256k1",
+      "dimension": "reclaim",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "invalid_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-017-uaf/experiment.json",
+      "result_sha256": "02a82a995afd7e1517135661c09fd4b714ebb4a7436d87b94f42c18779539601",
+      "scenario_id": "RSH-017-uaf",
+      "tool": "asan_c_and_rust",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 8,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 8,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "allocator_visible_double_free",
+      "case_id": "RSH-018",
+      "crate": "arenavec",
+      "dimension": "reclaim",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_safe_panic_control_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 4,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 4,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "double_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-018-reserve-overflow/experiment.json",
+      "result_sha256": "c82912078c0015f4d3097ce0a775e5c8986db3a6cd787278a5ffc8d4298f57b7",
+      "scenario_id": "RSH-018-reserve-overflow",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 4,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 4,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "allocator_visible_double_free",
+      "case_id": "RSH-018",
+      "crate": "arenavec",
+      "dimension": "reclaim",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "double_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-018-split-off/experiment.json",
+      "result_sha256": "7c9d34967a65e706a4803bd87b6b789ce5efd16cb740a9e50dff41d3a7dd860a",
+      "scenario_id": "RSH-018-split-off",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 5,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "allocator_visible_double_free",
+      "case_id": "RSH-018",
+      "crate": "arenavec",
+      "dimension": "reclaim",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 1,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 1,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "double_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-018-unsafe-alloc-handle/experiment.json",
+      "result_sha256": "f0f41b7afc370c8ea32018f4bbacc8d06fb4deb985e3cfbf6b73c1568cda8914",
+      "scenario_id": "RSH-018-unsafe-alloc-handle",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 1,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_abnormal_exit_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 1,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_abnormal_exit_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_abnormal_exit_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "concurrency_unsoundness",
+      "case_id": "RSH-019",
+      "crate": "oneshot",
+      "dimension": "concurrency",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "use_after_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-019-upstream/experiment.json",
+      "result_sha256": "631aa17f3645a58fa2b4bcd6c0771fe6233f4b3906ae927aff598ea0adce2a00",
+      "scenario_id": "RSH-019-upstream",
+      "tool": "miri",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "panic_double_drop",
+      "case_id": "RSH-020",
+      "crate": "thin-vec",
+      "dimension": "reclaim",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_safe_panic_control_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "double_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-020-advisory/experiment.json",
+      "result_sha256": "d4c2838bd60ea9577cd130ed0b6eb1814e51089c9d0368de07fa0b45ced2c2ac",
+      "scenario_id": "RSH-020-advisory",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "allocator_visible_double_free",
+      "case_id": "RSH-021",
+      "crate": "oneringbuf",
+      "dimension": "reclaim",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "double_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-021-advisory/experiment.json",
+      "result_sha256": "1d56c879f5d36b90ddb8f1bde04e05a6683069cbef4f50c7741ea7fba21c5568",
+      "scenario_id": "RSH-021-advisory",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 1,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 1,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "uninitialized_exposure",
+      "case_id": "RSH-022",
+      "crate": "array-queue",
+      "dimension": "initialization",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 4,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 4,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "uninitialized_drop",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-022-upstream/experiment.json",
+      "result_sha256": "af806b94ccef7fd7f801de7508a69c33ac3b959fd0f56b210ddda9defad18c14",
+      "scenario_id": "RSH-022-upstream",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 9,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 9,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-024",
+      "crate": "bumpalo",
+      "dimension": "spatial",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "out_of_bounds_read",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-024-upstream/experiment.json",
+      "result_sha256": "563d7a79945d24459d0fbe07a83575fb1fcb3c16a4547e7e93c26311cfdff73b",
+      "scenario_id": "RSH-024-upstream",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "direct_only",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-026",
+      "crate": "calamine",
+      "dimension": "spatial",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 518,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 518,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "out_of_bounds_write",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-026-derived-cfb/experiment.json",
+      "result_sha256": "2705fccfe1d58fca8635bab036a66b72a748cc80ee836e71a91f8fee07c58603",
+      "scenario_id": "RSH-026-derived-cfb",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 497,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 497,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-028",
+      "crate": "nix",
+      "dimension": "spatial",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 73,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 73,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": null,
+          "critical_site_coverage_validated": null,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "unsupported_allocator_topology",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "unsupported",
+          "rewrite_route": null,
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "out_of_bounds_write",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-028-upstream/experiment.json",
+      "result_sha256": "962b26e746941839753cab5040b214ebc4b53a9cb66f7c0de1f14fa4ad1ac3bf",
+      "scenario_id": "RSH-028-upstream",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 73,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 73,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": null,
+          "critical_site_coverage_validated": null,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "unsupported_allocator_topology",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "unsupported",
+          "rewrite_route": null,
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "foreign_allocator_boundary",
+      "case_id": "RSH-029",
+      "crate": "linked_list_allocator",
+      "dimension": "spatial",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_safe_panic_control_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "out_of_bounds_write",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-029-advisory/experiment.json",
+      "result_sha256": "a80335c8d67896fbf3088593993d52b262e2fb3b7fd603998c4879416a3f5352",
+      "scenario_id": "RSH-029-advisory",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "foreign_allocator_boundary",
+      "case_id": "RSH-030",
+      "crate": "mimalloc",
+      "dimension": "provenance",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": null,
+          "critical_site_coverage_validated": null,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "unsupported_allocator_topology",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "unsupported",
+          "rewrite_route": null,
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": null,
+          "critical_site_coverage_validated": null,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "unsupported_allocator_topology",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "unsupported",
+          "rewrite_route": null,
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": null,
+          "critical_site_coverage_validated": null,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "unsupported_allocator_topology",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "unsupported",
+          "rewrite_route": null,
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "misaligned_allocation",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-030-upstream/experiment.json",
+      "result_sha256": "f5b72e07f7a0de60217bf94a314df646d354470a7be1daf067b964b191dfb8a7",
+      "scenario_id": "RSH-030-upstream",
+      "tool": "native_alignment",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": null,
+          "critical_site_coverage_validated": null,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "unsupported_allocator_topology",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "unsupported",
+          "rewrite_route": null,
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": null,
+          "critical_site_coverage_validated": null,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "unsupported_allocator_topology",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "unsupported",
+          "rewrite_route": null,
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": null,
+          "critical_site_coverage_validated": null,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "unsupported_allocator_topology",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "unsupported",
+          "rewrite_route": null,
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "invalid_deallocation",
+      "case_id": "RSH-031",
+      "crate": "maligned",
+      "dimension": "reclaim",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 1,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 1,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "invalid_free",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-031-upstream/experiment.json",
+      "result_sha256": "5b6dfcf5e84a92f0b1d2711b417b922eab11e40afa4a1ec11d3c1d9541c40117",
+      "scenario_id": "RSH-031-upstream",
+      "tool": "miri",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 2,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-032",
+      "crate": "transpose",
+      "dimension": "spatial",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_safe_panic_control_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 2,
+          "oracle_status": "native_diagnostic_signal_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "out_of_bounds_write",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-032-upstream/experiment.json",
+      "result_sha256": "37317f98d7b16d4f7ec298d6709263297b9510bf230fbba56cbd69207c7d024b",
+      "scenario_id": "RSH-032-upstream",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_abnormal_exit_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_abnormal_exit_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_abnormal_exit_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-033",
+      "crate": "scratchpad",
+      "dimension": "spatial",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "patched_control_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 0,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_diagnostic_compile_rejection_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "out_of_bounds_write",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-033-upstream/experiment.json",
+      "result_sha256": "7f44205471c0d76aef62e3a35f5cfcdfbddbf21bf414d2f955da64c02c79de05",
+      "scenario_id": "RSH-033-upstream",
+      "tool": "asan",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 3,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "semantic",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    },
+    {
+      "assessment_profile": "uninitialized_exposure",
+      "case_id": "RSH-040",
+      "crate": "direct_ring_buffer",
+      "dimension": "initialization",
+      "patched": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "clean_tool_runs_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      },
+      "primary_primitive": "uninitialized_read",
+      "result_path": "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-040-upstream/experiment.json",
+      "result_sha256": "90229403fc34b20f6584eb7855ebce98cded4c1ca48fbcd4a73ac98d4d790e2e",
+      "scenario_id": "RSH-040-upstream",
+      "tool": "miri",
+      "vulnerable": {
+        "system": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "tool_finding_observed",
+          "rewrite_route": "none",
+          "tool_finding_count": 2
+        },
+        "typed_plain": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "typeiso": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        },
+        "unialloc": {
+          "address_reuse_observation_count": 0,
+          "compiler_rewrites": 0,
+          "critical_site_coverage_validated": false,
+          "efficacy_eligible": false,
+          "executed_repetitions": 2,
+          "execution_status": "completed",
+          "mitigation_inferred": false,
+          "native_diagnostic_signal_count": 0,
+          "oracle_status": "native_clean_runs_inconclusive",
+          "rewrite_route": "none",
+          "tool_finding_count": 0
+        }
+      }
+    }
+  ],
+  "schema_version": 2,
+  "source": "unialloc-rustsec-heap-full-sweep-summary",
+  "totals": {
+    "arm_count": 216,
+    "executed_repetitions": 352,
+    "expected_compile_rejection_count": 32,
+    "failed_count": 0,
+    "planned_repetition_slots": 352,
+    "resumed_count": 0,
+    "run_count": 352,
+    "scenario_count": 27,
+    "success_count": 27,
+    "terminal_arm_count": 216,
+    "unexpected_count": 0,
+    "unsupported_count": 8
+  },
+  "typeiso_boundary": {
+    "arms_supported": 52,
+    "arms_total": 54,
+    "arms_unsupported": 2,
+    "completed_supported_arms": 52,
+    "critical_site_coverage_validated_arms": 0,
+    "efficacy_eligible_arms": 0,
+    "rewrite_routes": {
+      "direct_only": 8,
+      "none": 9,
+      "semantic": 35,
+      "unsupported": 2
+    }
+  }
+}

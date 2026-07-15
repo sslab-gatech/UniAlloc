@@ -1,0 +1,66 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 592f82f99238b881b2f90483da263674a4d700f8..18f4c0a9be21c1fe61179a92fa9d251c8761d5af 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -18,32 +18,15 @@ description = "Linear Algebra: Vectors and Matrices"
+ documentation = "https://docs.rs/linea/"
+ license = "MIT OR Apache-2.0"
+ repository = "https://github.com/strake/linea.rs"
+-[dependencies.dimensioned]
+-version = "0.6"
+-optional = true
+-
+ [dependencies.generic-array]
+ version = "0.12"
+ 
+-[dependencies.glium]
+-version = "0.16"
+-optional = true
+-
+ [dependencies.idem]
+ version = "0.4"
+ 
+-[dependencies.quickcheck]
+-version = "0.6"
+-optional = true
+-
+ [dependencies.radical]
+ version = "0.1"
+ 
+ [dependencies.typenum]
+ version = "1.3"
+ features = ["no_std"]
+-[dev-dependencies.quickcheck]
+-version = "0.6"
+-
+-[dev-dependencies.quickcheck_macros]
+-version = "0.6"
+diff --git a/src/lib.rs b/src/lib.rs
+index ab3589826e12866ac86a979cb8d940a63e2cc53f..475f02806c29385771dfe7bac5e1ddf8b209e772 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,9 +1,5 @@
+ #![no_std]
+ 
+-#![feature(const_fn)]
+-#![feature(const_fn_union)]
+-#![feature(const_let)]
+-#![feature(untagged_unions)]
+ 
+ #![cfg_attr(test, feature(plugin))]
+ #![cfg_attr(test, plugin(quickcheck_macros))]
+@@ -92,11 +88,9 @@ impl<A: Copy + Zero + AddAssign + Sub<Output = A>, N: ArrayLength<A>> Matrix<A,
+ 
+ impl<A, M: ArrayLength<A>, N: ArrayLength<GenericArray<A, M>>> Matrix<A, M, N> {
+     #[inline] pub const fn from_col_major_array(a: GenericArray<GenericArray<A, M>, N>) -> Self { Matrix(a) }
+-    #[inline] pub const fn to_col_major_array(self) -> GenericArray<GenericArray<A, M>, N> {
+-        #[allow(unions_with_drop_fields)]
+-        union U<A, M: ArrayLength<A>, N: ArrayLength<GenericArray<A, M>>> { a: Matrix<A, M, N> }
+-        let u = U { a: self };
+-        unsafe { u.a.0 }
++    #[inline] pub fn to_col_major_array(self) -> GenericArray<GenericArray<A, M>, N> {
++        let Matrix(a) = self;
++        a
+     }
+ }
+ 

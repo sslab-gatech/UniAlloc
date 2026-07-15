@@ -1,0 +1,1 @@
+zsh -lc printf\ \"METACALL_INSTALL_PATH=%s\\n\"\ \"\$\{METACALL_INSTALL_PATH-\<unset\>\}\"\;\ find\ /usr/local\ /gnu\ /usr\ /opt\ -maxdepth\ 5\ \\\(\ -iname\ \"libmetacall\*\"\ -o\ -iname\ \"metacall.h\"\ \\\)\ -print\ 2\>/dev/null\ \|\ sort 

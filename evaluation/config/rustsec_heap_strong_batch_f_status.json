@@ -1,0 +1,644 @@
+{
+  "baseline_results": [
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_content_sha256": "a4f333e742b5bd06e087f9ddd6e3e84e0887f22f4021614e52ccde6d9d9fc4ca",
+      "advisory_id": "RUSTSEC-2025-0016",
+      "case_id": "RSH-068",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "pared",
+      "dependencies": {
+        "patched": {
+          "bytes": 24629,
+          "kind": "crates_io_archive",
+          "package": "pared",
+          "sha256": "71f23325adb6d7beb334b39d9defe38ae5221847e0b8b3bd1e447a94e5944709",
+          "upstream_commit": "fdc4de8be7cffb2b7d71c910b6a12964b61f4f0d",
+          "url": "https://static.crates.io/crates/pared/pared-0.4.0.crate",
+          "version": "0.4.0"
+        },
+        "vulnerable": {
+          "bytes": 23011,
+          "kind": "crates_io_archive",
+          "package": "pared",
+          "sha256": "bd869f4a7856dfb6bf40fe168fb7a0792cb387c79a6903b2e6b94990ace9c073",
+          "upstream_commit": "65bbc627e31a2fb43fc3b94c7ca1177536c7c626",
+          "url": "https://static.crates.io/crates/pared/pared-0.3.0.crate",
+          "version": "0.3.0"
+        }
+      },
+      "experiment": {
+        "allocator_variants": [
+          "system"
+        ],
+        "arms": [
+          {
+            "allocator_variant": "system",
+            "archive_variant": "vulnerable",
+            "artifact_fingerprint": "b63f1fd2151ddb5b276e875fc9c05ddfbdfdeda4966c5a6c30b8820013454729",
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_heap_use_after_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_heap_use_after_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              1
+            ],
+            "tool_finding_count": 1
+          },
+          {
+            "allocator_variant": "system",
+            "archive_variant": "patched",
+            "artifact_fingerprint": "a403d12bc089dde15e1167d4866f75f379bd47adca08677085cbc99a80bb08ba",
+            "build_exit_code": 101,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [
+                "E0597"
+              ],
+              "expected_finding_signature": null,
+              "kind": "compile_rejection",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "build_nonzero",
+                "compile_error_code"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [],
+            "tool_finding_count": 0
+          }
+        ],
+        "orchestration_success": true,
+        "path": "/tmp/strong-batch-f-system-runs/RSH-068-parc-project/experiment.json",
+        "repetitions": 1,
+        "sha256": "720f21f928541bc81f3c43baaf46336fd01f791159f859b6362fd0593ea5a069",
+        "unexpected_arm_count": 0
+      },
+      "oracle": {
+        "patched_control": "pared 0.4.0 rejects the published projection with E0597 before execution",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports heap-use-after-free when the stale Parc projection reads the dropped String"
+      },
+      "origin_content_sha256": "8bc3f0ac1dd777cc80a573da2fc4591cdd8c0e6ddf92b6375f0066d0a60feb1b",
+      "origin_url": "https://github.com/radekvit/pared/issues/2",
+      "preflight": {
+        "all_planned_arms_supported": true,
+        "path": "/tmp/strong-batch-f-system-runs/RSH-068-parc-project/preflight.json",
+        "planned_arm_count": 2,
+        "sha256": "16528c1e9692a5435c9d9e33bdf5309428cd9161c14fa0fdc1360ab05497537d"
+      },
+      "provenance": "upstream_issue_mechanical_adapter",
+      "repository_artifacts": {
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-068/Cargo.lock.patched": "20f818de88f9bc662614658c3cda4021d087d9b17dc7466cd29e1bd4a206f0cb",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-068/Cargo.lock.vulnerable": "c40639bcac27a49b7738ce3cc916b93147ef4bdc32ef4adde48f56fb7d798fdf",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-068/main.rs": "d45606add93bf1aac1e8c9e5d18cde94cc4cc05b51034c43c6caf501670e0900",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-068/origin.rs": "8bc3f0ac1dd777cc80a573da2fc4591cdd8c0e6ddf92b6375f0066d0a60feb1b"
+      },
+      "scenario_id": "RSH-068-parc-project",
+      "status": "executable_baseline_reproduced"
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_content_sha256": "1cc11e4d1d3d006afe0820ecd1e31adf76144e440f1f68198e5a0e109b3396ac",
+      "advisory_id": "RUSTSEC-2025-0022",
+      "case_id": "RSH-069",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "openssl",
+      "dependencies": {
+        "patched": {
+          "bytes": 283852,
+          "kind": "crates_io_archive",
+          "package": "openssl",
+          "sha256": "fedfea7d58a1f73118430a55da6a286e7b044961736ce96a16a17068ea25e5da",
+          "upstream_commit": "87085bd67896b7f92e6de35d081f607a334beae4",
+          "url": "https://static.crates.io/crates/openssl/openssl-0.10.72.crate",
+          "version": "0.10.72"
+        },
+        "vulnerable": {
+          "bytes": 281165,
+          "kind": "crates_io_archive",
+          "package": "openssl",
+          "sha256": "5e14130c6a98cd258fdcb0fb6d744152343ff729cbfcb28c656a9d12b999fbcd",
+          "upstream_commit": "1a16077c43c64ce6272ee8ee98a3d24a9021a298",
+          "url": "https://static.crates.io/crates/openssl/openssl-0.10.71.crate",
+          "version": "0.10.71"
+        }
+      },
+      "experiment": {
+        "allocator_variants": [
+          "system"
+        ],
+        "arms": [
+          {
+            "allocator_variant": "system",
+            "archive_variant": "vulnerable",
+            "artifact_fingerprint": "6eb69cec2b15431aab9446087a336aa1873d258efcc23491da3449f21aa4a886",
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_heap_use_after_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_heap_use_after_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              1
+            ],
+            "tool_finding_count": 1
+          },
+          {
+            "allocator_variant": "system",
+            "archive_variant": "patched",
+            "artifact_fingerprint": "917c7656454dabd5a5db5a8c1fdc7fa8cac7e86bd27e4afbc45f46b220551c56",
+            "build_exit_code": 0,
+            "clean_exit_count": 1,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": null,
+              "kind": "clean_exit",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "clean_exit",
+                "no_sanitizer_finding"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              0
+            ],
+            "tool_finding_count": 0
+          }
+        ],
+        "orchestration_success": true,
+        "path": "/tmp/strong-batch-f-system-runs/RSH-069-md-fetch/experiment.json",
+        "repetitions": 1,
+        "sha256": "4420315c3e07849769e5a37be6c7318526720e09e54faaa674bf7fe03b54ba5d",
+        "unexpected_arm_count": 0
+      },
+      "oracle": {
+        "patched_control": "openssl 0.10.72 exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports heap-use-after-free while OpenSSL consumes the freed properties CString"
+      },
+      "origin_content_sha256": "7d8d463b2fd8b2f7cd986b2d957a3014d0d4392d6bcd1231f107c0e192616997",
+      "origin_url": "https://github.com/rust-openssl/rust-openssl/commit/d1a12e21573e95727b2e38b8b65273cb389be7e4#diff-b02ddfdd",
+      "preflight": {
+        "all_planned_arms_supported": true,
+        "path": "/tmp/strong-batch-f-system-runs/RSH-069-md-fetch/preflight.json",
+        "planned_arm_count": 2,
+        "sha256": "602c2f02293786d996cfa9bf2953d0465bba47d1fa782ae6dff1ebac73ae5a62"
+      },
+      "provenance": "upstream_fix_regression_test_standalone_adapter",
+      "repository_artifacts": {
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-069/Cargo.lock.patched": "0f8fff6381ff0a823958e1e592030723605c643525346c6c02d7d8e94d060390",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-069/Cargo.lock.vulnerable": "271507e5b2db82c4381e6c7b45197e86ec18c1267507135b4bb113a8238bd852",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-069/main.rs": "35d03d7ef66fa07c078008525ffea77a1ea7edee17f49ef623961a77282d6354",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-069/origin.rs": "7d8d463b2fd8b2f7cd986b2d957a3014d0d4392d6bcd1231f107c0e192616997"
+      },
+      "scenario_id": "RSH-069-md-fetch",
+      "status": "executable_baseline_reproduced"
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_content_sha256": "58fa6472377475aa603211af8eb5d0baf2308aa65778263cb7ef22294a3bb350",
+      "advisory_id": "RUSTSEC-2025-0024",
+      "case_id": "RSH-070",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "crossbeam-channel",
+      "dependencies": {
+        "patched": {
+          "bytes": 92716,
+          "kind": "crates_io_archive",
+          "package": "crossbeam-channel",
+          "sha256": "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2",
+          "upstream_commit": "d35ffde18a76ae9667f602d8c0127ff89ac2e4d4",
+          "url": "https://static.crates.io/crates/crossbeam-channel/crossbeam-channel-0.5.15.crate",
+          "version": "0.5.15"
+        },
+        "vulnerable": {
+          "bytes": 92728,
+          "kind": "crates_io_archive",
+          "package": "crossbeam-channel",
+          "sha256": "06ba6d68e24814cb8de6bb986db8222d3a027d15872cabc0d18817bc3c0e4471",
+          "upstream_commit": "ccd83ac4108a2a1b41e9c6e79c87267167d18dfa",
+          "url": "https://static.crates.io/crates/crossbeam-channel/crossbeam-channel-0.5.14.crate",
+          "version": "0.5.14"
+        }
+      },
+      "experiment": {
+        "allocator_variants": [
+          "system"
+        ],
+        "arms": [
+          {
+            "allocator_variant": "system",
+            "archive_variant": "vulnerable",
+            "artifact_fingerprint": "42e07fd23a64040cc219592386128c3af3d7b3dc164af4930fe2819aecc5a9d8",
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_double_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_double_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              1
+            ],
+            "tool_finding_count": 1
+          },
+          {
+            "allocator_variant": "system",
+            "archive_variant": "patched",
+            "artifact_fingerprint": "d6c0f176323d3fa92787cd00fa1caf92bd3f8d26c4d2d79ef0b4228161259520",
+            "build_exit_code": 0,
+            "clean_exit_count": 1,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": null,
+              "kind": "clean_exit",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "clean_exit",
+                "no_sanitizer_finding"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              0
+            ],
+            "tool_finding_count": 0
+          }
+        ],
+        "orchestration_success": true,
+        "path": "/tmp/strong-batch-f-system-runs/RSH-070-list-drop-race/experiment.json",
+        "repetitions": 1,
+        "sha256": "7d8728124bdb1602727839975cc6df70926b03533be8f9e3e8ee18c15297b455",
+        "unexpected_arm_count": 0
+      },
+      "oracle": {
+        "patched_control": "crossbeam-channel 0.5.15 exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports double-free after discard_all_messages and Channel::drop reclaim the same list block"
+      },
+      "origin_content_sha256": "d04fe98c2bacce0491d6e655678cc13e4210d3b476cd1d3324a90a56456ff017",
+      "origin_url": "https://github.com/crossbeam-rs/crossbeam/commit/2d2262823de47492fdfa9555a47cfd999772f396",
+      "preflight": {
+        "all_planned_arms_supported": true,
+        "path": "/tmp/strong-batch-f-system-runs/RSH-070-list-drop-race/preflight.json",
+        "planned_arm_count": 2,
+        "sha256": "45889a076517997ba4ef912b4963551d40ddc6fa36db882e61c15ac59eefab10"
+      },
+      "provenance": "upstream_regression_test_mechanical_payload_adapter",
+      "repository_artifacts": {
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-070/Cargo.lock.patched": "bedd8d7430070d807f67a4e80bf17ba7539d66b95790224b61d9106f9edf1b07",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-070/Cargo.lock.vulnerable": "097a1bf7236a77684217d8055b46417127bf7628336c19b9e90dff15101db736",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-070/main.rs": "70ef9402827d9c8071ce253cea618e3349f25a9023f1b250427e7cc297cd3fbb",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-070/origin.rs": "d04fe98c2bacce0491d6e655678cc13e4210d3b476cd1d3324a90a56456ff017",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-070/patches/deterministic-race-window.diff": "ea5a38546022df65fa63bde2efeeae01cc0effd6c263714015f3e3f435e285ac"
+      },
+      "scenario_id": "RSH-070-list-drop-race",
+      "status": "executable_baseline_reproduced"
+    },
+    {
+      "adapter_kind": "exact_published_witness",
+      "advisory_content_sha256": "dacdc580862afdda5c73269a3e59b86ae96469e712786c66fc0d6f3e6ddb4b78",
+      "advisory_id": "RUSTSEC-2025-0044",
+      "case_id": "RSH-071",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "slice-ring-buffer",
+      "dependencies": {
+        "patched": {
+          "base_version": "0.3.4",
+          "kind": "scenario_local_patches"
+        },
+        "vulnerable": {
+          "bytes": 56470,
+          "kind": "crates_io_archive",
+          "package": "slice-ring-buffer",
+          "sha256": "84ae312bda09b2368f79f985fdb4df4a0b5cbc75546b511303972d195f8c27d6",
+          "upstream_commit": "73e11ed898c35c627867294d2bd1a61037440b4f",
+          "url": "https://static.crates.io/crates/slice-ring-buffer/slice-ring-buffer-0.3.4.crate",
+          "version": "0.3.4"
+        }
+      },
+      "experiment": {
+        "allocator_variants": [
+          "system"
+        ],
+        "arms": [
+          {
+            "allocator_variant": "system",
+            "archive_variant": "vulnerable",
+            "artifact_fingerprint": "d0d6fa23db1cd29b31c3811b9aa98ccdc61b1f67f93b23df2f1e38d0a3dc3e47",
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_double_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_double_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              1
+            ],
+            "tool_finding_count": 1
+          },
+          {
+            "allocator_variant": "system",
+            "archive_variant": "patched",
+            "artifact_fingerprint": "56fddd9d2306b8a5bcd885b006d519676483929e7888e6e46531afeb8a7e6093",
+            "build_exit_code": 0,
+            "clean_exit_count": 1,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": null,
+              "kind": "clean_exit",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "clean_exit",
+                "no_sanitizer_finding"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              0
+            ],
+            "tool_finding_count": 0
+          }
+        ],
+        "orchestration_success": true,
+        "path": "/tmp/strong-batch-f-system-runs/RSH-071-into-iter-clone/experiment.json",
+        "repetitions": 1,
+        "sha256": "b706b0eaf9655d0557b516f5db7630d6ccca3aa8f083c91143c4658299906121",
+        "unexpected_arm_count": 0
+      },
+      "oracle": {
+        "patched_control": "the local deep-clone control exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports double-free when cloned IntoIter values both reclaim the same String elements"
+      },
+      "origin_content_sha256": "2354c0ddacba6fdaca73562a1a0779fc393b02e9204b5bf7f82fa89cd4f92ab4",
+      "origin_url": "https://github.com/LiquidityC/slice_ring_buffer/issues/12",
+      "preflight": {
+        "all_planned_arms_supported": true,
+        "path": "/tmp/strong-batch-f-system-runs/RSH-071-into-iter-clone/preflight.json",
+        "planned_arm_count": 2,
+        "sha256": "a97b2e207e340825eb8669549d47289af91359c04854284165deb572a395d4c3"
+      },
+      "provenance": "upstream_issue",
+      "repository_artifacts": {
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-071/Cargo.lock.patched": "740d96af6959f2c2160e87f8da0d00d9a375a189564b701796096233c5e6afed",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-071/Cargo.lock.vulnerable": "740d96af6959f2c2160e87f8da0d00d9a375a189564b701796096233c5e6afed",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-071/main.rs": "2354c0ddacba6fdaca73562a1a0779fc393b02e9204b5bf7f82fa89cd4f92ab4",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-071/origin.rs": "2354c0ddacba6fdaca73562a1a0779fc393b02e9204b5bf7f82fa89cd4f92ab4",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-071/patches/into-iter-clone-deep-copy.diff": "7a221ba3e04bf508f621e94baf0e56710a5735ab4a7ee433f951ddd3aea261fc"
+      },
+      "scenario_id": "RSH-071-into-iter-clone",
+      "status": "executable_baseline_reproduced"
+    },
+    {
+      "adapter_kind": "derived_adapter",
+      "advisory_content_sha256": "f525b5019e9cba3a28b3bf2a41c251706d74d10a585dc0ed9304c9c22eef2f65",
+      "advisory_id": "RUSTSEC-2026-0122",
+      "case_id": "RSH-072",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "rkyv",
+      "dependencies": {
+        "patched": {
+          "bytes": 166858,
+          "kind": "crates_io_archive",
+          "package": "rkyv",
+          "sha256": "73389e0c99e664f919275ab5b5b0471391fe9a8de61e1dff9b1eaf56a90f16e3",
+          "upstream_commit": "47ebe030d49b12da8afe963b3d16c5c6b0fbf16b",
+          "url": "https://static.crates.io/crates/rkyv/rkyv-0.8.16.crate",
+          "version": "0.8.16"
+        },
+        "vulnerable": {
+          "bytes": 165972,
+          "kind": "crates_io_archive",
+          "package": "rkyv",
+          "sha256": "1a30e631b7f4a03dee9056b8ef6982e8ba371dd5bedb74d3ec86df4499132c70",
+          "upstream_commit": "c0d502c83bfcae4f5d5fa6022a087d2ec3a36bbd",
+          "url": "https://static.crates.io/crates/rkyv/rkyv-0.8.15.crate",
+          "version": "0.8.15"
+        }
+      },
+      "experiment": {
+        "allocator_variants": [
+          "system"
+        ],
+        "arms": [
+          {
+            "allocator_variant": "system",
+            "archive_variant": "vulnerable",
+            "artifact_fingerprint": "1d1e9d7d6d9c41227eeba720e2d9dbe34ff010d85d4d28050ff414abaec80aa0",
+            "build_exit_code": 0,
+            "clean_exit_count": 0,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": "asan_double_free",
+              "kind": "asan_finding",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "asan_double_free",
+                "run_nonzero"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              1
+            ],
+            "tool_finding_count": 1
+          },
+          {
+            "allocator_variant": "system",
+            "archive_variant": "patched",
+            "artifact_fingerprint": "8fd2731f988e34d95964f022eee57b8276222be391851bbd78664ec10dd11a06",
+            "build_exit_code": 0,
+            "clean_exit_count": 1,
+            "execution_status": "completed",
+            "expected_contract": {
+              "compile_error_codes": [],
+              "expected_finding_signature": null,
+              "kind": "clean_exit",
+              "parse_status": "parsed",
+              "required_evidence": [
+                "clean_exit",
+                "no_sanitizer_finding"
+              ]
+            },
+            "expected_oracle_observed": true,
+            "run_exit_codes": [
+              0
+            ],
+            "tool_finding_count": 0
+          }
+        ],
+        "orchestration_success": true,
+        "path": "/tmp/strong-batch-f-system-runs/RSH-072-inline-vec-clear/experiment.json",
+        "repetitions": 1,
+        "sha256": "a2e9b3c16605da253df7b02340f537f201c8cf7426f4195f38b56487be9c948e",
+        "unexpected_arm_count": 0
+      },
+      "oracle": {
+        "patched_control": "rkyv 0.8.16 exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports double-free when panic-unsafe InlineVec::clear leaves a dropped Box counted as live"
+      },
+      "origin_content_sha256": "3646e7a70cefc94bf7292621de4944feef40c473a8e31549bb472015b6b757b5",
+      "origin_url": "https://github.com/rkyv/rkyv/commit/5828cf5c27b664eb4432c4a93d4769e12e5e42fb",
+      "preflight": {
+        "all_planned_arms_supported": true,
+        "path": "/tmp/strong-batch-f-system-runs/RSH-072-inline-vec-clear/preflight.json",
+        "planned_arm_count": 2,
+        "sha256": "7ba020b65ca331f1cb2bcf005df6c84a674ef729e00ae098cbf7105a1d96f08c"
+      },
+      "provenance": "upstream_fix_root_cause_adapter",
+      "repository_artifacts": {
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-072/Cargo.lock.patched": "6fedf25cccf570191a729c22b662c27b91423a5cf8dfd2558fe709505a194069",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-072/Cargo.lock.vulnerable": "2707407785f2f4973f2c7575f3e9bd806df5ab2259457e0fd8139a95035b8434",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-072/main.rs": "783df966215423493d20e2cf94e6ab3708f84b55cf2ab7cb80ff44b290417c79",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-072/origin.rs": "3646e7a70cefc94bf7292621de4944feef40c473a8e31549bb472015b6b757b5"
+      },
+      "scenario_id": "RSH-072-inline-vec-clear",
+      "status": "executable_baseline_reproduced"
+    }
+  ],
+  "blocked_cases": [
+    {
+      "advisory_content_sha256": "ba65f91d80215b9d365928341e88df7306ca5d05a356391e052daaad4284c676",
+      "advisory_id": "RUSTSEC-2026-0139",
+      "blocker_code": "metacall_native_core_and_headers_missing",
+      "case_id": "RSH-073",
+      "crate": "metacall",
+      "dependencies": {
+        "patched": {
+          "base_version": "0.5.10",
+          "kind": "no_published_fixed_release"
+        },
+        "vulnerable": {
+          "bytes": 32606,
+          "kind": "crates_io_archive",
+          "package": "metacall",
+          "sha256": "0b9430a61a9c66ca517360d19c9564ef6b451e3f4f2d98c5ffc09ccdc6521c8f",
+          "upstream_commit": "e7f0e35d64d8201cc7eaad9f0344044fce21f1d3",
+          "url": "https://static.crates.io/crates/metacall/metacall-0.5.10.crate",
+          "version": "0.5.10"
+        }
+      },
+      "disposition": "Retained the exact published MetaCallPointer witness, pinned 0.5.10 archive lock, host build failure, and an evidence-backed blocker; excluded from executable counts on this host.",
+      "host_build_evidence": {
+        "exit_code": 101,
+        "path": "/tmp/strong-batch-f-metacall-build.log",
+        "sha256": "290b3ef480e2866b978dc289a17bb0420895d848f9d3b69530fa7c4a66b5e33c"
+      },
+      "origin_url": "https://github.com/metacall/core/issues/618",
+      "reason": "The metacall 0.5.10 build script requires a native MetaCall core library and C headers. This host has no libmetacall under /usr/local/lib or /gnu/lib and no pinned MetaCall install prefix; the build exits 101 before compiling the witness.",
+      "repository_artifacts": {
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-073/BLOCKER.md": "4b7dc7fe345f2f8a85e783c2dcaaa0b76771ae4396a1a39f776c0ed8ac9fe01a",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-073/Cargo.lock.patched": "4a40831be22fa99ab73afae462e2dd640c27e916ca4d0ae122a74f4d2c3849ea",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-073/Cargo.lock.vulnerable": "4a40831be22fa99ab73afae462e2dd640c27e916ca4d0ae122a74f4d2c3849ea",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-073/main.rs": "9d0371a519ea3d0496327fed79230fff3143363d93891867cf2e12963e7926f8",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-073/origin.rs": "9d0371a519ea3d0496327fed79230fff3143363d93891867cf2e12963e7926f8"
+      },
+      "status": "blocked"
+    }
+  ],
+  "catalog": {
+    "counts": {
+      "blocked_case_count": 1,
+      "distinct_advisory_count": 5,
+      "executable_case_count": 5,
+      "published_scenario_count": 4,
+      "repository_scenario_count": 5,
+      "scope_case_count": 6
+    },
+    "list_output_path": "/tmp/strong-batch-f-list.txt",
+    "list_output_sha256": "9bc6946a107c197ce74cfeabf1aeddb803e989011b0f0c822fa0d32c6db54f79",
+    "parser_validation": "passed",
+    "path": "/tmp/strong-batch-f-catalog.json",
+    "sha256": "c2c9f6804cb1d4344e8df7ba56e3972a8b75269a58a44d5d0c59ba50643453f0"
+  },
+  "caveats": [
+    "All five executable results are one-repetition system-allocator ASan ground-truth runs and remain non-claim-grade.",
+    "The crossbeam witness restores the upstream published deterministic scheduling sleep to make the race repeatable; the sleep is applied to both vulnerable and patched archives.",
+    "The slice-ring-buffer patched control is a hashed local root-cause patch because the advisory publishes no fixed crate release.",
+    "The metacall case remains blocked on a missing native runtime and is excluded from executable totals."
+  ],
+  "claim_boundary": "These artifacts establish reproducible vulnerable/patched ground truth for five additional RustSec advisories. They do not by themselves establish UniAlloc mitigation or detection efficacy; allocator experiments require matched treatment arms and critical-site coverage evidence.",
+  "schema_version": 1,
+  "scope": {
+    "assigned_case_ids": [
+      "RSH-068",
+      "RSH-069",
+      "RSH-070",
+      "RSH-071",
+      "RSH-072",
+      "RSH-073"
+    ],
+    "baseline_reproduced_count": 5,
+    "baseline_unexpected_arm_count": 0,
+    "blocked_case_count": 1,
+    "executable_case_count": 5,
+    "scoped_advisory_count": 6
+  },
+  "source": "unialloc-strong-rustsec-batch-f-integration-status",
+  "toolchain": {
+    "cargo": {
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "-V"
+      ],
+      "exit_code": 0,
+      "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+      "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+    },
+    "name": "nightly-2026-06-11",
+    "rustc": {
+      "command": [
+        "rustc",
+        "+nightly-2026-06-11",
+        "-vV"
+      ],
+      "exit_code": 0,
+      "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+      "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+    },
+    "target": "x86_64-unknown-linux-gnu"
+  }
+}

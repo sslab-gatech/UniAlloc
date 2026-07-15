@@ -1,0 +1,22 @@
+diff --git a/src/traits.rs b/src/traits.rs
+index f293f22..978ee7f 100644
+--- a/src/traits.rs
++++ b/src/traits.rs
+@@ -222,7 +222,7 @@ where
+ /// [`Marker`]: trait.Marker.html
+ /// [`Scratchpad`]: struct.Scratchpad.html
+ /// [`set()`]: #method.set.html
+-pub trait Tracking: Sized {
++pub unsafe trait Tracking: Sized {
+     /// Returns the total number of allocations that can be stored in this
+     /// container.
+     fn capacity(&self) -> usize;
+@@ -232,7 +232,7 @@ pub trait Tracking: Sized {
+     fn get(&self, index: usize) -> usize;
+ }
+ 
+-impl<T> Tracking for T
++unsafe impl<T> Tracking for T
+ where
+     T: Buffer,
+ {

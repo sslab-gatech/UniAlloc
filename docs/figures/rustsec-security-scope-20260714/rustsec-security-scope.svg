@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="870" viewBox="0 0 1240 870">
+<style>
+.title{font-family:sans-serif;font-size:25px;font-weight:700;fill:#17202A}.subtitle{font-family:sans-serif;font-size:14px;fill:#566573}
+.panel{font-family:sans-serif;font-size:17px;font-weight:700;fill:#17202A}.label{font-family:sans-serif;font-size:13px;fill:#273746}
+.count{font-family:sans-serif;font-size:13px;font-weight:700;fill:#17202A}.note{font-family:sans-serif;font-size:12px;fill:#566573}
+</style>
+<rect width="100%" height="100%" fill="#FFFFFF"/>
+<text x="45" y="45" class="title">RUSTSEC scope: integration and allocator-mechanism coverage</text>
+<text x="45" y="70" class="subtitle">Evaluable scope: 49 of 53 reviewed advisories · 4 excluded before evaluation · RustSec 9f3e138091487e69144f536d36976e427a7a3307</text>
+<text x="45" y="115" class="panel">A. Vulnerability primitives in the 49-case efficacy scope</text>
+<text x="45" y="152" class="label">Double Free</text>
+<rect x="235" y="138" width="320" height="20" rx="3" fill="#4C78A8"/>
+<text x="565" y="153" class="count">27</text>
+<text x="45" y="183" class="label">Use After Free</text>
+<rect x="235" y="169" width="213" height="20" rx="3" fill="#4C78A8"/>
+<text x="458" y="184" class="count">18</text>
+<text x="45" y="214" class="label">Uninitialized Drop</text>
+<rect x="235" y="200" width="24" height="20" rx="3" fill="#4C78A8"/>
+<text x="269" y="215" class="count">2</text>
+<text x="45" y="245" class="label">Invalid Free</text>
+<rect x="235" y="231" width="12" height="20" rx="3" fill="#4C78A8"/>
+<text x="257" y="246" class="count">1</text>
+<text x="45" y="276" class="label">Out Of Bounds Read</text>
+<rect x="235" y="262" width="12" height="20" rx="3" fill="#4C78A8"/>
+<text x="257" y="277" class="count">1</text>
+<text x="650" y="115" class="panel">B. Integration readiness</text>
+<text x="650" y="152" class="label">Executable</text>
+<rect x="840" y="138" width="270" height="20" rx="3" fill="#3A9D5D"/>
+<text x="1120" y="153" class="count">49</text>
+<text x="650" y="183" class="label">Source evidence only</text>
+<rect x="840" y="169" width="0" height="20" rx="3" fill="#E2B84B"/>
+<text x="850" y="184" class="count">0</text>
+<text x="650" y="214" class="label">Pending integration</text>
+<rect x="840" y="200" width="0" height="20" rx="3" fill="#9AA0A6"/>
+<text x="850" y="215" class="count">0</text>
+<text x="650" y="245" class="label">Excluded before evaluation</text>
+<rect x="840" y="231" width="22" height="20" rx="3" fill="#6B7280"/>
+<text x="872" y="246" class="count">4</text>
+<text x="45" y="650" class="panel">D. Nonexclusive mechanism-specific evidence</text>
+<text x="45" y="430" class="panel">C. Exclusive case attribution</text>
+<text x="45" y="467" class="label">Other allocator feature only</text>
+<rect x="435" y="453" width="354" height="20" rx="3" fill="#E28E2C"/>
+<text x="799" y="468" class="count">31</text>
+<text x="45" y="502" class="label">Type Isolation only</text>
+<rect x="435" y="488" width="126" height="20" rx="3" fill="#2A6FDB"/>
+<text x="571" y="503" class="count">11</text>
+<text x="45" y="537" class="label">Type Isolation + other allocator feature</text>
+<rect x="435" y="523" width="11" height="20" rx="3" fill="#7A5195"/>
+<text x="456" y="538" class="count">1</text>
+<text x="45" y="572" class="label">No exact allocator signal observed</text>
+<rect x="435" y="558" width="34" height="20" rx="3" fill="#C84A4A"/>
+<text x="479" y="573" class="count">3</text>
+<text x="45" y="607" class="label">Unresolved mechanism attribution</text>
+<rect x="435" y="593" width="34" height="20" rx="3" fill="#E2B84B"/>
+<text x="479" y="608" class="count">3</text>
+<text x="45" y="687" class="label">Type Isolation edge covered</text>
+<rect x="435" y="673" width="137" height="20" rx="3" fill="#2A6FDB"/>
+<text x="582" y="688" class="count">12</text>
+<text x="45" y="722" class="label">reclaim_checks exact detection</text>
+<rect x="435" y="708" width="354" height="20" rx="3" fill="#E28E2C"/>
+<text x="799" y="723" class="count">31</text>
+<text x="45" y="757" class="label">Recovery-layout validation</text>
+<rect x="435" y="743" width="11" height="20" rx="3" fill="#8E5EA2"/>
+<text x="456" y="758" class="count">1</text>
+<text x="45" y="815" class="note">Case-attribution bars partition the 49-case efficacy denominator. Mechanism bars are nonexclusive; RSH-002 contributes to both Type Isolation and reclaim_checks.</text>
+<text x="45" y="835" class="note">No-signal requires a completed matched trial; unrun and inconclusive integrated cases remain in their own row.</text>
+<text x="650" y="835" class="note">All Type Isolation positives are manual derived reuse edges, including 2 synthetic reductions; automatic source-level true positives: 0.</text>
+<text x="650" y="855" class="note">Excluded candidates remain in the audit ledger and outside the efficacy denominator.</text>
+</svg>

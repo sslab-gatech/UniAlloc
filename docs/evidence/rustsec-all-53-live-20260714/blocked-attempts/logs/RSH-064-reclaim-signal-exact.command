@@ -1,0 +1,1 @@
+zsh -lc rg\ -n\ -i\ \'pointer\ already\ released\|pointer\ belongs\ to\ evicted\ released\ history\|type-cache\ pointer\ already\ retained\ or\ released\'\ \'/tmp/unialloc-blocked-reattempt-20260714/logs/RSH-064-reclaim_plain-node-run.pty\'\ \'/tmp/unialloc-blocked-reattempt-20260714/logs/RSH-064-reclaim_checks-node-run.pty\' 

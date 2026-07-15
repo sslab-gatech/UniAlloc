@@ -1,0 +1,869 @@
+{
+  "archive_variants": [
+    "vulnerable",
+    "patched"
+  ],
+  "arms": [
+    {
+      "allocator_provenance": {
+        "compiler_wrapper_sha256": null,
+        "direct_cargo_unialloc": false,
+        "force_loaded_unialloc": false,
+        "force_rlib_sha256": null,
+        "force_wrapper_sha256": null,
+        "single_unialloc_identity_enforced": true,
+        "unialloc_implementation_sha256": "c18745ce1786ea977b8b266ffdc30a8517fc77744e01957d588234dcfbdd5a32"
+      },
+      "allocator_topology": {
+        "allocator_variant": "system",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "system",
+      "archive_variant": "vulnerable",
+      "binary_artifact": {
+        "bytes": 7054104,
+        "path": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness",
+        "sha256": "2a109358d0e2cb79fd48e2e6010c4ea5952e6c3f52f13104b87baa3d8cb3ef15"
+      },
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--offline",
+          "--locked",
+          "--manifest-path",
+          "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/Cargo.toml",
+          "--jobs",
+          "2",
+          "--target",
+          "x86_64-unknown-linux-gnu"
+        ],
+        "cwd": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project",
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs -Zsanitizer=address -Cforce-frame-pointers=yes",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "ASAN_OPTIONS",
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 0,
+        "stderr": "warning: ../subject/endian_trait-0.6.0/Cargo.toml: `package.edition` is unspecified, defaulting to `2015` while the latest is `2024`\nwarning: `endian_trait` (manifest) generated 1 warning\n   Compiling unicode-xid v0.1.0\n   Compiling proc-macro2 v0.2.3\n   Compiling quote v0.4.2\n   Compiling syn v0.12.15\n   Compiling endian_trait_derive v0.6.0\n   Compiling endian_trait v0.6.0 (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/subject/endian_trait-0.6.0)\nwarning: unnecessary transmute\n   --> /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/subject/endian_trait-0.6.0/src/lib.rs:130:12\n    |\n130 |         unsafe { ::std::mem::transmute(flip) }\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |\n    = help: consider using `char::from_u32(\u2026).unwrap()`\n    = note: `#[warn(unnecessary_transmutes)]` on by default\nhelp: replace this with\n    |\n130 -         unsafe { ::std::mem::transmute(flip) }\n130 +         unsafe { char::from_u32_unchecked(flip) }\n    |\n\nwarning: unnecessary transmute\n   --> /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/subject/endian_trait-0.6.0/src/lib.rs:142:12\n    |\n142 |         unsafe { ::std::mem::transmute(flip) }\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |\n    = help: consider using `char::from_u32(\u2026).unwrap()`\nhelp: replace this with\n    |\n142 -         unsafe { ::std::mem::transmute(flip) }\n142 +         unsafe { char::from_u32_unchecked(flip) }\n    |\n\nwarning: unnecessary transmute\n   --> /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/subject/endian_trait-0.6.0/src/lib.rs:151:12\n    |\n151 |         unsafe { ::std::mem::transmute((self as u32).to_be()) }\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |\n    = help: consider using `char::from_u32(\u2026).unwrap()`\nhelp: replace this with\n    |\n151 -         unsafe { ::std::mem::transmute((self as u32).to_be()) }\n151 +         unsafe { char::from_u32_unchecked((self as u32).to_be()) }\n    |\n\nwarning: unnecessary transmute\n   --> /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/subject/endian_trait-0.6.0/src/lib.rs:160:12\n    |\n160 |         unsafe { ::std::mem::transmute((self as u32).to_le()) }\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |\n    = help: consider using `char::from_u32(\u2026).unwrap()`\nhelp: replace this with\n    |\n160 -         unsafe { ::std::mem::transmute((self as u32).to_le()) }\n160 +         unsafe { char::from_u32_unchecked((self as u32).to_le()) }\n    |\n\nwarning: `endian_trait` (lib) generated 4 warnings (run `cargo fix --lib -p endian_trait` to apply 4 suggestions)\n   Compiling rsh-061-harness v0.0.0 (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.67s\nwarning: the following packages contain code that will be rejected by a future version of Rust: syn v0.12.15\nnote: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`\n",
+        "stderr_path": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/artifacts/build.stderr",
+        "stderr_sha256": "6af070bf48299c3782c41fcb89b929b147cf235f57502db7df5eb93e70a9b8e6",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/artifacts/build.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 1.710883911
+      },
+      "case_id": "RSH-061",
+      "claim_boundary": "This arm records reproduction and detector observations only. It does not establish mitigation, detection coverage, or exploit prevention.",
+      "claim_grade": false,
+      "crate": "endian_trait",
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "efficacy_blockers": [
+        "critical_site_coverage_not_validated"
+      ],
+      "efficacy_eligible": false,
+      "execution_mode": "asan",
+      "execution_status": "completed",
+      "fingerprint": "4378d5396eec84a0436dad717fc38d3098aea3567261b1f4f74e29cfff2df72e",
+      "fingerprint_payload": {
+        "allocator_variant": "system",
+        "archive_sha256": "77c844962d33db56fe7024846eeb8db92c79ccb68d3752a0ee37c261ac79fd46",
+        "archive_variant": "vulnerable",
+        "base_lock_sha256": "6f4f8fa88c7fb1f4aaee706667456ede0bd1d49eb68e6930c4ebe84da72d4039",
+        "cargo_config_sha256": "5f03abfa0a8e36fab914c9ef77c50c497990186e1ba1bd31035cc0208f032422",
+        "catalog_sha256": "065dec7a65b4155a5fec26b3400353758f393876281a47c1dff75da9b09df861",
+        "effective_lock_sha256": "6f4f8fa88c7fb1f4aaee706667456ede0bd1d49eb68e6930c4ebe84da72d4039",
+        "effective_manifest_sha256": "5b0873af0a48845b7bbaefabe230567221a2981ce68e0e27946973ea6b6c7081",
+        "materializer_sha256": "ea1de13aa79777a5d273b9e314850ae966d0ec036b9a99fe33d0c7232fe425a7",
+        "orchestrator_sha256": "83587b37f937ef8e35afcfc72d8ef05d9d1b7f6bdd4e8933d78a14c1357d7f39",
+        "realworld_driver_sha256": "4a9039e10f09e8c6387abc8a9cc9ca609dd95c7d639cfdd1269d2320236a5440",
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "scenario_id": "RSH-061-rudra",
+        "schema_version": 1,
+        "source_sha256": "a30b0d9cd607db9b64278e0e84bdf4044c6bc0d230e43a1ab93ad794c6c39f1b",
+        "target_crates": [
+          "endian_trait",
+          "rsh_061_harness"
+        ],
+        "toolchain": {
+          "cargo": {
+            "command": [
+              "cargo",
+              "+nightly-2026-06-11",
+              "-V"
+            ],
+            "exit_code": 0,
+            "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+            "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+          },
+          "name": "nightly-2026-06-11",
+          "rustc": {
+            "command": [
+              "rustc",
+              "+nightly-2026-06-11",
+              "-vV"
+            ],
+            "exit_code": 0,
+            "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+            "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+          },
+          "target": "x86_64-unknown-linux-gnu"
+        },
+        "transformed_sources": {
+          "original_source_sha256": "a30b0d9cd607db9b64278e0e84bdf4044c6bc0d230e43a1ab93ad794c6c39f1b",
+          "witness_module_sha256": "56710445c0841b06ec2b55843a45432e3ed2e5cf912b9d4d01fac84221504bb5",
+          "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+        },
+        "unialloc_implementation_sha256": "c18745ce1786ea977b8b266ffdc30a8517fc77744e01957d588234dcfbdd5a32"
+      },
+      "full_rebuild_required": true,
+      "ground_truth_arm": true,
+      "lock_resolution": null,
+      "materialization": {
+        "archive_bytes": 11201,
+        "archive_path": "/tmp/strong-batch-c-cache/archives/endian_trait-0.6.0.crate",
+        "archive_sha256": "77c844962d33db56fe7024846eeb8db92c79ccb68d3752a0ee37c261ac79fd46",
+        "cargo_lock_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-061/Cargo.lock.vulnerable",
+        "cargo_lock_sha256": "6f4f8fa88c7fb1f4aaee706667456ede0bd1d49eb68e6930c4ebe84da72d4039",
+        "case_id": "RSH-061",
+        "claim_grade": false,
+        "dependency_package": "endian_trait",
+        "dependency_version": "0.6.0",
+        "oracle": {
+          "patched_control": "local Copy-bound patch rejects source with E0599",
+          "tool": "asan",
+          "vulnerable": "AddressSanitizer reports double-free after the user Endian implementation panics"
+        },
+        "required_environment": {
+          "ASAN_OPTIONS": "detect_leaks=0"
+        },
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs"
+        ],
+        "scenario_id": "RSH-061-rudra",
+        "schema_version": 1,
+        "source": "unialloc-rustsec-heap-materialization",
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-061/main.rs",
+        "source_sha256": "a30b0d9cd607db9b64278e0e84bdf4044c6bc0d230e43a1ab93ad794c6c39f1b",
+        "subject_directory": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/subject/endian_trait-0.6.0",
+        "variant": "vulnerable",
+        "work_directory": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work"
+      },
+      "oracle_validation": {
+        "boundary": "A clean exit or absent tool finding does not establish mitigation; matched repeated baseline/treatment evidence is required.",
+        "claim_grade": false,
+        "diagnostic_only": false,
+        "expected_contract": {
+          "compile_error_codes": [],
+          "expected_finding_signature": "asan_double_free",
+          "kind": "asan_finding",
+          "parse_status": "parsed",
+          "required_evidence": [
+            "asan_double_free",
+            "run_nonzero"
+          ]
+        },
+        "expected_description": "AddressSanitizer reports double-free after the user Endian implementation panics",
+        "expected_oracle_observed": true,
+        "matched_compile_error_codes": [],
+        "mitigation_inferred": false,
+        "native_diagnostic_signatures": [],
+        "oracle_role": "catalog_oracle",
+        "repetition_observations": [
+          {
+            "address_reuse_observed": false,
+            "claim_grade": false,
+            "clean_exit": false,
+            "exit_code": 1,
+            "mitigation_inferred": false,
+            "native_diagnostic_signature": null,
+            "repetition": 1,
+            "rust_panic_or_assertion_observed": true,
+            "sanitizer_finding_observed": true,
+            "timed_out": false,
+            "tool_finding_signature": "asan_double_free"
+          }
+        ],
+        "status": "tool_finding_observed",
+        "tool_finding_signatures": [
+          "asan_double_free"
+        ]
+      },
+      "pass_audit_summary": {
+        "audit_file_count": 0,
+        "audit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "claim_grade_file_count": 0,
+        "crate_names": [],
+        "direct_allocator_rewrites_applied": 0,
+        "direct_layout_allocator_rewrites_applied": 0,
+        "semantic_deallocation_like_rewrites_applied": 0,
+        "semantic_drop_rewrites_applied": 0,
+        "semantic_ownership_transfer_rewrites_applied": 0,
+        "semantic_rewrites_applied": 0,
+        "semantic_scope_rewrites_applied": 0,
+        "total_compiler_rewrites_applied": 0,
+        "unresolved_file_count": 0
+      },
+      "pass_audit_validation": {
+        "claim_grade": false,
+        "compiler_rewrite_counts": {
+          "direct_allocator_rewrites_applied": 0,
+          "direct_layout_allocator_rewrites_applied": 0,
+          "semantic_ownership_transfer_rewrites_applied": 0,
+          "semantic_rewrites_applied": 0,
+          "total_compiler_rewrites_applied": 0
+        },
+        "critical_site_coverage_validated": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated",
+          "no_compiler_rewrite_observed"
+        ],
+        "efficacy_eligible": false,
+        "rewrite_route": "none",
+        "status": "not_applicable",
+        "valid": null,
+        "validation_scope": "target_crate_presence_and_force_load_topology_only"
+      },
+      "pass_audits": [],
+      "pass_logs": [],
+      "platform_constraints": {},
+      "repetition_summary": {
+        "address_reuse_observation_count": 0,
+        "claim_grade": false,
+        "clean_exit_count": 0,
+        "executed": 1,
+        "exit_codes": [
+          1
+        ],
+        "mitigation_inferred": false,
+        "native_diagnostic_signal_count": 0,
+        "requested": 1,
+        "timed_out_count": 0,
+        "tool_finding_count": 1
+      },
+      "repetitions_requested": 1,
+      "required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "reuse_denial_evidence": {
+        "claim_grade": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "run": {
+        "command": [
+          "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness"
+        ],
+        "cwd": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug",
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs -Zsanitizer=address -Cforce-frame-pointers=yes",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "ASAN_OPTIONS",
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 1,
+        "stderr": "\nthread 'main' (3405301) panicked at src/witness.rs:15:68:\ncalled `Option::unwrap()` on a `None` value\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n=================================================================\n==3405301==ERROR: AddressSanitizer: attempting double-free on 0x7b32d87e0010 in thread T0:\n    #0 0x5639955cf7f6 in free /rustc/llvm/src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\n    #1 0x5639955ff538 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18\n    #2 0x5639955fe3b4 in __rustc::__rust_dealloc /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:4:19\n    #3 0x5639955ff870 in alloc::alloc::dealloc_nonnull /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128:14\n    #4 0x5639955ff870 in <alloc::alloc::Global>::deallocate_impl_runtime /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229:22\n    #5 0x5639955ff870 in <alloc::alloc::Global>::deallocate_impl /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344:9\n    #6 0x5639955ff870 in <alloc::alloc::Global as core::alloc::Allocator>::deallocate /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462:23\n    #7 0x5639955ff7d8 in <alloc::boxed::Box<core::option::Option<i32>> as core::ops::drop::Drop>::drop /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1958:24\n    #8 0x5639955fe1a0 in core::ptr::drop_glue::<alloc::boxed::Box<core::option::Option<i32>>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #9 0x5639955fe1c0 in core::ptr::drop_glue::<rsh_061_harness::witness::Foo> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #10 0x5639955fe211 in core::ptr::drop_glue::<[rsh_061_harness::witness::Foo]> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #11 0x5639955fe165 in core::ptr::drop_glue::<[rsh_061_harness::witness::Foo; 1]> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #12 0x5639955fea81 in rsh_061_harness::witness::run /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/witness.rs:27:1\n    #13 0x5639955fe478 in rsh_061_harness::main /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:9:5\n    #14 0x5639955ff8bd in <fn() as core::ops::function::FnOnce<()>>::call_once /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5\n    #15 0x5639955fe280 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18\n    #16 0x5639955fe2c3 in std::rt::lang_start::<()>::{closure#0} /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18\n    #17 0x563995624e56 in <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21\n    #18 0x563995624e56 in std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #19 0x563995624e56 in std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #20 0x563995624e56 in std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #21 0x563995624e56 in std::rt::lang_start_internal::{closure#0} /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24\n    #22 0x563995624e56 in std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #23 0x563995624e56 in std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #24 0x563995624e56 in std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #25 0x563995624e56 in std::rt::lang_start_internal /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5\n    #26 0x5639955fe05f in std::rt::lang_start::<()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5\n    #27 0x5639955ffc00 in main (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x101c00) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n    #28 0x7f12d942a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #29 0x7f12d942a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #30 0x563995543ad4 in _start (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x45ad4) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n\n0x7b32d87e0010 is located 0 bytes inside of 8-byte region [0x7b32d87e0010,0x7b32d87e0018)\nfreed by thread T0 here:\n    #0 0x5639955cf7f6 in free /rustc/llvm/src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\n    #1 0x5639955ff538 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18\n    #2 0x5639955fe3b4 in __rustc::__rust_dealloc /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:4:19\n    #3 0x5639955ff870 in alloc::alloc::dealloc_nonnull /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128:14\n    #4 0x5639955ff870 in <alloc::alloc::Global>::deallocate_impl_runtime /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229:22\n    #5 0x5639955ff870 in <alloc::alloc::Global>::deallocate_impl /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344:9\n    #6 0x5639955ff870 in <alloc::alloc::Global as core::alloc::Allocator>::deallocate /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462:23\n    #7 0x5639955ff7d8 in <alloc::boxed::Box<core::option::Option<i32>> as core::ops::drop::Drop>::drop /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1958:24\n    #8 0x5639955fe1a0 in core::ptr::drop_glue::<alloc::boxed::Box<core::option::Option<i32>>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #9 0x5639955fe1c0 in core::ptr::drop_glue::<rsh_061_harness::witness::Foo> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #10 0x5639955fef01 in <rsh_061_harness::witness::Foo as endian_trait::Endian>::to_be /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/witness.rs:17:5\n    #11 0x5639955ff220 in <&mut [rsh_061_harness::witness::Foo] as endian_trait::Endian>::to_be /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/subject/endian_trait-0.6.0/src/slices.rs:23:35\n    #12 0x5639955feaa7 in rsh_061_harness::witness::run /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/witness.rs:26:31\n    #13 0x5639955fe478 in rsh_061_harness::main /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:9:5\n    #14 0x5639955ff8bd in <fn() as core::ops::function::FnOnce<()>>::call_once /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5\n    #15 0x5639955fe280 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18\n    #16 0x5639955fe2c3 in std::rt::lang_start::<()>::{closure#0} /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18\n    #17 0x563995624e56 in <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21\n    #18 0x563995624e56 in std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #19 0x563995624e56 in std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #20 0x563995624e56 in std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #21 0x563995624e56 in std::rt::lang_start_internal::{closure#0} /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24\n    #22 0x563995624e56 in std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #23 0x563995624e56 in std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #24 0x563995624e56 in std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #25 0x563995624e56 in std::rt::lang_start_internal /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5\n    #26 0x5639955fe05f in std::rt::lang_start::<()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5\n    #27 0x5639955ffc00 in main (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x101c00) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n    #28 0x7f12d942a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #29 0x7f12d942a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #30 0x563995543ad4 in _start (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x45ad4) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n\npreviously allocated by thread T0 here:\n    #0 0x5639955cfa94 in malloc /rustc/llvm/src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:67:3\n    #1 0x5639955ff495 in <std::alloc::System as core::alloc::global::GlobalAlloc>::alloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:14:22\n    #2 0x5639955fe34a in __rustc::__rust_alloc /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:4:19\n    #3 0x5639955fe618 in alloc::alloc::alloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:101:9\n    #4 0x5639955fe618 in <alloc::alloc::Global>::alloc_impl_runtime /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:210:73\n    #5 0x5639955feba4 in <alloc::alloc::Global>::alloc_impl /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:332:9\n    #6 0x5639955feba4 in <alloc::alloc::Global as core::alloc::Allocator>::allocate /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:449:14\n    #7 0x5639955feba4 in alloc::boxed::box_new_uninit /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:248:18\n    #8 0x5639955fe970 in <alloc::boxed::Box<core::option::Option<i32>>>::new /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:286:19\n    #9 0x5639955fe970 in rsh_061_harness::witness::run /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/witness.rs:25:27\n    #10 0x5639955fe478 in rsh_061_harness::main /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:9:5\n    #11 0x5639955ff8bd in <fn() as core::ops::function::FnOnce<()>>::call_once /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5\n    #12 0x5639955fe280 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18\n    #13 0x5639955fe2c3 in std::rt::lang_start::<()>::{closure#0} /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18\n    #14 0x563995624e56 in <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21\n    #15 0x563995624e56 in std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #16 0x563995624e56 in std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #17 0x563995624e56 in std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #18 0x563995624e56 in std::rt::lang_start_internal::{closure#0} /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24\n    #19 0x563995624e56 in std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #20 0x563995624e56 in std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #21 0x563995624e56 in std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #22 0x563995624e56 in std::rt::lang_start_internal /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5\n    #23 0x5639955fe05f in std::rt::lang_start::<()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5\n    #24 0x5639955ffc00 in main (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x101c00) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n    #25 0x7f12d942a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #26 0x7f12d942a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #27 0x563995543ad4 in _start (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x45ad4) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n\nSUMMARY: AddressSanitizer: double-free /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc\n==3405301==ABORTING\n",
+        "stderr_path": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/artifacts/run-001.stderr",
+        "stderr_sha256": "c41f6dce2a51dc46deacf761a7f19fac35d91f4a9ea0a85ed438c5b456325762",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/artifacts/run-001.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 0.332654098
+      },
+      "runs": [
+        {
+          "command": [
+            "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness"
+          ],
+          "cwd": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug",
+          "environment": {
+            "ASAN_OPTIONS": "detect_leaks=0",
+            "CARGO_INCREMENTAL": "0",
+            "CARGO_TARGET_DIR": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target",
+            "HOME": "/home/hanqing",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "LOGNAME": "hanqing",
+            "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+            "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs -Zsanitizer=address -Cforce-frame-pointers=yes",
+            "SHELL": "/usr/bin/zsh",
+            "TERM": "xterm-256color",
+            "USER": "hanqing"
+          },
+          "environment_allowlist": [
+            "ASAN_OPTIONS",
+            "CARGO_INCREMENTAL",
+            "CARGO_TARGET_DIR",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LOGNAME",
+            "PATH",
+            "RUSTFLAGS",
+            "SHELL",
+            "TERM",
+            "USER"
+          ],
+          "exit_code": 1,
+          "stderr": "\nthread 'main' (3405301) panicked at src/witness.rs:15:68:\ncalled `Option::unwrap()` on a `None` value\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n=================================================================\n==3405301==ERROR: AddressSanitizer: attempting double-free on 0x7b32d87e0010 in thread T0:\n    #0 0x5639955cf7f6 in free /rustc/llvm/src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\n    #1 0x5639955ff538 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18\n    #2 0x5639955fe3b4 in __rustc::__rust_dealloc /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:4:19\n    #3 0x5639955ff870 in alloc::alloc::dealloc_nonnull /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128:14\n    #4 0x5639955ff870 in <alloc::alloc::Global>::deallocate_impl_runtime /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229:22\n    #5 0x5639955ff870 in <alloc::alloc::Global>::deallocate_impl /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344:9\n    #6 0x5639955ff870 in <alloc::alloc::Global as core::alloc::Allocator>::deallocate /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462:23\n    #7 0x5639955ff7d8 in <alloc::boxed::Box<core::option::Option<i32>> as core::ops::drop::Drop>::drop /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1958:24\n    #8 0x5639955fe1a0 in core::ptr::drop_glue::<alloc::boxed::Box<core::option::Option<i32>>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #9 0x5639955fe1c0 in core::ptr::drop_glue::<rsh_061_harness::witness::Foo> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #10 0x5639955fe211 in core::ptr::drop_glue::<[rsh_061_harness::witness::Foo]> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #11 0x5639955fe165 in core::ptr::drop_glue::<[rsh_061_harness::witness::Foo; 1]> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #12 0x5639955fea81 in rsh_061_harness::witness::run /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/witness.rs:27:1\n    #13 0x5639955fe478 in rsh_061_harness::main /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:9:5\n    #14 0x5639955ff8bd in <fn() as core::ops::function::FnOnce<()>>::call_once /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5\n    #15 0x5639955fe280 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18\n    #16 0x5639955fe2c3 in std::rt::lang_start::<()>::{closure#0} /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18\n    #17 0x563995624e56 in <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21\n    #18 0x563995624e56 in std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #19 0x563995624e56 in std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #20 0x563995624e56 in std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #21 0x563995624e56 in std::rt::lang_start_internal::{closure#0} /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24\n    #22 0x563995624e56 in std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #23 0x563995624e56 in std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #24 0x563995624e56 in std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #25 0x563995624e56 in std::rt::lang_start_internal /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5\n    #26 0x5639955fe05f in std::rt::lang_start::<()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5\n    #27 0x5639955ffc00 in main (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x101c00) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n    #28 0x7f12d942a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #29 0x7f12d942a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #30 0x563995543ad4 in _start (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x45ad4) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n\n0x7b32d87e0010 is located 0 bytes inside of 8-byte region [0x7b32d87e0010,0x7b32d87e0018)\nfreed by thread T0 here:\n    #0 0x5639955cf7f6 in free /rustc/llvm/src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:51:3\n    #1 0x5639955ff538 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18\n    #2 0x5639955fe3b4 in __rustc::__rust_dealloc /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:4:19\n    #3 0x5639955ff870 in alloc::alloc::dealloc_nonnull /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:128:14\n    #4 0x5639955ff870 in <alloc::alloc::Global>::deallocate_impl_runtime /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:229:22\n    #5 0x5639955ff870 in <alloc::alloc::Global>::deallocate_impl /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:344:9\n    #6 0x5639955ff870 in <alloc::alloc::Global as core::alloc::Allocator>::deallocate /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:462:23\n    #7 0x5639955ff7d8 in <alloc::boxed::Box<core::option::Option<i32>> as core::ops::drop::Drop>::drop /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:1958:24\n    #8 0x5639955fe1a0 in core::ptr::drop_glue::<alloc::boxed::Box<core::option::Option<i32>>> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #9 0x5639955fe1c0 in core::ptr::drop_glue::<rsh_061_harness::witness::Foo> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ptr/mod.rs:825:1\n    #10 0x5639955fef01 in <rsh_061_harness::witness::Foo as endian_trait::Endian>::to_be /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/witness.rs:17:5\n    #11 0x5639955ff220 in <&mut [rsh_061_harness::witness::Foo] as endian_trait::Endian>::to_be /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/subject/endian_trait-0.6.0/src/slices.rs:23:35\n    #12 0x5639955feaa7 in rsh_061_harness::witness::run /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/witness.rs:26:31\n    #13 0x5639955fe478 in rsh_061_harness::main /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:9:5\n    #14 0x5639955ff8bd in <fn() as core::ops::function::FnOnce<()>>::call_once /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5\n    #15 0x5639955fe280 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18\n    #16 0x5639955fe2c3 in std::rt::lang_start::<()>::{closure#0} /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18\n    #17 0x563995624e56 in <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21\n    #18 0x563995624e56 in std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #19 0x563995624e56 in std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #20 0x563995624e56 in std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #21 0x563995624e56 in std::rt::lang_start_internal::{closure#0} /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24\n    #22 0x563995624e56 in std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #23 0x563995624e56 in std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #24 0x563995624e56 in std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #25 0x563995624e56 in std::rt::lang_start_internal /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5\n    #26 0x5639955fe05f in std::rt::lang_start::<()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5\n    #27 0x5639955ffc00 in main (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x101c00) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n    #28 0x7f12d942a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #29 0x7f12d942a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #30 0x563995543ad4 in _start (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x45ad4) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n\npreviously allocated by thread T0 here:\n    #0 0x5639955cfa94 in malloc /rustc/llvm/src/llvm-project/compiler-rt/lib/asan/asan_malloc_linux.cpp:67:3\n    #1 0x5639955ff495 in <std::alloc::System as core::alloc::global::GlobalAlloc>::alloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:14:22\n    #2 0x5639955fe34a in __rustc::__rust_alloc /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:4:19\n    #3 0x5639955fe618 in alloc::alloc::alloc /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:101:9\n    #4 0x5639955fe618 in <alloc::alloc::Global>::alloc_impl_runtime /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:210:73\n    #5 0x5639955feba4 in <alloc::alloc::Global>::alloc_impl /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:332:9\n    #6 0x5639955feba4 in <alloc::alloc::Global as core::alloc::Allocator>::allocate /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/alloc.rs:449:14\n    #7 0x5639955feba4 in alloc::boxed::box_new_uninit /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:248:18\n    #8 0x5639955fe970 in <alloc::boxed::Box<core::option::Option<i32>>>::new /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/boxed.rs:286:19\n    #9 0x5639955fe970 in rsh_061_harness::witness::run /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/witness.rs:25:27\n    #10 0x5639955fe478 in rsh_061_harness::main /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/work/project/src/main.rs:9:5\n    #11 0x5639955ff8bd in <fn() as core::ops::function::FnOnce<()>>::call_once /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5\n    #12 0x5639955fe280 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18\n    #13 0x5639955fe2c3 in std::rt::lang_start::<()>::{closure#0} /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:206:18\n    #14 0x563995624e56 in <&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe as core::ops::function::FnOnce<()>>::call_once /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/core/src/ops/function.rs:287:21\n    #15 0x563995624e56 in std::panicking::catch_unwind::do_call::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #16 0x563995624e56 in std::panicking::catch_unwind::<i32, &dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #17 0x563995624e56 in std::panic::catch_unwind::<&dyn core::ops::function::Fn<(), Output = i32> + core::marker::Sync + core::panic::unwind_safe::RefUnwindSafe, i32> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #18 0x563995624e56 in std::rt::lang_start_internal::{closure#0} /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:175:24\n    #19 0x563995624e56 in std::panicking::catch_unwind::do_call::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:575:43\n    #20 0x563995624e56 in std::panicking::catch_unwind::<isize, std::rt::lang_start_internal::{closure#0}> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panicking.rs:543:19\n    #21 0x563995624e56 in std::panic::catch_unwind::<std::rt::lang_start_internal::{closure#0}, isize> /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/panic.rs:359:14\n    #22 0x563995624e56 in std::rt::lang_start_internal /rustc/485ec3fbcc12fa14ef6596dabb125ad710499c9e/library/std/src/rt.rs:171:5\n    #23 0x5639955fe05f in std::rt::lang_start::<()> /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/rt.rs:205:5\n    #24 0x5639955ffc00 in main (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x101c00) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n    #25 0x7f12d942a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #26 0x7f12d942a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #27 0x563995543ad4 in _start (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/debug/rsh-061-harness+0x45ad4) (BuildId: 8a181af6d5233c2ec8a81badfed289d24f86d6ea)\n\nSUMMARY: AddressSanitizer: double-free /home/hanqing/.rustup/toolchains/nightly-2026-06-11-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/alloc/unix.rs:48:18 in <std::alloc::System as core::alloc::global::GlobalAlloc>::dealloc\n==3405301==ABORTING\n",
+          "stderr_path": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "c41f6dce2a51dc46deacf761a7f19fac35d91f4a9ea0a85ed438c5b456325762",
+          "stdout": "",
+          "stdout_path": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/vulnerable/system/artifacts/run-001.stdout",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "wall_seconds": 0.332654098
+        }
+      ],
+      "runtime_stats": null,
+      "runtime_stats_by_repetition": [],
+      "runtime_stats_validation": {
+        "claim_grade": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated"
+        ],
+        "efficacy_eligible": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ]
+      },
+      "scenario_id": "RSH-061-rudra",
+      "schema_version": 1,
+      "source": "unialloc-rustsec-heap-experiment",
+      "source_provenance": {
+        "archive_sha256": "77c844962d33db56fe7024846eeb8db92c79ccb68d3752a0ee37c261ac79fd46",
+        "base_lock_sha256": "6f4f8fa88c7fb1f4aaee706667456ede0bd1d49eb68e6930c4ebe84da72d4039",
+        "effective_lock_sha256": "6f4f8fa88c7fb1f4aaee706667456ede0bd1d49eb68e6930c4ebe84da72d4039",
+        "original_source_sha256": "a30b0d9cd607db9b64278e0e84bdf4044c6bc0d230e43a1ab93ad794c6c39f1b",
+        "source_sha256": "a30b0d9cd607db9b64278e0e84bdf4044c6bc0d230e43a1ab93ad794c6c39f1b",
+        "witness_module_sha256": "56710445c0841b06ec2b55843a45432e3ed2e5cf912b9d4d01fac84221504bb5",
+        "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+      },
+      "target_crates": [
+        "endian_trait",
+        "rsh_061_harness"
+      ],
+      "target_reset": false,
+      "target_reset_reasons": [
+        "fingerprint_changed"
+      ],
+      "tool": "asan",
+      "toolchain": {
+        "cargo": {
+          "command": [
+            "cargo",
+            "+nightly-2026-06-11",
+            "-V"
+          ],
+          "exit_code": 0,
+          "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+          "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+        },
+        "name": "nightly-2026-06-11",
+        "rustc": {
+          "command": [
+            "rustc",
+            "+nightly-2026-06-11",
+            "-vV"
+          ],
+          "exit_code": 0,
+          "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+          "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+        },
+        "target": "x86_64-unknown-linux-gnu"
+      }
+    },
+    {
+      "allocator_provenance": {
+        "compiler_wrapper_sha256": null,
+        "direct_cargo_unialloc": false,
+        "force_loaded_unialloc": false,
+        "force_rlib_sha256": null,
+        "force_wrapper_sha256": null,
+        "single_unialloc_identity_enforced": true,
+        "unialloc_implementation_sha256": "c18745ce1786ea977b8b266ffdc30a8517fc77744e01957d588234dcfbdd5a32"
+      },
+      "allocator_topology": {
+        "allocator_variant": "system",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "system",
+      "archive_variant": "patched",
+      "binary_artifact": null,
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--offline",
+          "--locked",
+          "--manifest-path",
+          "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/work/project/Cargo.toml",
+          "--jobs",
+          "2",
+          "--target",
+          "x86_64-unknown-linux-gnu"
+        ],
+        "cwd": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/work/project",
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs -Zsanitizer=address -Cforce-frame-pointers=yes",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "ASAN_OPTIONS",
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 101,
+        "stderr": "warning: ../subject/endian_trait-0.6.0/Cargo.toml: `package.edition` is unspecified, defaulting to `2015` while the latest is `2024`\nwarning: `endian_trait` (manifest) generated 1 warning\n   Compiling unicode-xid v0.1.0\n   Compiling proc-macro2 v0.2.3\n   Compiling quote v0.4.2\n   Compiling syn v0.12.15\n   Compiling endian_trait_derive v0.6.0\n   Compiling endian_trait v0.6.0 (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/work/subject/endian_trait-0.6.0)\nwarning: unnecessary transmute\n   --> /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/work/subject/endian_trait-0.6.0/src/lib.rs:130:12\n    |\n130 |         unsafe { ::std::mem::transmute(flip) }\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |\n    = help: consider using `char::from_u32(\u2026).unwrap()`\n    = note: `#[warn(unnecessary_transmutes)]` on by default\nhelp: replace this with\n    |\n130 -         unsafe { ::std::mem::transmute(flip) }\n130 +         unsafe { char::from_u32_unchecked(flip) }\n    |\n\nwarning: unnecessary transmute\n   --> /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/work/subject/endian_trait-0.6.0/src/lib.rs:142:12\n    |\n142 |         unsafe { ::std::mem::transmute(flip) }\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |\n    = help: consider using `char::from_u32(\u2026).unwrap()`\nhelp: replace this with\n    |\n142 -         unsafe { ::std::mem::transmute(flip) }\n142 +         unsafe { char::from_u32_unchecked(flip) }\n    |\n\nwarning: unnecessary transmute\n   --> /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/work/subject/endian_trait-0.6.0/src/lib.rs:151:12\n    |\n151 |         unsafe { ::std::mem::transmute((self as u32).to_be()) }\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |\n    = help: consider using `char::from_u32(\u2026).unwrap()`\nhelp: replace this with\n    |\n151 -         unsafe { ::std::mem::transmute((self as u32).to_be()) }\n151 +         unsafe { char::from_u32_unchecked((self as u32).to_be()) }\n    |\n\nwarning: unnecessary transmute\n   --> /tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/work/subject/endian_trait-0.6.0/src/lib.rs:160:12\n    |\n160 |         unsafe { ::std::mem::transmute((self as u32).to_le()) }\n    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    |\n    = help: consider using `char::from_u32(\u2026).unwrap()`\nhelp: replace this with\n    |\n160 -         unsafe { ::std::mem::transmute((self as u32).to_le()) }\n160 +         unsafe { char::from_u32_unchecked((self as u32).to_le()) }\n    |\n\nwarning: `endian_trait` (lib) generated 4 warnings (run `cargo fix --lib -p endian_trait` to apply 4 suggestions)\n   Compiling rsh-061-harness v0.0.0 (/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/work/project)\nerror[E0599]: the method `to_be` exists for mutable reference `&mut [Foo]`, but its trait bounds were not satisfied\n  --> src/witness.rs:26:31\n   |\n11 | struct Foo(Box<Option<i32>>);\n   | ---------- doesn't satisfy `Foo: Copy`\n...\n26 |     let _ = (&mut values[..]).to_be();\n   |                               ^^^^^ method cannot be called on `&mut [Foo]` due to unsatisfied trait bounds\n   |\n   = note: the following trait bounds were not satisfied:\n           `Foo: Copy`\n           which is required by `&mut [Foo]: Endian`\nhelp: consider annotating `Foo` with `#[derive(Clone, Copy)]`\n   |\n11 + #[derive(Clone, Copy)]\n12 | struct Foo(Box<Option<i32>>);\n   |\n\nFor more information about this error, try `rustc --explain E0599`.\nerror: could not compile `rsh-061-harness` (bin \"rsh-061-harness\") due to 1 previous error\n",
+        "stderr_path": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/artifacts/build.stderr",
+        "stderr_sha256": "77a4f94561c085d97649a1ac460457df63500d3ed17011a046d904ecbe285d5a",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/artifacts/build.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 1.600028076
+      },
+      "case_id": "RSH-061",
+      "claim_boundary": "This arm records reproduction and detector observations only. It does not establish mitigation, detection coverage, or exploit prevention.",
+      "claim_grade": false,
+      "crate": "endian_trait",
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "efficacy_blockers": [
+        "critical_site_coverage_not_validated"
+      ],
+      "efficacy_eligible": false,
+      "execution_mode": "asan",
+      "execution_status": "completed",
+      "fingerprint": "9741a79747ca31ab33e9546168b66a2650477514f0ad4626262d93fe57364118",
+      "fingerprint_payload": {
+        "allocator_variant": "system",
+        "archive_sha256": "77c844962d33db56fe7024846eeb8db92c79ccb68d3752a0ee37c261ac79fd46",
+        "archive_variant": "patched",
+        "base_lock_sha256": "6f4f8fa88c7fb1f4aaee706667456ede0bd1d49eb68e6930c4ebe84da72d4039",
+        "cargo_config_sha256": "5f03abfa0a8e36fab914c9ef77c50c497990186e1ba1bd31035cc0208f032422",
+        "catalog_sha256": "065dec7a65b4155a5fec26b3400353758f393876281a47c1dff75da9b09df861",
+        "effective_lock_sha256": "6f4f8fa88c7fb1f4aaee706667456ede0bd1d49eb68e6930c4ebe84da72d4039",
+        "effective_manifest_sha256": "5b0873af0a48845b7bbaefabe230567221a2981ce68e0e27946973ea6b6c7081",
+        "materializer_sha256": "ea1de13aa79777a5d273b9e314850ae966d0ec036b9a99fe33d0c7232fe425a7",
+        "orchestrator_sha256": "83587b37f937ef8e35afcfc72d8ef05d9d1b7f6bdd4e8933d78a14c1357d7f39",
+        "realworld_driver_sha256": "4a9039e10f09e8c6387abc8a9cc9ca609dd95c7d639cfdd1269d2320236a5440",
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "scenario_id": "RSH-061-rudra",
+        "schema_version": 1,
+        "source_sha256": "a30b0d9cd607db9b64278e0e84bdf4044c6bc0d230e43a1ab93ad794c6c39f1b",
+        "target_crates": [
+          "endian_trait",
+          "rsh_061_harness"
+        ],
+        "toolchain": {
+          "cargo": {
+            "command": [
+              "cargo",
+              "+nightly-2026-06-11",
+              "-V"
+            ],
+            "exit_code": 0,
+            "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+            "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+          },
+          "name": "nightly-2026-06-11",
+          "rustc": {
+            "command": [
+              "rustc",
+              "+nightly-2026-06-11",
+              "-vV"
+            ],
+            "exit_code": 0,
+            "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+            "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+          },
+          "target": "x86_64-unknown-linux-gnu"
+        },
+        "transformed_sources": {
+          "original_source_sha256": "a30b0d9cd607db9b64278e0e84bdf4044c6bc0d230e43a1ab93ad794c6c39f1b",
+          "witness_module_sha256": "56710445c0841b06ec2b55843a45432e3ed2e5cf912b9d4d01fac84221504bb5",
+          "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+        },
+        "unialloc_implementation_sha256": "c18745ce1786ea977b8b266ffdc30a8517fc77744e01957d588234dcfbdd5a32"
+      },
+      "full_rebuild_required": true,
+      "ground_truth_arm": true,
+      "lock_resolution": null,
+      "materialization": {
+        "archive_bytes": 11201,
+        "archive_path": "/tmp/strong-batch-c-cache/archives/endian_trait-0.6.0.crate",
+        "archive_sha256": "77c844962d33db56fe7024846eeb8db92c79ccb68d3752a0ee37c261ac79fd46",
+        "cargo_lock_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-061/Cargo.lock.patched",
+        "cargo_lock_sha256": "6f4f8fa88c7fb1f4aaee706667456ede0bd1d49eb68e6930c4ebe84da72d4039",
+        "case_id": "RSH-061",
+        "claim_grade": false,
+        "dependency_package": "endian_trait",
+        "dependency_version": "0.6.0",
+        "local_patched_control": {
+          "kind": "hashed_local_patch",
+          "label": "fail-closed Copy bound for slice Endian implementation",
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-061/patches/require-copy-slice-endian.patch",
+          "resulting_source_files": {
+            "src/slices.rs": "7d02a6cb1092b1c07c22c5a28f1cdfce609d27c3594ab093f6e8ac7b8158ccae"
+          },
+          "sha256": "1fad11ad3db6dd882acd784e52ace6d8925c4a5b73d9bf766c66783f0ce26eb4"
+        },
+        "oracle": {
+          "patched_control": "local Copy-bound patch rejects source with E0599",
+          "tool": "asan",
+          "vulnerable": "AddressSanitizer reports double-free after the user Endian implementation panics"
+        },
+        "required_environment": {
+          "ASAN_OPTIONS": "detect_leaks=0"
+        },
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs"
+        ],
+        "scenario_id": "RSH-061-rudra",
+        "schema_version": 1,
+        "source": "unialloc-rustsec-heap-materialization",
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-061/main.rs",
+        "source_sha256": "a30b0d9cd607db9b64278e0e84bdf4044c6bc0d230e43a1ab93ad794c6c39f1b",
+        "subject_directory": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/work/subject/endian_trait-0.6.0",
+        "variant": "patched",
+        "work_directory": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/arms/patched/system/work"
+      },
+      "oracle_validation": {
+        "boundary": "A clean exit or absent tool finding does not establish mitigation; matched repeated baseline/treatment evidence is required.",
+        "claim_grade": false,
+        "diagnostic_only": false,
+        "expected_contract": {
+          "compile_error_codes": [
+            "E0599"
+          ],
+          "expected_finding_signature": null,
+          "kind": "compile_rejection",
+          "parse_status": "parsed",
+          "required_evidence": [
+            "build_nonzero",
+            "compile_error_code"
+          ]
+        },
+        "expected_description": "local Copy-bound patch rejects source with E0599",
+        "expected_oracle_observed": true,
+        "matched_compile_error_codes": [
+          "E0599"
+        ],
+        "mitigation_inferred": false,
+        "native_diagnostic_signatures": [],
+        "oracle_role": "catalog_oracle",
+        "repetition_observations": [],
+        "status": "patched_control_compile_rejection_observed",
+        "tool_finding_signatures": []
+      },
+      "pass_audit_summary": {
+        "audit_file_count": 0,
+        "audit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "claim_grade_file_count": 0,
+        "crate_names": [],
+        "direct_allocator_rewrites_applied": 0,
+        "direct_layout_allocator_rewrites_applied": 0,
+        "semantic_deallocation_like_rewrites_applied": 0,
+        "semantic_drop_rewrites_applied": 0,
+        "semantic_ownership_transfer_rewrites_applied": 0,
+        "semantic_rewrites_applied": 0,
+        "semantic_scope_rewrites_applied": 0,
+        "total_compiler_rewrites_applied": 0,
+        "unresolved_file_count": 0
+      },
+      "pass_audit_validation": {
+        "claim_grade": false,
+        "compiler_rewrite_counts": {
+          "direct_allocator_rewrites_applied": 0,
+          "direct_layout_allocator_rewrites_applied": 0,
+          "semantic_ownership_transfer_rewrites_applied": 0,
+          "semantic_rewrites_applied": 0,
+          "total_compiler_rewrites_applied": 0
+        },
+        "critical_site_coverage_validated": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated",
+          "no_compiler_rewrite_observed"
+        ],
+        "efficacy_eligible": false,
+        "rewrite_route": "none",
+        "status": "not_applicable",
+        "valid": null,
+        "validation_scope": "target_crate_presence_and_force_load_topology_only"
+      },
+      "pass_audits": [],
+      "pass_logs": [],
+      "platform_constraints": {},
+      "repetition_summary": {
+        "address_reuse_observation_count": 0,
+        "claim_grade": false,
+        "clean_exit_count": 0,
+        "executed": 0,
+        "exit_codes": [],
+        "mitigation_inferred": false,
+        "native_diagnostic_signal_count": 0,
+        "requested": 1,
+        "timed_out_count": 0,
+        "tool_finding_count": 0
+      },
+      "repetitions_requested": 1,
+      "required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "reuse_denial_evidence": {
+        "claim_grade": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "run": null,
+      "runs": [],
+      "runtime_stats": null,
+      "runtime_stats_by_repetition": [],
+      "runtime_stats_validation": {
+        "claim_grade": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated"
+        ],
+        "efficacy_eligible": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ]
+      },
+      "scenario_id": "RSH-061-rudra",
+      "schema_version": 1,
+      "source": "unialloc-rustsec-heap-experiment",
+      "source_provenance": {
+        "archive_sha256": "77c844962d33db56fe7024846eeb8db92c79ccb68d3752a0ee37c261ac79fd46",
+        "base_lock_sha256": "6f4f8fa88c7fb1f4aaee706667456ede0bd1d49eb68e6930c4ebe84da72d4039",
+        "effective_lock_sha256": "6f4f8fa88c7fb1f4aaee706667456ede0bd1d49eb68e6930c4ebe84da72d4039",
+        "original_source_sha256": "a30b0d9cd607db9b64278e0e84bdf4044c6bc0d230e43a1ab93ad794c6c39f1b",
+        "source_sha256": "a30b0d9cd607db9b64278e0e84bdf4044c6bc0d230e43a1ab93ad794c6c39f1b",
+        "witness_module_sha256": "56710445c0841b06ec2b55843a45432e3ed2e5cf912b9d4d01fac84221504bb5",
+        "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+      },
+      "target_crates": [
+        "endian_trait",
+        "rsh_061_harness"
+      ],
+      "target_reset": false,
+      "target_reset_reasons": [
+        "fingerprint_changed"
+      ],
+      "tool": "asan",
+      "toolchain": {
+        "cargo": {
+          "command": [
+            "cargo",
+            "+nightly-2026-06-11",
+            "-V"
+          ],
+          "exit_code": 0,
+          "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+          "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+        },
+        "name": "nightly-2026-06-11",
+        "rustc": {
+          "command": [
+            "rustc",
+            "+nightly-2026-06-11",
+            "-vV"
+          ],
+          "exit_code": 0,
+          "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+          "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+        },
+        "target": "x86_64-unknown-linux-gnu"
+      }
+    }
+  ],
+  "claim_boundary": "Per-arm exit status is never a mitigation classification. Claim-grade evaluation requires preregistered repetitions, matched controls, and coverage validation.",
+  "claim_grade": false,
+  "created_at_unix": 1784064885,
+  "orchestration_success": true,
+  "preflight_path": "/tmp/strong-batch-c-system-runs/RSH-061-rudra/preflight.json",
+  "repetitions_requested": 1,
+  "scenario_id": "RSH-061-rudra",
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-experiment-matrix",
+  "toolchain": {
+    "cargo": {
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "-V"
+      ],
+      "exit_code": 0,
+      "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+      "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+    },
+    "name": "nightly-2026-06-11",
+    "rustc": {
+      "command": [
+        "rustc",
+        "+nightly-2026-06-11",
+        "-vV"
+      ],
+      "exit_code": 0,
+      "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+      "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+    },
+    "target": "x86_64-unknown-linux-gnu"
+  },
+  "type_isolation_reuse_edge_evaluation": {
+    "claim_grade": false,
+    "status": "not_applicable",
+    "validated": null
+  },
+  "typeiso_toolchain": null,
+  "unexpected_arm_count": 0,
+  "unsafe_execution_requested": true,
+  "variants": [
+    "system"
+  ]
+}

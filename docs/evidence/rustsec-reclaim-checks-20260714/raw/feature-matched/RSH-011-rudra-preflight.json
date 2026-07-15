@@ -1,0 +1,322 @@
+{
+  "allocator_cargo_feature_overrides": {},
+  "case_id": "RSH-011",
+  "catalog_path": "/home/hanqing/alloc/UniAlloc/evaluation/config/rustsec_heap_strong_batch_e_harnesses.json",
+  "catalog_sha256": "d0442a40f29b83c82d1b607c7645480e5cd4a2d6fdd895d00cf0d29842eb49e5",
+  "claim_grade": false,
+  "crate": "http",
+  "harness_target_crates": [
+    "http",
+    "rsh_011_harness"
+  ],
+  "legacy_allocator_abi_bridge": false,
+  "planned_arms": [
+    {
+      "allocator_substitution_supported": true,
+      "allocator_topology": {
+        "allocator_variant": "reclaim_plain",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "reclaim_plain",
+      "archive_sha256": "d7e06e336150b178206af098a055e3621e8336027e2b4d126bda0bc64824baaf",
+      "archive_variant": "vulnerable",
+      "catalog_allocator_exclusion": null,
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {},
+      "effective_rustflags": [
+        "-Ainvalid_reference_casting",
+        "-Adangerous_implicit_autorefs",
+        "--cap-lints=warn"
+      ],
+      "execution_mode": "native_diagnostic",
+      "ground_truth_arm": false,
+      "legacy_allocator_abi_bridge": false,
+      "lock_sha256": "f7fea9893cc620702b19352720a8aec17ce152894b5f3d7657602c0cf5bba2ec",
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ]
+      },
+      "source_sha256": "e482d7da77cf16df74439f8245f245c9fb90d0c6a0fdf2ee58c3329563950003",
+      "subject_cargo_features": {
+        "allocator_variant": "reclaim_plain",
+        "catalog_features": [],
+        "crate": "http",
+        "default_features_enabled": true,
+        "effective_features": [],
+        "override_allocator_variant": null,
+        "override_applied": false,
+        "override_source": null
+      },
+      "supported": true,
+      "tool_supported": true,
+      "transformed_sources": {
+        "original_source_sha256": "e482d7da77cf16df74439f8245f245c9fb90d0c6a0fdf2ee58c3329563950003",
+        "witness_module_sha256": "ae90e590ec893426edb4ea59eb1cc89c52034e65898dc63947be5d64752df515",
+        "wrapper_source_sha256": "8e14008f76904e03415e8ac0073974821eb30de78810dd043f43537f5fcff170"
+      },
+      "unsupported_reason": null
+    },
+    {
+      "allocator_substitution_supported": true,
+      "allocator_topology": {
+        "allocator_variant": "reclaim_checks",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "reclaim_checks",
+      "archive_sha256": "d7e06e336150b178206af098a055e3621e8336027e2b4d126bda0bc64824baaf",
+      "archive_variant": "vulnerable",
+      "catalog_allocator_exclusion": null,
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {},
+      "effective_rustflags": [
+        "-Ainvalid_reference_casting",
+        "-Adangerous_implicit_autorefs",
+        "--cap-lints=warn"
+      ],
+      "execution_mode": "native_diagnostic",
+      "ground_truth_arm": false,
+      "legacy_allocator_abi_bridge": false,
+      "lock_sha256": "f7fea9893cc620702b19352720a8aec17ce152894b5f3d7657602c0cf5bba2ec",
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ]
+      },
+      "source_sha256": "e482d7da77cf16df74439f8245f245c9fb90d0c6a0fdf2ee58c3329563950003",
+      "subject_cargo_features": {
+        "allocator_variant": "reclaim_checks",
+        "catalog_features": [],
+        "crate": "http",
+        "default_features_enabled": true,
+        "effective_features": [],
+        "override_allocator_variant": null,
+        "override_applied": false,
+        "override_source": null
+      },
+      "supported": true,
+      "tool_supported": true,
+      "transformed_sources": {
+        "original_source_sha256": "e482d7da77cf16df74439f8245f245c9fb90d0c6a0fdf2ee58c3329563950003",
+        "witness_module_sha256": "ae90e590ec893426edb4ea59eb1cc89c52034e65898dc63947be5d64752df515",
+        "wrapper_source_sha256": "93cc2b18b0b381cd99884fc96daa1a62da85fadbd7f9f2d3c1e250105c6a0a51"
+      },
+      "unsupported_reason": null
+    },
+    {
+      "allocator_substitution_supported": true,
+      "allocator_topology": {
+        "allocator_variant": "reclaim_plain",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "reclaim_plain",
+      "archive_sha256": "2790658cddc82e82b08e25176c431d7015a0adeb1718498715cbd20138a0bf68",
+      "archive_variant": "patched",
+      "catalog_allocator_exclusion": null,
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {},
+      "effective_rustflags": [
+        "-Ainvalid_reference_casting",
+        "-Adangerous_implicit_autorefs",
+        "--cap-lints=warn"
+      ],
+      "execution_mode": "native_diagnostic",
+      "ground_truth_arm": false,
+      "legacy_allocator_abi_bridge": false,
+      "lock_sha256": "61075a9513148f67d7d3d66ce18e504ad460325c3ba81b362c723cfb499e65a6",
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ]
+      },
+      "source_sha256": "e482d7da77cf16df74439f8245f245c9fb90d0c6a0fdf2ee58c3329563950003",
+      "subject_cargo_features": {
+        "allocator_variant": "reclaim_plain",
+        "catalog_features": [],
+        "crate": "http",
+        "default_features_enabled": true,
+        "effective_features": [],
+        "override_allocator_variant": null,
+        "override_applied": false,
+        "override_source": null
+      },
+      "supported": true,
+      "tool_supported": true,
+      "transformed_sources": {
+        "original_source_sha256": "e482d7da77cf16df74439f8245f245c9fb90d0c6a0fdf2ee58c3329563950003",
+        "witness_module_sha256": "ae90e590ec893426edb4ea59eb1cc89c52034e65898dc63947be5d64752df515",
+        "wrapper_source_sha256": "8e14008f76904e03415e8ac0073974821eb30de78810dd043f43537f5fcff170"
+      },
+      "unsupported_reason": null
+    },
+    {
+      "allocator_substitution_supported": true,
+      "allocator_topology": {
+        "allocator_variant": "reclaim_checks",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "reclaim_checks",
+      "archive_sha256": "2790658cddc82e82b08e25176c431d7015a0adeb1718498715cbd20138a0bf68",
+      "archive_variant": "patched",
+      "catalog_allocator_exclusion": null,
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {},
+      "effective_rustflags": [
+        "-Ainvalid_reference_casting",
+        "-Adangerous_implicit_autorefs",
+        "--cap-lints=warn"
+      ],
+      "execution_mode": "native_diagnostic",
+      "ground_truth_arm": false,
+      "legacy_allocator_abi_bridge": false,
+      "lock_sha256": "61075a9513148f67d7d3d66ce18e504ad460325c3ba81b362c723cfb499e65a6",
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ]
+      },
+      "source_sha256": "e482d7da77cf16df74439f8245f245c9fb90d0c6a0fdf2ee58c3329563950003",
+      "subject_cargo_features": {
+        "allocator_variant": "reclaim_checks",
+        "catalog_features": [],
+        "crate": "http",
+        "default_features_enabled": true,
+        "effective_features": [],
+        "override_allocator_variant": null,
+        "override_applied": false,
+        "override_source": null
+      },
+      "supported": true,
+      "tool_supported": true,
+      "transformed_sources": {
+        "original_source_sha256": "e482d7da77cf16df74439f8245f245c9fb90d0c6a0fdf2ee58c3329563950003",
+        "witness_module_sha256": "ae90e590ec893426edb4ea59eb1cc89c52034e65898dc63947be5d64752df515",
+        "wrapper_source_sha256": "93cc2b18b0b381cd99884fc96daa1a62da85fadbd7f9f2d3c1e250105c6a0a51"
+      },
+      "unsupported_reason": null
+    }
+  ],
+  "platform_constraints": {},
+  "repetitions_requested": 3,
+  "required_environment": {
+    "ASAN_OPTIONS": "detect_leaks=0:disable_coredump=1"
+  },
+  "scenario_id": "RSH-011-rudra",
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-experiment-preflight",
+  "tool": "asan",
+  "toolchain": {
+    "cargo": {
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "-V"
+      ],
+      "exit_code": 0,
+      "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+      "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+    },
+    "name": "nightly-2026-06-11",
+    "rustc": {
+      "command": [
+        "rustc",
+        "+nightly-2026-06-11",
+        "-vV"
+      ],
+      "exit_code": 0,
+      "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+      "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+    },
+    "target": "x86_64-unknown-linux-gnu"
+  },
+  "type_isolation_edge_annotation": null,
+  "unsafe_execution_requested": false
+}

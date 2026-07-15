@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "source": "unialloc-rustsec-reviewed-primary-primitive-overrides",
+  "claim_grade": false,
+  "review_scope": {
+    "strong_candidate_count": 53,
+    "policy": "A reviewed override is used when a validated executable oracle or pinned source-level root-cause record identifies a more specific memory-safety primitive than the corpus or inventory fallback. Curated multi-primitive corpus labels remain unchanged when scenarios exercise different primitives."
+  },
+  "overrides": [
+    {
+      "advisory_id": "RUSTSEC-2019-0010",
+      "case_id": "RSH-049",
+      "primary_primitive": "uninitialized_drop",
+      "replaces": "use_after_free",
+      "reason": "The validated witness faults while unwinding drops a fabricated uninitialized reader. The advisory title and executable oracle both identify an uninitialized-value drop.",
+      "evidence_paths": [
+        "evaluation/config/rustsec_heap_strong_batch_a_harnesses.json#cases[RSH-049].scenarios[RSH-049-advisory].oracle.vulnerable",
+        "evaluation/config/rustsec_heap_strong_batch_a_status.json#cases[RSH-049].oracle.vulnerable",
+        "docs/evidence/rustsec-security-complete-20260714/raw/system-one-rep/RSH-049-system-experiment.json"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2019-0014",
+      "case_id": "RSH-050",
+      "primary_primitive": "uninitialized_drop",
+      "replaces": "use_after_free",
+      "reason": "The validated witness faults while deallocating an uninitialized Box after the HDR error path. The advisory title and executable oracle both identify an uninitialized-value drop.",
+      "evidence_paths": [
+        "evaluation/config/rustsec_heap_strong_batch_a_harnesses.json#cases[RSH-050].scenarios[RSH-050-upstream-reduction].oracle.vulnerable",
+        "evaluation/config/rustsec_heap_strong_batch_a_status.json#cases[RSH-050].oracle.vulnerable",
+        "docs/evidence/rustsec-security-complete-20260714/raw/system-one-rep/RSH-050-system-experiment.json"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2019-0016",
+      "case_id": "RSH-001",
+      "primary_primitive": "double_free",
+      "replaces": "use_after_free",
+      "reason": "The evaluated upstream scenario terminates with an AddressSanitizer double-free when the converted Vec drops.",
+      "evidence_paths": [
+        "evaluation/config/rustsec_heap_harnesses.json#cases[RSH-001].scenarios[RSH-001-upstream].oracle.vulnerable",
+        "evaluation/raw/rustsec-heap-full-sweep-20260714/RSH-001-upstream/experiment.json"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0038",
+      "case_id": "RSH-053",
+      "primary_primitive": "use_after_free",
+      "replaces": "double_free",
+      "reason": "The validated Miri witness reports a dangling-reference use-after-free after the invalid-index panic.",
+      "evidence_paths": [
+        "evaluation/config/rustsec_heap_strong_batch_b_harnesses.json#cases[RSH-053].scenarios[RSH-053-rudra].oracle.vulnerable",
+        "evaluation/config/rustsec_heap_strong_batch_b_status.json#baseline_results[RSH-053].oracle.vulnerable",
+        "docs/evidence/rustsec-security-complete-20260714/raw/system-one-rep/RSH-053-system-experiment.json"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0047",
+      "case_id": "RSH-005",
+      "primary_primitive": "double_free",
+      "replaces": "uninitialized_read",
+      "reason": "The heap-adapted executable witness used by the allocator evaluation terminates with an AddressSanitizer double-free when the stale front Box is returned.",
+      "evidence_paths": [
+        "evaluation/config/rustsec_heap_strong_batch_d_harnesses.json#cases[RSH-005].scenarios[RSH-005-rudra-heap-adapter].oracle.vulnerable",
+        "evaluation/config/rustsec_heap_strong_batch_d_status.json#cases[RSH-005].observations.vulnerable",
+        "evaluation/config/rustsec_heap_strong_batch_d_status.json#cases[RSH-005].oracle.vulnerable"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0105",
+      "case_id": "RSH-054",
+      "primary_primitive": "double_free",
+      "replaces": "manual_classification_required",
+      "reason": "The pinned Rudra source record identifies panic-safety in abi_stable's copied DrainFilter, and the retained upstream control documents that unwinding drops elements 0 and 1 twice. The public archive adapter remains blocked, so this is a source-backed primitive classification rather than executable mechanism evidence.",
+      "evidence_paths": [
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-054/origin.rs",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-054/upstream_drain_filter.rs",
+        "evaluation/harnesses/rustsec_heap_expansion/RSH-054/BLOCKER.md"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0009",
+      "case_id": "RSH-057",
+      "primary_primitive": "use_after_free",
+      "replaces": "manual_classification_required",
+      "reason": "The validated Miri witness reports a dangling-reference use-after-free while unwinding duplicated array-element ownership.",
+      "evidence_paths": [
+        "evaluation/config/rustsec_heap_strong_batch_b_harnesses.json#cases[RSH-057].scenarios[RSH-057-rudra-derived].oracle.vulnerable",
+        "evaluation/config/rustsec_heap_strong_batch_b_status.json#baseline_results[RSH-057].oracle.vulnerable",
+        "docs/evidence/rustsec-security-complete-20260714/raw/system-one-rep/RSH-057-system-experiment.json"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0028",
+      "case_id": "RSH-060",
+      "primary_primitive": "out_of_bounds_read",
+      "replaces": "double_free",
+      "reason": "The validated AddressSanitizer witness reports a wild high-address out-of-bounds read caused by the wrong-length iterator.",
+      "evidence_paths": [
+        "evaluation/config/rustsec_heap_strong_batch_c_harnesses.json#cases[RSH-060].scenarios[RSH-060-rudra].oracle.vulnerable",
+        "evaluation/config/rustsec_heap_strong_batch_c_status.json#baseline_results[RSH-060].oracle.vulnerable",
+        "docs/evidence/rustsec-security-complete-20260714/raw/system-one-rep/RSH-060-system-experiment.json"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0128",
+      "case_id": "RSH-042",
+      "primary_primitive": "use_after_free",
+      "replaces": "double_free",
+      "reason": "The published executable witness reports a heap-use-after-free when Display reads String storage released by Keys::next; the derived scenario validates the subsequent address-reuse edge.",
+      "evidence_paths": [
+        "evaluation/config/rustsec_heap_expansion_harnesses.json#cases[RSH-042].scenarios[RSH-042-upstream].oracle.vulnerable",
+        "docs/evidence/rustsec-security-expansion-20260714/raw/published/RSH-042-system-experiment.json",
+        "docs/evidence/rustsec-security-expansion-20260714/raw/derived/RSH-042-derived-reuse-experiment.json"
+      ]
+    }
+  ],
+  "deferred_multi_primitive_cases": [
+    {
+      "advisory_id": "RUSTSEC-2020-0007",
+      "case_id": "RSH-002",
+      "retained_primary_primitive": "use_after_free",
+      "reason": "The curated corpus classifies the realloc ownership drift as use-after-free; the published scenario reports double-free and the derived scenario reports a stale invalid free.",
+      "evidence_paths": [
+        "evaluation/config/rustsec_heap_security_corpus.json#cases[RSH-002].taxonomy",
+        "evaluation/config/rustsec_heap_harnesses.json#cases[RSH-002].scenarios"
+      ]
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0053",
+      "case_id": "RSH-018",
+      "retained_primary_primitive": "double_free",
+      "reason": "The three executable scenarios cover double-free, invalid write, and heap-buffer-overflow; the curated corpus retains double-free as the primary primitive.",
+      "evidence_paths": [
+        "evaluation/config/rustsec_heap_security_corpus.json#cases[RSH-018].taxonomy",
+        "evaluation/config/rustsec_heap_harnesses.json#cases[RSH-018].scenarios"
+      ]
+    }
+  ]
+}

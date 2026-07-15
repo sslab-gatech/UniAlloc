@@ -1,0 +1,4 @@
+Package yottadb was not found in the pkg-config search path.
+Perhaps you should add the directory containing `yottadb.pc'
+to the PKG_CONFIG_PATH environment variable
+Package 'yottadb', required by 'virtual:world', not found

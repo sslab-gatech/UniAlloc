@@ -1,0 +1,26 @@
+--- a/src/chomp.rs
++++ b/src/chomp.rs
+@@ -5,8 +5,12 @@
+     pub fn new(value: &T) -> Self {
+         Self(value as *const _)
+     }
+-    pub fn inner(&self) -> T {
+-        unsafe { std::ptr::read_unaligned(self.0) }
++    pub fn inner(&self) -> T
++    where
++        T: Clone,
++    {
++        // Cloning preserves the ownership held by the borrowed source.
++        unsafe { (&*self.0).clone() }
+     }
+ }
+ 
+@@ -14,7 +18,7 @@
+     fn flatten(&self) -> Vec<T>;
+ }
+ 
+-impl<T> ChompFlatten<T> for Vec<Chomp<T>> {
++impl<T: Clone> ChompFlatten<T> for Vec<Chomp<T>> {
+     fn flatten(&self) -> Vec<T> {
+         self.iter().map(|c| c.inner()).collect()
+     }

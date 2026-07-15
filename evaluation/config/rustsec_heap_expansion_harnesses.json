@@ -1,0 +1,427 @@
+{
+  "cases": [
+    {
+      "advisory_id": "RUSTSEC-2026-0152",
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-041",
+      "crate": "oneringbuf",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-041/Cargo.lock.patched",
+          "sha256": "d03264cb5a437598e02869eab1698f8ad197a7ecb8cc4c19736c04ec8c30087b"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-041/Cargo.lock.vulnerable",
+          "sha256": "035b05647949bc8aa58b058ea1ae169513bcedf60a0a1731783f9140d2d89c84"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 53883,
+        "kind": "crates_io_archive",
+        "package": "oneringbuf",
+        "sha256": "6f357329a64ecd8eede34f99344bdaebb7b546b3f745bd32b3ced40663da47d1",
+        "upstream_commit": "643a24b30914068416dff9021a069c12c865a316",
+        "url": "https://static.crates.io/crates/oneringbuf/oneringbuf-0.8.0.crate",
+        "version": "0.8.0"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "release",
+          "classification_role": "published_negative_control",
+          "oracle": {
+            "patched_control": "oneringbuf 0.8.0 supported split control exits 0 with no AddressSanitizer finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports heap-use-after-free while the final cloned DroppableRef reads the freed iterator counter"
+          },
+          "origin_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/oneringbuf/RUSTSEC-2026-0152.md",
+          "patched_source": {
+            "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-041/patched.rs",
+            "source_sha256": "42478764ff3cb0c2287a73262b02aed82e456c32473df20c95c2eb3c910abffe"
+          },
+          "provenance": "rustsec_inline",
+          "required_environment": {
+            "ASAN_OPTIONS": "detect_leaks=0"
+          },
+          "rustflags": [],
+          "scenario_id": "RSH-041-advisory",
+          "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-041/main.rs",
+          "source_sha256": "45095b718a835eb6191539c1dac4cd86528b93cdd6605d2863ed12f38e599422"
+        },
+        {
+          "adapter_kind": "derived_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "derived_reuse_experiment",
+          "compiler_target_crates": [
+            "rsh-041-harness"
+          ],
+          "compiler_target_exclusion": {
+            "claim_boundary": "The experiment validates allocator policy under manual victim attribution and records automatic compiler victim coverage as unvalidated.",
+            "compiler_automatic_victim_coverage": false,
+            "reason": "The derived adapter supplies the vulnerable DroppableRef allocation and reclaim identity manually; the compiler audit binds the distinct harness replacement site.",
+            "subject_crate": "oneringbuf"
+          },
+          "oracle": {
+            "patched_control": "same address grooming exits 0",
+            "tool": "native_address_trace",
+            "vulnerable": "original address equals Replacement address after the boxed LocalHeapRB victim is reclaimed"
+          },
+          "origin_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/oneringbuf/RUSTSEC-2026-0152.md",
+          "patched_source": {
+            "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-041/derived_reuse_patched.rs",
+            "source_sha256": "2ef30190d22170685beb9cba470ee726405d4c4a225e2502e3a66431c0f0205b"
+          },
+          "provenance": "derived_adapter",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-041-derived-reuse",
+          "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-041/derived_reuse.rs",
+          "source_sha256": "2315a2f2c862a1e138a353a4465bccbd4454f5ef65bcdd8411d5b76c0958c58f",
+          "type_isolation_edge_annotation": {
+            "annotation_scope": [
+              "DroppableRef::from boxed LocalHeapRB victim allocation",
+              "second cloned DroppableRef victim reclaim"
+            ],
+            "claim_scope": "derived RSH-041 boxed LocalHeapRB-to-Replacement reuse edge only",
+            "expected_layout": {
+              "align": 8,
+              "size": 40
+            },
+            "kind": "manual_exact_vulnerability_edge_identity",
+            "replacement_semantic_type_fragment": "Box<witness::Replacement",
+            "replacement_source_file_fragment": "src/witness.rs:",
+            "schema_version": 1,
+            "victim_module_id": 5932164578187149314,
+            "victim_type_id": 5932164578187149313
+          }
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 53849,
+        "kind": "crates_io_archive",
+        "package": "oneringbuf",
+        "sha256": "c7e226c6fe0d458725a815f9b26971de3c1e78f4a0292bd174ca1a9936e41724",
+        "upstream_commit": "5a6f6c2655b55fea2753ed117e41eb53969194ad",
+        "url": "https://static.crates.io/crates/oneringbuf/oneringbuf-0.7.1.crate",
+        "version": "0.7.1"
+      }
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0128",
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-042",
+      "crate": "emap",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-042/Cargo.lock.patched",
+          "sha256": "7e8b9ceb693d9ac43879952a1f80491d19688993d108029517e020d12719bd2f"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-042/Cargo.lock.vulnerable",
+          "sha256": "7e8b9ceb693d9ac43879952a1f80491d19688993d108029517e020d12719bd2f"
+        }
+      },
+      "patched_dependency": {
+        "base_version": "0.0.13",
+        "kind": "scenario_local_patches"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "published_negative_control",
+          "local_patched_control": {
+            "kind": "hashed_local_patch",
+            "label": "upstream issue-comment shared-borrow fix",
+            "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-042/patches/issue-168.diff",
+            "resulting_source_files": {
+              "src/keys.rs": "440b6623aa681cbed558763bd4c877871ce55ecce6a9074bbbecb8b13e1cd14a"
+            },
+            "sha256": "3442a5f468cb655b2a2afd0d83d584d8b25114d851a52704d89f3fb5ef4fbbcc"
+          },
+          "oracle": {
+            "patched_control": "the upstream issue-comment fix exits 0 with no AddressSanitizer finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports heap-use-after-free when Display reads the String storage freed by Keys::next"
+          },
+          "origin_content_sha256": "88c4fcbfeba8f49e32467bd0978ff2a82c6560d35175aab014306baf14baa2a4",
+          "origin_url": "https://github.com/yegor256/emap/issues/168",
+          "provenance": "upstream_issue",
+          "required_environment": {
+            "ASAN_OPTIONS": "detect_leaks=0",
+            "RUSTC_BOOTSTRAP": "1"
+          },
+          "rustflags": [
+            "--cap-lints=warn",
+            "-Zsanitizer=address"
+          ],
+          "scenario_id": "RSH-042-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-042/main.rs",
+          "source_sha256": "8a74802046e2a17f5f8859bc79f543599cba522fc59a39866d15c1ccc74fc4cf"
+        },
+        {
+          "adapter_kind": "derived_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "derived_reuse_experiment",
+          "local_patched_control": {
+            "kind": "hashed_local_patch",
+            "label": "upstream issue-comment shared-borrow fix",
+            "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-042/patches/issue-168.diff",
+            "resulting_source_files": {
+              "src/keys.rs": "440b6623aa681cbed558763bd4c877871ce55ecce6a9074bbbecb8b13e1cd14a"
+            },
+            "sha256": "3442a5f468cb655b2a2afd0d83d584d8b25114d851a52704d89f3fb5ef4fbbcc"
+          },
+          "oracle": {
+            "patched_control": "safe same-identity same address grooming exits 0",
+            "tool": "native_address_trace",
+            "vulnerable": "original and Replacement addresses are equal after Keys::next frees the victim buffer"
+          },
+          "origin_content_sha256": "88c4fcbfeba8f49e32467bd0978ff2a82c6560d35175aab014306baf14baa2a4",
+          "origin_url": "https://github.com/yegor256/emap/issues/168",
+          "patched_source": {
+            "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-042/derived_reuse_patched.rs",
+            "source_sha256": "0ae34eda462c0222f84d1d81b7db5ac6c63fd8f8cd4f35b7c3ef284005b6a527"
+          },
+          "provenance": "derived_adapter",
+          "required_environment": {},
+          "rustflags": [
+            "--cap-lints=warn"
+          ],
+          "scenario_id": "RSH-042-derived-reuse",
+          "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-042/derived_reuse.rs",
+          "source_sha256": "bd0f7561624771957e32e328bf11de0ccc7677a5daebb5ac4c248e815c6afa4f",
+          "type_isolation_edge_annotation": {
+            "annotation_scope": [
+              "generic materialize_victim Vec<T> victim-buffer allocation",
+              "generic reclaim_next emap::Keys<V>::next victim-buffer reclaim"
+            ],
+            "claim_scope": "derived RSH-042 cross-identity Vec<u8>-buffer-to-Replacement reuse edge only",
+            "expected_layout": {
+              "align": 1,
+              "size": 64
+            },
+            "kind": "manual_exact_vulnerability_edge_identity",
+            "replacement_semantic_type_fragment": "Box<witness::Replacement",
+            "replacement_source_file_fragment": "src/witness.rs:",
+            "schema_version": 1,
+            "victim_module_id": 5932164479402901506,
+            "victim_type_id": 5932164479402901505
+          }
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 12642,
+        "kind": "crates_io_archive",
+        "package": "emap",
+        "sha256": "59cb1b59562f09a62311803c275c76e0b72e1b341decdfae4bde8284ad8c311c",
+        "upstream_commit": "ac176f7ea3882addb3ddbe9a0b3242c9b7c2eb41",
+        "url": "https://static.crates.io/crates/emap/emap-0.0.13.crate",
+        "version": "0.0.13"
+      }
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0131",
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-043",
+      "crate": "bitchomp",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-043/Cargo.lock.patched",
+          "sha256": "764e59cae5b3f01bf5e246bb2e5493edbf88be94323cb3620d2dff09101a9528"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-043/Cargo.lock.vulnerable",
+          "sha256": "764e59cae5b3f01bf5e246bb2e5493edbf88be94323cb3620d2dff09101a9528"
+        }
+      },
+      "patched_dependency": {
+        "base_version": "0.3.1",
+        "kind": "scenario_local_patches"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "allocator_boundary_detection_candidate",
+          "local_patched_control": {
+            "kind": "hashed_local_patch",
+            "label": "clone borrowed value instead of duplicating ownership",
+            "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-043/patches/clone-inner.patch",
+            "resulting_source_files": {
+              "src/chomp.rs": "f8932fbec9645f9836c8e84424ed93a9d26ec6d77eaa33e6bbf4d13e714c0d0f"
+            },
+            "sha256": "cc330eafd6a897492607ab21229d517deb3020f8ad29e5e2ae03cc0a5439c807"
+          },
+          "oracle": {
+            "patched_control": "local clone-based ownership patch exits 0 under AddressSanitizer",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports attempting double-free in Box<i32> deallocation"
+          },
+          "origin_content_sha256": "c462e06d077a7f227435f527d2e1d56339b388389125a8c30d76a0fc5c428477",
+          "origin_url": "https://github.com/KingPEPSALT/bitchomp/issues/5",
+          "provenance": "upstream_issue",
+          "required_environment": {
+            "RUSTC_BOOTSTRAP": "1"
+          },
+          "rustflags": [],
+          "scenario_id": "RSH-043-upstream",
+          "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-043/main.rs",
+          "source_sha256": "193d12ea7c8cc603170c1abb7245226715b8efcada28fe8760051ef6a0f594f8"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 19221,
+        "kind": "crates_io_archive",
+        "package": "bitchomp",
+        "sha256": "197bd7cb670a9b8b7238f62558f3c1823cd399795d70590a7bdfe7787073d2d5",
+        "upstream_commit": "7c0b1b6688ae15f9b95d807d2c3452117e38c79e",
+        "url": "https://static.crates.io/crates/bitchomp/bitchomp-0.3.1.crate",
+        "version": "0.3.1"
+      }
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0018",
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-044",
+      "crate": "qwutils",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-044/Cargo.lock.patched",
+          "sha256": "4874186ce5e27b08c747736ea006fd0539db125fe90e492236b9b677d30dcd03"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-044/Cargo.lock.vulnerable",
+          "sha256": "8ab0ed2ca679daf08c56d505dde6c375a9fce73fc304c44a431391f54f46d10a"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 12526,
+        "kind": "crates_io_archive",
+        "package": "qwutils",
+        "sha256": "323c0cf94637ca80ac4c6d11fd78c4eda25c9c61babc0200d16c53f66bdebf6d",
+        "upstream_commit": "833f581b5e63117fb87a7dad9f41a6532113fd88",
+        "url": "https://static.crates.io/crates/qwutils/qwutils-0.3.1.crate",
+        "version": "0.3.1"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "release",
+          "classification_role": "allocator_boundary_detection_candidate",
+          "oracle": {
+            "patched_control": "intentional panic fails safely without ASan finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports double-free"
+          },
+          "origin_content_sha256": "a48ed389c8e450e41ad00d92c0a1b07c7192bdcc686696b61979a70ae92870fb",
+          "origin_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0123-qwutils.rs",
+          "provenance": "rudra_poc_mechanical_payload_adapter",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-044-rudra",
+          "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-044/main.rs",
+          "source_sha256": "59b7d8cc844612b08151f50900e111048c4fb8a61f567f534e729d301c0259cc"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 11485,
+        "kind": "crates_io_archive",
+        "package": "qwutils",
+        "sha256": "6c107a0c7635e1319402f5564374098ff73bd15b23432dac5a06446f2122a272",
+        "upstream_commit": "c1a941e8ef5483ed96735068b59a553cd7171291",
+        "url": "https://static.crates.io/crates/qwutils/qwutils-0.2.0.crate",
+        "version": "0.2.0"
+      }
+    },
+    {
+      "advisory_id": "RUSTSEC-2021-0033",
+      "cargo": {
+        "default_features": true,
+        "features": [],
+        "patched_extra_dependencies": {},
+        "vulnerable_extra_dependencies": {}
+      },
+      "case_id": "RSH-045",
+      "crate": "stack_dst",
+      "lockfiles": {
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-045/Cargo.lock.patched",
+          "sha256": "57979b69b65453296a43cb0a7ed49211908556f1bfda12dfc00c3a72bdcbbfe9"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-045/Cargo.lock.vulnerable",
+          "sha256": "695044b9e4eb4ae217e1bd3146bcfa30216c036d2becab5c8b834b519713c7a4"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 13968,
+        "kind": "crates_io_archive",
+        "package": "stack_dst",
+        "sha256": "3da32d3178b2690b515008539f0215a5991bb82fad567bb520c2b1d9c4cc70da",
+        "upstream_commit": "6543ede4d550f39fc2ebfad67a09c70120a01370",
+        "url": "https://static.crates.io/crates/stack_dst/stack_dst-0.6.1.crate",
+        "version": "0.6.1"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "mechanical_adapter",
+          "cargo_profile": "release",
+          "classification_role": "allocator_boundary_detection_candidate",
+          "oracle": {
+            "patched_control": "intentional panic fails safely without ASan finding",
+            "tool": "asan",
+            "vulnerable": "AddressSanitizer reports double-free"
+          },
+          "origin_content_sha256": "8d424ae9544440768dae96dc0886acfeee4cb243f3cfe229d083d12878af18f8",
+          "origin_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0150-stack_dst.rs",
+          "provenance": "rudra_poc_mechanical_payload_adapter",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-045-rudra",
+          "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-045/main.rs",
+          "source_sha256": "4195e892e7ff82b6263ab52144684f4fb656a4ddffe85a8e5e1b0a3034e2f775"
+        }
+      ],
+      "vulnerable_dependency": {
+        "bytes": 13386,
+        "kind": "crates_io_archive",
+        "package": "stack_dst",
+        "sha256": "86d5e1dc9a5f4ac56709c87eeeacd25cb58eca03f4d6a3103ef65b6beb9307eb",
+        "upstream_commit": "b3c6c96adb309fd83b297caec752a26948cc1289",
+        "url": "https://static.crates.io/crates/stack_dst/stack_dst-0.6.0.crate",
+        "version": "0.6.0"
+      }
+    }
+  ],
+  "claim_grade": false,
+  "counts": {
+    "derived_reuse_scenario_count": 2,
+    "distinct_advisory_count": 5,
+    "harness_case_count": 5,
+    "published_scenario_count": 5,
+    "repository_scenario_count": 7
+  },
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-expansion-harnesses"
+}

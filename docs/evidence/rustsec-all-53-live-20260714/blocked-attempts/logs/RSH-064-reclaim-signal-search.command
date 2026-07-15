@@ -1,0 +1,1 @@
+zsh -lc rg\ -n\ -i\ \'pointer.\*already.\*released\|already.\*released\|double\[\ _-\]\?free\|reclaim\'\ \'/tmp/unialloc-blocked-reattempt-20260714/logs/RSH-064-reclaim_plain-node-run.pty\'\ \'/tmp/unialloc-blocked-reattempt-20260714/logs/RSH-064-reclaim_checks-node-run.pty\' 

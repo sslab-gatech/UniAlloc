@@ -1,0 +1,974 @@
+{
+  "archive_variants": [
+    "vulnerable",
+    "patched"
+  ],
+  "arms": [
+    {
+      "allocator_provenance": {
+        "compiler_wrapper_sha256": null,
+        "direct_cargo_configuration": null,
+        "direct_cargo_unialloc": false,
+        "force_loaded_unialloc": false,
+        "force_rlib_sha256": null,
+        "force_wrapper_sha256": null,
+        "single_unialloc_identity_enforced": true,
+        "unialloc_implementation_sha256": "13a1acd09b910ca43a67f6ae4a8477fb6db6092ede99dc4252dfa1bc6e098b1e"
+      },
+      "allocator_topology": {
+        "allocator_variant": "system",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "system",
+      "archive_variant": "vulnerable",
+      "binary_artifact": {
+        "bytes": 1677800,
+        "path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness",
+        "sha256": "3fb6286aafa1f7f727f1a2f74a010a258188bd91c2b326de43938b3e44d9dae4"
+      },
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--offline",
+          "--locked",
+          "--manifest-path",
+          "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/project/Cargo.toml",
+          "--jobs",
+          "1",
+          "--release",
+          "--target",
+          "x86_64-unknown-linux-gnu"
+        ],
+        "cwd": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/project",
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "ASAN_OPTIONS",
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 0,
+        "stderr": "warning: ../subject/smallvec-0.6.9/Cargo.toml: `package.edition` is unspecified, defaulting to `2015` while the latest is `2024`\nwarning: `smallvec` (manifest) generated 1 warning\n   Compiling smallvec v0.6.9 (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/subject/smallvec-0.6.9)\nwarning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead\n   --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/subject/smallvec-0.6.9/lib.rs:410:54\n    |\n410 |                 data: SmallVecData::from_inline(mem::uninitialized()),\n    |                                                      ^^^^^^^^^^^^^\n    |\n    = note: `#[warn(deprecated)]` on by default\n\nwarning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead\n   --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/subject/smallvec-0.6.9/lib.rs:451:68\n    |\n451 |                 let mut data = SmallVecData::<A>::from_inline(mem::uninitialized());\n    |                                                                    ^^^^^^^^^^^^^\n\nwarning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead\n   --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/subject/smallvec-0.6.9/lib.rs:655:60\n    |\n655 |                 self.data = SmallVecData::from_inline(mem::uninitialized());\n    |                                                            ^^^^^^^^^^^^^\n\nwarning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead\n   --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/subject/smallvec-0.6.9/lib.rs:718:60\n    |\n718 |                 self.data = SmallVecData::from_inline(mem::uninitialized());\n    |                                                            ^^^^^^^^^^^^^\n\nwarning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead\n    --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/subject/smallvec-0.6.9/lib.rs:1042:44\n     |\n1042 |                     let mut data: A = mem::uninitialized();\n     |                                            ^^^^^^^^^^^^^\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/subject/smallvec-0.6.9/lib.rs:600:18\n    |\n600 |     pub fn drain(&mut self) -> Drain<A::Item> {\n    |                  ^^^^^^^^^     ^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                  |\n    |                  the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\n    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default\nhelp: use `'_` for type paths\n    |\n600 |     pub fn drain(&mut self) -> Drain<'_, A::Item> {\n    |                                      +++\n\nwarning: specialization is experimental\n    --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/subject/smallvec-0.6.9/lib.rs:1256:5\n     |\n1256 |     default fn spec_from(slice: &'a [A::Item]) -> SmallVec<A> {\n     |     ^^^^^^^\n     |\n     = note: see issue #31844 <https://github.com/rust-lang/rust/issues/31844> for more information\n     = help: add `#![feature(specialization)]` to the crate attributes to enable\n     = note: this compiler was built on 2026-06-10; consider upgrading it if it is out of date\n     = warning: unstable syntax can change at any point in the future, causing a hard error!\n     = note: for more information, see issue #154045 <https://github.com/rust-lang/rust/issues/154045>\n\nwarning: `smallvec` (lib) generated 7 warnings (run `cargo fix --lib -p smallvec` to apply 1 suggestion)\n   Compiling rsh-048-harness v0.0.0 (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/project)\n    Finished `release` profile [optimized] target(s) in 0.29s\n",
+        "stderr_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/artifacts/build.stderr",
+        "stderr_sha256": "6dbe1cffea5deb2f887534aedc334fddc4b43de68d048984da645e81d80e7422",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/artifacts/build.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 0.308145173
+      },
+      "case_id": "RSH-048",
+      "claim_boundary": "This arm records reproduction and detector observations only. It does not establish mitigation, detection coverage, or exploit prevention.",
+      "claim_grade": false,
+      "crate": "smallvec",
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "efficacy_blockers": [
+        "critical_site_coverage_not_validated"
+      ],
+      "efficacy_eligible": false,
+      "execution_mode": "asan",
+      "execution_status": "completed",
+      "fingerprint": "aaa96c7d8fb1bc8e28b531fd58edc78fc4824028ce7984236b45aa10fdb0d325",
+      "fingerprint_payload": {
+        "allocator_variant": "system",
+        "archive_sha256": "c4488ae950c49d403731982257768f48fada354a5203fe81f9bb6f43ca9002be",
+        "archive_variant": "vulnerable",
+        "base_lock_sha256": "4123a57e6b335478b5bbf06b103f1d6a20dbd2a156c77799285d29a8f41022fd",
+        "cargo_config_sha256": "c29c2607f4e15f5e5f839f9bdef26dfd401230491358f70faaff82494de33004",
+        "catalog_sha256": "3ebacfd4609fa06901d6b0aeb8a4a25ac549ccca578822fb93979b5a085f3659",
+        "effective_lock_sha256": "4123a57e6b335478b5bbf06b103f1d6a20dbd2a156c77799285d29a8f41022fd",
+        "effective_manifest_sha256": "ee69cbcc51ef3c0af5d80f1d3f77e8c01449fa713ebc20a8fe2292990a7bde8f",
+        "materializer_sha256": "ea1de13aa79777a5d273b9e314850ae966d0ec036b9a99fe33d0c7232fe425a7",
+        "orchestrator_sha256": "7981732efbe19c89e89d1bbfdfa4e936d899330c66a7c626e6eaf265fd66ca0d",
+        "realworld_driver_sha256": "c0b1b1eedc0d95d8ac702c83699f7231845a5a9eea9e1e3b3efb5b6fe6be23c4",
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "scenario_id": "RSH-048-upstream",
+        "schema_version": 1,
+        "source_sha256": "8a96600e70ca4930c7bb9bf0d1c512b9b0ee8d32368f28a52eb10d78d71ae541",
+        "target_crates": [
+          "smallvec",
+          "rsh_048_harness"
+        ],
+        "toolchain": {
+          "cargo": {
+            "command": [
+              "cargo",
+              "+nightly-2026-06-11",
+              "-V"
+            ],
+            "exit_code": 0,
+            "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+            "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+          },
+          "name": "nightly-2026-06-11",
+          "rustc": {
+            "command": [
+              "rustc",
+              "+nightly-2026-06-11",
+              "-vV"
+            ],
+            "exit_code": 0,
+            "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+            "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+          },
+          "target": "x86_64-unknown-linux-gnu"
+        },
+        "transformed_sources": {
+          "original_source_sha256": "8a96600e70ca4930c7bb9bf0d1c512b9b0ee8d32368f28a52eb10d78d71ae541",
+          "witness_module_sha256": "ffb16e89ea962c58b773077946b18008e6d570b7cff1950049259a272b3ebc20",
+          "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+        },
+        "unialloc_implementation_sha256": "13a1acd09b910ca43a67f6ae4a8477fb6db6092ede99dc4252dfa1bc6e098b1e"
+      },
+      "full_rebuild_required": true,
+      "ground_truth_arm": true,
+      "lock_resolution": null,
+      "materialization": {
+        "archive_bytes": 21548,
+        "archive_path": "/tmp/strong-batch-a-cache/archives/smallvec-0.6.9.crate",
+        "archive_sha256": "c4488ae950c49d403731982257768f48fada354a5203fe81f9bb6f43ca9002be",
+        "cargo_lock_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-048/Cargo.lock.vulnerable",
+        "cargo_lock_sha256": "4123a57e6b335478b5bbf06b103f1d6a20dbd2a156c77799285d29a8f41022fd",
+        "case_id": "RSH-048",
+        "claim_grade": false,
+        "dependency_package": "smallvec",
+        "dependency_version": "0.6.9",
+        "oracle": {
+          "patched_control": "smallvec 0.6.10 preserves [0, 1, 2] and exits 0 with no AddressSanitizer finding",
+          "tool": "asan",
+          "vulnerable": "AddressSanitizer reports attempting double-free after grow(current_capacity) frees the spilled backing allocation"
+        },
+        "required_environment": {
+          "ASAN_OPTIONS": "detect_leaks=0"
+        },
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "scenario_id": "RSH-048-upstream",
+        "schema_version": 1,
+        "source": "unialloc-rustsec-heap-materialization",
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-048/main.rs",
+        "source_sha256": "8a96600e70ca4930c7bb9bf0d1c512b9b0ee8d32368f28a52eb10d78d71ae541",
+        "subject_directory": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work/subject/smallvec-0.6.9",
+        "variant": "vulnerable",
+        "work_directory": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/work"
+      },
+      "oracle_validation": {
+        "boundary": "A clean exit or absent tool finding does not establish mitigation; matched repeated baseline/treatment evidence is required.",
+        "claim_grade": false,
+        "diagnostic_only": false,
+        "expected_contract": {
+          "compile_error_codes": [],
+          "expected_finding_signature": "asan_double_free",
+          "kind": "asan_finding",
+          "parse_status": "parsed",
+          "required_evidence": [
+            "asan_double_free",
+            "run_nonzero"
+          ]
+        },
+        "expected_description": "AddressSanitizer reports attempting double-free after grow(current_capacity) frees the spilled backing allocation",
+        "expected_oracle_observed": true,
+        "matched_compile_error_codes": [],
+        "mitigation_inferred": false,
+        "native_diagnostic_signatures": [],
+        "oracle_role": "catalog_oracle",
+        "repetition_observations": [
+          {
+            "address_reuse_observed": false,
+            "claim_grade": false,
+            "clean_exit": false,
+            "exit_code": 1,
+            "mitigation_inferred": false,
+            "native_diagnostic_signature": null,
+            "repetition": 1,
+            "rust_panic_or_assertion_observed": false,
+            "sanitizer_finding_observed": true,
+            "timed_out": false,
+            "tool_finding_signature": "asan_double_free"
+          }
+        ],
+        "status": "tool_finding_observed",
+        "tool_finding_signatures": [
+          "asan_double_free"
+        ]
+      },
+      "pass_audit_summary": {
+        "audit_file_count": 0,
+        "audit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "claim_grade_file_count": 0,
+        "crate_names": [],
+        "direct_allocator_rewrites_applied": 0,
+        "direct_layout_allocator_rewrites_applied": 0,
+        "semantic_deallocation_like_rewrites_applied": 0,
+        "semantic_drop_rewrites_applied": 0,
+        "semantic_ownership_transfer_rewrites_applied": 0,
+        "semantic_rewrites_applied": 0,
+        "semantic_scope_rewrites_applied": 0,
+        "total_compiler_rewrites_applied": 0,
+        "unresolved_file_count": 0
+      },
+      "pass_audit_validation": {
+        "claim_grade": false,
+        "compiler_rewrite_counts": {
+          "direct_allocator_rewrites_applied": 0,
+          "direct_layout_allocator_rewrites_applied": 0,
+          "semantic_ownership_transfer_rewrites_applied": 0,
+          "semantic_rewrites_applied": 0,
+          "total_compiler_rewrites_applied": 0
+        },
+        "critical_site_coverage_validated": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated",
+          "no_compiler_rewrite_observed"
+        ],
+        "efficacy_eligible": false,
+        "rewrite_route": "none",
+        "status": "not_applicable",
+        "valid": null,
+        "validation_scope": "target_crate_presence_and_force_load_topology_only"
+      },
+      "pass_audits": [],
+      "pass_logs": [],
+      "platform_constraints": {},
+      "repetition_summary": {
+        "address_reuse_observation_count": 0,
+        "claim_grade": false,
+        "clean_exit_count": 0,
+        "executed": 1,
+        "exit_codes": [
+          1
+        ],
+        "mitigation_inferred": false,
+        "native_diagnostic_signal_count": 0,
+        "requested": 1,
+        "timed_out_count": 0,
+        "tool_finding_count": 1
+      },
+      "repetitions_requested": 1,
+      "required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "reuse_denial_evidence": {
+        "claim_grade": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "run": {
+        "command": [
+          "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness"
+        ],
+        "cwd": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release",
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "ASAN_OPTIONS",
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 1,
+        "stderr": "[18, 0, 0]\n=================================================================\n==3724081==ERROR: AddressSanitizer: attempting double-free on 0x7bcd501e0010 in thread T0:\n    #0 0x563f1a5ad7c6 in free (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xcf7c6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #1 0x563f1a5dc3cd in rsh_048_harness::main rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #2 0x563f1a5dbed5 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #3 0x563f1a5dbefb in std::rt::lang_start::<()>::{closure#0} rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #4 0x563f1a601aa6 in std::rt::lang_start_internal (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x123aa6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #5 0x563f1a5dc808 in main (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xfe808) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #6 0x7fad50e2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #7 0x7fad50e2a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #8 0x563f1a521f14 in _start (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x43f14) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n\n0x7bcd501e0010 is located 0 bytes inside of 4-byte region [0x7bcd501e0010,0x7bcd501e0014)\nfreed by thread T0 here:\n    #0 0x563f1a5ad7c6 in free (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xcf7c6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #1 0x563f1a5dc36c in rsh_048_harness::main rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #2 0x563f1a5dbed5 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #3 0x563f1a5dbefb in std::rt::lang_start::<()>::{closure#0} rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #4 0x563f1a601aa6 in std::rt::lang_start_internal (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x123aa6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #5 0x563f1a5dc808 in main (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xfe808) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #6 0x7fad50e2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #7 0x7fad50e2a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #8 0x563f1a521f14 in _start (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x43f14) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n\npreviously allocated by thread T0 here:\n    #0 0x563f1a5ada64 in malloc (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xcfa64) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #1 0x563f1a5dc338 in rsh_048_harness::main rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #2 0x563f1a5dbed5 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #3 0x563f1a5dbefb in std::rt::lang_start::<()>::{closure#0} rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #4 0x563f1a601aa6 in std::rt::lang_start_internal (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x123aa6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #5 0x563f1a5dc808 in main (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xfe808) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #6 0x7fad50e2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #7 0x7fad50e2a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #8 0x563f1a521f14 in _start (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x43f14) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n\nSUMMARY: AddressSanitizer: double-free (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xcf7c6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759) in free\n==3724081==ABORTING\n",
+        "stderr_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/artifacts/run-001.stderr",
+        "stderr_sha256": "1bbafaba3875baea24e775351a59d83685141ee66f8cef2a27e57d5494f2ffdb",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/artifacts/run-001.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 0.312212379
+      },
+      "runs": [
+        {
+          "command": [
+            "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness"
+          ],
+          "cwd": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release",
+          "environment": {
+            "ASAN_OPTIONS": "detect_leaks=0",
+            "CARGO_INCREMENTAL": "0",
+            "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target",
+            "HOME": "/home/hanqing",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "LOGNAME": "hanqing",
+            "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+            "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+            "SHELL": "/usr/bin/zsh",
+            "TERM": "xterm-256color",
+            "USER": "hanqing"
+          },
+          "environment_allowlist": [
+            "ASAN_OPTIONS",
+            "CARGO_INCREMENTAL",
+            "CARGO_TARGET_DIR",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LOGNAME",
+            "PATH",
+            "RUSTFLAGS",
+            "SHELL",
+            "TERM",
+            "USER"
+          ],
+          "exit_code": 1,
+          "stderr": "[18, 0, 0]\n=================================================================\n==3724081==ERROR: AddressSanitizer: attempting double-free on 0x7bcd501e0010 in thread T0:\n    #0 0x563f1a5ad7c6 in free (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xcf7c6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #1 0x563f1a5dc3cd in rsh_048_harness::main rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #2 0x563f1a5dbed5 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #3 0x563f1a5dbefb in std::rt::lang_start::<()>::{closure#0} rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #4 0x563f1a601aa6 in std::rt::lang_start_internal (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x123aa6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #5 0x563f1a5dc808 in main (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xfe808) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #6 0x7fad50e2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #7 0x7fad50e2a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #8 0x563f1a521f14 in _start (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x43f14) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n\n0x7bcd501e0010 is located 0 bytes inside of 4-byte region [0x7bcd501e0010,0x7bcd501e0014)\nfreed by thread T0 here:\n    #0 0x563f1a5ad7c6 in free (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xcf7c6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #1 0x563f1a5dc36c in rsh_048_harness::main rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #2 0x563f1a5dbed5 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #3 0x563f1a5dbefb in std::rt::lang_start::<()>::{closure#0} rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #4 0x563f1a601aa6 in std::rt::lang_start_internal (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x123aa6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #5 0x563f1a5dc808 in main (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xfe808) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #6 0x7fad50e2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #7 0x7fad50e2a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #8 0x563f1a521f14 in _start (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x43f14) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n\npreviously allocated by thread T0 here:\n    #0 0x563f1a5ada64 in malloc (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xcfa64) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #1 0x563f1a5dc338 in rsh_048_harness::main rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #2 0x563f1a5dbed5 in std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()> rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #3 0x563f1a5dbefb in std::rt::lang_start::<()>::{closure#0} rsh_048_harness.5cf1c402a435c6b2-cgu.0\n    #4 0x563f1a601aa6 in std::rt::lang_start_internal (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x123aa6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #5 0x563f1a5dc808 in main (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xfe808) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n    #6 0x7fad50e2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16\n    #7 0x7fad50e2a28a in __libc_start_main csu/../csu/libc-start.c:360:3\n    #8 0x563f1a521f14 in _start (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0x43f14) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759)\n\nSUMMARY: AddressSanitizer: double-free (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness+0xcf7c6) (BuildId: ca68c50afa0ab95b6179b37b90d6e4d603165759) in free\n==3724081==ABORTING\n",
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "1bbafaba3875baea24e775351a59d83685141ee66f8cef2a27e57d5494f2ffdb",
+          "stdout": "",
+          "stdout_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/artifacts/run-001.stdout",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "wall_seconds": 0.312212379
+        }
+      ],
+      "runtime_stats": null,
+      "runtime_stats_by_repetition": [],
+      "runtime_stats_validation": {
+        "claim_grade": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated"
+        ],
+        "efficacy_eligible": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ]
+      },
+      "scenario_id": "RSH-048-upstream",
+      "schema_version": 1,
+      "source": "unialloc-rustsec-heap-experiment",
+      "source_provenance": {
+        "archive_sha256": "c4488ae950c49d403731982257768f48fada354a5203fe81f9bb6f43ca9002be",
+        "base_lock_sha256": "4123a57e6b335478b5bbf06b103f1d6a20dbd2a156c77799285d29a8f41022fd",
+        "effective_lock_sha256": "4123a57e6b335478b5bbf06b103f1d6a20dbd2a156c77799285d29a8f41022fd",
+        "original_source_sha256": "8a96600e70ca4930c7bb9bf0d1c512b9b0ee8d32368f28a52eb10d78d71ae541",
+        "source_sha256": "8a96600e70ca4930c7bb9bf0d1c512b9b0ee8d32368f28a52eb10d78d71ae541",
+        "witness_module_sha256": "ffb16e89ea962c58b773077946b18008e6d570b7cff1950049259a272b3ebc20",
+        "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+      },
+      "target_crates": [
+        "smallvec",
+        "rsh_048_harness"
+      ],
+      "target_reset": false,
+      "target_reset_reasons": [
+        "fingerprint_changed"
+      ],
+      "tool": "asan",
+      "toolchain": {
+        "cargo": {
+          "command": [
+            "cargo",
+            "+nightly-2026-06-11",
+            "-V"
+          ],
+          "exit_code": 0,
+          "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+          "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+        },
+        "name": "nightly-2026-06-11",
+        "rustc": {
+          "command": [
+            "rustc",
+            "+nightly-2026-06-11",
+            "-vV"
+          ],
+          "exit_code": 0,
+          "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+          "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+        },
+        "target": "x86_64-unknown-linux-gnu"
+      }
+    },
+    {
+      "allocator_provenance": {
+        "compiler_wrapper_sha256": null,
+        "direct_cargo_configuration": null,
+        "direct_cargo_unialloc": false,
+        "force_loaded_unialloc": false,
+        "force_rlib_sha256": null,
+        "force_wrapper_sha256": null,
+        "single_unialloc_identity_enforced": true,
+        "unialloc_implementation_sha256": "13a1acd09b910ca43a67f6ae4a8477fb6db6092ede99dc4252dfa1bc6e098b1e"
+      },
+      "allocator_topology": {
+        "allocator_variant": "system",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "system",
+      "archive_variant": "patched",
+      "binary_artifact": {
+        "bytes": 1677928,
+        "path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness",
+        "sha256": "9ceb4ca0593fc9936179cd25bf1925ba901e979d244e31fc2349f1d749d61269"
+      },
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--offline",
+          "--locked",
+          "--manifest-path",
+          "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/project/Cargo.toml",
+          "--jobs",
+          "1",
+          "--release",
+          "--target",
+          "x86_64-unknown-linux-gnu"
+        ],
+        "cwd": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/project",
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "ASAN_OPTIONS",
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 0,
+        "stderr": "warning: ../subject/smallvec-0.6.10/Cargo.toml: `package.edition` is unspecified, defaulting to `2015` while the latest is `2024`\nwarning: `smallvec` (manifest) generated 1 warning\n   Compiling smallvec v0.6.10 (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/subject/smallvec-0.6.10)\nwarning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead\n   --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/subject/smallvec-0.6.10/lib.rs:410:54\n    |\n410 |                 data: SmallVecData::from_inline(mem::uninitialized()),\n    |                                                      ^^^^^^^^^^^^^\n    |\n    = note: `#[warn(deprecated)]` on by default\n\nwarning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead\n   --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/subject/smallvec-0.6.10/lib.rs:451:68\n    |\n451 |                 let mut data = SmallVecData::<A>::from_inline(mem::uninitialized());\n    |                                                                    ^^^^^^^^^^^^^\n\nwarning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead\n   --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/subject/smallvec-0.6.10/lib.rs:655:60\n    |\n655 |                 self.data = SmallVecData::from_inline(mem::uninitialized());\n    |                                                            ^^^^^^^^^^^^^\n\nwarning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead\n   --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/subject/smallvec-0.6.10/lib.rs:721:60\n    |\n721 |                 self.data = SmallVecData::from_inline(mem::uninitialized());\n    |                                                            ^^^^^^^^^^^^^\n\nwarning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead\n    --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/subject/smallvec-0.6.10/lib.rs:1045:44\n     |\n1045 |                     let mut data: A = mem::uninitialized();\n     |                                            ^^^^^^^^^^^^^\n\nwarning: hiding a lifetime that's elided elsewhere is confusing\n   --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/subject/smallvec-0.6.10/lib.rs:600:18\n    |\n600 |     pub fn drain(&mut self) -> Drain<A::Item> {\n    |                  ^^^^^^^^^     ^^^^^^^^^^^^^^ the same lifetime is hidden here\n    |                  |\n    |                  the lifetime is elided here\n    |\n    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing\n    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default\nhelp: use `'_` for type paths\n    |\n600 |     pub fn drain(&mut self) -> Drain<'_, A::Item> {\n    |                                      +++\n\nwarning: specialization is experimental\n    --> /tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/subject/smallvec-0.6.10/lib.rs:1259:5\n     |\n1259 |     default fn spec_from(slice: &'a [A::Item]) -> SmallVec<A> {\n     |     ^^^^^^^\n     |\n     = note: see issue #31844 <https://github.com/rust-lang/rust/issues/31844> for more information\n     = help: add `#![feature(specialization)]` to the crate attributes to enable\n     = note: this compiler was built on 2026-06-10; consider upgrading it if it is out of date\n     = warning: unstable syntax can change at any point in the future, causing a hard error!\n     = note: for more information, see issue #154045 <https://github.com/rust-lang/rust/issues/154045>\n\nwarning: `smallvec` (lib) generated 7 warnings (run `cargo fix --lib -p smallvec` to apply 1 suggestion)\n   Compiling rsh-048-harness v0.0.0 (/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/project)\n    Finished `release` profile [optimized] target(s) in 0.29s\n",
+        "stderr_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/artifacts/build.stderr",
+        "stderr_sha256": "28970b791f22baeb16f9f50fc26ee500fe2cdf9b04a0d562a4385372ba472f77",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/artifacts/build.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 0.305824639
+      },
+      "case_id": "RSH-048",
+      "claim_boundary": "This arm records reproduction and detector observations only. It does not establish mitigation, detection coverage, or exploit prevention.",
+      "claim_grade": false,
+      "crate": "smallvec",
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "efficacy_blockers": [
+        "critical_site_coverage_not_validated"
+      ],
+      "efficacy_eligible": false,
+      "execution_mode": "asan",
+      "execution_status": "completed",
+      "fingerprint": "a0393a9e8e311b0dcdaeed704afc81fdf9ca8d8e41748ecb8c85b1a0e52fec55",
+      "fingerprint_payload": {
+        "allocator_variant": "system",
+        "archive_sha256": "ab606a9c5e214920bb66c458cd7be8ef094f813f20fe77a54cc7dbfff220d4b7",
+        "archive_variant": "patched",
+        "base_lock_sha256": "16072af991e1e8e7f57200174df77bb30966e6a4b8a270574e97c64a5cc891f3",
+        "cargo_config_sha256": "c29c2607f4e15f5e5f839f9bdef26dfd401230491358f70faaff82494de33004",
+        "catalog_sha256": "3ebacfd4609fa06901d6b0aeb8a4a25ac549ccca578822fb93979b5a085f3659",
+        "effective_lock_sha256": "16072af991e1e8e7f57200174df77bb30966e6a4b8a270574e97c64a5cc891f3",
+        "effective_manifest_sha256": "0198b1ee6957d82220ea3c02c30f54fca1155a7e7b2f6bd2ef506d45595a37ae",
+        "materializer_sha256": "ea1de13aa79777a5d273b9e314850ae966d0ec036b9a99fe33d0c7232fe425a7",
+        "orchestrator_sha256": "7981732efbe19c89e89d1bbfdfa4e936d899330c66a7c626e6eaf265fd66ca0d",
+        "realworld_driver_sha256": "c0b1b1eedc0d95d8ac702c83699f7231845a5a9eea9e1e3b3efb5b6fe6be23c4",
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "scenario_id": "RSH-048-upstream",
+        "schema_version": 1,
+        "source_sha256": "8a96600e70ca4930c7bb9bf0d1c512b9b0ee8d32368f28a52eb10d78d71ae541",
+        "target_crates": [
+          "smallvec",
+          "rsh_048_harness"
+        ],
+        "toolchain": {
+          "cargo": {
+            "command": [
+              "cargo",
+              "+nightly-2026-06-11",
+              "-V"
+            ],
+            "exit_code": 0,
+            "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+            "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+          },
+          "name": "nightly-2026-06-11",
+          "rustc": {
+            "command": [
+              "rustc",
+              "+nightly-2026-06-11",
+              "-vV"
+            ],
+            "exit_code": 0,
+            "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+            "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+          },
+          "target": "x86_64-unknown-linux-gnu"
+        },
+        "transformed_sources": {
+          "original_source_sha256": "8a96600e70ca4930c7bb9bf0d1c512b9b0ee8d32368f28a52eb10d78d71ae541",
+          "witness_module_sha256": "ffb16e89ea962c58b773077946b18008e6d570b7cff1950049259a272b3ebc20",
+          "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+        },
+        "unialloc_implementation_sha256": "13a1acd09b910ca43a67f6ae4a8477fb6db6092ede99dc4252dfa1bc6e098b1e"
+      },
+      "full_rebuild_required": true,
+      "ground_truth_arm": true,
+      "lock_resolution": null,
+      "materialization": {
+        "archive_bytes": 22064,
+        "archive_path": "/tmp/strong-batch-a-cache/archives/smallvec-0.6.10.crate",
+        "archive_sha256": "ab606a9c5e214920bb66c458cd7be8ef094f813f20fe77a54cc7dbfff220d4b7",
+        "cargo_lock_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-048/Cargo.lock.patched",
+        "cargo_lock_sha256": "16072af991e1e8e7f57200174df77bb30966e6a4b8a270574e97c64a5cc891f3",
+        "case_id": "RSH-048",
+        "claim_grade": false,
+        "dependency_package": "smallvec",
+        "dependency_version": "0.6.10",
+        "oracle": {
+          "patched_control": "smallvec 0.6.10 preserves [0, 1, 2] and exits 0 with no AddressSanitizer finding",
+          "tool": "asan",
+          "vulnerable": "AddressSanitizer reports attempting double-free after grow(current_capacity) frees the spilled backing allocation"
+        },
+        "required_environment": {
+          "ASAN_OPTIONS": "detect_leaks=0"
+        },
+        "rustflags": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "scenario_id": "RSH-048-upstream",
+        "schema_version": 1,
+        "source": "unialloc-rustsec-heap-materialization",
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-048/main.rs",
+        "source_sha256": "8a96600e70ca4930c7bb9bf0d1c512b9b0ee8d32368f28a52eb10d78d71ae541",
+        "subject_directory": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work/subject/smallvec-0.6.10",
+        "variant": "patched",
+        "work_directory": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/work"
+      },
+      "oracle_validation": {
+        "boundary": "A clean exit or absent tool finding does not establish mitigation; matched repeated baseline/treatment evidence is required.",
+        "claim_grade": false,
+        "diagnostic_only": false,
+        "expected_contract": {
+          "compile_error_codes": [],
+          "expected_finding_signature": null,
+          "kind": "clean_exit",
+          "parse_status": "parsed",
+          "required_evidence": [
+            "clean_exit",
+            "no_sanitizer_finding"
+          ]
+        },
+        "expected_description": "smallvec 0.6.10 preserves [0, 1, 2] and exits 0 with no AddressSanitizer finding",
+        "expected_oracle_observed": true,
+        "matched_compile_error_codes": [],
+        "mitigation_inferred": false,
+        "native_diagnostic_signatures": [],
+        "oracle_role": "catalog_oracle",
+        "repetition_observations": [
+          {
+            "address_reuse_observed": false,
+            "claim_grade": false,
+            "clean_exit": true,
+            "exit_code": 0,
+            "mitigation_inferred": false,
+            "native_diagnostic_signature": null,
+            "repetition": 1,
+            "rust_panic_or_assertion_observed": false,
+            "sanitizer_finding_observed": false,
+            "timed_out": false,
+            "tool_finding_signature": null
+          }
+        ],
+        "status": "clean_tool_runs_observed",
+        "tool_finding_signatures": []
+      },
+      "pass_audit_summary": {
+        "audit_file_count": 0,
+        "audit_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "claim_grade_file_count": 0,
+        "crate_names": [],
+        "direct_allocator_rewrites_applied": 0,
+        "direct_layout_allocator_rewrites_applied": 0,
+        "semantic_deallocation_like_rewrites_applied": 0,
+        "semantic_drop_rewrites_applied": 0,
+        "semantic_ownership_transfer_rewrites_applied": 0,
+        "semantic_rewrites_applied": 0,
+        "semantic_scope_rewrites_applied": 0,
+        "total_compiler_rewrites_applied": 0,
+        "unresolved_file_count": 0
+      },
+      "pass_audit_validation": {
+        "claim_grade": false,
+        "compiler_rewrite_counts": {
+          "direct_allocator_rewrites_applied": 0,
+          "direct_layout_allocator_rewrites_applied": 0,
+          "semantic_ownership_transfer_rewrites_applied": 0,
+          "semantic_rewrites_applied": 0,
+          "total_compiler_rewrites_applied": 0
+        },
+        "critical_site_coverage_validated": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated",
+          "no_compiler_rewrite_observed"
+        ],
+        "efficacy_eligible": false,
+        "rewrite_route": "none",
+        "status": "not_applicable",
+        "valid": null,
+        "validation_scope": "target_crate_presence_and_force_load_topology_only"
+      },
+      "pass_audits": [],
+      "pass_logs": [],
+      "platform_constraints": {},
+      "repetition_summary": {
+        "address_reuse_observation_count": 0,
+        "claim_grade": false,
+        "clean_exit_count": 1,
+        "executed": 1,
+        "exit_codes": [
+          0
+        ],
+        "mitigation_inferred": false,
+        "native_diagnostic_signal_count": 0,
+        "requested": 1,
+        "timed_out_count": 0,
+        "tool_finding_count": 0
+      },
+      "repetitions_requested": 1,
+      "required_environment": {
+        "ASAN_OPTIONS": "detect_leaks=0"
+      },
+      "reuse_denial_evidence": {
+        "claim_grade": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "run": {
+        "command": [
+          "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness"
+        ],
+        "cwd": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/target/x86_64-unknown-linux-gnu/release",
+        "environment": {
+          "ASAN_OPTIONS": "detect_leaks=0",
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/target",
+          "HOME": "/home/hanqing",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "LOGNAME": "hanqing",
+          "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+          "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+          "SHELL": "/usr/bin/zsh",
+          "TERM": "xterm-256color",
+          "USER": "hanqing"
+        },
+        "environment_allowlist": [
+          "ASAN_OPTIONS",
+          "CARGO_INCREMENTAL",
+          "CARGO_TARGET_DIR",
+          "HOME",
+          "LANG",
+          "LC_ALL",
+          "LOGNAME",
+          "PATH",
+          "RUSTFLAGS",
+          "SHELL",
+          "TERM",
+          "USER"
+        ],
+        "exit_code": 0,
+        "stderr": "[0, 1, 2]\n",
+        "stderr_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/artifacts/run-001.stderr",
+        "stderr_sha256": "6473ec9f8048904982cc16b88f50f6eb0577bad0e88a30c2917b3589238596e3",
+        "stdout": "",
+        "stdout_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/artifacts/run-001.stdout",
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "timed_out": false,
+        "wall_seconds": 0.004045984
+      },
+      "runs": [
+        {
+          "command": [
+            "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/target/x86_64-unknown-linux-gnu/release/rsh-048-harness"
+          ],
+          "cwd": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/target/x86_64-unknown-linux-gnu/release",
+          "environment": {
+            "ASAN_OPTIONS": "detect_leaks=0",
+            "CARGO_INCREMENTAL": "0",
+            "CARGO_TARGET_DIR": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/target",
+            "HOME": "/home/hanqing",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "LOGNAME": "hanqing",
+            "PATH": "/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-path:/home/hanqing/.codex/tmp/arg0/codex-arg0oW9rPR:/home/hanqing/.omx-runs/run-20260713173306-6495/.omx/runtime/bin:/home/hanqing/.bun/bin:/home/hanqing/.bun/bin:/home/hanqing/.local/bin:/home/hanqing/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/home/hanqing/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+            "RUSTFLAGS": "-Ainvalid_reference_casting -Adangerous_implicit_autorefs --cap-lints=warn -Zsanitizer=address -Cforce-frame-pointers=yes",
+            "SHELL": "/usr/bin/zsh",
+            "TERM": "xterm-256color",
+            "USER": "hanqing"
+          },
+          "environment_allowlist": [
+            "ASAN_OPTIONS",
+            "CARGO_INCREMENTAL",
+            "CARGO_TARGET_DIR",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LOGNAME",
+            "PATH",
+            "RUSTFLAGS",
+            "SHELL",
+            "TERM",
+            "USER"
+          ],
+          "exit_code": 0,
+          "stderr": "[0, 1, 2]\n",
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "6473ec9f8048904982cc16b88f50f6eb0577bad0e88a30c2917b3589238596e3",
+          "stdout": "",
+          "stdout_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/artifacts/run-001.stdout",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "wall_seconds": 0.004045984
+        }
+      ],
+      "runtime_stats": null,
+      "runtime_stats_by_repetition": [],
+      "runtime_stats_validation": {
+        "claim_grade": false,
+        "efficacy_blockers": [
+          "critical_site_coverage_not_validated"
+        ],
+        "efficacy_eligible": false,
+        "repetitions": [],
+        "status": "not_applicable",
+        "valid": null
+      },
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn",
+          "-Zsanitizer=address",
+          "-Cforce-frame-pointers=yes"
+        ]
+      },
+      "scenario_id": "RSH-048-upstream",
+      "schema_version": 1,
+      "source": "unialloc-rustsec-heap-experiment",
+      "source_provenance": {
+        "archive_sha256": "ab606a9c5e214920bb66c458cd7be8ef094f813f20fe77a54cc7dbfff220d4b7",
+        "base_lock_sha256": "16072af991e1e8e7f57200174df77bb30966e6a4b8a270574e97c64a5cc891f3",
+        "effective_lock_sha256": "16072af991e1e8e7f57200174df77bb30966e6a4b8a270574e97c64a5cc891f3",
+        "original_source_sha256": "8a96600e70ca4930c7bb9bf0d1c512b9b0ee8d32368f28a52eb10d78d71ae541",
+        "source_sha256": "8a96600e70ca4930c7bb9bf0d1c512b9b0ee8d32368f28a52eb10d78d71ae541",
+        "witness_module_sha256": "ffb16e89ea962c58b773077946b18008e6d570b7cff1950049259a272b3ebc20",
+        "wrapper_source_sha256": "3fe1a01706187ffb26ae9e2ad2991aada3f3a55f0e7ca0c595e05e261de55d1a"
+      },
+      "target_crates": [
+        "smallvec",
+        "rsh_048_harness"
+      ],
+      "target_reset": false,
+      "target_reset_reasons": [
+        "fingerprint_changed"
+      ],
+      "tool": "asan",
+      "toolchain": {
+        "cargo": {
+          "command": [
+            "cargo",
+            "+nightly-2026-06-11",
+            "-V"
+          ],
+          "exit_code": 0,
+          "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+          "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+        },
+        "name": "nightly-2026-06-11",
+        "rustc": {
+          "command": [
+            "rustc",
+            "+nightly-2026-06-11",
+            "-vV"
+          ],
+          "exit_code": 0,
+          "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+          "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+        },
+        "target": "x86_64-unknown-linux-gnu"
+      }
+    }
+  ],
+  "claim_boundary": "Per-arm exit status is never a mitigation classification. Claim-grade evaluation requires preregistered repetitions, matched controls, and coverage validation.",
+  "claim_grade": false,
+  "created_at_unix": 1784066129,
+  "orchestration_success": true,
+  "preflight_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/preflight.json",
+  "repetitions_requested": 1,
+  "scenario_id": "RSH-048-upstream",
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-experiment-matrix",
+  "toolchain": {
+    "cargo": {
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "-V"
+      ],
+      "exit_code": 0,
+      "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+      "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+    },
+    "name": "nightly-2026-06-11",
+    "rustc": {
+      "command": [
+        "rustc",
+        "+nightly-2026-06-11",
+        "-vV"
+      ],
+      "exit_code": 0,
+      "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+      "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+    },
+    "target": "x86_64-unknown-linux-gnu"
+  },
+  "type_isolation_reuse_edge_evaluation": {
+    "claim_grade": false,
+    "status": "not_applicable",
+    "validated": null
+  },
+  "typeiso_toolchain": null,
+  "unexpected_arm_count": 0,
+  "unsafe_execution_requested": true,
+  "variants": [
+    "system"
+  ]
+}

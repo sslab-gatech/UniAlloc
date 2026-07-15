@@ -1,0 +1,11 @@
+diff -ruN a/src/common.rs b/src/common.rs
+--- a/src/common.rs	2019-07-30 20:12:02.000000000 -0400
++++ b/src/common.rs	2026-07-14 03:45:47.979543554 -0400
+@@ -410,6 +410,7 @@
+                 ret.slice.ptr.as_ptr(),
+                 ret.len());
+         }
++        self.slice.len = at;
+ 
+         ret
+     }

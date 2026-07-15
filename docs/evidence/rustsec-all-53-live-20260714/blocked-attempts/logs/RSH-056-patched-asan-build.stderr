@@ -1,0 +1,38 @@
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.46
+   Compiling syn v1.0.109
+   Compiling glsl-layout-derive v0.4.0
+   Compiling glsl-layout v0.4.0 (/tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.4.0)
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.4.0/src/array.rs:74:17
+   |
+74 |     pub fn iter(&self) -> ArrayIter<SliceIter<Element<T>>> {
+   |                 ^^^^^               ^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                 |
+   |                 the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+   |
+74 |     pub fn iter(&self) -> ArrayIter<SliceIter<'_, Element<T>>> {
+   |                                               +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.4.0/src/array.rs:78:21
+   |
+78 |     pub fn iter_mut(&mut self) -> ArrayIter<SliceIterMut<Element<T>>> {
+   |                     ^^^^^^^^^               ^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                     |
+   |                     the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+78 |     pub fn iter_mut(&mut self) -> ArrayIter<SliceIterMut<'_, Element<T>>> {
+   |                                                          +++
+
+warning: `glsl-layout` (lib) generated 2 warnings (run `cargo fix --lib -p glsl-layout` to apply 2 suggestions)
+   Compiling rsh-056-harness v0.0.0 (/tmp/unialloc-blocked-reattempt-20260714/projects/RSH-056/patched)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.31s

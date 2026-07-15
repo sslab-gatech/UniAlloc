@@ -1,0 +1,178 @@
+{
+  "arms": [
+    {
+      "address_reuse_observation_count": 2,
+      "allocator_variant": "system",
+      "archive_variant": "vulnerable",
+      "bound_replacement_site_count": null,
+      "direct_reuse_edge_coverage_observed": null,
+      "execution_status": "completed",
+      "executions": 2,
+      "exit_codes": [
+        1,
+        1
+      ],
+      "expected_oracle_observed": true,
+      "matching_reuse_denial_event_count": null,
+      "oracle_status": "tool_finding_observed",
+      "requested_site_spans": [],
+      "result_sha256": "e09acf22c610343f4398212bdffde9c7d80c3bef72643ef2b9674ed6b9f27160",
+      "reuse_denial_event_count": null
+    },
+    {
+      "address_reuse_observation_count": 2,
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "bound_replacement_site_count": 0,
+      "direct_reuse_edge_coverage_observed": false,
+      "execution_status": "completed",
+      "executions": 2,
+      "exit_codes": [
+        0,
+        0
+      ],
+      "expected_oracle_observed": false,
+      "matching_reuse_denial_event_count": 0,
+      "oracle_status": "native_clean_runs_inconclusive",
+      "requested_site_spans": [],
+      "result_sha256": "a03a2a59e175e4d320e0964783dba2a26958b68ca02aed2d511486e84566b885",
+      "reuse_denial_event_count": 0
+    },
+    {
+      "address_reuse_observation_count": 0,
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "bound_replacement_site_count": 2,
+      "direct_reuse_edge_coverage_observed": true,
+      "execution_status": "completed",
+      "executions": 2,
+      "exit_codes": [
+        -6,
+        -6
+      ],
+      "expected_oracle_observed": false,
+      "matching_reuse_denial_event_count": 2,
+      "oracle_status": "native_diagnostic_signal_observed",
+      "requested_site_spans": [
+        "src/witness.rs:50:23: 50:74"
+      ],
+      "result_sha256": "3536bd2778b4d48afc1163107b0290b07d3dd4bff59bf737174e970a7db30022",
+      "reuse_denial_event_count": 2
+    },
+    {
+      "address_reuse_observation_count": 2,
+      "allocator_variant": "system",
+      "archive_variant": "patched",
+      "bound_replacement_site_count": null,
+      "direct_reuse_edge_coverage_observed": null,
+      "execution_status": "completed",
+      "executions": 2,
+      "exit_codes": [
+        0,
+        0
+      ],
+      "expected_oracle_observed": true,
+      "matching_reuse_denial_event_count": null,
+      "oracle_status": "clean_tool_runs_observed",
+      "requested_site_spans": [],
+      "result_sha256": "d310d76b819737fed0c0077aaa88ca14043cce846662b2c07e23f42af9d83149",
+      "reuse_denial_event_count": null
+    },
+    {
+      "address_reuse_observation_count": 2,
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "bound_replacement_site_count": 0,
+      "direct_reuse_edge_coverage_observed": false,
+      "execution_status": "completed",
+      "executions": 2,
+      "exit_codes": [
+        0,
+        0
+      ],
+      "expected_oracle_observed": false,
+      "matching_reuse_denial_event_count": 0,
+      "oracle_status": "native_clean_runs_inconclusive",
+      "requested_site_spans": [],
+      "result_sha256": "472c3c44f90778ba74dd75df3e9805f29ce5eb981d27393dccd21ccda1f0a331",
+      "reuse_denial_event_count": 0
+    },
+    {
+      "address_reuse_observation_count": 0,
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "bound_replacement_site_count": 2,
+      "direct_reuse_edge_coverage_observed": true,
+      "execution_status": "completed",
+      "executions": 2,
+      "exit_codes": [
+        0,
+        0
+      ],
+      "expected_oracle_observed": false,
+      "matching_reuse_denial_event_count": 2,
+      "oracle_status": "native_clean_runs_inconclusive",
+      "requested_site_spans": [
+        "src/witness.rs:50:23: 50:74"
+      ],
+      "result_sha256": "bdd374a464c22f8b466c11a5674a30dc060b6aaa4910215b57416fce57683888",
+      "reuse_denial_event_count": 2
+    }
+  ],
+  "boundaries": [
+    "The current compiler pass still lacks automatic exact victim-site coverage for the generic BitVec allocation and reclaim.",
+    "The patched Type Isolation control also emits the denial. The event is a reuse-policy signal, and vulnerability-specific detection remains unvalidated.",
+    "The source-level stale pointer remains present in the vulnerable crate.",
+    "Same-identity reuse and stale access before reuse remain outside this mechanism."
+  ],
+  "claim_grade": false,
+  "date": "2026-07-14",
+  "experiment_runner_sha256": "6e3dce97b5a2c8237c2e6e017ca85bc8d1a7c0569a90c5be51e4ae0bca836607",
+  "git_head": "468639127d858c25f059e87d9fadb03af6c6ca40",
+  "harness_catalog_sha256": "58a5896f20eda7b4f113aafd1ca1083b9d969c9805efb116c634ea9e9cac592d",
+  "orchestration_success": true,
+  "raw_experiment_path": "evaluation/raw/rustsec-rsh002-denial-20260714/experiment.json",
+  "raw_experiment_sha256": "692458fca66409d69e614a3b74b8dea76c64d7967ac29aad73ea434c895a8e2b",
+  "repetitions": 2,
+  "scenario_id": "RSH-002-derived-reuse",
+  "schema_version": 1,
+  "source": "unialloc-rustsec-rsh002-annotated-reuse-edge-summary",
+  "supported_claim": "With manual exact victim attribution, Type Isolation denied and reported the derived cross-identity RSH-002 replacement edge in 2/2 repetitions.",
+  "type_isolation_reuse_edge_evaluation": {
+    "annotation": {
+      "annotation_scope": [
+        "BitVec::with_capacity victim allocation",
+        "BitVec-to-BitBox victim reclaim"
+      ],
+      "claim_scope": "derived RSH-002 cross-identity A-to-B reuse edge only",
+      "expected_layout": {
+        "align": 8,
+        "size": 1016
+      },
+      "kind": "manual_exact_vulnerability_edge_identity",
+      "replacement_semantic_type_fragment": "Box<witness::Replacement",
+      "replacement_source_file_fragment": "src/witness.rs:",
+      "schema_version": 1,
+      "victim_module_id": 5932164307604209666,
+      "victim_type_id": 5932164307604209665
+    },
+    "baseline_vulnerability_and_address_reuse_reproduced": true,
+    "boundary": "A validated result shows that exact-identity cache routing denied and reported the exploit-enabling cross-type reuse edge. The source-level stale pointer remains, same-identity reuse remains allowed, and the manual victim annotation is outside automatic compiler coverage.",
+    "claim_grade": false,
+    "claim_scope": "The manually attributed derived RSH-002 A-to-B replacement edge only.",
+    "compiler_automatic_victim_coverage": false,
+    "manual_victim_identity_annotation": true,
+    "missing_required_arms": [],
+    "patched_system_control_reproduced": true,
+    "patched_typeiso_matching_denial_count": 2,
+    "source_vulnerability_detection_validated": false,
+    "status": "cross_identity_reuse_edge_blocked_and_reported",
+    "typed_plain_address_reuse_ablation_reproduced": true,
+    "typeiso_reuse_edge_blocked_and_reported": true,
+    "validated": true,
+    "vulnerability_specific_detection_signal": false
+  },
+  "unexpected_arm_count": 0,
+  "unialloc_implementation_sha256": "0711afd64d7dd905b4a06f483c7884a6b5f6acead729f6ba9f42cae672a8ceef",
+  "witness_source_sha256": "d6ebecf4f322b65a5405f873d4cddfe160fb361c61f46940ba7e22808cd4f324"
+}

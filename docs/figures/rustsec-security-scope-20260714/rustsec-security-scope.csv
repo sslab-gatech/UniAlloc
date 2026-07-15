@@ -1,0 +1,16 @@
+section,key,label,count
+primitive,double_free,Double Free,27
+primitive,use_after_free,Use After Free,18
+primitive,uninitialized_drop,Uninitialized Drop,2
+primitive,invalid_free,Invalid Free,1
+primitive,out_of_bounds_read,Out Of Bounds Read,1
+integration,excluded_before_evaluation,Excluded before evaluation,4
+integration,executable,Executable,49
+case_attribution,other_allocator_feature_only,Other allocator feature only,31
+case_attribution,type_isolation_only,Type Isolation only,11
+case_attribution,multiple_allocator_mechanisms,Type Isolation + other allocator feature,1
+case_attribution,no_allocator_signal_observed,No exact allocator signal observed,3
+case_attribution,not_yet_attributed,Unresolved mechanism attribution,3
+mechanism_coverage,type_isolation_edge_covered,Type Isolation edge covered,12
+mechanism_coverage,reclaim_checks_exact_detection,reclaim_checks exact detection,31
+mechanism_coverage,recovery_layout_validation_exact_detection,Recovery-layout validation,1

@@ -1,0 +1,23 @@
+diff --git a/Cargo.toml b/Cargo.toml
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -20,6 +20,7 @@ license = "MIT"
+ repository = "https://github.com/sagebind/chttp"
+ 
+ [dependencies.curl]
++default-features = false
+ version = "0.4"
+ 
+ [dependencies.http]
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -8,7 +8,7 @@ mod client;
+ pub mod error;
+ pub mod options;
+ mod transport;
+-mod buffer;
++pub mod buffer;
+ 
+ pub use body::Body;
+ pub use client::Client;

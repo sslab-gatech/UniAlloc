@@ -1,0 +1,65 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,24 +1,38 @@
+-
+-use std::ptr;
+-
+-/// Mutate a referenced element by transferring ownership through a function.
+-pub fn through<T>(elem: &mut T, func: impl FnOnce(T) -> T) {
+-    unsafe {
+-        let elem_ref = elem;
+-        let elem = ptr::read(elem_ref);
+-        let elem = func(elem);
+-        ptr::write(elem_ref, elem);
+-    }
+-}
+-
+-/// Mutate a referenced element by transferring ownership through a function, which also
+-/// produces an output datum which is returned from this function.
+-pub fn through_and<T, O>(elem: &mut T, func: impl FnOnce(T) -> (T, O)) -> O {
+-    unsafe {
+-        let elem_ref = elem;
+-        let elem = ptr::read(elem_ref);
+-        let (elem, out) = func(elem);
+-        ptr::write(elem_ref, elem);
+-        out
+-    }
++
++use std::{mem, process, ptr};
++
++struct AbortOnUnwind;
++
++impl Drop for AbortOnUnwind {
++    fn drop(&mut self) {
++        if std::thread::panicking() {
++            process::abort();
++        }
++    }
++}
++
++/// Mutate a referenced element by transferring ownership through a function.
++pub fn through<T>(elem: &mut T, func: impl FnOnce(T) -> T) {
++    unsafe {
++        let elem_ref = elem;
++        let elem = ptr::read(elem_ref);
++        let guard = AbortOnUnwind;
++        let elem = func(elem);
++        mem::forget(guard);
++        ptr::write(elem_ref, elem);
++    }
++}
++
++/// Mutate a referenced element by transferring ownership through a function, which also
++/// produces an output datum which is returned from this function.
++pub fn through_and<T, O>(elem: &mut T, func: impl FnOnce(T) -> (T, O)) -> O {
++    unsafe {
++        let elem_ref = elem;
++        let elem = ptr::read(elem_ref);
++        let guard = AbortOnUnwind;
++        let (elem, out) = func(elem);
++        mem::forget(guard);
++        ptr::write(elem_ref, elem);
++        out
++    }
+ }
+\ No newline at end of file

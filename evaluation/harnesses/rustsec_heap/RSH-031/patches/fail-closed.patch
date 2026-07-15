@@ -1,0 +1,33 @@
+diff --git a/src/heap.rs b/src/heap.rs
+index 4324516..d4b3c43 100644
+--- a/src/heap.rs
++++ b/src/heap.rs
+@@ -1,5 +1,4 @@
+ use super::Alignment;
+-use alloc::alloc::Layout;
+ use alloc::boxed::Box;
+ use alloc::vec::Vec;
+ use core::mem::{align_of, size_of};
+@@ -14,17 +13,11 @@ use core::mem::{align_of, size_of};
+ #[allow(unsafe_code)]
+ #[must_use]
+ pub fn align_first<T, A: Alignment>(t_capacity: usize) -> Vec<T> {
+-  if align_of::<A>() <= align_of::<T>() || t_capacity == 0 || size_of::<T>() == 0 {
+-    return Vec::<T>::with_capacity(t_capacity);
+-  }
+-  let min_bytes_to_allocate = size_of::<T>() * t_capacity;
+-  // Unwrap is safe because we fulfill all the invariants of `from_size_align`
+-  let layout = Layout::from_size_align(min_bytes_to_allocate, align_of::<A>()).unwrap();
+-  let ptr = unsafe { alloc::alloc::alloc(layout) };
+-  let type_vec = unsafe { Vec::<T>::from_raw_parts(ptr as *mut T, 0, t_capacity) };
+-  debug_assert_eq!(type_vec.as_ptr() as usize % align_of::<A>(), 0);
+-  debug_assert_eq!(type_vec.as_ptr() as usize, ptr as usize);
+-  type_vec
++  assert!(
++    align_of::<A>() <= align_of::<T>() || t_capacity == 0 || size_of::<T>() == 0,
++    "maligned: over-aligned Vec<T> cannot be safely returned",
++  );
++  Vec::<T>::with_capacity(t_capacity)
+ }
+ 
+ /// Aligns types and initializes memory to the return value provided by the closure.

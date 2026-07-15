@@ -1,0 +1,161 @@
+{
+  "cases": [
+    {
+      "advisory_id": "RUSTSEC-2022-0028",
+      "cargo": {
+        "crate_type": "cdylib",
+        "default_features": false,
+        "features": [
+          "napi-6"
+        ],
+        "vulnerable_extra_dependencies": {},
+        "patched_extra_dependencies": {}
+      },
+      "case_id": "RSH-064",
+      "crate": "neon",
+      "lockfiles": {
+        "legacy_patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/Cargo.lock.legacy-patched",
+          "sha256": "bcee7db236b011d959630789b7550c7c1951c5260b3ca9a77d8ab4ac7811c95d"
+        },
+        "legacy_vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/Cargo.lock.legacy-vulnerable",
+          "sha256": "015cbde1abe37ab4f69e3d1ec9fff559104e7550a63f3e787605851c141a459c"
+        },
+        "patched": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/Cargo.lock.patched",
+          "sha256": "6f9609ddfbe9c596b0466303a358be5c927883e7773934e8ce8b4bb994104f49"
+        },
+        "reclaim": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/Cargo.lock.reclaim",
+          "sha256": "7f5e873ef95f07890863ef1e5a72b9976176298e274ca23a0429216042208a75"
+        },
+        "vulnerable": {
+          "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/Cargo.lock.vulnerable",
+          "sha256": "c6f58fb877d2646feb7cc694d08041f82363b91bce767a6a44d97cc2f4219032"
+        }
+      },
+      "patched_dependency": {
+        "bytes": 269594,
+        "kind": "crates_io_archive",
+        "package": "neon",
+        "sha256": "28e15415261d880aed48122e917a45e87bb82cf0260bb6db48bbab44b7464373",
+        "upstream_commit": "c17014e4196bae292a9b66140836f18ae5b17903",
+        "url": "https://static.crates.io/crates/neon/neon-0.10.1.crate",
+        "version": "0.10.1"
+      },
+      "primary_primitive": "use_after_free",
+      "reclaim_spin_dependency": {
+        "bytes": 25113,
+        "kind": "crates_io_archive",
+        "package": "spin",
+        "sha256": "b87bbf98cb81332a56c1ee8929845836f85e8ddd693157c30d76660196014478",
+        "url": "https://static.crates.io/crates/spin/spin-0.9.0.crate",
+        "version": "0.9.0"
+      },
+      "scenarios": [
+        {
+          "adapter_kind": "published_payload_node_host_adapter",
+          "classification_role": "allocator_boundary_detection_candidate",
+          "expected_payload": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "host_kind": "node_napi_addon",
+          "node_driver": {
+            "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+            "sha256": "44e5687c4acd383e0314be1a4300c972efa854c0eeb5124edfac53a97d1e2065"
+          },
+          "oracle": {
+            "patched_control": "neon 0.10.1 rejects the identical source with E0597 and E0505 because JsArrayBuffer::external requires static backing storage.",
+            "tool": "native_value_oracle",
+            "vulnerable": "Node reads four external ArrayBuffer bytes different from the initialized 0,1,2,3 payload before or after allocation churn."
+          },
+          "origin_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/neon/RUSTSEC-2022-0028.md",
+          "provenance": "rustsec_inline_with_mechanical_napi_export",
+          "published_witness": {
+            "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/published_witness.rs",
+            "sha256": "31511bca0b73b7dccb209e9e66b54b9d550272601b2f3aeaff8fb673cf95ff9c"
+          },
+          "scenario_id": "RSH-064-node-addon",
+          "source": {
+            "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+            "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+          },
+          "supported_allocator_variants": [
+            "system",
+            "reclaim_plain",
+            "reclaim_checks",
+            "typed_plain",
+            "typeiso"
+          ]
+        },
+        {
+          "adapter_kind": "derived_adapter",
+          "cargo_profile": "dev",
+          "classification_role": "derived_reuse_experiment",
+          "oracle": {
+            "patched_control": "same address grooming exits 0 with no stale external view",
+            "tool": "native_address_trace",
+            "vulnerable": "original Vec backing-store address equals the distinct Replacement address before the stale external read"
+          },
+          "origin_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/neon/RUSTSEC-2022-0028.md",
+          "patched_source": {
+            "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/derived_reuse_patched.rs",
+            "source_sha256": "b5acdaef2f3c929a54f49723e7900e8da6e81fa1b85313b4b70f81fa6336c2df"
+          },
+          "provenance": "derived_adapter",
+          "required_environment": {},
+          "rustflags": [],
+          "scenario_id": "RSH-064-derived-reuse",
+          "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/derived_reuse.rs",
+          "source_sha256": "1ac8fdd766d3b42b68149f711b5a172c249a0bc2c01b76051c6f5358de7ea40b",
+          "type_isolation_edge_annotation": {
+            "annotation_scope": [
+              "Rust Vec<u8> backing-store allocation exposed through an external view",
+              "Rust Vec<u8> owner reclaim before the external view is read"
+            ],
+            "claim_scope": "derived RSH-064 cross-identity Vec<u8>-backing-store-to-Replacement reuse edge only",
+            "expected_layout": {
+              "align": 1,
+              "size": 4
+            },
+            "kind": "manual_exact_vulnerability_edge_identity",
+            "replacement_semantic_type_fragment": "Box<witness::Replacement",
+            "replacement_source_file_fragment": "src/witness.rs:",
+            "schema_version": 1,
+            "victim_module_id": 5932164573892182018,
+            "victim_type_id": 5932164573892182017
+          }
+        }
+      ],
+      "title": "Use after free in Neon external buffers",
+      "vulnerable_dependency": {
+        "bytes": 269317,
+        "kind": "crates_io_archive",
+        "package": "neon",
+        "sha256": "544694d02bbff81f78dba5ef7d29341cc6d256edcae4fbb2d684491d5755c748",
+        "upstream_commit": "779f733d2a98d343a125510208a96b98efa630ee",
+        "url": "https://static.crates.io/crates/neon/neon-0.10.0.crate",
+        "version": "0.10.0"
+      }
+    }
+  ],
+  "claim_boundary": "The published Neon Node/V8 scenario and the derived cross-identity reuse scenario are separate evidence. The derived scenario tests only whether exact-identity routing denies and reports reuse of the released Rust Vec backing store by an equal-layout distinct Rust type; the source stale pointer remains outside that claim.",
+  "claim_grade": false,
+  "counts": {
+    "harness_case_count": 1,
+    "repository_scenario_count": 2
+  },
+  "execution_policy": {
+    "default_action": "list",
+    "network_used_only_for_pinned_archive_or_locked_dependency_fetch": true,
+    "unsafe_execution_requires_explicit_opt_in": true
+  },
+  "schema_version": 1,
+  "source": "unialloc-rustsec-neon-node-harness-catalog",
+  "toolchain": "nightly-2026-06-11",
+  "validated_target": "x86_64-unknown-linux-gnu"
+}

@@ -1,0 +1,106 @@
+   Compiling semver-parser v0.7.0
+   Compiling proc-macro2 v1.0.24
+   Compiling unicode-xid v0.2.6
+   Compiling cfg-if v1.0.4
+   Compiling syn v1.0.54
+   Compiling autocfg v1.5.1
+   Compiling libc v0.2.95
+   Compiling serde_derive v1.0.118
+   Compiling ryu v1.0.5
+   Compiling parking_lot_core v0.8.6
+   Compiling serde v1.0.118
+   Compiling serde_json v1.0.61
+   Compiling lazy_static v1.5.0
+   Compiling smallvec v1.6.1
+   Compiling scopeguard v1.1.0
+   Compiling itoa v0.4.8
+   Compiling typed-arena v2.0.2
+   Compiling instant v0.1.13
+   Compiling generational-arena v0.2.9
+   Compiling libloading v0.6.7
+   Compiling lock_api v0.4.5
+   Compiling semver v0.9.0
+   Compiling rustc_version v0.2.3
+   Compiling crossbeam-utils v0.8.1
+   Compiling core_extensions v0.1.18
+   Compiling repr_offset v0.1.2
+   Compiling quote v1.0.7
+   Compiling parking_lot v0.11.2
+   Compiling abi_stable_shared v0.9.0
+   Compiling crossbeam-channel v0.5.0
+   Compiling as_derive_utils v0.9.0
+   Compiling abi_stable_derive v0.9.0
+   Compiling abi_stable v0.9.1 (/tmp/unialloc-blocked-reattempt-20260714/subjects/abi_stable-0.9.1)
+warning: derive helper attribute is used before it is introduced
+  --> /tmp/unialloc-blocked-reattempt-20260714/subjects/abi_stable-0.9.1/src/std_types/map/iterator_stuff.rs:35:7
+   |
+16 |         #[derive(StableAbi)]
+   |                  --------- the attribute is introduced here
+...
+35 |     #[sabi(impl_InterfaceType(Iterator,Clone))]
+   |       ^^^^
+   |
+   = note: `#[warn(legacy_derive_helpers)]` on by default
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+   = note: for more information, see issue #79202 <https://github.com/rust-lang/rust/issues/79202>
+
+warning: derive helper attribute is used before it is introduced
+  --> /tmp/unialloc-blocked-reattempt-20260714/subjects/abi_stable-0.9.1/src/std_types/map/iterator_stuff.rs:44:7
+   |
+16 |         #[derive(StableAbi)]
+   |                  --------- the attribute is introduced here
+...
+44 |     #[sabi(impl_InterfaceType(Iterator))]
+   |       ^^^^
+   |
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+   = note: for more information, see issue #79202 <https://github.com/rust-lang/rust/issues/79202>
+
+warning: derive helper attribute is used before it is introduced
+  --> /tmp/unialloc-blocked-reattempt-20260714/subjects/abi_stable-0.9.1/src/std_types/map/iterator_stuff.rs:53:7
+   |
+16 |         #[derive(StableAbi)]
+   |                  --------- the attribute is introduced here
+...
+53 |     #[sabi(impl_InterfaceType(Iterator))]
+   |       ^^^^
+   |
+   = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+   = note: for more information, see issue #79202 <https://github.com/rust-lang/rust/issues/79202>
+
+warning: fields `type_`, `type_size`, `type_alignment`, `storage_`, `storage_size` and `storage_alignment` are never read
+  --> /tmp/unialloc-blocked-reattempt-20260714/subjects/abi_stable-0.9.1/src/nonexhaustive_enum.rs:66:9
+   |
+65 |     struct TypeAndStorageLayout{
+   |            -------------------- fields in this struct
+66 |         type_:&'static str,
+   |         ^^^^^^^^^^^^^^^^^^
+67 |         type_size:usize,
+   |         ^^^^^^^^^^^^^^^
+68 |         type_alignment:usize,
+   |         ^^^^^^^^^^^^^^^^^^^^
+69 |         storage_:&'static str,
+   |         ^^^^^^^^^^^^^^^^^^^^^
+70 |         storage_size:usize,
+   |         ^^^^^^^^^^^^^^^^^^
+71 |         storage_alignment:usize,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+   = note: `TypeAndStorageLayout` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: fields `key_in_map` and `type_` are never read
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/abi_stable-0.9.1/src/type_layout/printing.rs:360:5
+    |
+359 | struct TypeLayoutPointer{
+    |        ----------------- fields in this struct
+360 |     key_in_map:Option<usize>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+361 |     type_:FmtFullType,
+    |     ^^^^^^^^^^^^^^^^^
+    |
+    = note: `TypeLayoutPointer` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: `abi_stable` (lib) generated 5 warnings
+   Compiling rsh-054-harness v0.0.0 (/tmp/unialloc-blocked-reattempt-20260714/projects/RSH-054/patched)
+    Finished dev [unoptimized + debuginfo] target(s) in 14.48s

@@ -1,0 +1,1655 @@
+{
+  "advisory_id": "RUSTSEC-2022-0028",
+  "arms": [
+    {
+      "allocator_variant": "system",
+      "archive": {
+        "bytes": 269594,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.1.crate",
+        "sha256": "28e15415261d880aed48122e917a45e87bb82cf0260bb6db48bbab44b7464373"
+      },
+      "archive_variant": "patched",
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--locked",
+          "--manifest-path",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/project/Cargo.toml",
+          "--target-dir",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/target"
+        ],
+        "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/project",
+        "duration_seconds": 1.8133440017700195,
+        "returncode": 101,
+        "stderr": {
+          "bytes": 5221,
+          "path": "/tmp/rsh064-current-final-20260714/arms/patched-system/build.stderr",
+          "sha256": "1a5308c22a1e42c64c33fc5589c4f3367b8e5fe60b91af3d30c10edfe0fc7068"
+        },
+        "stdout": {
+          "bytes": 0,
+          "path": "/tmp/rsh064-current-final-20260714/arms/patched-system/build.stdout",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "timed_out": false
+      },
+      "claim_grade": false,
+      "execution_status": "completed",
+      "executions": [],
+      "lockfile": {
+        "bytes": 3909,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/project/Cargo.lock",
+        "sha256": "6f9609ddfbe9c596b0466303a358be5c927883e7773934e8ce8b4bb994104f49"
+      },
+      "manifest_sha256": "2e50f9942ca6d410b7df08c7afa3abc3388f7bc0144047129d200fb1272677a6",
+      "materialized_source": {
+        "bytes": 374,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/project/src/lib.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "oracle": "expected_compile_rejection",
+      "oracle_validation": {
+        "error_codes": [
+          "E0505",
+          "E0597"
+        ],
+        "observed": true,
+        "static_bound_observed": true,
+        "status": "patched_control_compile_rejection_observed"
+      },
+      "reclaim_spin_archive": null,
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "none"
+    },
+    {
+      "addon": {
+        "bytes": 7445832,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system/rsh064.node",
+        "sha256": "130185290f2b7c9fa486fe89e08c42c9f659c2926086760de37e0d6e7fd5f55f"
+      },
+      "allocator_variant": "system",
+      "archive": {
+        "bytes": 269317,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.0.crate",
+        "sha256": "544694d02bbff81f78dba5ef7d29341cc6d256edcae4fbb2d684491d5755c748"
+      },
+      "archive_variant": "vulnerable",
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--locked",
+          "--manifest-path",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system/project/Cargo.toml",
+          "--target-dir",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system/target"
+        ],
+        "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system/project",
+        "duration_seconds": 1.8893029689788818,
+        "returncode": 0,
+        "stderr": {
+          "bytes": 3274,
+          "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-system/build.stderr",
+          "sha256": "4837e46f133b1e5b29d3f34ab2d42f1ab07193c243e07d2e806b50fdcfe88525"
+        },
+        "stdout": {
+          "bytes": 0,
+          "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-system/build.stdout",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "timed_out": false
+      },
+      "claim_grade": false,
+      "execution_status": "completed",
+      "executions": [
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system",
+            "duration_seconds": 0.16287469863891602,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-system/run-001.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 60,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-system/run-001.stdout",
+              "sha256": "a7df406ea38d405dbff9a09e99900fa303ec18a1f9adf4b900925bcbe4470194"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              110,
+              111,
+              100,
+              101
+            ],
+            "before": [
+              181,
+              46,
+              111,
+              27
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 1,
+          "reuse_denial_signal_observed": false
+        },
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system",
+            "duration_seconds": 0.15335750579833984,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-system/run-002.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 62,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-system/run-002.stdout",
+              "sha256": "0fec47221ac25839a0c028a25ded9ce3d62e98f446de7530f25304857314f263"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              110,
+              111,
+              100,
+              101
+            ],
+            "before": [
+              211,
+              238,
+              239,
+              247
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 2,
+          "reuse_denial_signal_observed": false
+        },
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system",
+            "duration_seconds": 0.15448331832885742,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-system/run-003.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 61,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-system/run-003.stdout",
+              "sha256": "6e0fd0748cfbe5c3c095f2593e5565eb1bc5449f48570db0eb1dfc400406da03"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              110,
+              111,
+              100,
+              101
+            ],
+            "before": [
+              132,
+              55,
+              217,
+              118
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 3,
+          "reuse_denial_signal_observed": false
+        }
+      ],
+      "lockfile": {
+        "bytes": 3909,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system/project/Cargo.lock",
+        "sha256": "c6f58fb877d2646feb7cc694d08041f82363b91bce767a6a44d97cc2f4219032"
+      },
+      "manifest_sha256": "c6025d88dd612a7299675e90e35110ab50e04279be23ec80fe0cd7c2e340c36c",
+      "materialized_source": {
+        "bytes": 374,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-system/project/src/lib.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "oracle": "corrupt_external_array_buffer_bytes",
+      "oracle_validation": {
+        "expected_payload": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "observed": true,
+        "status": "corrupt_bytes_observed_in_all_repetitions"
+      },
+      "reclaim_spin_archive": null,
+      "repetition_summary": {
+        "completed": 3,
+        "corrupt_bytes_observed": 3,
+        "exact_reclaim_signal_observed": 0,
+        "requested": 3,
+        "reuse_denial_signal_observed": 0
+      },
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "none"
+    },
+    {
+      "addon": {
+        "bytes": 10313632,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain/rsh064.node",
+        "sha256": "ddbdfd0682eaf48fecad51dfef5836c15eb3f2c0a12f68a36cf4280acd2e1e09"
+      },
+      "allocator_variant": "reclaim_plain",
+      "archive": {
+        "bytes": 269317,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.0.crate",
+        "sha256": "544694d02bbff81f78dba5ef7d29341cc6d256edcae4fbb2d684491d5755c748"
+      },
+      "archive_variant": "vulnerable",
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--locked",
+          "--manifest-path",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain/project/Cargo.toml",
+          "--target-dir",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain/target"
+        ],
+        "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain/project",
+        "duration_seconds": 2.1035330295562744,
+        "returncode": 0,
+        "stderr": {
+          "bytes": 12604,
+          "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_plain/build.stderr",
+          "sha256": "11e30d896f6c91de05843694e007828a369374bed471efa613d378e1eea8ac33"
+        },
+        "stdout": {
+          "bytes": 0,
+          "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_plain/build.stdout",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "timed_out": false
+      },
+      "claim_grade": false,
+      "execution_status": "completed",
+      "executions": [
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain",
+            "duration_seconds": 0.15381669998168945,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_plain/run-001.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 46,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_plain/run-001.stdout",
+              "sha256": "f70206c99ca49405ce8ce218cc02ab92051a4c4f9a6236d56dbacd0cafe25a65"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "before": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 1,
+          "reuse_denial_signal_observed": false
+        },
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain",
+            "duration_seconds": 0.14205193519592285,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_plain/run-002.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 46,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_plain/run-002.stdout",
+              "sha256": "f70206c99ca49405ce8ce218cc02ab92051a4c4f9a6236d56dbacd0cafe25a65"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "before": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 2,
+          "reuse_denial_signal_observed": false
+        },
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain",
+            "duration_seconds": 0.14232683181762695,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_plain/run-003.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 46,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_plain/run-003.stdout",
+              "sha256": "f70206c99ca49405ce8ce218cc02ab92051a4c4f9a6236d56dbacd0cafe25a65"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "before": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 3,
+          "reuse_denial_signal_observed": false
+        }
+      ],
+      "lockfile": {
+        "bytes": 5706,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain/project/Cargo.lock",
+        "sha256": "7f5e873ef95f07890863ef1e5a72b9976176298e274ca23a0429216042208a75"
+      },
+      "manifest_sha256": "dc0432841bb162fad638626ac88ebeb80fb5aa8e6425bf7099e9cc0d2ecdebc4",
+      "materialized_source": {
+        "bytes": 459,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_plain/project/src/lib.rs",
+        "sha256": "9adbd25d5eceeee3f503201ff9a410bfae0eddb64fe3d7b6f81882f23f448810"
+      },
+      "oracle": "corrupt_external_array_buffer_bytes",
+      "oracle_validation": {
+        "expected_payload": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "observed": true,
+        "status": "corrupt_bytes_observed_in_all_repetitions"
+      },
+      "reclaim_spin_archive": {
+        "bytes": 25113,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/spin-0.9.0.crate",
+        "sha256": "b87bbf98cb81332a56c1ee8929845836f85e8ddd693157c30d76660196014478"
+      },
+      "repetition_summary": {
+        "completed": 3,
+        "corrupt_bytes_observed": 3,
+        "exact_reclaim_signal_observed": 0,
+        "requested": 3,
+        "reuse_denial_signal_observed": 0
+      },
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "append_selected_global_allocator_only"
+    },
+    {
+      "addon": {
+        "bytes": 10313392,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/rsh064.node",
+        "sha256": "4d32a55b5634512d3ee917f27ee6fe0bc6d8c3d88a62cf9239d1e9428b5ff4e1"
+      },
+      "allocator_variant": "reclaim_checks",
+      "archive": {
+        "bytes": 269317,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.0.crate",
+        "sha256": "544694d02bbff81f78dba5ef7d29341cc6d256edcae4fbb2d684491d5755c748"
+      },
+      "archive_variant": "vulnerable",
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--locked",
+          "--manifest-path",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/project/Cargo.toml",
+          "--target-dir",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/target"
+        ],
+        "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/project",
+        "duration_seconds": 2.1047749519348145,
+        "returncode": 0,
+        "stderr": {
+          "bytes": 12622,
+          "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_checks/build.stderr",
+          "sha256": "3928adfc85167b591c8baabf545ad32f2b8bcbffd9199f2928b4f5194def522c"
+        },
+        "stdout": {
+          "bytes": 0,
+          "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_checks/build.stdout",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "timed_out": false
+      },
+      "claim_grade": false,
+      "execution_status": "completed",
+      "executions": [
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks",
+            "duration_seconds": 0.16108012199401855,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_checks/run-001.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 46,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_checks/run-001.stdout",
+              "sha256": "f70206c99ca49405ce8ce218cc02ab92051a4c4f9a6236d56dbacd0cafe25a65"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "before": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 1,
+          "reuse_denial_signal_observed": false
+        },
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks",
+            "duration_seconds": 0.1522836685180664,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_checks/run-002.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 46,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_checks/run-002.stdout",
+              "sha256": "f70206c99ca49405ce8ce218cc02ab92051a4c4f9a6236d56dbacd0cafe25a65"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "before": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 2,
+          "reuse_denial_signal_observed": false
+        },
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks",
+            "duration_seconds": 0.14322471618652344,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_checks/run-003.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 46,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-reclaim_checks/run-003.stdout",
+              "sha256": "f70206c99ca49405ce8ce218cc02ab92051a4c4f9a6236d56dbacd0cafe25a65"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "before": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 3,
+          "reuse_denial_signal_observed": false
+        }
+      ],
+      "lockfile": {
+        "bytes": 5706,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/project/Cargo.lock",
+        "sha256": "7f5e873ef95f07890863ef1e5a72b9976176298e274ca23a0429216042208a75"
+      },
+      "manifest_sha256": "8b522601cc4cfce3ffb33de54e53cbe0e93d670838973a39aaaf2ffea2b1f433",
+      "materialized_source": {
+        "bytes": 459,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/project/src/lib.rs",
+        "sha256": "9adbd25d5eceeee3f503201ff9a410bfae0eddb64fe3d7b6f81882f23f448810"
+      },
+      "oracle": "corrupt_external_array_buffer_bytes",
+      "oracle_validation": {
+        "expected_payload": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "observed": true,
+        "status": "corrupt_bytes_observed_in_all_repetitions"
+      },
+      "reclaim_spin_archive": {
+        "bytes": 25113,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/spin-0.9.0.crate",
+        "sha256": "b87bbf98cb81332a56c1ee8929845836f85e8ddd693157c30d76660196014478"
+      },
+      "repetition_summary": {
+        "completed": 3,
+        "corrupt_bytes_observed": 3,
+        "exact_reclaim_signal_observed": 0,
+        "requested": 3,
+        "reuse_denial_signal_observed": 0
+      },
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "append_selected_global_allocator_only"
+    },
+    {
+      "addon": {
+        "bytes": 8374608,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain/rsh064.node",
+        "sha256": "112baaeff46b2ad08f598593c2dc51cce20c27ed7fd0f44aecab0e3595a7e7ce"
+      },
+      "allocator_variant": "typed_plain",
+      "archive": {
+        "bytes": 269317,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.0.crate",
+        "sha256": "544694d02bbff81f78dba5ef7d29341cc6d256edcae4fbb2d684491d5755c748"
+      },
+      "archive_variant": "vulnerable",
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--locked",
+          "--manifest-path",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain/project/Cargo.toml",
+          "--target-dir",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain/target"
+        ],
+        "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain/project",
+        "duration_seconds": 3.794109344482422,
+        "returncode": 0,
+        "stderr": {
+          "bytes": 3299,
+          "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/build.stderr",
+          "sha256": "b3b2f334b7bccbcdec5bb45b8f9866e22ff410d7e3fe30722fa4d356e940b7fd"
+        },
+        "stdout": {
+          "bytes": 0,
+          "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/build.stdout",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "timed_out": false
+      },
+      "claim_grade": false,
+      "compiler_evidence": {
+        "audit_files": [
+          {
+            "bytes": 4206701,
+            "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/audits/neon-351fc93d5fdbf5b4.json",
+            "sha256": "be7bb84fac8dbd25552b0c9e94519f246f30ca9cec6a5c495fee2b74224d3e00"
+          },
+          {
+            "bytes": 26523,
+            "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/audits/rsh_064_harness-2c8436917dca5a55.json",
+            "sha256": "b985fcc00597e36830d84bbd70d307b74aade6bd1afdeae43be43822f00e9397"
+          }
+        ],
+        "harness_compiler_pass": {
+          "actual_allocator_call_replacement": false,
+          "actual_allocator_call_replacement_requested": true,
+          "actual_semantic_ownership_transfer_rewrite": false,
+          "actual_semantic_ownership_transfer_rewrite_requested": true,
+          "actual_semantic_scope_rewrite": false,
+          "actual_semantic_scope_rewrite_requested": true,
+          "auto_cross_thread_recovery_hint": false,
+          "automatic_lifetime_abstained_allocation_site_count": 0,
+          "automatic_lifetime_candidate_allocation_site_count": 0,
+          "automatic_lifetime_classifier_enabled": false,
+          "automatic_lifetime_classifier_precedence": "exact_profile>manual_global>automatic>Unknown",
+          "automatic_lifetime_eligible_allocation_site_count": 0,
+          "automatic_lifetime_ephemeral_allocation_site_count": 0,
+          "automatic_lifetime_ephemeral_count": 0,
+          "automatic_lifetime_long_lived_allocation_site_count": 0,
+          "automatic_lifetime_long_lived_count": 0,
+          "automatic_lifetime_pairing_contract": "same per-owner decision for semantic allocation and matching Drop scopes",
+          "automatic_lifetime_phase_boundary": "exact DefId unialloc::lifetime_hugepage_advance_epoch on unique normal MIR path",
+          "automatic_lifetime_unknown_allocation_site_count": 0,
+          "automatic_lifetime_unknown_allocation_site_reasons": {},
+          "automatic_lifetime_unknown_count": 0,
+          "automatic_lifetime_unsupported_allocation_site_count": 0,
+          "body_clone_returned_to_rustc": true,
+          "claim_grade": false,
+          "continue_compilation": true,
+          "cross_thread_recovery_hint_count": 1,
+          "cross_thread_recovery_placement_hint_bit": 32768,
+          "default_policy_flags": 1,
+          "direct_local_metadata_abi": true,
+          "direct_local_size_align_with_semantic_drop": true,
+          "direct_replacement_resolution_status": "no_supported_rewrite_candidates",
+          "kind": "rustc_driver_optimized_mir_provider_override",
+          "lifetime_hint": 0,
+          "lifetime_profile_abstention_count": 0,
+          "lifetime_profile_ambiguous_entry_count": 0,
+          "lifetime_profile_ambiguous_match_count": 0,
+          "lifetime_profile_binding": "exact(callsite,type_id,module_id)",
+          "lifetime_profile_confidence_threshold": 0,
+          "lifetime_profile_digest": null,
+          "lifetime_profile_digest_algorithm": "fnv1a64-raw-bytes",
+          "lifetime_profile_duplicate_key_count": 0,
+          "lifetime_profile_enabled": false,
+          "lifetime_profile_format": "unialloc-lifetime-profile-v1",
+          "lifetime_profile_format_valid": false,
+          "lifetime_profile_guard_mismatch_count": 0,
+          "lifetime_profile_invalid_line_count": 0,
+          "lifetime_profile_match_count": 0,
+          "lifetime_profile_miss_count": 0,
+          "lifetime_profile_path": null,
+          "lifetime_profile_source_entry_line_count": 0,
+          "lifetime_profile_unique_entry_count": 0,
+          "module_id": 2503697382057723246,
+          "module_id_algorithm": "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))",
+          "name": "unialloc-rustc-driver-mir-rewrite-dry-run",
+          "notes": [
+            "This installs a real rustc query override and returns cloned MIR bodies to rustc.",
+            "Dry-run is the default; explicit actual modes can retarget direct allocator calls or insert semantic-scope enter/exit calls."
+          ],
+          "placement_hint": 0,
+          "policy_flags": 0,
+          "query_overridden": "optimized_mir",
+          "replacement_resolution_status": "no_supported_rewrite_candidates",
+          "rewrite_applied_count": 0,
+          "semantic_ownership_transfer_candidate_count": 0,
+          "semantic_ownership_transfer_replacement_resolution_status": "no_supported_semantic_ownership_transfer_candidates",
+          "semantic_ownership_transfer_rewrite_applied_count": 0,
+          "semantic_scope_callback_capable_skipped_count": 0,
+          "semantic_scope_deallocation_like_rewrite_applied_count": 0,
+          "semantic_scope_drop_candidate_count": 1,
+          "semantic_scope_drop_generic_type_parameter_skipped_count": 0,
+          "semantic_scope_drop_non_heap_skipped_count": 2,
+          "semantic_scope_drop_rewrite_applied_count": 1,
+          "semantic_scope_drop_unsolved_candidate_count": 0,
+          "semantic_scope_replacement_resolution_status": "no_supported_semantic_scope_candidates",
+          "semantic_scope_rewrite_applied_count": 0,
+          "semantic_scope_unsolved_candidate_count": 3,
+          "semantic_scope_unwind_pop_inserted_count": 0
+        },
+        "harness_summary": {
+          "actual_allocator_call_replacement": false,
+          "actual_allocator_call_replacement_requested": true,
+          "actual_semantic_ownership_transfer_rewrite": false,
+          "actual_semantic_ownership_transfer_rewrite_requested": true,
+          "actual_semantic_scope_rewrite": false,
+          "actual_semantic_scope_rewrite_requested": true,
+          "automatic_lifetime_abstained_allocation_site_count": 0,
+          "automatic_lifetime_candidate_allocation_site_count": 0,
+          "automatic_lifetime_classifier_enabled": false,
+          "automatic_lifetime_eligible_allocation_site_count": 0,
+          "automatic_lifetime_ephemeral_allocation_site_count": 0,
+          "automatic_lifetime_long_lived_allocation_site_count": 0,
+          "automatic_lifetime_unknown_allocation_site_count": 0,
+          "automatic_lifetime_unsupported_allocation_site_count": 0,
+          "body_clone_returned_to_rustc": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "continue_compilation": true,
+          "cross_thread_recovery_hint_count": 1,
+          "direct_allocator_call_site_count": 0,
+          "direct_layout_allocator_call_site_count": 0,
+          "direct_layout_allocator_rewrite_applied_count": 0,
+          "direct_local_metadata_abi": true,
+          "direct_local_size_align_metadata_contract_violation_count": 0,
+          "direct_local_size_align_pairing_details": [],
+          "direct_local_size_align_pairing_gap_count": 0,
+          "direct_local_size_align_pairing_gaps": [],
+          "direct_local_size_align_semantic_drop_scope_count": 0,
+          "direct_local_size_align_with_semantic_drop": true,
+          "direct_replacement_resolution_status": "no_supported_rewrite_candidates",
+          "direct_size_align_allocator_call_site_count": 0,
+          "direct_size_align_recovery_backed_unpaired_dealloc_count": 0,
+          "lifetime_profile_abstention_count": 0,
+          "lifetime_profile_ambiguous_match_count": 0,
+          "lifetime_profile_guard_mismatch_count": 0,
+          "lifetime_profile_match_count": 0,
+          "lifetime_profile_miss_count": 0,
+          "provider_override_installed": true,
+          "replacement_resolution_status": "no_supported_rewrite_candidates",
+          "rewrite_applied_count": 0,
+          "rewrite_candidate_count": 6,
+          "semantic_ownership_transfer_candidate_count": 0,
+          "semantic_ownership_transfer_replacement_resolution_status": "no_supported_semantic_ownership_transfer_candidates",
+          "semantic_ownership_transfer_rewrite_applied_count": 0,
+          "semantic_scope_callback_capable_skipped_count": 0,
+          "semantic_scope_candidate_count": 0,
+          "semantic_scope_deallocation_like_candidate_count": 0,
+          "semantic_scope_deallocation_like_rewrite_applied_count": 0,
+          "semantic_scope_drop_candidate_count": 1,
+          "semantic_scope_drop_generic_type_parameter_skipped_count": 0,
+          "semantic_scope_drop_non_heap_skipped_count": 2,
+          "semantic_scope_drop_rewrite_applied_count": 1,
+          "semantic_scope_drop_unsolved_candidate_count": 0,
+          "semantic_scope_replacement_resolution_status": "no_supported_semantic_scope_candidates",
+          "semantic_scope_rewrite_applied_count": 0,
+          "semantic_scope_unsolved_candidate_count": 3,
+          "semantic_scope_unwind_pop_inserted_count": 0
+        },
+        "pass_log_files": [
+          {
+            "bytes": 5170,
+            "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/pass-logs/neon-351fc93d5fdbf5b4.log",
+            "sha256": "4da39c0fd2460003a6296ffcbbfbe845f28ac276c9cc9c42e049dcf523047859"
+          },
+          {
+            "bytes": 5158,
+            "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/pass-logs/rsh_064_harness-2c8436917dca5a55.log",
+            "sha256": "4491e7280e83c334145dc9ed713405c331cc92c87bdd32eacccb137726d70e53"
+          }
+        ],
+        "policy_flags": 0
+      },
+      "execution_status": "completed",
+      "executions": [
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain",
+            "duration_seconds": 0.1542346477508545,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/run-001.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 57,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/run-001.stdout",
+              "sha256": "e0bee341904459c2d2930b15c92723fb78f0d5cd4b11d580497de42738f4c98c"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              110,
+              111,
+              100,
+              101
+            ],
+            "before": [
+              227,
+              1,
+              34,
+              8
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 1,
+          "reuse_denial_signal_observed": false
+        },
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain",
+            "duration_seconds": 0.1555321216583252,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/run-002.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 62,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/run-002.stdout",
+              "sha256": "3f46358ea8394d529d66ace0f3734829977eef437c3d68e71f0b9f427d604fab"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              110,
+              111,
+              100,
+              101
+            ],
+            "before": [
+              134,
+              209,
+              148,
+              140
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 2,
+          "reuse_denial_signal_observed": false
+        },
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain",
+            "duration_seconds": 0.1651453971862793,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/run-003.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 58,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typed_plain/run-003.stdout",
+              "sha256": "8c0ec3a6d9d4497071895132a0237e419409ee7c63970eb45ffc8ae42df084db"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              110,
+              111,
+              100,
+              101
+            ],
+            "before": [
+              8,
+              157,
+              54,
+              18
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 3,
+          "reuse_denial_signal_observed": false
+        }
+      ],
+      "lockfile": {
+        "bytes": 3909,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain/project/Cargo.lock",
+        "sha256": "c6f58fb877d2646feb7cc694d08041f82363b91bce767a6a44d97cc2f4219032"
+      },
+      "manifest_sha256": "c6025d88dd612a7299675e90e35110ab50e04279be23ec80fe0cd7c2e340c36c",
+      "materialized_source": {
+        "bytes": 374,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typed_plain/project/src/lib.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "oracle": "corrupt_external_array_buffer_bytes",
+      "oracle_validation": {
+        "expected_payload": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "observed": true,
+        "status": "corrupt_bytes_observed_in_all_repetitions"
+      },
+      "reclaim_spin_archive": null,
+      "repetition_summary": {
+        "completed": 3,
+        "corrupt_bytes_observed": 3,
+        "exact_reclaim_signal_observed": 0,
+        "requested": 3,
+        "reuse_denial_signal_observed": 0
+      },
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "none"
+    },
+    {
+      "addon": {
+        "bytes": 8374560,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/rsh064.node",
+        "sha256": "23382fc6b827404831bf7ac885aa8bfc603376eae7341959d9abc8c83efb7caa"
+      },
+      "allocator_variant": "typeiso",
+      "archive": {
+        "bytes": 269317,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.0.crate",
+        "sha256": "544694d02bbff81f78dba5ef7d29341cc6d256edcae4fbb2d684491d5755c748"
+      },
+      "archive_variant": "vulnerable",
+      "build": {
+        "command": [
+          "cargo",
+          "+nightly-2026-06-11",
+          "build",
+          "--locked",
+          "--manifest-path",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/project/Cargo.toml",
+          "--target-dir",
+          "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/target"
+        ],
+        "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/project",
+        "duration_seconds": 3.849990129470825,
+        "returncode": 0,
+        "stderr": {
+          "bytes": 3279,
+          "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/build.stderr",
+          "sha256": "3713002c9cf7197f935490b509207d6a03afdbe0b697484a2629b80400e401c3"
+        },
+        "stdout": {
+          "bytes": 0,
+          "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/build.stdout",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "timed_out": false
+      },
+      "claim_grade": false,
+      "compiler_evidence": {
+        "audit_files": [
+          {
+            "bytes": 4198185,
+            "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/audits/neon-07daf5bbb9885cbe.json",
+            "sha256": "a6c3348a9f6762f030dccff69246a98b2ae8139c3b2184a57dce88da63fbf856"
+          },
+          {
+            "bytes": 26513,
+            "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/audits/rsh_064_harness-a1077cc55d4837e4.json",
+            "sha256": "0ff7f90c880ebb1d45a4fd4bc78bab899d2e98348fd654505f2bd76175186afe"
+          }
+        ],
+        "harness_compiler_pass": {
+          "actual_allocator_call_replacement": false,
+          "actual_allocator_call_replacement_requested": true,
+          "actual_semantic_ownership_transfer_rewrite": false,
+          "actual_semantic_ownership_transfer_rewrite_requested": true,
+          "actual_semantic_scope_rewrite": false,
+          "actual_semantic_scope_rewrite_requested": true,
+          "auto_cross_thread_recovery_hint": false,
+          "automatic_lifetime_abstained_allocation_site_count": 0,
+          "automatic_lifetime_candidate_allocation_site_count": 0,
+          "automatic_lifetime_classifier_enabled": false,
+          "automatic_lifetime_classifier_precedence": "exact_profile>manual_global>automatic>Unknown",
+          "automatic_lifetime_eligible_allocation_site_count": 0,
+          "automatic_lifetime_ephemeral_allocation_site_count": 0,
+          "automatic_lifetime_ephemeral_count": 0,
+          "automatic_lifetime_long_lived_allocation_site_count": 0,
+          "automatic_lifetime_long_lived_count": 0,
+          "automatic_lifetime_pairing_contract": "same per-owner decision for semantic allocation and matching Drop scopes",
+          "automatic_lifetime_phase_boundary": "exact DefId unialloc::lifetime_hugepage_advance_epoch on unique normal MIR path",
+          "automatic_lifetime_unknown_allocation_site_count": 0,
+          "automatic_lifetime_unknown_allocation_site_reasons": {},
+          "automatic_lifetime_unknown_count": 0,
+          "automatic_lifetime_unsupported_allocation_site_count": 0,
+          "body_clone_returned_to_rustc": true,
+          "claim_grade": false,
+          "continue_compilation": true,
+          "cross_thread_recovery_hint_count": 1,
+          "cross_thread_recovery_placement_hint_bit": 32768,
+          "default_policy_flags": 1,
+          "direct_local_metadata_abi": true,
+          "direct_local_size_align_with_semantic_drop": true,
+          "direct_replacement_resolution_status": "no_supported_rewrite_candidates",
+          "kind": "rustc_driver_optimized_mir_provider_override",
+          "lifetime_hint": 0,
+          "lifetime_profile_abstention_count": 0,
+          "lifetime_profile_ambiguous_entry_count": 0,
+          "lifetime_profile_ambiguous_match_count": 0,
+          "lifetime_profile_binding": "exact(callsite,type_id,module_id)",
+          "lifetime_profile_confidence_threshold": 0,
+          "lifetime_profile_digest": null,
+          "lifetime_profile_digest_algorithm": "fnv1a64-raw-bytes",
+          "lifetime_profile_duplicate_key_count": 0,
+          "lifetime_profile_enabled": false,
+          "lifetime_profile_format": "unialloc-lifetime-profile-v1",
+          "lifetime_profile_format_valid": false,
+          "lifetime_profile_guard_mismatch_count": 0,
+          "lifetime_profile_invalid_line_count": 0,
+          "lifetime_profile_match_count": 0,
+          "lifetime_profile_miss_count": 0,
+          "lifetime_profile_path": null,
+          "lifetime_profile_source_entry_line_count": 0,
+          "lifetime_profile_unique_entry_count": 0,
+          "module_id": 5066189562921636184,
+          "module_id_algorithm": "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))",
+          "name": "unialloc-rustc-driver-mir-rewrite-dry-run",
+          "notes": [
+            "This installs a real rustc query override and returns cloned MIR bodies to rustc.",
+            "Dry-run is the default; explicit actual modes can retarget direct allocator calls or insert semantic-scope enter/exit calls."
+          ],
+          "placement_hint": 0,
+          "policy_flags": 1,
+          "query_overridden": "optimized_mir",
+          "replacement_resolution_status": "no_supported_rewrite_candidates",
+          "rewrite_applied_count": 0,
+          "semantic_ownership_transfer_candidate_count": 0,
+          "semantic_ownership_transfer_replacement_resolution_status": "no_supported_semantic_ownership_transfer_candidates",
+          "semantic_ownership_transfer_rewrite_applied_count": 0,
+          "semantic_scope_callback_capable_skipped_count": 0,
+          "semantic_scope_deallocation_like_rewrite_applied_count": 0,
+          "semantic_scope_drop_candidate_count": 1,
+          "semantic_scope_drop_generic_type_parameter_skipped_count": 0,
+          "semantic_scope_drop_non_heap_skipped_count": 2,
+          "semantic_scope_drop_rewrite_applied_count": 1,
+          "semantic_scope_drop_unsolved_candidate_count": 0,
+          "semantic_scope_replacement_resolution_status": "no_supported_semantic_scope_candidates",
+          "semantic_scope_rewrite_applied_count": 0,
+          "semantic_scope_unsolved_candidate_count": 3,
+          "semantic_scope_unwind_pop_inserted_count": 0
+        },
+        "harness_summary": {
+          "actual_allocator_call_replacement": false,
+          "actual_allocator_call_replacement_requested": true,
+          "actual_semantic_ownership_transfer_rewrite": false,
+          "actual_semantic_ownership_transfer_rewrite_requested": true,
+          "actual_semantic_scope_rewrite": false,
+          "actual_semantic_scope_rewrite_requested": true,
+          "automatic_lifetime_abstained_allocation_site_count": 0,
+          "automatic_lifetime_candidate_allocation_site_count": 0,
+          "automatic_lifetime_classifier_enabled": false,
+          "automatic_lifetime_eligible_allocation_site_count": 0,
+          "automatic_lifetime_ephemeral_allocation_site_count": 0,
+          "automatic_lifetime_long_lived_allocation_site_count": 0,
+          "automatic_lifetime_unknown_allocation_site_count": 0,
+          "automatic_lifetime_unsupported_allocation_site_count": 0,
+          "body_clone_returned_to_rustc": true,
+          "claim_grade": false,
+          "complete_for_claim": false,
+          "continue_compilation": true,
+          "cross_thread_recovery_hint_count": 1,
+          "direct_allocator_call_site_count": 0,
+          "direct_layout_allocator_call_site_count": 0,
+          "direct_layout_allocator_rewrite_applied_count": 0,
+          "direct_local_metadata_abi": true,
+          "direct_local_size_align_metadata_contract_violation_count": 0,
+          "direct_local_size_align_pairing_details": [],
+          "direct_local_size_align_pairing_gap_count": 0,
+          "direct_local_size_align_pairing_gaps": [],
+          "direct_local_size_align_semantic_drop_scope_count": 0,
+          "direct_local_size_align_with_semantic_drop": true,
+          "direct_replacement_resolution_status": "no_supported_rewrite_candidates",
+          "direct_size_align_allocator_call_site_count": 0,
+          "direct_size_align_recovery_backed_unpaired_dealloc_count": 0,
+          "lifetime_profile_abstention_count": 0,
+          "lifetime_profile_ambiguous_match_count": 0,
+          "lifetime_profile_guard_mismatch_count": 0,
+          "lifetime_profile_match_count": 0,
+          "lifetime_profile_miss_count": 0,
+          "provider_override_installed": true,
+          "replacement_resolution_status": "no_supported_rewrite_candidates",
+          "rewrite_applied_count": 0,
+          "rewrite_candidate_count": 6,
+          "semantic_ownership_transfer_candidate_count": 0,
+          "semantic_ownership_transfer_replacement_resolution_status": "no_supported_semantic_ownership_transfer_candidates",
+          "semantic_ownership_transfer_rewrite_applied_count": 0,
+          "semantic_scope_callback_capable_skipped_count": 0,
+          "semantic_scope_candidate_count": 0,
+          "semantic_scope_deallocation_like_candidate_count": 0,
+          "semantic_scope_deallocation_like_rewrite_applied_count": 0,
+          "semantic_scope_drop_candidate_count": 1,
+          "semantic_scope_drop_generic_type_parameter_skipped_count": 0,
+          "semantic_scope_drop_non_heap_skipped_count": 2,
+          "semantic_scope_drop_rewrite_applied_count": 1,
+          "semantic_scope_drop_unsolved_candidate_count": 0,
+          "semantic_scope_replacement_resolution_status": "no_supported_semantic_scope_candidates",
+          "semantic_scope_rewrite_applied_count": 0,
+          "semantic_scope_unsolved_candidate_count": 3,
+          "semantic_scope_unwind_pop_inserted_count": 0
+        },
+        "pass_log_files": [
+          {
+            "bytes": 5169,
+            "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/pass-logs/neon-07daf5bbb9885cbe.log",
+            "sha256": "8490ac9bf221c4c1de68b8599294855d90b2d424994eb2845a039296d383f6f8"
+          },
+          {
+            "bytes": 5158,
+            "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/pass-logs/rsh_064_harness-a1077cc55d4837e4.log",
+            "sha256": "de703949eaed256c501ce07327f8ece3175b558da8c1aff84f6a91ee0a89bfa0"
+          }
+        ],
+        "policy_flags": 1
+      },
+      "execution_status": "completed",
+      "executions": [
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso",
+            "duration_seconds": 0.16041326522827148,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/run-001.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 60,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/run-001.stdout",
+              "sha256": "33b4800bb8ac1e8eb0a913106c612c7b734c0ffe756e15270a2d987b78342d4e"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              105,
+              110,
+              116,
+              101
+            ],
+            "before": [
+              89,
+              91,
+              173,
+              109
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 1,
+          "reuse_denial_signal_observed": false
+        },
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso",
+            "duration_seconds": 0.14360594749450684,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/run-002.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 59,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/run-002.stdout",
+              "sha256": "dd21307f502d871eb1881598054ede4f1f582a00e6417ce80d0bdf3ff5c9d7b8"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              110,
+              111,
+              100,
+              101
+            ],
+            "before": [
+              82,
+              252,
+              120,
+              6
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 2,
+          "reuse_denial_signal_observed": false
+        },
+        {
+          "exact_reclaim_signal_observed": false,
+          "execution": {
+            "command": [
+              "node",
+              "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-064/invoke.js",
+              "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/rsh064.node"
+            ],
+            "cwd": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso",
+            "duration_seconds": 0.14166545867919922,
+            "returncode": 0,
+            "stderr": {
+              "bytes": 0,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/run-003.stderr",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stdout": {
+              "bytes": 62,
+              "path": "/tmp/rsh064-current-final-20260714/arms/vulnerable-typeiso/run-003.stdout",
+              "sha256": "2beeebcc88656abfc46689cd13f4daa28762a9219b8d827ab514564c5fd38894"
+            },
+            "timed_out": false
+          },
+          "oracle": {
+            "after_churn": [
+              105,
+              110,
+              116,
+              101
+            ],
+            "before": [
+              118,
+              100,
+              151,
+              223
+            ],
+            "byte_length": 4,
+            "expected": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "observed": true,
+            "status": "corrupt_bytes_observed"
+          },
+          "repetition": 3,
+          "reuse_denial_signal_observed": false
+        }
+      ],
+      "lockfile": {
+        "bytes": 3909,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/project/Cargo.lock",
+        "sha256": "c6f58fb877d2646feb7cc694d08041f82363b91bce767a6a44d97cc2f4219032"
+      },
+      "manifest_sha256": "c6025d88dd612a7299675e90e35110ab50e04279be23ec80fe0cd7c2e340c36c",
+      "materialized_source": {
+        "bytes": 374,
+        "path": "/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/project/src/lib.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "oracle": "corrupt_external_array_buffer_bytes",
+      "oracle_validation": {
+        "expected_payload": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "observed": true,
+        "status": "corrupt_bytes_observed_in_all_repetitions"
+      },
+      "reclaim_spin_archive": null,
+      "repetition_summary": {
+        "completed": 3,
+        "corrupt_bytes_observed": 3,
+        "exact_reclaim_signal_observed": 0,
+        "requested": 3,
+        "reuse_denial_signal_observed": 0
+      },
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "none"
+    }
+  ],
+  "case_id": "RSH-064",
+  "catalog": {
+    "bytes": 5160,
+    "path": "evaluation/config/rustsec_heap_neon_node_harnesses.json",
+    "sha256": "07f6aa0cde866a8caf6f44793653d9a4d294718c14627953148a401197828c07"
+  },
+  "checks": {
+    "exact_reclaim_signal_count": 0,
+    "feature_matched_reclaim_arms_reproduced_uaf": true,
+    "patched_static_bound_compile_rejection_observed": true,
+    "vulnerable_system_corrupt_bytes_reproduced": true
+  },
+  "claim_boundary": "The system arm reproduces the source UAF symptom and the patched archive rejects the same source. Direct UniAlloc reclaim arms test duplicate-reclaim diagnostics. The typed compiler pair remains inconclusive unless the critical Vec/external allocation path is rewritten.",
+  "claim_grade": false,
+  "input_drift": {},
+  "input_fingerprint_after": {
+    "catalog_sha256": "07f6aa0cde866a8caf6f44793653d9a4d294718c14627953148a401197828c07",
+    "runner_sha256": "42f86a8ff1d405f82d0b8d3ea44b80931af920c956964282e8598ed0010f0fc1",
+    "unialloc_implementation_sha256": "29ec9af086226428864e331e8a21fb9c3437c484e177a4973bb48312d8f9f8c7"
+  },
+  "input_fingerprint_before": {
+    "catalog_sha256": "07f6aa0cde866a8caf6f44793653d9a4d294718c14627953148a401197828c07",
+    "runner_sha256": "42f86a8ff1d405f82d0b8d3ea44b80931af920c956964282e8598ed0010f0fc1",
+    "unialloc_implementation_sha256": "29ec9af086226428864e331e8a21fb9c3437c484e177a4973bb48312d8f9f8c7"
+  },
+  "mechanism_evaluation": {
+    "mechanism": "reclaim_checks",
+    "outcome": "no_signal",
+    "reason": "single_valid_free_followed_by_stale_v8_read_without_duplicate_reclaim"
+  },
+  "mitigation_inferred": false,
+  "orchestration_success": true,
+  "repetitions_requested": 3,
+  "scenario_id": "RSH-064-node-addon",
+  "schema_version": 1,
+  "source": "unialloc-rsh064-neon-node-experiment",
+  "type_isolation_evaluation": {
+    "compiler_critical_site_coverage_validated": false,
+    "harness_compiler_summary": {
+      "actual_allocator_call_replacement": false,
+      "actual_allocator_call_replacement_requested": true,
+      "actual_semantic_ownership_transfer_rewrite": false,
+      "actual_semantic_ownership_transfer_rewrite_requested": true,
+      "actual_semantic_scope_rewrite": false,
+      "actual_semantic_scope_rewrite_requested": true,
+      "automatic_lifetime_abstained_allocation_site_count": 0,
+      "automatic_lifetime_candidate_allocation_site_count": 0,
+      "automatic_lifetime_classifier_enabled": false,
+      "automatic_lifetime_eligible_allocation_site_count": 0,
+      "automatic_lifetime_ephemeral_allocation_site_count": 0,
+      "automatic_lifetime_long_lived_allocation_site_count": 0,
+      "automatic_lifetime_unknown_allocation_site_count": 0,
+      "automatic_lifetime_unsupported_allocation_site_count": 0,
+      "body_clone_returned_to_rustc": true,
+      "claim_grade": false,
+      "complete_for_claim": false,
+      "continue_compilation": true,
+      "cross_thread_recovery_hint_count": 1,
+      "direct_allocator_call_site_count": 0,
+      "direct_layout_allocator_call_site_count": 0,
+      "direct_layout_allocator_rewrite_applied_count": 0,
+      "direct_local_metadata_abi": true,
+      "direct_local_size_align_metadata_contract_violation_count": 0,
+      "direct_local_size_align_pairing_details": [],
+      "direct_local_size_align_pairing_gap_count": 0,
+      "direct_local_size_align_pairing_gaps": [],
+      "direct_local_size_align_semantic_drop_scope_count": 0,
+      "direct_local_size_align_with_semantic_drop": true,
+      "direct_replacement_resolution_status": "no_supported_rewrite_candidates",
+      "direct_size_align_allocator_call_site_count": 0,
+      "direct_size_align_recovery_backed_unpaired_dealloc_count": 0,
+      "lifetime_profile_abstention_count": 0,
+      "lifetime_profile_ambiguous_match_count": 0,
+      "lifetime_profile_guard_mismatch_count": 0,
+      "lifetime_profile_match_count": 0,
+      "lifetime_profile_miss_count": 0,
+      "provider_override_installed": true,
+      "replacement_resolution_status": "no_supported_rewrite_candidates",
+      "rewrite_applied_count": 0,
+      "rewrite_candidate_count": 6,
+      "semantic_ownership_transfer_candidate_count": 0,
+      "semantic_ownership_transfer_replacement_resolution_status": "no_supported_semantic_ownership_transfer_candidates",
+      "semantic_ownership_transfer_rewrite_applied_count": 0,
+      "semantic_scope_callback_capable_skipped_count": 0,
+      "semantic_scope_candidate_count": 0,
+      "semantic_scope_deallocation_like_candidate_count": 0,
+      "semantic_scope_deallocation_like_rewrite_applied_count": 0,
+      "semantic_scope_drop_candidate_count": 1,
+      "semantic_scope_drop_generic_type_parameter_skipped_count": 0,
+      "semantic_scope_drop_non_heap_skipped_count": 2,
+      "semantic_scope_drop_rewrite_applied_count": 1,
+      "semantic_scope_drop_unsolved_candidate_count": 0,
+      "semantic_scope_replacement_resolution_status": "no_supported_semantic_scope_candidates",
+      "semantic_scope_rewrite_applied_count": 0,
+      "semantic_scope_unsolved_candidate_count": 3,
+      "semantic_scope_unwind_pop_inserted_count": 0
+    },
+    "outcome": "inconclusive",
+    "reason": "compiler_critical_site_coverage_not_validated",
+    "reuse_denial_signal_count": 0,
+    "typed_plain_and_typeiso_uaf_reproduced": true
+  },
+  "unexpected_arm_count": 0,
+  "unsafe_execution_requested": true,
+  "variants": [
+    "system",
+    "reclaim_plain",
+    "reclaim_checks",
+    "typed_plain",
+    "typeiso"
+  ]
+}

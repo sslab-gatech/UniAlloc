@@ -1,0 +1,165 @@
+{
+  "accounted_case_count": 49,
+  "case_attribution_case_ids": {
+    "multiple_allocator_mechanisms": [
+      "RSH-002"
+    ],
+    "no_allocator_signal_observed": [
+      "RSH-049",
+      "RSH-050",
+      "RSH-075"
+    ],
+    "not_yet_attributed": [
+      "RSH-003",
+      "RSH-006",
+      "RSH-019"
+    ],
+    "other_allocator_feature_only": [
+      "RSH-046",
+      "RSH-047",
+      "RSH-048",
+      "RSH-001",
+      "RSH-051",
+      "RSH-011",
+      "RSH-053",
+      "RSH-005",
+      "RSH-057",
+      "RSH-058",
+      "RSH-044",
+      "RSH-060",
+      "RSH-009",
+      "RSH-045",
+      "RSH-061",
+      "RSH-062",
+      "RSH-063",
+      "RSH-014",
+      "RSH-010",
+      "RSH-012",
+      "RSH-013",
+      "RSH-031",
+      "RSH-070",
+      "RSH-071",
+      "RSH-018",
+      "RSH-020",
+      "RSH-072",
+      "RSH-043",
+      "RSH-074",
+      "RSH-021",
+      "RSH-076"
+    ],
+    "type_isolation_only": [
+      "RSH-052",
+      "RSH-055",
+      "RSH-008",
+      "RSH-064",
+      "RSH-065",
+      "RSH-066",
+      "RSH-067",
+      "RSH-068",
+      "RSH-069",
+      "RSH-042",
+      "RSH-041"
+    ]
+  },
+  "case_attribution_categories_are_exclusive": true,
+  "case_attribution_counts": {
+    "multiple_allocator_mechanisms": 1,
+    "no_allocator_signal_observed": 3,
+    "not_yet_attributed": 3,
+    "other_allocator_feature_only": 31,
+    "type_isolation_only": 11
+  },
+  "excluded_before_evaluation_case_ids": [
+    "RSH-054",
+    "RSH-056",
+    "RSH-059",
+    "RSH-073"
+  ],
+  "excluded_before_evaluation_count": 4,
+  "integration_status": {
+    "excluded_before_evaluation": 4,
+    "executable": 49
+  },
+  "mechanism_categories_are_nonexclusive": true,
+  "mechanism_coverage_case_ids": {
+    "reclaim_checks_exact_detection": [
+      "RSH-046",
+      "RSH-047",
+      "RSH-048",
+      "RSH-001",
+      "RSH-051",
+      "RSH-011",
+      "RSH-002",
+      "RSH-053",
+      "RSH-005",
+      "RSH-057",
+      "RSH-058",
+      "RSH-044",
+      "RSH-060",
+      "RSH-009",
+      "RSH-045",
+      "RSH-061",
+      "RSH-062",
+      "RSH-063",
+      "RSH-014",
+      "RSH-010",
+      "RSH-012",
+      "RSH-013",
+      "RSH-070",
+      "RSH-071",
+      "RSH-018",
+      "RSH-020",
+      "RSH-072",
+      "RSH-043",
+      "RSH-074",
+      "RSH-021",
+      "RSH-076"
+    ],
+    "recovery_layout_validation_exact_detection": [
+      "RSH-031"
+    ],
+    "type_isolation_edge_covered": [
+      "RSH-052",
+      "RSH-002",
+      "RSH-055",
+      "RSH-008",
+      "RSH-064",
+      "RSH-065",
+      "RSH-066",
+      "RSH-067",
+      "RSH-068",
+      "RSH-069",
+      "RSH-042",
+      "RSH-041"
+    ]
+  },
+  "mechanism_coverage_counts": {
+    "reclaim_checks_exact_detection": 31,
+    "recovery_layout_validation_exact_detection": 1,
+    "type_isolation_edge_covered": 12
+  },
+  "primitive_counts": {
+    "double_free": 27,
+    "invalid_free": 1,
+    "out_of_bounds_read": 1,
+    "uninitialized_drop": 2,
+    "use_after_free": 18
+  },
+  "reviewed_candidate_count": 53,
+  "rustsec_commit": "9f3e138091487e69144f536d36976e427a7a3307",
+  "scope_count": 49,
+  "type_isolation_claim_boundary": {
+    "automatic_source_true_positive_case_count": 0,
+    "claim_grade": false,
+    "compiler_automatic_victim_coverage": false,
+    "manual_derived_reuse_edge_case_count": 12,
+    "source_vulnerability_detection_validated": false,
+    "synthetic_reduction_case_count": 2,
+    "synthetic_reduction_case_ids": [
+      "RSH-065",
+      "RSH-069"
+    ]
+  },
+  "unresolved_integration_case_ids": [],
+  "unresolved_integration_count": 0
+}

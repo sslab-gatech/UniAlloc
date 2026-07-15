@@ -1,0 +1,60 @@
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.46
+   Compiling unicode-ident v1.0.24
+   Compiling syn v1.0.109
+   Compiling neon-build v0.10.0
+   Compiling cfg-if v1.0.4
+   Compiling smallvec v1.15.2
+   Compiling semver-parser v0.7.0
+   Compiling libloading v0.6.7
+   Compiling semver v0.9.0
+   Compiling neon-runtime v0.10.0
+   Compiling neon v0.10.0 (/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/subject/neon-0.10.0)
+   Compiling syn-mid v0.5.4
+   Compiling neon-macros v0.10.0
+warning: unexpected `cfg` condition name: `neon_profile`
+  --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/subject/neon-0.10.0/src/meta.rs:31:7
+   |
+31 | #[cfg(neon_profile = "release")]
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: expected names are: `docsrs`, `feature`, and `test` and 32 more
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(neon_profile, values("release"))'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(neon_profile, values(\"release\"))");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition name: `neon_profile`
+  --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/subject/neon-0.10.0/src/meta.rs:35:11
+   |
+35 | #[cfg(not(neon_profile = "release"))]
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(neon_profile, values("release"))'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(neon_profile, values(\"release\"))");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: hiding a lifetime that's named elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/subject/neon-0.10.0/src/context/mod.rs:329:34
+    |
+329 |     fn lock<'b>(&'b mut self) -> Lock<Self>
+    |                  --              ^^^^^^^^^^ the same lifetime is hidden here
+    |                  |
+    |                  the lifetime is named here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: consistently use `'b`
+    |
+329 |     fn lock<'b>(&'b mut self) -> Lock<'b, Self>
+    |                                       +++
+
+warning: `neon` (lib) generated 3 warnings (run `cargo fix --lib -p neon` to apply 1 suggestion)
+   Compiling rsh-064-harness v0.0.0 (/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-typeiso/project)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.83s

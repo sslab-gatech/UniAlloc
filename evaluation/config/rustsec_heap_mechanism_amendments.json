@@ -1,0 +1,175 @@
+{
+  "amendments": [
+    {
+      "advisory_id": "RUSTSEC-2019-0016",
+      "allowed_outcomes": [
+        "detected"
+      ],
+      "case_id": "RSH-001",
+      "evidence_paths": [
+        "docs/evidence/rustsec-rsh001-reclaim-20260714/mechanism-results.json"
+      ],
+      "mechanism": "reclaim_checks",
+      "reason": "Root-cause review identified the integrated chttp witness as an exact duplicate-ownership and duplicate-reclaim event. A post-review feature-matched plain/check matrix attributes the repeated exact diagnostic to reclaim_checks while preserving Type Isolation as a separate source-witness question.",
+      "scenario_id": "RSH-001-upstream"
+    },
+    {
+      "advisory_id": "RUSTSEC-2019-0023",
+      "allowed_outcomes": [
+        "no_signal",
+        "inconclusive"
+      ],
+      "case_id": "RSH-052",
+      "evidence_paths": [
+        "docs/evidence/rustsec-reclaim-checks-20260714/summary-batch-a-remaining.json"
+      ],
+      "mechanism": "reclaim_checks",
+      "reason": "Review added a cross-mechanism negative-control run after witness integration to test whether the exact duplicate-reclaim diagnostic also appears on this candidate. The original strong-candidate mechanism classification remains unchanged.",
+      "scenario_id": "RSH-052-upstream"
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0047",
+      "allowed_outcomes": [
+        "detected",
+        "inconclusive"
+      ],
+      "case_id": "RSH-005",
+      "evidence_paths": [
+        "docs/evidence/rustsec-reclaim-checks-20260714/summary-batch-d.json"
+      ],
+      "mechanism": "reclaim_checks",
+      "reason": "The integrated terminal witness reaches an exact duplicate-reclaim transition. Review added the reclaim configuration as a post-integration mechanism evaluation; the original strong-candidate classification remains cross-type reuse.",
+      "scenario_id": "RSH-005-rudra-heap-adapter"
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0091",
+      "allowed_outcomes": [
+        "no_signal",
+        "inconclusive"
+      ],
+      "case_id": "RSH-006",
+      "evidence_paths": [
+        "docs/evidence/rustsec-reclaim-checks-20260714/summary-batch-d.json"
+      ],
+      "mechanism": "reclaim_checks",
+      "reason": "Review added a cross-mechanism negative-control run after witness integration to test whether the exact duplicate-reclaim diagnostic also appears on this candidate. The original strong-candidate mechanism classification remains unchanged.",
+      "scenario_id": "RSH-006-rudra"
+    },
+    {
+      "advisory_id": "RUSTSEC-2020-0145",
+      "allowed_outcomes": [
+        "no_signal",
+        "inconclusive"
+      ],
+      "case_id": "RSH-055",
+      "evidence_paths": [
+        "docs/evidence/rustsec-reclaim-checks-20260714/summary-batch-b-remaining.json"
+      ],
+      "mechanism": "reclaim_checks",
+      "reason": "Review added a cross-mechanism negative-control run after witness integration to test whether the exact duplicate-reclaim diagnostic also appears on this candidate. The original strong-candidate mechanism classification remains unchanged.",
+      "scenario_id": "RSH-055-upstream"
+    },
+    {
+      "advisory_id": "RUSTSEC-2023-0017",
+      "allowed_outcomes": [
+        "detected",
+        "inconclusive"
+      ],
+      "case_id": "RSH-031",
+      "evidence_paths": [
+        "docs/evidence/rustsec-rsh031-layout-20260715/mechanism-results.json"
+      ],
+      "mechanism": "recovery_layout_validation",
+      "reason": "Root-cause review identified an allocation/deallocation layout mismatch on the integrated Vec Drop edge. The derived native matrix binds the exact recovery-layout diagnostic to that edge while the pinned upstream Miri run supplies source-level ground truth.",
+      "scenario_id": "RSH-031-derived-layout-validation"
+    },
+    {
+      "advisory_id": "RUSTSEC-2023-0054",
+      "allowed_outcomes": [
+        "no_signal",
+        "inconclusive"
+      ],
+      "case_id": "RSH-065",
+      "evidence_paths": [
+        "docs/evidence/rustsec-reclaim-checks-20260714/summary-batch-c-remaining.json"
+      ],
+      "mechanism": "reclaim_checks",
+      "reason": "Review added a cross-mechanism negative-control run after witness integration to test whether the exact duplicate-reclaim diagnostic also appears on this candidate. The original strong-candidate mechanism classification remains unchanged.",
+      "scenario_id": "RSH-065-upstream"
+    },
+    {
+      "advisory_id": "RUSTSEC-2024-0007",
+      "allowed_outcomes": [
+        "no_signal",
+        "inconclusive"
+      ],
+      "case_id": "RSH-066",
+      "evidence_paths": [
+        "docs/evidence/rustsec-reclaim-checks-20260714/summary-batch-c-remaining.json"
+      ],
+      "mechanism": "reclaim_checks",
+      "reason": "Review added a cross-mechanism negative-control run after witness integration to test whether the exact duplicate-reclaim diagnostic also appears on this candidate. The original strong-candidate mechanism classification remains unchanged.",
+      "scenario_id": "RSH-066-advisory"
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0004",
+      "allowed_outcomes": [
+        "no_signal",
+        "inconclusive"
+      ],
+      "case_id": "RSH-067",
+      "evidence_paths": [
+        "docs/evidence/rustsec-reclaim-checks-20260714/summary-batch-c-remaining.json"
+      ],
+      "mechanism": "reclaim_checks",
+      "reason": "Review added a cross-mechanism negative-control run after witness integration to test whether the exact duplicate-reclaim diagnostic also appears on this candidate. The original strong-candidate mechanism classification remains unchanged.",
+      "scenario_id": "RSH-067-advisory"
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0016",
+      "allowed_outcomes": [
+        "no_signal",
+        "inconclusive"
+      ],
+      "case_id": "RSH-068",
+      "evidence_paths": [
+        "docs/evidence/rustsec-reclaim-checks-20260714/summary-batch-f.json"
+      ],
+      "mechanism": "reclaim_checks",
+      "reason": "Review added a cross-mechanism negative-control run after witness integration to test whether the exact duplicate-reclaim diagnostic also appears on this candidate. The original strong-candidate mechanism classification remains unchanged.",
+      "scenario_id": "RSH-068-parc-project"
+    },
+    {
+      "advisory_id": "RUSTSEC-2025-0022",
+      "allowed_outcomes": [
+        "no_signal",
+        "inconclusive"
+      ],
+      "case_id": "RSH-069",
+      "evidence_paths": [
+        "docs/evidence/rustsec-reclaim-checks-20260714/summary-batch-f.json"
+      ],
+      "mechanism": "reclaim_checks",
+      "reason": "Review added a cross-mechanism negative-control run after witness integration to test whether the exact duplicate-reclaim diagnostic also appears on this candidate. The original strong-candidate mechanism classification remains unchanged.",
+      "scenario_id": "RSH-069-md-fetch"
+    },
+    {
+      "advisory_id": "RUSTSEC-2026-0172",
+      "allowed_outcomes": [
+        "no_signal",
+        "inconclusive"
+      ],
+      "case_id": "RSH-075",
+      "evidence_paths": [
+        "docs/evidence/rustsec-reclaim-checks-20260714/summary-batch-d.json"
+      ],
+      "mechanism": "reclaim_checks",
+      "reason": "Review added a cross-mechanism negative-control run after witness integration to test whether the exact duplicate-reclaim diagnostic also appears on this candidate. The original strong-candidate mechanism classification remains unchanged.",
+      "scenario_id": "RSH-075-upstream-regression"
+    }
+  ],
+  "boundary": "These amendments register post-integration cross-mechanism experiments. They preserve the original candidate classification and expose post-hoc positive evidence explicitly.",
+  "claim_grade": false,
+  "schema_version": 1,
+  "source": "unialloc-rustsec-reviewed-mechanism-amendments"
+}

@@ -1,0 +1,37 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -3017,12 +3017,15 @@
+         unsafe {
+             while self.idx != self.old_len {
+                 let i = self.idx;
+-                self.idx += 1;
+                 let v = slice::from_raw_parts_mut(
+                     self.deq.as_mut_ptr(),
+                     self.old_len,
+                 );
+-                if (self.pred)(&mut v[i]) {
++                let drained = (self.pred)(&mut v[i]);
++                // Advance only after the predicate returns. On panic, the
++                // current and remaining elements stay in the untouched tail.
++                self.idx += 1;
++                if drained {
+                     self.del += 1;
+                     return Some(ptr::read(&v[i]));
+                 } else if self.del > 0 {
+@@ -3049,9 +3052,14 @@
+     F: FnMut(&mut T) -> bool,
+ {
+     fn drop(&mut self) {
+-        for _ in self.by_ref() {}
+-
+         unsafe {
++            if self.del > 0 {
++                // Retain the unvisited tail without calling the user predicate
++                // during drop. `ptr::copy` handles the overlapping backshift.
++                let src = self.deq.as_ptr().add(self.idx);
++                let dst = self.deq.as_mut_ptr().add(self.idx - self.del);
++                ptr::copy(src, dst, self.old_len - self.idx);
++            }
+             let new_len = self.old_len - self.del;
+             self.deq.move_tail_unchecked(new_len as isize);
+         }

@@ -1,0 +1,48 @@
+# RSH-067 Type-Isolation Reuse-Edge Evidence
+
+This bundle evaluates the manually attributed reuse edge derived from
+RSH-067 / RUSTSEC-2025-0004 (`openssl`). The vulnerable
+`select_next_proto` result has a lifetime tied only to the client list even
+when it points into the server buffer. The adapter reclaims that 64-byte server
+buffer and requests a semantically distinct equal-layout `Replacement` before
+the collision-gated stale read.
+
+## Strict result
+
+| Arm | Address reuse | Matching TypeIso denial |
+| --- | ---: | ---: |
+| vulnerable / system | 3/3 | 0/3 |
+| vulnerable / `typed_plain` | 3/3 | 0/3 |
+| vulnerable / `typeiso` | 0/3 | 3/3 |
+| patched / system | 3/3 | 0/3 |
+| patched / `typed_plain` | 3/3 | 0/3 |
+| patched / `typeiso` | 3/3 | 0/3 |
+
+The strict exporter classifies this as
+`type_isolation / mitigated / causal_mitigation_true_positive`. The vulnerable
+system and plain ablation arms collide in every repetition; TypeIso denies and
+reports each cross-identity collision; the patched same-identity control
+retains ordinary reuse without a denial.
+
+## Evidence and boundary
+
+- `preflight.json` records the pinned inputs and supported arm topology.
+- `experiment.json` contains the raw six-arm, three-repetition matrix.
+- `derived-reuse-summary.json` validates the bounded A-to-B edge.
+- `mechanism-results.json` contains the strict mechanism classification.
+- Vulnerable adapter: `evaluation/harnesses/rustsec_heap_expansion/RSH-067/derived_reuse.rs`
+  (`5bc90e106316eeb2cd67876dea882360400d49f0b0915bdf45c4cdba7068ae4e`).
+- Patched control: `evaluation/harnesses/rustsec_heap_expansion/RSH-067/derived_reuse_patched.rs`
+  (`1ddbec25a9cdb9885ab04a67a91a177d31f31840885e61ed4412665d93f1a09d`).
+
+This matrix is part of the 12-case frozen isolated WIP evidence snapshot with
+UniAlloc implementation digest
+`ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2`.
+The current shared-session working tree and current HEAD have separate live
+provenance.
+
+This is one manually annotated, collision-gated, layout-bounded allocator
+edge. Automatic compiler victim-site coverage is `0`, validated complete
+source-level vulnerability detection is `0`, and `claim_grade` remains
+`false`. The positive claim covers denial of the measured 64-byte
+cross-identity reuse decision.

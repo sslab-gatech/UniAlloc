@@ -1,0 +1,74 @@
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.9
+   Compiling glob v0.3.3
+   Compiling version_check v0.9.5
+   Compiling libc v0.2.186
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.46
+   Compiling memchr v2.8.3
+   Compiling regex-syntax v0.8.11
+   Compiling bindgen v0.54.0
+   Compiling peeking_take_while v0.1.2
+   Compiling lazycell v1.3.0
+   Compiling rustc-hash v1.1.0
+   Compiling shlex v0.1.1
+   Compiling lazy_static v1.5.0
+   Compiling bitflags v1.3.2
+   Compiling cfg-if v0.1.10
+   Compiling pkg-config v0.3.33
+   Compiling cc v1.2.67
+   Compiling nom v5.1.3
+   Compiling clang-sys v0.29.3
+   Compiling libloading v0.5.2
+   Compiling regex-automata v0.4.15
+   Compiling cexpr v0.4.0
+   Compiling regex v1.13.0
+   Compiling yottadb v1.1.0 (/tmp/unialloc-blocked-reattempt-20260714/subjects/yottadb-1.1.0)
+error: failed to run custom build command for `yottadb v1.1.0 (/tmp/unialloc-blocked-reattempt-20260714/subjects/yottadb-1.1.0)`
+
+Caused by:
+  process didn't exit successfully: `/tmp/unialloc-blocked-reattempt-20260714/projects/RSH-059/vulnerable/target/debug/build/yottadb-27e591fc1d5530f0/build-script-build` (exit status: 101)
+  --- stdout
+  cargo:rerun-if-env-changed=YOTTADB_NO_PKG_CONFIG
+  cargo:rerun-if-env-changed=PKG_CONFIG_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG
+  cargo:rerun-if-env-changed=PKG_CONFIG
+  cargo:rerun-if-env-changed=YOTTADB_STATIC
+  cargo:rerun-if-env-changed=YOTTADB_DYNAMIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_ALL_STATIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_ALL_DYNAMIC
+  cargo:rerun-if-env-changed=PKG_CONFIG_PATH_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_PATH_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG_PATH
+  cargo:rerun-if-env-changed=PKG_CONFIG_PATH
+  cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG_LIBDIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64-unknown-linux-gnu
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64_unknown_linux_gnu
+  cargo:rerun-if-env-changed=HOST_PKG_CONFIG_SYSROOT_DIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR
+
+  --- stderr
+
+  thread 'main' (2246562) panicked at /tmp/unialloc-blocked-reattempt-20260714/subjects/yottadb-1.1.0/build.rs:20:56:
+  called `Result::unwrap()` on an `Err` value: 
+  pkg-config exited with status code 1
+  > PKG_CONFIG_ALLOW_SYSTEM_LIBS=1 PKG_CONFIG_ALLOW_SYSTEM_CFLAGS=1 pkg-config --libs --cflags yottadb
+
+  pkg-config output:
+    Package yottadb was not found in the pkg-config search path.
+    Perhaps you should add the directory containing `yottadb.pc'
+    to the PKG_CONFIG_PATH environment variable
+    Package 'yottadb', required by 'virtual:world', not found
+
+  The system library `yottadb` required by crate `yottadb` was not found.
+  The file `yottadb.pc` needs to be installed and the PKG_CONFIG_PATH environment variable must contain its parent directory.
+  The PKG_CONFIG_PATH environment variable is not set.
+
+  HINT: if you have installed the library, try setting PKG_CONFIG_PATH to the directory containing `yottadb.pc`.
+
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

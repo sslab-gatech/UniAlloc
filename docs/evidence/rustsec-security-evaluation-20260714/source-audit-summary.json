@@ -1,0 +1,50 @@
+{
+  "claim_boundary": "Source and preflight verification establish pinned inputs and executable topology only; they do not establish mitigation or detection coverage.",
+  "claim_grade": false,
+  "corpus_sha256": "1441faa0e96188da7d18b2c4e2b95a930c30d492eed07dfa6e42115a16f7bce9",
+  "date": "2026-07-14",
+  "full_preflight": {
+    "path": "evaluation/raw/rustsec-heap-full-preflight-final-20260714/sweep-summary.json",
+    "sha256": "b2a82f65e7e82811af26de8d2351105bd6e7a4788bf89fd296208e97722d9e45",
+    "totals": {
+      "arm_count": 216,
+      "executed_repetitions": 0,
+      "expected_compile_rejection_count": 0,
+      "failed_count": 0,
+      "planned_repetition_slots": 416,
+      "resumed_count": 0,
+      "run_count": 0,
+      "scenario_count": 27,
+      "success_count": 27,
+      "terminal_arm_count": 216,
+      "unexpected_count": 0,
+      "unsupported_count": 8
+    },
+    "valid": true
+  },
+  "harness_catalog_sha256": "fc83229a1fe21901bb416aecc4dc6d433465301597b17c564dc2804bbf937c26",
+  "pinned_sources": {
+    "rudra_poc_commit": "6226dd030fffbed5601099cb0e24f73e4150a7f5",
+    "rustsec_advisory_db_commit": "9f3e138091487e69144f536d36976e427a7a3307"
+  },
+  "schema_version": 2,
+  "source": "unialloc-rustsec-heap-source-audit-summary",
+  "source_audit": {
+    "audit_script_sha256": "e6373bbee15e620adb082df49903d02c44dab920ce9f9a484929da21b0fbf746",
+    "blocker_count": 0,
+    "counts": {
+      "derived_adapter_scenarios": 3,
+      "harness_case_bundles": 22,
+      "pinned_rudra_source_scenarios": 18,
+      "published_or_upstream_scenarios": 24,
+      "repository_materializable_scenarios": 27,
+      "source_pinned_advisories": 40,
+      "source_pinned_scenarios": 45
+    },
+    "passed": true,
+    "path": "evaluation/raw/rustsec-heap-full-sweep-20260714/source-audit.final.json",
+    "sha256": "3ebe211a8a61054d076c7ac5f93116e159a761f8d75f37ec5b48e95e996ef690",
+    "snapshot_verified": true,
+    "warning_count": 1
+  }
+}

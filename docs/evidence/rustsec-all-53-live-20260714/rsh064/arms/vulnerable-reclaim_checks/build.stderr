@@ -1,0 +1,238 @@
+   Compiling proc-macro2 v1.0.106
+   Compiling libc v0.2.183
+   Compiling quote v1.0.46
+   Compiling unicode-ident v1.0.24
+   Compiling neon-build v0.10.0
+   Compiling syn v1.0.109
+   Compiling cfg_aliases v0.1.1
+   Compiling cfg-if v1.0.4
+   Compiling scopeguard v1.2.0
+   Compiling semver-parser v0.7.0
+   Compiling smallvec v1.15.2
+   Compiling alloc_macros v0.1.0 (/home/hanqing/alloc/UniAlloc/alloc_macros)
+   Compiling libloading v0.6.7
+   Compiling lock_api v0.4.14
+   Compiling semver v0.9.0
+   Compiling neon-runtime v0.10.0
+   Compiling spin v0.9.0 (/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0)
+   Compiling neon v0.10.0 (/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/subject/neon-0.10.0)
+warning: unexpected `cfg` condition value: `lock_api1`
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/rwlock.rs:845:7
+    |
+845 | #[cfg(feature = "lock_api1")]
+    |       ^^^^^^^^^^-----------
+    |                 |
+    |                 help: there is a expected value with a similar name: `"lock_api"`
+    |
+    = note: expected values for `feature` are: `barrier`, `default`, `lazy`, `lock_api`, `lock_api_crate`, `mutex`, `once`, `rwlock`, `spin_mutex`, `std`, `ticket_mutex`, and `use_ticket_mutex`
+    = help: consider adding `lock_api1` as a feature in `Cargo.toml`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/mutex.rs:162:17
+    |
+162 |     pub fn lock(&self) -> MutexGuard<T> {
+    |                 ^^^^^     ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                 |
+    |                 the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+162 |     pub fn lock(&self) -> MutexGuard<'_, T> {
+    |                                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/mutex.rs:208:21
+    |
+208 |     pub fn try_lock(&self) -> Option<MutexGuard<T>> {
+    |                     ^^^^^            ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                     |
+    |                     the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+208 |     pub fn try_lock(&self) -> Option<MutexGuard<'_, T>> {
+    |                                                 +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/mutex/spin.rs:138:17
+    |
+138 |     pub fn lock(&self) -> SpinMutexGuard<T> {
+    |                 ^^^^^     ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                 |
+    |                 the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+138 |     pub fn lock(&self) -> SpinMutexGuard<'_, T> {
+    |                                          +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/mutex/spin.rs:194:21
+    |
+194 |     pub fn try_lock(&self) -> Option<SpinMutexGuard<T>> {
+    |                     ^^^^^            ^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                     |
+    |                     the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+194 |     pub fn try_lock(&self) -> Option<SpinMutexGuard<'_, T>> {
+    |                                                     +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/rwlock.rs:169:17
+    |
+169 |     pub fn read(&self) -> RwLockReadGuard<T> {
+    |                 ^^^^^     ^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                 |
+    |                 the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+169 |     pub fn read(&self) -> RwLockReadGuard<'_, T> {
+    |                                           +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/rwlock.rs:197:18
+    |
+197 |     pub fn write(&self) -> RwLockWriteGuard<T, R> {
+    |                  ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                  |
+    |                  the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+197 |     pub fn write(&self) -> RwLockWriteGuard<'_, T, R> {
+    |                                             +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/rwlock.rs:209:29
+    |
+209 |     pub fn upgradeable_read(&self) -> RwLockUpgradableGuard<T, R> {
+    |                             ^^^^^     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                             |
+    |                             the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+209 |     pub fn upgradeable_read(&self) -> RwLockUpgradableGuard<'_, T, R> {
+    |                                                             +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/rwlock.rs:243:21
+    |
+243 |     pub fn try_read(&self) -> Option<RwLockReadGuard<T>> {
+    |                     ^^^^^            ^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                     |
+    |                     the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+243 |     pub fn try_read(&self) -> Option<RwLockReadGuard<'_, T>> {
+    |                                                      +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/rwlock.rs:312:27
+    |
+312 |     fn try_write_internal(&self, strong: bool) -> Option<RwLockWriteGuard<T, R>> {
+    |                           ^^^^^                          ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                           |
+    |                           the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+312 |     fn try_write_internal(&self, strong: bool) -> Option<RwLockWriteGuard<'_, T, R>> {
+    |                                                                           +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/rwlock.rs:353:22
+    |
+353 |     pub fn try_write(&self) -> Option<RwLockWriteGuard<T, R>> {
+    |                      ^^^^^            ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                      |
+    |                      the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+353 |     pub fn try_write(&self) -> Option<RwLockWriteGuard<'_, T, R>> {
+    |                                                        +++
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/spin/spin-0.9.0/src/rwlock.rs:359:33
+    |
+359 |     pub fn try_upgradeable_read(&self) -> Option<RwLockUpgradableGuard<T, R>> {
+    |                                 ^^^^^            ^^^^^^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+    |                                 |
+    |                                 the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+    |
+359 |     pub fn try_upgradeable_read(&self) -> Option<RwLockUpgradableGuard<'_, T, R>> {
+    |                                                                        +++
+
+warning: `spin` (lib) generated 12 warnings (run `cargo fix --lib -p spin` to apply 11 suggestions)
+   Compiling num_cpus v1.13.0
+   Compiling page_size v0.4.2
+   Compiling unialloc v0.1.0 (/home/hanqing/alloc/UniAlloc/unialloc)
+   Compiling syn-mid v0.5.4
+   Compiling neon-macros v0.10.0
+warning: unexpected `cfg` condition name: `neon_profile`
+  --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/subject/neon-0.10.0/src/meta.rs:31:7
+   |
+31 | #[cfg(neon_profile = "release")]
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: expected names are: `docsrs`, `feature`, and `test` and 32 more
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(neon_profile, values("release"))'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(neon_profile, values(\"release\"))");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition name: `neon_profile`
+  --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/subject/neon-0.10.0/src/meta.rs:35:11
+   |
+35 | #[cfg(not(neon_profile = "release"))]
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(neon_profile, values("release"))'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(neon_profile, values(\"release\"))");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: hiding a lifetime that's named elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/subject/neon-0.10.0/src/context/mod.rs:329:34
+    |
+329 |     fn lock<'b>(&'b mut self) -> Lock<Self>
+    |                  --              ^^^^^^^^^^ the same lifetime is hidden here
+    |                  |
+    |                  the lifetime is named here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: consistently use `'b`
+    |
+329 |     fn lock<'b>(&'b mut self) -> Lock<'b, Self>
+    |                                       +++
+
+warning: `neon` (lib) generated 3 warnings (run `cargo fix --lib -p neon` to apply 1 suggestion)
+   Compiling rsh-064-harness v0.0.0 (/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/vulnerable-reclaim_checks/project)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.08s

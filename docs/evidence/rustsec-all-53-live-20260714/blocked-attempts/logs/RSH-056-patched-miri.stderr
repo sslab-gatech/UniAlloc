@@ -1,0 +1,3 @@
+ Downloading crates ...
+  Downloaded glsl-layout-derive v0.4.0
+error: package `unicode-ident v1.0.24` cannot be built because it requires rustc 1.71 or newer, while the currently active rustc version is 1.64.0-nightly

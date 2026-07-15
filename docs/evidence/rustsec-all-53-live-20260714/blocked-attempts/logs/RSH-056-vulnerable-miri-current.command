@@ -1,0 +1,1 @@
+env MIRIFLAGS=-Zmiri-ignore-leaks\ -Zmiri-disable-stacked-borrows cargo +nightly-2026-06-11 miri run --locked --manifest-path /tmp/unialloc-blocked-reattempt-20260714/projects/RSH-056/vulnerable/Cargo.toml 

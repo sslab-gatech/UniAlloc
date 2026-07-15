@@ -1,0 +1,252 @@
+{
+  "advisory_id": "RUSTSEC-2021-0010",
+  "allocator_feature_validation": {
+    "arms": [
+      {
+        "allocator_variant": "system",
+        "archive_variant": "vulnerable",
+        "binary_sha256": "e929b805ab604ae612bb1a669d22fd89603a91d9d698474a55fff20230b5d78d",
+        "build_exit_code": 0,
+        "native_diagnostic_signatures": [],
+        "oracle_status": "tool_finding_observed",
+        "run_exit_codes": [
+          1,
+          1,
+          1
+        ],
+        "tool_finding_signatures": [
+          "asan_double_free",
+          "asan_double_free",
+          "asan_double_free"
+        ]
+      },
+      {
+        "allocator_variant": "reclaim_checks",
+        "archive_variant": "vulnerable",
+        "binary_sha256": "5276edc316b41ec56d6c991acbf78f76a3d53655d96a4f6f167e7dc9810fa133",
+        "build_exit_code": 0,
+        "native_diagnostic_signatures": [
+          "unialloc_pointer_already_released_check",
+          "unialloc_pointer_already_released_check",
+          "unialloc_pointer_already_released_check"
+        ],
+        "oracle_status": "native_diagnostic_signal_observed",
+        "run_exit_codes": [
+          -6,
+          -6,
+          -6
+        ],
+        "tool_finding_signatures": []
+      },
+      {
+        "allocator_variant": "system",
+        "archive_variant": "patched",
+        "binary_sha256": "4634b70ad361eea9a45a6ecc7df797951c5de2a96e7ce63cb53946cd4f68fe28",
+        "build_exit_code": 0,
+        "native_diagnostic_signatures": [],
+        "oracle_status": "patched_safe_panic_control_observed",
+        "run_exit_codes": [
+          -4,
+          -4,
+          -4
+        ],
+        "tool_finding_signatures": []
+      },
+      {
+        "allocator_variant": "reclaim_checks",
+        "archive_variant": "patched",
+        "binary_sha256": "75412cfa6479912f56fd3d17c45cfdf2e1b949cf158ab18db5a2b00f04b7bf2a",
+        "build_exit_code": 0,
+        "native_diagnostic_signatures": [
+          "rust_panic_observed",
+          "rust_panic_observed",
+          "rust_panic_observed"
+        ],
+        "oracle_status": "native_diagnostic_signal_observed",
+        "run_exit_codes": [
+          -4,
+          -4,
+          -4
+        ],
+        "tool_finding_signatures": []
+      }
+    ],
+    "experiment": {
+      "bytes": 410246,
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/RSH-058-reclaim-checks-experiment.json",
+      "sha256": "a206cecd0d092fb401fa7c8185210b5eb24fc64e2903080c3efe874e58c617ff"
+    },
+    "orchestration_success": true,
+    "preflight": {
+      "bytes": 12117,
+      "path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/RSH-058-reclaim-checks-preflight.json",
+      "sha256": "232e26f62d46d2d0484f3221a73c43f1ba5ddec43fc25218db1fd7f05378624e"
+    },
+    "repetitions": 3,
+    "result": "System ASan reproduced the vulnerable double-free in 3/3 runs. reclaim_checks emitted pointer already released in 3/3 vulnerable runs. Both patched arms were free of sanitizer and UniAlloc reclaim signals in 3/3 runs; their intentional panic/abort control remained.",
+    "unexpected_arm_count": 0
+  },
+  "archives": {
+    "patched": {
+      "bytes": 24737,
+      "package": "containers",
+      "sha256": "c550e54925bbe7e578bc612016bd3716d7fbd818d5dd56c9248938ae94e8ba8f",
+      "upstream_fix_commit": "7389a24d84ee7ff1d60dc87270882897679c4afa",
+      "url": "https://static.crates.io/crates/containers/containers-0.9.11.crate",
+      "version": "0.9.11"
+    },
+    "peer_dependencies": {
+      "default_allocator_0_3_0": {
+        "bytes": 6146,
+        "sha256": "1008954db5c525beb38a3ae4c3c6f248eb9ae82f94150056f00226ac0ec1f322"
+      },
+      "either_1_6_1": {
+        "sha256": "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
+      },
+      "rel_0_2_0": {
+        "bytes": 5515,
+        "sha256": "35f4a32661bff050a4e4e7bcf1ec5fbe36f2dd8fa32269318204d0bcfd9b5569"
+      }
+    },
+    "vulnerable": {
+      "bytes": 24671,
+      "package": "containers",
+      "sha256": "4a8d98a64ac51f955a41098631855ff8d314f784f4b942973c5a5b1b6c020937",
+      "url": "https://static.crates.io/crates/containers/containers-0.9.10.crate",
+      "version": "0.9.10"
+    }
+  },
+  "case_id": "RSH-058",
+  "claim_boundary": "This is an executable allocator-boundary double-reclaim case after bounded source and ABI compatibility adapters. The matched result establishes exact duplicate-reclaim detection in this integrated witness. It does not establish general use-after-free prevention or detection after an address has been reallocated.",
+  "crate": "containers",
+  "historical_linker_alias_validation": {
+    "build_command_template": "ulimit -c 0; RUSTFLAGS='--cfg feature=\"stable-rust\" -Clink-arg=-Wl,--defsym=__rust_alloc=malloc -Clink-arg=-Wl,--defsym=__rust_dealloc=free -Zsanitizer=address -Cforce-frame-pointers=yes --cap-lints=warn' cargo +nightly-2026-06-11 build --release --target x86_64-unknown-linux-gnu --locked",
+    "classification": "superseded_system_only_linker_alias_validation",
+    "patched": {
+      "build_exit_code": 0,
+      "build_stderr_sha256": "0b89f628e59d4522c36e3d295e09ad0f87fedbf43b17f72426312d3767a11fa0",
+      "oracle": "intentional panic followed by the 0.9.11 abort-on-unwind guard; no AddressSanitizer finding",
+      "run_exit_code": 132,
+      "run_stderr_sha256": "a955f89ed44578b7fe8fe28b651bad7c7efe0e0f0470d6c9229b33153151c808"
+    },
+    "run_command_template": "ulimit -c 0; ASAN_OPTIONS=detect_leaks=0:disable_coredump=1 timeout -k 1 5 target/x86_64-unknown-linux-gnu/release/rsh-058-harness",
+    "toolchain": {
+      "commit": "485ec3fbcc12fa14ef6596dabb125ad710499c9e",
+      "llvm": "22.1.6",
+      "name": "nightly-2026-06-11",
+      "rustc": "1.98.0-nightly"
+    },
+    "vulnerable": {
+      "build_exit_code": 0,
+      "build_stderr_sha256": "260b69893669b1d5ec9fdac73c79ab582f88b406c7a19bf8ef2906feb20dfe75",
+      "first_free_location": "main closure through containers::BNode::insert_with",
+      "oracle": "AddressSanitizer: attempting double-free",
+      "run_exit_code": 1,
+      "run_stderr_sha256": "35a9dc328887450d78275ef4389227395123d26e675c72801115d70aebe054f1",
+      "second_free_location": "containers::BNode::drop"
+    }
+  },
+  "historical_probe": {
+    "miri": {
+      "classification": "oracle_incompatible_with_subject_pointer_provenance_idiom",
+      "command_default": "MIRIFLAGS='-Zmiri-ignore-leaks' cargo +nightly-2020-12-23 miri run --locked",
+      "command_relaxed": "MIRIFLAGS='-Zmiri-disable-validation -Zmiri-disable-stacked-borrows -Zmiri-disable-alignment-check -Zmiri-ignore-leaks' cargo +nightly-2020-12-23 miri run --locked",
+      "miri": "0.1.0 (2065b52 2020-12-11)",
+      "outcome": "shared pre-witness failure in both releases: containers::BNode::component_arrays_mut reconstructs a pointer after integer alignment, and Miri reports 'inbounds test failed: ... is not a valid pointer' before the first insert completes",
+      "patched_default_stderr_sha256": "79ca03644c9914f5e1fc54145aafd7d3444d9028bee3b9b382fb814fc1de17f2",
+      "rustc_commit": "bb1fbbf84455fbad9afd26c17e0f725019322655",
+      "toolchain": "nightly-2020-12-23",
+      "vulnerable_default_stderr_sha256": "bbb17203cb0914b212795cea5fa892a8a42c2ab99723f42a7d86208de47838cc"
+    },
+    "native": {
+      "command_template": "cargo +nightly-2021-02-19 build --release --locked; ulimit -c 0; timeout -k 1 5 target/release/rsh-058-harness",
+      "patched": {
+        "build_exit_code": 0,
+        "diagnostic": "intentional panic then abort-on-unwind",
+        "run_exit_code": 132,
+        "run_stderr_sha256": "b1d566d9728509c764fc14886534b52d88422f19b76528e1716dd085779c9871"
+      },
+      "rustc_commit": "0148b971c921a0831fbf3357e5936eec724e3566",
+      "toolchain": "nightly-2021-02-19",
+      "vulnerable": {
+        "build_exit_code": 0,
+        "diagnostic": "free(): double free detected in tcache 2",
+        "run_exit_code": 134,
+        "run_stderr_sha256": "70be052035690c04b90d9684cdf6921013842927a593e7f05e2796f06d4452f2"
+      }
+    }
+  },
+  "integration_result": {
+    "catalog_path": "evaluation/config/rustsec_heap_strong_batch_b_harnesses.json",
+    "experiment_path": "docs/evidence/rustsec-reclaim-checks-20260714/raw/RSH-058-reclaim-checks-experiment.json",
+    "experiment_sha256": "a206cecd0d092fb401fa7c8185210b5eb24fc64e2903080c3efe874e58c617ff",
+    "orchestration_success": true,
+    "preflight_sha256": "232e26f62d46d2d0484f3221a73c43f1ba5ddec43fc25218db1fd7f05378624e",
+    "repetitions": 3,
+    "status": "executable_and_reclaim_check_validated",
+    "unexpected_arm_count": 0
+  },
+  "locks": {
+    "extra_dependencies": {
+      "default_allocator": "=0.3.0",
+      "either": "=1.6.1",
+      "rel": "=0.2.0"
+    },
+    "patched": {
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-058/Cargo.lock.patched",
+      "sha256": "2352c734f92e2889d9c5b4e2355e61d201c44818c25da242d29c7a7ff2fbe55a"
+    },
+    "vulnerable": {
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-058/Cargo.lock.vulnerable",
+      "sha256": "6ba38f0914db0c63aa937f2f35611d00ea7e46bde317aac4376b4fe2a591a27c"
+    }
+  },
+  "mechanical_adapter": {
+    "bounded_witness": {
+      "description": "Replace the published retrying while loop with one call to the same public insert_with method and the same panic closure. The call reaches the cited panic-safety path once and preserves the std::Box<u64> duplicate reclaim.",
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-058/main.rs",
+      "sha256": "ead4e2789e4f2d50ab820893f3cc46a575b4828d4e1cc5186224d9d5fd248c75"
+    },
+    "legacy_allocator_abi_bridge": {
+      "catalog_option": "legacy_allocator_abi_bridge=true",
+      "description": "The old default_allocator crate references six removed __rust_* allocator ABI symbols. The experiment wrapper defines all six symbols and forwards alloc, dealloc, realloc, and alloc_zeroed to the allocator selected for that arm; grow/shrink in place return the legacy cannot-resize result. This identical mechanical adapter keeps the std::Box<u64> target and all legacy Heap traffic allocator-visible without applying target link flags to build scripts.",
+      "implemented_by": "evaluation/scripts/run_rustsec_heap_experiment.py",
+      "rustflags": [
+        "--cap-lints=warn",
+        "--cfg=feature=\"stable-rust\""
+      ],
+      "scope": "experiment wrapper only; identical vulnerable and patched source treatment"
+    },
+    "subject_compatibility_patch": {
+      "apply_variants": [
+        "vulnerable",
+        "patched"
+      ],
+      "description": "Apply identically to both release archives: remove the removed const_fn feature gate and the obsolete custom Debug implementation whose coherence now conflicts with core. Neither edit intersects BTree insert/drop/panic-safety code.",
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-058/patches/current-toolchain-compat.patch",
+      "resulting_source_files_by_variant": {
+        "patched": {
+          "src/boxed.rs": "35d441a2ed1422068daea075dcdf2c345eefbcbb8270d93fa001497ad580086c",
+          "src/lib.rs": "4ba840343ae65be2c84765ecb4aba8b0d5d48594e795a2428e3f9e7cc1e28635"
+        },
+        "vulnerable": {
+          "src/boxed.rs": "35d441a2ed1422068daea075dcdf2c345eefbcbb8270d93fa001497ad580086c",
+          "src/lib.rs": "4ba840343ae65be2c84765ecb4aba8b0d5d48594e795a2428e3f9e7cc1e28635"
+        }
+      },
+      "sha256": "1902469a18780e1ab453e4a2fb8ff84458e490b9aad0f58c4721cc159109c510"
+    }
+  },
+  "provenance": {
+    "commit": "6226dd030fffbed5601099cb0e24f73e4150a7f5",
+    "issue_url": "https://github.com/strake/containers.rs/issues/2",
+    "kind": "rudra_poc",
+    "origin_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-058/origin.rs",
+    "origin_sha256": "b76e6e0790f8d725fa9a3a327f2aca5f4c4a1a7f68d47e45fc37ab778e9e7bb5",
+    "origin_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0108-containers.rs",
+    "published_toolchain_note": "Tested with rustc 1.50.0-nightly (7f9c43cf9 2020-12-23) on Ubuntu 18.04",
+    "repository": "https://github.com/sslab-gatech/Rudra-PoC"
+  },
+  "schema_version": 1,
+  "status": "integration_ready_with_mechanical_current_toolchain_adapter"
+}

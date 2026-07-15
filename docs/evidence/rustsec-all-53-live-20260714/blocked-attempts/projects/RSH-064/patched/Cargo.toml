@@ -1,0 +1,10 @@
+[package]
+name = "rsh-064-harness"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+neon = { path = "/tmp/unialloc-blocked-reattempt-20260714/subjects/neon-0.10.1", version = "=0.10.1", default-features = false, features = ["napi-6"] }

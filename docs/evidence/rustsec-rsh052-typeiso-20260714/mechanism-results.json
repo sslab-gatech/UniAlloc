@@ -1,0 +1,70 @@
+{
+  "boundary": "Detected true positives reproduce an exact allocator diagnostic in every vulnerable repetition with matched baseline and patched controls. Mitigated true positives causally block and report one matched exploit-enabling cross-identity reuse edge. No-signal rows are feature-matched negatives for the integrated witness only.",
+  "claim_grade": false,
+  "counts": {
+    "mitigated": 1
+  },
+  "derived_reuse_input": {
+    "bytes": 7675,
+    "path": "docs/evidence/rustsec-rsh052-typeiso-20260714/derived-reuse-summary.json",
+    "sha256": "7f3d5c2b2956e491402d91a14a298a279afc8e6ecac04f77577c4adc3423611e"
+  },
+  "minimum_repetitions": 3,
+  "results": [
+    {
+      "advisory_id": "RUSTSEC-2019-0023",
+      "automatic_source_coverage": false,
+      "case_id": "RSH-052",
+      "checks": {
+        "claim_scope_present": true,
+        "matched_arms_present": true,
+        "minimum_repetitions_met": true,
+        "orchestration_success": true,
+        "patched_system_control_valid": true,
+        "patched_typed_plain_control_valid": true,
+        "patched_typeiso_control_valid": true,
+        "synthetic_reduction_marker_present": true,
+        "system_has_no_reuse_denial": true,
+        "system_reuse_observed_in_all_repetitions": true,
+        "typed_allocator_oracle_policy_valid": true,
+        "typed_plain_has_no_reuse_denial": true,
+        "typed_plain_reuse_observed_in_all_repetitions": true,
+        "typeiso_address_reuse_blocked_in_all_repetitions": true,
+        "typeiso_denial_observed_in_all_repetitions": true,
+        "typeiso_report_bound_in_all_repetitions": true,
+        "vulnerable_system_completed_in_all_repetitions": true,
+        "vulnerable_system_oracle_observed": true,
+        "vulnerable_typed_plain_completed_in_all_repetitions": true,
+        "vulnerable_typed_plain_oracle_contract_satisfied": true,
+        "vulnerable_typeiso_completed_in_all_repetitions": true
+      },
+      "claim_grade": false,
+      "claim_scope": "derived RSH-052 old Box<str>-to-Replacement cross-identity reuse edge only",
+      "compiler_automatic_victim_coverage": false,
+      "evidence": {
+        "bytes": 7675,
+        "path": "docs/evidence/rustsec-rsh052-typeiso-20260714/derived-reuse-summary.json",
+        "sha256": "7f3d5c2b2956e491402d91a14a298a279afc8e6ecac04f77577c4adc3423611e"
+      },
+      "evidence_gaps": [],
+      "evidence_scope": "exploit_enabling_cross_identity_reuse_edge",
+      "failed_checks": [],
+      "mechanism": "type_isolation",
+      "missing_arms": [],
+      "negative_boundary": null,
+      "outcome": "mitigated",
+      "positive_scope": "exploit_enabling_cross_identity_reuse_edge",
+      "reason": "matched_cross_identity_reuse_edge_blocked_and_reported",
+      "reduction_fidelity": "manual_derived_reduction",
+      "repetitions": 3,
+      "result_semantics": "causal_mitigation_true_positive",
+      "scenario_id": "RSH-052-derived-reuse",
+      "source_level_true_positive": false,
+      "source_vulnerability_detection_validated": false,
+      "synthetic_reduction": false,
+      "true_positive": true
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-mechanism-results"
+}

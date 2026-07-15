@@ -1,0 +1,954 @@
+{
+  "automatic_source_true_positive_case_count": 0,
+  "case_count": 12,
+  "case_ids": [
+    "RSH-002",
+    "RSH-008",
+    "RSH-041",
+    "RSH-042",
+    "RSH-052",
+    "RSH-055",
+    "RSH-064",
+    "RSH-065",
+    "RSH-066",
+    "RSH-067",
+    "RSH-068",
+    "RSH-069"
+  ],
+  "claim_boundary": "The implementation digest authenticates one frozen isolated WIP snapshot used by all twelve manual derived-edge matrices. The artifact does not assert equality with the current shared working tree. Automatic source-vulnerability Type Isolation true positives remain zero.",
+  "claim_grade": false,
+  "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2",
+  "manual_derived_edge_case_count": 12,
+  "pass_sha256": "1eaf922cae44d511562f37316a9f8284a2fc057c826dd0e1d766790890215c2d",
+  "results": [
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            1,
+            1,
+            1
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            -6,
+            -6,
+            -6
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-002",
+      "durable_experiment_path": "docs/evidence/rustsec-rsh002-typeiso-20260714/experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "00f76effc26314aa61b71809d1a76d48b7d8d2d583d350828dcd4ee506aa5c11",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    },
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-008",
+      "durable_experiment_path": "docs/evidence/rustsec-rsh008-typeiso-20260714/experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "77e284f60c1396d102c07ae8efbd67dc9836ae1d448a8d74a6327b0de6aff734",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    },
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-041",
+      "durable_experiment_path": "docs/evidence/rustsec-security-expansion-20260714/raw/derived/RSH-041-derived-reuse-experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "bb92dbc51b8412c750a459490816651781508089afb846648baf1d38785e51da",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    },
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "unialloc",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "unialloc",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-042",
+      "durable_experiment_path": "docs/evidence/rustsec-security-expansion-20260714/raw/derived/RSH-042-derived-reuse-experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "ec83a267a753de616b6c91166af6e9614ad81e14fdf3eb0fa4b7fd2689882693",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    },
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-052",
+      "durable_experiment_path": "docs/evidence/rustsec-rsh052-typeiso-20260714/experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "368668007444322e0239fb4b6292d8dbe2f96ea16ba6547204de0c32bf609d4a",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    },
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-055",
+      "durable_experiment_path": "docs/evidence/rustsec-rsh055-typeiso-20260715/experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "5232365fa92f8d87b8824b046f43f12af50f650f1b8606fbaf2d5e4f8d90b8d2",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    },
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-064",
+      "durable_experiment_path": "docs/evidence/rustsec-rsh064-typeiso-20260714/experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "80b28f3ef7c3d913ae40e3c494020be92b89d7bf9f75bcd781db915c5e038c69",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    },
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-065",
+      "durable_experiment_path": "docs/evidence/rustsec-rsh065-typeiso-20260715/experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "ddb089bcc48d23577d9d39d8992473533c47b0d457512cba016f181bc1be00af",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    },
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-066",
+      "durable_experiment_path": "docs/evidence/rustsec-rsh066-typeiso-20260715/experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "7fc31c7a18892380776a0769d89432a7b03452e43dae4ac2d50b30675dfce931",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    },
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-067",
+      "durable_experiment_path": "docs/evidence/rustsec-rsh067-typeiso-20260715/experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "0ab6a3de77239b3a28e7364922c97afd8aa2e0d0032c65efce0c8489191948d8",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    },
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-068",
+      "durable_experiment_path": "docs/evidence/rustsec-rsh068-typeiso-20260715/experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "da56f637141ecaa123ce1d87cd4fcf4e0df1bbd2280c467948b440558dd8a737",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    },
+    {
+      "arms": [
+        {
+          "allocator": "system",
+          "archive": "vulnerable",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "vulnerable",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "vulnerable",
+          "denials": 3,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 0
+        },
+        {
+          "allocator": "system",
+          "archive": "patched",
+          "denials": null,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typed_plain",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        },
+        {
+          "allocator": "typeiso",
+          "archive": "patched",
+          "denials": 0,
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "reuse": 3
+        }
+      ],
+      "case": "RSH-069",
+      "durable_experiment_path": "docs/evidence/rustsec-rsh069-typeiso-20260715/experiment.json",
+      "edge_status": "cross_identity_reuse_edge_blocked_and_reported",
+      "experiment_sha256": "7ef9068cb06f53e1357a8fb224e5cf431386682cc73629b2bfaea6ff678393e3",
+      "implementation_sha256": "ce653fd5c35e2d6b912b7f8111e947cce6af29a78284cd57ea45d9bc347ab9c2"
+    }
+  ],
+  "schema_version": 1,
+  "snapshot_status": "frozen_isolated_wip_evidence_snapshot",
+  "source": "unialloc-rustsec-frozen-typeiso-matrix-batch",
+  "synthetic_reduction_case_ids": [
+    "RSH-065",
+    "RSH-069"
+  ]
+}

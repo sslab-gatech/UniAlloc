@@ -1,0 +1,13 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -2440,8 +2440,8 @@
+     #[inline]
+     fn clone(&self) -> Self {
+         let mut deq = SliceRingBuffer::<T>::with_capacity(self.size_hint().0);
+-        unsafe {
+-            deq.append_elements(self.as_slice());
++        for value in self.as_slice() {
++            deq.push_back(value.clone());
+         }
+         deq.into_iter()
+     }

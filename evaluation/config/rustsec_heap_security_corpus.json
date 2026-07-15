@@ -1,0 +1,3058 @@
+{
+  "cases": [
+    {
+      "advisory": {
+        "categories": [],
+        "informational": null,
+        "keywords": [
+          "memory-management",
+          "memory-corruption"
+        ],
+        "patched_versions": [
+          ">= 0.1.3"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2019-0016.html",
+        "sha256": "33a28440a4edccf872e0ec37f7760de3191ff6979ae49da1c4a486969dcc3d2d",
+        "snapshot_path": "crates/chttp/RUSTSEC-2019-0016.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/chttp/RUSTSEC-2019-0016.md",
+        "unaffected_versions": [
+          "< 0.1.1"
+        ],
+        "upstream_url": "https://github.com/sagebind/isahc/issues/2",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2019-0016",
+      "assessment_profile": "reuse_dependent_uaf",
+      "case_id": "RSH-001",
+      "cohort": "rustsec_extended",
+      "crate": "chttp",
+      "disclosure_date": "2019-09-01",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-001",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.1.2",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "memory_access_then_deallocation",
+        "dimension": "temporal",
+        "identity_relation": "must_measure",
+        "lifecycle_phase": "post_free_access",
+        "primary_primitive": "use_after_free",
+        "reuse_relation": "unknown",
+        "root_cause": "ownership_transfer",
+        "root_cause_cluster": "ownership_transfer",
+        "secondary_primitives": [
+          "invalid_free"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Use-after-free in buffer conversion implementation"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [
+          ">= 0.17.4"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2020-0007.html",
+        "sha256": "e2cc58ca588c7ae45d653ff95f2ec9e4a20f9e2ae4ec28e54f2121db3abae6ea",
+        "snapshot_path": "crates/bitvec/RUSTSEC-2020-0007.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/bitvec/RUSTSEC-2020-0007.md",
+        "unaffected_versions": [
+          "< 0.11.0"
+        ],
+        "upstream_url": "https://github.com/myrrlyn/bitvec/issues/55",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2020-0007",
+      "assessment_profile": "reuse_dependent_uaf",
+      "case_id": "RSH-002",
+      "cohort": "rustsec_extended",
+      "crate": "bitvec",
+      "disclosure_date": "2020-03-27",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-002",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.17.3",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "reuse_dependent_access",
+        "dimension": "temporal",
+        "identity_relation": "must_measure",
+        "lifecycle_phase": "reallocation",
+        "primary_primitive": "use_after_free",
+        "reuse_relation": "unknown",
+        "root_cause": "realloc_ownership_drift",
+        "root_cause_cluster": "realloc_ownership_drift",
+        "secondary_primitives": [
+          "double_free"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "use-after or double free of allocated memory"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [
+          ">= 0.4.0"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2020-0017.html",
+        "sha256": "47a9ee31b0c90c21303272ec8b6dbaf2596a7ab381ad5ba861bd83db97fc0d72",
+        "snapshot_path": "crates/internment/RUSTSEC-2020-0017.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/internment/RUSTSEC-2020-0017.md",
+        "unaffected_versions": [
+          "< 0.3.12"
+        ],
+        "upstream_url": "https://github.com/droundy/internment/issues/11",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2020-0017",
+      "assessment_profile": "concurrency_unsoundness",
+      "case_id": "RSH-003",
+      "cohort": "rustsec_extended",
+      "crate": "internment",
+      "disclosure_date": "2020-05-28",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-003",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.3.13",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "concurrency_only",
+        "dimension": "concurrency",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "drop",
+        "primary_primitive": "use_after_free",
+        "reuse_relation": "same",
+        "root_cause": "concurrency_race",
+        "root_cause_cluster": "concurrency_race",
+        "secondary_primitives": [
+          "data_race"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Use after free in ArcIntern::drop"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [
+          ">= 0.3.0-beta.1"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2020-0049.html",
+        "sha256": "446f032192a2929df398f468f943028231abac3f11842495f3aff4daf1104151",
+        "snapshot_path": "crates/actix-codec/RUSTSEC-2020-0049.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/actix-codec/RUSTSEC-2020-0049.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/actix/actix-net/issues/91",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2020-0049",
+      "assessment_profile": "language_invariant_violation",
+      "case_id": "RSH-004",
+      "cohort": "rustsec_extended",
+      "crate": "actix-codec",
+      "disclosure_date": "2020-01-30",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-004",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.2.0",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "memory_access_only",
+        "dimension": "provenance",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "post_move_access",
+        "primary_primitive": "use_after_free",
+        "reuse_relation": "none",
+        "root_cause": "pinning_violation",
+        "root_cause_cluster": "pinning_violation",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "mixed"
+      },
+      "title": "Use-after-free in Framed due to lack of pinning"
+    },
+    {
+      "advisory": {
+        "categories": [],
+        "informational": null,
+        "keywords": [
+          "memory-corruption",
+          "uninitialized-memory",
+          "use-after-free"
+        ],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2020-0047.html",
+        "sha256": "154ba2b311590b446bf6c512113e42992a22f0c671aeb693132d340815e85aa8",
+        "snapshot_path": "crates/array-queue/RUSTSEC-2020-0047.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/array-queue/RUSTSEC-2020-0047.md",
+        "unaffected_versions": [
+          "< 0.3.0"
+        ],
+        "upstream_url": "https://github.com/raviqqe/array-queue/issues/2",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2020-0047",
+      "assessment_profile": "uninitialized_exposure",
+      "case_id": "RSH-005",
+      "cohort": "rudra_poc",
+      "crate": "array-queue",
+      "disclosure_date": "2020-09-26",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.3.3",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0017",
+        "indexed_version": null,
+        "issue_url": "https://github.com/raviqqe/array-queue/issues/2",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "Manual"
+        ],
+        "rudra_bug_classes": [
+          "Other"
+        ],
+        "sha256": "f9e5143c30f28a409bd8e03784e09b5df3f79cf7541ecd944d055ebe3c25eafb",
+        "snapshot_path": "poc/0017-array-queue.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0017-array-queue.rs",
+        "target_crate": "array-queue",
+        "vulnerable_version": "0.3.3"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "stack_only",
+        "allocator_visibility": "memory_access_only",
+        "dimension": "initialization",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "uninitialized_read",
+        "reuse_relation": "none",
+        "root_cause": "ring_index_invariant",
+        "root_cause_cluster": "ring_index_invariant",
+        "secondary_primitives": [
+          "use_after_free",
+          "out_of_bounds_read"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "stack_inline"
+      },
+      "title": "array_queue pop_back() may cause a use-after-free"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "dangling reference"
+        ],
+        "patched_versions": [
+          ">= 0.4.8, < 1.0.0-0",
+          ">= 1.1.0"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2020-0091.html",
+        "sha256": "1071b3c2b3767df57453bb69fe9206b1d2743534b3ad5d560762d89e36528206",
+        "snapshot_path": "crates/arc-swap/RUSTSEC-2020-0091.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/arc-swap/RUSTSEC-2020-0091.md",
+        "unaffected_versions": [
+          "< 0.4.2"
+        ],
+        "upstream_url": "https://github.com/vorner/arc-swap/issues/45",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2020-0091",
+      "assessment_profile": "same_identity_or_pre_reuse_uaf",
+      "case_id": "RSH-006",
+      "cohort": "rudra_poc",
+      "crate": "arc-swap",
+      "disclosure_date": "2020-12-10",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "1.0.0",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0059",
+        "indexed_version": "0.4.7",
+        "issue_url": "https://github.com/vorner/arc-swap/issues/45",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "Manual"
+        ],
+        "rudra_bug_classes": [
+          "Other"
+        ],
+        "sha256": "915d156df801aaeed767030c680c1ff9b488213de97ea19059553ecbf7840ecb",
+        "snapshot_path": "poc/0059-arc-swap.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0059-arc-swap.rs",
+        "target_crate": "arc-swap",
+        "vulnerable_version": "1.0.0"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "memory_access_only",
+        "dimension": "temporal",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "use_after_free",
+        "reuse_relation": "none",
+        "root_cause": "invalid_lifetime",
+        "root_cause_cluster": "invalid_lifetime",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Dangling reference in `access::Map` with Constant"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": "unsound",
+        "keywords": [
+          "memory-safety",
+          "use-after-free"
+        ],
+        "patched_versions": [
+          ">= 0.4.7"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0044.html",
+        "sha256": "5d4659d943f4ed9f65c8b755849ceee32e1eb0f670414247b36b6891abf98178",
+        "snapshot_path": "crates/rocket/RUSTSEC-2021-0044.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/rocket/RUSTSEC-2021-0044.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/SergioBenitez/Rocket/issues/1534",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0044",
+      "assessment_profile": "same_identity_or_pre_reuse_uaf",
+      "case_id": "RSH-007",
+      "cohort": "rudra_poc",
+      "crate": "rocket",
+      "disclosure_date": "2021-02-09",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.4.6",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0131",
+        "indexed_version": "0.4.5",
+        "issue_url": "https://github.com/SergioBenitez/Rocket/issues/1534",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "PanicSafety"
+        ],
+        "sha256": "8c2a55a359ea72a4c865370b39f8f9ef6ec50a153f25b3d953d410673c6cf1e1",
+        "snapshot_path": "poc/0131-rocket_http.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0131-rocket_http.rs",
+        "target_crate": "rocket_http",
+        "vulnerable_version": "0.4.6"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "memory_access_only",
+        "dimension": "temporal",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "unwind",
+        "primary_primitive": "use_after_free",
+        "reuse_relation": "none",
+        "root_cause": "panic_safety",
+        "root_cause_cluster": "panic_safety",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "mixed"
+      },
+      "title": "Use after free possible in `uri::Formatter` on panic"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "use-after-free"
+        ],
+        "patched_versions": [
+          ">= 0.7.1"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0130.html",
+        "sha256": "c3628e588cc8e4b22f3106d1c70d91e5273b8cfe5ef677530f1abb5fcbe283a6",
+        "snapshot_path": "crates/lru/RUSTSEC-2021-0130.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/lru/RUSTSEC-2021-0130.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/jeromefroe/lru-rs/issues/120",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0130",
+      "assessment_profile": "reuse_dependent_uaf",
+      "case_id": "RSH-008",
+      "cohort": "rustsec_extended",
+      "crate": "lru",
+      "disclosure_date": "2021-12-21",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-008",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.7.0",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "reuse_dependent_access",
+        "dimension": "temporal",
+        "identity_relation": "must_measure",
+        "lifecycle_phase": "post_free_access",
+        "primary_primitive": "use_after_free",
+        "reuse_relation": "unknown",
+        "root_cause": "iterator_ownership",
+        "root_cause_cluster": "iterator_ownership",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Use after free in lru crate"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "memory-safety",
+          "double-free"
+        ],
+        "patched_versions": [
+          ">= 1.3.1"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0030.html",
+        "sha256": "e6af9af54f01276e034a2a3a31b1ec01cfa7490fe7327115d3f635586a15f8c2",
+        "snapshot_path": "crates/scratchpad/RUSTSEC-2021-0030.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/scratchpad/RUSTSEC-2021-0030.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/okready/scratchpad/issues/1",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0030",
+      "assessment_profile": "panic_double_drop",
+      "case_id": "RSH-009",
+      "cohort": "rudra_poc",
+      "crate": "scratchpad",
+      "disclosure_date": "2021-02-18",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "1.3.0",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0141",
+        "indexed_version": null,
+        "issue_url": "https://github.com/okready/scratchpad/issues/1",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "PanicSafety"
+        ],
+        "sha256": "170b326ef9228e6855f8eccc0eaf9bac2cc18662c745a75ec561a26fc518e135",
+        "snapshot_path": "poc/0141-scratchpad.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0141-scratchpad.rs",
+        "target_crate": "scratchpad",
+        "vulnerable_version": "1.3.0"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "unwind",
+        "primary_primitive": "double_free",
+        "reuse_relation": "none",
+        "root_cause": "panic_safety",
+        "root_cause_cluster": "panic_safety",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "move_elements can double-free objects on panic"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "memory-safety",
+          "double-free"
+        ],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0049.html",
+        "sha256": "d09d54281421f8cbf5dd57de28e39d397af6e269f1720eeec5902d243ba8715e",
+        "snapshot_path": "crates/through/RUSTSEC-2021-0049.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/through/RUSTSEC-2021-0049.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/gretchenfrage/through/issues/1",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0049",
+      "assessment_profile": "panic_double_drop",
+      "case_id": "RSH-010",
+      "cohort": "rudra_poc",
+      "crate": "through",
+      "disclosure_date": "2021-02-18",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.1.0",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0140",
+        "indexed_version": null,
+        "issue_url": "https://github.com/gretchenfrage/through/issues/1",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "PanicSafety"
+        ],
+        "sha256": "3438bed3895ef3fedd61f325da6ea1f1f8f52c9dc7ec1aa30dd9562f44824bbe",
+        "snapshot_path": "poc/0140-through.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0140-through.rs",
+        "target_crate": "through",
+        "vulnerable_version": "0.1.0"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "unwind",
+        "primary_primitive": "double_free",
+        "reuse_relation": "none",
+        "root_cause": "panic_safety",
+        "root_cause_cluster": "panic_safety",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "`through` and `through_and` causes a double free if the map function panics"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "memory-safety",
+          "double-free",
+          "unsound"
+        ],
+        "patched_versions": [
+          ">= 0.1.20"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2019-0034.html",
+        "sha256": "6925d422ce6ae6407804edbd9938da9499924033ba3f596afeb83fc76203b7e3",
+        "snapshot_path": "crates/http/RUSTSEC-2019-0034.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/http/RUSTSEC-2019-0034.md",
+        "unaffected_versions": [],
+        "upstream_url": null,
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2019-0034",
+      "assessment_profile": "allocator_visible_double_free",
+      "case_id": "RSH-011",
+      "cohort": "rudra_poc",
+      "crate": "http",
+      "disclosure_date": "2019-11-16",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.1.19",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0001",
+        "indexed_version": null,
+        "issue_url": "hyperium/http#353 and hyperium/http#354",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "Manual"
+        ],
+        "rudra_bug_classes": [
+          "Other"
+        ],
+        "sha256": "7c41964a39b93f9ad4f9e17b84cde66abf2c864aae796192761bb8f30bcfc65f",
+        "snapshot_path": "poc/0001-http.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0001-http.rs",
+        "target_crate": "http",
+        "vulnerable_version": "0.1.19"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "drop",
+        "primary_primitive": "double_free",
+        "reuse_relation": "none",
+        "root_cause": "partial_iterator_consumption",
+        "root_cause_cluster": "partial_iterator_consumption",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "HeaderMap::Drain API is unsound"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "memory-safety",
+          "double-free"
+        ],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0052.html",
+        "sha256": "3633ddfd27917fb01f2caff6b9de5ff0d56ee3f5dc975a18b8b4dd6cf484cba5",
+        "snapshot_path": "crates/id-map/RUSTSEC-2021-0052.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/id-map/RUSTSEC-2021-0052.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/andrewhickman/id-map/issues/3",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0052",
+      "assessment_profile": "panic_double_drop",
+      "case_id": "RSH-012",
+      "cohort": "rudra_poc",
+      "crate": "id-map",
+      "disclosure_date": "2021-02-26",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.2.1",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0157",
+        "indexed_version": null,
+        "issue_url": "https://github.com/andrewhickman/id-map/issues/3",
+        "kind": "rudra_poc",
+        "peer_dependencies": [
+          {
+            "crate": "id-set",
+            "version": "0.2.1"
+          }
+        ],
+        "rudra_analyzers": [
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "PanicSafety"
+        ],
+        "sha256": "81e0e70e5d60562fd6e1b0e89b32082e6ff928a9fa1a7084d7c53b773d686644",
+        "snapshot_path": "poc/0157-id-map.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0157-id-map.rs",
+        "target_crate": "id-map",
+        "vulnerable_version": "0.2.1"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "unwind",
+        "primary_primitive": "double_free",
+        "reuse_relation": "none",
+        "root_cause": "panic_safety",
+        "root_cause_cluster": "panic_safety",
+        "secondary_primitives": [
+          "uninitialized_read"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Multiple functions can cause double-frees"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0053.html",
+        "sha256": "0206776166fa42dddb69237ab999c1a383d1fc6cc57db5b07f7b624491955a66",
+        "snapshot_path": "crates/algorithmica/RUSTSEC-2021-0053.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/algorithmica/RUSTSEC-2021-0053.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/AbrarNitk/algorithmica/issues/1",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0053",
+      "assessment_profile": "allocator_visible_double_free",
+      "case_id": "RSH-013",
+      "cohort": "rudra_poc",
+      "crate": "algorithmica",
+      "disclosure_date": "2021-03-07",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.1.8",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0163",
+        "indexed_version": null,
+        "issue_url": "https://github.com/AbrarNitk/algorithmica/issues/1",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "PanicSafety"
+        ],
+        "sha256": "3940899c6226bd3991cd9ad49aa26057db0fbb60114b30b29e789665ed15dd02",
+        "snapshot_path": "poc/0163-algorithmica.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0163-algorithmica.rs",
+        "target_crate": "algorithmica",
+        "vulnerable_version": "0.1.8"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "drop",
+        "primary_primitive": "double_free",
+        "reuse_relation": "none",
+        "root_cause": "ownership_duplication",
+        "root_cause_cluster": "ownership_duplication",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "'merge_sort::merge()' crashes with double-free for `T: Drop`"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "memory-safety",
+          "double-free"
+        ],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0047.html",
+        "sha256": "86684f8acd9dedf268bacf1c008065bfba72eb2201a61901eeb123891aa86428",
+        "snapshot_path": "crates/slice-deque/RUSTSEC-2021-0047.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/slice-deque/RUSTSEC-2021-0047.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/gnzlbg/slice_deque/issues/90",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0047",
+      "assessment_profile": "panic_double_drop",
+      "case_id": "RSH-014",
+      "cohort": "rudra_poc",
+      "crate": "slice-deque",
+      "disclosure_date": "2021-02-19",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.3.0",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0145",
+        "indexed_version": null,
+        "issue_url": "https://github.com/gnzlbg/slice_deque/issues/90",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "PanicSafety"
+        ],
+        "sha256": "c98c06853f15a3d23a57497b56bfdad4878478f729d4966d32514379be5a1533",
+        "snapshot_path": "poc/0145-slice-deque.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0145-slice-deque.rs",
+        "target_crate": "slice-deque",
+        "vulnerable_version": "0.3.0"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "unwind",
+        "primary_primitive": "double_free",
+        "reuse_relation": "none",
+        "root_cause": "panic_safety",
+        "root_cause_cluster": "panic_safety",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "SliceDeque::drain_filter can double drop an element if the predicate panics"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [
+          ">= 0.7.1, < 0.8",
+          ">= 0.8.2, < 0.9",
+          ">= 0.9.2, < 0.10",
+          ">= 0.10.0"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2022-0012.html",
+        "sha256": "648d9037bbc24efb4234fa7a028e28fc1d3c9626951ab035e812a7e8581d48ee",
+        "snapshot_path": "crates/arrow2/RUSTSEC-2022-0012.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/arrow2/RUSTSEC-2022-0012.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/jorgecarleitao/arrow2/issues/880",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2022-0012",
+      "assessment_profile": "allocator_visible_double_free",
+      "case_id": "RSH-015",
+      "cohort": "rustsec_extended",
+      "crate": "arrow2",
+      "disclosure_date": "2022-03-04",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-015",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.7.0",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "drop",
+        "primary_primitive": "double_free",
+        "reuse_relation": "none",
+        "root_cause": "ffi_shallow_clone",
+        "root_cause_cluster": "ffi_shallow_clone",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "mixed"
+      },
+      "title": "Arrow2 allows double free in `safe` code"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption",
+          "memory-exposure"
+        ],
+        "informational": "unsound",
+        "keywords": [
+          "use-after-free"
+        ],
+        "patched_versions": [
+          ">= 3.11.1"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2022-0078.html",
+        "sha256": "76eb107ee6abad9bd82b29085cdd64895adc8f23b2115c47269a61287b1fe334",
+        "snapshot_path": "crates/bumpalo/RUSTSEC-2022-0078.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/bumpalo/RUSTSEC-2022-0078.md",
+        "unaffected_versions": [
+          "< 1.1.0"
+        ],
+        "upstream_url": "https://github.com/fitzgen/bumpalo/blob/main/CHANGELOG.md#3111",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2022-0078",
+      "assessment_profile": "foreign_allocator_boundary",
+      "case_id": "RSH-016",
+      "cohort": "rustsec_extended",
+      "crate": "bumpalo",
+      "disclosure_date": "2022-01-14",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-016",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "3.11.0",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "arena_internal",
+        "allocator_visibility": "arena_internal_access",
+        "dimension": "temporal",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "post_free_access",
+        "primary_primitive": "use_after_free",
+        "reuse_relation": "same",
+        "root_cause": "arena_lifetime",
+        "root_cause_cluster": "arena_lifetime",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "arena_managed"
+      },
+      "title": "Use-after-free due to a lifetime error in `Vec::into_iter()`"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": "unsound",
+        "keywords": [
+          "use-after-free",
+          "unsound-api",
+          "invalid-free"
+        ],
+        "patched_versions": [
+          ">= 0.22.2, < 0.23.0",
+          ">= 0.23.5, < 0.24.0",
+          ">= 0.24.2"
+        ],
+        "references": [
+          "https://github.com/rust-bitcoin/rust-secp256k1/pull/548"
+        ],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2022-0070.html",
+        "sha256": "f52357d4439f6aef4928a6a9619c41602e7196fbda44fc5d64e7310a614ff44e",
+        "snapshot_path": "crates/secp256k1/RUSTSEC-2022-0070.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/secp256k1/RUSTSEC-2022-0070.md",
+        "unaffected_versions": [
+          "< 0.14.0"
+        ],
+        "upstream_url": "https://github.com/rust-bitcoin/rust-secp256k1/issues/543",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2022-0070",
+      "assessment_profile": "invalid_deallocation",
+      "case_id": "RSH-017",
+      "cohort": "rustsec_extended",
+      "crate": "secp256k1",
+      "disclosure_date": "2022-11-30",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-017",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.24.1",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "foreign_or_custom",
+        "allocator_visibility": "external_ffi_reclaim",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "drop",
+        "primary_primitive": "invalid_free",
+        "reuse_relation": "unknown",
+        "root_cause": "invalid_lifetime",
+        "root_cause_cluster": "invalid_lifetime",
+        "secondary_primitives": [
+          "use_after_free"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "mixed"
+      },
+      "title": "Unsound API in `secp256k1` allows use-after-free and invalid deallocation from safe code"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "memory-safety",
+          "buffer-overflow",
+          "double-free",
+          "raw-pointer"
+        ],
+        "patched_versions": [],
+        "references": [
+          "https://github.com/ibabushkin/arenavec/issues/5",
+          "https://github.com/ibabushkin/arenavec/issues/6"
+        ],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2025-0053.html",
+        "sha256": "01f9e2d38a6fe079706659099b2915da058f35fa6c05231de0bc555ed2bc6873",
+        "snapshot_path": "crates/arenavec/RUSTSEC-2025-0053.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/arenavec/RUSTSEC-2025-0053.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/ibabushkin/arenavec/issues/4",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2025-0053",
+      "assessment_profile": "allocator_visible_double_free",
+      "case_id": "RSH-018",
+      "cohort": "rustsec_extended",
+      "crate": "arenavec",
+      "disclosure_date": "2025-08-14",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-018",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.1.1",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "drop",
+        "primary_primitive": "double_free",
+        "reuse_relation": "none",
+        "root_cause": "custom_allocator_ownership",
+        "root_cause_cluster": "custom_allocator_ownership",
+        "secondary_primitives": [
+          "out_of_bounds_write"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "mixed"
+      },
+      "title": "Multiple memory corruption vulnerabilities in safe APIs"
+    },
+    {
+      "advisory": {
+        "categories": [],
+        "informational": "unsound",
+        "keywords": [
+          "memory-safety",
+          "use-after-free"
+        ],
+        "patched_versions": [
+          ">= 0.1.12"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2026-0005.html",
+        "sha256": "170e9f18808cae87dfc6747c63ba5241f96d8a9615bc0a29c1c3cc802fc67773",
+        "snapshot_path": "crates/oneshot/RUSTSEC-2026-0005.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/oneshot/RUSTSEC-2026-0005.md",
+        "unaffected_versions": [
+          "<= 0.1.1"
+        ],
+        "upstream_url": "https://github.com/faern/oneshot/issues/73",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2026-0005",
+      "assessment_profile": "concurrency_unsoundness",
+      "case_id": "RSH-019",
+      "cohort": "rustsec_extended",
+      "crate": "oneshot",
+      "disclosure_date": "2026-01-25",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-019",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.1.11",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "concurrency_only",
+        "dimension": "concurrency",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "post_free_access",
+        "primary_primitive": "use_after_free",
+        "reuse_relation": "same",
+        "root_cause": "async_lifetime_race",
+        "root_cause_cluster": "async_lifetime_race",
+        "secondary_primitives": [
+          "data_race"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Potential use-after-free in `oneshot` when used asynchronously"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "code-execution",
+          "memory-corruption",
+          "memory-exposure"
+        ],
+        "informational": null,
+        "keywords": [
+          "memory-safety",
+          "double-free",
+          "use-after-free"
+        ],
+        "patched_versions": [
+          ">= 0.2.16"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2026-0103.html",
+        "sha256": "3820523197a3cb9ff53dcc47e48c96c09dc23a4c11a29969a5cf07bb5db1fc5f",
+        "snapshot_path": "crates/thin-vec/RUSTSEC-2026-0103.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/thin-vec/RUSTSEC-2026-0103.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/mozilla/thin-vec/security/advisories/GHSA-xphw-cqx3-667j",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2026-0103",
+      "assessment_profile": "panic_double_drop",
+      "case_id": "RSH-020",
+      "cohort": "rustsec_extended",
+      "crate": "thin-vec",
+      "disclosure_date": "2026-04-14",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-020",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.2.15",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "unwind",
+        "primary_primitive": "double_free",
+        "reuse_relation": "none",
+        "root_cause": "panic_safety",
+        "root_cause_cluster": "panic_safety",
+        "secondary_primitives": [
+          "use_after_free"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Use-After-Free and Double Free in IntoIter::drop When Element Drop Panics"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": "unsound",
+        "keywords": [
+          "double-free",
+          "use-after-free",
+          "vmem",
+          "drop"
+        ],
+        "patched_versions": [
+          ">= 0.7.1"
+        ],
+        "references": [
+          "https://github.com/skilvingr/rust-oneringbuf/pull/3"
+        ],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2026-0143.html",
+        "sha256": "20ea083781089bdc63729e78f586ce04382357d36c43455c89c49e00f9df9765",
+        "snapshot_path": "crates/oneringbuf/RUSTSEC-2026-0143.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/oneringbuf/RUSTSEC-2026-0143.md",
+        "unaffected_versions": [],
+        "upstream_url": null,
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2026-0143",
+      "assessment_profile": "allocator_visible_double_free",
+      "case_id": "RSH-021",
+      "cohort": "rustsec_extended",
+      "crate": "oneringbuf",
+      "disclosure_date": "2026-05-14",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-021",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.7.0",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "drop",
+        "primary_primitive": "double_free",
+        "reuse_relation": "none",
+        "root_cause": "bitwise_copy_ownership",
+        "root_cause_cluster": "bitwise_copy_ownership",
+        "secondary_primitives": [
+          "use_after_free"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "mixed"
+      },
+      "title": "Double-free in `vmem` storage reachable from safe Rust"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "memory-safety",
+          "panic-safety",
+          "uninitialized-memory"
+        ],
+        "patched_versions": [
+          ">=0.4.0"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2025-0054.html",
+        "sha256": "978166be88ebba66733cf759c2527209fdecda31de7fd3f57ddacb205e4f7836",
+        "snapshot_path": "crates/array-queue/RUSTSEC-2025-0054.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/array-queue/RUSTSEC-2025-0054.md",
+        "unaffected_versions": [
+          "< 0.3.0"
+        ],
+        "upstream_url": "https://github.com/raviqqe/array-queue/issues/3",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2025-0054",
+      "assessment_profile": "uninitialized_exposure",
+      "case_id": "RSH-022",
+      "cohort": "rustsec_extended",
+      "crate": "array-queue",
+      "disclosure_date": "2025-08-14",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-022",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.3.3",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "invalid_value_drop",
+        "dimension": "initialization",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "unwind",
+        "primary_primitive": "uninitialized_drop",
+        "reuse_relation": "none",
+        "root_cause": "panic_safety",
+        "root_cause_cluster": "panic_safety",
+        "secondary_primitives": [
+          "uninitialized_read",
+          "invalid_free"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "ArrayQueue::push_front is not panic-safe"
+    },
+    {
+      "advisory": {
+        "categories": [],
+        "informational": "unsound",
+        "keywords": [],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2020-0032.html",
+        "sha256": "3926b66dcc6f0498e88684603967a95a605a91ee07fd49f1638a533da3801468",
+        "snapshot_path": "crates/alpm-rs/RUSTSEC-2020-0032.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/alpm-rs/RUSTSEC-2020-0032.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/pigeonhands/rust-arch/issues/2",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2020-0032",
+      "assessment_profile": "invalid_deallocation",
+      "case_id": "RSH-023",
+      "cohort": "rudra_poc",
+      "crate": "alpm-rs",
+      "disclosure_date": "2020-08-20",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.1.24",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0006",
+        "indexed_version": null,
+        "issue_url": "https://github.com/pigeonhands/rust-arch/issues/2",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "Manual"
+        ],
+        "rudra_bug_classes": [
+          "Other"
+        ],
+        "sha256": "f05123e095d24012793d3dd251c8535fe29dd87e5013618a13a6b8693a212e25",
+        "snapshot_path": "poc/0006-alpm-rs.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0006-alpm-rs.rs",
+        "target_crate": "alpm-rs",
+        "vulnerable_version": "0.1.24"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "drop",
+        "primary_primitive": "invalid_free",
+        "reuse_relation": "unknown",
+        "root_cause": "ffi_ownership_error",
+        "root_cause_cluster": "ffi_ownership_error",
+        "secondary_primitives": [
+          "use_after_free",
+          "double_free"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "StrcCtx deallocates a memory region that it doesn't own"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-exposure"
+        ],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [
+          ">= 3.2.1"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2020-0006.html",
+        "sha256": "e437d423f54ff052970b61e706f4cf04d5c8c99795afd9f39a7de7cc540ba2b5",
+        "snapshot_path": "crates/bumpalo/RUSTSEC-2020-0006.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/bumpalo/RUSTSEC-2020-0006.md",
+        "unaffected_versions": [
+          "< 3.0.0"
+        ],
+        "upstream_url": "https://github.com/fitzgen/bumpalo/issues/69",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2020-0006",
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-024",
+      "cohort": "rustsec_extended",
+      "crate": "bumpalo",
+      "disclosure_date": "2020-03-24",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-024",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "3.2.0",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "arena_internal",
+        "allocator_visibility": "arena_internal_access",
+        "dimension": "spatial",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "reallocation",
+        "primary_primitive": "out_of_bounds_read",
+        "reuse_relation": "none",
+        "root_cause": "reallocation_size_mismatch",
+        "root_cause_cluster": "reallocation_size_mismatch",
+        "secondary_primitives": [
+          "uninitialized_read"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "arena_managed"
+      },
+      "title": "Flaw in `realloc` allows reading unknown memory"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "buffer-overflow",
+          "heap-overflow",
+          "unsound"
+        ],
+        "patched_versions": [
+          ">= 0.6.14, < 1.0.0",
+          ">= 1.6.1"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0003.html",
+        "sha256": "f41e9ee063e50215fda123a406ffd4c4337bc5837be8e8b2c409994291e37db2",
+        "snapshot_path": "crates/smallvec/RUSTSEC-2021-0003.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/smallvec/RUSTSEC-2021-0003.md",
+        "unaffected_versions": [
+          "< 0.6.3"
+        ],
+        "upstream_url": "https://github.com/servo/rust-smallvec/issues/252",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0003",
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-025",
+      "cohort": "rudra_poc",
+      "crate": "smallvec",
+      "disclosure_date": "2021-01-08",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "1.6.0",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0103",
+        "indexed_version": "1.4.0",
+        "issue_url": "https://github.com/servo/rust-smallvec/issues/252",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "Other"
+        ],
+        "sha256": "61ca5ff2faafe45f78c5a1cd89cd902f9d7f715924c01c6ad8fabadac4c79124",
+        "snapshot_path": "poc/0103-smallvec.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0103-smallvec.rs",
+        "target_crate": "smallvec",
+        "vulnerable_version": "1.6.0"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "memory_access_only",
+        "dimension": "spatial",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "out_of_bounds_write",
+        "reuse_relation": "none",
+        "root_cause": "length_capacity_invariant",
+        "root_cause_cluster": "length_capacity_invariant",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Buffer overflow in SmallVec::insert_many"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption",
+          "memory-exposure"
+        ],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [
+          ">= 0.17.0"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0015.html",
+        "sha256": "6d7b1277f4b0ea4431c0bd852edd7df1c0739101696976efea4b2909e5ab2c86",
+        "snapshot_path": "crates/calamine/RUSTSEC-2021-0015.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/calamine/RUSTSEC-2021-0015.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/tafia/calamine/issues/199",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0015",
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-026",
+      "cohort": "rudra_poc",
+      "crate": "calamine",
+      "disclosure_date": "2021-01-06",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-026",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.16.2",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": false,
+        "id": "0095",
+        "indexed_version": "0.16.1",
+        "issue_url": "https://github.com/tafia/calamine/issues/199",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "Manual",
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "Other",
+          "UninitExposure"
+        ],
+        "sha256": "bcfe9add068ec8731d5c6f71c6a6bfb95502c5f7cd96f77049fab73be0f8e473",
+        "snapshot_path": "poc/0095-calamine.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0095-calamine.rs",
+        "target_crate": "calamine",
+        "vulnerable_version": "0.16.2"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "allocator_returned_bytes",
+        "dimension": "spatial",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "out_of_bounds_write",
+        "reuse_relation": "none",
+        "root_cause": "untrusted_length",
+        "root_cause_cluster": "untrusted_length",
+        "secondary_primitives": [
+          "uninitialized_read"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "`Sectors::get` accesses unclaimed/uninitialized memory"
+    },
+    {
+      "advisory": {
+        "categories": [],
+        "informational": null,
+        "keywords": [
+          "memory-corruption",
+          "out-of-bounds"
+        ],
+        "patched_versions": [
+          ">= 1.1.0"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0050.html",
+        "sha256": "600850ecc967e5fe682d23b198838e95a3f17f07e8782dcdf38fdf61ce20c76b",
+        "snapshot_path": "crates/reorder/RUSTSEC-2021-0050.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/reorder/RUSTSEC-2021-0050.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/tiby312/reorder/issues/1",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0050",
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-027",
+      "cohort": "rudra_poc",
+      "crate": "reorder",
+      "disclosure_date": "2021-02-24",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "1.0.3",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0153",
+        "indexed_version": null,
+        "issue_url": "https://github.com/tiby312/reorder/issues/1",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "HigherOrderInvariant"
+        ],
+        "sha256": "cf42de7704c0740cd715b9313f5a72192a0a31d4031e7df0a5330283a0cf25ee",
+        "snapshot_path": "poc/0153-reorder.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0153-reorder.rs",
+        "target_crate": "reorder",
+        "vulnerable_version": "1.0.3"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "memory_access_only",
+        "dimension": "spatial",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "out_of_bounds_write",
+        "reuse_relation": "none",
+        "root_cause": "iterator_contract",
+        "root_cause_cluster": "iterator_contract",
+        "secondary_primitives": [
+          "uninitialized_read"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "swap_index can write out of bounds and return uninitialized memory"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "nss"
+        ],
+        "patched_versions": [
+          "^0.20.2",
+          "^0.21.2",
+          "^0.22.2",
+          ">= 0.23.0"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0119.html",
+        "sha256": "b88110013c261da320d45368672e74edd40b6430ca338c244b6f43a454beb5b6",
+        "snapshot_path": "crates/nix/RUSTSEC-2021-0119.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/nix/RUSTSEC-2021-0119.md",
+        "unaffected_versions": [
+          "< 0.16.0"
+        ],
+        "upstream_url": "https://github.com/nix-rust/nix/issues/1541",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0119",
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-028",
+      "cohort": "rustsec_extended",
+      "crate": "nix",
+      "disclosure_date": "2021-09-27",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-028",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.22.1",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "external_ffi_access",
+        "dimension": "spatial",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "out_of_bounds_write",
+        "reuse_relation": "none",
+        "root_cause": "ffi_length_mismatch",
+        "root_cause_cluster": "ffi_length_mismatch",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Out-of-bounds write in nix::unistd::getgrouplist"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [
+          ">= 0.10.2"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2022-0063.html",
+        "sha256": "3e6843eb536c3b00b8536a1a91e59aee075dd434c8e4968c8e62d8e94d5f3c1c",
+        "snapshot_path": "crates/linked_list_allocator/RUSTSEC-2022-0063.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/linked_list_allocator/RUSTSEC-2022-0063.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/advisories/GHSA-xg8p-34w2-j49j",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2022-0063",
+      "assessment_profile": "foreign_allocator_boundary",
+      "case_id": "RSH-029",
+      "cohort": "rustsec_extended",
+      "crate": "linked_list_allocator",
+      "disclosure_date": "2022-09-07",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-029",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.10.1",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "foreign_or_custom",
+        "allocator_visibility": "foreign_allocator_access",
+        "dimension": "spatial",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "out_of_bounds_write",
+        "reuse_relation": "none",
+        "root_cause": "allocator_initialization_contract",
+        "root_cause_cluster": "allocator_initialization_contract",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Multiple vulnerabilities resulting in out-of-bounds writes"
+    },
+    {
+      "advisory": {
+        "categories": [],
+        "informational": "unsound",
+        "keywords": [],
+        "patched_versions": [
+          ">= 0.1.39"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2022-0094.html",
+        "sha256": "194b93d70e4abe37f7cbc79ac9c0810371e2fe6690df5ec4fc4989815dcff120",
+        "snapshot_path": "crates/mimalloc/RUSTSEC-2022-0094.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/mimalloc/RUSTSEC-2022-0094.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/purpleprotocol/mimalloc_rust/issues/87",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2022-0094",
+      "assessment_profile": "foreign_allocator_boundary",
+      "case_id": "RSH-030",
+      "cohort": "rustsec_extended",
+      "crate": "mimalloc",
+      "disclosure_date": "2022-11-23",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-030",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.1.32",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "foreign_or_custom",
+        "allocator_visibility": "foreign_allocator_access",
+        "dimension": "provenance",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "allocation",
+        "primary_primitive": "misaligned_allocation",
+        "reuse_relation": "none",
+        "root_cause": "alignment_dispatch_error",
+        "root_cause_cluster": "alignment_dispatch_error",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "foreign_heap"
+      },
+      "title": "Mimalloc Can Allocate Memory with Bad Alignment"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": "unsound",
+        "keywords": [
+          "unsound",
+          "alloc",
+          "align"
+        ],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2023-0017.html",
+        "sha256": "f6ad49e43250bf6e18165d71ad2dfe8857057cd5614409e8d01c4b39fa2ceb3e",
+        "snapshot_path": "crates/maligned/RUSTSEC-2023-0017.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/maligned/RUSTSEC-2023-0017.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/tylerhawkes/maligned/issues/5",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2023-0017",
+      "assessment_profile": "invalid_deallocation",
+      "case_id": "RSH-031",
+      "cohort": "rustsec_extended",
+      "crate": "maligned",
+      "disclosure_date": "2023-03-04",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-031",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.2.1",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "deallocation_boundary",
+        "dimension": "reclaim",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "drop",
+        "primary_primitive": "invalid_free",
+        "reuse_relation": "unknown",
+        "root_cause": "deallocation_layout_mismatch",
+        "root_cause_cluster": "deallocation_layout_mismatch",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "`maligned::align_first` causes incorrect deallocation"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [
+          ">= 0.2.3"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2023-0080.html",
+        "sha256": "0b215e715ca9c38ce570145b28f31d939488ad4090796aa646afbf620bcf71e5",
+        "snapshot_path": "crates/transpose/RUSTSEC-2023-0080.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/transpose/RUSTSEC-2023-0080.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/ejmahler/transpose/issues/11",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2023-0080",
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-032",
+      "cohort": "rustsec_extended",
+      "crate": "transpose",
+      "disclosure_date": "2023-12-18",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-032",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.2.2",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "memory_access_only",
+        "dimension": "spatial",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "out_of_bounds_write",
+        "reuse_relation": "none",
+        "root_cause": "integer_overflow",
+        "root_cause_cluster": "integer_overflow",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Buffer overflow due to integer overflow in `transpose`"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-corruption"
+        ],
+        "informational": null,
+        "keywords": [
+          "memory-safety",
+          "buffer-overflow",
+          "raw-pointer"
+        ],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2025-0049.html",
+        "sha256": "292a3da52be914d4ea1783af710df16731a036b2f49184af2a0d2fd5d6f7fe6b",
+        "snapshot_path": "crates/scratchpad/RUSTSEC-2025-0049.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/scratchpad/RUSTSEC-2025-0049.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/okready/scratchpad/issues/2",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2025-0049",
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-033",
+      "cohort": "rustsec_extended",
+      "crate": "scratchpad",
+      "disclosure_date": "2025-08-14",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-033",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "1.3.1",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "foreign_or_custom",
+        "allocator_visibility": "arena_internal_access",
+        "dimension": "spatial",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "out_of_bounds_write",
+        "reuse_relation": "none",
+        "root_cause": "custom_tracking_contract",
+        "root_cause_cluster": "custom_tracking_contract",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "arena_managed"
+      },
+      "title": "User-defined implementations of the safe trait scratchpad::Tracking can cause heap buffer overflows"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-exposure"
+        ],
+        "informational": "unsound",
+        "keywords": [],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2021-0094.html",
+        "sha256": "06907ae5a8bc71b162285462d429e8887328443ebcc2ac2540446e52a3ed7a10",
+        "snapshot_path": "crates/rdiff/RUSTSEC-2021-0094.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/rdiff/RUSTSEC-2021-0094.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/dyule/rdiff/issues/3",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2021-0094",
+      "assessment_profile": "heap_oob",
+      "case_id": "RSH-034",
+      "cohort": "rudra_poc",
+      "crate": "rdiff",
+      "disclosure_date": "2021-02-03",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.1.2",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0124",
+        "indexed_version": null,
+        "issue_url": "https://github.com/dyule/rdiff/issues/3",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "HigherOrderInvariant"
+        ],
+        "sha256": "942ee7831f2ab18419491b470cfb334d1d2b3f2aaf2cfe695f413d2aee412a2c",
+        "snapshot_path": "poc/0124-rdiff.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0124-rdiff.rs",
+        "target_crate": "rdiff",
+        "vulnerable_version": "0.1.2"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "allocator_returned_bytes",
+        "dimension": "spatial",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "out_of_bounds_read",
+        "reuse_relation": "none",
+        "root_cause": "untrusted_length",
+        "root_cause_cluster": "untrusted_length",
+        "secondary_primitives": [
+          "uninitialized_read"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Window can read out of bounds if Read instance returns more bytes than buffer size"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-exposure"
+        ],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [
+          ">= 0.27.1"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2020-0123.html",
+        "sha256": "5b768eb6d8b68250df74164ce84e660ae69869f6a0a4f221fdd4cd6f1aca3823",
+        "snapshot_path": "crates/libp2p-deflate/RUSTSEC-2020-0123.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/libp2p-deflate/RUSTSEC-2020-0123.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/libp2p/rust-libp2p/issues/1932",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2020-0123",
+      "assessment_profile": "uninitialized_exposure",
+      "case_id": "RSH-035",
+      "cohort": "rudra_poc",
+      "crate": "libp2p-deflate",
+      "disclosure_date": "2020-01-24",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.27.0",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0110",
+        "indexed_version": "0.20.0",
+        "issue_url": "https://github.com/libp2p/rust-libp2p/issues/1932",
+        "kind": "rudra_poc",
+        "peer_dependencies": [
+          {
+            "crate": "libp2p-core",
+            "version": "0.27.0"
+          },
+          {
+            "crate": "futures",
+            "features": [
+              "executor"
+            ],
+            "version": "0.3.12"
+          }
+        ],
+        "rudra_analyzers": [
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "UninitExposure"
+        ],
+        "sha256": "e066229e02977b81e9437f445a047c60c917482425daf5d85ed9415535589fc4",
+        "snapshot_path": "poc/0110-libp2p-deflate.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0110-libp2p-deflate.rs",
+        "target_crate": "libp2p-deflate",
+        "vulnerable_version": "0.27.0"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "allocator_returned_bytes",
+        "dimension": "initialization",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "uninitialized_read",
+        "reuse_relation": "none",
+        "root_cause": "uninitialized_buffer",
+        "root_cause_cluster": "uninitialized_buffer",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Contents of uninitialized memory exposed in DeflateOutput's AsyncRead implementation"
+    },
+    {
+      "advisory": {
+        "categories": [],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2020-0033.html",
+        "sha256": "0dba94c7756c0adaf95fbb80e5715b1371033c91e9f2d73923c308d48741cc00",
+        "snapshot_path": "crates/alg_ds/RUSTSEC-2020-0033.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/alg_ds/RUSTSEC-2020-0033.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://gitlab.com/dvshapkin/alg-ds/-/issues/1",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2020-0033",
+      "assessment_profile": "uninitialized_exposure",
+      "case_id": "RSH-036",
+      "cohort": "rudra_poc",
+      "crate": "alg_ds",
+      "disclosure_date": "2020-08-25",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.3.1",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0007",
+        "indexed_version": null,
+        "issue_url": "https://gitlab.com/dvshapkin/alg-ds/-/issues/1",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "Manual",
+          "UnsafeDataflow"
+        ],
+        "rudra_bug_classes": [
+          "Other"
+        ],
+        "sha256": "d098551c881bd98bdd5c2542623a1b44129e93b00d83e2da735fa16535e14c8d",
+        "snapshot_path": "poc/0007-alg_ds.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0007-alg_ds.rs",
+        "target_crate": "alg_ds",
+        "vulnerable_version": "0.3.1"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "invalid_value_drop",
+        "dimension": "initialization",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "construction",
+        "primary_primitive": "uninitialized_drop",
+        "reuse_relation": "none",
+        "root_cause": "invalid_initialization",
+        "root_cause_cluster": "invalid_initialization",
+        "secondary_primitives": [
+          "invalid_free"
+        ],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Matrix::new() drops uninitialized memory"
+    },
+    {
+      "advisory": {
+        "categories": [],
+        "informational": null,
+        "keywords": [],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2020-0023.html",
+        "sha256": "3c6de38be95142ef0d465a186be7980fd57649af07d4e657afa1ccdb64ff8324",
+        "snapshot_path": "crates/rulinalg/RUSTSEC-2020-0023.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/rulinalg/RUSTSEC-2020-0023.md",
+        "unaffected_versions": [
+          "< 0.4.0"
+        ],
+        "upstream_url": "https://github.com/AtheMathmo/rulinalg/issues/201",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2020-0023",
+      "assessment_profile": "language_invariant_violation",
+      "case_id": "RSH-037",
+      "cohort": "rudra_poc",
+      "crate": "rulinalg",
+      "disclosure_date": "2020-02-11",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.4.2",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0000",
+        "indexed_version": null,
+        "issue_url": "https://github.com/AtheMathmo/rulinalg/issues/201",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "Manual"
+        ],
+        "rudra_bug_classes": [
+          "Other"
+        ],
+        "sha256": "ca69bbcb8676c1c799621864f493c22852876aab7910f4053513b046c46d9654",
+        "snapshot_path": "poc/0000-rulinalg.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0000-rulinalg.rs",
+        "target_crate": "rulinalg",
+        "vulnerable_version": "0.4.2"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "memory_access_only",
+        "dimension": "provenance",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "aliasing_violation",
+        "reuse_relation": "none",
+        "root_cause": "mutable_alias_escape",
+        "root_cause_cluster": "mutable_alias_escape",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Lifetime boundary for `raw_slice` and `raw_slice_mut` are incorrect"
+    },
+    {
+      "advisory": {
+        "categories": [],
+        "informational": "unsound",
+        "keywords": [
+          "unsound"
+        ],
+        "patched_versions": [],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2019-0036.html",
+        "sha256": "e906f376fa7683613a6552cfcc84d98f8a5afb012ef8a01aa72b879da134abe3",
+        "snapshot_path": "crates/failure/RUSTSEC-2019-0036.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/failure/RUSTSEC-2019-0036.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/rust-lang-nursery/failure/issues/336",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2019-0036",
+      "assessment_profile": "language_invariant_violation",
+      "case_id": "RSH-038",
+      "cohort": "rudra_poc",
+      "crate": "failure",
+      "disclosure_date": "2019-11-13",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "hashed_local_patch_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.1.8",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0005",
+        "indexed_version": null,
+        "issue_url": "https://github.com/rust-lang-nursery/failure/issues/336",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "Manual"
+        ],
+        "rudra_bug_classes": [
+          "Other"
+        ],
+        "sha256": "4bab279c7562b96e9e0d0cdb875cbea9da7f8dd1e89988b7dd8ffe4a3cda7ea0",
+        "snapshot_path": "poc/0005-failure.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0005-failure.rs",
+        "target_crate": "failure",
+        "vulnerable_version": "0.1.8"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "memory_access_only",
+        "dimension": "provenance",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "type_confusion",
+        "reuse_relation": "none",
+        "root_cause": "forged_runtime_type_id",
+        "root_cause_cluster": "forged_runtime_type_id",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Type confusion if __private_get_type_id__ is overridden"
+    },
+    {
+      "advisory": {
+        "categories": [],
+        "informational": "unsound",
+        "keywords": [],
+        "patched_versions": [
+          ">= 0.5.0"
+        ],
+        "references": [],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2020-0050.html",
+        "sha256": "084fa7bfff1b4557923000342274f3ac8bcb29df3aeaea6ca75342ae4a63d33e",
+        "snapshot_path": "crates/dync/RUSTSEC-2020-0050.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/dync/RUSTSEC-2020-0050.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/elrnv/dync/issues/4",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2020-0050",
+      "assessment_profile": "language_invariant_violation",
+      "case_id": "RSH-039",
+      "cohort": "rudra_poc",
+      "crate": "dync",
+      "disclosure_date": "2020-09-27",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "poc_source_available",
+        "replay_pin": "0.4.0",
+        "reproduction_kind": "rudra_poc",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": {
+        "executable_source": true,
+        "id": "0018",
+        "indexed_version": null,
+        "issue_url": "https://github.com/elrnv/dync/issues/4",
+        "kind": "rudra_poc",
+        "peer_dependencies": [],
+        "rudra_analyzers": [
+          "Manual"
+        ],
+        "rudra_bug_classes": [
+          "Other"
+        ],
+        "sha256": "7f0bb2a475207c712c3a954f6a25a2b8e0298143f2d5adc0f08a2aa852528536",
+        "snapshot_path": "poc/0018-dync.rs",
+        "snapshot_url": "https://github.com/sslab-gatech/Rudra-PoC/blob/6226dd030fffbed5601099cb0e24f73e4150a7f5/poc/0018-dync.rs",
+        "target_crate": "dync",
+        "vulnerable_version": "0.4.0"
+      },
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "memory_access_only",
+        "dimension": "provenance",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "live_access",
+        "primary_primitive": "misaligned_reference",
+        "reuse_relation": "none",
+        "root_cause": "alignment_invariant",
+        "root_cause_cluster": "alignment_invariant",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "VecCopy allows misaligned access to elements"
+    },
+    {
+      "advisory": {
+        "categories": [
+          "memory-exposure"
+        ],
+        "informational": "unsound",
+        "keywords": [
+          "uninitialized-memory",
+          "soundness"
+        ],
+        "patched_versions": [
+          ">= 0.2.2"
+        ],
+        "references": [
+          "https://github.com/ain1084/direct_ring_buffer/pull/2"
+        ],
+        "rustsec_url": "https://rustsec.org/advisories/RUSTSEC-2025-0105.html",
+        "sha256": "cb242808683bf7fc63decbaaebed9d665c7b0d4bc2ab7ca2e695d69d15c9ea56",
+        "snapshot_path": "crates/direct_ring_buffer/RUSTSEC-2025-0105.md",
+        "snapshot_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/direct_ring_buffer/RUSTSEC-2025-0105.md",
+        "unaffected_versions": [],
+        "upstream_url": "https://github.com/ain1084/direct_ring_buffer/issues/1",
+        "withdrawn": null
+      },
+      "advisory_id": "RUSTSEC-2025-0105",
+      "assessment_profile": "uninitialized_exposure",
+      "case_id": "RSH-040",
+      "cohort": "rustsec_extended",
+      "crate": "direct_ring_buffer",
+      "disclosure_date": "2025-10-21",
+      "execution": {
+        "artifact_ids": [],
+        "baseline_oracle": "must_be_defined_before_execution",
+        "claim_grade": false,
+        "critical_site_coverage": "must_be_measured",
+        "harness_case_id": "RSH-040",
+        "patched_control": "upstream_patched_version_required",
+        "readiness": "pinned_harness_source_available",
+        "replay_pin": "0.2.1",
+        "reproduction_kind": "repository_harness",
+        "treatment_oracle": "must_be_defined_before_execution"
+      },
+      "poc": null,
+      "taxonomy": {
+        "align_bytes": "must_measure",
+        "allocator_path": "rust_global_candidate",
+        "allocator_visibility": "allocator_returned_bytes",
+        "dimension": "initialization",
+        "identity_relation": "not_required",
+        "lifecycle_phase": "construction",
+        "primary_primitive": "uninitialized_read",
+        "reuse_relation": "none",
+        "root_cause": "invalid_typed_initialization",
+        "root_cause_cluster": "invalid_typed_initialization",
+        "secondary_primitives": [],
+        "semantic_cache_eligibility": "must_measure",
+        "size_bytes": "must_measure",
+        "storage_domain": "heap"
+      },
+      "title": "Uninitialized memory exposure in create_ring_buffer"
+    }
+  ],
+  "claim_boundary": "This artifact is a preregistered classification corpus. Mitigation and detection counts require baseline reproduction, patched controls, exact compiler/runtime coverage, and raw run evidence.",
+  "claim_grade": false,
+  "created_at": "2026-07-14",
+  "harness_bundle": {
+    "catalog_path": "evaluation/config/rustsec_heap_harnesses.json",
+    "catalog_sha256": "ed557f2231db288e08fad746c1fc6b2c007010aba07cf502fe3ab06f47557173",
+    "claim_grade": false,
+    "distinct_advisory_count": 40,
+    "harness_case_count": 22,
+    "repository_scenario_count": 28,
+    "total_source_ready_scenario_count": 46
+  },
+  "mechanism_profiles": {
+    "allocator_visible_double_free": {
+      "allocator_event_sequence": [
+        "allocate",
+        "first_reclaim",
+        "second_reclaim"
+      ],
+      "auxiliary_mechanisms": [
+        "retained_ownership_registry",
+        "memory_tagging",
+        "delayed_free"
+      ],
+      "boundaries": [
+        "destructor side effects can occur before the second allocator call",
+        "arbitrary untracked pointers can reach conventional raw behavior",
+        "a stale free after legitimate same-address reuse can target the new allocation",
+        "this is retained-ownership detection rather than general UAF prevention"
+      ],
+      "claim": "Tracked cache, quarantine, tag, or lifecycle ownership can fail-stop a second allocator-visible reclaim during its recorded ownership window.",
+      "confidence": "medium",
+      "control_role": "positive_candidate",
+      "derived_type_isolation_experiment_effect": "no_direct_effect",
+      "preregistered_hypothesis": "candidate_detected",
+      "published_witness_type_isolation_effect": "no_direct_effect",
+      "required_conditions": [
+        "the first reclaim publishes a tracked ownership or lifecycle record",
+        "the second reclaim reaches a UniAlloc entry point before legitimate backend reuse",
+        "the fail-stop occurs before duplicate cache or quarantine ownership is published"
+      ],
+      "unialloc_boundary_effect": "conditional_detection"
+    },
+    "concurrency_unsoundness": {
+      "allocator_event_sequence": [
+        "publish_unsound_cross_thread_access",
+        "concurrent_memory_access"
+      ],
+      "auxiliary_mechanisms": [],
+      "boundaries": [
+        "a later invalid reclaim may independently encounter allocator lifecycle checks",
+        "a schedule change is not evidence of mitigation without the original race witness and mechanism-specific oracle"
+      ],
+      "claim": "Type Isolation does not enforce Send, Sync, aliasing, or synchronization invariants during ordinary memory access.",
+      "confidence": "high",
+      "control_role": "negative_control",
+      "derived_type_isolation_experiment_effect": "no_direct_effect",
+      "preregistered_hypothesis": "negative_control_expected_unsafe",
+      "published_witness_type_isolation_effect": "no_direct_effect",
+      "required_conditions": [
+        "the race witness reproduces under a matched allocator configuration",
+        "allocator substitution does not change the synchronization schedule contract"
+      ],
+      "unialloc_boundary_effect": "no_direct_effect"
+    },
+    "foreign_allocator_boundary": {
+      "allocator_event_sequence": [
+        "outer_allocation_optional",
+        "foreign_or_arena_internal_operation"
+      ],
+      "auxiliary_mechanisms": [],
+      "boundaries": [
+        "a nested Rust heap allocation may still pass through UniAlloc and must be analyzed separately",
+        "allocator substitution can change symptoms without covering the vulnerable object lifecycle"
+      ],
+      "claim": "Objects privately managed by arenas, mmap regions, custom allocators, or foreign allocators do not receive per-object Type Isolation from an outer allocation identity.",
+      "confidence": "high",
+      "control_role": "negative_control",
+      "derived_type_isolation_experiment_effect": "no_direct_effect",
+      "preregistered_hypothesis": "negative_control_expected_unsafe",
+      "published_witness_type_isolation_effect": "no_direct_effect",
+      "required_conditions": [
+        "the experiment records the allocator that owns the failing object",
+        "compiler and runtime audits distinguish outer allocation coverage from inner object coverage"
+      ],
+      "unialloc_boundary_effect": "no_direct_effect"
+    },
+    "heap_oob": {
+      "allocator_event_sequence": [
+        "allocate",
+        "live_out_of_bounds_access"
+      ],
+      "auxiliary_mechanisms": [
+        "guard_pages"
+      ],
+      "boundaries": [
+        "guard pages are a separate policy for eligible page-scale boundary crossings",
+        "sub-page, intra-object, and fixed-heap overflows remain outside guard-page coverage"
+      ],
+      "claim": "Type Isolation does not validate ordinary loads or stores and therefore does not stop the out-of-bounds access.",
+      "confidence": "high",
+      "control_role": "negative_control",
+      "derived_type_isolation_experiment_effect": "no_direct_effect",
+      "preregistered_hypothesis": "negative_control_expected_unsafe",
+      "published_witness_type_isolation_effect": "no_direct_effect",
+      "required_conditions": [
+        "the baseline OOB witness reproduces",
+        "the Type Isolation arm preserves the same critical-site coverage as typed_plain"
+      ],
+      "unialloc_boundary_effect": "no_direct_effect"
+    },
+    "invalid_deallocation": {
+      "allocator_event_sequence": [
+        "allocate_or_acquire",
+        "reclaim_with_invalid_pointer_layout_or_owner"
+      ],
+      "auxiliary_mechanisms": [
+        "recovery_layout_validation",
+        "memory_tagging",
+        "retained_ownership_registry"
+      ],
+      "boundaries": [
+        "UniAlloc does not implement general pointer provenance",
+        "unknown deallocation metadata is accepted on selected recovery paths",
+        "external C allocator ownership remains outside the instrumented path"
+      ],
+      "claim": "Known tracked addresses can reject mismatched layout, identity, or ownership at allocator reclaim boundaries.",
+      "confidence": "low",
+      "control_role": "positive_candidate",
+      "derived_type_isolation_experiment_effect": "no_direct_effect",
+      "preregistered_hypothesis": "candidate_detected",
+      "published_witness_type_isolation_effect": "no_direct_effect",
+      "required_conditions": [
+        "the invalid free reaches UniAlloc rather than a foreign allocator",
+        "an exact recovery, tag, cache-ownership, or lifecycle record exists",
+        "the oracle identifies an allocator-specific fail-stop before raw release"
+      ],
+      "unialloc_boundary_effect": "conditional_detection"
+    },
+    "language_invariant_violation": {
+      "allocator_event_sequence": [
+        "create_invalid_language_level_reference_or_value",
+        "ordinary_memory_access"
+      ],
+      "auxiliary_mechanisms": [],
+      "boundaries": [
+        "an eventual invalid deallocation may independently encounter a tracked lifecycle check",
+        "a changed address or schedule is not evidence of language-invariant enforcement"
+      ],
+      "claim": "Allocator identity does not enforce Rust aliasing, pinning, alignment, or language-level dynamic type invariants during access.",
+      "confidence": "high",
+      "control_role": "negative_control",
+      "derived_type_isolation_experiment_effect": "no_direct_effect",
+      "preregistered_hypothesis": "negative_control_expected_unsafe",
+      "published_witness_type_isolation_effect": "no_direct_effect",
+      "required_conditions": [
+        "the original provenance, aliasing, pinning, or alignment witness reproduces",
+        "the allocator arms use matched compiler and optimization settings"
+      ],
+      "unialloc_boundary_effect": "no_direct_effect"
+    },
+    "panic_double_drop": {
+      "allocator_event_sequence": [
+        "allocate_owned_elements",
+        "panic_or_unwind",
+        "first_drop",
+        "duplicate_drop"
+      ],
+      "auxiliary_mechanisms": [
+        "retained_ownership_registry",
+        "memory_tagging",
+        "delayed_free"
+      ],
+      "boundaries": [
+        "panic-abort builds do not exercise unwind-triggered double drop",
+        "user Drop code can perform unsafe side effects before allocator detection",
+        "the registry window is finite and a later legitimate reuse changes the address epoch"
+      ],
+      "claim": "A duplicated deallocation reached during unwind can fail-stop when the first deallocation remains represented in allocator lifecycle state.",
+      "confidence": "medium",
+      "control_role": "positive_candidate",
+      "derived_type_isolation_experiment_effect": "no_direct_effect",
+      "preregistered_hypothesis": "candidate_detected",
+      "published_witness_type_isolation_effect": "no_direct_effect",
+      "required_conditions": [
+        "the PoC runs with unwind semantics and reproduces the duplicate deallocation",
+        "both deallocations reach UniAlloc",
+        "the first deallocation remains in a tracked cache, quarantine, tag, or lifecycle state"
+      ],
+      "unialloc_boundary_effect": "conditional_detection"
+    },
+    "reuse_dependent_uaf": {
+      "allocator_event_sequence": [
+        "allocate_victim",
+        "free_victim",
+        "allocate_distinct_identity_replacement",
+        "stale_access"
+      ],
+      "auxiliary_mechanisms": [
+        "delayed_free"
+      ],
+      "boundaries": [
+        "same-identity reuse remains allowed",
+        "a stale dereference before reuse remains observable",
+        "fallback, custom-allocator, and foreign-allocator paths receive no Type Isolation guarantee",
+        "a changed address-reuse outcome leaves the source vulnerability present"
+      ],
+      "claim": "A derived same-layout A-to-B grooming experiment can test whether exact-identity cache routing removes a cross-identity reuse edge; the published advisory witness remains a no-direct-effect control.",
+      "confidence": "medium",
+      "control_role": "positive_candidate",
+      "derived_type_isolation_experiment_effect": "conditional_reuse_edge_mitigation",
+      "preregistered_hypothesis": "candidate_reuse_edge_blocked",
+      "published_witness_type_isolation_effect": "no_direct_effect",
+      "required_conditions": [
+        "the published vulnerable behavior reproduces under both typed_plain and typeiso",
+        "a separately hashed derived grooming witness reproduces under typed_plain",
+        "the derived witness requires reuse by a distinct exact identity",
+        "the allocation, reclaim, and replacement sites carry exact nonzero compiler metadata",
+        "the object is eligible for and participates in the semantic type cache",
+        "critical-site fallback and recovery mismatch counts are zero"
+      ],
+      "unialloc_boundary_effect": "no_direct_effect"
+    },
+    "same_identity_or_pre_reuse_uaf": {
+      "allocator_event_sequence": [
+        "create_stale_reference",
+        "stale_access_before_reuse_or_after_same_identity_reuse"
+      ],
+      "auxiliary_mechanisms": [
+        "delayed_free"
+      ],
+      "boundaries": [
+        "allocator-side software tags do not validate ordinary loads or stores",
+        "same-identity cache reuse is an intentional part of the exact-identity contract",
+        "scheduler or address changes without a mechanism-specific oracle are inconclusive"
+      ],
+      "claim": "Type Isolation cannot invalidate a stale pointer before reuse or distinguish it after legitimate same-identity reuse.",
+      "confidence": "high",
+      "control_role": "negative_control",
+      "derived_type_isolation_experiment_effect": "no_direct_effect",
+      "preregistered_hypothesis": "negative_control_expected_unsafe",
+      "published_witness_type_isolation_effect": "no_direct_effect",
+      "required_conditions": [
+        "the baseline stale-access witness reproduces",
+        "the original trigger does not require a distinct-identity cache reuse edge",
+        "the comparison keeps optional delayed-free policy separate"
+      ],
+      "unialloc_boundary_effect": "no_direct_effect"
+    },
+    "uninitialized_exposure": {
+      "allocator_event_sequence": [
+        "allocate_or_construct_partially_initialized_storage",
+        "read_or_drop_invalid_bytes"
+      ],
+      "auxiliary_mechanisms": [
+        "force_initialize"
+      ],
+      "boundaries": [
+        "force initialization is a separate policy and only helps allocation-backed byte regions that zeroing makes safe",
+        "same-identity stale bytes, stack storage, and foreign buffers remain outside that policy",
+        "zero bytes do not form a valid value for every Rust type"
+      ],
+      "claim": "Type Isolation does not track initializedness and therefore does not detect the invalid read.",
+      "confidence": "high",
+      "control_role": "negative_control",
+      "derived_type_isolation_experiment_effect": "no_direct_effect",
+      "preregistered_hypothesis": "negative_control_expected_unsafe",
+      "published_witness_type_isolation_effect": "no_direct_effect",
+      "required_conditions": [
+        "the baseline uninitialized-byte or invalid-value witness reproduces",
+        "the Type Isolation comparison does not enable force initialization"
+      ],
+      "unialloc_boundary_effect": "no_direct_effect"
+    }
+  },
+  "schema_version": 1,
+  "selection_protocol": {
+    "cohorts": {
+      "rudra_poc": "19 RustSec cases present in Rudra-PoC, including 18 source reproducers and one explicit no-PoC stub",
+      "rustsec_extended": "21 additional advisories selected for temporal, allocator-boundary, spatial, and provenance coverage"
+    },
+    "design": "purposive_stratified_subset",
+    "exclusion": [
+      "pure panic or denial of service without a memory-safety primitive",
+      "stack-only memory corruption outside the predeclared provenance and access-time control stratum",
+      "cryptographic or logic defects without heap memory safety",
+      "unmaintained-only notices",
+      "duplicate advisory aliases for the same package and root cause"
+    ],
+    "inclusion": [
+      "public RustSec advisory with a direct heap memory-safety primitive, or a predeclared mechanism-boundary negative control",
+      "heap allocation, access, or reclaim participates in the main failure chain for derived reuse experiments or boundary candidates",
+      "one of the preregistered temporal, reclaim, spatial, initialization, concurrency, or provenance strata",
+      "advisory date is no later than the corpus snapshot date"
+    ],
+    "minimum_strata": {
+      "concurrency_cases": 2,
+      "initialization_cases": 5,
+      "negative_controls": 24,
+      "provenance_cases": 5,
+      "reclaim_cases": 13,
+      "rudra_poc_cases": 19,
+      "rustsec_extended_cases": 21,
+      "spatial_cases": 9,
+      "temporal_cases": 6,
+      "total_cases": 40
+    },
+    "prevalence_use": "This subset cannot estimate Rust ecosystem prevalence or the percentage of RustSec vulnerabilities mitigated.",
+    "sampling_frame": "RustSec advisories at the pinned commit, with Rudra-PoC as a reproducibility stratum rather than the universe"
+  },
+  "source": "unialloc-rustsec-heap-security-corpus",
+  "source_snapshots": {
+    "rudra_poc": {
+      "commit": "6226dd030fffbed5601099cb0e24f73e4150a7f5",
+      "commit_time": "2024-02-12T16:51:56+09:00",
+      "license": "upstream repository does not declare a license; this corpus stores references and hashes only",
+      "rust_poc_file_count": 166,
+      "selected_file_count": 19,
+      "selected_files_sha256": "c9b26f67ffd258ccd766023c6f1f2023e8f3f7c2fe5bbcfe0cb420854ab39b2b",
+      "url": "https://github.com/sslab-gatech/Rudra-PoC"
+    },
+    "rustsec_advisory_db": {
+      "advisory_file_count": 1140,
+      "candidate_screen_count": 276,
+      "candidate_screen_query": {
+        "category_any": [
+          "memory-corruption"
+        ],
+        "keyword_any": [
+          "buffer-overflow",
+          "double-free",
+          "heap-overflow",
+          "invalid-free",
+          "memory-safety",
+          "out-of-bounds",
+          "uninitialized-memory",
+          "use-after-free"
+        ]
+      },
+      "commit": "9f3e138091487e69144f536d36976e427a7a3307",
+      "commit_time": "2026-07-13T19:31:41+02:00",
+      "license": "CC0-1.0 with explicitly marked CC-BY-4.0 GHSA imports",
+      "memory_corruption_category_count": 253,
+      "parsed_advisory_count": 1140,
+      "selected_case_candidate_screen_count": 30,
+      "selected_case_outside_candidate_screen_count": 10,
+      "selected_file_count": 40,
+      "selected_files_sha256": "8919a7a0c1004ed7ceaa99238bc192d95baf3d56e77e2080a7794b17ebf93980",
+      "url": "https://github.com/RustSec/advisory-db"
+    }
+  }
+}

@@ -1,0 +1,202 @@
+{
+  "boundary": "This artifact validates one manually attributed, layout-bounded properties-CString-to-Replacement reuse decision. The claim is limited to the derived RSH-069 cross-identity edge; automatic compiler victim coverage and complete source-level detection remain outside its scope.",
+  "catalog": {
+    "bytes": 21599,
+    "path": "evaluation/config/rustsec_heap_strong_batch_f_harnesses.json",
+    "sha256": "f0b3a0526a5d10836aa2f1939e0ac7422feeca677664aecca53faa49ef835055"
+  },
+  "claim_grade": false,
+  "counts": {
+    "compiler_automatic_victim_coverage_count": 0,
+    "derived_reuse_scenario_count": 1,
+    "source_vulnerability_detection_validated_count": 0,
+    "source_vulnerability_mitigation_inferred_count": 0,
+    "validated_cross_identity_reuse_edge_count": 1
+  },
+  "mitigation_inferred": false,
+  "raw_experiment_inputs": [
+    {
+      "bytes": 353270,
+      "case_id": "RSH-069",
+      "path": "docs/evidence/rustsec-rsh069-typeiso-20260715/experiment.json",
+      "sha256": "7ef9068cb06f53e1357a8fb224e5cf431386682cc73629b2bfaea6ff678393e3"
+    }
+  ],
+  "scenarios": [
+    {
+      "advisory_id": "RUSTSEC-2025-0022",
+      "annotation": {
+        "annotation_scope": [
+          "indirect generic materialization of the synthetic 4096-byte Vec backing transferred into the properties CString",
+          "indirect generic Option<CString> owner consumption and reclaim before collision-gated FFI read"
+        ],
+        "claim_scope": "derived RSH-069 synthetically groomed 4096-byte properties-CString-to-Replacement cross-identity reuse edge only",
+        "expected_layout": {
+          "align": 1,
+          "size": 4096
+        },
+        "kind": "manual_exact_vulnerability_edge_identity",
+        "replacement_semantic_type_fragment": "Box<witness::Replacement",
+        "replacement_source_file_fragment": "src/witness.rs:",
+        "schema_version": 1,
+        "victim_module_id": 5932164749985841154,
+        "victim_type_id": 5932164749985841153
+      },
+      "arms": [
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 0,
+          "allocator_variant": "typeiso",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 3,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": false,
+          "matching_reuse_denial_event_count": 3,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typeiso",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        }
+      ],
+      "case_id": "RSH-069",
+      "crate": "openssl",
+      "edge_evaluation": {
+        "annotation": {
+          "annotation_scope": [
+            "indirect generic materialization of the synthetic 4096-byte Vec backing transferred into the properties CString",
+            "indirect generic Option<CString> owner consumption and reclaim before collision-gated FFI read"
+          ],
+          "claim_scope": "derived RSH-069 synthetically groomed 4096-byte properties-CString-to-Replacement cross-identity reuse edge only",
+          "expected_layout": {
+            "align": 1,
+            "size": 4096
+          },
+          "kind": "manual_exact_vulnerability_edge_identity",
+          "replacement_semantic_type_fragment": "Box<witness::Replacement",
+          "replacement_source_file_fragment": "src/witness.rs:",
+          "schema_version": 1,
+          "victim_module_id": 5932164749985841154,
+          "victim_type_id": 5932164749985841153
+        },
+        "baseline_vulnerability_and_address_reuse_reproduced": true,
+        "boundary": "A validated result shows that exact-identity cache routing denied and reported the exploit-enabling cross-type reuse edge. The source-level stale pointer remains, same-identity reuse remains allowed, and the manual victim annotation is outside automatic compiler coverage.",
+        "claim_grade": false,
+        "claim_scope": "derived RSH-069 synthetically groomed 4096-byte properties-CString-to-Replacement cross-identity reuse edge only",
+        "compiler_automatic_victim_coverage": false,
+        "manual_victim_identity_annotation": true,
+        "missing_required_arms": [],
+        "patched_system_control_reproduced": true,
+        "patched_typeiso_matching_denial_count": 0,
+        "source_vulnerability_detection_validated": false,
+        "status": "cross_identity_reuse_edge_blocked_and_reported",
+        "typed_plain_address_reuse_ablation_reproduced": true,
+        "typeiso_reuse_edge_blocked_and_reported": true,
+        "validated": true,
+        "vulnerability_specific_detection_signal": true
+      },
+      "orchestration_success": true,
+      "patched_scenario_source": {
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-069/derived_reuse_patched.rs",
+        "source_sha256": "447cf102407be6753715fa2f7cabce26b82dc8631d099072709e0d44f17c1f01"
+      },
+      "raw_experiment": {
+        "bytes": 353270,
+        "case_id": "RSH-069",
+        "path": "docs/evidence/rustsec-rsh069-typeiso-20260715/experiment.json",
+        "sha256": "7ef9068cb06f53e1357a8fb224e5cf431386682cc73629b2bfaea6ff678393e3"
+      },
+      "repetitions_requested": 3,
+      "scenario_id": "RSH-069-derived-reuse",
+      "scenario_source": {
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-069/derived_reuse.rs",
+        "sha256": "59156d8f175c07124388b9dbf4befd91e6a66af79ccd5318137fdef92a7129a5"
+      },
+      "typed_allocator_expected_oracle": true,
+      "unexpected_arm_count": 0
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-rsh069-derived-reuse-summary"
+}

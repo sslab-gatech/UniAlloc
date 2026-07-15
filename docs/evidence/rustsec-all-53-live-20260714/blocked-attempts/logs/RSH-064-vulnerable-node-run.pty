@@ -1,0 +1,5 @@
+Script started on 2026-07-14 20:46:04-04:00 [COMMAND="node '/tmp/unialloc-blocked-reattempt-20260714/projects/RSH-064/invoke.js' '/tmp/unialloc-blocked-reattempt-20260714/projects/RSH-064/vulnerable/rsh064.node'" <not executed on terminal>]
+byteLength=4 bytes=178,125,131,73
+afterChurn=110,111,100,101
+
+Script done on 2026-07-14 20:46:04-04:00 [COMMAND_EXIT_CODE="0"]

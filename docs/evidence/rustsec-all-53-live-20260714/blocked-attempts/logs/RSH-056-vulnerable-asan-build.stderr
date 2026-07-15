@@ -1,0 +1,1099 @@
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.46
+   Compiling syn v1.0.109
+   Compiling glsl-layout-derive v0.3.2
+   Compiling glsl-layout v0.3.2 (/tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2)
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+195 | impl_array!(000);
+    | ---------------- in this macro invocation
+    |
+    = note: `#[warn(deprecated)]` on by default
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+195 | impl_array!(000);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+195 | impl_array!(000);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+196 | impl_array!(001);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+196 | impl_array!(001);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+196 | impl_array!(001);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+197 | impl_array!(002);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+197 | impl_array!(002);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+197 | impl_array!(002);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+198 | impl_array!(003);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+198 | impl_array!(003);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+198 | impl_array!(003);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+199 | impl_array!(004);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+199 | impl_array!(004);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+199 | impl_array!(004);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+200 | impl_array!(005);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+200 | impl_array!(005);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+200 | impl_array!(005);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+201 | impl_array!(006);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+201 | impl_array!(006);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+201 | impl_array!(006);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+202 | impl_array!(007);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+202 | impl_array!(007);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+202 | impl_array!(007);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+203 | impl_array!(008);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+203 | impl_array!(008);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+203 | impl_array!(008);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+204 | impl_array!(009);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+204 | impl_array!(009);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+204 | impl_array!(009);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+205 | impl_array!(010);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+205 | impl_array!(010);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+205 | impl_array!(010);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+206 | impl_array!(011);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+206 | impl_array!(011);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+206 | impl_array!(011);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+207 | impl_array!(012);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+207 | impl_array!(012);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+207 | impl_array!(012);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+208 | impl_array!(013);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+208 | impl_array!(013);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+208 | impl_array!(013);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+209 | impl_array!(014);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+209 | impl_array!(014);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+209 | impl_array!(014);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+210 | impl_array!(015);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+210 | impl_array!(015);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+210 | impl_array!(015);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+211 | impl_array!(016);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+211 | impl_array!(016);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+211 | impl_array!(016);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+212 | impl_array!(017);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+212 | impl_array!(017);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+212 | impl_array!(017);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+213 | impl_array!(018);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+213 | impl_array!(018);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+213 | impl_array!(018);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+214 | impl_array!(019);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+214 | impl_array!(019);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+214 | impl_array!(019);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+215 | impl_array!(020);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+215 | impl_array!(020);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+215 | impl_array!(020);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+216 | impl_array!(021);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+216 | impl_array!(021);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+216 | impl_array!(021);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+217 | impl_array!(022);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+217 | impl_array!(022);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+217 | impl_array!(022);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+218 | impl_array!(023);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+218 | impl_array!(023);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+218 | impl_array!(023);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+219 | impl_array!(024);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+219 | impl_array!(024);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+219 | impl_array!(024);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+220 | impl_array!(025);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+220 | impl_array!(025);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+220 | impl_array!(025);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+221 | impl_array!(026);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+221 | impl_array!(026);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+221 | impl_array!(026);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+222 | impl_array!(027);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+222 | impl_array!(027);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+222 | impl_array!(027);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+223 | impl_array!(028);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+223 | impl_array!(028);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+223 | impl_array!(028);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+224 | impl_array!(029);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+224 | impl_array!(029);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+224 | impl_array!(029);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+225 | impl_array!(030);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+225 | impl_array!(030);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+225 | impl_array!(030);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+226 | impl_array!(031);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+226 | impl_array!(031);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+226 | impl_array!(031);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:93:71
+    |
+ 93 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+227 | impl_array!(032);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:133:71
+    |
+133 |                         output: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                       ^^^^^^^^^^^^^
+...
+227 | impl_array!(032);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated function `std::mem::uninitialized`: use `mem::MaybeUninit` instead
+   --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/array.rs:173:70
+    |
+173 |                         array: std::mem::ManuallyDrop::new(std::mem::uninitialized()),
+    |                                                                      ^^^^^^^^^^^^^
+...
+227 | impl_array!(032);
+    | ---------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `impl_array` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: `glsl-layout` (lib) generated 99 warnings
+   Compiling rsh-056-harness v0.0.0 (/tmp/unialloc-blocked-reattempt-20260714/projects/RSH-056/vulnerable)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.54s

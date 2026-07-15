@@ -1,0 +1,190 @@
+{
+  "catalog": {
+    "bytes": 5160,
+    "path": "evaluation/config/rustsec_heap_neon_node_harnesses.json",
+    "sha256": "07f6aa0cde866a8caf6f44793653d9a4d294718c14627953148a401197828c07"
+  },
+  "claim_grade": false,
+  "host": {
+    "cargo": {
+      "toolchain": "nightly-2026-06-11",
+      "version": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)"
+    },
+    "node": {
+      "executable": "/snap/bin/node",
+      "version": "v20.20.2"
+    },
+    "platform": "linux"
+  },
+  "input_fingerprint": {
+    "catalog_sha256": "07f6aa0cde866a8caf6f44793653d9a4d294718c14627953148a401197828c07",
+    "runner_sha256": "347222ae34809691dd4c76ccdade7cdc9d1478b9e77940023d81d6fd28251658",
+    "unialloc_implementation_sha256": "7dff1d578c333c97342ff7d8782ffb7a109331c6697985321b5d1a847c15241c"
+  },
+  "planned_arms": [
+    {
+      "allocator_variant": "system",
+      "archive": {
+        "bytes": 269594,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.1.crate",
+        "sha256": "28e15415261d880aed48122e917a45e87bb82cf0260bb6db48bbab44b7464373"
+      },
+      "archive_variant": "patched",
+      "lockfile": {
+        "bytes": 3909,
+        "path": "/tmp/rsh064-preflight-48gydwjh/patched-system/project/Cargo.lock",
+        "sha256": "6f9609ddfbe9c596b0466303a358be5c927883e7773934e8ce8b4bb994104f49"
+      },
+      "manifest_sha256": "2e50f9942ca6d410b7df08c7afa3abc3388f7bc0144047129d200fb1272677a6",
+      "materialized_source_sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b",
+      "oracle": "expected_compile_rejection",
+      "reclaim_spin_archive": null,
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "none"
+    },
+    {
+      "allocator_variant": "system",
+      "archive": {
+        "bytes": 269317,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.0.crate",
+        "sha256": "544694d02bbff81f78dba5ef7d29341cc6d256edcae4fbb2d684491d5755c748"
+      },
+      "archive_variant": "vulnerable",
+      "lockfile": {
+        "bytes": 3909,
+        "path": "/tmp/rsh064-preflight-48gydwjh/vulnerable-system/project/Cargo.lock",
+        "sha256": "c6f58fb877d2646feb7cc694d08041f82363b91bce767a6a44d97cc2f4219032"
+      },
+      "manifest_sha256": "c6025d88dd612a7299675e90e35110ab50e04279be23ec80fe0cd7c2e340c36c",
+      "materialized_source_sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b",
+      "oracle": "corrupt_external_array_buffer_bytes",
+      "reclaim_spin_archive": null,
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "none"
+    },
+    {
+      "allocator_variant": "reclaim_plain",
+      "archive": {
+        "bytes": 269317,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.0.crate",
+        "sha256": "544694d02bbff81f78dba5ef7d29341cc6d256edcae4fbb2d684491d5755c748"
+      },
+      "archive_variant": "vulnerable",
+      "lockfile": {
+        "bytes": 5706,
+        "path": "/tmp/rsh064-preflight-48gydwjh/vulnerable-reclaim_plain/project/Cargo.lock",
+        "sha256": "7f5e873ef95f07890863ef1e5a72b9976176298e274ca23a0429216042208a75"
+      },
+      "manifest_sha256": "dc0432841bb162fad638626ac88ebeb80fb5aa8e6425bf7099e9cc0d2ecdebc4",
+      "materialized_source_sha256": "9adbd25d5eceeee3f503201ff9a410bfae0eddb64fe3d7b6f81882f23f448810",
+      "oracle": "corrupt_external_array_buffer_bytes",
+      "reclaim_spin_archive": {
+        "bytes": 25113,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/spin-0.9.0.crate",
+        "sha256": "b87bbf98cb81332a56c1ee8929845836f85e8ddd693157c30d76660196014478"
+      },
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "append_selected_global_allocator_only"
+    },
+    {
+      "allocator_variant": "reclaim_checks",
+      "archive": {
+        "bytes": 269317,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.0.crate",
+        "sha256": "544694d02bbff81f78dba5ef7d29341cc6d256edcae4fbb2d684491d5755c748"
+      },
+      "archive_variant": "vulnerable",
+      "lockfile": {
+        "bytes": 5706,
+        "path": "/tmp/rsh064-preflight-48gydwjh/vulnerable-reclaim_checks/project/Cargo.lock",
+        "sha256": "7f5e873ef95f07890863ef1e5a72b9976176298e274ca23a0429216042208a75"
+      },
+      "manifest_sha256": "8b522601cc4cfce3ffb33de54e53cbe0e93d670838973a39aaaf2ffea2b1f433",
+      "materialized_source_sha256": "9adbd25d5eceeee3f503201ff9a410bfae0eddb64fe3d7b6f81882f23f448810",
+      "oracle": "corrupt_external_array_buffer_bytes",
+      "reclaim_spin_archive": {
+        "bytes": 25113,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/spin-0.9.0.crate",
+        "sha256": "b87bbf98cb81332a56c1ee8929845836f85e8ddd693157c30d76660196014478"
+      },
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "append_selected_global_allocator_only"
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive": {
+        "bytes": 269317,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.0.crate",
+        "sha256": "544694d02bbff81f78dba5ef7d29341cc6d256edcae4fbb2d684491d5755c748"
+      },
+      "archive_variant": "vulnerable",
+      "lockfile": {
+        "bytes": 3909,
+        "path": "/tmp/rsh064-preflight-48gydwjh/vulnerable-typed_plain/project/Cargo.lock",
+        "sha256": "c6f58fb877d2646feb7cc694d08041f82363b91bce767a6a44d97cc2f4219032"
+      },
+      "manifest_sha256": "c6025d88dd612a7299675e90e35110ab50e04279be23ec80fe0cd7c2e340c36c",
+      "materialized_source_sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b",
+      "oracle": "corrupt_external_array_buffer_bytes",
+      "reclaim_spin_archive": null,
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "none"
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive": {
+        "bytes": 269317,
+        "path": "/home/hanqing/.cache/unialloc/rustsec-heap/archives/neon-0.10.0.crate",
+        "sha256": "544694d02bbff81f78dba5ef7d29341cc6d256edcae4fbb2d684491d5755c748"
+      },
+      "archive_variant": "vulnerable",
+      "lockfile": {
+        "bytes": 3909,
+        "path": "/tmp/rsh064-preflight-48gydwjh/vulnerable-typeiso/project/Cargo.lock",
+        "sha256": "c6f58fb877d2646feb7cc694d08041f82363b91bce767a6a44d97cc2f4219032"
+      },
+      "manifest_sha256": "c6025d88dd612a7299675e90e35110ab50e04279be23ec80fe0cd7c2e340c36c",
+      "materialized_source_sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b",
+      "oracle": "corrupt_external_array_buffer_bytes",
+      "reclaim_spin_archive": null,
+      "source": {
+        "bytes": 374,
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-064/addon.rs",
+        "sha256": "f4578102c71bfaceaaee2ac16643f67e53446f1fb8937c73db7a77f2b16e1f7b"
+      },
+      "source_transformation": "none"
+    }
+  ],
+  "scenario_id": "RSH-064-node-addon",
+  "schema_version": 1,
+  "source": "unialloc-rsh064-neon-node-preflight",
+  "unsafe_execution_requested": false,
+  "valid": true,
+  "variants": [
+    "system",
+    "reclaim_plain",
+    "reclaim_checks",
+    "typed_plain",
+    "typeiso"
+  ]
+}

@@ -1,0 +1,16 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -50,7 +50,12 @@
+ 
+ impl<T> InsertMany<T> for Vec<T> {
+     fn insert_many<I>(&mut self, index: usize, iterable: I) where I: IntoIterator<Item=T>, I::IntoIter: ExactSizeIterator {
+-        impl_veclike!(self, index, iterable);
++        if index > self.len() {
++            panic!("Index out of bounds: the length is {} but the index is {}", self.len(), index);
++        }
++        // Vec::splice owns its unwind bookkeeping and keeps the vector valid
++        // when the supplied iterator panics.
++        self.splice(index..index, iterable);
+     }
+ }
+ 

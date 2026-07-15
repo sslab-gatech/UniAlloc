@@ -1,0 +1,202 @@
+{
+  "boundary": "This artifact validates one manually attributed, layout-bounded consumed Box<VictimPayload>-to-Replacement reuse decision. The claim is limited to the derived RSH-055 cross-identity edge; automatic compiler victim coverage and complete source-level detection remain outside its scope.",
+  "catalog": {
+    "bytes": 16413,
+    "path": "evaluation/config/rustsec_heap_strong_batch_b_harnesses.json",
+    "sha256": "f889fe1d7cea3390b77b88f91fa254418660fad06fa882e4ad49bbcf423e0594"
+  },
+  "claim_grade": false,
+  "counts": {
+    "compiler_automatic_victim_coverage_count": 0,
+    "derived_reuse_scenario_count": 1,
+    "source_vulnerability_detection_validated_count": 0,
+    "source_vulnerability_mitigation_inferred_count": 0,
+    "validated_cross_identity_reuse_edge_count": 1
+  },
+  "mitigation_inferred": false,
+  "raw_experiment_inputs": [
+    {
+      "bytes": 1167194,
+      "case_id": "RSH-055",
+      "path": "docs/evidence/rustsec-rsh055-typeiso-20260715/experiment.json",
+      "sha256": "5232365fa92f8d87b8824b046f43f12af50f650f1b8606fbaf2d5e4f8d90b8d2"
+    }
+  ],
+  "scenarios": [
+    {
+      "advisory_id": "RUSTSEC-2020-0145",
+      "annotation": {
+        "annotation_scope": [
+          "indirect generic materialization of the heapless IntoIter consumed one-word Vec<u64> payload backing",
+          "indirect generic reclaim of the consumed DropDetector and its one-word Vec<u64> payload backing"
+        ],
+        "claim_scope": "derived RSH-055 collision-gated consumed one-word Vec<u64>-payload-to-Replacement cross-identity reuse edge only",
+        "expected_layout": {
+          "align": 8,
+          "size": 8
+        },
+        "kind": "manual_exact_vulnerability_edge_identity",
+        "replacement_semantic_type_fragment": "Box<witness::Replacement",
+        "replacement_source_file_fragment": "src/witness.rs:",
+        "schema_version": 1,
+        "victim_module_id": 5932164535237476354,
+        "victim_type_id": 5932164535237476353
+      },
+      "arms": [
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 0,
+          "allocator_variant": "typeiso",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 3,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": false,
+          "matching_reuse_denial_event_count": 3,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typeiso",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        }
+      ],
+      "case_id": "RSH-055",
+      "crate": "heapless",
+      "edge_evaluation": {
+        "annotation": {
+          "annotation_scope": [
+            "indirect generic materialization of the heapless IntoIter consumed one-word Vec<u64> payload backing",
+            "indirect generic reclaim of the consumed DropDetector and its one-word Vec<u64> payload backing"
+          ],
+          "claim_scope": "derived RSH-055 collision-gated consumed one-word Vec<u64>-payload-to-Replacement cross-identity reuse edge only",
+          "expected_layout": {
+            "align": 8,
+            "size": 8
+          },
+          "kind": "manual_exact_vulnerability_edge_identity",
+          "replacement_semantic_type_fragment": "Box<witness::Replacement",
+          "replacement_source_file_fragment": "src/witness.rs:",
+          "schema_version": 1,
+          "victim_module_id": 5932164535237476354,
+          "victim_type_id": 5932164535237476353
+        },
+        "baseline_vulnerability_and_address_reuse_reproduced": true,
+        "boundary": "A validated result shows that exact-identity cache routing denied and reported the exploit-enabling cross-type reuse edge. The source-level stale pointer remains, same-identity reuse remains allowed, and the manual victim annotation is outside automatic compiler coverage.",
+        "claim_grade": false,
+        "claim_scope": "derived RSH-055 collision-gated consumed one-word Vec<u64>-payload-to-Replacement cross-identity reuse edge only",
+        "compiler_automatic_victim_coverage": false,
+        "manual_victim_identity_annotation": true,
+        "missing_required_arms": [],
+        "patched_system_control_reproduced": true,
+        "patched_typeiso_matching_denial_count": 0,
+        "source_vulnerability_detection_validated": false,
+        "status": "cross_identity_reuse_edge_blocked_and_reported",
+        "typed_plain_address_reuse_ablation_reproduced": true,
+        "typeiso_reuse_edge_blocked_and_reported": true,
+        "validated": true,
+        "vulnerability_specific_detection_signal": true
+      },
+      "orchestration_success": true,
+      "patched_scenario_source": {
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-055/derived_reuse_patched.rs",
+        "source_sha256": "b2d790af6201f5ab517f85b8b37fd587e0c3e9da4aa9c58f5b27aa891926e79e"
+      },
+      "raw_experiment": {
+        "bytes": 1167194,
+        "case_id": "RSH-055",
+        "path": "docs/evidence/rustsec-rsh055-typeiso-20260715/experiment.json",
+        "sha256": "5232365fa92f8d87b8824b046f43f12af50f650f1b8606fbaf2d5e4f8d90b8d2"
+      },
+      "repetitions_requested": 3,
+      "scenario_id": "RSH-055-derived-reuse",
+      "scenario_source": {
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-055/derived_reuse.rs",
+        "sha256": "93ccd3eaa9e3f0accbbec1944b718b19e5230e1c0dd1bbd398d72fd396160d45"
+      },
+      "typed_allocator_expected_oracle": true,
+      "unexpected_arm_count": 0
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-rsh055-derived-reuse-summary"
+}

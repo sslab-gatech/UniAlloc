@@ -1,0 +1,520 @@
+{
+  "blocked_cases": [],
+  "cases": [
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2018-0003",
+      "case_id": "RSH-046",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "smallvec",
+      "experiment_path": "/tmp/strong-batch-a-run-final/RSH-046-upstream-gist/experiment.json",
+      "experiment_sha256": "57ba01e620d6ffa9e8487d93498551581c9a643bbf8fc3329777717cfe38e41a",
+      "note": "Published upstream gist with a mechanical generic payload substitution that makes the ownership failure ASan-visible.",
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "patched_safe_panic_control_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-046-upstream-gist/arms/patched/system/result.json",
+          "result_sha256": "e008143c0061080fac3e03e7d57b388f74cbf679866c8d9cf80b841a97c71cd2",
+          "run_exit_code": 101,
+          "rust_panic_or_assertion_observed": true,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-046-upstream-gist/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "2875ea2b01a5b8bb4de8592b815fc48abf45e0393bcbdc362421788a499cef3e",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-046-upstream-gist/arms/vulnerable/system/result.json",
+          "result_sha256": "637b444752ff1ec98bae31030ff9b1c47e0899345e68191265f5eee7d5f35981",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": true,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-046-upstream-gist/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "8239a6c0731a84c25e5ebbf66194c3115663eb6cb7592b4063d017cede220fc6",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_double_free"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "smallvec 0.6.3 reaches an intentional panic with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports attempting double-free while unwinding SmallVec::insert_many"
+      },
+      "origin_content_sha256": "72d512ce70fa8da0977b736143b75770965d62b5983831c4ececa220ce3b558f",
+      "origin_url": "https://gist.github.com/eira-fransham/ffa55d8e69377a64c9708e07c2db2a1b/b0f2b9a092f966068ecb1abe0ec5cd012c7bf51a",
+      "patched_dependency": {
+        "archive_or_patch_sha256": "26df3bb03ca5eac2e64192b723d51f56c1b1e0860e7c766281f4598f181acdc8",
+        "upstream_commit": "fcb1b7e99a2a98d928983af78a494ef566cbde8b",
+        "version_or_patch": "0.6.3"
+      },
+      "patched_revision_url": "https://github.com/servo/rust-smallvec/commit/fcb1b7e99a2a98d928983af78a494ef566cbde8b",
+      "preflight_path": "/tmp/strong-batch-a-run-final/RSH-046-upstream-gist/preflight.json",
+      "preflight_sha256": "007f20a2af732c7239079e7f0d5fa0c5d4b064d82717364bb01fc7a2f6b20ee8",
+      "provenance": "upstream_gist_mechanical_payload_adapter",
+      "scenario_id": "RSH-046-upstream-gist",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-046/main.rs",
+      "source_sha256": "1ae04027160140c20117f72789927de4443d80ff592f0b57b69ed8f0425ad671",
+      "status": "executable_and_validated",
+      "tool": "asan",
+      "vulnerable_dependency": {
+        "archive_sha256": "312a7df010092e73d6bbaf141957e868d4f30efd2bfd9bb1028ad91abec58514",
+        "upstream_commit": "d41b4eb9bdece1b73ed37a0108c93a4262926e6e",
+        "version": "0.6.2"
+      }
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2018-0009",
+      "case_id": "RSH-047",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "crossbeam",
+      "experiment_path": "/tmp/strong-batch-a-run-final/RSH-047-upstream-reduction/experiment.json",
+      "experiment_sha256": "b83f2c21ab218782be4338fe4c20799a8157d491ff5ac4e278aa0e035781be5e",
+      "note": "Mechanical deterministic reduction of the upstream epoch-reclamation issue; the HeapOwner payload makes moved heap ownership observable and 512 queue operations force reclamation.",
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "clean_tool_runs_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-047-upstream-reduction/arms/patched/system/result.json",
+          "result_sha256": "78eb5e2f8cd02ed77a9c7533ad164ad86dc0a1678b1abcd6ba2387e953e83b5d",
+          "run_exit_code": 0,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-047-upstream-reduction/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-047-upstream-reduction/arms/vulnerable/system/result.json",
+          "result_sha256": "e6849c881ff4eb302fff35001c3a2f528a45a5accefd0ad2999e57dcd91fb700",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-047-upstream-reduction/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "fdf85636063f9d023789e00e8f3215c926f22d4beb77a7824bf5447fe232755e",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_double_free"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "crossbeam 0.4.1 completes the same 512 push/pop reclamation schedule and exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports attempting double-free when epoch reclamation drops a payload already moved from MsQueue"
+      },
+      "origin_content_sha256": "9222e4e94feeffcfd8781593957442ce5db6ac6174cecdc52c94c958b09a5ed8",
+      "origin_url": "https://github.com/crossbeam-rs/crossbeam-epoch/issues/82",
+      "patched_dependency": {
+        "archive_or_patch_sha256": "d7408247b1b87f480890f28b670c5f8d9a8a4274833433fe74dc0dfd46d33650",
+        "upstream_commit": "9607780fc7380118483af672a736da78f1e6f6ab",
+        "version_or_patch": "0.4.1"
+      },
+      "patched_revision_url": "https://github.com/crossbeam-rs/crossbeam/commit/9607780fc7380118483af672a736da78f1e6f6ab",
+      "preflight_path": "/tmp/strong-batch-a-run-final/RSH-047-upstream-reduction/preflight.json",
+      "preflight_sha256": "9a8a831ef5ab7e8095a3cc4f666d65ae9fc90653ca06b9a68b3a5a8eb2522ece",
+      "provenance": "upstream_issue_mechanical_epoch_reduction",
+      "scenario_id": "RSH-047-upstream-reduction",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-047/main.rs",
+      "source_sha256": "1d3c5e85db3e5de1d3d206d2f88cb7346da98539f9d9da8d4234bae702e4795c",
+      "status": "executable_and_validated",
+      "tool": "asan",
+      "vulnerable_dependency": {
+        "archive_sha256": "abf6568ab210c7fe534af09d971bd085049866aa71700df471919b7a2fbf0d57",
+        "upstream_commit": "8f353c52e918029466e42cd0eefc34849c15c532",
+        "version": "0.4.0"
+      }
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2019-0009",
+      "case_id": "RSH-048",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "smallvec",
+      "experiment_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/experiment.json",
+      "experiment_sha256": "ac1861af5003386cba2bd9a66d27cd35434cb683e47fbd1a6d58c04d4264b5cd",
+      "note": "Direct transcription of the upstream grow(current_capacity) reproducer.",
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "clean_tool_runs_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/result.json",
+          "result_sha256": "b64de99337d1e4dd4ed3127349430e265e381983c661107b8ebae31a75fd8601",
+          "run_exit_code": 0,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "6473ec9f8048904982cc16b88f50f6eb0577bad0e88a30c2917b3589238596e3",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/result.json",
+          "result_sha256": "9362f6ae7a9179df92f1054c707b1ab10d9e6507749663f1bcf2b8a5296e6eaa",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "1bbafaba3875baea24e775351a59d83685141ee66f8cef2a27e57d5494f2ffdb",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_double_free"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "smallvec 0.6.10 preserves [0, 1, 2] and exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports attempting double-free after grow(current_capacity) frees the spilled backing allocation"
+      },
+      "origin_content_sha256": "b8504fb51e59d76f7ce54f70a58a234e228bb7efdc07ccc12ce5fd449f3363d8",
+      "origin_url": "https://github.com/servo/rust-smallvec/issues/148",
+      "patched_dependency": {
+        "archive_or_patch_sha256": "ab606a9c5e214920bb66c458cd7be8ef094f813f20fe77a54cc7dbfff220d4b7",
+        "upstream_commit": "830d32bbdb7dc858d1f81d662fe6dd06219f0647",
+        "version_or_patch": "0.6.10"
+      },
+      "patched_revision_url": "https://github.com/servo/rust-smallvec/commit/830d32bbdb7dc858d1f81d662fe6dd06219f0647",
+      "preflight_path": "/tmp/strong-batch-a-run-final/RSH-048-upstream/preflight.json",
+      "preflight_sha256": "df16ea1af941ba885ab8437cfca5b0be171fca5e081a1122e50f4ada58704d29",
+      "provenance": "upstream_issue",
+      "scenario_id": "RSH-048-upstream",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-048/main.rs",
+      "source_sha256": "8a96600e70ca4930c7bb9bf0d1c512b9b0ee8d32368f28a52eb10d78d71ae541",
+      "status": "executable_and_validated",
+      "tool": "asan",
+      "vulnerable_dependency": {
+        "archive_sha256": "c4488ae950c49d403731982257768f48fada354a5203fe81f9bb6f43ca9002be",
+        "upstream_commit": "dfd78d18b790c18bd103c3e7b4930bb54cb6b8f0",
+        "version": "0.6.9"
+      }
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2019-0010",
+      "case_id": "RSH-049",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "libflate",
+      "experiment_path": "/tmp/strong-batch-a-run-final/RSH-049-advisory/experiment.json",
+      "experiment_sha256": "9d0108bdb34651a868f4c6a3e38aba06c07117c929a9fe28cb2e016cf42832c1",
+      "note": "Mechanical advisory-derived Read/Drop adapter; the patched take_mut path deliberately aborts after the supplied reader panics and emits no ASan finding.",
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "patched_safe_panic_control_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-049-advisory/arms/patched/system/result.json",
+          "result_sha256": "be7d88522e230056834592283df7a2d1069cb0b2db10f64872754dfa63f764d2",
+          "run_exit_code": -6,
+          "rust_panic_or_assertion_observed": true,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-049-advisory/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "52f43f1eb4f6016b1fb52de8a5ec4113edbf2addba116d6a715c63cd7420b960",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-049-advisory/arms/vulnerable/system/result.json",
+          "result_sha256": "f32425382a34831b4b9edcbc6014a07f2bc2d561404c771898b697803358ab05",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": true,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-049-advisory/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "b925e35229700192d86db1522734a9c3198739a871de13c1ec4904e75f059cc4",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_deadly_fault"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "libflate 0.1.25 fails safely without ASan finding when the supplied Read implementation panics",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports a sanitizer fault (DEADLYSIGNAL/SEGV) when unwinding invokes Drop for libflate's fabricated uninitialized reader"
+      },
+      "origin_content_sha256": "dff69a042e92fc4ce2d4d4cc521e7c62d88fad237a489e287b4997f3f7da1360",
+      "origin_url": "https://github.com/RustSec/advisory-db/blob/9f3e138091487e69144f536d36976e427a7a3307/crates/libflate/RUSTSEC-2019-0010.md",
+      "patched_dependency": {
+        "archive_or_patch_sha256": "90c6f86f4b0caa347206f916f8b687b51d77c6ef8ff18d52dd007491fd580529",
+        "upstream_commit": "2efa0ab0d59698128b75ba2e6ec19195b403c83e",
+        "version_or_patch": "0.1.25"
+      },
+      "patched_revision_url": "https://github.com/sile/libflate/commit/2efa0ab0d59698128b75ba2e6ec19195b403c83e",
+      "preflight_path": "/tmp/strong-batch-a-run-final/RSH-049-advisory/preflight.json",
+      "preflight_sha256": "466bec5817b9b4ce7c106a50446fd20c2c31696c4b3cc25bd80c5c06650ae822",
+      "provenance": "rustsec_inline_mechanical_reader_adapter",
+      "scenario_id": "RSH-049-advisory",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-049/main.rs",
+      "source_sha256": "d9767540120d9fe7a5b3c35b1b559b0b45e729b635c58e1e99774935abe88af0",
+      "status": "executable_and_validated",
+      "tool": "asan",
+      "vulnerable_dependency": {
+        "archive_sha256": "fdd31ee4d780c641d240f5c0006d99445c53d2f5d1718e4813d725f6477d8720",
+        "upstream_commit": "691454e1808e43cf028a256d5f8bc6d9fe6cf63f",
+        "version": "0.1.24"
+      }
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2019-0014",
+      "case_id": "RSH-050",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "image",
+      "experiment_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/experiment.json",
+      "experiment_sha256": "0d30ca732a2a7ce7ef4de07f863df6e56b0ddb78b1787e3081e2578ce9fcee35",
+      "note": "Mechanical reduction using a valid one-pixel HDR header plus a missing scanline and Box<u64> output to expose the upstream uninitialized-output drop.",
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "clean_tool_runs_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/result.json",
+          "result_sha256": "20bbccf21751e3c1b734ad0cb996e7fd4a0206e9d4f20cf24cdaae8603d38545",
+          "run_exit_code": 0,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/result.json",
+          "result_sha256": "6f30cb5be06c437a26c50f1a6f9579f723563937569b865a5b2eb3c0a7d46287",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "74f9b1b5a317dac521ddcb8ebe1d1f4792caa4ec86b7665f1751f3837edeb698",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_deadly_fault"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "image 0.21.3 returns the expected truncated-input error and exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports a sanitizer fault (DEADLYSIGNAL/SEGV) while deallocating the uninitialized Box dropped after the HDR scanline error"
+      },
+      "origin_content_sha256": "b9411d35702fae9e5fb1a0ace18d7ee305dd75e29132a7135acba3c243240426",
+      "origin_url": "https://github.com/image-rs/image/issues/980",
+      "patched_dependency": {
+        "archive_or_patch_sha256": "35371e467cd7b0b3d1d6013d619203658467df12d61b0ca43cd67b743b1965eb",
+        "upstream_commit": "3b6b15e0ef5b1c9646a37f625a7e2a04fbbe7198",
+        "version_or_patch": "0.21.3"
+      },
+      "patched_revision_url": "https://github.com/image-rs/image/commit/3b6b15e0ef5b1c9646a37f625a7e2a04fbbe7198",
+      "preflight_path": "/tmp/strong-batch-a-run-final/RSH-050-upstream-reduction/preflight.json",
+      "preflight_sha256": "a2eb066a876fe84fd05951927ed1f931e68dceaad0f512d893f06a186de31560",
+      "provenance": "upstream_issue_mechanical_truncated_input_adapter",
+      "scenario_id": "RSH-050-upstream-reduction",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-050/main.rs",
+      "source_sha256": "97b9da70269bbcd00841add5c364ec03d83638cad75aa295ebcd98c96c53b8a5",
+      "status": "executable_and_validated",
+      "tool": "asan",
+      "vulnerable_dependency": {
+        "archive_sha256": "99198e595d012efccf12abf4abc08da2d97be0b0355a2b08d101347527476ba4",
+        "upstream_commit": "88f3c8de44cb2ed8b4ea3bdf8d7dad45f32b5e82",
+        "version": "0.21.2"
+      }
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2019-0021",
+      "case_id": "RSH-051",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "linea",
+      "experiment_path": "/tmp/strong-batch-a-run-final/RSH-051-upstream/experiment.json",
+      "experiment_sha256": "69786fbc425507b908faf22c6fc492b843b90a161457f0ce29082b529a03da3e",
+      "note": "Direct upstream issue reproducer expressed through Matrix::from_col_major_array so the experiment runner can wrap it as a module; both arms receive the same compatibility-only patch and the patched arm additionally receives exact upstream PR 2.",
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "patched_safe_panic_control_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-051-upstream/arms/patched/system/result.json",
+          "result_sha256": "8577c97edb84c7974ba8e0aa0599033cd921b74cd7cb4707228b266f4b945af1",
+          "run_exit_code": 101,
+          "rust_panic_or_assertion_observed": true,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-051-upstream/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "e092e6f844052759c593a2f26695d57237e183f42e276d75b3a7b6019b20f7eb",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-051-upstream/arms/vulnerable/system/result.json",
+          "result_sha256": "65c504cfe98505be5c1dae0d43eb019eba46a61e0115d09bec3923ab41d80142",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": true,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-051-upstream/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "10af28dea569a1fa36468e405ae75264cb61df975236df1bffe23dd2d225087c",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_double_free"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "the hash-pinned upstream PR-2 fix reaches an intentional panic with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports attempting double-free after the supplied Mul implementation panics in Matrix::scale"
+      },
+      "origin_content_sha256": "b6de36a346f701ca6d71eb9f8f0a15ac7b337b5a96114d8dd2dd642dcae26ada",
+      "origin_url": "https://github.com/strake/linea.rs/issues/1",
+      "patched_dependency": {
+        "archive_or_patch_sha256": "17327ab6352a6919f769d3c32f26187b7fac8062d119a9ac7e278ad02dbb1e4a",
+        "upstream_commit": "9d2fba1f76d076478b50446e4738c219516e63d8",
+        "version_or_patch": "0.9.4 + upstream PR-2"
+      },
+      "patched_revision_url": "https://github.com/strake/linea.rs/commit/9d2fba1f76d076478b50446e4738c219516e63d8",
+      "preflight_path": "/tmp/strong-batch-a-run-final/RSH-051-upstream/preflight.json",
+      "preflight_sha256": "8583128b59b59e85d4a24b07cd63280835827f5a41416e25efafe6aae28a6fda",
+      "provenance": "upstream_issue",
+      "scenario_id": "RSH-051-upstream",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-051/main.rs",
+      "source_sha256": "58e40ecd5fc0937712cb000a6a5b32fbe4096486a58e13135b69e8cc9cf00631",
+      "status": "executable_and_validated",
+      "tool": "asan",
+      "vulnerable_dependency": {
+        "archive_sha256": "0648613a5a0a6a93ce16adad238acda45920b0dabe7aee0cc77d3e85841fe888",
+        "upstream_commit": "218027e38e570a26778e07a2b6775dc3b540bc81",
+        "version": "0.9.4"
+      }
+    },
+    {
+      "adapter_kind": "mechanical_adapter",
+      "advisory_id": "RUSTSEC-2019-0023",
+      "case_id": "RSH-052",
+      "classification_role": "allocator_boundary_detection_candidate",
+      "crate": "string-interner",
+      "experiment_path": "/tmp/strong-batch-a-run-final/RSH-052-upstream/experiment.json",
+      "experiment_sha256": "73d90d97a4c766b999642e01e22c4ca7b5eb5171c1de593b6ba59ba8a8b5a4f8",
+      "note": "Direct upstream clone/use-after-free reproducer.",
+      "observations": {
+        "patched": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "clean_tool_runs_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-052-upstream/arms/patched/system/result.json",
+          "result_sha256": "f4d544cbdfd1866763b351acd150a2c15dad884d4dbbbca60125670c798896e5",
+          "run_exit_code": 0,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": false,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-052-upstream/arms/patched/system/artifacts/run-001.stderr",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "timed_out": false,
+          "tool_finding_signatures": []
+        },
+        "vulnerable": {
+          "build_exit_code": 0,
+          "expected_oracle_observed": true,
+          "oracle_status": "tool_finding_observed",
+          "result_path": "/tmp/strong-batch-a-run-final/RSH-052-upstream/arms/vulnerable/system/result.json",
+          "result_sha256": "75502503cf8951b2628febf13127a908b6f77fd9ea24eef82c1b4dceb8c4e971",
+          "run_exit_code": 1,
+          "rust_panic_or_assertion_observed": false,
+          "sanitizer_finding_observed": true,
+          "stderr_path": "/tmp/strong-batch-a-run-final/RSH-052-upstream/arms/vulnerable/system/artifacts/run-001.stderr",
+          "stderr_sha256": "c455a6c6dc2ab9e9f2d7710acdc58ffb002c4430fa4dce65858f59953b389ab4",
+          "timed_out": false,
+          "tool_finding_signatures": [
+            "asan_heap_use_after_free"
+          ]
+        }
+      },
+      "oracle": {
+        "patched_control": "string-interner 0.7.1 preserves clone-owned string storage and exits 0 with no AddressSanitizer finding",
+        "tool": "asan",
+        "vulnerable": "AddressSanitizer reports heap-use-after-free when the cloned interner compares the dropped original string bytes"
+      },
+      "origin_content_sha256": "1cdd4b2c3085635c44e92788248716f61270b59958e68143323f6ad008eab91f",
+      "origin_url": "https://github.com/Robbepop/string-interner/issues/9",
+      "patched_dependency": {
+        "archive_or_patch_sha256": "fd710eadff449a1531351b0e43eb81ea404336fa2f56c777427ab0e32a4cf183",
+        "upstream_commit": "685623308fab819bdbb9314df930316f80804994",
+        "version_or_patch": "0.7.1"
+      },
+      "patched_revision_url": "https://github.com/Robbepop/string-interner/commit/685623308fab819bdbb9314df930316f80804994",
+      "preflight_path": "/tmp/strong-batch-a-run-final/RSH-052-upstream/preflight.json",
+      "preflight_sha256": "f7eea60f113804e3b9c7107ddd02123ccad3f2b3d6a744f895cc264524feb429",
+      "provenance": "upstream_issue",
+      "scenario_id": "RSH-052-upstream",
+      "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-052/main.rs",
+      "source_sha256": "893bd190eeca662011be80e4b4fed0e198680f7585d7fe082a35c85e38880134",
+      "status": "executable_and_validated",
+      "tool": "asan",
+      "vulnerable_dependency": {
+        "archive_sha256": "db37827ddc5f79892754f71038ce0c6b4147e0454fcc765ff779faeedaef2d05",
+        "upstream_commit": "313a32019363b1eed87988ea5051311afca40889",
+        "version": "0.7.0"
+      }
+    }
+  ],
+  "catalog": {
+    "path": "/tmp/strong-batch-a-catalog.json",
+    "sha256": "3ebacfd4609fa06901d6b0aeb8a4a25ac549ccca578822fb93979b5a085f3659"
+  },
+  "claim_boundary": "These are one-repetition system-ASan reproduction and patched-control checks. They establish executable ground truth for later allocator comparisons; they are not claim-grade mitigation results.",
+  "counts": {
+    "assigned": 7,
+    "blocked": 0,
+    "executable": 7,
+    "materialized_arms": 14,
+    "validated_patched": 7,
+    "validated_vulnerable": 7
+  },
+  "generated_at_unix": 1784066208,
+  "integration_notes": [
+    "RSH-047, RSH-049, and RSH-050 use explicit mechanical reductions/adapters because the upstream reports do not publish standalone allocator-ready programs.",
+    "RSH-046 uses a published gist with a mechanical payload substitution.",
+    "RSH-051 requires both hash-pinned local patches recorded in its catalog entry; the compatibility patch is applied identically to both arms.",
+    "The shared experiment runner was concurrently untracked and temporarily syntactically invalid during this slice, so validation executed the same source through /tmp/strong-batch-a-runner.py with only the misplaced configure_manifest branch locally reordered in memory. No shared runner file was edited by this slice."
+  ],
+  "schema_version": 1,
+  "source": "strong-batch-a-rustsec-heap-expansion-validation",
+  "validation": {
+    "archive_hash_and_size_checks": 14,
+    "commands": {
+      "catalog_list": "python3 evaluation/scripts/run_rustsec_heap_harness.py --catalog /tmp/strong-batch-a-catalog.json --action list",
+      "materialize_template": "python3 evaluation/scripts/run_rustsec_heap_harness.py --catalog /tmp/strong-batch-a-catalog.json --action materialize --scenario <scenario> --variant <vulnerable|patched> --cache /tmp/strong-batch-a-cache --work-dir <dir> --allow-download",
+      "system_asan_template": "python3 evaluation/scripts/run_rustsec_heap_experiment.py --catalog /tmp/strong-batch-a-catalog.json --action run --scenario <scenario> --variants system --archive-variants vulnerable,patched --output-dir <dir> --cache /tmp/strong-batch-a-cache --allow-download --execute-unsafe --jobs 1 --repetitions 1 --build-timeout 900 --run-timeout 30"
+    },
+    "integrity_report_path": "/tmp/strong-batch-a-hashes.json",
+    "integrity_report_sha256": "b31047cc113ddab9358b62b1b1d423babbaebae2b87dc206adf69db41dbfac01",
+    "materialization_logs_root": "/tmp/strong-batch-a-materialize-logs",
+    "materialization_root": "/tmp/strong-batch-a-materialize",
+    "repetitions_per_arm": 1,
+    "repo_file_hash_checks": 23,
+    "system_asan_run_root": "/tmp/strong-batch-a-run-final",
+    "target": "x86_64-unknown-linux-gnu",
+    "toolchain": "nightly-2026-06-11"
+  }
+}

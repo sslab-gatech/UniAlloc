@@ -1,0 +1,34 @@
+{
+  "advisory_id": "RUSTSEC-2023-0017",
+  "case_id": "RSH-031",
+  "scenario_id": "RSH-031-derived-layout-validation",
+  "classification_role": "allocator_boundary_detection_candidate",
+  "mechanism": "recovery_layout_validation",
+  "mechanism_class": "other_allocator_feature",
+  "claim_scope": "exact same-pointer recovery-record allocation/deallocation layout mismatch",
+  "source_path": "evaluation/harnesses/rustsec_heap/RSH-031/derived_layout_vulnerable.rs",
+  "source_sha256": "be587469c964a2495246af4396eef461a79802d495c24348e1f86ec4968a0dd8",
+  "patched_source": {
+    "source_path": "evaluation/harnesses/rustsec_heap/RSH-031/derived_layout_patched.rs",
+    "source_sha256": "edac5b700fdaa7abfb03bc5aae62eea88733d4b3799934f6623b0c11534a753e"
+  },
+  "upstream_baseline_scenario_id": "RSH-031-upstream",
+  "upstream_baseline_oracle": "Miri reports size=1009 align=256 allocated and size=1009 align=1 deallocated",
+  "minimum_repetitions": 3,
+  "expected_variants": [
+    "typed_plain",
+    "typeiso"
+  ],
+  "expected_vulnerable_signal": {
+    "recovery_deallocation_layout_mismatches": 1,
+    "last_requested_size": 1009,
+    "last_requested_align": 1,
+    "last_recorded_size": 1009,
+    "last_recorded_align": 256
+  },
+  "expected_patched_signal": {
+    "recovery_deallocation_layout_mismatches": 0
+  },
+  "claim_grade": false,
+  "boundary": "The derived pair validates allocator mechanism coverage; the pinned upstream Miri arm supplies source-vulnerability ground truth. The layout signal is policy-independent and is not attributed to TypeIso."
+}

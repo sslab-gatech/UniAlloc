@@ -1,0 +1,366 @@
+{
+  "all_passed": true,
+  "archive_checks": [
+    {
+      "actual_bytes": 5775,
+      "actual_sha256": "88f16b064898f39d79d2d3f0ab3d7f302025d68925740109ad3e3c7244dae430",
+      "case_id": "RSH-005",
+      "expected_bytes": 5775,
+      "expected_sha256": "88f16b064898f39d79d2d3f0ab3d7f302025d68925740109ad3e3c7244dae430",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/array-queue-0.4.0.crate",
+      "variant": "vulnerable"
+    },
+    {
+      "actual_bytes": 5678,
+      "actual_sha256": "4fb31ef484e56373b8838ad7cab519c66982512eccc4aeeecba0d28c0ffd10b8",
+      "case_id": "RSH-005",
+      "expected_bytes": 5678,
+      "expected_sha256": "4fb31ef484e56373b8838ad7cab519c66982512eccc4aeeecba0d28c0ffd10b8",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/array-queue-0.4.1.crate",
+      "variant": "patched"
+    },
+    {
+      "actual_bytes": 54456,
+      "actual_sha256": "0688b520bcc7498f6ca8fa006e8031d353e3fd4f51bd4a50fb03cc4230b28bd2",
+      "case_id": "RSH-006",
+      "expected_bytes": 54456,
+      "expected_sha256": "0688b520bcc7498f6ca8fa006e8031d353e3fd4f51bd4a50fb03cc4230b28bd2",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/arc-swap-1.0.0.crate",
+      "variant": "vulnerable"
+    },
+    {
+      "actual_bytes": 56882,
+      "actual_sha256": "ec5a4539a733493f412c4d0bb962748ea1f90f3dfdba9ff3ee18acbefc3b33f0",
+      "case_id": "RSH-006",
+      "expected_bytes": 56882,
+      "expected_sha256": "ec5a4539a733493f412c4d0bb962748ea1f90f3dfdba9ff3ee18acbefc3b33f0",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/arc-swap-1.1.0.crate",
+      "variant": "patched"
+    },
+    {
+      "actual_bytes": 52797,
+      "actual_sha256": "befd8192baa9939f3ecad2173d9bb4213c9433a770f4c275af611cd7e1bccb07",
+      "case_id": "RSH-009",
+      "expected_bytes": 52797,
+      "expected_sha256": "befd8192baa9939f3ecad2173d9bb4213c9433a770f4c275af611cd7e1bccb07",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/scratchpad-1.3.0.crate",
+      "variant": "vulnerable"
+    },
+    {
+      "actual_bytes": 54383,
+      "actual_sha256": "05c42d7468eaafe45491f0e7f83338604e78ba2eb1555f111009f2b545e9bc1d",
+      "case_id": "RSH-009",
+      "expected_bytes": 54383,
+      "expected_sha256": "05c42d7468eaafe45491f0e7f83338604e78ba2eb1555f111009f2b545e9bc1d",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/scratchpad-1.3.1.crate",
+      "variant": "patched"
+    },
+    {
+      "actual_bytes": 47181,
+      "actual_sha256": "ed8dbbb1d38e66c78a0d6ff3f439ac47ba153dcdbaa1d26e4162ee9f5781f938",
+      "case_id": "RSH-074",
+      "expected_bytes": 47181,
+      "expected_sha256": "ed8dbbb1d38e66c78a0d6ff3f439ac47ba153dcdbaa1d26e4162ee9f5781f938",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/mutringbuf-1.0.0.crate",
+      "variant": "vulnerable"
+    },
+    {
+      "actual_bytes": 47181,
+      "actual_sha256": "ed8dbbb1d38e66c78a0d6ff3f439ac47ba153dcdbaa1d26e4162ee9f5781f938",
+      "case_id": "RSH-074",
+      "expected_bytes": 47181,
+      "expected_sha256": "ed8dbbb1d38e66c78a0d6ff3f439ac47ba153dcdbaa1d26e4162ee9f5781f938",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/mutringbuf-1.0.0.crate",
+      "variant": "patched"
+    },
+    {
+      "actual_bytes": 442357,
+      "actual_sha256": "9940fb8467a0a06312218ed384185cb8536aa10d8ec017d0ce7fad2c1bd882d5",
+      "case_id": "RSH-075",
+      "expected_bytes": 442357,
+      "expected_sha256": "9940fb8467a0a06312218ed384185cb8536aa10d8ec017d0ce7fad2c1bd882d5",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/diesel-2.3.9.crate",
+      "variant": "vulnerable"
+    },
+    {
+      "actual_bytes": 445593,
+      "actual_sha256": "29fe29a87fb84c631ffb3ba21798c4b1f3a964701ba78f0dce4bf8668562ec88",
+      "case_id": "RSH-075",
+      "expected_bytes": 445593,
+      "expected_sha256": "29fe29a87fb84c631ffb3ba21798c4b1f3a964701ba78f0dce4bf8668562ec88",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/diesel-2.3.10.crate",
+      "variant": "patched"
+    },
+    {
+      "actual_bytes": 141795,
+      "actual_sha256": "5581cd5dd2cb79cbe9d8137071d67f62f0db926e83a07b4d14561c5b7d423776",
+      "case_id": "RSH-076",
+      "expected_bytes": 141795,
+      "expected_sha256": "5581cd5dd2cb79cbe9d8137071d67f62f0db926e83a07b4d14561c5b7d423776",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/scc-3.8.3.crate",
+      "variant": "vulnerable"
+    },
+    {
+      "actual_bytes": 142326,
+      "actual_sha256": "7800bc2c7e91b26aeae70c2ab6eaa653efc133104b7756e674c99304adff3fdb",
+      "case_id": "RSH-076",
+      "expected_bytes": 142326,
+      "expected_sha256": "7800bc2c7e91b26aeae70c2ab6eaa653efc133104b7756e674c99304adff3fdb",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-cache/archives/scc-3.8.4.crate",
+      "variant": "patched"
+    }
+  ],
+  "catalog_path": "/tmp/strong-batch-d-catalog.json",
+  "catalog_sha256": "1c1d7aff5f312cc0be5f2b3c824b461589aac2feb4444f084be8ac1614ff44f6",
+  "counts": {
+    "archives": 12,
+    "origins": 6,
+    "patched_results": 1,
+    "repo_files": 22
+  },
+  "origin_content_checks": [
+    {
+      "actual_sha256": "f9e5143c30f28a409bd8e03784e09b5df3f79cf7541ecd944d055ebe3c25eafb",
+      "case_id": "RSH-005",
+      "expected_sha256": "f9e5143c30f28a409bd8e03784e09b5df3f79cf7541ecd944d055ebe3c25eafb",
+      "matches": true,
+      "path": "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-005/origin.rs"
+    },
+    {
+      "actual_sha256": "915d156df801aaeed767030c680c1ff9b488213de97ea19059553ecbf7840ecb",
+      "case_id": "RSH-006",
+      "expected_sha256": "915d156df801aaeed767030c680c1ff9b488213de97ea19059553ecbf7840ecb",
+      "matches": true,
+      "path": "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-006/origin.rs"
+    },
+    {
+      "actual_sha256": "170b326ef9228e6855f8eccc0eaf9bac2cc18662c745a75ec561a26fc518e135",
+      "case_id": "RSH-009",
+      "expected_sha256": "170b326ef9228e6855f8eccc0eaf9bac2cc18662c745a75ec561a26fc518e135",
+      "matches": true,
+      "path": "/home/hanqing/alloc/UniAlloc/evaluation/harnesses/rustsec_heap_expansion/RSH-009/origin.rs"
+    },
+    {
+      "actual_sha256": "f6960932d3d0e3b6074f93f36ddc04fc91e99deef3a7f8a1ae5f33fd67613133",
+      "case_id": "RSH-074",
+      "expected_sha256": "f6960932d3d0e3b6074f93f36ddc04fc91e99deef3a7f8a1ae5f33fd67613133",
+      "matches": true,
+      "path": "/tmp/rustsec-advisory-db-latest/crates/mutringbuf/RUSTSEC-2026-0142.md"
+    },
+    {
+      "actual_sha256": "ecaf0f4ed3912f956afd4a2ac68b889c6fd3f2bb6be9a927f667e5082cfe97e3",
+      "case_id": "RSH-075",
+      "expected_sha256": "ecaf0f4ed3912f956afd4a2ac68b889c6fd3f2bb6be9a927f667e5082cfe97e3",
+      "matches": true,
+      "path": "/tmp/rsh074076-research/evidence/diesel-fix.patch"
+    },
+    {
+      "actual_sha256": "95d53018fe4c23cf8d4e039b1a0f27857f06dcec3488941c416740b695ff786e",
+      "case_id": "RSH-076",
+      "expected_sha256": "95d53018fe4c23cf8d4e039b1a0f27857f06dcec3488941c416740b695ff786e",
+      "matches": true,
+      "path": "/tmp/rsh074076-research/evidence/scc-issue-232.body"
+    }
+  ],
+  "patched_result_checks": [
+    {
+      "actual_sha256": "45c2e90a72e4097588d26cc1d91cb0ef4baab95c80e822c28b94ffb7854f38b8",
+      "case_id": "RSH-074",
+      "expected_sha256": "45c2e90a72e4097588d26cc1d91cb0ef4baab95c80e822c28b94ffb7854f38b8",
+      "matches": true,
+      "path": "/tmp/strong-batch-d-materialize/RSH-074-rustsec/patched/subject/mutringbuf-1.0.0/src/ring_buffer/storage/heap/mod.rs"
+    }
+  ],
+  "repo_file_checks": [
+    {
+      "actual_sha256": "7ae2f1f76a1c4596ebea9e7dd5209851667271693913fb12dafccd4e3596c2fd",
+      "case_id": "RSH-005",
+      "expected_sha256": "7ae2f1f76a1c4596ebea9e7dd5209851667271693913fb12dafccd4e3596c2fd",
+      "kind": "witness_source",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-005/main.rs"
+    },
+    {
+      "actual_sha256": "29fddd5379b6bea9098afcd33a2c136d24f484d61232a5a0d94b0ad1289e4bde",
+      "case_id": "RSH-005",
+      "expected_sha256": "29fddd5379b6bea9098afcd33a2c136d24f484d61232a5a0d94b0ad1289e4bde",
+      "kind": "lockfile_patched",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-005/Cargo.lock.patched"
+    },
+    {
+      "actual_sha256": "544e51c5741047506dcf4d316d5c342e3e00215dca4ba497c955a2231df6a882",
+      "case_id": "RSH-005",
+      "expected_sha256": "544e51c5741047506dcf4d316d5c342e3e00215dca4ba497c955a2231df6a882",
+      "kind": "lockfile_vulnerable",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-005/Cargo.lock.vulnerable"
+    },
+    {
+      "actual_sha256": "f9e5143c30f28a409bd8e03784e09b5df3f79cf7541ecd944d055ebe3c25eafb",
+      "case_id": "RSH-005",
+      "expected_sha256": "f9e5143c30f28a409bd8e03784e09b5df3f79cf7541ecd944d055ebe3c25eafb",
+      "kind": "origin_snapshot",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-005/origin.rs"
+    },
+    {
+      "actual_sha256": "a9df7eea8717324cef53e52001fc82c31e381a098fc27f7b76be68fb6ba3b445",
+      "case_id": "RSH-006",
+      "expected_sha256": "a9df7eea8717324cef53e52001fc82c31e381a098fc27f7b76be68fb6ba3b445",
+      "kind": "witness_source",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-006/main.rs"
+    },
+    {
+      "actual_sha256": "9dd311bb56b16c034459730576290032ac19b9cafba72cb9bdbe67b09ffa605a",
+      "case_id": "RSH-006",
+      "expected_sha256": "9dd311bb56b16c034459730576290032ac19b9cafba72cb9bdbe67b09ffa605a",
+      "kind": "lockfile_patched",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-006/Cargo.lock.patched"
+    },
+    {
+      "actual_sha256": "23e3d9fbe27b06d9c4b09c2542a4dba070002ebdd048eb119fd55b166c9617f3",
+      "case_id": "RSH-006",
+      "expected_sha256": "23e3d9fbe27b06d9c4b09c2542a4dba070002ebdd048eb119fd55b166c9617f3",
+      "kind": "lockfile_vulnerable",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-006/Cargo.lock.vulnerable"
+    },
+    {
+      "actual_sha256": "915d156df801aaeed767030c680c1ff9b488213de97ea19059553ecbf7840ecb",
+      "case_id": "RSH-006",
+      "expected_sha256": "915d156df801aaeed767030c680c1ff9b488213de97ea19059553ecbf7840ecb",
+      "kind": "origin_snapshot",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-006/origin.rs"
+    },
+    {
+      "actual_sha256": "c5111fc2fe1c145c741cfd8200cef910d9292785030070370a888fbe44b24979",
+      "case_id": "RSH-009",
+      "expected_sha256": "c5111fc2fe1c145c741cfd8200cef910d9292785030070370a888fbe44b24979",
+      "kind": "witness_source",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-009/main.rs"
+    },
+    {
+      "actual_sha256": "3b0c416c3779d1b21efdc1fe3950befb349eb3c6e81a8b37e7d65e81d0ac97f5",
+      "case_id": "RSH-009",
+      "expected_sha256": "3b0c416c3779d1b21efdc1fe3950befb349eb3c6e81a8b37e7d65e81d0ac97f5",
+      "kind": "lockfile_patched",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-009/Cargo.lock.patched"
+    },
+    {
+      "actual_sha256": "9e949459d7efc252f8ade84df6a4cd8a4ad7642ab1139ca054f3ae0ab0431d92",
+      "case_id": "RSH-009",
+      "expected_sha256": "9e949459d7efc252f8ade84df6a4cd8a4ad7642ab1139ca054f3ae0ab0431d92",
+      "kind": "lockfile_vulnerable",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-009/Cargo.lock.vulnerable"
+    },
+    {
+      "actual_sha256": "170b326ef9228e6855f8eccc0eaf9bac2cc18662c745a75ec561a26fc518e135",
+      "case_id": "RSH-009",
+      "expected_sha256": "170b326ef9228e6855f8eccc0eaf9bac2cc18662c745a75ec561a26fc518e135",
+      "kind": "origin_snapshot",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-009/origin.rs"
+    },
+    {
+      "actual_sha256": "e6542cc0aacb6dd53bab94f460253d0f0a8b815b85f94c0bd6182bd4cb1e7fac",
+      "case_id": "RSH-074",
+      "expected_sha256": "e6542cc0aacb6dd53bab94f460253d0f0a8b815b85f94c0bd6182bd4cb1e7fac",
+      "kind": "witness_source",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-074/main.rs"
+    },
+    {
+      "actual_sha256": "2a93930a194d15a35efab190e8ab0dd3af4cc7c388e0a4e18e48e5caeba2d12f",
+      "case_id": "RSH-074",
+      "expected_sha256": "2a93930a194d15a35efab190e8ab0dd3af4cc7c388e0a4e18e48e5caeba2d12f",
+      "kind": "lockfile_patched",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-074/Cargo.lock.patched"
+    },
+    {
+      "actual_sha256": "2a93930a194d15a35efab190e8ab0dd3af4cc7c388e0a4e18e48e5caeba2d12f",
+      "case_id": "RSH-074",
+      "expected_sha256": "2a93930a194d15a35efab190e8ab0dd3af4cc7c388e0a4e18e48e5caeba2d12f",
+      "kind": "lockfile_vulnerable",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-074/Cargo.lock.vulnerable"
+    },
+    {
+      "actual_sha256": "4cf60802b688c5b7e99e5bda1b19c90693ed6ce70d9fe5d2a5cf207bc1549a1a",
+      "case_id": "RSH-074",
+      "expected_sha256": "4cf60802b688c5b7e99e5bda1b19c90693ed6ce70d9fe5d2a5cf207bc1549a1a",
+      "kind": "local_patched_control",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-074/patches/upstream-oneringbuf-vmem-ownership.diff"
+    },
+    {
+      "actual_sha256": "7b6666f9daa4784955844676135e24779824358520cfa0a5c4712490f75add97",
+      "case_id": "RSH-075",
+      "expected_sha256": "7b6666f9daa4784955844676135e24779824358520cfa0a5c4712490f75add97",
+      "kind": "witness_source",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-075/main.rs"
+    },
+    {
+      "actual_sha256": "bda3956f161af1a758bf33afdfe628469b1a1f003c152356689df7ea8c9976d7",
+      "case_id": "RSH-075",
+      "expected_sha256": "bda3956f161af1a758bf33afdfe628469b1a1f003c152356689df7ea8c9976d7",
+      "kind": "lockfile_patched",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-075/Cargo.lock.patched"
+    },
+    {
+      "actual_sha256": "0d629dc2ff0b23d9fb328cf7026b3f0b3bb54356b14e40371fc4a7f7755cfc9b",
+      "case_id": "RSH-075",
+      "expected_sha256": "0d629dc2ff0b23d9fb328cf7026b3f0b3bb54356b14e40371fc4a7f7755cfc9b",
+      "kind": "lockfile_vulnerable",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-075/Cargo.lock.vulnerable"
+    },
+    {
+      "actual_sha256": "9d33fa702227e455399cd9e7e33c0cf80806d7e2aa86d390ef842efadfe0407b",
+      "case_id": "RSH-076",
+      "expected_sha256": "9d33fa702227e455399cd9e7e33c0cf80806d7e2aa86d390ef842efadfe0407b",
+      "kind": "witness_source",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-076/main.rs"
+    },
+    {
+      "actual_sha256": "5fd638f091237dab041860e1b0547a1e5a2d3fb2489a9e2f4e33e0039c8fc53a",
+      "case_id": "RSH-076",
+      "expected_sha256": "5fd638f091237dab041860e1b0547a1e5a2d3fb2489a9e2f4e33e0039c8fc53a",
+      "kind": "lockfile_patched",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-076/Cargo.lock.patched"
+    },
+    {
+      "actual_sha256": "a11927e798522f7b8f872dd7945ffdc741512b6ed03f90f5707cf1154bc3f99c",
+      "case_id": "RSH-076",
+      "expected_sha256": "a11927e798522f7b8f872dd7945ffdc741512b6ed03f90f5707cf1154bc3f99c",
+      "kind": "lockfile_vulnerable",
+      "matches": true,
+      "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-076/Cargo.lock.vulnerable"
+    }
+  ],
+  "schema_version": 1,
+  "source": "strong-batch-d-integrity-validation"
+}

@@ -1,0 +1,202 @@
+{
+  "boundary": "This artifact validates one manually attributed, layout-bounded pre-reserve Vec<u8>-buffer-to-Replacement reuse decision. The claim is limited to the derived RSH-065 cross-identity edge; automatic compiler victim coverage and complete source-level detection remain outside its scope.",
+  "catalog": {
+    "bytes": 30757,
+    "path": "evaluation/config/rustsec_heap_strong_batch_c_harnesses.json",
+    "sha256": "e4216413c34b783750009300f1a6bca69a42ec604af607545103f7c060e75cf6"
+  },
+  "claim_grade": false,
+  "counts": {
+    "compiler_automatic_victim_coverage_count": 0,
+    "derived_reuse_scenario_count": 1,
+    "source_vulnerability_detection_validated_count": 0,
+    "source_vulnerability_mitigation_inferred_count": 0,
+    "validated_cross_identity_reuse_edge_count": 1
+  },
+  "mitigation_inferred": false,
+  "raw_experiment_inputs": [
+    {
+      "bytes": 505783,
+      "case_id": "RSH-065",
+      "path": "docs/evidence/rustsec-rsh065-typeiso-20260715/experiment.json",
+      "sha256": "ddb089bcc48d23577d9d39d8992473533c47b0d457512cba016f181bc1be00af"
+    }
+  ],
+  "scenarios": [
+    {
+      "advisory_id": "RUSTSEC-2023-0054",
+      "annotation": {
+        "annotation_scope": [
+          "indirect generic materialization of the four-byte Vec victim backing",
+          "modeled reserve relocation with indirect generic old-buffer reclaim before collision-gated stale copy"
+        ],
+        "claim_scope": "derived RSH-065 manually modeled pre-reserve Vec<u8>-buffer-to-Replacement cross-identity reuse edge only",
+        "expected_layout": {
+          "align": 1,
+          "size": 4
+        },
+        "kind": "manual_exact_vulnerability_edge_identity",
+        "replacement_semantic_type_fragment": "Box<witness::Replacement",
+        "replacement_source_file_fragment": "src/witness.rs:",
+        "schema_version": 1,
+        "victim_module_id": 5932164732805971970,
+        "victim_type_id": 5932164732805971969
+      },
+      "arms": [
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 0,
+          "allocator_variant": "typeiso",
+          "archive_variant": "vulnerable",
+          "bound_replacement_site_count": 3,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": false,
+          "matching_reuse_denial_event_count": 3,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "system",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typed_plain",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        },
+        {
+          "address_reuse_observation_count": 3,
+          "allocator_variant": "typeiso",
+          "archive_variant": "patched",
+          "bound_replacement_site_count": 0,
+          "claim_grade": false,
+          "execution_status": "completed",
+          "exit_codes": [
+            0,
+            0,
+            0
+          ],
+          "expected_oracle_observed": true,
+          "matching_reuse_denial_event_count": 0,
+          "mitigation_inferred": false
+        }
+      ],
+      "case_id": "RSH-065",
+      "crate": "mail-internals",
+      "edge_evaluation": {
+        "annotation": {
+          "annotation_scope": [
+            "indirect generic materialization of the four-byte Vec victim backing",
+            "modeled reserve relocation with indirect generic old-buffer reclaim before collision-gated stale copy"
+          ],
+          "claim_scope": "derived RSH-065 manually modeled pre-reserve Vec<u8>-buffer-to-Replacement cross-identity reuse edge only",
+          "expected_layout": {
+            "align": 1,
+            "size": 4
+          },
+          "kind": "manual_exact_vulnerability_edge_identity",
+          "replacement_semantic_type_fragment": "Box<witness::Replacement",
+          "replacement_source_file_fragment": "src/witness.rs:",
+          "schema_version": 1,
+          "victim_module_id": 5932164732805971970,
+          "victim_type_id": 5932164732805971969
+        },
+        "baseline_vulnerability_and_address_reuse_reproduced": true,
+        "boundary": "A validated result shows that exact-identity cache routing denied and reported the exploit-enabling cross-type reuse edge. The source-level stale pointer remains, same-identity reuse remains allowed, and the manual victim annotation is outside automatic compiler coverage.",
+        "claim_grade": false,
+        "claim_scope": "derived RSH-065 manually modeled pre-reserve Vec<u8>-buffer-to-Replacement cross-identity reuse edge only",
+        "compiler_automatic_victim_coverage": false,
+        "manual_victim_identity_annotation": true,
+        "missing_required_arms": [],
+        "patched_system_control_reproduced": true,
+        "patched_typeiso_matching_denial_count": 0,
+        "source_vulnerability_detection_validated": false,
+        "status": "cross_identity_reuse_edge_blocked_and_reported",
+        "typed_plain_address_reuse_ablation_reproduced": true,
+        "typeiso_reuse_edge_blocked_and_reported": true,
+        "validated": true,
+        "vulnerability_specific_detection_signal": true
+      },
+      "orchestration_success": true,
+      "patched_scenario_source": {
+        "source_path": "evaluation/harnesses/rustsec_heap_expansion/RSH-065/derived_reuse_patched.rs",
+        "source_sha256": "2cbc7f945b9961f6d022897ac54191aacfc239c3dea77969f252ba326270070f"
+      },
+      "raw_experiment": {
+        "bytes": 505783,
+        "case_id": "RSH-065",
+        "path": "docs/evidence/rustsec-rsh065-typeiso-20260715/experiment.json",
+        "sha256": "ddb089bcc48d23577d9d39d8992473533c47b0d457512cba016f181bc1be00af"
+      },
+      "repetitions_requested": 3,
+      "scenario_id": "RSH-065-derived-reuse",
+      "scenario_source": {
+        "path": "evaluation/harnesses/rustsec_heap_expansion/RSH-065/derived_reuse.rs",
+        "sha256": "8123e1c70af07184d3896e1220b1de242319f98845a13a2f0c27098a4dcb1a53"
+      },
+      "typed_allocator_expected_oracle": true,
+      "unexpected_arm_count": 0
+    }
+  ],
+  "schema_version": 1,
+  "source": "unialloc-rustsec-rsh065-derived-reuse-summary"
+}

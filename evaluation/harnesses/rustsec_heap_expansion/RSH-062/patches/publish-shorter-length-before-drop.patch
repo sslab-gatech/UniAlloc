@@ -1,0 +1,23 @@
+--- a/src/common.rs
++++ b/src/common.rs
+@@ -462,9 +462,19 @@
+                 ptr::write(self.slice.ptr.as_ptr().add(len - 1), value);
+             }
+         } else if len < old_len {
++            // Construct the removed range before publishing the shorter length,
++            // then make unwind observe only the retained prefix.
++            let removed = unsafe {
++                std::slice::from_raw_parts_mut(
++                    self.slice.ptr.as_ptr().add(len),
++                    old_len - len,
++                )
++            };
++            self.slice.len = len;
+             unsafe {
+-                ptr::drop_in_place(&mut self.slice[len..old_len]);
++                ptr::drop_in_place(removed);
+             }
++            return;
+         }
+ 
+         self.slice.len = len;

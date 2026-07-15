@@ -1,0 +1,101 @@
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.46
+   Compiling unicode-ident v1.0.24
+   Compiling syn v1.0.109
+   Compiling neon-build v0.10.1
+   Compiling cfg-if v1.0.4
+   Compiling semver-parser v0.7.0
+   Compiling smallvec v1.15.2
+   Compiling libloading v0.6.7
+   Compiling semver v0.9.0
+   Compiling neon-runtime v0.10.1
+   Compiling neon v0.10.1 (/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/subject/neon-0.10.1)
+   Compiling syn-mid v0.5.4
+   Compiling neon-macros v0.10.1
+warning: unexpected `cfg` condition name: `neon_profile`
+  --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/subject/neon-0.10.1/src/meta.rs:31:7
+   |
+31 | #[cfg(neon_profile = "release")]
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: expected names are: `docsrs`, `feature`, and `test` and 32 more
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(neon_profile, values("release"))'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(neon_profile, values(\"release\"))");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition name: `neon_profile`
+  --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/subject/neon-0.10.1/src/meta.rs:35:11
+   |
+35 | #[cfg(not(neon_profile = "release"))]
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a Cargo feature instead
+   = help: or consider adding in `Cargo.toml` the `check-cfg` lint config for the lint:
+            [lints.rust]
+            unexpected_cfgs = { level = "warn", check-cfg = ['cfg(neon_profile, values("release"))'] }
+   = help: or consider adding `println!("cargo::rustc-check-cfg=cfg(neon_profile, values(\"release\"))");` to the top of the `build.rs`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: hiding a lifetime that's named elsewhere is confusing
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/subject/neon-0.10.1/src/context/mod.rs:329:34
+    |
+329 |     fn lock<'b>(&'b mut self) -> Lock<Self>
+    |                  --              ^^^^^^^^^^ the same lifetime is hidden here
+    |                  |
+    |                  the lifetime is named here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: consistently use `'b`
+    |
+329 |     fn lock<'b>(&'b mut self) -> Lock<'b, Self>
+    |                                       +++
+
+warning: `neon` (lib) generated 3 warnings (run `cargo fix --lib -p neon` to apply 1 suggestion)
+   Compiling rsh-064-harness v0.0.0 (/tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/project)
+error[E0597]: `data` does not live long enough
+   --> src/lib.rs:5:48
+    |
+  4 |     let mut data = vec![0u8, 1, 2, 3];
+    |         -------- binding `data` declared here
+  5 |     let buf = JsArrayBuffer::external(&mut cx, data.as_mut_slice());
+    |               ---------------------------------^^^^----------------
+    |               |                                |
+    |               |                                borrowed value does not live long enough
+    |               argument requires that `data` is borrowed for `'static`
+...
+  8 | }
+    | - `data` dropped here while still borrowed
+    |
+note: requirement that the value outlives `'static` introduced here
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/subject/neon-0.10.1/src/types/buffer/types.rs:154:33
+    |
+154 |         T: AsMut<[u8]> + Send + 'static,
+    |                                 ^^^^^^^
+
+error[E0505]: cannot move out of `data` because it is borrowed
+   --> src/lib.rs:6:10
+    |
+  4 |     let mut data = vec![0u8, 1, 2, 3];
+    |         -------- binding `data` declared here
+  5 |     let buf = JsArrayBuffer::external(&mut cx, data.as_mut_slice());
+    |               -----------------------------------------------------
+    |               |                                |
+    |               |                                borrow of `data` occurs here
+    |               argument requires that `data` is borrowed for `'static`
+  6 |     drop(data);
+    |          ^^^^ move out of `data` occurs here
+    |
+note: requirement that the value outlives `'static` introduced here
+   --> /tmp/rsh064-current-final-20260714/rsh064-run-9xr2ennz/patched-system/subject/neon-0.10.1/src/types/buffer/types.rs:154:33
+    |
+154 |         T: AsMut<[u8]> + Send + 'static,
+    |                                 ^^^^^^^
+
+Some errors have detailed explanations: E0505, E0597.
+For more information about an error, try `rustc --explain E0505`.
+error: could not compile `rsh-064-harness` (lib) due to 2 previous errors

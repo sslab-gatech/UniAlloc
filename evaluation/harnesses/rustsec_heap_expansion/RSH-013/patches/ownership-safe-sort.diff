@@ -1,0 +1,28 @@
+--- a/src/sort/merge_sort.rs
++++ b/src/sort/merge_sort.rs
+@@ -71,10 +71,7 @@
+ where
+     T: Ord + Debug,
+ {
+-    if list.is_empty() || list.len() == 1 {
+-        return;
+-    }
+-    merge_sort(list, 0, list.len() - 1, &|a, b| a.lt(b));
++    list.sort();
+ }
+ 
+ pub fn sort_by<T, F>(list: &mut [T], compare: &F)
+@@ -82,12 +79,7 @@
+     F: Fn(&T, &T) -> Ordering,
+     T: Debug,
+ {
+-    if list.is_empty() || list.len() == 1 {
+-        return;
+-    }
+-    merge_sort(list, 0, list.len() - 1, &|a, b| {
+-        compare(a, b) == Ordering::Less
+-    });
++    list.sort_by(|a, b| compare(a, b));
+ }
+ 
+ #[cfg(test)]

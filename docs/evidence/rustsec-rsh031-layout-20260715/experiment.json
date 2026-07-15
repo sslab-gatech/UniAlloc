@@ -1,0 +1,352 @@
+{
+  "arms": [
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "vulnerable",
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "run",
+        "--quiet",
+        "--offline",
+        "--manifest-path",
+        "/tmp/unialloc-rsh031-layout-hyhovoky/project/Cargo.toml"
+      ],
+      "policy_flags": 0,
+      "runs": [
+        {
+          "exit_code": 0,
+          "repetition": 1,
+          "signal": {
+            "last_recorded_align": 256,
+            "last_recorded_callsite": 5932164506031554563,
+            "last_recorded_module_id": 5932164506031554562,
+            "last_recorded_size": 1009,
+            "last_recorded_type_id": 5932164506031554561,
+            "last_requested_align": 1,
+            "last_requested_size": 1009,
+            "policy_flags": 0,
+            "recovery_deallocation_layout_mismatches": 1
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":0,\"recovery_deallocation_layout_mismatches\":1,\"last_requested_size\":1009,\"last_requested_align\":1,\"last_recorded_size\":1009,\"last_recorded_align\":256,\"last_recorded_type_id\":5932164506031554561,\"last_recorded_module_id\":5932164506031554562,\"last_recorded_callsite\":5932164506031554563}\n",
+          "stdout": ""
+        },
+        {
+          "exit_code": 0,
+          "repetition": 2,
+          "signal": {
+            "last_recorded_align": 256,
+            "last_recorded_callsite": 5932164506031554563,
+            "last_recorded_module_id": 5932164506031554562,
+            "last_recorded_size": 1009,
+            "last_recorded_type_id": 5932164506031554561,
+            "last_requested_align": 1,
+            "last_requested_size": 1009,
+            "policy_flags": 0,
+            "recovery_deallocation_layout_mismatches": 1
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":0,\"recovery_deallocation_layout_mismatches\":1,\"last_requested_size\":1009,\"last_requested_align\":1,\"last_recorded_size\":1009,\"last_recorded_align\":256,\"last_recorded_type_id\":5932164506031554561,\"last_recorded_module_id\":5932164506031554562,\"last_recorded_callsite\":5932164506031554563}\n",
+          "stdout": ""
+        },
+        {
+          "exit_code": 0,
+          "repetition": 3,
+          "signal": {
+            "last_recorded_align": 256,
+            "last_recorded_callsite": 5932164506031554563,
+            "last_recorded_module_id": 5932164506031554562,
+            "last_recorded_size": 1009,
+            "last_recorded_type_id": 5932164506031554561,
+            "last_requested_align": 1,
+            "last_requested_size": 1009,
+            "policy_flags": 0,
+            "recovery_deallocation_layout_mismatches": 1
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":0,\"recovery_deallocation_layout_mismatches\":1,\"last_requested_size\":1009,\"last_requested_align\":1,\"last_recorded_size\":1009,\"last_recorded_align\":256,\"last_recorded_type_id\":5932164506031554561,\"last_recorded_module_id\":5932164506031554562,\"last_recorded_callsite\":5932164506031554563}\n",
+          "stdout": ""
+        }
+      ],
+      "strict_expected_signal": true
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "vulnerable",
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "run",
+        "--quiet",
+        "--offline",
+        "--manifest-path",
+        "/tmp/unialloc-rsh031-layout-hyhovoky/project/Cargo.toml"
+      ],
+      "policy_flags": 1,
+      "runs": [
+        {
+          "exit_code": 0,
+          "repetition": 1,
+          "signal": {
+            "last_recorded_align": 256,
+            "last_recorded_callsite": 5932164506031554563,
+            "last_recorded_module_id": 5932164506031554562,
+            "last_recorded_size": 1009,
+            "last_recorded_type_id": 5932164506031554561,
+            "last_requested_align": 1,
+            "last_requested_size": 1009,
+            "policy_flags": 1,
+            "recovery_deallocation_layout_mismatches": 1
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":1,\"recovery_deallocation_layout_mismatches\":1,\"last_requested_size\":1009,\"last_requested_align\":1,\"last_recorded_size\":1009,\"last_recorded_align\":256,\"last_recorded_type_id\":5932164506031554561,\"last_recorded_module_id\":5932164506031554562,\"last_recorded_callsite\":5932164506031554563}\n",
+          "stdout": ""
+        },
+        {
+          "exit_code": 0,
+          "repetition": 2,
+          "signal": {
+            "last_recorded_align": 256,
+            "last_recorded_callsite": 5932164506031554563,
+            "last_recorded_module_id": 5932164506031554562,
+            "last_recorded_size": 1009,
+            "last_recorded_type_id": 5932164506031554561,
+            "last_requested_align": 1,
+            "last_requested_size": 1009,
+            "policy_flags": 1,
+            "recovery_deallocation_layout_mismatches": 1
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":1,\"recovery_deallocation_layout_mismatches\":1,\"last_requested_size\":1009,\"last_requested_align\":1,\"last_recorded_size\":1009,\"last_recorded_align\":256,\"last_recorded_type_id\":5932164506031554561,\"last_recorded_module_id\":5932164506031554562,\"last_recorded_callsite\":5932164506031554563}\n",
+          "stdout": ""
+        },
+        {
+          "exit_code": 0,
+          "repetition": 3,
+          "signal": {
+            "last_recorded_align": 256,
+            "last_recorded_callsite": 5932164506031554563,
+            "last_recorded_module_id": 5932164506031554562,
+            "last_recorded_size": 1009,
+            "last_recorded_type_id": 5932164506031554561,
+            "last_requested_align": 1,
+            "last_requested_size": 1009,
+            "policy_flags": 1,
+            "recovery_deallocation_layout_mismatches": 1
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":1,\"recovery_deallocation_layout_mismatches\":1,\"last_requested_size\":1009,\"last_requested_align\":1,\"last_recorded_size\":1009,\"last_recorded_align\":256,\"last_recorded_type_id\":5932164506031554561,\"last_recorded_module_id\":5932164506031554562,\"last_recorded_callsite\":5932164506031554563}\n",
+          "stdout": ""
+        }
+      ],
+      "strict_expected_signal": true
+    },
+    {
+      "allocator_variant": "typed_plain",
+      "archive_variant": "patched",
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "run",
+        "--quiet",
+        "--offline",
+        "--manifest-path",
+        "/tmp/unialloc-rsh031-layout-hyhovoky/project/Cargo.toml"
+      ],
+      "policy_flags": 0,
+      "runs": [
+        {
+          "exit_code": 0,
+          "repetition": 1,
+          "signal": {
+            "last_recorded_align": 0,
+            "last_recorded_callsite": 0,
+            "last_recorded_module_id": 0,
+            "last_recorded_size": 0,
+            "last_recorded_type_id": 0,
+            "last_requested_align": 0,
+            "last_requested_size": 0,
+            "policy_flags": 0,
+            "recovery_deallocation_layout_mismatches": 0
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":0,\"recovery_deallocation_layout_mismatches\":0,\"last_requested_size\":0,\"last_requested_align\":0,\"last_recorded_size\":0,\"last_recorded_align\":0,\"last_recorded_type_id\":0,\"last_recorded_module_id\":0,\"last_recorded_callsite\":0}\n",
+          "stdout": ""
+        },
+        {
+          "exit_code": 0,
+          "repetition": 2,
+          "signal": {
+            "last_recorded_align": 0,
+            "last_recorded_callsite": 0,
+            "last_recorded_module_id": 0,
+            "last_recorded_size": 0,
+            "last_recorded_type_id": 0,
+            "last_requested_align": 0,
+            "last_requested_size": 0,
+            "policy_flags": 0,
+            "recovery_deallocation_layout_mismatches": 0
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":0,\"recovery_deallocation_layout_mismatches\":0,\"last_requested_size\":0,\"last_requested_align\":0,\"last_recorded_size\":0,\"last_recorded_align\":0,\"last_recorded_type_id\":0,\"last_recorded_module_id\":0,\"last_recorded_callsite\":0}\n",
+          "stdout": ""
+        },
+        {
+          "exit_code": 0,
+          "repetition": 3,
+          "signal": {
+            "last_recorded_align": 0,
+            "last_recorded_callsite": 0,
+            "last_recorded_module_id": 0,
+            "last_recorded_size": 0,
+            "last_recorded_type_id": 0,
+            "last_requested_align": 0,
+            "last_requested_size": 0,
+            "policy_flags": 0,
+            "recovery_deallocation_layout_mismatches": 0
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":0,\"recovery_deallocation_layout_mismatches\":0,\"last_requested_size\":0,\"last_requested_align\":0,\"last_recorded_size\":0,\"last_recorded_align\":0,\"last_recorded_type_id\":0,\"last_recorded_module_id\":0,\"last_recorded_callsite\":0}\n",
+          "stdout": ""
+        }
+      ],
+      "strict_expected_signal": true
+    },
+    {
+      "allocator_variant": "typeiso",
+      "archive_variant": "patched",
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "run",
+        "--quiet",
+        "--offline",
+        "--manifest-path",
+        "/tmp/unialloc-rsh031-layout-hyhovoky/project/Cargo.toml"
+      ],
+      "policy_flags": 1,
+      "runs": [
+        {
+          "exit_code": 0,
+          "repetition": 1,
+          "signal": {
+            "last_recorded_align": 0,
+            "last_recorded_callsite": 0,
+            "last_recorded_module_id": 0,
+            "last_recorded_size": 0,
+            "last_recorded_type_id": 0,
+            "last_requested_align": 0,
+            "last_requested_size": 0,
+            "policy_flags": 1,
+            "recovery_deallocation_layout_mismatches": 0
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":1,\"recovery_deallocation_layout_mismatches\":0,\"last_requested_size\":0,\"last_requested_align\":0,\"last_recorded_size\":0,\"last_recorded_align\":0,\"last_recorded_type_id\":0,\"last_recorded_module_id\":0,\"last_recorded_callsite\":0}\n",
+          "stdout": ""
+        },
+        {
+          "exit_code": 0,
+          "repetition": 2,
+          "signal": {
+            "last_recorded_align": 0,
+            "last_recorded_callsite": 0,
+            "last_recorded_module_id": 0,
+            "last_recorded_size": 0,
+            "last_recorded_type_id": 0,
+            "last_requested_align": 0,
+            "last_requested_size": 0,
+            "policy_flags": 1,
+            "recovery_deallocation_layout_mismatches": 0
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":1,\"recovery_deallocation_layout_mismatches\":0,\"last_requested_size\":0,\"last_requested_align\":0,\"last_recorded_size\":0,\"last_recorded_align\":0,\"last_recorded_type_id\":0,\"last_recorded_module_id\":0,\"last_recorded_callsite\":0}\n",
+          "stdout": ""
+        },
+        {
+          "exit_code": 0,
+          "repetition": 3,
+          "signal": {
+            "last_recorded_align": 0,
+            "last_recorded_callsite": 0,
+            "last_recorded_module_id": 0,
+            "last_recorded_size": 0,
+            "last_recorded_type_id": 0,
+            "last_requested_align": 0,
+            "last_requested_size": 0,
+            "policy_flags": 1,
+            "recovery_deallocation_layout_mismatches": 0
+          },
+          "stderr": "UNIALLOC_RSH031_LAYOUT_SIGNAL={\"policy_flags\":1,\"recovery_deallocation_layout_mismatches\":0,\"last_requested_size\":0,\"last_requested_align\":0,\"last_recorded_size\":0,\"last_recorded_align\":0,\"last_recorded_type_id\":0,\"last_recorded_module_id\":0,\"last_recorded_callsite\":0}\n",
+          "stdout": ""
+        }
+      ],
+      "strict_expected_signal": true
+    }
+  ],
+  "checks": {
+    "all_arms_completed": true,
+    "patched_signal_free_all_repetitions": true,
+    "policy_independent_signal": true,
+    "valid": true,
+    "vulnerable_exact_signal_all_repetitions": true
+  },
+  "claim_grade": false,
+  "created_at": "2026-07-15T07:54:36.620817+00:00",
+  "implementation": {
+    "combined_sha256": "629042247b8d21ef24f72fd23910accda66c7695a0a451b01586cab2b773119a",
+    "files": [
+      {
+        "bytes": 1763353,
+        "path": "unialloc/src/alloc_api/type_isolation.rs",
+        "sha256": "c69db012d95479ecb64ecf91077b3162337487acc51b967e0cc94eb480528543"
+      },
+      {
+        "bytes": 148461,
+        "path": "unialloc/src/cache/mod.rs",
+        "sha256": "7fade223375f43dbe24c1042ad7553e9b4c3d1bc80401c143c8cd614e80a5c3c"
+      },
+      {
+        "bytes": 6526,
+        "path": "unialloc/src/alloc_api/mod.rs",
+        "sha256": "571047585590653e664efc93650625be16b832e60333304eaf754e22f4284fbd"
+      },
+      {
+        "bytes": 25620,
+        "path": "unialloc/src/lib.rs",
+        "sha256": "5a917cc9956deef4b1abec9c094643e42cbccadbbfc7279ed845c8ad92965e96"
+      }
+    ]
+  },
+  "repetitions_requested": 3,
+  "scenario": {
+    "advisory_id": "RUSTSEC-2023-0017",
+    "boundary": "The derived pair validates allocator mechanism coverage; the pinned upstream Miri arm supplies source-vulnerability ground truth. The layout signal is policy-independent and is not attributed to TypeIso.",
+    "case_id": "RSH-031",
+    "claim_grade": false,
+    "claim_scope": "exact same-pointer recovery-record allocation/deallocation layout mismatch",
+    "classification_role": "allocator_boundary_detection_candidate",
+    "expected_patched_signal": {
+      "recovery_deallocation_layout_mismatches": 0
+    },
+    "expected_variants": [
+      "typed_plain",
+      "typeiso"
+    ],
+    "expected_vulnerable_signal": {
+      "last_recorded_align": 256,
+      "last_recorded_size": 1009,
+      "last_requested_align": 1,
+      "last_requested_size": 1009,
+      "recovery_deallocation_layout_mismatches": 1
+    },
+    "mechanism": "recovery_layout_validation",
+    "mechanism_class": "other_allocator_feature",
+    "minimum_repetitions": 3,
+    "patched_source": {
+      "source_path": "evaluation/harnesses/rustsec_heap/RSH-031/derived_layout_patched.rs",
+      "source_sha256": "edac5b700fdaa7abfb03bc5aae62eea88733d4b3799934f6623b0c11534a753e"
+    },
+    "scenario_id": "RSH-031-derived-layout-validation",
+    "source_path": "evaluation/harnesses/rustsec_heap/RSH-031/derived_layout_vulnerable.rs",
+    "source_sha256": "be587469c964a2495246af4396eef461a79802d495c24348e1f86ec4968a0dd8",
+    "upstream_baseline_oracle": "Miri reports size=1009 align=256 allocated and size=1009 align=1 deallocated",
+    "upstream_baseline_scenario_id": "RSH-031-upstream"
+  },
+  "schema_version": 1,
+  "source": "unialloc-rsh031-derived-layout-matrix",
+  "toolchain": {
+    "cargo": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+    "name": "nightly-2026-06-11",
+    "rustc": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6"
+  }
+}

@@ -1,0 +1,338 @@
+{
+  "allocator_cargo_feature_overrides": {},
+  "case_id": "RSH-074",
+  "catalog_path": "/home/hanqing/alloc/UniAlloc/evaluation/config/rustsec_heap_strong_batch_d_harnesses.json",
+  "catalog_sha256": "1c1d7aff5f312cc0be5f2b3c824b461589aac2feb4444f084be8ac1614ff44f6",
+  "claim_grade": false,
+  "crate": "mutringbuf",
+  "harness_target_crates": [
+    "mutringbuf",
+    "rsh_074_harness"
+  ],
+  "legacy_allocator_abi_bridge": false,
+  "planned_arms": [
+    {
+      "allocator_substitution_supported": true,
+      "allocator_topology": {
+        "allocator_variant": "reclaim_plain",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "reclaim_plain",
+      "archive_sha256": "ed8dbbb1d38e66c78a0d6ff3f439ac47ba153dcdbaa1d26e4162ee9f5781f938",
+      "archive_variant": "vulnerable",
+      "catalog_allocator_exclusion": null,
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {},
+      "effective_rustflags": [
+        "-Ainvalid_reference_casting",
+        "-Adangerous_implicit_autorefs",
+        "--cap-lints=warn"
+      ],
+      "execution_mode": "native_diagnostic",
+      "ground_truth_arm": false,
+      "legacy_allocator_abi_bridge": false,
+      "lock_sha256": "2a93930a194d15a35efab190e8ab0dd3af4cc7c388e0a4e18e48e5caeba2d12f",
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ]
+      },
+      "source_sha256": "e6542cc0aacb6dd53bab94f460253d0f0a8b815b85f94c0bd6182bd4cb1e7fac",
+      "subject_cargo_features": {
+        "allocator_variant": "reclaim_plain",
+        "catalog_features": [
+          "vmem"
+        ],
+        "crate": "mutringbuf",
+        "default_features_enabled": true,
+        "effective_features": [
+          "vmem"
+        ],
+        "override_allocator_variant": null,
+        "override_applied": false,
+        "override_source": null
+      },
+      "supported": true,
+      "tool_supported": true,
+      "transformed_sources": {
+        "original_source_sha256": "e6542cc0aacb6dd53bab94f460253d0f0a8b815b85f94c0bd6182bd4cb1e7fac",
+        "witness_module_sha256": "4d9671143db993d389eb433a3ebd86a1a18ee9f7a083ddee6afa14debbe20b37",
+        "wrapper_source_sha256": "8e14008f76904e03415e8ac0073974821eb30de78810dd043f43537f5fcff170"
+      },
+      "unsupported_reason": null
+    },
+    {
+      "allocator_substitution_supported": true,
+      "allocator_topology": {
+        "allocator_variant": "reclaim_checks",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "reclaim_checks",
+      "archive_sha256": "ed8dbbb1d38e66c78a0d6ff3f439ac47ba153dcdbaa1d26e4162ee9f5781f938",
+      "archive_variant": "vulnerable",
+      "catalog_allocator_exclusion": null,
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {},
+      "effective_rustflags": [
+        "-Ainvalid_reference_casting",
+        "-Adangerous_implicit_autorefs",
+        "--cap-lints=warn"
+      ],
+      "execution_mode": "native_diagnostic",
+      "ground_truth_arm": false,
+      "legacy_allocator_abi_bridge": false,
+      "lock_sha256": "2a93930a194d15a35efab190e8ab0dd3af4cc7c388e0a4e18e48e5caeba2d12f",
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ]
+      },
+      "source_sha256": "e6542cc0aacb6dd53bab94f460253d0f0a8b815b85f94c0bd6182bd4cb1e7fac",
+      "subject_cargo_features": {
+        "allocator_variant": "reclaim_checks",
+        "catalog_features": [
+          "vmem"
+        ],
+        "crate": "mutringbuf",
+        "default_features_enabled": true,
+        "effective_features": [
+          "vmem"
+        ],
+        "override_allocator_variant": null,
+        "override_applied": false,
+        "override_source": null
+      },
+      "supported": true,
+      "tool_supported": true,
+      "transformed_sources": {
+        "original_source_sha256": "e6542cc0aacb6dd53bab94f460253d0f0a8b815b85f94c0bd6182bd4cb1e7fac",
+        "witness_module_sha256": "4d9671143db993d389eb433a3ebd86a1a18ee9f7a083ddee6afa14debbe20b37",
+        "wrapper_source_sha256": "93cc2b18b0b381cd99884fc96daa1a62da85fadbd7f9f2d3c1e250105c6a0a51"
+      },
+      "unsupported_reason": null
+    },
+    {
+      "allocator_substitution_supported": true,
+      "allocator_topology": {
+        "allocator_variant": "reclaim_plain",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "reclaim_plain",
+      "archive_sha256": "ed8dbbb1d38e66c78a0d6ff3f439ac47ba153dcdbaa1d26e4162ee9f5781f938",
+      "archive_variant": "patched",
+      "catalog_allocator_exclusion": null,
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {},
+      "effective_rustflags": [
+        "-Ainvalid_reference_casting",
+        "-Adangerous_implicit_autorefs",
+        "--cap-lints=warn"
+      ],
+      "execution_mode": "native_diagnostic",
+      "ground_truth_arm": false,
+      "legacy_allocator_abi_bridge": false,
+      "lock_sha256": "2a93930a194d15a35efab190e8ab0dd3af4cc7c388e0a4e18e48e5caeba2d12f",
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ]
+      },
+      "source_sha256": "e6542cc0aacb6dd53bab94f460253d0f0a8b815b85f94c0bd6182bd4cb1e7fac",
+      "subject_cargo_features": {
+        "allocator_variant": "reclaim_plain",
+        "catalog_features": [
+          "vmem"
+        ],
+        "crate": "mutringbuf",
+        "default_features_enabled": true,
+        "effective_features": [
+          "vmem"
+        ],
+        "override_allocator_variant": null,
+        "override_applied": false,
+        "override_source": null
+      },
+      "supported": true,
+      "tool_supported": true,
+      "transformed_sources": {
+        "original_source_sha256": "e6542cc0aacb6dd53bab94f460253d0f0a8b815b85f94c0bd6182bd4cb1e7fac",
+        "witness_module_sha256": "4d9671143db993d389eb433a3ebd86a1a18ee9f7a083ddee6afa14debbe20b37",
+        "wrapper_source_sha256": "8e14008f76904e03415e8ac0073974821eb30de78810dd043f43537f5fcff170"
+      },
+      "unsupported_reason": null
+    },
+    {
+      "allocator_substitution_supported": true,
+      "allocator_topology": {
+        "allocator_variant": "reclaim_checks",
+        "allocator_wrapper_policy": "explicit_experiment_wrapper",
+        "claim_grade": false,
+        "default_system_allocator_preserved": false,
+        "detection": "absent",
+        "direct_global_allocator_attribute_count": 0,
+        "effective_allocator_owner": "experiment_wrapper",
+        "fail_closed": false,
+        "global_allocator_token_count": 0,
+        "subject_allocator_preserved": false,
+        "subject_global_allocator_detected": false,
+        "substitution_supported": true,
+        "unsupported_reason": null,
+        "wrapper_defines_global_allocator": true
+      },
+      "allocator_variant": "reclaim_checks",
+      "archive_sha256": "ed8dbbb1d38e66c78a0d6ff3f439ac47ba153dcdbaa1d26e4162ee9f5781f938",
+      "archive_variant": "patched",
+      "catalog_allocator_exclusion": null,
+      "effective_oracle_toolchain": "nightly-2026-06-11",
+      "effective_required_environment": {},
+      "effective_rustflags": [
+        "-Ainvalid_reference_casting",
+        "-Adangerous_implicit_autorefs",
+        "--cap-lints=warn"
+      ],
+      "execution_mode": "native_diagnostic",
+      "ground_truth_arm": false,
+      "legacy_allocator_abi_bridge": false,
+      "lock_sha256": "2a93930a194d15a35efab190e8ab0dd3af4cc7c388e0a4e18e48e5caeba2d12f",
+      "rustflag_policy": {
+        "effective": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ],
+        "effective_oracle_toolchain": "nightly-2026-06-11",
+        "reason": null,
+        "removed": [],
+        "requested": [
+          "-Ainvalid_reference_casting",
+          "-Adangerous_implicit_autorefs",
+          "--cap-lints=warn"
+        ]
+      },
+      "source_sha256": "e6542cc0aacb6dd53bab94f460253d0f0a8b815b85f94c0bd6182bd4cb1e7fac",
+      "subject_cargo_features": {
+        "allocator_variant": "reclaim_checks",
+        "catalog_features": [
+          "vmem"
+        ],
+        "crate": "mutringbuf",
+        "default_features_enabled": true,
+        "effective_features": [
+          "vmem"
+        ],
+        "override_allocator_variant": null,
+        "override_applied": false,
+        "override_source": null
+      },
+      "supported": true,
+      "tool_supported": true,
+      "transformed_sources": {
+        "original_source_sha256": "e6542cc0aacb6dd53bab94f460253d0f0a8b815b85f94c0bd6182bd4cb1e7fac",
+        "witness_module_sha256": "4d9671143db993d389eb433a3ebd86a1a18ee9f7a083ddee6afa14debbe20b37",
+        "wrapper_source_sha256": "93cc2b18b0b381cd99884fc96daa1a62da85fadbd7f9f2d3c1e250105c6a0a51"
+      },
+      "unsupported_reason": null
+    }
+  ],
+  "platform_constraints": {},
+  "repetitions_requested": 3,
+  "required_environment": {
+    "ASAN_OPTIONS": "detect_leaks=0:disable_coredump=1"
+  },
+  "scenario_id": "RSH-074-rustsec",
+  "schema_version": 1,
+  "source": "unialloc-rustsec-heap-experiment-preflight",
+  "tool": "asan",
+  "toolchain": {
+    "cargo": {
+      "command": [
+        "cargo",
+        "+nightly-2026-06-11",
+        "-V"
+      ],
+      "exit_code": 0,
+      "stdout": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+      "stdout_sha256": "73079022d75e2845fa0633a623507ae35f57fab4e65bf541e383abaf8536f7b9"
+    },
+    "name": "nightly-2026-06-11",
+    "rustc": {
+      "command": [
+        "rustc",
+        "+nightly-2026-06-11",
+        "-vV"
+      ],
+      "exit_code": 0,
+      "stdout": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+      "stdout_sha256": "cc9b5227c86f5947b4be0264065a8019578920ea3dff6c58b9b2dfa05e2a9c6e"
+    },
+    "target": "x86_64-unknown-linux-gnu"
+  },
+  "type_isolation_edge_annotation": null,
+  "unsafe_execution_requested": false
+}

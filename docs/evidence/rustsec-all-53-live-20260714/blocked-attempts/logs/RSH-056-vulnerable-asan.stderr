@@ -1,0 +1,13 @@
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.46
+   Compiling syn v1.0.109
+   Compiling glsl-layout-derive v0.3.2
+   Compiling glsl-layout v0.3.2 (/tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2)
+error: /tmp/unialloc-blocked-reattempt-20260714/projects/RSH-056/vulnerable/target/debug/deps/libglsl_layout_derive-1545ccf126795551.so: undefined symbol: __asan_option_detect_stack_use_after_return
+  --> /tmp/unialloc-blocked-reattempt-20260714/subjects/glsl-layout-0.3.2/src/lib.rs:98:1
+   |
+98 | extern crate glsl_layout_derive;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: could not compile `glsl-layout` (lib) due to 1 previous error

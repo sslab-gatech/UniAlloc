@@ -32,6 +32,7 @@ Module.symvers
 *.ko
 *.so
 *.so.dbg
+*.node
 *.mod.c
 *.i
 *.lst
