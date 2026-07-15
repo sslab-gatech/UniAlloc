@@ -619,6 +619,110 @@ impl RustAllocator {
         self.dealloc_raw_backend(ptr, layout)
     }
 
+    #[cfg_attr(
+        not(any(feature = "type_isolation", feature = "quarantine", feature = "stats")),
+        cold
+    )]
+    #[inline(never)]
+    unsafe fn alloc_semantic_slow(&self, layout: Layout) -> *mut u8 {
+        if let Some(metadata) = active_allocation_metadata() {
+            if active_allocation_metadata_requires_recovery_record(metadata) {
+                return self.alloc_with_recovery_metadata(layout, metadata);
+            }
+            return self.alloc_with_metadata(layout, metadata);
+        }
+        if let Some(metadata) = auto_allocation_metadata(layout) {
+            return self.alloc_with_recovery_metadata(layout, metadata);
+        }
+
+        #[cfg(feature = "quarantine")]
+        {
+            self.alloc_with_metadata(layout, COMPILED_QUARANTINE_METADATA)
+        }
+        #[cfg(not(feature = "quarantine"))]
+        {
+            let ptr = self.alloc_raw(layout);
+            if !ptr.is_null() && semantic_stats_recording_enabled() {
+                SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), layout.size());
+                semantic_fallback_attribution_record_raw_alloc_no_metadata(layout.size());
+            }
+            ptr
+        }
+    }
+
+    #[cfg_attr(
+        not(any(feature = "type_isolation", feature = "quarantine", feature = "stats")),
+        cold
+    )]
+    #[inline(never)]
+    unsafe fn dealloc_semantic_slow(&self, ptr: *mut u8, layout: Layout, semantic_slow_path: bool) {
+        let reclaim_observation = observe_global_reclaim(ptr);
+        reject_known_retained_or_released_from_observation(&reclaim_observation);
+        if !cfg!(feature = "quarantine") && !semantic_slow_path {
+            return self.dealloc_raw_from_observation(layout, reclaim_observation);
+        }
+        if let Some(metadata) = active_allocation_metadata() {
+            if !active_allocation_metadata_requires_recovery_record(metadata) {
+                let _ = self.dealloc_with_metadata_from_observation(
+                    layout,
+                    metadata,
+                    reclaim_observation,
+                );
+                return;
+            }
+            return dealloc_with_active_or_recorded_metadata_from_observation(
+                self,
+                ptr,
+                layout,
+                metadata,
+                reclaim_observation,
+            );
+        }
+        match checked_recorded_reallocation_old_metadata(ptr, layout) {
+            AutoAllocationRecordLookup::Exact(metadata) => {
+                return self.dealloc_with_peeked_recovery_metadata_from_observation(
+                    layout,
+                    metadata,
+                    reclaim_observation,
+                );
+            }
+            AutoAllocationRecordLookup::Mismatched => {
+                // A recovery record for this address with a different layout
+                // proves that raw deallocation under the caller's layout is
+                // unsafe. Preserve the authoritative record for an exact
+                // retry instead of treating the mismatch as if no record
+                // existed.
+                return;
+            }
+            AutoAllocationRecordLookup::Missing => {}
+        }
+
+        #[cfg(feature = "quarantine")]
+        {
+            if semantic_auto_metadata_enabled() {
+                dealloc_raw_with_fallback_attribution_from_observation(
+                    self,
+                    layout,
+                    reclaim_observation,
+                );
+            } else {
+                let _ = self.dealloc_with_metadata_from_observation(
+                    layout,
+                    COMPILED_QUARANTINE_METADATA,
+                    reclaim_observation,
+                );
+            }
+        }
+        #[cfg(not(feature = "quarantine"))]
+        {
+            dealloc_raw_with_fallback_attribution_from_observation(
+                self,
+                layout,
+                reclaim_observation,
+            )
+        }
+    }
+
     #[inline]
     unsafe fn dealloc_raw_backend(&self, ptr: *mut u8, layout: Layout) -> bool {
         #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
@@ -931,29 +1035,7 @@ unsafe impl GlobalAlloc for RustAllocator {
         if !cfg!(feature = "quarantine") && !semantic_allocation_slow_path_enabled() {
             return self.alloc_raw(layout);
         }
-        if let Some(metadata) = active_allocation_metadata() {
-            if active_allocation_metadata_requires_recovery_record(metadata) {
-                return self.alloc_with_recovery_metadata(layout, metadata);
-            }
-            return self.alloc_with_metadata(layout, metadata);
-        }
-        if let Some(metadata) = auto_allocation_metadata(layout) {
-            return self.alloc_with_recovery_metadata(layout, metadata);
-        }
-
-        #[cfg(feature = "quarantine")]
-        {
-            self.alloc_with_metadata(layout, COMPILED_QUARANTINE_METADATA)
-        }
-        #[cfg(not(feature = "quarantine"))]
-        {
-            let ptr = self.alloc_raw(layout);
-            if !ptr.is_null() && semantic_stats_recording_enabled() {
-                SEMANTIC_STATS.record_alloc(AllocationMetadata::unknown(), layout.size());
-                semantic_fallback_attribution_record_raw_alloc_no_metadata(layout.size());
-            }
-            ptr
-        }
+        self.alloc_semantic_slow(layout)
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
@@ -976,71 +1058,7 @@ unsafe impl GlobalAlloc for RustAllocator {
             let _ = self.dealloc_raw_backend(ptr, layout);
             return;
         }
-        let reclaim_observation = observe_global_reclaim(ptr);
-        reject_known_retained_or_released_from_observation(&reclaim_observation);
-        if !cfg!(feature = "quarantine") && !semantic_slow_path {
-            return self.dealloc_raw_from_observation(layout, reclaim_observation);
-        }
-        if let Some(metadata) = active_allocation_metadata() {
-            if !active_allocation_metadata_requires_recovery_record(metadata) {
-                let _ = self.dealloc_with_metadata_from_observation(
-                    layout,
-                    metadata,
-                    reclaim_observation,
-                );
-                return;
-            }
-            return dealloc_with_active_or_recorded_metadata_from_observation(
-                self,
-                ptr,
-                layout,
-                metadata,
-                reclaim_observation,
-            );
-        }
-        match checked_recorded_reallocation_old_metadata(ptr, layout) {
-            AutoAllocationRecordLookup::Exact(metadata) => {
-                return self.dealloc_with_peeked_recovery_metadata_from_observation(
-                    layout,
-                    metadata,
-                    reclaim_observation,
-                );
-            }
-            AutoAllocationRecordLookup::Mismatched => {
-                // A recovery record for this address with a different layout
-                // proves that raw deallocation under the caller's layout is
-                // unsafe. Preserve the authoritative record for an exact
-                // retry instead of treating the mismatch as if no record
-                // existed.
-                return;
-            }
-            AutoAllocationRecordLookup::Missing => {}
-        }
-
-        #[cfg(feature = "quarantine")]
-        {
-            if semantic_auto_metadata_enabled() {
-                dealloc_raw_with_fallback_attribution_from_observation(
-                    self,
-                    layout,
-                    reclaim_observation,
-                );
-            } else {
-                let _ = self.dealloc_with_metadata_from_observation(
-                    layout,
-                    COMPILED_QUARANTINE_METADATA,
-                    reclaim_observation,
-                );
-            }
-        }
-        #[cfg(not(feature = "quarantine"))]
-        {
-            dealloc_raw_with_fallback_attribution_from_observation(
-                self,
-                layout,
-                reclaim_observation,
-            )
-        }
+        self.dealloc_semantic_slow(ptr, layout, semantic_slow_path)
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
