@@ -227,7 +227,7 @@ def smaps_text(*, rss: int, anon_hugepages: int) -> str:
 class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
     def test_arm_matrix_keeps_prior_opt_in_and_diagnostic_separate(self) -> None:
         campaign.validate_arm_contract()
-        self.assertEqual(4, len(campaign.PERFORMANCE_ARMS))
+        self.assertEqual(5, len(campaign.PERFORMANCE_ARMS))
         self.assertEqual(2, len(campaign.SCREENING_ARMS))
         self.assertEqual(
             ["all-unknown", "compiler-prior"],
@@ -235,6 +235,13 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         )
         self.assertTrue(campaign.SCREENING_ARM.force_track)
         self.assertFalse(campaign.SCREENING_ARM.performance_arm)
+        runtime_only_thp = campaign.ARM_BY_NAME[
+            "adaptive-selective-thp-all-unknown"
+        ]
+        self.assertEqual(
+            "adaptive-selective-thp-compiler-prior",
+            campaign.runtime_arm_selector(runtime_only_thp),
+        )
         for arm in campaign.ARMS:
             with self.subTest(arm=arm.name):
                 environment = campaign.arm_build_environment(arm)
@@ -273,6 +280,26 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
             {"polars", "swc", "rustpython", "actix_web"},
             set(manifest["performance_blockers"]),
         )
+
+    def test_rustpython_routed_scope_excludes_uninstrumentable_git_dependency(
+        self,
+    ) -> None:
+        routed = campaign.stage_a_target_crates("rustpython")
+        self.assertIn("rustpython_vm", routed)
+        self.assertIn("rustpython_codegen", routed)
+        self.assertNotIn("rustpython_ruff_python_parser", routed)
+        gaps = campaign.TARGET_CRATE_COVERAGE_GAPS["rustpython"]
+        self.assertEqual("rustpython_ruff_python_parser", gaps[0]["crate"])
+        self.assertIn("first-party", gaps[0]["claim_boundary"])
+
+    def test_actix_uses_service_workload_with_metadata_bearing_crates(self) -> None:
+        target = campaign.TARGETS["actix_web"]
+        self.assertEqual("async_web_service_direct", target.harness_id)
+        self.assertEqual(
+            ("service", "actix_web", "actix_http", "actix_router"),
+            campaign.stage_a_target_crates("actix_web"),
+        )
+        self.assertEqual("service", campaign._artifact_name("actix_web"))
 
     def test_oxipng_calibration_retains_measured_identity_and_estimates(self) -> None:
         record = campaign.calibration_record(campaign.TARGETS["oxipng"])
@@ -350,6 +377,23 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         )
         self.assertTrue(gate["passed"])
         self.assertTrue(gate["confirmed_short_passed"])
+
+    def test_explicit_sample_arm_must_match_compiler_build_group(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, self.assertRaises(
+            campaign.CampaignContractError
+        ):
+            campaign.run_stage_a_sample(
+                "oxipng",
+                "all-unknown",
+                build={},
+                raw_dir=Path(directory),
+                input_path=None,
+                work_units=1,
+                measurement_seconds=30.0,
+                timeout=60.0,
+                sample_interval=0.5,
+                arm_name="adaptive-ordinary-compiler-prior",
+            )
 
     def test_compiler_audit_digest_and_prior_mode_are_bound(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -651,7 +695,14 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
             field: index + 1
             for index, field in enumerate(campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS)
         }
-        runtime["align"] = 8
+        runtime.update(
+            {
+                "align": 8,
+                "allocation_count": 1,
+                "predictor_key_ambiguous": False,
+                "latest_static_prior": 0,
+            }
+        )
         with self.assertRaises(campaign.CampaignContractError):
             campaign.join_compiler_runtime_sites(
                 {"rows": []}, [runtime, dict(runtime)]
@@ -748,6 +799,31 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         self.assertEqual("unobserved", result["rows"][0]["resolution_status"])
         self.assertEqual(0, result["matched_site_count"])
         self.assertEqual(0, result["generic_compiler_site_count"])
+
+    def test_numeric_join_authenticates_static_prior_transport(self) -> None:
+        runtime = generic_runtime_row(type_id=17, latest_static_prior=1)
+        compiler = {
+            **{
+                field: runtime[field]
+                for field in campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS
+            },
+            "runtime_join_key_complete": True,
+            "lifetime_hint": 2,
+            "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+        }
+        result = campaign.join_compiler_runtime_sites(
+            {"rows": [compiler]}, [runtime]
+        )
+        joined = result["rows"][0]
+        self.assertFalse(joined["matched"])
+        self.assertEqual(
+            "rejected_static_prior_transport_mismatch",
+            joined["resolution_status"],
+        )
+        self.assertEqual(
+            "runtime_latest_static_prior_mismatch",
+            joined["rejection_reason"],
+        )
 
     def test_generic_join_rejects_multi_type_zst_and_ambiguous_rows(self) -> None:
         cases = (
@@ -866,7 +942,14 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
             field: index + 1
             for index, field in enumerate(campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS)
         }
-        runtime["align"] = 8
+        runtime.update(
+            {
+                "align": 8,
+                "allocation_count": 1,
+                "predictor_key_ambiguous": False,
+                "latest_static_prior": 2,
+            }
+        )
         unknown = {
             **runtime,
             "runtime_join_key_complete": True,
@@ -903,7 +986,14 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
             field: index + 1
             for index, field in enumerate(campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS)
         }
-        runtime["align"] = 8
+        runtime.update(
+            {
+                "align": 8,
+                "allocation_count": 1,
+                "predictor_key_ambiguous": False,
+                "latest_static_prior": 2,
+            }
+        )
         applied_long = {
             **runtime,
             "runtime_join_key_complete": True,
@@ -1145,6 +1235,10 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                 "adaptive_promotions": 1,
                 "adaptive_demotions": 0,
                 "adaptive_prior_corrections": 1,
+                "predictor_tp": 6,
+                "predictor_tn": 3,
+                "predictor_fp": 1,
+                "predictor_fn": 0,
             }
         )
         summary = campaign.runtime_classification_summary(stats)
@@ -1152,6 +1246,15 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         self.assertIsNone(summary["production_accuracy"])
         self.assertFalse(summary["production_accuracy_claim_eligible"])
         self.assertFalse(summary["cross_clock_accuracy_claim"])
+        self.assertEqual(0.9, summary["runtime_predictor_accuracy"])
+
+        production = campaign.runtime_classification_summary(
+            stats, evidence_stage="production"
+        )
+        self.assertIsNone(production["stage_a_pressure_clock_accuracy"])
+        self.assertEqual(0.9, production["production_accuracy"])
+        self.assertEqual("production", production["accuracy_evidence_stage"])
+        self.assertFalse(production["production_accuracy_claim_eligible"])
 
     def test_rustpython_runtime_context_uses_retained_assets_and_libpython(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

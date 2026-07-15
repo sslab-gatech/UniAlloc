@@ -248,6 +248,16 @@ ARMS: tuple[ArmSpec, ...] = (
         True,
     ),
     ArmSpec(
+        "adaptive-selective-thp-all-unknown",
+        "performance",
+        "all-unknown",
+        False,
+        5,
+        "selective-thp",
+        False,
+        True,
+    ),
+    ArmSpec(
         "adaptive-selective-thp-compiler-prior",
         "performance",
         "compiler-prior",
@@ -282,6 +292,25 @@ ARM_BY_NAME = {arm.name: arm for arm in ARMS}
 PERFORMANCE_ARMS = tuple(arm for arm in ARMS if arm.performance_arm)
 SCREENING_ARMS = tuple(arm for arm in ARMS if arm.stage == "screening")
 SCREENING_ARM = ARM_BY_NAME["force-track-compiler-prior-diagnostic"]
+RUNTIME_ARM_SELECTOR_ALIASES = {
+    "adaptive-selective-thp-all-unknown": (
+        "adaptive-selective-thp-compiler-prior"
+    ),
+}
+
+
+def runtime_arm_selector(arm: ArmSpec) -> str:
+    selector = RUNTIME_ARM_SELECTOR_ALIASES.get(arm.name, arm.name)
+    selected = ARM_BY_NAME[selector]
+    if (
+        selected.expected_policy != arm.expected_policy
+        or selected.backing != arm.backing
+        or selected.force_track != arm.force_track
+    ):
+        raise CampaignContractError(
+            f"runtime selector changes arm semantics: {arm.name} -> {selector}"
+        )
+    return selector
 
 
 @dataclass(frozen=True)
@@ -448,7 +477,7 @@ def _target_contracts() -> dict[str, TargetContract]:
             source_ref=actix.source_ref,
             runner=Path(redb_actix.__file__).resolve(),
             target_crates=tuple(actix.target_crates),
-            harness_id="router_actix",
+            harness_id="async_web_service_direct",
             adapter_kind="actix-fixed-request-driver-v1",
             work_unit="fixed request with retained runtime/service/router",
             work_granularity=256,
@@ -469,14 +498,31 @@ def _target_contracts() -> dict[str, TargetContract]:
 
 TARGETS = _target_contracts()
 TARGET_ORDER = ("oxipng", "redb", "polars", "swc", "rustpython", "actix_web")
+TARGET_CRATE_COVERAGE_GAPS: dict[str, tuple[dict[str, str], ...]] = {
+    "rustpython": (
+        {
+            "crate": "rustpython_ruff_python_parser",
+            "reason": (
+                "external Git dependency outside the copied RustPython workspace; "
+                "its rustc invocation has no direct --extern unialloc transport"
+            ),
+            "claim_boundary": "first-party RustPython crates only",
+        },
+    ),
+}
 
 
 def stage_a_target_crates(target_id: str) -> tuple[str, ...]:
     if target_id == "oxipng":
         return ("oxipng",)
     if target_id == "actix_web":
-        return ("router", "actix_router")
-    return TARGETS[target_id].target_crates
+        return ("service", "actix_web", "actix_http", "actix_router")
+    excluded = {
+        row["crate"] for row in TARGET_CRATE_COVERAGE_GAPS.get(target_id, ())
+    }
+    return tuple(
+        crate for crate in TARGETS[target_id].target_crates if crate not in excluded
+    )
 
 
 def sha256_file(path: Path) -> str:
@@ -533,6 +579,7 @@ def validate_arm_contract() -> None:
         "default",
         "adaptive-ordinary-all-unknown",
         "adaptive-ordinary-compiler-prior",
+        "adaptive-selective-thp-all-unknown",
         "adaptive-selective-thp-compiler-prior",
     ]:
         raise CampaignContractError("matched performance arm order changed")
@@ -1200,6 +1247,10 @@ extern "C" fn unialloc_lifetime_experiment_initialize() {{
         ),
         "adaptive-ordinary-compiler-prior" => (
             unialloc::LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary,
+            false,
+        ),
+        "adaptive-selective-thp-all-unknown" => (
+            unialloc::LifetimeHugepagePolicy::AdaptiveRuntimeHugepage,
             false,
         ),
         "adaptive-selective-thp-compiler-prior" => (
@@ -3000,6 +3051,10 @@ def build_stage_a_binary(
         ),
         "source_commit": TARGETS[target_id].source_commit,
         "requested_target_crates": list(stage_a_target_crates(target_id)),
+        "declared_target_crates": list(TARGETS[target_id].target_crates),
+        "target_crate_coverage_gaps": list(
+            TARGET_CRATE_COVERAGE_GAPS.get(target_id, ())
+        ),
         "toolchain": TOOLCHAIN,
         "runtime_instrumentation_sha256": instrumentation_sha256,
         "generated_source_sha256": prepared["generated_source_sha256"],
@@ -3065,7 +3120,7 @@ def _runtime_environment(arm: ArmSpec) -> dict[str, str]:
         env.pop(name, None)
     env.update(
         {
-            RUNTIME_ARM_ENV: arm.name,
+            RUNTIME_ARM_ENV: runtime_arm_selector(arm),
             "POLARS_MAX_THREADS": "1",
             "RAYON_NUM_THREADS": "1",
             "TOKIO_WORKER_THREADS": "1",
@@ -3257,13 +3312,28 @@ def workload_output_identity(
     raise CampaignContractError(f"unknown target: {target_id}")
 
 
-def runtime_classification_summary(stats: Mapping[str, Any]) -> dict[str, Any]:
+def runtime_classification_summary(
+    stats: Mapping[str, Any], *, evidence_stage: str = "stage-a"
+) -> dict[str, Any]:
+    if evidence_stage not in {"stage-a", "production"}:
+        raise CampaignContractError(
+            f"unknown classification evidence stage: {evidence_stage}"
+        )
     tp = _nonnegative_integer(stats, "static_hint_tp")
     tn = _nonnegative_integer(stats, "static_hint_tn")
     fp = _nonnegative_integer(stats, "static_hint_fp")
     fn = _nonnegative_integer(stats, "static_hint_fn")
     abstained = _nonnegative_integer(stats, "static_hint_abstained")
     decisive = tp + tn + fp + fn
+    accuracy = (tp + tn) / decisive if decisive else None
+    precision = tp / (tp + fp) if tp + fp else None
+    recall = tp / (tp + fn) if tp + fn else None
+    predictor_tp = _nonnegative_integer(stats, "predictor_tp")
+    predictor_tn = _nonnegative_integer(stats, "predictor_tn")
+    predictor_fp = _nonnegative_integer(stats, "predictor_fp")
+    predictor_fn = _nonnegative_integer(stats, "predictor_fn")
+    predictor_decisive = predictor_tp + predictor_tn + predictor_fp + predictor_fn
+    stage_a = evidence_stage == "stage-a"
     return {
         "static_hint_true_positive": tp,
         "static_hint_true_negative": tn,
@@ -3271,11 +3341,35 @@ def runtime_classification_summary(stats: Mapping[str, Any]) -> dict[str, Any]:
         "static_hint_false_negative": fn,
         "static_hint_abstained": abstained,
         "static_hint_decisive": decisive,
-        "stage_a_pressure_clock_accuracy": (tp + tn) / decisive if decisive else None,
-        "stage_a_pressure_clock_long_precision": tp / (tp + fp) if tp + fp else None,
-        "stage_a_pressure_clock_long_recall": tp / (tp + fn) if tp + fn else None,
-        "production_accuracy": None,
+        "accuracy_evidence_stage": evidence_stage,
+        "stage_a_pressure_clock_accuracy": accuracy if stage_a else None,
+        "stage_a_pressure_clock_long_precision": precision if stage_a else None,
+        "stage_a_pressure_clock_long_recall": recall if stage_a else None,
+        "production_accuracy": accuracy if not stage_a else None,
+        "production_long_precision": precision if not stage_a else None,
+        "production_long_recall": recall if not stage_a else None,
         "production_accuracy_claim_eligible": False,
+        "runtime_predictor_true_positive": predictor_tp,
+        "runtime_predictor_true_negative": predictor_tn,
+        "runtime_predictor_false_positive": predictor_fp,
+        "runtime_predictor_false_negative": predictor_fn,
+        "runtime_predictor_decisive": predictor_decisive,
+        "runtime_predictor_accuracy": (
+            (predictor_tp + predictor_tn) / predictor_decisive
+            if predictor_decisive
+            else None
+        ),
+        "runtime_predictor_long_precision": (
+            predictor_tp / (predictor_tp + predictor_fp)
+            if predictor_tp + predictor_fp
+            else None
+        ),
+        "runtime_predictor_long_recall": (
+            predictor_tp / (predictor_tp + predictor_fn)
+            if predictor_tp + predictor_fn
+            else None
+        ),
+        "runtime_predictor_evidence_stage": evidence_stage,
         "cross_clock_accuracy_claim": False,
         "affinity_pinned": False,
         "measurement_lock_held": False,
@@ -3309,9 +3403,14 @@ def _aggregate_runtime_outcomes(
         ):
             invalid_rows += 1
     evidence_complete = invalid_rows == 0
+    encoded_identities = sorted(
+        json.dumps(list(identity), separators=(",", ":"), ensure_ascii=True)
+        for identity in identities
+    )
     return {
         "scope": scope,
         "deduplicated_by": list(runtime_lifetime.RUNTIME_SITE_KEY_FIELDS),
+        "exact_site_key_digest": canonical_json_sha256(encoded_identities),
         "site_count": len(rows),
         "short_prior_site_count": sum(
             int(row.get("latest_static_prior") == 1) for row in rows
@@ -3422,10 +3521,26 @@ def join_compiler_runtime_sites(
                         "compiler export contains a duplicate exact site tuple"
                     )
                 numeric_keys.add(key)
-                runtime = runtime_by_key.get(key)
-                if runtime is None:
+                candidate_runtime = runtime_by_key.get(key)
+                if candidate_runtime is None:
                     resolution_status = "unobserved"
+                elif (
+                    not _plain_integer(candidate_runtime.get("allocation_count"))
+                    or candidate_runtime["allocation_count"] <= 0
+                ):
+                    resolution_status = "rejected_zero_runtime_allocations"
+                    rejection_reason = "runtime_allocation_count_not_positive"
+                elif candidate_runtime.get("predictor_key_ambiguous") is not False:
+                    resolution_status = "rejected_predictor_key_ambiguous"
+                    rejection_reason = "runtime_predictor_key_ambiguous"
+                elif compiler.get("lifetime_hint") in {1, 2} and (
+                    candidate_runtime.get("latest_static_prior")
+                    != compiler.get("lifetime_hint")
+                ):
+                    resolution_status = "rejected_static_prior_transport_mismatch"
+                    rejection_reason = "runtime_latest_static_prior_mismatch"
                 else:
+                    runtime = candidate_runtime
                     resolved_runtime_key = key
                     resolution_status = "exact_numeric_match"
                     numeric_matched += 1
@@ -3704,8 +3819,20 @@ def run_stage_a_sample(
     sample_interval: float,
     validate_duration: bool = True,
     run_label: str = "measured",
+    arm_name: str | None = None,
+    command_prefix: Sequence[str] = (),
+    evidence_stage: str = "stage-a",
 ) -> dict[str, Any]:
-    arm = ARM_BY_NAME[STAGE_A_ARM_BY_BUILD_GROUP[build_group]]
+    arm = ARM_BY_NAME[
+        arm_name or STAGE_A_ARM_BY_BUILD_GROUP[build_group]
+    ]
+    if arm.build_group != build_group:
+        raise CampaignContractError(
+            f"arm {arm.name} requires build group {arm.build_group}, got {build_group}"
+        )
+    if evidence_stage not in {"stage-a", "production"}:
+        raise CampaignContractError(f"unknown sample evidence stage: {evidence_stage}")
+    stage_label = "Stage-A" if evidence_stage == "stage-a" else "Stage-B"
     binary = Path(str(build["binary"]))
     work_dir = raw_dir / "workloads" / target_id / build_group / run_label
     shutil.rmtree(work_dir, ignore_errors=True)
@@ -3718,6 +3845,7 @@ def run_stage_a_sample(
         measurement_seconds=measurement_seconds,
         input_path=input_path,
     )
+    command = [*command_prefix, *command]
     artifact_dir = raw_dir / "runs" / target_id / build_group / run_label
     runtime_cwd, runtime_environment = stage_a_runtime_context(
         target_id, build, arm
@@ -3734,12 +3862,12 @@ def run_stage_a_sample(
     stderr = Path(process["stderr_path"]).read_text(encoding="utf-8", errors="replace")
     if process["timed_out"] or process["exit_code"] != 0:
         raise CampaignContractError(
-            f"{target_id}/{build_group} Stage-A process failed: {stderr[-8000:]}"
+            f"{target_id}/{build_group} {stage_label} process failed: {stderr[-8000:]}"
         )
     if process["single_process_guard"]["passed"] is not True:
         raise CampaignContractError(
             f"{target_id}/{build_group} spawned descendant processes; "
-            "Stage-A requires one persistent process"
+            f"{stage_label} requires one persistent process"
         )
     if validate_duration:
         validate_stage_duration("screening", float(process["wall_seconds"]))
@@ -3770,13 +3898,22 @@ def run_stage_a_sample(
         "target_id": target_id,
         "build_group": build_group,
         "arm": arm.name,
+        "runtime_arm_selector": runtime_arm_selector(arm),
         "work_units": work_units,
         "measurement_seconds": measurement_seconds,
         "runtime_stats": stats,
         "runtime_sites_path": str((artifact_dir / "runtime-sites.json").resolve()),
+        "smaps_samples_path": str((artifact_dir / "smaps-samples.json").resolve()),
         "runtime_site_summary": summarize_screening_sites(sites),
-        "classification": runtime_classification_summary(stats),
-        "stage_a_pressure_basis": "process_wide_requested_generation_bytes",
+        "classification": runtime_classification_summary(
+            stats, evidence_stage=evidence_stage
+        ),
+        "evidence_stage": evidence_stage,
+        "stage_a_pressure_basis": (
+            "process_wide_requested_generation_bytes"
+            if evidence_stage == "stage-a"
+            else None
+        ),
         "production_pressure_basis": "eligible_exact_site_payload_capacity",
         "cross_clock_accuracy_claim": False,
         "production_accuracy_claim_eligible": False,
@@ -4019,13 +4156,14 @@ def compile_run_runtime_hook_smoke(
 
 
 def _artifact_name(target_id: str) -> str:
+    actix_harness = TARGETS["actix_web"].harness_id
     return {
         "oxipng": "oxipng",
         "redb": "unialloc-redb-actix-runner",
         "polars": psr.TARGET_SPECS["polars"].package,
         "swc": str(psr.TARGET_SPECS["swc"].bench_name),
         "rustpython": str(psr.TARGET_SPECS["rustpython"].bench_name),
-        "actix_web": redb_actix.ACTIX_BENCHES["router_actix"][1],
+        "actix_web": redb_actix.ACTIX_BENCHES[actix_harness][1],
     }[target_id]
 
 
@@ -4061,7 +4199,9 @@ def _planned_build_command(
             "--no-run",
         ]
     else:
-        package, bench, _selector, _source = redb_actix.ACTIX_BENCHES["router_actix"]
+        package, bench, _selector, _source = redb_actix.ACTIX_BENCHES[
+            TARGETS["actix_web"].harness_id
+        ]
         command = [
             "cargo",
             f"+{TOOLCHAIN}",
@@ -4738,7 +4878,7 @@ def build_campaign_manifest() -> dict[str, Any]:
             "actix_web": [
                 "BINARY",
                 "--bench",
-                redb_actix.ACTIX_BENCHES["router_actix"][2],
+                redb_actix.ACTIX_BENCHES[TARGETS["actix_web"].harness_id][2],
                 "--warm-up-time",
                 "1.0",
                 "--measurement-time",
