@@ -48,10 +48,32 @@ def write_audit(
         "lowering_kind": "semantic_scope_enter_exit_rewrite",
     }
     if runtime_key is not None:
+        candidate.update(
+            {
+                field: runtime_key[field]
+                for field in ("callsite", "type_id", "module_id")
+            }
+        )
         candidate["lifetime_analysis_features"] = {
             "runtime_join_key_complete": True,
             "runtime_join_key": runtime_key,
+            "requested_layout_basis": "exact_box_new_payload_layout",
         }
+    if rewrite_status == campaign.GENERIC_REWRITE_STATUS:
+        candidate.update(
+            {
+                "type_id_basis": campaign.GENERIC_RUNTIME_TYPE_ID_BASIS,
+                "replacement_symbol": (
+                    "__unialloc_semantic_scope_push_for_rust_type"
+                ),
+                "replacement_resolution_status": (
+                    "resolved_unialloc_semantic_scope_push_for_rust_type_pop"
+                ),
+                "metadata_pairing_contract": (
+                    "semantic_scope_monomorphized_runtime_type_metadata"
+                ),
+            }
+        )
     (root / "audit.json").write_text(
         json.dumps(
             {
@@ -97,6 +119,84 @@ def runtime_stats(arm) -> dict[str, object]:
         }
     )
     return stats
+
+
+def generic_compiler_row(
+    *,
+    callsite: int = 11,
+    module_id: int = 13,
+    requested_size: int | None = 4096,
+    align: int | None = 8,
+    hint: int = 2,
+) -> dict[str, object]:
+    audit_key = {
+        "callsite": callsite,
+        "type_id": 0,
+        "module_id": module_id,
+        "requested_size": requested_size,
+        "align": align,
+    }
+    resolution_key = {
+        field: audit_key[field] for field in campaign.GENERIC_RESOLUTION_KEY_FIELDS
+    }
+    return {
+        **audit_key,
+        "identity_mode": "generic_runtime_type",
+        "compiler_audit_key": audit_key,
+        "audit_type_id_sentinel": 0,
+        "runtime_join_key_complete": False,
+        "numeric_exact_key_complete": False,
+        "generic_resolution_key_complete": (
+            isinstance(requested_size, int)
+            and requested_size > 0
+            and isinstance(align, int)
+            and align > 0
+            and align & (align - 1) == 0
+        ),
+        "generic_resolution_key": resolution_key,
+        "rewrite_status": campaign.GENERIC_REWRITE_STATUS,
+        "type_id_basis": campaign.GENERIC_RUNTIME_TYPE_ID_BASIS,
+        "replacement_symbol": "__unialloc_semantic_scope_push_for_rust_type_hints",
+        "replacement_resolution_status": (
+            "resolved_unialloc_semantic_scope_push_for_rust_type_hints_pop"
+        ),
+        "metadata_pairing_contract": (
+            "semantic_scope_monomorphized_runtime_type_metadata"
+        ),
+        "lifetime_hint": hint,
+        "lifetime_hint_basis": (
+            "automatic_rust_lifetime_prior_return_long"
+            if hint == 2
+            else (
+                "automatic_rust_lifetime_prior_all_path_local_release_short"
+                if hint == 1
+                else "default_unknown"
+            )
+        ),
+    }
+
+
+def generic_runtime_row(
+    *,
+    type_id: int = 17,
+    callsite: int = 11,
+    module_id: int = 13,
+    requested_size: int = 4096,
+    align: int = 8,
+    allocation_count: int = 3,
+    predictor_key_ambiguous: bool = False,
+    latest_static_prior: int = 2,
+) -> dict[str, object]:
+    return {
+        "callsite": callsite,
+        "type_id": type_id,
+        "module_id": module_id,
+        "requested_size": requested_size,
+        "align": align,
+        "allocation_count": allocation_count,
+        "predictor_key_ambiguous": predictor_key_ambiguous,
+        "latest_static_prior": latest_static_prior,
+    }
 
 
 def smaps_text(*, rss: int, anon_hugepages: int) -> str:
@@ -279,7 +379,7 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                 rewrite_status="actual_semantic_scope_generic_type_rewrite_applied",
                 runtime_key={
                     "callsite": 1,
-                    "type_id": 2,
+                    "type_id": 0,
                     "module_id": 3,
                     "requested_size_bytes": 4096,
                     "requested_align_bytes": 8,
@@ -310,6 +410,18 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
             self.assertEqual(2, summary["applied_prior_hinted_candidate_count"])
             self.assertEqual(2, exported["site_count"])
             self.assertEqual(2, exported["applied_prior_hinted_count"])
+            self.assertEqual(1, exported["numeric_site_count"])
+            self.assertEqual(1, exported["generic_site_count"])
+            self.assertEqual(1, exported["numeric_exact_key_complete_count"])
+            self.assertEqual(1, exported["generic_resolution_key_complete_count"])
+            generic = next(
+                row
+                for row in exported["rows"]
+                if row["identity_mode"] == "generic_runtime_type"
+            )
+            self.assertFalse(generic["runtime_join_key_complete"])
+            self.assertTrue(generic["audit_runtime_join_key_complete"])
+            self.assertEqual(0, generic["audit_type_id_sentinel"])
             self.assertEqual(
                 {
                     "actual_semantic_scope_enter_exit_rewrite_applied",
@@ -461,6 +573,7 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
             field: index + 1
             for index, field in enumerate(campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS)
         }
+        runtime["align"] = 8
         with self.assertRaises(campaign.CampaignContractError):
             campaign.join_compiler_runtime_sites(
                 {"rows": []}, [runtime, dict(runtime)]
@@ -484,11 +597,162 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         self.assertEqual(0.0, result["match_coverage"])
         self.assertFalse(result["runtime_join_rewrite_success"])
 
+    def test_generic_join_resolves_one_authenticated_runtime_type(self) -> None:
+        compiler = generic_compiler_row()
+        runtime = generic_runtime_row()
+        result = campaign.join_compiler_runtime_sites(
+            {"rows": [compiler]}, [runtime]
+        )
+        self.assertEqual("complete-static-coverage", result["status"])
+        self.assertEqual(1, result["generic_compiler_site_count"])
+        self.assertEqual(1, result["generic_resolved_site_count"])
+        self.assertEqual(0, result["numeric_matched_site_count"])
+        self.assertTrue(result["generic_runtime_join_rewrite_success"])
+        joined = result["rows"][0]
+        self.assertEqual(
+            "generic_unique_runtime_type_match", joined["resolution_status"]
+        )
+        self.assertEqual(0, joined["audit_type_id_sentinel"])
+        self.assertEqual(17, joined["resolved_runtime_exact_key"]["type_id"])
+        self.assertTrue(result["claim_scope"]["adaptive_site_key_unchanged"])
+
+    def test_numeric_join_never_falls_back_to_generic_key4(self) -> None:
+        runtime = generic_runtime_row(type_id=17)
+        compiler = {
+            **{
+                field: runtime[field]
+                for field in campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS
+            },
+            "type_id": 19,
+            "runtime_join_key_complete": True,
+            "lifetime_hint": 2,
+            "lifetime_hint_basis": "automatic_rust_lifetime_prior_return_long",
+        }
+        result = campaign.join_compiler_runtime_sites(
+            {"rows": [compiler]}, [runtime]
+        )
+        self.assertEqual("unobserved", result["rows"][0]["resolution_status"])
+        self.assertEqual(0, result["matched_site_count"])
+        self.assertEqual(0, result["generic_compiler_site_count"])
+
+    def test_generic_join_rejects_multi_type_zst_and_ambiguous_rows(self) -> None:
+        cases = (
+            (
+                generic_compiler_row(),
+                [generic_runtime_row(type_id=17), generic_runtime_row(type_id=19)],
+                "rejected_multi_runtime_type_id",
+            ),
+            (generic_compiler_row(requested_size=0), [], "ineligible_zst"),
+            (
+                generic_compiler_row(),
+                [generic_runtime_row(predictor_key_ambiguous=True)],
+                "rejected_predictor_key_ambiguous",
+            ),
+            (
+                generic_compiler_row(),
+                [generic_runtime_row(allocation_count=0)],
+                "rejected_zero_runtime_allocations",
+            ),
+        )
+        for compiler, runtime, expected in cases:
+            with self.subTest(expected=expected):
+                result = campaign.join_compiler_runtime_sites(
+                    {"rows": [compiler]}, runtime
+                )
+                self.assertEqual(expected, result["rows"][0]["resolution_status"])
+                self.assertFalse(result["rows"][0]["matched"])
+
+    def test_generic_join_rejects_bad_basis_symbol_and_prior_transport(self) -> None:
+        cases: list[tuple[dict[str, object], dict[str, object], str, str]] = []
+        bad_basis = generic_compiler_row()
+        bad_basis["type_id_basis"] = "compiler_type_name_hash"
+        cases.append(
+            (
+                bad_basis,
+                generic_runtime_row(),
+                "rejected_generic_contract",
+                "bad_type_id_basis",
+            )
+        )
+        bad_symbol = generic_compiler_row()
+        bad_symbol["replacement_symbol"] = "__unauthenticated_generic_push"
+        cases.append(
+            (
+                bad_symbol,
+                generic_runtime_row(),
+                "rejected_generic_contract",
+                "unauthenticated_replacement_symbol",
+            )
+        )
+        cases.append(
+            (
+                generic_compiler_row(),
+                generic_runtime_row(latest_static_prior=1),
+                "rejected_static_prior_transport_mismatch",
+                "runtime_latest_static_prior_mismatch",
+            )
+        )
+        for compiler, runtime, status, reason in cases:
+            with self.subTest(reason=reason):
+                result = campaign.join_compiler_runtime_sites(
+                    {"rows": [compiler]}, [runtime]
+                )
+                joined = result["rows"][0]
+                self.assertEqual(status, joined["resolution_status"])
+                self.assertEqual(reason, joined["rejection_reason"])
+
+    def test_generic_join_rejects_duplicate_key4_and_double_claim(self) -> None:
+        generic = generic_compiler_row()
+        runtime = generic_runtime_row()
+        with self.assertRaises(campaign.CampaignContractError):
+            campaign.join_compiler_runtime_sites(
+                {"rows": [generic, dict(generic)]}, [runtime]
+            )
+        numeric = {
+            **{
+                field: runtime[field]
+                for field in campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS
+            },
+            "runtime_join_key_complete": True,
+            "lifetime_hint": 0,
+            "lifetime_hint_basis": "default_unknown",
+        }
+        with self.assertRaises(campaign.CampaignContractError):
+            campaign.join_compiler_runtime_sites(
+                {"rows": [numeric, generic]}, [runtime]
+            )
+
+    def test_compiler_export_rejects_raw_and_top_level_identity_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_audit(
+                root,
+                enabled=True,
+                basis="automatic_rust_lifetime_prior_return_long",
+                hint=2,
+                confidence=70,
+                rewrite_status=campaign.GENERIC_REWRITE_STATUS,
+                runtime_key={
+                    "callsite": 11,
+                    "type_id": 0,
+                    "module_id": 13,
+                    "requested_size_bytes": 4096,
+                    "requested_align_bytes": 8,
+                },
+            )
+            path = root / "audit.json"
+            document = json.loads(path.read_text(encoding="utf-8"))
+            document["rewrite_candidates"][0]["callsite"] = 12
+            path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaises(campaign.CampaignContractError):
+                campaign.export_compiler_site_features(root)
+
     def test_unknown_rewrite_match_cannot_substitute_for_prior_coverage(self) -> None:
         runtime = {
             field: index + 1
             for index, field in enumerate(campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS)
         }
+        runtime["align"] = 8
         unknown = {
             **runtime,
             "runtime_join_key_complete": True,
@@ -513,7 +777,8 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         result = campaign.join_compiler_runtime_sites(
             {"rows": [unknown, long_unmatched, short_incomplete]}, [runtime]
         )
-        self.assertTrue(result["generic_runtime_join_rewrite_success"])
+        self.assertFalse(result["generic_runtime_join_rewrite_success"])
+        self.assertTrue(result["runtime_join_rewrite_success"])
         self.assertEqual(2, result["applied_prior_classified_count"])
         self.assertEqual(0, result["matched_applied_prior_site_count"])
         self.assertEqual("no-static-coverage", result["status"])
@@ -524,6 +789,7 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
             field: index + 1
             for index, field in enumerate(campaign.runtime_lifetime.RUNTIME_SITE_KEY_FIELDS)
         }
+        runtime["align"] = 8
         applied_long = {
             **runtime,
             "runtime_join_key_complete": True,

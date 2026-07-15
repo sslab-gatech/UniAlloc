@@ -107,6 +107,32 @@ APPLIED_ALLOCATION_SCOPE_STATUSES = frozenset(
         "actual_semantic_scope_generic_type_rewrite_applied",
     }
 )
+GENERIC_RUNTIME_TYPE_ID_BASIS = "monomorphized_compiler_type_id_runtime"
+GENERIC_REWRITE_STATUS = "actual_semantic_scope_generic_type_rewrite_applied"
+GENERIC_REPLACEMENT_CONTRACTS = {
+    "__unialloc_semantic_scope_push_for_rust_type": (
+        "resolved_unialloc_semantic_scope_push_for_rust_type_pop",
+        "semantic_scope_monomorphized_runtime_type_metadata",
+    ),
+    "__unialloc_semantic_scope_push_for_rust_type_local": (
+        "resolved_unialloc_semantic_scope_push_for_rust_type_local_pop",
+        "semantic_scope_monomorphized_runtime_type_metadata_local_no_recovery",
+    ),
+    "__unialloc_semantic_scope_push_for_rust_type_hints": (
+        "resolved_unialloc_semantic_scope_push_for_rust_type_hints_pop",
+        "semantic_scope_monomorphized_runtime_type_metadata",
+    ),
+    "__unialloc_semantic_scope_push_for_rust_type_hints_local": (
+        "resolved_unialloc_semantic_scope_push_for_rust_type_hints_local_pop",
+        "semantic_scope_monomorphized_runtime_type_metadata_local_no_recovery",
+    ),
+}
+GENERIC_RESOLUTION_KEY_FIELDS = (
+    "callsite",
+    "module_id",
+    "requested_size",
+    "align",
+)
 TARGET_SNAPSHOT_DEPENDENCY_REWRITES: dict[str, tuple[dict[str, Any], ...]] = {
     "swc": (
         {
@@ -2336,10 +2362,35 @@ def validate_retained_post_injection_build_inputs(
     )
 
 
+def _plain_integer(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _positive_power_of_two(value: Any) -> bool:
+    return _plain_integer(value) and value > 0 and value & (value - 1) == 0
+
+
+def _runtime_key_dict(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        field: row.get(field) for field in runtime_lifetime.RUNTIME_SITE_KEY_FIELDS
+    }
+
+
+def _generic_resolution_key_dict(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {field: row.get(field) for field in GENERIC_RESOLUTION_KEY_FIELDS}
+
+
 def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
-    """Export joinable compiler features without changing the runtime predictor key."""
+    """Export numeric KEY5 and authenticated generic KEY4 compiler identities.
+
+    The runtime observation KEY5 and allocator ``AdaptiveSiteKey`` remain
+    untouched.  A generic compiler row retains the audit's zero TypeId
+    sentinel and is resolved later only when runtime evidence gives KEY4 a
+    unique positive TypeId.
+    """
     rows: list[dict[str, Any]] = []
-    complete_keys: set[tuple[int, ...]] = set()
+    numeric_keys: set[tuple[int, ...]] = set()
+    generic_keys: set[tuple[int, ...]] = set()
     for path in sorted(audit_root.rglob("*.json")):
         try:
             document = json.loads(path.read_text(encoding="utf-8"))
@@ -2356,10 +2407,10 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
                 continue
             features = candidate.get("lifetime_analysis_features")
             if not isinstance(features, dict):
-                continue
+                features = {}
             raw_key = features.get("runtime_join_key")
             if not isinstance(raw_key, dict):
-                continue
+                raw_key = {}
             key = {
                 "callsite": raw_key.get("callsite"),
                 "type_id": raw_key.get("type_id"),
@@ -2367,24 +2418,107 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
                 "requested_size": raw_key.get("requested_size_bytes"),
                 "align": raw_key.get("requested_align_bytes"),
             }
-            complete = features.get("runtime_join_key_complete") is True and all(
-                isinstance(value, int) and not isinstance(value, bool) and value >= 0
-                for value in key.values()
+            for field in ("callsite", "type_id", "module_id"):
+                top_level = candidate.get(field)
+                raw_value = key[field]
+                if (
+                    top_level is not None
+                    and raw_value is not None
+                    and top_level != raw_value
+                ):
+                    raise CampaignContractError(
+                        "compiler audit top-level identity disagrees with its raw "
+                        f"runtime join key: {path}:{field}"
+                    )
+                if raw_value is None:
+                    key[field] = top_level
+
+            audit_complete = features.get("runtime_join_key_complete") is True
+            audit_numeric_complete = features.get(
+                "numeric_exact_key_complete", audit_complete
+            ) is True
+            audit_generic_complete = features.get(
+                "generic_resolution_key_complete", audit_complete
+            ) is True
+            positive_identity = all(
+                _plain_integer(key[field]) and key[field] > 0
+                for field in ("callsite", "module_id")
             )
-            if complete:
+            positive_layout = (
+                _plain_integer(key["requested_size"])
+                and key["requested_size"] > 0
+                and _positive_power_of_two(key["align"])
+            )
+            if rewrite_status == GENERIC_REWRITE_STATUS:
+                identity_mode = "generic_runtime_type"
+            elif _plain_integer(key["type_id"]) and key["type_id"] > 0:
+                identity_mode = "numeric_exact"
+            else:
+                identity_mode = "invalid"
+            numeric_complete = (
+                identity_mode == "numeric_exact"
+                and positive_identity
+                and positive_layout
+                and audit_numeric_complete
+            )
+            generic_complete = (
+                identity_mode == "generic_runtime_type"
+                and positive_identity
+                and positive_layout
+                and audit_generic_complete
+            )
+            generic_key_materialized = (
+                identity_mode == "generic_runtime_type"
+                and positive_identity
+                and _plain_integer(key["requested_size"])
+                and key["requested_size"] >= 0
+                and _plain_integer(key["align"])
+                and key["align"] > 0
+            )
+            compiler_audit_key = dict(key)
+            generic_resolution_key = {
+                field: key[field] for field in GENERIC_RESOLUTION_KEY_FIELDS
+            }
+            if numeric_complete:
                 exact_key = tuple(
                     int(key[field]) for field in runtime_lifetime.RUNTIME_SITE_KEY_FIELDS
                 )
-                if exact_key in complete_keys:
+                if exact_key in numeric_keys:
                     raise CampaignContractError(
                         "compiler audit contains a duplicate exact runtime tuple"
                     )
-                complete_keys.add(exact_key)
+                numeric_keys.add(exact_key)
+            if generic_key_materialized:
+                resolution_key = tuple(
+                    int(key[field]) for field in GENERIC_RESOLUTION_KEY_FIELDS
+                )
+                if resolution_key in generic_keys:
+                    raise CampaignContractError(
+                        "compiler audit contains a duplicate generic resolution tuple"
+                    )
+                generic_keys.add(resolution_key)
             rows.append(
                 {
                     **key,
-                    "runtime_join_key_complete": complete,
+                    "identity_mode": identity_mode,
+                    "compiler_audit_key": compiler_audit_key,
+                    "audit_type_id_sentinel": (
+                        key["type_id"]
+                        if identity_mode == "generic_runtime_type"
+                        else None
+                    ),
+                    "audit_runtime_join_key_complete": audit_complete,
+                    "audit_numeric_exact_key_complete": audit_numeric_complete,
+                    "audit_generic_resolution_key_complete": (
+                        audit_generic_complete
+                    ),
+                    # Compatibility name now means a claim-complete numeric KEY5.
+                    "runtime_join_key_complete": numeric_complete,
+                    "numeric_exact_key_complete": numeric_complete,
+                    "generic_resolution_key_complete": generic_complete,
+                    "generic_resolution_key": generic_resolution_key,
                     "audit_file": path.relative_to(audit_root).as_posix(),
+                    "audit_file_sha256": sha256_file(path),
                     "allocation_site_id": candidate.get("allocation_site_id"),
                     "mir_function": candidate.get("mir_function"),
                     "source_span": candidate.get("source_span"),
@@ -2396,15 +2530,54 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
                     ),
                     "lifetime_hint_basis": candidate.get("lifetime_hint_basis"),
                     "rewrite_status": rewrite_status,
+                    "type_id_basis": candidate.get("type_id_basis"),
+                    "replacement_symbol": candidate.get("replacement_symbol"),
+                    "replacement_resolution_status": candidate.get(
+                        "replacement_resolution_status"
+                    ),
+                    "metadata_pairing_contract": candidate.get(
+                        "metadata_pairing_contract"
+                    ),
+                    "requested_layout_basis": candidate.get(
+                        "requested_layout_basis",
+                        features.get("requested_layout_basis"),
+                    ),
                     "lifetime_analysis_features": features,
                 }
             )
+    numeric_rows = [row for row in rows if row["identity_mode"] == "numeric_exact"]
+    generic_rows = [
+        row for row in rows if row["identity_mode"] == "generic_runtime_type"
+    ]
     return {
-        "source": "unialloc-compiler-runtime-exact-site-export-v1",
+        "source": "unialloc-compiler-runtime-exact-site-export-v2",
         "runtime_join_key": list(runtime_lifetime.RUNTIME_SITE_KEY_FIELDS),
+        "generic_resolution_key": list(GENERIC_RESOLUTION_KEY_FIELDS),
+        "claim_scope": {
+            "runtime_exact_observation_key_unchanged": True,
+            "runtime_exact_observation_key": list(
+                runtime_lifetime.RUNTIME_SITE_KEY_FIELDS
+            ),
+            "adaptive_site_key_unchanged": True,
+            "numeric_resolution": "exact-key5-only",
+            "generic_resolution": (
+                "authenticated-typeid-zero-key4-to-one-runtime-positive-typeid-key5"
+            ),
+        },
         "site_count": len(rows),
+        "numeric_site_count": len(numeric_rows),
+        "generic_site_count": len(generic_rows),
         "complete_join_key_count": sum(
             int(row["runtime_join_key_complete"]) for row in rows
+        ),
+        "audit_complete_join_key_count": sum(
+            int(row["audit_runtime_join_key_complete"]) for row in rows
+        ),
+        "numeric_exact_key_complete_count": sum(
+            int(row["numeric_exact_key_complete"]) for row in numeric_rows
+        ),
+        "generic_resolution_key_complete_count": sum(
+            int(row["generic_resolution_key_complete"]) for row in generic_rows
         ),
         "applied_prior_hinted_count": sum(
             int(
@@ -2774,8 +2947,15 @@ def build_stage_a_binary(
             for key in (
                 "source",
                 "runtime_join_key",
+                "generic_resolution_key",
+                "claim_scope",
                 "site_count",
+                "numeric_site_count",
+                "generic_site_count",
                 "complete_join_key_count",
+                "audit_complete_join_key_count",
+                "numeric_exact_key_complete_count",
+                "generic_resolution_key_complete_count",
                 "applied_prior_hinted_count",
             )
         },
@@ -3041,18 +3221,36 @@ def join_compiler_runtime_sites(
 ) -> dict[str, Any]:
     key_fields = runtime_lifetime.RUNTIME_SITE_KEY_FIELDS
     runtime_by_key: dict[tuple[Any, ...], dict[str, Any]] = {}
+    runtime_by_generic_key: dict[tuple[Any, ...], list[tuple[Any, ...]]] = {}
     for row in runtime_rows:
-        key = tuple(row[field] for field in key_fields)
+        try:
+            key = tuple(row[field] for field in key_fields)
+        except KeyError as error:
+            raise CampaignContractError(
+                f"runtime observation lacks exact site field: {error.args[0]}"
+            ) from error
         if key in runtime_by_key:
             raise CampaignContractError(
                 "runtime observation contains a duplicate exact site tuple"
             )
         runtime_by_key[key] = dict(row)
+        generic_key = tuple(row[field] for field in GENERIC_RESOLUTION_KEY_FIELDS)
+        runtime_by_generic_key.setdefault(generic_key, []).append(key)
+
     joined: list[dict[str, Any]] = []
-    incomplete = 0
+    resolution_counts: Counter[str] = Counter()
     applied_prior_total = 0
     applied_prior_incomplete = 0
-    compiler_keys: set[tuple[Any, ...]] = set()
+    numeric_keys: set[tuple[Any, ...]] = set()
+    generic_keys: set[tuple[Any, ...]] = set()
+    claimed_runtime_keys: set[tuple[Any, ...]] = set()
+    numeric_total = 0
+    numeric_complete = 0
+    numeric_matched = 0
+    generic_total = 0
+    generic_complete = 0
+    generic_resolved = 0
+
     for compiler in compiler_export.get("rows", []):
         if not isinstance(compiler, dict):
             continue
@@ -3064,34 +3262,228 @@ def join_compiler_runtime_sites(
         )
         if applied_prior:
             applied_prior_total += 1
-        if compiler.get("runtime_join_key_complete") is not True:
-            incomplete += 1
-            applied_prior_incomplete += int(applied_prior)
-            continue
-        key = tuple(compiler[field] for field in key_fields)
-        if key in compiler_keys:
-            raise CampaignContractError(
-                "compiler export contains a duplicate exact site tuple"
+
+        compiler_audit_key = compiler.get("compiler_audit_key")
+        if not isinstance(compiler_audit_key, dict):
+            compiler_audit_key = _runtime_key_dict(compiler)
+        identity_mode = compiler.get("identity_mode")
+        if identity_mode not in {"numeric_exact", "generic_runtime_type"}:
+            if compiler.get("rewrite_status") == GENERIC_REWRITE_STATUS:
+                identity_mode = "generic_runtime_type"
+            elif _plain_integer(compiler_audit_key.get("type_id")) and (
+                compiler_audit_key["type_id"] > 0
+            ):
+                identity_mode = "numeric_exact"
+            else:
+                identity_mode = "invalid"
+
+        runtime: dict[str, Any] | None = None
+        resolved_runtime_key: tuple[Any, ...] | None = None
+        resolution_status = "rejected_compiler_identity_contract"
+        rejection_reason: str | None = None
+        key_complete = False
+
+        if identity_mode == "numeric_exact":
+            numeric_total += 1
+            key = tuple(compiler_audit_key.get(field) for field in key_fields)
+            computed_complete = (
+                all(
+                    _plain_integer(compiler_audit_key.get(field))
+                    and compiler_audit_key[field] > 0
+                    for field in ("callsite", "type_id", "module_id", "requested_size")
+                )
+                and _positive_power_of_two(compiler_audit_key.get("align"))
             )
-        compiler_keys.add(key)
-        runtime = runtime_by_key.get(key)
+            declared_complete = compiler.get(
+                "numeric_exact_key_complete",
+                compiler.get("runtime_join_key_complete"),
+            )
+            key_complete = declared_complete is True and computed_complete
+            if key_complete:
+                numeric_complete += 1
+                if key in numeric_keys:
+                    raise CampaignContractError(
+                        "compiler export contains a duplicate exact site tuple"
+                    )
+                numeric_keys.add(key)
+                runtime = runtime_by_key.get(key)
+                if runtime is None:
+                    resolution_status = "unobserved"
+                else:
+                    resolved_runtime_key = key
+                    resolution_status = "exact_numeric_match"
+                    numeric_matched += 1
+            else:
+                resolution_status = "ineligible_dynamic_layout"
+                rejection_reason = "numeric_exact_key_incomplete"
+
+        elif identity_mode == "generic_runtime_type":
+            generic_total += 1
+            generic_key_dict = compiler.get("generic_resolution_key")
+            if not isinstance(generic_key_dict, dict):
+                generic_key_dict = _generic_resolution_key_dict(compiler_audit_key)
+            generic_key = tuple(
+                generic_key_dict.get(field) for field in GENERIC_RESOLUTION_KEY_FIELDS
+            )
+            layout_present = all(
+                _plain_integer(generic_key_dict.get(field))
+                for field in ("requested_size", "align")
+            )
+            computed_complete = (
+                all(
+                    _plain_integer(generic_key_dict.get(field))
+                    and generic_key_dict[field] > 0
+                    for field in ("callsite", "module_id", "requested_size")
+                )
+                and _positive_power_of_two(generic_key_dict.get("align"))
+            )
+            materialized_generic_key = (
+                all(
+                    _plain_integer(generic_key_dict.get(field))
+                    for field in GENERIC_RESOLUTION_KEY_FIELDS
+                )
+                and generic_key_dict["callsite"] > 0
+                and generic_key_dict["module_id"] > 0
+                and generic_key_dict["requested_size"] >= 0
+                and generic_key_dict["align"] > 0
+            )
+            declared_complete = compiler.get("generic_resolution_key_complete")
+            if declared_complete is None:
+                declared_complete = computed_complete
+            key_complete = declared_complete is True and computed_complete
+            if materialized_generic_key:
+                if generic_key in generic_keys:
+                    raise CampaignContractError(
+                        "compiler export contains a duplicate generic resolution tuple"
+                    )
+                generic_keys.add(generic_key)
+            if key_complete:
+                generic_complete += 1
+
+            replacement_symbol = compiler.get("replacement_symbol")
+            replacement_contract = GENERIC_REPLACEMENT_CONTRACTS.get(
+                replacement_symbol
+            )
+            if compiler.get("rewrite_status") != GENERIC_REWRITE_STATUS:
+                resolution_status = "rejected_generic_contract"
+                rejection_reason = "bad_rewrite_status"
+            elif compiler_audit_key.get("type_id") != 0:
+                resolution_status = "rejected_generic_contract"
+                rejection_reason = "generic_audit_type_id_not_zero"
+            elif compiler.get("type_id_basis") != GENERIC_RUNTIME_TYPE_ID_BASIS:
+                resolution_status = "rejected_generic_contract"
+                rejection_reason = "bad_type_id_basis"
+            elif replacement_contract is None:
+                resolution_status = "rejected_generic_contract"
+                rejection_reason = "unauthenticated_replacement_symbol"
+            elif compiler.get("replacement_resolution_status") != replacement_contract[0]:
+                resolution_status = "rejected_generic_contract"
+                rejection_reason = "replacement_resolution_status_mismatch"
+            elif compiler.get("metadata_pairing_contract") != replacement_contract[1]:
+                resolution_status = "rejected_generic_contract"
+                rejection_reason = "metadata_pairing_contract_mismatch"
+            elif not layout_present:
+                resolution_status = "ineligible_dynamic_layout"
+                rejection_reason = "generic_layout_missing"
+            elif generic_key_dict.get("requested_size") == 0:
+                resolution_status = "ineligible_zst"
+                rejection_reason = "zero_sized_allocation"
+            elif not _positive_power_of_two(generic_key_dict.get("align")):
+                resolution_status = "rejected_generic_contract"
+                rejection_reason = "invalid_requested_alignment"
+            elif not key_complete:
+                resolution_status = "rejected_generic_contract"
+                rejection_reason = "generic_resolution_key_incomplete"
+            else:
+                candidate_keys = runtime_by_generic_key.get(generic_key, [])
+                runtime_type_ids = {
+                    runtime_key[1]
+                    for runtime_key in candidate_keys
+                    if _plain_integer(runtime_key[1]) and runtime_key[1] > 0
+                }
+                if not candidate_keys:
+                    resolution_status = "unobserved"
+                elif (
+                    len(candidate_keys) != 1
+                    or len(runtime_type_ids) != 1
+                ):
+                    resolution_status = "rejected_multi_runtime_type_id"
+                    rejection_reason = "generic_key4_has_multiple_runtime_key5_rows"
+                else:
+                    candidate_key = candidate_keys[0]
+                    candidate_runtime = runtime_by_key[candidate_key]
+                    if not _plain_integer(candidate_key[1]) or candidate_key[1] <= 0:
+                        resolution_status = "rejected_runtime_contract"
+                        rejection_reason = "runtime_type_id_not_positive"
+                    elif (
+                        not _plain_integer(candidate_runtime.get("allocation_count"))
+                        or candidate_runtime["allocation_count"] <= 0
+                    ):
+                        resolution_status = "rejected_zero_runtime_allocations"
+                        rejection_reason = "runtime_allocation_count_not_positive"
+                    elif candidate_runtime.get("predictor_key_ambiguous") is not False:
+                        resolution_status = "rejected_predictor_key_ambiguous"
+                        rejection_reason = "runtime_predictor_key_ambiguous"
+                    elif compiler.get("lifetime_hint") in {1, 2} and (
+                        candidate_runtime.get("latest_static_prior")
+                        != compiler.get("lifetime_hint")
+                    ):
+                        resolution_status = (
+                            "rejected_static_prior_transport_mismatch"
+                        )
+                        rejection_reason = "runtime_latest_static_prior_mismatch"
+                    else:
+                        runtime = candidate_runtime
+                        resolved_runtime_key = candidate_key
+                        resolution_status = "generic_unique_runtime_type_match"
+                        generic_resolved += 1
+
+        else:
+            applied_prior_incomplete += int(applied_prior)
+            rejection_reason = "missing_positive_numeric_or_generic_identity"
+
+        if key_complete is False and identity_mode != "invalid":
+            applied_prior_incomplete += int(applied_prior)
+        if resolved_runtime_key is not None:
+            if resolved_runtime_key in claimed_runtime_keys:
+                raise CampaignContractError(
+                    "one runtime exact site tuple was claimed by multiple compiler rows"
+                )
+            claimed_runtime_keys.add(resolved_runtime_key)
+        resolution_counts[resolution_status] += 1
         joined.append(
             {
-                "join_key": dict(zip(key_fields, key, strict=True)),
+                "compiler_audit_key": compiler_audit_key,
+                "audit_type_id_sentinel": compiler.get(
+                    "audit_type_id_sentinel",
+                    compiler_audit_key.get("type_id")
+                    if identity_mode == "generic_runtime_type"
+                    else None,
+                ),
+                "identity_mode": identity_mode,
+                "join_key": compiler_audit_key,
+                "resolved_runtime_exact_key": (
+                    dict(zip(key_fields, resolved_runtime_key, strict=True))
+                    if resolved_runtime_key is not None
+                    else None
+                ),
                 "matched": runtime is not None,
                 "applied_prior_hint": applied_prior,
+                "resolution_status": resolution_status,
+                "rejection_reason": rejection_reason,
                 "compiler": compiler,
                 "runtime": runtime,
             }
         )
+
     matched = sum(int(row["matched"]) for row in joined)
-    complete = len(joined)
+    complete = numeric_complete + generic_complete
     generic_status = (
         "no-generic-rewrite-coverage"
-        if matched == 0
+        if generic_resolved == 0
         else (
             "complete-generic-rewrite-coverage"
-            if matched == complete
+            if generic_resolved == generic_total
             else "partial-generic-rewrite-coverage"
         )
     )
@@ -3109,14 +3501,33 @@ def join_compiler_runtime_sites(
         )
     )
     return {
-        "source": "unialloc-compiler-runtime-exact-site-join-v1",
+        "source": "unialloc-compiler-runtime-exact-site-join-v2",
         "status": static_status,
         "generic_rewrite_status": generic_status,
-        "compiler_complete_key_count": len(joined),
-        "compiler_incomplete_key_count": incomplete,
+        "claim_scope": {
+            "runtime_exact_observation_key_unchanged": True,
+            "runtime_exact_observation_key": list(key_fields),
+            "adaptive_site_key_unchanged": True,
+            "numeric_resolution": "exact-key5-only",
+            "generic_resolution": (
+                "authenticated-typeid-zero-key4-to-one-runtime-positive-typeid-key5"
+            ),
+            "generic_static_prior_transport_required": True,
+        },
+        "compiler_complete_key_count": complete,
+        "compiler_incomplete_key_count": len(joined) - complete,
         "matched_site_count": matched,
         "unmatched_site_count": complete - matched,
         "match_coverage": matched / complete if complete else 0.0,
+        "numeric_compiler_site_count": numeric_total,
+        "numeric_complete_key_count": numeric_complete,
+        "numeric_matched_site_count": numeric_matched,
+        "numeric_unmatched_site_count": numeric_complete - numeric_matched,
+        "generic_compiler_site_count": generic_total,
+        "generic_resolution_key_complete_count": generic_complete,
+        "generic_resolved_site_count": generic_resolved,
+        "generic_rejected_or_unobserved_site_count": generic_total - generic_resolved,
+        "resolution_status_counts": dict(sorted(resolution_counts.items())),
         "applied_prior_classified_count": applied_prior_total,
         "applied_prior_complete_key_count": applied_prior_complete,
         "applied_prior_incomplete_key_count": applied_prior_incomplete,
@@ -3131,7 +3542,7 @@ def join_compiler_runtime_sites(
         ),
         "static_prior_join_success": applied_prior_matched > 0,
         "static_coverage_claim_eligible": applied_prior_matched > 0,
-        "generic_runtime_join_rewrite_success": matched > 0,
+        "generic_runtime_join_rewrite_success": generic_resolved > 0,
         "runtime_join_rewrite_success": matched > 0,
         "runtime_site_count": len(runtime_rows),
         "rows": joined,
