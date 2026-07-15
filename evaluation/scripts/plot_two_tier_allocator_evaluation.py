@@ -7,8 +7,9 @@
 
 The exporter keeps the Rust ``std_bench`` campaign and the real-world Type
 Isolation campaign as separate statistical populations.  It validates the
-process evidence before deriving paired cell or harness medians, publishes
-uncapped machine-readable ratios, and applies clipping only while drawing.
+process evidence before deriving ratios of run medians or medians of paired-run
+ratios, publishes uncapped machine-readable ratios, and applies clipping only
+while drawing.
 """
 
 from __future__ import annotations
@@ -188,7 +189,7 @@ MACRO_CSV_FIELDS = (
     "aggregation_level",
     "target_id",
     "target_label",
-    "harness_id",
+    "workload_id",
     "rss_work_model",
     "eligible_for_suite_headline",
     "diagnostic_only",
@@ -208,7 +209,6 @@ AXIS = "#45484E"
 MUTED = "#696D75"
 GRID = "#DADDE2"
 PALE = "#D7DBE2"
-LIGHT_BLUE = "#A8BCE8"
 BLUE = "#315B9D"
 ORANGE = "#D86D3B"
 WHITE = "#FFFFFF"
@@ -364,7 +364,7 @@ def hierarchical_summary(
         "observation_count": sum(len(values) for values in values_by_family.values()),
         "family_median_ratios": family_medians,
         "headline_ratio": headline,
-        "sensitivity_equal_family_geomean_ratio": sensitivity,
+        "sensitivity_geometric_mean_of_family_geometric_means_ratio": sensitivity,
         "sensitivity_family_geomean_ratios": family_geomeans,
     }
 
@@ -1067,7 +1067,7 @@ def summarize_micro(
                         "metric": metric,
                         "comparison": allocator,
                         "comparison_label": leaf.label,
-                        "aggregation_level": "leaf",
+                        "aggregation_level": "benchmark_case",
                         "unit_id": leaf.benchmark,
                         "family": leaf.family,
                         "eligible_for_headline": metric == "peak_rss" or leaf.robust,
@@ -1078,7 +1078,7 @@ def summarize_micro(
                         "ratio": ratio,
                         "observation_count": 3,
                         "note": (
-                            "timer-floor leaf excluded from the performance headline"
+                            "timer-floor benchmark case excluded from the performance aggregate"
                             if metric == "performance" and not leaf.robust
                             else "process-observed RSS; iteration counts were not captured"
                             if metric == "peak_rss"
@@ -1110,7 +1110,7 @@ def summarize_micro(
                                 and (metric == "peak_rss" or leaf.robust)
                             ]
                         ),
-                        "note": "median of leaf log-ratios",
+                        "note": "back-transformed median log-ratio within benchmark family",
                     }
                 )
             rows.append(
@@ -1119,7 +1119,7 @@ def summarize_micro(
                     "metric": metric,
                     "comparison": allocator,
                     "comparison_label": ALLOCATOR_LABELS[allocator],
-                    "aggregation_level": "equal_family_headline",
+                    "aggregation_level": "geometric_mean_across_family_medians",
                     "unit_id": "all_families",
                     "family": "",
                     "eligible_for_headline": True,
@@ -1128,7 +1128,7 @@ def summarize_micro(
                     "subject_median": "",
                     "ratio": summary["headline_ratio"],
                     "observation_count": summary["observation_count"],
-                    "note": "exp(mean over families of median leaf log-ratio)",
+                    "note": "unweighted geometric mean of back-transformed family median log-ratios",
                 }
             )
             rows.append(
@@ -1137,16 +1137,18 @@ def summarize_micro(
                     "metric": metric,
                     "comparison": allocator,
                     "comparison_label": ALLOCATOR_LABELS[allocator],
-                    "aggregation_level": "sensitivity_equal_family_geomean",
+                    "aggregation_level": "geometric_mean_across_family_geometric_means",
                     "unit_id": "all_families",
                     "family": "",
                     "eligible_for_headline": False,
                     "diagnostic_only": True,
                     "reference_median": "",
                     "subject_median": "",
-                    "ratio": summary["sensitivity_equal_family_geomean_ratio"],
+                    "ratio": summary[
+                        "sensitivity_geometric_mean_of_family_geometric_means_ratio"
+                    ],
                     "observation_count": summary["observation_count"],
-                    "note": "equal-family geometric-mean sensitivity analysis",
+                    "note": "unweighted geometric mean of within-family geometric means; sensitivity analysis",
                 }
             )
 
@@ -1176,7 +1178,7 @@ def summarize_micro(
                         "metric": metric,
                         "comparison": variant,
                         "comparison_label": TYPE_LABELS[variant],
-                        "aggregation_level": "harness",
+                        "aggregation_level": "benchmark_case",
                         "unit_id": harness.harness_id,
                         "family": harness.harness_id,
                         "eligible_for_headline": True,
@@ -1185,7 +1187,7 @@ def summarize_micro(
                         "subject_median": "",
                         "ratio": ratio,
                         "observation_count": 5,
-                        "note": "separate five-harness Collections cohort",
+                        "note": "five-case Collections diagnostic cohort",
                     }
                 )
             rows.append(
@@ -1194,7 +1196,7 @@ def summarize_micro(
                     "metric": metric,
                     "comparison": variant,
                     "comparison_label": TYPE_LABELS[variant],
-                    "aggregation_level": "cohort_headline",
+                    "aggregation_level": "geometric_mean_across_benchmark_cases",
                     "unit_id": "collections",
                     "family": "",
                     "eligible_for_headline": True,
@@ -1203,7 +1205,7 @@ def summarize_micro(
                     "subject_median": "",
                     "ratio": summary["headline_ratio"],
                     "observation_count": len(collections),
-                    "note": "kept separate from the 468-leaf allocator cohort",
+                    "note": "geometric mean across five benchmark-case ratios; retained outside the primary figure",
                 }
             )
         collections_summary[variant] = {"label": TYPE_LABELS[variant], **metrics}
@@ -1222,7 +1224,7 @@ def summarize_micro(
         },
         "collections_type_isolation_subset": {
             "cohort_pooling": "separate",
-            "harness_count": len(collections),
+            "benchmark_case_count": len(collections),
             "reference": "unialloc",
             "rss_claim": "process-observed adaptive-iteration diagnostic only",
             "variants": collections_summary,
@@ -1242,7 +1244,7 @@ def summarize_macro(
         ]
         target_entry: dict[str, Any] = {
             "label": TARGET_LABELS[target_id],
-            "harness_count": len(target_harnesses),
+            "workload_count": len(target_harnesses),
             "rss_work_model": target_harnesses[0].rss_work_model,
             "rss_eligibility": target_harnesses[0].rss_eligibility,
             "comparison_families": {},
@@ -1258,22 +1260,26 @@ def summarize_macro(
                 target_ratio = geometric_mean(ratios)
                 diagnostic = metric == "peak_rss" and target_id in ADAPTIVE_TARGETS
                 metric_entry: dict[str, Any] = {
-                    "harness_median_ratios": {
+                    "workload_paired_run_median_ratios": {
                         row.harness_id: ratio
                         for row, ratio in zip(target_harnesses, ratios, strict=True)
                     },
-                    "target_geomean_ratio": target_ratio,
+                    "within_target_geometric_mean_ratio": target_ratio,
                     "diagnostic_only": diagnostic,
                 }
                 if metric == "performance":
                     route_rows = [
                         row for row in target_harnesses if row.compiler_route_equivalent
                     ]
-                    metric_entry["route_equivalent_harness_median_ratios"] = {
+                    metric_entry[
+                        "route_equivalent_workload_paired_run_median_ratios"
+                    ] = {
                         row.harness_id: row.comparisons[family][metric]
                         for row in route_rows
                     }
-                    metric_entry["route_equivalent_target_geomean_ratio"] = (
+                    metric_entry[
+                        "route_equivalent_within_target_geometric_mean_ratio"
+                    ] = (
                         geometric_mean(
                             row.comparisons[family][metric] for row in route_rows
                         )
@@ -1287,10 +1293,10 @@ def summarize_macro(
                             "metric": metric,
                             "comparison": family,
                             "comparison_label": contract["label"],
-                            "aggregation_level": "harness_paired_median",
+                            "aggregation_level": "workload_paired_run_median",
                             "target_id": target_id,
                             "target_label": TARGET_LABELS[target_id],
-                            "harness_id": harness.harness_id,
+                            "workload_id": harness.harness_id,
                             "rss_work_model": harness.rss_work_model,
                             "eligible_for_suite_headline": metric == "performance"
                             or not diagnostic,
@@ -1298,9 +1304,9 @@ def summarize_macro(
                             "ratio": ratio,
                             "observation_count": 5,
                             "note": (
-                                "median of five round-paired ratios; compiler-route-equivalent"
+                                "median of five paired-run ratios; compiler-route-equivalent"
                                 if harness.compiler_route_equivalent
-                                else "median of five round-paired ratios"
+                                else "median of five paired-run ratios"
                             ),
                         }
                     )
@@ -1309,38 +1315,42 @@ def summarize_macro(
                         "metric": metric,
                         "comparison": family,
                         "comparison_label": contract["label"],
-                        "aggregation_level": "target_geomean",
+                        "aggregation_level": "within_target_geometric_mean",
                         "target_id": target_id,
                         "target_label": TARGET_LABELS[target_id],
-                        "harness_id": "",
+                        "workload_id": "",
                         "rss_work_model": target_harnesses[0].rss_work_model,
                         "eligible_for_suite_headline": metric == "performance"
                         or not diagnostic,
                         "diagnostic_only": diagnostic,
                         "ratio": target_ratio,
                         "observation_count": len(target_harnesses),
-                        "note": "geometric mean across harness paired medians",
+                        "note": "geometric mean across workload paired-run medians within target",
                     }
                 )
-                route_ratio = metric_entry.get("route_equivalent_target_geomean_ratio")
+                route_ratio = metric_entry.get(
+                    "route_equivalent_within_target_geometric_mean_ratio"
+                )
                 if route_ratio is not None:
                     rows.append(
                         {
                             "metric": metric,
                             "comparison": family,
                             "comparison_label": contract["label"],
-                            "aggregation_level": "route_equivalent_target_geomean",
+                            "aggregation_level": "route_equivalent_within_target_geometric_mean",
                             "target_id": target_id,
                             "target_label": TARGET_LABELS[target_id],
-                            "harness_id": "",
+                            "workload_id": "",
                             "rss_work_model": target_harnesses[0].rss_work_model,
                             "eligible_for_suite_headline": True,
                             "diagnostic_only": False,
                             "ratio": route_ratio,
                             "observation_count": len(
-                                metric_entry["route_equivalent_harness_median_ratios"]
+                                metric_entry[
+                                    "route_equivalent_workload_paired_run_median_ratios"
+                                ]
                             ),
-                            "note": "geometric mean across route-equivalent harnesses",
+                            "note": "geometric mean across route-equivalent workloads within target",
                         }
                     )
             target_entry["comparison_families"][family] = family_entry
@@ -1361,13 +1371,13 @@ def summarize_macro(
     for family, contract in COMPARISON_FAMILIES.items():
         performance_target_ratios = [
             target_summaries[target_id]["comparison_families"][family]["performance"][
-                "target_geomean_ratio"
+                "within_target_geometric_mean_ratio"
             ]
             for target_id in MACRO_TARGET_ORDER
         ]
         rss_target_ratios = [
             target_summaries[target_id]["comparison_families"][family]["peak_rss"][
-                "target_geomean_ratio"
+                "within_target_geometric_mean_ratio"
             ]
             for target_id in FIXED_WORK_TARGETS
         ]
@@ -1376,12 +1386,12 @@ def summarize_macro(
                 target_id,
                 target_summaries[target_id]["comparison_families"][family][
                     "performance"
-                ]["route_equivalent_target_geomean_ratio"],
+                ]["route_equivalent_within_target_geometric_mean_ratio"],
             )
             for target_id in MACRO_TARGET_ORDER
             if target_summaries[target_id]["comparison_families"][family][
                 "performance"
-            ]["route_equivalent_target_geomean_ratio"]
+            ]["route_equivalent_within_target_geometric_mean_ratio"]
             is not None
         ]
         comparison_suites[family] = {
@@ -1389,23 +1399,23 @@ def summarize_macro(
             "reference": contract["reference"],
             "subject": contract["subject"],
             "performance": {
-                "suite_equal_target_geomean_ratio": geometric_mean(
+                "across_target_geometric_mean_ratio": geometric_mean(
                     performance_target_ratios
                 ),
                 "target_count": len(MACRO_TARGET_ORDER),
-                "harness_count": sum(
-                    target_summaries[target_id]["harness_count"]
+                "workload_count": sum(
+                    target_summaries[target_id]["workload_count"]
                     for target_id in MACRO_TARGET_ORDER
                 ),
-                "route_equivalent_equal_target_geomean_ratio": geometric_mean(
+                "route_equivalent_across_target_geometric_mean_ratio": geometric_mean(
                     ratio for _, ratio in route_target_ratios
                 ),
                 "route_equivalent_target_count": len(route_target_ratios),
-                "route_equivalent_harness_count": sum(
+                "route_equivalent_workload_count": sum(
                     len(
                         target_summaries[target_id]["comparison_families"][family][
                             "performance"
-                        ]["route_equivalent_harness_median_ratios"]
+                        ]["route_equivalent_workload_paired_run_median_ratios"]
                     )
                     for target_id, _ in route_target_ratios
                 ),
@@ -1414,10 +1424,10 @@ def summarize_macro(
                 ],
             },
             "peak_rss": {
-                "suite_equal_target_geomean_ratio": geometric_mean(rss_target_ratios),
+                "across_target_geometric_mean_ratio": geometric_mean(rss_target_ratios),
                 "target_count": len(FIXED_WORK_TARGETS),
-                "harness_count": sum(
-                    target_summaries[target_id]["harness_count"]
+                "workload_count": sum(
+                    target_summaries[target_id]["workload_count"]
                     for target_id in FIXED_WORK_TARGETS
                 ),
                 "included_targets": list(FIXED_WORK_TARGETS),
@@ -1437,22 +1447,22 @@ def summarize_macro(
                     "metric": metric,
                     "comparison": family,
                     "comparison_label": contract["label"],
-                    "aggregation_level": "suite_equal_target_geomean",
+                    "aggregation_level": "across_target_geometric_mean",
                     "target_id": "all_real_world_targets"
                     if metric == "performance"
                     else "fixed_work_targets",
-                    "target_label": "Equal-target suite",
-                    "harness_id": "",
+                    "target_label": "Across-target geometric mean",
+                    "workload_id": "",
                     "rss_work_model": "mixed"
                     if metric == "performance"
                     else "fixed_work",
                     "eligible_for_suite_headline": True,
                     "diagnostic_only": False,
                     "ratio": comparison_suites[family][metric][
-                        "suite_equal_target_geomean_ratio"
+                        "across_target_geometric_mean_ratio"
                     ],
                     "observation_count": len(target_ids),
-                    "note": "equal-weight geometric mean of target geometric means",
+                    "note": "unweighted geometric mean of within-target geometric means",
                 }
             )
         rows.append(
@@ -1460,20 +1470,20 @@ def summarize_macro(
                 "metric": "performance",
                 "comparison": family,
                 "comparison_label": contract["label"],
-                "aggregation_level": "route_equivalent_suite_equal_target_geomean",
+                "aggregation_level": "route_equivalent_across_target_geometric_mean",
                 "target_id": "route_equivalent_real_world_targets",
-                "target_label": "Route-equivalent equal-target suite",
-                "harness_id": "",
+                "target_label": "Route-equivalent across-target geometric mean",
+                "workload_id": "",
                 "rss_work_model": "mixed",
                 "eligible_for_suite_headline": True,
                 "diagnostic_only": False,
                 "ratio": comparison_suites[family]["performance"][
-                    "route_equivalent_equal_target_geomean_ratio"
+                    "route_equivalent_across_target_geometric_mean_ratio"
                 ],
                 "observation_count": comparison_suites[family]["performance"][
                     "route_equivalent_target_count"
                 ],
-                "note": "equal-weight geometric mean of route-equivalent target summaries",
+                "note": "unweighted geometric mean of route-equivalent within-target geometric means",
             }
         )
 
@@ -1490,7 +1500,7 @@ def summarize_macro(
     return {
         "reference": "unialloc",
         "target_count": len(MACRO_TARGET_ORDER),
-        "harness_count": sum(
+        "workload_count": sum(
             row.target_id in MACRO_TARGET_ORDER for row in evidence.harnesses
         ),
         "target_order": list(MACRO_TARGET_ORDER),
@@ -1573,6 +1583,7 @@ def scatter_ratios(
     hollow: bool,
     size: float,
     alpha: float,
+    marker: str = "o",
     gid: str | None = None,
     ratio_bounds: tuple[float, float] | None = None,
 ) -> None:
@@ -1587,14 +1598,14 @@ def scatter_ratios(
     for index, ((value, clipped), ratio) in enumerate(
         zip(clamped, ratios, strict=True)
     ):
-        marker = ("<" if value < 0 else ">") if clipped else "o"
-        marker_groups[marker].append(index)
-    for marker, indices in marker_groups.items():
+        displayed_marker = ("<" if value < 0 else ">") if clipped else marker
+        marker_groups[displayed_marker].append(index)
+    for displayed_marker, indices in marker_groups.items():
         collection = ax.scatter(
             [displayed[index] for index in indices],
             [y + offsets[index] for index in indices],
             s=size,
-            marker=marker,
+            marker=displayed_marker,
             facecolors="none" if hollow else color,
             edgecolors=color,
             linewidths=0.8,
@@ -1602,7 +1613,11 @@ def scatter_ratios(
             zorder=3,
         )
         if gid:
-            collection.set_gid(gid if marker == "o" else f"{gid}-clipped-{marker}")
+            collection.set_gid(
+                gid
+                if displayed_marker == marker
+                else f"{gid}-clipped-{displayed_marker}"
+            )
 
 
 def headline_marker(
@@ -1642,14 +1657,10 @@ def render_micro_figure(
 ) -> None:
     configure_matplotlib()
     figure, axes = plt.subplots(1, 2, figsize=FIGURE_SIZE, sharey=True)
-    figure.subplots_adjust(left=0.19, right=0.985, top=0.90, bottom=0.20, wspace=0.12)
-    row_keys = [*ALLOCATOR_ORDER[1:], "typed_plain", "typeiso_perf"]
-    y_positions = {
-        key: index + (0.75 if index >= len(ALLOCATOR_ORDER) - 1 else 0.0)
-        for index, key in enumerate(row_keys)
-    }
+    figure.subplots_adjust(left=0.19, right=0.985, top=0.90, bottom=0.22, wspace=0.12)
+    row_keys = list(ALLOCATOR_ORDER[1:])
+    y_positions = {key: index for index, key in enumerate(row_keys)}
     colors = {key: ORANGE for key in ALLOCATOR_ORDER[1:]}
-    colors.update({"typed_plain": LIGHT_BLUE, "typeiso_perf": BLUE})
 
     for ax, metric, label in (
         (axes[0], "performance", "Execution cost / UniAlloc  |  lower is better"),
@@ -1658,112 +1669,82 @@ def render_micro_figure(
         style_ratio_axis(ax, label)
         for key in row_keys:
             y = y_positions[key]
-            if key in ALLOCATOR_ORDER:
-                variant = micro["rust_std_bench"]["variants"][key][metric]
-                leaf_rows = [
-                    row
-                    for row in micro_rows
-                    if row["cohort"] == "rust_std_bench"
-                    and row["metric"] == metric
-                    and row["comparison"] == key
-                    and row["aggregation_level"] == "leaf"
+            variant = micro["rust_std_bench"]["variants"][key][metric]
+            benchmark_rows = [
+                row
+                for row in micro_rows
+                if row["cohort"] == "rust_std_bench"
+                and row["metric"] == metric
+                and row["comparison"] == key
+                and row["aggregation_level"] == "benchmark_case"
+            ]
+            if metric == "performance":
+                diagnostic = [
+                    float(row["ratio"])
+                    for row in benchmark_rows
+                    if not row["eligible_for_headline"]
                 ]
-                if metric == "performance":
-                    diagnostic = [
-                        float(row["ratio"])
-                        for row in leaf_rows
-                        if not row["eligible_for_headline"]
-                    ]
-                    if diagnostic:
-                        scatter_ratios(
-                            ax,
-                            diagnostic,
-                            y,
-                            color=PALE,
-                            hollow=True,
-                            size=9,
-                            alpha=0.45,
-                            gid=f"timer-floor-{key}",
-                        )
-                    robust = [
-                        float(row["ratio"])
-                        for row in leaf_rows
-                        if row["eligible_for_headline"]
-                    ]
+                if diagnostic:
                     scatter_ratios(
                         ax,
-                        robust,
+                        diagnostic,
                         y,
-                        color=colors[key],
-                        hollow=False,
-                        size=10,
-                        alpha=0.22,
-                    )
-                else:
-                    ratios = [float(row["ratio"]) for row in leaf_rows]
-                    scatter_ratios(
-                        ax,
-                        ratios,
-                        y,
-                        color=colors[key],
+                        color=PALE,
                         hollow=True,
-                        size=10,
-                        alpha=0.22,
-                        gid=f"diagnostic-rss-{key}",
+                        size=9,
+                        alpha=0.45,
+                        gid=f"timer-floor-{key}",
                     )
-                family_ratios = list(variant["family_median_ratios"].values())
+                robust = [
+                    float(row["ratio"])
+                    for row in benchmark_rows
+                    if row["eligible_for_headline"]
+                ]
                 scatter_ratios(
                     ax,
-                    family_ratios,
+                    robust,
                     y,
                     color=colors[key],
-                    hollow=metric == "peak_rss",
-                    size=29,
-                    alpha=0.95,
-                    gid=f"family-medians-{metric}-{key}",
+                    hollow=False,
+                    size=10,
+                    alpha=0.22,
                 )
-                ratio = float(variant["headline_ratio"])
             else:
-                variant = micro["collections_type_isolation_subset"]["variants"][key][
-                    metric
-                ]
-                harness_rows = [
-                    row
-                    for row in micro_rows
-                    if row["cohort"] == "collections_type_isolation_subset"
-                    and row["metric"] == metric
-                    and row["comparison"] == key
-                    and row["aggregation_level"] == "harness"
-                ]
                 scatter_ratios(
                     ax,
-                    [float(row["ratio"]) for row in harness_rows],
+                    [float(row["ratio"]) for row in benchmark_rows],
                     y,
                     color=colors[key],
-                    hollow=metric == "peak_rss",
-                    size=30,
-                    alpha=0.9,
-                    gid=f"collections-harnesses-{metric}-{key}",
+                    hollow=True,
+                    size=10,
+                    alpha=0.22,
+                    gid=f"diagnostic-rss-{key}",
                 )
-                ratio = float(variant["headline_ratio"])
+            family_ratios = list(variant["family_median_ratios"].values())
+            scatter_ratios(
+                ax,
+                family_ratios,
+                y,
+                color=colors[key],
+                hollow=metric == "peak_rss",
+                size=32,
+                alpha=0.95,
+                marker="s",
+                gid=f"family-medians-{metric}-{key}",
+            )
             headline_marker(
                 ax,
-                ratio,
+                float(variant["headline_ratio"]),
                 y,
                 color=colors[key],
                 hollow=metric == "peak_rss",
                 marker="D",
                 gid=f"headline-micro-{metric}-{key}",
             )
-        separator_y = y_positions["typed_plain"] - 0.62
-        line = ax.axhline(separator_y, color=AXIS, linewidth=0.8, zorder=1)
-        line.set_gid("cohort-separator")
-        ax.set_ylim(y_positions["typeiso_perf"] + 0.65, -0.65)
+        ax.set_ylim(y_positions[row_keys[-1]] + 0.65, -0.65)
 
     axes[0].set_yticks([y_positions[key] for key in row_keys])
-    axes[0].set_yticklabels(
-        [ALLOCATOR_LABELS.get(key, TYPE_LABELS.get(key, key)) for key in row_keys]
-    )
+    axes[0].set_yticklabels([ALLOCATOR_LABELS[key] for key in row_keys])
     axes[1].tick_params(labelleft=False)
     figure.text(
         0.018,
@@ -1771,21 +1752,9 @@ def render_micro_figure(
         (
             "Rust std_bench\n"
             f"{micro['rust_std_bench']['performance_headline_leaf_count']} "
-            "timer-floor-safe leaves\n"
-            f"{micro['rust_std_bench']['family_count']} equal-weight families"
-        ),
-        ha="left",
-        va="top",
-        fontsize=9.5,
-        color=MUTED,
-    )
-    figure.text(
-        0.018,
-        0.302,
-        (
-            "Collections subset\n"
-            f"{micro['collections_type_isolation_subset']['harness_count']} harnesses\n"
-            "separate cohort"
+            "benchmark cases\n"
+            f"median >= {ROBUST_THRESHOLD_NS:g} ns; "
+            f"{micro['rust_std_bench']['family_count']} families"
         ),
         ha="left",
         va="top",
@@ -1801,7 +1770,34 @@ def render_micro_figure(
             color=ORANGE,
             markerfacecolor=ORANGE,
             alpha=0.45,
-            label="Eligible leaf / harness",
+            label="Per-benchmark ratio",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="s",
+            linestyle="none",
+            color=ORANGE,
+            markerfacecolor=ORANGE,
+            label="Family median (log-ratio scale)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="D",
+            linestyle="none",
+            color=INK,
+            markerfacecolor=ORANGE,
+            label="Geometric mean across family medians",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="none",
+            color=PALE,
+            markerfacecolor=WHITE,
+            label="Timer-floor diagnostic",
         ),
         Line2D(
             [0],
@@ -1812,30 +1808,12 @@ def render_micro_figure(
             markerfacecolor=WHITE,
             label="Process-observed RSS diagnostic",
         ),
-        Line2D(
-            [0],
-            [0],
-            marker="D",
-            linestyle="none",
-            color=INK,
-            markerfacecolor=BLUE,
-            label="Equal-family / equal-harness headline",
-        ),
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            linestyle="none",
-            color=PALE,
-            markerfacecolor=WHITE,
-            label="Timer-floor performance diagnostic",
-        ),
     ]
     figure.legend(
         handles=legend,
         loc="lower center",
-        bbox_to_anchor=(0.57, 0.035),
-        ncol=2,
+        bbox_to_anchor=(0.57, 0.025),
+        ncol=3,
         frameon=False,
         columnspacing=2.0,
         handletextpad=0.6,
@@ -1864,7 +1842,7 @@ def render_macro_figure(
 ) -> None:
     configure_matplotlib()
     figure, axes = plt.subplots(1, 2, figsize=FIGURE_SIZE, sharey=True)
-    figure.subplots_adjust(left=0.16, right=0.985, top=0.92, bottom=0.18, wspace=0.12)
+    figure.subplots_adjust(left=0.16, right=0.985, top=0.92, bottom=0.20, wspace=0.12)
     row_keys = ["suite", *MACRO_TARGET_ORDER]
     y_positions = {
         key: index + (0.35 if index else 0.0) for index, key in enumerate(row_keys)
@@ -1884,7 +1862,7 @@ def render_macro_figure(
         ),
     ):
         style_macro_ratio_axis(ax, label)
-        suite_ratio = float(policy[metric]["suite_equal_target_geomean_ratio"])
+        suite_ratio = float(policy[metric]["across_target_geometric_mean_ratio"])
         headline_marker(
             ax,
             suite_ratio,
@@ -1904,7 +1882,7 @@ def render_macro_figure(
             y = y_positions[target_id]
             scatter_ratios(
                 ax,
-                list(metric_data["harness_median_ratios"].values()),
+                list(metric_data["workload_paired_run_median_ratios"].values()),
                 y,
                 color=BLUE,
                 hollow=diagnostic,
@@ -1915,7 +1893,7 @@ def render_macro_figure(
             )
             headline_marker(
                 ax,
-                float(metric_data["target_geomean_ratio"]),
+                float(metric_data["within_target_geometric_mean_ratio"]),
                 y,
                 color=BLUE,
                 hollow=diagnostic,
@@ -1929,7 +1907,10 @@ def render_macro_figure(
 
     axes[0].set_yticks([y_positions[key] for key in row_keys])
     axes[0].set_yticklabels(
-        ["Equal-target suite", *[TARGET_LABELS[key] for key in MACRO_TARGET_ORDER]]
+        [
+            "Across-target geometric mean",
+            *[TARGET_LABELS[key] for key in MACRO_TARGET_ORDER],
+        ]
     )
     axes[1].tick_params(labelleft=False)
     legend = [
@@ -1941,7 +1922,7 @@ def render_macro_figure(
             color=BLUE,
             markerfacecolor=BLUE,
             alpha=0.42,
-            label="Harness paired median",
+            label="Median paired-run ratio (workload, n=5)",
         ),
         Line2D(
             [0],
@@ -1950,7 +1931,7 @@ def render_macro_figure(
             linestyle="none",
             color=BLUE,
             markerfacecolor=BLUE,
-            label="Target geometric mean",
+            label="Within-target geometric mean",
         ),
         Line2D(
             [0],
@@ -1959,7 +1940,7 @@ def render_macro_figure(
             linestyle="none",
             color=BLUE,
             markerfacecolor=BLUE,
-            label="Equal-target suite",
+            label="Across-target geometric mean",
         ),
         Line2D(
             [0],
@@ -1968,13 +1949,13 @@ def render_macro_figure(
             linestyle="none",
             color=BLUE,
             markerfacecolor=WHITE,
-            label="Adaptive-work RSS diagnostic; excluded from suite RSS",
+            label="Adaptive-work RSS diagnostic; excluded from RSS aggregate",
         ),
     ]
     figure.legend(
         handles=legend,
         loc="lower center",
-        bbox_to_anchor=(0.57, 0.035),
+        bbox_to_anchor=(0.57, 0.025),
         ncol=2,
         frameon=False,
         columnspacing=1.8,
@@ -2023,17 +2004,18 @@ def presentation_data(
     macro: Mapping[str, Any],
 ) -> dict[str, Any]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_utc": FIXED_TIMESTAMP,
         "production_contract": evidence.production_contract,
         "lower_ratio_is_better": True,
         "reference": "unialloc",
         "aggregation_contract": {
-            "micro_performance": "paired cell medians; exp(mean over families of median leaf log-ratio); leaves below 100 ns excluded from headline",
-            "micro_peak_rss": "paired process peak-RSS cell medians; equal-family aggregation; diagnostic because iteration counts were not captured",
-            "macro_performance": "round-paired harness median; harness geometric mean per target; equal-target suite geometric mean",
-            "macro_peak_rss": "round-paired harness median; fixed-work targets only in suite headline; adaptive-work targets diagnostic only",
-            "cohort_rule": "Rust std_bench, Collections Type Isolation, and real-world targets remain separate populations",
+            "micro_performance": "subject/reference ratio of three-process medians per benchmark case; back-transformed median log-ratio within each family; unweighted geometric mean across family medians; cases below 100 ns excluded from the aggregate",
+            "micro_peak_rss": "subject/reference ratio of three-process peak-RSS medians per benchmark case; the same family hierarchy; diagnostic because iteration counts were not captured",
+            "macro_performance": "median of five paired-run ratios per workload; geometric mean across workloads within each target; unweighted geometric mean across target summaries",
+            "macro_peak_rss": "median of five paired-run ratios per workload; fixed-work targets only in the across-target aggregate; adaptive-work targets diagnostic only",
+            "cohort_rule": "the primary micro figure contains the full Rust std_bench allocator cohort; the Collections Type Isolation diagnostic remains in CSV and JSON; real-world targets form the macro population",
+            "statistical_units": "benchmark case for microbenchmarks; workload for macrobenchmarks; harness reserved for the execution driver or adapter",
         },
         "display": {
             "log2_ratio_cap": DISPLAY_LOG2_CAP,

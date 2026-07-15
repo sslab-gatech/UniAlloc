@@ -6,7 +6,7 @@
 >
 > If the program explicitly requires a full 60-minute talk with questions handled separately, use the 53--55-minute extended version in this document and retain about 5 minutes of buffer.
 >
-> Current allocator figure boundary: use `docs/figures/allocator-evaluation-20260714/microbenchmarks.svg` and `docs/figures/allocator-evaluation-20260714/macrobenchmarks.svg` as the two lead evaluation figures. Microbenchmarks cover the canonical 468-leaf Rust `std_bench` inventory: 466 leaves have complete seven-way comparisons and 236 pass the timing robustness gate. A separately labeled five-leaf Collections cohort covers Type Isolation. Macrobenchmarks cover 29 harnesses across Oxipng, redb, Polars, SWC, RustPython, and Actix Web. Policy-only macro execution cost is `1.0054x` (`+0.54%`); fixed-work policy-only peak RSS is `1.0006x` (`+0.057%`). Compiler-route-equivalent policy cost is `0.9968x` (`-0.32%`). The detailed seven-target figure and full heatmap remain audit-only backup evidence.
+> Current allocator figure boundary: use `docs/figures/allocator-evaluation-20260714/microbenchmarks.svg` and `docs/figures/allocator-evaluation-20260714/macrobenchmarks.svg` as the two lead evaluation figures. Microbenchmarks cover the canonical 468-case Rust `std_bench` inventory: 466 cases have complete seven-way comparisons and 236 pass the timing robustness gate. Macrobenchmarks cover 29 workloads across Oxipng, redb, Polars, SWC, RustPython, and Actix Web. Policy-only macro execution cost is `1.0054x` (`+0.54%`); fixed-work policy-only peak RSS is `1.0006x` (`+0.057%`). Compiler-route-equivalent policy cost is `0.9968x` (`-0.32%`). The five-case Collections Type Isolation diagnostic remains in the CSV/JSON appendix. The detailed seven-target figure and full heatmap remain audit-only backup evidence.
 
 ## 1. One-Sentence Conclusion
 
@@ -286,15 +286,18 @@ Key implementation evidence:
 
 | # | Suggested English title | Purpose of this slide | Figure | Time / likely question |
 |---:|---|---|---|---|
-| 25 | **Microbenchmarks and real programs answer different allocator questions.** | Define the two-tier method, metric, baseline, hierarchy, and threat before showing results | Place the title-free micro and macro figures side by side; move leaf and harness detail to backup | 1:30; distinguish robust timing, process-observed RSS, fixed-work RSS, and compiler-route attribution |
+| 25 | **Microbenchmarks and real programs answer different allocator questions.** | Define the two-tier method, metric, baseline, hierarchy, and threat before showing results | Place the title-free micro and macro figures side by side; move benchmark-case and workload detail to backup | 1:30; distinguish robust timing, process-observed RSS, fixed-work RSS, and compiler-route attribution |
 | 26 | **The paper reported less than 2% average performance difference in its tested aggregate, with workload-dependent memory retention.** | Historical result 1: specify the tested baselines, workloads, and aggregation; most memory results were comparable, while Collections/Rust-Redis had higher peaks | Two takeaways; put the exact comparison table in B14/B16 | 1:30; footer says paper-reported historical |
 | 27 | **The paper reported 5--14% type-isolation slowdown and 72.17% object coverage under its original setup.** | Address only H2 cost and coverage; move metadata segregation, hugepage, and PAC to backup | Two number tiles plus the coverage boundary; keep other features separate | 1:30; do not describe this as a current reproduction |
 | 28 | **Current functional evidence is source-bound; full paper-performance reproduction is intentionally deferred.** | Show the four-tier evidence ladder and G001→G002 status; this is the credibility slide | Four steps: Historical / Current probe / Historical partial record / Deferred claim | 1:30; the committee may examine the methodology here |
 
-Slide 25 must state the current two-tier hierarchy precisely: paired cell
-medians, within-family micro summaries, within-target macro summaries, and
-equal family or target weight in the headline. It must distinguish robust
-timing, process-observed RSS, fixed-work RSS, and compiler-route attribution.
+Slide 25 must state the current two-tier hierarchy precisely. Microbenchmark
+cases use a subject/reference ratio of three-process medians, a back-transformed
+median log-ratio within each family, and an unweighted geometric mean across
+family medians. Macro workloads use a median of five paired-run ratios, a
+geometric mean within each target, and an unweighted geometric mean across
+target summaries. It must distinguish robust timing, process-observed RSS,
+fixed-work RSS, and compiler-route attribution.
 
 Slide 26 must state the original paper methodology precisely:
 `nightly-2021-08-04`; six runs per item, reporting the geometric mean of the
@@ -360,31 +363,32 @@ coverage, external-platform runtime, or publication-grade performance claim.
 
 Use the canonical figures from `docs/figures/allocator-evaluation-20260714/`.
 The micro figure uses Rust `std_bench`; the macro figure uses real-world Rust
-programs. Type Isolation appears as a UniAlloc variant in both parts.
+programs. Type Isolation appears as the matched policy variant in the macro
+figure. Its five-case Collections microdiagnostic remains in the appendix data.
 
 > **Evidence badge:** current source-bound diagnostic; post-measurement
 > presentation-analysis amendment. The amendment changes taxonomy and
 > aggregation only; measured membership, variants, observations, and sampling
 > remain frozen.
 
-The micro headline prevents the 129 `str`, 118 `vec`, and 100 `btree` leaves
-from dominating: it takes the median leaf log-ratio inside each of eight
-families, then gives every family equal weight. Performance uses 236
-seven-way leaves above the 100 ns/iter timer floor. Peak RSS from libtest is a
-process-observed adaptive-work diagnostic and uses hollow marks. The five
-Collections Type Isolation leaves form a separately labeled cohort and are
-never pooled with the 468-leaf external-allocator matrix.
+The micro aggregate prevents the 129 `str`, 118 `vec`, and 100 `btree` cases
+from dominating. It takes the back-transformed median log-ratio within each of
+eight families and then the unweighted geometric mean across family medians.
+Performance uses 236 seven-way cases above the 100 ns/iter timer floor. Peak
+RSS from libtest is a process-observed adaptive-work diagnostic and uses hollow
+marks. The five Collections Type Isolation cases remain appendix data and are
+never pooled with the 468-case external-allocator matrix.
 
-The macro figure contains 29 harnesses across Oxipng, redb, Polars, SWC,
-RustPython, and Actix Web. It takes paired medians per harness, aggregates
-harnesses within each target, and gives every target equal suite weight.
-Policy-only execution cost is `1.0054x` (`+0.54%`); the 11 route-equivalent
-harnesses give `0.9968x` (`-0.32%`). Equal-work policy-only RSS is `1.0006x`
-(`+0.057%`) across 14 harnesses in three targets. Adaptive RSS for SWC,
-RustPython, and Actix Web remains a hollow diagnostic outside the suite RSS
-aggregate. The `2.577x` end-to-end execution ratio includes compiler-route
-cost because 18 of 29 macro harnesses fall outside the preregistered route-
-equivalence interval.
+The macro figure contains 29 workloads across Oxipng, redb, Polars, SWC,
+RustPython, and Actix Web. It takes the median of five paired-run ratios per
+workload, a geometric mean within each target, and an unweighted geometric mean
+across target summaries. Policy-only execution cost is `1.0054x` (`+0.54%`);
+the 11 route-equivalent workloads give `0.9968x` (`-0.32%`). Equal-work
+policy-only RSS is `1.0006x` (`+0.057%`) across 14 workloads in three targets.
+Adaptive RSS for SWC, RustPython, and Actix Web remains a hollow diagnostic
+outside the across-target RSS aggregate. The `2.577x` end-to-end execution ratio
+includes compiler-route cost because 18 of 29 macro workloads fall outside the
+preregistered route-equivalence interval.
 
 The older ripgrep/fd/Oxipng matrix uses a different implementation digest and
 cohort. Its compact historical ledger and machine artifact are linked from

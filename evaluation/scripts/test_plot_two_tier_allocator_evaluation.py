@@ -353,12 +353,20 @@ class TwoTierAllocatorEvaluationTests(unittest.TestCase):
             self.assertEqual(digest(path), metadata["sha256"])
 
     def test_micro_hierarchy_timer_floor_and_separate_collections(self) -> None:
+        self.assertEqual(2, self.data["schema_version"])
         micro = self.data["microbenchmarks"]
         ptmalloc = micro["rust_std_bench"]["variants"]["ptmalloc"]["performance"]
         self.assertEqual(9, ptmalloc["observation_count"])
         self.assertAlmostEqual(4.0 ** (1.0 / 8.0), ptmalloc["headline_ratio"])
         self.assertEqual(
             "separate", micro["collections_type_isolation_subset"]["cohort_pooling"]
+        )
+        self.assertEqual(
+            1, micro["collections_type_isolation_subset"]["benchmark_case_count"]
+        )
+        self.assertEqual(
+            {"typed_plain", "typeiso_perf"},
+            set(micro["collections_type_isolation_subset"]["variants"]),
         )
         self.assertNotIn("collections", self.data["macrobenchmarks"]["target_order"])
 
@@ -370,10 +378,11 @@ class TwoTierAllocatorEvaluationTests(unittest.TestCase):
         )
         self.assertAlmostEqual(
             32.0 ** (1.0 / 6.0),
-            policy["performance"]["suite_equal_target_geomean_ratio"],
+            policy["performance"]["across_target_geometric_mean_ratio"],
         )
         self.assertAlmostEqual(
-            2.0 ** (1.0 / 3.0), policy["peak_rss"]["suite_equal_target_geomean_ratio"]
+            2.0 ** (1.0 / 3.0),
+            policy["peak_rss"]["across_target_geometric_mean_ratio"],
         )
         self.assertEqual(
             ["oxipng", "redb", "polars"], policy["peak_rss"]["included_targets"]
@@ -382,7 +391,7 @@ class TwoTierAllocatorEvaluationTests(unittest.TestCase):
             ["swc", "rustpython", "actix_web"],
             policy["peak_rss"]["excluded_diagnostic_targets"],
         )
-        self.assertEqual(7, policy["performance"]["route_equivalent_harness_count"])
+        self.assertEqual(7, policy["performance"]["route_equivalent_workload_count"])
 
     def test_csv_keeps_uncapped_policy_and_raw_ratios(self) -> None:
         with (self.output_a / "macrobenchmarks.csv").open(
@@ -398,6 +407,23 @@ class TwoTierAllocatorEvaluationTests(unittest.TestCase):
         ) as handle:
             micro_rows = list(csv.DictReader(handle))
         self.assertTrue(any(float(row["ratio"]) == 16.0 for row in micro_rows))
+        collections_rows = [
+            row
+            for row in micro_rows
+            if row["cohort"] == "collections_type_isolation_subset"
+        ]
+        self.assertEqual(
+            {"typed_plain", "typeiso_perf"},
+            {row["comparison"] for row in collections_rows},
+        )
+        self.assertEqual(
+            {"performance", "peak_rss"},
+            {row["metric"] for row in collections_rows},
+        )
+        self.assertEqual(
+            {"benchmark_case", "geometric_mean_across_benchmark_cases"},
+            {row["aggregation_level"] for row in collections_rows},
+        )
         self.assertFalse(self.data["display"]["raw_csv_ratios_capped"])
 
     def test_figures_are_title_free_two_panel_exports(self) -> None:
@@ -405,10 +431,42 @@ class TwoTierAllocatorEvaluationTests(unittest.TestCase):
             svg = (self.output_a / name).read_text(encoding="utf-8")
             self.assertEqual(2, svg.count('id="axes_'))
             self.assertNotIn("<title", svg)
+        micro_svg = (self.output_a / "microbenchmarks.svg").read_text(encoding="utf-8")
+        self.assertEqual(6, micro_svg.count("headline-micro-performance-"))
+        self.assertEqual(6, micro_svg.count("headline-micro-peak_rss-"))
+        self.assertIn("Family median (log-ratio scale)", micro_svg)
+        self.assertNotIn("Collections subset", micro_svg)
+        self.assertNotIn("collections-harnesses-", micro_svg)
+        self.assertNotIn("cohort-separator", micro_svg)
+        self.assertNotIn("headline-micro-performance-typed_plain", micro_svg)
+        self.assertNotIn("headline-micro-performance-typeiso_perf", micro_svg)
         macro_svg = (self.output_a / "macrobenchmarks.svg").read_text(encoding="utf-8")
         self.assertIn("Type Isolation / typed control execution cost", macro_svg)
         self.assertIn("target-policy-summary-performance", macro_svg)
+        self.assertIn("Median paired-run ratio (workload, n=5)", macro_svg)
+        self.assertIn("Within-target geometric mean", macro_svg)
+        self.assertIn("Across-target geometric mean", macro_svg)
         self.assertNotIn("headline-macro-performance-typed_plain", macro_svg)
+
+    def test_public_artifacts_avoid_local_aggregation_shorthand(self) -> None:
+        public_text = "\n".join(
+            (self.output_a / name).read_text(encoding="utf-8")
+            for name in (
+                "microbenchmarks.svg",
+                "macrobenchmarks.svg",
+                "microbenchmarks.csv",
+                "macrobenchmarks.csv",
+                "presentation-data.json",
+            )
+        ).lower()
+        for shorthand in (
+            "equal-family",
+            "equal-harness",
+            "equal-target",
+            "harness paired median",
+            "round-paired harness median",
+        ):
+            self.assertNotIn(shorthand, public_text)
 
     def test_all_artifact_bytes_are_deterministic(self) -> None:
         for name in EXPECTED_FILES:

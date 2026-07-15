@@ -1,10 +1,11 @@
 {
   "aggregation_contract": {
-    "cohort_rule": "Rust std_bench, Collections Type Isolation, and real-world targets remain separate populations",
-    "macro_peak_rss": "round-paired harness median; fixed-work targets only in suite headline; adaptive-work targets diagnostic only",
-    "macro_performance": "round-paired harness median; harness geometric mean per target; equal-target suite geometric mean",
-    "micro_peak_rss": "paired process peak-RSS cell medians; equal-family aggregation; diagnostic because iteration counts were not captured",
-    "micro_performance": "paired cell medians; exp(mean over families of median leaf log-ratio); leaves below 100 ns excluded from headline"
+    "cohort_rule": "the primary micro figure contains the full Rust std_bench allocator cohort; the Collections Type Isolation diagnostic remains in CSV and JSON; real-world targets form the macro population",
+    "macro_peak_rss": "median of five paired-run ratios per workload; fixed-work targets only in the across-target aggregate; adaptive-work targets diagnostic only",
+    "macro_performance": "median of five paired-run ratios per workload; geometric mean across workloads within each target; unweighted geometric mean across target summaries",
+    "micro_peak_rss": "subject/reference ratio of three-process peak-RSS medians per benchmark case; the same family hierarchy; diagnostic because iteration counts were not captured",
+    "micro_performance": "subject/reference ratio of three-process medians per benchmark case; back-transformed median log-ratio within each family; unweighted geometric mean across family medians; cases below 100 ns excluded from the aggregate",
+    "statistical_units": "benchmark case for microbenchmarks; workload for macrobenchmarks; harness reserved for the execution driver or adapter"
   },
   "display": {
     "log2_ratio_cap": 3.0,
@@ -17,24 +18,23 @@
       "compiler_route": {
         "label": "Compiler route",
         "peak_rss": {
+          "across_target_geometric_mean_ratio": 1.0328559659160792,
           "excluded_diagnostic_targets": [
             "swc",
             "rustpython",
             "actix_web"
           ],
-          "harness_count": 14,
           "included_targets": [
             "oxipng",
             "redb",
             "polars"
           ],
-          "suite_equal_target_geomean_ratio": 1.0328559659160792,
-          "target_count": 3
+          "target_count": 3,
+          "workload_count": 14
         },
         "performance": {
-          "harness_count": 29,
-          "route_equivalent_equal_target_geomean_ratio": 1.0435212852959215,
-          "route_equivalent_harness_count": 11,
+          "across_target_geometric_mean_ratio": 2.565237547575722,
+          "route_equivalent_across_target_geometric_mean_ratio": 1.0435212852959215,
           "route_equivalent_target_count": 5,
           "route_equivalent_targets": [
             "oxipng",
@@ -43,8 +43,9 @@
             "rustpython",
             "actix_web"
           ],
-          "suite_equal_target_geomean_ratio": 2.565237547575722,
-          "target_count": 6
+          "route_equivalent_workload_count": 11,
+          "target_count": 6,
+          "workload_count": 29
         },
         "reference": "unialloc",
         "subject": "typed_plain"
@@ -52,24 +53,23 @@
       "end_to_end": {
         "label": "End to end",
         "peak_rss": {
+          "across_target_geometric_mean_ratio": 1.0034222896941378,
           "excluded_diagnostic_targets": [
             "swc",
             "rustpython",
             "actix_web"
           ],
-          "harness_count": 14,
           "included_targets": [
             "oxipng",
             "redb",
             "polars"
           ],
-          "suite_equal_target_geomean_ratio": 1.0034222896941378,
-          "target_count": 3
+          "target_count": 3,
+          "workload_count": 14
         },
         "performance": {
-          "harness_count": 29,
-          "route_equivalent_equal_target_geomean_ratio": 1.0421231954379255,
-          "route_equivalent_harness_count": 11,
+          "across_target_geometric_mean_ratio": 2.5770294598455306,
+          "route_equivalent_across_target_geometric_mean_ratio": 1.0421231954379255,
           "route_equivalent_target_count": 5,
           "route_equivalent_targets": [
             "oxipng",
@@ -78,8 +78,9 @@
             "rustpython",
             "actix_web"
           ],
-          "suite_equal_target_geomean_ratio": 2.5770294598455306,
-          "target_count": 6
+          "route_equivalent_workload_count": 11,
+          "target_count": 6,
+          "workload_count": 29
         },
         "reference": "unialloc",
         "subject": "typeiso_perf"
@@ -87,24 +88,23 @@
       "policy_increment": {
         "label": "Policy increment",
         "peak_rss": {
+          "across_target_geometric_mean_ratio": 1.0005703933484715,
           "excluded_diagnostic_targets": [
             "swc",
             "rustpython",
             "actix_web"
           ],
-          "harness_count": 14,
           "included_targets": [
             "oxipng",
             "redb",
             "polars"
           ],
-          "suite_equal_target_geomean_ratio": 1.0005703933484715,
-          "target_count": 3
+          "target_count": 3,
+          "workload_count": 14
         },
         "performance": {
-          "harness_count": 29,
-          "route_equivalent_equal_target_geomean_ratio": 0.9967802879157435,
-          "route_equivalent_harness_count": 11,
+          "across_target_geometric_mean_ratio": 1.0054108472765604,
+          "route_equivalent_across_target_geometric_mean_ratio": 0.9967802879157435,
           "route_equivalent_target_count": 5,
           "route_equivalent_targets": [
             "oxipng",
@@ -113,38 +113,37 @@
             "rustpython",
             "actix_web"
           ],
-          "suite_equal_target_geomean_ratio": 1.0054108472765604,
-          "target_count": 6
+          "route_equivalent_workload_count": 11,
+          "target_count": 6,
+          "workload_count": 29
         },
         "reference": "typed_plain",
         "subject": "typeiso_perf"
       }
     },
-    "harness_count": 29,
     "reference": "unialloc",
     "suite": {
       "typed_plain": {
         "comparison_family": "compiler_route",
         "label": "Typed control",
         "peak_rss": {
+          "across_target_geometric_mean_ratio": 1.0328559659160792,
           "excluded_diagnostic_targets": [
             "swc",
             "rustpython",
             "actix_web"
           ],
-          "harness_count": 14,
           "included_targets": [
             "oxipng",
             "redb",
             "polars"
           ],
-          "suite_equal_target_geomean_ratio": 1.0328559659160792,
-          "target_count": 3
+          "target_count": 3,
+          "workload_count": 14
         },
         "performance": {
-          "harness_count": 29,
-          "route_equivalent_equal_target_geomean_ratio": 1.0435212852959215,
-          "route_equivalent_harness_count": 11,
+          "across_target_geometric_mean_ratio": 2.565237547575722,
+          "route_equivalent_across_target_geometric_mean_ratio": 1.0435212852959215,
           "route_equivalent_target_count": 5,
           "route_equivalent_targets": [
             "oxipng",
@@ -153,32 +152,32 @@
             "rustpython",
             "actix_web"
           ],
-          "suite_equal_target_geomean_ratio": 2.565237547575722,
-          "target_count": 6
+          "route_equivalent_workload_count": 11,
+          "target_count": 6,
+          "workload_count": 29
         }
       },
       "typeiso_perf": {
         "comparison_family": "end_to_end",
         "label": "Type Isolation",
         "peak_rss": {
+          "across_target_geometric_mean_ratio": 1.0034222896941378,
           "excluded_diagnostic_targets": [
             "swc",
             "rustpython",
             "actix_web"
           ],
-          "harness_count": 14,
           "included_targets": [
             "oxipng",
             "redb",
             "polars"
           ],
-          "suite_equal_target_geomean_ratio": 1.0034222896941378,
-          "target_count": 3
+          "target_count": 3,
+          "workload_count": 14
         },
         "performance": {
-          "harness_count": 29,
-          "route_equivalent_equal_target_geomean_ratio": 1.0421231954379255,
-          "route_equivalent_harness_count": 11,
+          "across_target_geometric_mean_ratio": 2.5770294598455306,
+          "route_equivalent_across_target_geometric_mean_ratio": 1.0421231954379255,
           "route_equivalent_target_count": 5,
           "route_equivalent_targets": [
             "oxipng",
@@ -187,8 +186,9 @@
             "rustpython",
             "actix_web"
           ],
-          "suite_equal_target_geomean_ratio": 2.5770294598455306,
-          "target_count": 6
+          "route_equivalent_workload_count": 11,
+          "target_count": 6,
+          "workload_count": 29
         }
       }
     },
@@ -208,29 +208,29 @@
             "label": "Compiler route",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 0.6716437401919355,
+              "workload_paired_run_median_ratios": {
                 "async_service_direct": 0.10666666666666667,
                 "async_web_service_direct": 1.1512085441259134,
                 "compression_gzip": 1.0,
                 "get_body_async_burst": 1.0434782608695652,
                 "router_actix": 1.0666666666666667
-              },
-              "target_geomean_ratio": 0.6716437401919355
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0755888120942099,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "compression_gzip": 1.0755888120942099
+              },
+              "within_target_geometric_mean_ratio": 3.0932611526807015,
+              "workload_paired_run_median_ratios": {
                 "async_service_direct": 53.90792291220558,
                 "async_web_service_direct": 3.1131658010573626,
                 "compression_gzip": 1.0755888120942099,
                 "get_body_async_burst": 1.2079884850665707,
                 "router_actix": 1.29873043146239
-              },
-              "route_equivalent_harness_median_ratios": {
-                "compression_gzip": 1.0755888120942099
-              },
-              "route_equivalent_target_geomean_ratio": 1.0755888120942099,
-              "target_geomean_ratio": 3.0932611526807015
+              }
             },
             "reference": "unialloc",
             "subject": "typed_plain"
@@ -239,29 +239,29 @@
             "label": "End to end",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 0.6552914802357916,
+              "workload_paired_run_median_ratios": {
                 "async_service_direct": 0.10650887573964497,
                 "async_web_service_direct": 1.0714285714285714,
                 "compression_gzip": 1.0,
                 "get_body_async_burst": 1.0,
                 "router_actix": 1.0588235294117647
-              },
-              "target_geomean_ratio": 0.6552914802357916
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0882677945435149,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "compression_gzip": 1.0882677945435149
+              },
+              "within_target_geometric_mean_ratio": 3.1205627810195917,
+              "workload_paired_run_median_ratios": {
                 "async_service_direct": 52.951281707153406,
                 "async_web_service_direct": 3.1597378321463214,
                 "compression_gzip": 1.0882677945435149,
                 "get_body_async_burst": 1.2640825937330196,
                 "router_actix": 1.2856592135697764
-              },
-              "route_equivalent_harness_median_ratios": {
-                "compression_gzip": 1.0882677945435149
-              },
-              "route_equivalent_target_geomean_ratio": 1.0882677945435149,
-              "target_geomean_ratio": 3.1205627810195917
+              }
             },
             "reference": "unialloc",
             "subject": "typeiso_perf"
@@ -270,35 +270,34 @@
             "label": "Policy increment",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0107801192852999,
+              "workload_paired_run_median_ratios": {
                 "async_service_direct": 1.0159290084330044,
                 "async_web_service_direct": 1.0836860957342884,
                 "compression_gzip": 1.0,
                 "get_body_async_burst": 0.9583333333333334,
                 "router_actix": 1.0
-              },
-              "target_geomean_ratio": 1.0107801192852999
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.009187304172346,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "compression_gzip": 1.009187304172346
+              },
+              "within_target_geometric_mean_ratio": 1.009982643156386,
+              "workload_paired_run_median_ratios": {
                 "async_service_direct": 0.9859226572732938,
                 "async_web_service_direct": 1.0211230149684674,
                 "compression_gzip": 1.009187304172346,
                 "get_body_async_burst": 1.049492385786802,
                 "router_actix": 0.9855929072774289
-              },
-              "route_equivalent_harness_median_ratios": {
-                "compression_gzip": 1.009187304172346
-              },
-              "route_equivalent_target_geomean_ratio": 1.009187304172346,
-              "target_geomean_ratio": 1.009982643156386
+              }
             },
             "reference": "typed_plain",
             "subject": "typeiso_perf"
           }
         },
-        "harness_count": 5,
         "label": "Actix Web",
         "rss_eligibility": "diagnostic_only",
         "rss_work_model": "workload_native_adaptive_iterations",
@@ -308,29 +307,29 @@
             "label": "Typed control",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 0.6716437401919355,
+              "workload_paired_run_median_ratios": {
                 "async_service_direct": 0.10666666666666667,
                 "async_web_service_direct": 1.1512085441259134,
                 "compression_gzip": 1.0,
                 "get_body_async_burst": 1.0434782608695652,
                 "router_actix": 1.0666666666666667
-              },
-              "target_geomean_ratio": 0.6716437401919355
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0755888120942099,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "compression_gzip": 1.0755888120942099
+              },
+              "within_target_geometric_mean_ratio": 3.0932611526807015,
+              "workload_paired_run_median_ratios": {
                 "async_service_direct": 53.90792291220558,
                 "async_web_service_direct": 3.1131658010573626,
                 "compression_gzip": 1.0755888120942099,
                 "get_body_async_burst": 1.2079884850665707,
                 "router_actix": 1.29873043146239
-              },
-              "route_equivalent_harness_median_ratios": {
-                "compression_gzip": 1.0755888120942099
-              },
-              "route_equivalent_target_geomean_ratio": 1.0755888120942099,
-              "target_geomean_ratio": 3.0932611526807015
+              }
             }
           },
           "typeiso_perf": {
@@ -338,32 +337,33 @@
             "label": "Type Isolation",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 0.6552914802357916,
+              "workload_paired_run_median_ratios": {
                 "async_service_direct": 0.10650887573964497,
                 "async_web_service_direct": 1.0714285714285714,
                 "compression_gzip": 1.0,
                 "get_body_async_burst": 1.0,
                 "router_actix": 1.0588235294117647
-              },
-              "target_geomean_ratio": 0.6552914802357916
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0882677945435149,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "compression_gzip": 1.0882677945435149
+              },
+              "within_target_geometric_mean_ratio": 3.1205627810195917,
+              "workload_paired_run_median_ratios": {
                 "async_service_direct": 52.951281707153406,
                 "async_web_service_direct": 3.1597378321463214,
                 "compression_gzip": 1.0882677945435149,
                 "get_body_async_burst": 1.2640825937330196,
                 "router_actix": 1.2856592135697764
-              },
-              "route_equivalent_harness_median_ratios": {
-                "compression_gzip": 1.0882677945435149
-              },
-              "route_equivalent_target_geomean_ratio": 1.0882677945435149,
-              "target_geomean_ratio": 3.1205627810195917
+              }
             }
           }
-        }
+        },
+        "workload_count": 5
       },
       "oxipng": {
         "comparison_families": {
@@ -371,33 +371,33 @@
             "label": "Compiler route",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0989912893394933,
+              "workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.0106017191977077,
                 "cli_issue_141_t4": 1.0152457783550968,
                 "filters_8bit_filter_0": 1.25,
                 "filters_entropy": 1.0,
                 "reductions_rgba_to_palette_8": 1.25
-              },
-              "target_geomean_ratio": 1.0989912893394933
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0353847356475916,
+              "route_equivalent_workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.017616244521667,
                 "cli_issue_141_t4": 1.0169388640997745,
                 "filters_8bit_filter_0": 1.0880028928418808,
                 "filters_entropy": 1.0507908507047752,
                 "reductions_rgba_to_palette_8": 1.005735039834762
               },
-              "route_equivalent_harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0353847356475916,
+              "workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.017616244521667,
                 "cli_issue_141_t4": 1.0169388640997745,
                 "filters_8bit_filter_0": 1.0880028928418808,
                 "filters_entropy": 1.0507908507047752,
                 "reductions_rgba_to_palette_8": 1.005735039834762
-              },
-              "route_equivalent_target_geomean_ratio": 1.0353847356475916,
-              "target_geomean_ratio": 1.0353847356475916
+              }
             },
             "reference": "unialloc",
             "subject": "typed_plain"
@@ -406,33 +406,33 @@
             "label": "End to end",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0015015261772915,
+              "workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.0096009036144578,
                 "cli_issue_141_t4": 0.9979489984275655,
                 "filters_8bit_filter_0": 1.0,
                 "filters_entropy": 1.0,
                 "reductions_rgba_to_palette_8": 1.0
-              },
-              "target_geomean_ratio": 1.0015015261772915
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0373765444400513,
+              "route_equivalent_workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.0442140388382706,
                 "cli_issue_141_t4": 1.041986840344493,
                 "filters_8bit_filter_0": 1.0557756118075234,
                 "filters_entropy": 1.046491312018977,
                 "reductions_rgba_to_palette_8": 0.9993626315338131
               },
-              "route_equivalent_harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0373765444400513,
+              "workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.0442140388382706,
                 "cli_issue_141_t4": 1.041986840344493,
                 "filters_8bit_filter_0": 1.0557756118075234,
                 "filters_entropy": 1.046491312018977,
                 "reductions_rgba_to_palette_8": 0.9993626315338131
-              },
-              "route_equivalent_target_geomean_ratio": 1.0373765444400513,
-              "target_geomean_ratio": 1.0373765444400513
+              }
             },
             "reference": "unialloc",
             "subject": "typeiso_perf"
@@ -441,39 +441,38 @@
             "label": "Policy increment",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 0.9997867293265497,
+              "workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 0.9879028447216709,
                 "cli_issue_141_t4": 1.0111663375774493,
                 "filters_8bit_filter_0": 1.0,
                 "filters_entropy": 1.0,
                 "reductions_rgba_to_palette_8": 1.0
-              },
-              "target_geomean_ratio": 0.9997867293265497
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0057931727806915,
+              "route_equivalent_workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.0297996297971708,
                 "cli_issue_141_t4": 1.0255143601536343,
                 "filters_8bit_filter_0": 0.9801059239153237,
                 "filters_entropy": 0.9969179827860007,
                 "reductions_rgba_to_palette_8": 0.9975082472903156
               },
-              "route_equivalent_harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0057931727806915,
+              "workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.0297996297971708,
                 "cli_issue_141_t4": 1.0255143601536343,
                 "filters_8bit_filter_0": 0.9801059239153237,
                 "filters_entropy": 0.9969179827860007,
                 "reductions_rgba_to_palette_8": 0.9975082472903156
-              },
-              "route_equivalent_target_geomean_ratio": 1.0057931727806915,
-              "target_geomean_ratio": 1.0057931727806915
+              }
             },
             "reference": "typed_plain",
             "subject": "typeiso_perf"
           }
         },
-        "harness_count": 5,
         "label": "Oxipng",
         "rss_eligibility": "core",
         "rss_work_model": "fixed_work",
@@ -483,33 +482,33 @@
             "label": "Typed control",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0989912893394933,
+              "workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.0106017191977077,
                 "cli_issue_141_t4": 1.0152457783550968,
                 "filters_8bit_filter_0": 1.25,
                 "filters_entropy": 1.0,
                 "reductions_rgba_to_palette_8": 1.25
-              },
-              "target_geomean_ratio": 1.0989912893394933
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0353847356475916,
+              "route_equivalent_workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.017616244521667,
                 "cli_issue_141_t4": 1.0169388640997745,
                 "filters_8bit_filter_0": 1.0880028928418808,
                 "filters_entropy": 1.0507908507047752,
                 "reductions_rgba_to_palette_8": 1.005735039834762
               },
-              "route_equivalent_harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0353847356475916,
+              "workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.017616244521667,
                 "cli_issue_141_t4": 1.0169388640997745,
                 "filters_8bit_filter_0": 1.0880028928418808,
                 "filters_entropy": 1.0507908507047752,
                 "reductions_rgba_to_palette_8": 1.005735039834762
-              },
-              "route_equivalent_target_geomean_ratio": 1.0353847356475916,
-              "target_geomean_ratio": 1.0353847356475916
+              }
             }
           },
           "typeiso_perf": {
@@ -517,36 +516,37 @@
             "label": "Type Isolation",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0015015261772915,
+              "workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.0096009036144578,
                 "cli_issue_141_t4": 0.9979489984275655,
                 "filters_8bit_filter_0": 1.0,
                 "filters_entropy": 1.0,
                 "reductions_rgba_to_palette_8": 1.0
-              },
-              "target_geomean_ratio": 1.0015015261772915
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0373765444400513,
+              "route_equivalent_workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.0442140388382706,
                 "cli_issue_141_t4": 1.041986840344493,
                 "filters_8bit_filter_0": 1.0557756118075234,
                 "filters_entropy": 1.046491312018977,
                 "reductions_rgba_to_palette_8": 0.9993626315338131
               },
-              "route_equivalent_harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0373765444400513,
+              "workload_paired_run_median_ratios": {
                 "cli_issue_141_t1": 1.0442140388382706,
                 "cli_issue_141_t4": 1.041986840344493,
                 "filters_8bit_filter_0": 1.0557756118075234,
                 "filters_entropy": 1.046491312018977,
                 "reductions_rgba_to_palette_8": 0.9993626315338131
-              },
-              "route_equivalent_target_geomean_ratio": 1.0373765444400513,
-              "target_geomean_ratio": 1.0373765444400513
+              }
             }
           }
-        }
+        },
+        "workload_count": 5
       },
       "polars": {
         "comparison_families": {
@@ -554,29 +554,29 @@
             "label": "Compiler route",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0025938516680954,
+              "workload_paired_run_median_ratios": {
                 "csv_scan": 0.9946886104357584,
                 "filter_retain": 1.0,
                 "groupby_high_cardinality": 1.0067567567567568,
                 "groupby_low_cardinality": 1.0067567567567568,
                 "groupby_multikey": 1.0048215343499882
-              },
-              "target_geomean_ratio": 1.0025938516680954
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0106125207127592,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "csv_scan": 1.0106125207127592
+              },
+              "within_target_geometric_mean_ratio": 1.2939978841560242,
+              "workload_paired_run_median_ratios": {
                 "csv_scan": 1.0106125207127592,
                 "filter_retain": 1.4236977115199847,
                 "groupby_high_cardinality": 1.4000714494654871,
                 "groupby_low_cardinality": 1.4307738854117762,
                 "groupby_multikey": 1.2587635696367203
-              },
-              "route_equivalent_harness_median_ratios": {
-                "csv_scan": 1.0106125207127592
-              },
-              "route_equivalent_target_geomean_ratio": 1.0106125207127592,
-              "target_geomean_ratio": 1.2939978841560242
+              }
             },
             "reference": "unialloc",
             "subject": "typed_plain"
@@ -585,29 +585,29 @@
             "label": "End to end",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0054959682802094,
+              "workload_paired_run_median_ratios": {
                 "csv_scan": 1.005912067352666,
                 "filter_retain": 1.0067567567567568,
                 "groupby_high_cardinality": 1.0067567567567568,
                 "groupby_low_cardinality": 1.0067567567567568,
                 "groupby_multikey": 1.001308702180711
-              },
-              "target_geomean_ratio": 1.0054959682802094
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0193406479486948,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "csv_scan": 1.0193406479486948
+              },
+              "within_target_geometric_mean_ratio": 1.2975373615361296,
+              "workload_paired_run_median_ratios": {
                 "csv_scan": 1.0193406479486948,
                 "filter_retain": 1.4281248706651353,
                 "groupby_high_cardinality": 1.3971097342551466,
                 "groupby_low_cardinality": 1.4281906225058911,
                 "groupby_multikey": 1.266184924291079
-              },
-              "route_equivalent_harness_median_ratios": {
-                "csv_scan": 1.0193406479486948
-              },
-              "route_equivalent_target_geomean_ratio": 1.0193406479486948,
-              "target_geomean_ratio": 1.2975373615361296
+              }
             },
             "reference": "unialloc",
             "subject": "typeiso_perf"
@@ -616,35 +616,34 @@
             "label": "Policy increment",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 0.9986568680452999,
+              "workload_paired_run_median_ratios": {
                 "csv_scan": 1.0034769463340891,
                 "filter_retain": 1.0,
                 "groupby_high_cardinality": 1.0,
                 "groupby_low_cardinality": 0.9933333333333333,
                 "groupby_multikey": 0.9965040238000575
-              },
-              "target_geomean_ratio": 0.9986568680452999
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.001779107077223,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "csv_scan": 1.001779107077223
+              },
+              "within_target_geometric_mean_ratio": 1.000118609093225,
+              "workload_paired_run_median_ratios": {
                 "csv_scan": 1.001779107077223,
                 "filter_retain": 1.0016037114749659,
                 "groupby_high_cardinality": 0.9978845970957616,
                 "groupby_low_cardinality": 0.9981944995416647,
                 "groupby_multikey": 1.0011384805005703
-              },
-              "route_equivalent_harness_median_ratios": {
-                "csv_scan": 1.001779107077223
-              },
-              "route_equivalent_target_geomean_ratio": 1.001779107077223,
-              "target_geomean_ratio": 1.000118609093225
+              }
             },
             "reference": "typed_plain",
             "subject": "typeiso_perf"
           }
         },
-        "harness_count": 5,
         "label": "Polars",
         "rss_eligibility": "core",
         "rss_work_model": "fixed_work",
@@ -654,29 +653,29 @@
             "label": "Typed control",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0025938516680954,
+              "workload_paired_run_median_ratios": {
                 "csv_scan": 0.9946886104357584,
                 "filter_retain": 1.0,
                 "groupby_high_cardinality": 1.0067567567567568,
                 "groupby_low_cardinality": 1.0067567567567568,
                 "groupby_multikey": 1.0048215343499882
-              },
-              "target_geomean_ratio": 1.0025938516680954
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0106125207127592,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "csv_scan": 1.0106125207127592
+              },
+              "within_target_geometric_mean_ratio": 1.2939978841560242,
+              "workload_paired_run_median_ratios": {
                 "csv_scan": 1.0106125207127592,
                 "filter_retain": 1.4236977115199847,
                 "groupby_high_cardinality": 1.4000714494654871,
                 "groupby_low_cardinality": 1.4307738854117762,
                 "groupby_multikey": 1.2587635696367203
-              },
-              "route_equivalent_harness_median_ratios": {
-                "csv_scan": 1.0106125207127592
-              },
-              "route_equivalent_target_geomean_ratio": 1.0106125207127592,
-              "target_geomean_ratio": 1.2939978841560242
+              }
             }
           },
           "typeiso_perf": {
@@ -684,32 +683,33 @@
             "label": "Type Isolation",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0054959682802094,
+              "workload_paired_run_median_ratios": {
                 "csv_scan": 1.005912067352666,
                 "filter_retain": 1.0067567567567568,
                 "groupby_high_cardinality": 1.0067567567567568,
                 "groupby_low_cardinality": 1.0067567567567568,
                 "groupby_multikey": 1.001308702180711
-              },
-              "target_geomean_ratio": 1.0054959682802094
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0193406479486948,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "csv_scan": 1.0193406479486948
+              },
+              "within_target_geometric_mean_ratio": 1.2975373615361296,
+              "workload_paired_run_median_ratios": {
                 "csv_scan": 1.0193406479486948,
                 "filter_retain": 1.4281248706651353,
                 "groupby_high_cardinality": 1.3971097342551466,
                 "groupby_low_cardinality": 1.4281906225058911,
                 "groupby_multikey": 1.266184924291079
-              },
-              "route_equivalent_harness_median_ratios": {
-                "csv_scan": 1.0193406479486948
-              },
-              "route_equivalent_target_geomean_ratio": 1.0193406479486948,
-              "target_geomean_ratio": 1.2975373615361296
+              }
             }
           }
-        }
+        },
+        "workload_count": 5
       },
       "redb": {
         "comparison_families": {
@@ -717,29 +717,29 @@
             "label": "Compiler route",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0,
+              "workload_paired_run_median_ratios": {
                 "bulk_small": 1.0,
                 "delete_reinsert": 1.0,
                 "large_values": 1.0,
                 "transaction_churn": 1.0
-              },
-              "target_geomean_ratio": 1.0
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
-                "bulk_small": 1.0548699480766464,
-                "delete_reinsert": 1.0586793827836183,
-                "large_values": 0.9918174339490106,
-                "transaction_churn": 1.3982844803133816
-              },
-              "route_equivalent_harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0346616952789067,
+              "route_equivalent_workload_paired_run_median_ratios": {
                 "bulk_small": 1.0548699480766464,
                 "delete_reinsert": 1.0586793827836183,
                 "large_values": 0.9918174339490106
               },
-              "route_equivalent_target_geomean_ratio": 1.0346616952789067,
-              "target_geomean_ratio": 1.1155721475564533
+              "within_target_geometric_mean_ratio": 1.1155721475564533,
+              "workload_paired_run_median_ratios": {
+                "bulk_small": 1.0548699480766464,
+                "delete_reinsert": 1.0586793827836183,
+                "large_values": 0.9918174339490106,
+                "transaction_churn": 1.3982844803133816
+              }
             },
             "reference": "unialloc",
             "subject": "typed_plain"
@@ -748,29 +748,29 @@
             "label": "End to end",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0032733661922877,
+              "workload_paired_run_median_ratios": {
                 "bulk_small": 1.013157894736842,
                 "delete_reinsert": 1.0,
                 "large_values": 1.0,
                 "transaction_churn": 1.0
-              },
-              "target_geomean_ratio": 1.0032733661922877
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
-                "bulk_small": 1.0688604181982921,
-                "delete_reinsert": 1.0632608733783695,
-                "large_values": 0.9928183678600341,
-                "transaction_churn": 1.410456992403389
-              },
-              "route_equivalent_harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.041062676943563,
+              "route_equivalent_workload_paired_run_median_ratios": {
                 "bulk_small": 1.0688604181982921,
                 "delete_reinsert": 1.0632608733783695,
                 "large_values": 0.9928183678600341
               },
-              "route_equivalent_target_geomean_ratio": 1.041062676943563,
-              "target_geomean_ratio": 1.123175495263244
+              "within_target_geometric_mean_ratio": 1.123175495263244,
+              "workload_paired_run_median_ratios": {
+                "bulk_small": 1.0688604181982921,
+                "delete_reinsert": 1.0632608733783695,
+                "large_values": 0.9928183678600341,
+                "transaction_churn": 1.410456992403389
+              }
             },
             "reference": "unialloc",
             "subject": "typeiso_perf"
@@ -779,35 +779,34 @@
             "label": "Policy increment",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0032733661922877,
+              "workload_paired_run_median_ratios": {
                 "bulk_small": 1.013157894736842,
                 "delete_reinsert": 1.0,
                 "large_values": 1.0,
                 "transaction_churn": 1.0
-              },
-              "target_geomean_ratio": 1.0032733661922877
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
-                "bulk_small": 1.0056564344769034,
-                "delete_reinsert": 1.0095705288044037,
-                "large_values": 0.9992066438046392,
-                "transaction_churn": 1.008705318739774
-              },
-              "route_equivalent_harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0048021091025487,
+              "route_equivalent_workload_paired_run_median_ratios": {
                 "bulk_small": 1.0056564344769034,
                 "delete_reinsert": 1.0095705288044037,
                 "large_values": 0.9992066438046392
               },
-              "route_equivalent_target_geomean_ratio": 1.0048021091025487,
-              "target_geomean_ratio": 1.0057764932647826
+              "within_target_geometric_mean_ratio": 1.0057764932647826,
+              "workload_paired_run_median_ratios": {
+                "bulk_small": 1.0056564344769034,
+                "delete_reinsert": 1.0095705288044037,
+                "large_values": 0.9992066438046392,
+                "transaction_churn": 1.008705318739774
+              }
             },
             "reference": "typed_plain",
             "subject": "typeiso_perf"
           }
         },
-        "harness_count": 4,
         "label": "redb",
         "rss_eligibility": "core",
         "rss_work_model": "fixed_work",
@@ -817,29 +816,29 @@
             "label": "Typed control",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0,
+              "workload_paired_run_median_ratios": {
                 "bulk_small": 1.0,
                 "delete_reinsert": 1.0,
                 "large_values": 1.0,
                 "transaction_churn": 1.0
-              },
-              "target_geomean_ratio": 1.0
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
-                "bulk_small": 1.0548699480766464,
-                "delete_reinsert": 1.0586793827836183,
-                "large_values": 0.9918174339490106,
-                "transaction_churn": 1.3982844803133816
-              },
-              "route_equivalent_harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0346616952789067,
+              "route_equivalent_workload_paired_run_median_ratios": {
                 "bulk_small": 1.0548699480766464,
                 "delete_reinsert": 1.0586793827836183,
                 "large_values": 0.9918174339490106
               },
-              "route_equivalent_target_geomean_ratio": 1.0346616952789067,
-              "target_geomean_ratio": 1.1155721475564533
+              "within_target_geometric_mean_ratio": 1.1155721475564533,
+              "workload_paired_run_median_ratios": {
+                "bulk_small": 1.0548699480766464,
+                "delete_reinsert": 1.0586793827836183,
+                "large_values": 0.9918174339490106,
+                "transaction_churn": 1.3982844803133816
+              }
             }
           },
           "typeiso_perf": {
@@ -847,32 +846,33 @@
             "label": "Type Isolation",
             "peak_rss": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0032733661922877,
+              "workload_paired_run_median_ratios": {
                 "bulk_small": 1.013157894736842,
                 "delete_reinsert": 1.0,
                 "large_values": 1.0,
                 "transaction_churn": 1.0
-              },
-              "target_geomean_ratio": 1.0032733661922877
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
-                "bulk_small": 1.0688604181982921,
-                "delete_reinsert": 1.0632608733783695,
-                "large_values": 0.9928183678600341,
-                "transaction_churn": 1.410456992403389
-              },
-              "route_equivalent_harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.041062676943563,
+              "route_equivalent_workload_paired_run_median_ratios": {
                 "bulk_small": 1.0688604181982921,
                 "delete_reinsert": 1.0632608733783695,
                 "large_values": 0.9928183678600341
               },
-              "route_equivalent_target_geomean_ratio": 1.041062676943563,
-              "target_geomean_ratio": 1.123175495263244
+              "within_target_geometric_mean_ratio": 1.123175495263244,
+              "workload_paired_run_median_ratios": {
+                "bulk_small": 1.0688604181982921,
+                "delete_reinsert": 1.0632608733783695,
+                "large_values": 0.9928183678600341,
+                "transaction_churn": 1.410456992403389
+              }
             }
           }
-        }
+        },
+        "workload_count": 4
       },
       "rustpython": {
         "comparison_families": {
@@ -880,29 +880,29 @@
             "label": "Compiler route",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 0.9768396077115173,
+              "workload_paired_run_median_ratios": {
                 "execute_fannkuch": 0.9286965898369053,
                 "execute_mandelbrot": 1.016600391340024,
                 "execute_nbody": 1.011693723953474,
                 "parse_mandelbrot": 1.0057460256655812,
                 "pystone_30000": 0.9258802034467434
-              },
-              "target_geomean_ratio": 0.9768396077115173
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0626138699918097,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "execute_mandelbrot": 1.0626138699918097
+              },
+              "within_target_geometric_mean_ratio": 2.585395425373309,
+              "workload_paired_run_median_ratios": {
                 "execute_fannkuch": 4.6154719754158595,
                 "execute_mandelbrot": 1.0626138699918097,
                 "execute_nbody": 1.429064173549968,
                 "parse_mandelbrot": 4.578978311993729,
                 "pystone_30000": 3.5993407498969923
-              },
-              "route_equivalent_harness_median_ratios": {
-                "execute_mandelbrot": 1.0626138699918097
-              },
-              "route_equivalent_target_geomean_ratio": 1.0626138699918097,
-              "target_geomean_ratio": 2.585395425373309
+              }
             },
             "reference": "unialloc",
             "subject": "typed_plain"
@@ -911,29 +911,29 @@
             "label": "End to end",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 0.9788195296004895,
+              "workload_paired_run_median_ratios": {
                 "execute_fannkuch": 0.9323977870732695,
                 "execute_mandelbrot": 1.007574323044878,
                 "execute_nbody": 1.0107587064676617,
                 "parse_mandelbrot": 1.0248994445508524,
                 "pystone_30000": 0.9232218091697646
-              },
-              "target_geomean_ratio": 0.9788195296004895
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0259516431069053,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "execute_mandelbrot": 1.0259516431069053
+              },
+              "within_target_geometric_mean_ratio": 2.594590809176717,
+              "workload_paired_run_median_ratios": {
                 "execute_fannkuch": 4.674727770726168,
                 "execute_mandelbrot": 1.0259516431069053,
                 "execute_nbody": 1.4740412445730824,
                 "parse_mandelbrot": 4.616939998682738,
                 "pystone_30000": 3.602444462796267
-              },
-              "route_equivalent_harness_median_ratios": {
-                "execute_mandelbrot": 1.0259516431069053
-              },
-              "route_equivalent_target_geomean_ratio": 1.0259516431069053,
-              "target_geomean_ratio": 2.594590809176717
+              }
             },
             "reference": "unialloc",
             "subject": "typeiso_perf"
@@ -942,35 +942,34 @@
             "label": "Policy increment",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0000393819518956,
+              "workload_paired_run_median_ratios": {
                 "execute_fannkuch": 1.00358249419055,
                 "execute_mandelbrot": 0.9896849212303076,
                 "execute_nbody": 0.9945719220330619,
                 "parse_mandelbrot": 1.0190439916206437,
                 "pystone_30000": 0.9935880451486407
-              },
-              "target_geomean_ratio": 1.0000393819518956
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 0.9630841487279843,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "execute_mandelbrot": 0.9630841487279843
+              },
+              "within_target_geometric_mean_ratio": 1.0048065372823636,
+              "workload_paired_run_median_ratios": {
                 "execute_fannkuch": 1.0094785360285512,
                 "execute_mandelbrot": 0.9630841487279843,
                 "execute_nbody": 1.035647641721897,
                 "parse_mandelbrot": 1.0123162211204617,
                 "pystone_30000": 1.0048997055576003
-              },
-              "route_equivalent_harness_median_ratios": {
-                "execute_mandelbrot": 0.9630841487279843
-              },
-              "route_equivalent_target_geomean_ratio": 0.9630841487279843,
-              "target_geomean_ratio": 1.0048065372823636
+              }
             },
             "reference": "typed_plain",
             "subject": "typeiso_perf"
           }
         },
-        "harness_count": 5,
         "label": "RustPython",
         "rss_eligibility": "diagnostic_only",
         "rss_work_model": "workload_native_adaptive_iterations",
@@ -980,29 +979,29 @@
             "label": "Typed control",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 0.9768396077115173,
+              "workload_paired_run_median_ratios": {
                 "execute_fannkuch": 0.9286965898369053,
                 "execute_mandelbrot": 1.016600391340024,
                 "execute_nbody": 1.011693723953474,
                 "parse_mandelbrot": 1.0057460256655812,
                 "pystone_30000": 0.9258802034467434
-              },
-              "target_geomean_ratio": 0.9768396077115173
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0626138699918097,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "execute_mandelbrot": 1.0626138699918097
+              },
+              "within_target_geometric_mean_ratio": 2.585395425373309,
+              "workload_paired_run_median_ratios": {
                 "execute_fannkuch": 4.6154719754158595,
                 "execute_mandelbrot": 1.0626138699918097,
                 "execute_nbody": 1.429064173549968,
                 "parse_mandelbrot": 4.578978311993729,
                 "pystone_30000": 3.5993407498969923
-              },
-              "route_equivalent_harness_median_ratios": {
-                "execute_mandelbrot": 1.0626138699918097
-              },
-              "route_equivalent_target_geomean_ratio": 1.0626138699918097,
-              "target_geomean_ratio": 2.585395425373309
+              }
             }
           },
           "typeiso_perf": {
@@ -1010,32 +1009,33 @@
             "label": "Type Isolation",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 0.9788195296004895,
+              "workload_paired_run_median_ratios": {
                 "execute_fannkuch": 0.9323977870732695,
                 "execute_mandelbrot": 1.007574323044878,
                 "execute_nbody": 1.0107587064676617,
                 "parse_mandelbrot": 1.0248994445508524,
                 "pystone_30000": 0.9232218091697646
-              },
-              "target_geomean_ratio": 0.9788195296004895
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": 1.0259516431069053,
+              "route_equivalent_workload_paired_run_median_ratios": {
+                "execute_mandelbrot": 1.0259516431069053
+              },
+              "within_target_geometric_mean_ratio": 2.594590809176717,
+              "workload_paired_run_median_ratios": {
                 "execute_fannkuch": 4.674727770726168,
                 "execute_mandelbrot": 1.0259516431069053,
                 "execute_nbody": 1.4740412445730824,
                 "parse_mandelbrot": 4.616939998682738,
                 "pystone_30000": 3.602444462796267
-              },
-              "route_equivalent_harness_median_ratios": {
-                "execute_mandelbrot": 1.0259516431069053
-              },
-              "route_equivalent_target_geomean_ratio": 1.0259516431069053,
-              "target_geomean_ratio": 2.594590809176717
+              }
             }
           }
-        }
+        },
+        "workload_count": 5
       },
       "swc": {
         "comparison_families": {
@@ -1043,27 +1043,27 @@
             "label": "Compiler route",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0122808955898024,
+              "workload_paired_run_median_ratios": {
                 "large_all_es2020": 1.0031737971308874,
                 "large_all_es5": 1.006077216396568,
                 "large_codegen_es2020": 1.0773472645479611,
                 "large_fixer": 1.0103824418451834,
                 "large_parser": 0.967511655011655
-              },
-              "target_geomean_ratio": 1.0122808955898024
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": null,
+              "route_equivalent_workload_paired_run_median_ratios": {},
+              "within_target_geometric_mean_ratio": 23.839051845077122,
+              "workload_paired_run_median_ratios": {
                 "large_all_es2020": 27.244106018450726,
                 "large_all_es5": 21.173602961090552,
                 "large_codegen_es2020": 2.8908793930133307,
                 "large_fixer": 81.68883249881053,
                 "large_parser": 56.51775486827033
-              },
-              "route_equivalent_harness_median_ratios": {},
-              "route_equivalent_target_geomean_ratio": null,
-              "target_geomean_ratio": 23.839051845077122
+              }
             },
             "reference": "unialloc",
             "subject": "typed_plain"
@@ -1072,27 +1072,27 @@
             "label": "End to end",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0237178442288049,
+              "workload_paired_run_median_ratios": {
                 "large_all_es2020": 1.0077258566978193,
                 "large_all_es5": 1.0162396246842296,
                 "large_codegen_es2020": 1.0938940092165899,
                 "large_fixer": 1.0150914439186596,
                 "large_parser": 0.9887407407407407
-              },
-              "target_geomean_ratio": 1.0237178442288049
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": null,
+              "route_equivalent_workload_paired_run_median_ratios": {},
+              "within_target_geometric_mean_ratio": 23.928230543359113,
+              "workload_paired_run_median_ratios": {
                 "large_all_es2020": 27.333565904994472,
                 "large_all_es5": 21.298384749708966,
                 "large_codegen_es2020": 2.8568870160653153,
                 "large_fixer": 82.71856070879667,
                 "large_parser": 57.0182555780933
-              },
-              "route_equivalent_harness_median_ratios": {},
-              "route_equivalent_target_geomean_ratio": null,
-              "target_geomean_ratio": 23.928230543359113
+              }
             },
             "reference": "unialloc",
             "subject": "typeiso_perf"
@@ -1101,33 +1101,32 @@
             "label": "Policy increment",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0146732197539292,
+              "workload_paired_run_median_ratios": {
                 "large_all_es2020": 1.0080180405913306,
                 "large_all_es5": 1.0248235580433196,
                 "large_codegen_es2020": 1.0182305630026809,
                 "large_fixer": 1.002162024672517,
                 "large_parser": 1.0203038270522933
-              },
-              "target_geomean_ratio": 1.0146732197539292
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": null,
+              "route_equivalent_workload_paired_run_median_ratios": {},
+              "within_target_geometric_mean_ratio": 1.0060124694551897,
+              "workload_paired_run_median_ratios": {
                 "large_all_es2020": 1.0055576457941413,
                 "large_all_es5": 1.0085506626763574,
                 "large_codegen_es2020": 0.9877559865640914,
                 "large_fixer": 1.0215200826192539,
                 "large_parser": 1.0069677177996355
-              },
-              "route_equivalent_harness_median_ratios": {},
-              "route_equivalent_target_geomean_ratio": null,
-              "target_geomean_ratio": 1.0060124694551897
+              }
             },
             "reference": "typed_plain",
             "subject": "typeiso_perf"
           }
         },
-        "harness_count": 5,
         "label": "SWC",
         "rss_eligibility": "diagnostic_only",
         "rss_work_model": "workload_native_adaptive_iterations",
@@ -1137,27 +1136,27 @@
             "label": "Typed control",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0122808955898024,
+              "workload_paired_run_median_ratios": {
                 "large_all_es2020": 1.0031737971308874,
                 "large_all_es5": 1.006077216396568,
                 "large_codegen_es2020": 1.0773472645479611,
                 "large_fixer": 1.0103824418451834,
                 "large_parser": 0.967511655011655
-              },
-              "target_geomean_ratio": 1.0122808955898024
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": null,
+              "route_equivalent_workload_paired_run_median_ratios": {},
+              "within_target_geometric_mean_ratio": 23.839051845077122,
+              "workload_paired_run_median_ratios": {
                 "large_all_es2020": 27.244106018450726,
                 "large_all_es5": 21.173602961090552,
                 "large_codegen_es2020": 2.8908793930133307,
                 "large_fixer": 81.68883249881053,
                 "large_parser": 56.51775486827033
-              },
-              "route_equivalent_harness_median_ratios": {},
-              "route_equivalent_target_geomean_ratio": null,
-              "target_geomean_ratio": 23.839051845077122
+              }
             }
           },
           "typeiso_perf": {
@@ -1165,37 +1164,39 @@
             "label": "Type Isolation",
             "peak_rss": {
               "diagnostic_only": true,
-              "harness_median_ratios": {
+              "within_target_geometric_mean_ratio": 1.0237178442288049,
+              "workload_paired_run_median_ratios": {
                 "large_all_es2020": 1.0077258566978193,
                 "large_all_es5": 1.0162396246842296,
                 "large_codegen_es2020": 1.0938940092165899,
                 "large_fixer": 1.0150914439186596,
                 "large_parser": 0.9887407407407407
-              },
-              "target_geomean_ratio": 1.0237178442288049
+              }
             },
             "performance": {
               "diagnostic_only": false,
-              "harness_median_ratios": {
+              "route_equivalent_within_target_geometric_mean_ratio": null,
+              "route_equivalent_workload_paired_run_median_ratios": {},
+              "within_target_geometric_mean_ratio": 23.928230543359113,
+              "workload_paired_run_median_ratios": {
                 "large_all_es2020": 27.333565904994472,
                 "large_all_es5": 21.298384749708966,
                 "large_codegen_es2020": 2.8568870160653153,
                 "large_fixer": 82.71856070879667,
                 "large_parser": 57.0182555780933
-              },
-              "route_equivalent_harness_median_ratios": {},
-              "route_equivalent_target_geomean_ratio": null,
-              "target_geomean_ratio": 23.928230543359113
+              }
             }
           }
-        }
+        },
+        "workload_count": 5
       }
-    }
+    },
+    "workload_count": 29
   },
   "microbenchmarks": {
     "collections_type_isolation_subset": {
+      "benchmark_case_count": 5,
       "cohort_pooling": "separate",
-      "harness_count": 5,
       "reference": "unialloc",
       "rss_claim": "process-observed adaptive-iteration diagnostic only",
       "variants": {
@@ -1213,14 +1214,14 @@
             },
             "headline_ratio": 1.0592238410488122,
             "observation_count": 5,
-            "sensitivity_equal_family_geomean_ratio": 1.0592238410488122,
             "sensitivity_family_geomean_ratios": {
               "binary_heap_push": 1.0,
               "btree_set_clone_remove": 1.3333333333333333,
               "slice_random_inserts": 1.0,
               "vec_deque_grow_1025": 1.0,
               "vec_in_place_collect_droppable": 1.0
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.0592238410488122
           },
           "performance": {
             "diagnostic_only": false,
@@ -1234,14 +1235,14 @@
             },
             "headline_ratio": 1.4373923489680298,
             "observation_count": 5,
-            "sensitivity_equal_family_geomean_ratio": 1.4373923489680298,
             "sensitivity_family_geomean_ratios": {
               "binary_heap_push": 1.0124765107878193,
               "btree_set_clone_remove": 3.258458624424157,
               "slice_random_inserts": 1.071225038424564,
               "vec_deque_grow_1025": 1.2444361596939686,
               "vec_in_place_collect_droppable": 1.395166821900203
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.4373923489680298
           }
         },
         "typeiso_perf": {
@@ -1258,14 +1259,14 @@
             },
             "headline_ratio": 1.0592238410488122,
             "observation_count": 5,
-            "sensitivity_equal_family_geomean_ratio": 1.0592238410488122,
             "sensitivity_family_geomean_ratios": {
               "binary_heap_push": 1.0,
               "btree_set_clone_remove": 1.3333333333333333,
               "slice_random_inserts": 1.0,
               "vec_deque_grow_1025": 1.0,
               "vec_in_place_collect_droppable": 1.0
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.0592238410488122
           },
           "performance": {
             "diagnostic_only": false,
@@ -1279,14 +1280,14 @@
             },
             "headline_ratio": 1.4287858780305578,
             "observation_count": 5,
-            "sensitivity_equal_family_geomean_ratio": 1.4287858780305578,
             "sensitivity_family_geomean_ratios": {
               "binary_heap_push": 1.005492773081331,
               "btree_set_clone_remove": 3.233823263401383,
               "slice_random_inserts": 1.0700044255671335,
               "vec_deque_grow_1025": 1.2349805456913359,
               "vec_in_place_collect_droppable": 1.3857816955433004
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.4287858780305578
           }
         }
       }
@@ -1318,7 +1319,6 @@
             },
             "headline_ratio": 1.0,
             "observation_count": 466,
-            "sensitivity_equal_family_geomean_ratio": 0.9858301700131972,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0,
               "btree": 1.0281437446556543,
@@ -1328,7 +1328,8 @@
               "string": 1.0170664710381807,
               "vec": 1.0,
               "vec_deque": 1.0
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9858301700131972
           },
           "performance": {
             "diagnostic_only": false,
@@ -1346,7 +1347,6 @@
             },
             "headline_ratio": 0.9863753793889839,
             "observation_count": 236,
-            "sensitivity_equal_family_geomean_ratio": 0.9313224077305244,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 0.9801731644324555,
               "btree": 1.0286720865953956,
@@ -1356,7 +1356,8 @@
               "string": 0.9519950318963784,
               "vec": 0.9540669615178344,
               "vec_deque": 0.8316172663006638
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9313224077305244
           }
         },
         "mimalloc": {
@@ -1377,7 +1378,6 @@
             },
             "headline_ratio": 1.0,
             "observation_count": 466,
-            "sensitivity_equal_family_geomean_ratio": 0.9858717734253976,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0,
               "btree": 1.0445521122209551,
@@ -1387,7 +1387,8 @@
               "string": 1.0,
               "vec": 1.0,
               "vec_deque": 1.0
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9858717734253976
           },
           "performance": {
             "diagnostic_only": false,
@@ -1405,7 +1406,6 @@
             },
             "headline_ratio": 0.9901316078880537,
             "observation_count": 236,
-            "sensitivity_equal_family_geomean_ratio": 0.8885475261746657,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0001594322189287,
               "btree": 0.9793137217919854,
@@ -1415,7 +1415,8 @@
               "string": 0.9587809975273348,
               "vec": 0.8791059594183747,
               "vec_deque": 0.9305786153628177
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.8885475261746657
           }
         },
         "ptmalloc": {
@@ -1436,7 +1437,6 @@
             },
             "headline_ratio": 1.0,
             "observation_count": 466,
-            "sensitivity_equal_family_geomean_ratio": 1.0042240634322872,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0,
               "btree": 0.997098338461539,
@@ -1446,7 +1446,8 @@
               "string": 1.0,
               "vec": 1.0,
               "vec_deque": 1.0
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.0042240634322872
           },
           "performance": {
             "diagnostic_only": false,
@@ -1464,7 +1465,6 @@
             },
             "headline_ratio": 0.9825820936708559,
             "observation_count": 236,
-            "sensitivity_equal_family_geomean_ratio": 0.9401944565793812,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.016919864643632,
               "btree": 0.9842848928102734,
@@ -1474,7 +1474,8 @@
               "string": 0.937585144665202,
               "vec": 0.9490326812474665,
               "vec_deque": 0.846525606512475
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9401944565793812
           }
         },
         "scudo": {
@@ -1495,7 +1496,6 @@
             },
             "headline_ratio": 1.0,
             "observation_count": 466,
-            "sensitivity_equal_family_geomean_ratio": 0.9782241373292986,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0,
               "btree": 1.0523250219736062,
@@ -1505,7 +1505,8 @@
               "string": 1.0,
               "vec": 1.0,
               "vec_deque": 1.0
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9782241373292986
           },
           "performance": {
             "diagnostic_only": false,
@@ -1523,7 +1524,6 @@
             },
             "headline_ratio": 1.0207164797421722,
             "observation_count": 236,
-            "sensitivity_equal_family_geomean_ratio": 1.064504954767654,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0004211730258035,
               "btree": 1.4704967315053095,
@@ -1533,7 +1533,8 @@
               "string": 1.022538239452277,
               "vec": 1.0096704026965542,
               "vec_deque": 0.8628662887780444
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.064504954767654
           }
         },
         "snmalloc": {
@@ -1554,7 +1555,6 @@
             },
             "headline_ratio": 1.3531090598756028,
             "observation_count": 466,
-            "sensitivity_equal_family_geomean_ratio": 1.3742838003705469,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.3848821642589764,
               "btree": 1.5126915823085585,
@@ -1564,7 +1564,8 @@
               "string": 1.3333333333333333,
               "vec": 1.3608094107168325,
               "vec_deque": 1.3333333333333333
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 1.3742838003705469
           },
           "performance": {
             "diagnostic_only": false,
@@ -1582,7 +1583,6 @@
             },
             "headline_ratio": 0.9748349769298694,
             "observation_count": 236,
-            "sensitivity_equal_family_geomean_ratio": 0.8724889925920641,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0067174142787287,
               "btree": 0.9846863828638259,
@@ -1592,7 +1592,8 @@
               "string": 0.9048355403298274,
               "vec": 0.9149132520129053,
               "vec_deque": 0.8270493187132542
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.8724889925920641
           }
         },
         "tcmalloc": {
@@ -1613,7 +1614,6 @@
             },
             "headline_ratio": 3.0000000000000004,
             "observation_count": 466,
-            "sensitivity_equal_family_geomean_ratio": 2.7677072230616866,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 2.6866538995899485,
               "btree": 2.9802975525295476,
@@ -1623,7 +1623,8 @@
               "string": 3.0000000000000004,
               "vec": 2.969423179411973,
               "vec_deque": 3.0000000000000004
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 2.7677072230616866
           },
           "performance": {
             "diagnostic_only": false,
@@ -1641,7 +1642,6 @@
             },
             "headline_ratio": 0.9786954729679196,
             "observation_count": 236,
-            "sensitivity_equal_family_geomean_ratio": 0.9098610429312377,
             "sensitivity_family_geomean_ratios": {
               "binary_heap": 1.0098354985605758,
               "btree": 0.9960611245351586,
@@ -1651,7 +1651,8 @@
               "string": 0.9550815241971786,
               "vec": 0.9389636927316976,
               "vec_deque": 0.8291055270798295
-            }
+            },
+            "sensitivity_geometric_mean_of_family_geometric_means_ratio": 0.9098610429312377
           }
         }
       }
@@ -1659,7 +1660,7 @@
   },
   "production_contract": true,
   "reference": "unialloc",
-  "schema_version": 1,
+  "schema_version": 2,
   "sources": {
     "micro_records": "e5499bca4d7ebbf722ceeeff881bf905e7e2a2879f2c921fc481f3380a4e286f",
     "micro_results": "b738a192c71bda67ec2e2d989b0b90c33c94e225bcc53f4673c7467dd0c30eea",

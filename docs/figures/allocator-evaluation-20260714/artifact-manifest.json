@@ -1,32 +1,32 @@
 {
   "artifacts": {
     "macrobenchmarks.csv": {
-      "bytes": 44558,
-      "sha256": "83efa7c588ed8d80e4efa82db1d41c6f38717b4485ea1053b54e5b0981252f5a"
+      "bytes": 46860,
+      "sha256": "a0c842db0f29f5757f988da69936b78d434a51c6742573f59ffac9c190ead4e8"
     },
     "macrobenchmarks.png": {
-      "bytes": 115204,
-      "sha256": "4a2fdadc052b52a8dd0ec35225f53214df1ac7cc123bd82f8af07e0648db0da3"
+      "bytes": 121886,
+      "sha256": "6d76a6bbbe7361a144a489abb86ee745312fcd495d056d70b3b7a55943b1c8cf"
     },
     "macrobenchmarks.svg": {
-      "bytes": 31959,
-      "sha256": "60995b0031df20cc99d24641fe1ab649b8d9626e4da6ec5f7217a6acfc198138"
+      "bytes": 31973,
+      "sha256": "4280d5f24600fef0dee363e6c0d81a896eb4b2ba7231e4a1116271633c1a1969"
     },
     "microbenchmarks.csv": {
-      "bytes": 957950,
-      "sha256": "436196eecab18fd9d7ba9a5ec0ec1cd65e5e7174484ee8ce707648bed325c1c3"
+      "bytes": 1033450,
+      "sha256": "05b5f4fb8b0ee573d492deefc48ec2b16a9daac4365120751aefc2ad47e24490"
     },
     "microbenchmarks.png": {
-      "bytes": 247758,
-      "sha256": "34446cc45a463823cbc44b2b99fbd573f736e74cc1c362ff13b3a122cf182b1f"
+      "bytes": 235297,
+      "sha256": "56e146313177e49a304d20e69efb07507c7f7c9a61f43291b80e9aba3eaf40f2"
     },
     "microbenchmarks.svg": {
-      "bytes": 1108845,
-      "sha256": "e20238f397ab69393b3aa03c4e0da4b8b248cc5352eff12db321256dd3e5571c"
+      "bytes": 1099098,
+      "sha256": "6f1685d8a6fb858670c2f5e12dd3678d138095afb300d736a2ddcf6bcf786d0a"
     },
     "presentation-data.json": {
-      "bytes": 64978,
-      "sha256": "95fa83d09e7204ed93fd9631f73e16388d08cbdb63a8a31bc893bfb3708dad8c"
+      "bytes": 68195,
+      "sha256": "d9909d79f58108a1a4742b3c8b74c96c64dd087d7b31f1f403446274aadca24f"
     }
   },
   "generated_utc": "2026-07-15T01:00:00Z",

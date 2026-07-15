@@ -5,17 +5,18 @@
 > aggregation only. It leaves targets, harnesses, variants, observations,
 > correctness gates, source identities, and sampling budgets unchanged.
 
-The committee-facing evaluation has two parts. **Microbenchmarks** use Rust's
-`std_bench` harnesses. **Macrobenchmarks** use pinned real-world Rust programs.
-Both parts report execution cost and peak resident set size (RSS), preserve
-matched comparisons, and treat Type Isolation as a UniAlloc variant.
+The committee-facing evaluation has two parts. **Microbenchmarks** use
+`std_bench` benchmark cases executed by Rust's libtest benchmark harness.
+**Macrobenchmarks** use pinned workloads from real-world Rust programs. Both
+parts report execution cost and peak resident set size (RSS), preserve matched
+comparisons, and treat Type Isolation as a UniAlloc variant.
 
 ## Presentation figures
 
 | Part | Slide-ready figure | Presentation unit |
 |---|---|---|
-| Microbenchmarks | [`microbenchmarks.svg`](figures/allocator-evaluation-20260714/microbenchmarks.svg) | Rust `std_bench` leaf, aggregated with equal family weight |
-| Macrobenchmarks | [`macrobenchmarks.svg`](figures/allocator-evaluation-20260714/macrobenchmarks.svg) | Real-world harness, aggregated with equal target weight |
+| Microbenchmarks | [`microbenchmarks.svg`](figures/allocator-evaluation-20260714/microbenchmarks.svg) | Benchmark-case ratio, back-transformed median log-ratio within family, then unweighted geometric mean across family medians |
+| Macrobenchmarks | [`macrobenchmarks.svg`](figures/allocator-evaluation-20260714/macrobenchmarks.svg) | Median paired-run ratio per workload, geometric mean within target, then unweighted geometric mean across targets |
 
 The SVG and PNG files contain axes, labels, marks, values, and legends without
 a title. The bundle also retains uncapped CSV data, compact derived JSON, and a
@@ -26,10 +27,10 @@ hash-bound manifest. Display clipping affects marks only.
 A cost ratio below `1x` favors the subject variant; a ratio above `1x` favors
 the reference. Performance and RSS remain separate metrics.
 
-- A microbenchmark cell is the median of three measured fresh processes. The
-  cell ratio uses the matching UniAlloc cell as its reference.
-- A macrobenchmark harness forms same-round ratios before taking the median of
-  five paired ratios.
+- A microbenchmark case divides the subject's three-process median by the
+  matching UniAlloc three-process median.
+- A macrobenchmark workload forms five same-round subject/reference ratios and
+  reports their median.
 - `typed_plain` uses the actual-MIR compiler/runtime route with policy disabled.
 - `typeiso_perf` uses the same route with Type Isolation enabled. It is the
   **UniAlloc + Type Isolation** variant.
@@ -37,12 +38,23 @@ the reference. Performance and RSS remain separate metrics.
   (`typeiso_perf / typed_plain`), and end-to-end cost
   (`typeiso_perf / unialloc`) are distinct comparison families.
 
+The vocabulary follows established benchmark reporting practice. SPEC CPU
+uses the median of three runs for each benchmark and the geometric mean of
+normalized benchmark ratios. Fleming and Wallace establish the geometric mean
+as the appropriate average for normalized performance measurements. Rust uses
+*harness* for the libtest driver, so the statistical units here are
+*benchmark case* and *workload*.
+
+- [SPEC CPU 2017 Run and Reporting Rules](https://www.spec.org/cpu2017/Docs/runrules.html)
+- [Fleming and Wallace, *How not to lie with statistics: the correct way to summarize benchmark results*](https://cgi.cse.unsw.edu.au/~cs9242/11/papers/Fleming_Wallace_86.pdf)
+- [Cargo Book: Cargo Targets and the libtest harness](https://doc.rust-lang.org/cargo/reference/cargo-targets.html)
+
 ## Part I: microbenchmarks
 
 ### Complete Rust `std_bench` matrix
 
 The external-allocator cohort contains all 468 canonical leaves in eight
-families and seven allocator configurations. Of 3,276 allocator/leaf cells,
+families and seven allocator configurations. Of 3,276 allocator/case cells,
 3,268 completed. Eight warm-up cells were censored at the 30-second timeout,
 leaving 466 leaves with complete seven-allocator comparisons.
 
@@ -60,25 +72,25 @@ leaving 466 leaves with complete seven-allocator comparisons.
 Each allocator was a separate Cargo build with exactly one `bench_*` selector.
 The repository-default `pthread_dtor` and `rseq` features remained enabled. One
 discarded warm-up and three measured fresh processes ran each complete cell,
-with one exact leaf and one libtest thread per process. Four deterministic lanes
+with one exact benchmark case and one libtest thread per process. Four deterministic lanes
 used CPUs 0, 4, 8, and 12 on NUMA node 0. Build time was excluded.
 
-### Robust equal-family performance headline
+### Robust geometric mean across family medians
 
-The headline admits the 236 complete leaves whose median is at least
+The aggregate admits the 236 complete cases whose median is at least
 100 ns/iter under every allocator. This timer-floor gate retains all eight
 families. For each variant:
 
-1. form every eligible leaf's matching-cell median ratio;
-2. take the median leaf log-ratio within each family;
-3. average the eight family summaries with equal weight;
-4. exponentiate the result.
+1. form every eligible benchmark case's ratio of three-process medians;
+2. take the median log-ratio within each family and transform it back to ratio
+   space;
+3. take the unweighted geometric mean of the eight family medians.
 
 The hierarchy prevents large families from dominating and prevents one extreme
-leaf from controlling a family. The conventional geometric mean within each
-family, followed by equal family weighting, remains a sensitivity result.
+case from controlling a family. A geometric mean within each family followed
+by an unweighted geometric mean across families remains a sensitivity result.
 
-| Variant vs. UniAlloc | Robust equal-family ratio | Conventional equal-family sensitivity |
+| Variant vs. UniAlloc | Geometric mean across family medians | Geometric mean across within-family geometric means |
 |---|---:|---:|
 | ptmalloc | `0.9826x` | `0.9402x` |
 | jemalloc | `0.9864x` | `0.9313x` |
@@ -90,23 +102,25 @@ family, followed by equal family weighting, remains a sensitivity result.
 Many closures mainly measure library work and perform no allocation in the
 timed region. These whole-closure ratios therefore describe allocator-linked
 binaries; they do not establish allocator fast-path parity. The figure keeps
-all eligible leaf points visible, and the CSV retains every positive leaf.
+all eligible benchmark-case points visible, and the CSV retains every positive
+case.
 
-### Collections Type Isolation cohort
+### Collections Type Isolation appendix diagnostic
 
-Collections contributes five selected `std_bench` harnesses from the current
-Type Isolation suite, using Rust 1.97.0 at
-`2d8144b7880597b6e6d3dfd63a9a9efae3f533d3`. Its compiler route and leaf set
-differ from the complete allocator cohort, so the figure separates it and never
-pools the values.
+Collections contributes five selected `std_bench` benchmark cases from the
+current Type Isolation suite, using Rust 1.97.0 at
+`2d8144b7880597b6e6d3dfd63a9a9efae3f533d3`. Its compiler route and case set
+differ from the complete allocator cohort. The primary micro figure therefore
+contains only the full allocator cohort; CSV and JSON retain the Collections
+diagnostic without pooling the populations.
 
-| Variant vs. UniAlloc | Equal-harness execution ratio | Process-observed RSS ratio |
+| Variant vs. UniAlloc | Geometric mean across five benchmark cases | Process-observed RSS ratio |
 |---|---:|---:|
 | Typed control | `1.4374x` | `1.0592x` diagnostic |
 | Type Isolation | `1.4288x` | `1.0592x` diagnostic |
 
-The direct policy increment across these five harnesses is `0.9930x` execution
-cost. Two of five harnesses meet the compiler-route equivalence gate.
+The direct policy increment across these five benchmark cases is `0.9930x`
+execution cost. Two of five cases meet the compiler-route equivalence gate.
 
 ### RSS interpretation
 
@@ -135,14 +149,14 @@ The largest robust high ratios are `3.4030x` for ptmalloc on
 `btree::map::clone_fat_val_100_and_clear`. These are descriptive three-sample
 extrema; the uncapped CSV preserves exact medians and raw observations.
 
-| Censored leaf | Variants | Phase | Timeout |
+| Censored benchmark case | Variants | Phase | Timeout |
 |---|---|---|---:|
 | `btree::map::iter_1m` | all seven | warm-up | 30 s |
 | `linked_list::bench_push_back` | Scudo | warm-up | 30 s |
 
 A censored warm-up produced no timing estimate and skipped its three measured
 processes. Scudo also reported `Can't populate more pages for size class 64.`
-and `Can't populate more pages for size class 96.` for the linked-list leaf.
+and `Can't populate more pages for size class 96.` for the linked-list case.
 The campaign produced 13,080 terminal records and ended as
 `complete_with_timeout_censoring`.
 
@@ -195,10 +209,10 @@ uv run evaluation/scripts/plot_std_bench_allocator_full.py \
 
 ### Frozen target set
 
-Collections belongs to the microbenchmark part. The macro cohort contains 29
-predeclared harnesses across six current real-world Rust programs.
+Collections remains a microbenchmark appendix diagnostic. The macro cohort
+contains 29 predeclared workloads across six current real-world Rust programs.
 
-| Target | Frozen upstream identity | Harnesses | RSS work model |
+| Target | Frozen upstream identity | Workloads | RSS work model |
 |---|---|---:|---|
 | Oxipng | v10.1.1, `628e241e23f368097883807fa6e985ccf7c00357` | 5 | Fixed work |
 | redb | v4.1.0, `6ed1f981ba4deab0b2adbdd7bccb46ec409b2191` | 4 | Fixed work |
@@ -207,16 +221,17 @@ predeclared harnesses across six current real-world Rust programs.
 | RustPython | main at 2026-07-13, `a9c2c529b14199a7ae7893b9d82c8bebe6b17418` | 5 | Adaptive iterations |
 | Actix Web | web-v4.14.0, `696b1fed9c5b0147c37c70e0808cae5f63a5a4a0` | 5 | Adaptive iterations |
 
-Every harness has one digest-validated warm-up and five measured paired rounds.
-Variant order rotates within a round. Workload-native correctness, successful
+Every workload has one digest-validated warm-up and five measured paired runs.
+Variant order rotates within a pair. Workload-native correctness, successful
 builds, allocator activation, actual-MIR provenance, statistics-disabled
-execution, source audits, and complete paired rounds are mandatory eligibility
+execution, source audits, and five complete pairs are mandatory eligibility
 gates.
 
-For each comparison family and metric, the analysis takes a harness paired
-median, forms a geometric mean within each target, and gives every target equal
-weight in the suite geometric mean. Harness count and internal iteration count
-receive no extra suite weight.
+For each comparison family and metric, the analysis takes the median of five
+paired-run ratios per workload, forms a geometric mean across workloads within
+each target, and then takes an unweighted geometric mean across target
+summaries. Workload count and internal iteration count receive no extra weight
+in the across-target estimate.
 
 The paper artifact supplies useful target classes and normalized plot data, but
 omits enough source, lockfile, input, command, and memory-collection identity to
@@ -257,9 +272,9 @@ allocator peak RSS.
 
 | Suite comparison | Execution cost | Route-equivalent execution cost | Fixed-work peak RSS |
 |---|---:|---:|---:|
-| Compiler route | `2.5652x` (29 harnesses) | `1.0435x` (11 harnesses, 5 targets) | `1.0329x` (14 harnesses, 3 targets) |
+| Compiler route | `2.5652x` (29 workloads) | `1.0435x` (11 workloads, 5 targets) | `1.0329x` (14 workloads, 3 targets) |
 | Policy increment | **`1.0054x` (+0.54%)** | **`0.9968x` (-0.32%)** | **`1.0006x` (+0.057%)** |
-| End to end | `2.5770x` (29 harnesses) | `1.0421x` (11 harnesses, 5 targets) | `1.0034x` (14 harnesses, 3 targets) |
+| End to end | `2.5770x` (29 workloads) | `1.0421x` (11 workloads, 5 targets) | `1.0034x` (14 workloads, 3 targets) |
 
 The policy increment is the principal Type Isolation result. The typed compiler
 route dominates end-to-end cost where route equivalence fails, especially SWC,
@@ -269,7 +284,7 @@ CSV, JSON, and table above.
 
 ### RSS amendment and audit boundary
 
-The fixed-work RSS core contains Oxipng, redb, and Polars: 14 harnesses across
+The fixed-work RSS core contains Oxipng, redb, and Polars: 14 workloads across
 three targets. SWC, RustPython, and Actix Web retain workload-native adaptive
 iteration counts. Their hollow RSS observations describe process volume and are
 excluded from the suite RSS diamond.

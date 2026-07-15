@@ -185,9 +185,9 @@ Canonical scope:  131 files, 4,426,670 bytes
 
 The fixed-work RSS result is:
 
-> Across 14 harnesses in Oxipng, redb, and Polars, Type Isolation relative to the same typed compiler/runtime route with policy disabled has an equal-target peak-RSS ratio of **`1.000570x` (`+0.057%`)**.
+> Across 14 workloads in Oxipng, redb, and Polars, Type Isolation relative to the same typed compiler/runtime route with policy disabled has an across-target geometric mean peak-RSS ratio of **`1.000570x` (`+0.057%`)**.
 
-This is the current committee-facing Type Isolation memory claim. The all-process adaptive RSS rows remain visible diagnostics. Compiler-route equivalence passes for 13 of 34 harnesses and fails for 21, so compiler-route, policy-increment, and end-to-end effects remain separate. The current result status is `complete_with_attribution_limits`.
+This is the current committee-facing Type Isolation memory claim. The all-process adaptive RSS rows remain visible diagnostics. Compiler-route equivalence passes for 13 of 34 workloads and fails for 21, so compiler-route, policy-increment, and end-to-end effects remain separate. The current result status is `complete_with_attribution_limits`.
 
 Provenance is dual-recorded:
 
@@ -225,7 +225,7 @@ All 75 measured Oxipng processes passed output and evidence gates. The three-cel
 
 Key current-host observations are:
 
-- Disabling mimalloc THP on the same Oxipng binary changed paired median wall time by `+2.26%` and peak RSS by `-23.61%`.
+- Disabling mimalloc THP on the same Oxipng binary changed the median paired wall-time ratio by `+2.26%` and peak RSS by `-23.61%`.
 - On the Rsedis service diagnostic, disabling mimalloc THP changed throughput by `+0.22%`, peak RSS by `-85.08%`, and post-load `AnonHugePages` by `-36,864 KiB`.
 - gperftools TCMalloc 2.18.1 issued no `MADV_HUGEPAGE`, recorded `AnonHugePages=0`, and used no memfs HugeTLB path. Its precise label is **TCMalloc default, effectively THP-inactive under the measured host's `madvise` policy**.
 - UniAlloc's `hugepage` Cargo feature produced four successful 2 MiB `MAP_HUGETLB` mappings. The process sampler observed 8,192 KiB of `HugetlbPages`, which GNU Time peak RSS omitted.
@@ -330,7 +330,7 @@ UniAlloc's defensible mechanism contribution is the combination of exact Rust pr
 
 ### Defended current statements
 
-- Type Isolation adds `+0.057%` equal-target peak RSS across 14 fixed-work harnesses relative to the same typed compiler/runtime route with policy disabled.
+- Type Isolation adds `+0.057%` to the across-target geometric mean peak RSS across 14 fixed-work workloads relative to the same typed compiler/runtime route with policy disabled.
 - The full lifetime-aware feature improves dependent touch by 16.90%, improves allocate/fault/free lifecycle by 16.55%, and reduces steady effective resident memory by 8.09% on the formal synthetic trace.
 - Selective THP adds a 10.37% dependent-touch improvement relative to the same lifetime layout with THP forced off, with a 95% interval fully above zero.
 - Semantic selection uses 258 MiB of THP on the 50/50 trace, half the 516 MiB used by the measured global mimalloc and jemalloc THP controls.
