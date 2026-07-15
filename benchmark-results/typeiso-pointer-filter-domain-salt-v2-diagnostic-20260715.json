@@ -1,0 +1,328 @@
+{
+  "admission": {
+    "allocator_hotpath_each_leaf_below_one_percent": false,
+    "baseline_domain_indices_collide": true,
+    "candidate_domain_indices_are_distinct": true,
+    "mixed_same_hash_improves_over_one_percent": true,
+    "passed": false,
+    "single_domain_and_query_max_regression_below_one_percent": false
+  },
+  "allocator_hotpath": {
+    "geometric_mean_runtime_delta_percent": 0.29594459378341487,
+    "metric": "ns_per_iteration",
+    "scenarios": {
+      "conservative_same": {
+        "baseline": {
+          "max": 111.352357,
+          "median": 109.153949,
+          "min": 107.518683,
+          "samples": [
+            109.153949,
+            111.352357,
+            107.518683
+          ]
+        },
+        "candidate": {
+          "max": 107.699758,
+          "median": 107.668515,
+          "min": 107.566226,
+          "samples": [
+            107.699758,
+            107.668515,
+            107.566226
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.9863913856199559,
+        "paired_candidate_wins": 2,
+        "paired_rounds": 3,
+        "runtime_delta_percent": -1.3608614380044126
+      },
+      "conservative_split": {
+        "baseline": {
+          "max": 115.239302,
+          "median": 114.669159,
+          "min": 114.53726,
+          "samples": [
+            114.53726,
+            115.239302,
+            114.669159
+          ]
+        },
+        "candidate": {
+          "max": 114.713221,
+          "median": 114.102566,
+          "min": 113.445352,
+          "samples": [
+            114.713221,
+            113.445352,
+            114.102566
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.9950588893740818,
+        "paired_candidate_wins": 2,
+        "paired_rounds": 3,
+        "runtime_delta_percent": -0.4941110625918177
+      },
+      "conservative_unscoped_drop": {
+        "baseline": {
+          "max": 97.468609,
+          "median": 97.01361,
+          "min": 96.528841,
+          "samples": [
+            96.528841,
+            97.468609,
+            97.01361
+          ]
+        },
+        "candidate": {
+          "max": 97.059078,
+          "median": 96.493191,
+          "min": 95.847144,
+          "samples": [
+            97.059078,
+            95.847144,
+            96.493191
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.9946356083440251,
+        "paired_candidate_wins": 2,
+        "paired_rounds": 3,
+        "runtime_delta_percent": -0.5364391655974909
+      },
+      "local_same": {
+        "baseline": {
+          "max": 63.914719,
+          "median": 63.30789,
+          "min": 62.866402,
+          "samples": [
+            63.914719,
+            63.30789,
+            62.866402
+          ]
+        },
+        "candidate": {
+          "max": 64.128303,
+          "median": 63.764367,
+          "min": 62.982287,
+          "samples": [
+            63.764367,
+            64.128303,
+            62.982287
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.0072104282736323,
+        "paired_candidate_wins": 1,
+        "paired_rounds": 3,
+        "runtime_delta_percent": 0.7210428273632274
+      },
+      "raw": {
+        "baseline": {
+          "max": 14.683556,
+          "median": 14.37309,
+          "min": 14.343621,
+          "samples": [
+            14.683556,
+            14.37309,
+            14.343621
+          ]
+        },
+        "candidate": {
+          "max": 14.104454,
+          "median": 14.090893,
+          "min": 14.054372,
+          "samples": [
+            14.104454,
+            14.090893,
+            14.054372
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.9803662956260624,
+        "paired_candidate_wins": 3,
+        "paired_rounds": 3,
+        "runtime_delta_percent": -1.9633704373937633
+      },
+      "raw64": {
+        "baseline": {
+          "max": 14.465144,
+          "median": 14.418484,
+          "min": 14.340196,
+          "samples": [
+            14.465144,
+            14.418484,
+            14.340196
+          ]
+        },
+        "candidate": {
+          "max": 15.11644,
+          "median": 14.533693,
+          "min": 14.391172,
+          "samples": [
+            15.11644,
+            14.391172,
+            14.533693
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.0079903684742446,
+        "paired_candidate_wins": 1,
+        "paired_rounds": 3,
+        "runtime_delta_percent": 0.7990368474244613
+      },
+      "raw64_under_global_recovery": {
+        "baseline": {
+          "max": 16.040765,
+          "median": 15.735683,
+          "min": 15.699233,
+          "samples": [
+            16.040765,
+            15.735683,
+            15.699233
+          ]
+        },
+        "candidate": {
+          "max": 37.212117,
+          "median": 16.532639,
+          "min": 15.743866,
+          "samples": [
+            15.743866,
+            37.212117,
+            16.532639
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.0506464193514828,
+        "paired_candidate_wins": 1,
+        "paired_rounds": 3,
+        "runtime_delta_percent": 5.064641935148284
+      }
+    }
+  },
+  "experiment_boundary": "The forced same-hash panel isolates cross-domain atomic contention. The allocator hot-path panel is the merge guard for ordinary and feature-on paths.",
+  "generated_at": "2026-07-15T15:48:38-0400",
+  "metric_convention": "runtime_delta_percent = (candidate / baseline - 1) * 100; negative is faster",
+  "pointer_filter": {
+    "geometric_mean_runtime_delta_percent": -30.752633582190647,
+    "metric": "ns_per_iteration",
+    "scenarios": {
+      "mixed_same_hash_2t": {
+        "baseline": {
+          "max": 10.801454,
+          "median": 10.523332,
+          "min": 10.441168,
+          "samples": [
+            10.523332,
+            10.801454,
+            10.441168
+          ]
+        },
+        "candidate": {
+          "max": 4.122338,
+          "median": 2.0117,
+          "min": 2.005595,
+          "samples": [
+            2.005595,
+            4.122338,
+            2.0117
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.1911656878258711,
+        "paired_candidate_wins": 3,
+        "paired_rounds": 3,
+        "runtime_delta_percent": -80.88343121741289
+      },
+      "negative_query_1t": {
+        "baseline": {
+          "max": 0.501555,
+          "median": 0.500368,
+          "min": 0.499967,
+          "samples": [
+            0.501555,
+            0.500368,
+            0.499967
+          ]
+        },
+        "candidate": {
+          "max": 0.602654,
+          "median": 0.601907,
+          "min": 0.601727,
+          "samples": [
+            0.601727,
+            0.602654,
+            0.601907
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.2029286445176348,
+        "paired_candidate_wins": 0,
+        "paired_rounds": 3,
+        "runtime_delta_percent": 20.29286445176348
+      },
+      "single_recovery_1t": {
+        "baseline": {
+          "max": 4.041148,
+          "median": 4.031704,
+          "min": 4.025106,
+          "samples": [
+            4.041148,
+            4.031704,
+            4.025106
+          ]
+        },
+        "candidate": {
+          "max": 4.035419,
+          "median": 4.024609,
+          "min": 4.008573,
+          "samples": [
+            4.035419,
+            4.008573,
+            4.024609
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.9982401981891527,
+        "paired_candidate_wins": 3,
+        "paired_rounds": 3,
+        "runtime_delta_percent": -0.1759801810847339
+      },
+      "single_retained_1t": {
+        "baseline": {
+          "max": 4.026031,
+          "median": 4.017633,
+          "min": 4.016875,
+          "samples": [
+            4.016875,
+            4.026031,
+            4.017633
+          ]
+        },
+        "candidate": {
+          "max": 4.025088,
+          "median": 4.024375,
+          "min": 4.024122,
+          "samples": [
+            4.025088,
+            4.024375,
+            4.024122
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.001678102504634,
+        "paired_candidate_wins": 1,
+        "paired_rounds": 3,
+        "runtime_delta_percent": 0.16781025046339604
+      }
+    }
+  },
+  "protocol": {
+    "order": "AB/BA alternating by round",
+    "rounds": 3,
+    "summary_statistic": "median",
+    "warmups": 2
+  },
+  "raw_artifacts": {
+    "metadata": "benchmark-results/typeiso-pointer-filter-domain-salt-v2-diagnostic-20260715.meta.json",
+    "metadata_sha256": "a06640d984d18a87493be88a30210a2883a6c8b708ef980f1edc2c011b2a915e",
+    "tsv": "benchmark-results/typeiso-pointer-filter-domain-salt-v2-diagnostic-20260715.raw.tsv",
+    "tsv_sha256": "47cfb9944956aeb61cbbf1d95d6ab4aa3f17e33c6adc64d3800dc3aa76e1016a"
+  },
+  "reproduce": {
+    "command": "uv run python evaluation/scripts/run_typeiso_pointer_filter_ab.py --baseline-ref 3f641b1ada28fe6a06bf049e05b3325595f1bff3 --candidate-ref a758937cafbe4412ed19fb1b66afe5e740b41a45 --worker-cpus 22,23 --coordinator-cpu 24 --warmups 2 --rounds 3 --filter-iterations 5000000 --hotpath-iterations 2000000 --timeout 300 --output-prefix benchmark-results/typeiso-pointer-filter-domain-salt-v2-diagnostic-20260715 --svg docs/figures/typeiso-pointer-filter-domain-salt-v2-diagnostic-20260715/typeiso-pointer-filter-domain-salt-v2-diagnostic.svg"
+  },
+  "schema_version": 1,
+  "verdict": "reject_domain_salted_indices"
+}

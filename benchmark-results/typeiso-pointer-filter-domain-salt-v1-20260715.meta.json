@@ -1,0 +1,182 @@
+{
+  "binaries": {
+    "allocator_hotpath": {
+      "baseline": {
+        "sha256": "a620b715ad3fa090188784b231674c70e428f3edb950d7e9a28faedde5da5101",
+        "size_bytes": 1333672
+      },
+      "candidate": {
+        "sha256": "cc9faeb26f20f15078fe4cf1d03ba95330d6b054063db15244a0cf12e35ff520",
+        "size_bytes": 1333752
+      }
+    },
+    "filter": {
+      "baseline": {
+        "sha256": "1327a3620d7e253fa73c8d8d3a519eded260cc2db69ca306f5a33f60c828c605",
+        "size_bytes": 455312
+      },
+      "candidate": {
+        "sha256": "92763aba9fbef907c541cd728718d6f585a86df1ea5760e0456b3006d3ddae84",
+        "size_bytes": 455360
+      }
+    }
+  },
+  "build_commands": {
+    "baseline": {
+      "allocator_hotpath": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "unialloc",
+        "--example",
+        "typeiso_allocator_hotpath",
+        "--features",
+        "type_isolation",
+        "--target-dir",
+        "/tmp/unialloc-typeiso-filter-ab-f09sj6xn/filter-target-baseline/allocator-hotpath"
+      ],
+      "filter": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "unialloc",
+        "--example",
+        "typeiso_pointer_filter_bench",
+        "--features",
+        "typeiso_pointer_filter_bench",
+        "--target-dir",
+        "/tmp/unialloc-typeiso-filter-ab-f09sj6xn/filter-target-baseline/filter"
+      ]
+    },
+    "candidate": {
+      "allocator_hotpath": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "unialloc",
+        "--example",
+        "typeiso_allocator_hotpath",
+        "--features",
+        "type_isolation",
+        "--target-dir",
+        "/tmp/unialloc-typeiso-filter-ab-f09sj6xn/filter-target-candidate/allocator-hotpath"
+      ],
+      "filter": [
+        "cargo",
+        "build",
+        "--release",
+        "--locked",
+        "--offline",
+        "-p",
+        "unialloc",
+        "--example",
+        "typeiso_pointer_filter_bench",
+        "--features",
+        "typeiso_pointer_filter_bench",
+        "--target-dir",
+        "/tmp/unialloc-typeiso-filter-ab-f09sj6xn/filter-target-candidate/filter"
+      ]
+    }
+  },
+  "cargo": "cargo 1.98.0-nightly (0b1123a48 2026-06-01)",
+  "coordinator_cpu": 24,
+  "cpu_topology": [
+    {
+      "core_id": 58,
+      "cpu": 22,
+      "frequency_khz": 1516518,
+      "governor": "schedutil",
+      "numa_node": 0,
+      "package_id": 0
+    },
+    {
+      "core_id": 59,
+      "cpu": 23,
+      "frequency_khz": 1500000,
+      "governor": "schedutil",
+      "numa_node": 0,
+      "package_id": 0
+    },
+    {
+      "core_id": 8,
+      "cpu": 24,
+      "frequency_khz": 3787077,
+      "governor": "schedutil",
+      "numa_node": 0,
+      "package_id": 0
+    }
+  ],
+  "filter_iterations_per_worker": 5000000,
+  "finished_at": "2026-07-15T15:38:20-0400",
+  "hotpath_iterations": 2000000,
+  "kernel": "Linux 6.8.0-111-generic",
+  "load_average_after": [
+    6.017578125,
+    7.96533203125,
+    7.6455078125
+  ],
+  "load_average_before": [
+    7.25244140625,
+    8.453125,
+    7.779296875
+  ],
+  "raw_tsv_serialization": {
+    "line_ending": "LF",
+    "missing_value": "NA"
+  },
+  "rounds": 5,
+  "rustc": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)\nbinary: rustc\ncommit-hash: 485ec3fbcc12fa14ef6596dabb125ad710499c9e\ncommit-date: 2026-06-10\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0-nightly\nLLVM version: 22.1.6",
+  "sanitized_environment_names": [
+    "CARGO_BUILD_RUSTC_WRAPPER",
+    "CARGO_ENCODED_RUSTFLAGS",
+    "CARGO_TARGET_DIR",
+    "GLIBC_TUNABLES",
+    "LD_PRELOAD",
+    "MALLOC_ARENA_MAX",
+    "MALLOC_CONF",
+    "RUSTC_WORKSPACE_WRAPPER",
+    "RUSTC_WRAPPER",
+    "RUSTFLAGS",
+    "RUSTUP_TOOLCHAIN",
+    "SCUDO_OPTIONS",
+    "SCUDO_RUNTIME_LIBRARY",
+    "SCUDO_STANDALONE_LIBRARY",
+    "TCMALLOC_LIB_DIR",
+    "UNIALLOC_GOOGLE_TCMALLOC_LIBRARY",
+    "UNIALLOC_GOOGLE_TCMALLOC_PREFIX",
+    "UNIALLOC_SCUDO_RUNTIME_LIBRARY",
+    "UNIALLOC_TCMALLOC_LIB_DIR"
+  ],
+  "sanitized_environment_prefixes": [
+    "MIMALLOC_",
+    "TCMALLOC_"
+  ],
+  "schema_version": 1,
+  "source": {
+    "baseline": {
+      "commit": "3f641b1ada28fe6a06bf049e05b3325595f1bff3",
+      "tree": "8f1a657767c0bd5ea18139b29daae72ebf242163",
+      "type_isolation_sha256": "7f8389bea99f819580d871f9e6935d8aa5f0ce1fb2e65d442d7dc428fede3f5f"
+    },
+    "candidate": {
+      "commit": "98b4ccb959dde90bff7c8c594ca92b14bc70aa78",
+      "tree": "902fb0866705fbbd9022cc6009a652e698ab8e28",
+      "type_isolation_sha256": "ebd79f26991f8af9c2091bc8940da49414afb921efe6d495c5cf0ea9c8490781"
+    }
+  },
+  "started_at": "2026-07-15T15:37:38-0400",
+  "warmups": 2,
+  "worker_cpus": [
+    22,
+    23
+  ]
+}

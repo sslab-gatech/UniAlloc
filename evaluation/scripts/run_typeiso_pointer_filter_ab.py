@@ -57,6 +57,7 @@ SANITIZED_ENV_NAMES = {
     "UNIALLOC_TCMALLOC_LIB_DIR",
 }
 SANITIZED_ENV_PREFIXES = ("MIMALLOC_", "TCMALLOC_")
+RAW_TSV_MISSING_VALUE = "NA"
 
 
 def parse_args() -> argparse.Namespace:
@@ -476,6 +477,7 @@ def write_raw_tsv(path: pathlib.Path, panels: dict[str, list[dict[str, Any]]]) -
                 "retained_index",
             ),
             delimiter="\t",
+            lineterminator="\n",
         )
         writer.writeheader()
         for panel, rows in panels.items():
@@ -494,8 +496,12 @@ def write_raw_tsv(path: pathlib.Path, panels: dict[str, list[dict[str, Any]]]) -
                         "elapsed_ns": row["elapsed_ns"],
                         "metric": metric,
                         "value": row[metric],
-                        "recovery_index": row.get("recovery_index", ""),
-                        "retained_index": row.get("retained_index", ""),
+                        "recovery_index": row.get(
+                            "recovery_index", RAW_TSV_MISSING_VALUE
+                        ),
+                        "retained_index": row.get(
+                            "retained_index", RAW_TSV_MISSING_VALUE
+                        ),
                     }
                 )
 
@@ -706,6 +712,10 @@ def main() -> int:
                 "rounds": args.rounds,
                 "filter_iterations_per_worker": args.filter_iterations,
                 "hotpath_iterations": args.hotpath_iterations,
+                "raw_tsv_serialization": {
+                    "line_ending": "LF",
+                    "missing_value": RAW_TSV_MISSING_VALUE,
+                },
                 "source": identities,
                 "build_commands": build_commands,
                 "sanitized_environment_names": sorted(SANITIZED_ENV_NAMES),

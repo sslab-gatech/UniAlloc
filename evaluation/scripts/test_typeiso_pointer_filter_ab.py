@@ -118,6 +118,39 @@ class TypeIsoPointerFilterABTests(unittest.TestCase):
         self.assertIn("+0.25%", svg)
         self.assertIn("3 counterbalanced process runs", svg)
 
+    def test_raw_tsv_uses_lf_and_nonempty_missing_value(self) -> None:
+        panels = {
+            "pointer_filter": [
+                {
+                    "variant": "baseline",
+                    "round": 1,
+                    "scenario": "negative_query_1t",
+                    "elapsed_ns": 10,
+                    "ns_per_iteration": 1.0,
+                    "recovery_index": 7,
+                    "retained_index": 7,
+                }
+            ],
+            "allocator_hotpath": [
+                {
+                    "variant": "candidate",
+                    "round": 1,
+                    "scenario": "raw",
+                    "elapsed_ns": 20,
+                    "ns_per_iteration": 2.0,
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            output = pathlib.Path(temporary) / "raw.tsv"
+            runner.write_raw_tsv(output, panels)
+            raw = output.read_bytes()
+
+        self.assertNotIn(b"\r", raw)
+        lines = raw.decode("utf-8").splitlines()
+        self.assertTrue(all(line and not line.endswith((" ", "\t")) for line in lines))
+        self.assertEqual(lines[-1].split("\t")[-2:], ["NA", "NA"])
+
 
 if __name__ == "__main__":
     unittest.main()

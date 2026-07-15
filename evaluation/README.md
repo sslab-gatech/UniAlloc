@@ -101,6 +101,17 @@ The forced same-hash result is a contention stress diagnostic. Admission also
 requires every single-domain, negative-query, raw, and feature-on median to
 remain below the one-percent regression guardrail.
 
+The recorded domain-salting candidates were rejected. The first five-round
+candidate improved forced mixed-domain contention by 64.68%, while regressing
+the negative query by 20.44%, raw by 1.90%, and the conservative unscoped-drop
+path by 1.84%. A three-round refinement restored the recovery helper's baseline
+code shape and improved forced contention by 80.88%; the negative query still
+regressed by 20.29% and raw64 under global recovery regressed by 5.06%. The
+production filter therefore remains unified. The decision-grade inputs are:
+
+- `../benchmark-results/typeiso-pointer-filter-domain-salt-v1-20260715.json`
+- `../benchmark-results/typeiso-pointer-filter-domain-salt-v2-diagnostic-20260715.json`
+
 ## RustSec/Rudra heap-security corpus
 
 The review initially screened **53 candidates**. Post-source inspection

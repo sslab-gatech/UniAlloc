@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="582" viewBox="0 0 1180 582">
+<rect width="100%" height="100%" fill="#fbfbfa"/>
+<style>text{font-family:Inter,system-ui,sans-serif;fill:#202124}.title{font-size:22px;font-weight:700}.sub{font-size:13px;fill:#5f6368}.label{font-size:13px}.value{font-size:12px;font-weight:700}</style>
+<text x="36" y="34" class="title">Type Isolation pointer-filter domain salting</text>
+<text x="36" y="58" class="sub">Candidate runtime delta vs baseline; lower is faster. 3 counterbalanced process runs.</text>
+<line x1="923.18" y1="78" x2="923.18" y2="558" stroke="#6b7280" stroke-width="1.5"/>
+<text x="36" y="103" class="label">filter / mixed_same_hash_2t</text>
+<rect x="415.82" y="86" width="507.36" height="23" rx="4" fill="#16865c" opacity="0.92"/>
+<text x="408.82" y="102" text-anchor="end" class="value">-80.88%</text>
+<text x="36" y="145" class="label">filter / single_recovery_1t</text>
+<rect x="922.08" y="128" width="2.00" height="23" rx="4" fill="#16865c" opacity="0.92"/>
+<text x="915.08" y="144" text-anchor="end" class="value">-0.18%</text>
+<text x="36" y="187" class="label">filter / single_retained_1t</text>
+<rect x="923.18" y="170" width="2.00" height="23" rx="4" fill="#c65348" opacity="0.92"/>
+<text x="931.23" y="186" text-anchor="start" class="value">+0.17%</text>
+<text x="36" y="229" class="label">filter / negative_query_1t</text>
+<rect x="923.18" y="212" width="127.29" height="23" rx="4" fill="#c65348" opacity="0.92"/>
+<text x="1057.47" y="228" text-anchor="start" class="value">+20.29%</text>
+<text x="36" y="271" class="label">allocator / raw</text>
+<rect x="910.87" y="254" width="12.32" height="23" rx="4" fill="#16865c" opacity="0.72"/>
+<text x="903.87" y="270" text-anchor="end" class="value">-1.96%</text>
+<text x="36" y="313" class="label">allocator / raw64</text>
+<rect x="923.18" y="296" width="5.01" height="23" rx="4" fill="#c65348" opacity="0.72"/>
+<text x="935.19" y="312" text-anchor="start" class="value">+0.80%</text>
+<text x="36" y="355" class="label">allocator / raw64_under_global_recovery</text>
+<rect x="923.18" y="338" width="31.77" height="23" rx="4" fill="#c65348" opacity="0.72"/>
+<text x="961.95" y="354" text-anchor="start" class="value">+5.06%</text>
+<text x="36" y="397" class="label">allocator / local_same</text>
+<rect x="923.18" y="380" width="4.52" height="23" rx="4" fill="#c65348" opacity="0.72"/>
+<text x="934.70" y="396" text-anchor="start" class="value">+0.72%</text>
+<text x="36" y="439" class="label">allocator / conservative_same</text>
+<rect x="914.65" y="422" width="8.54" height="23" rx="4" fill="#16865c" opacity="0.72"/>
+<text x="907.65" y="438" text-anchor="end" class="value">-1.36%</text>
+<text x="36" y="481" class="label">allocator / conservative_split</text>
+<rect x="920.08" y="464" width="3.10" height="23" rx="4" fill="#16865c" opacity="0.72"/>
+<text x="913.08" y="480" text-anchor="end" class="value">-0.49%</text>
+<text x="36" y="523" class="label">allocator / conservative_unscoped_drop</text>
+<rect x="919.82" y="506" width="3.36" height="23" rx="4" fill="#16865c" opacity="0.72"/>
+<text x="912.82" y="522" text-anchor="end" class="value">-0.54%</text>
+</svg>
