@@ -240,7 +240,11 @@ const AUTO_ALLOCATION_RECORD_PROBE_LIMIT: usize = 16;
 const AUTO_ALLOCATION_RECORD_SHARD_MASK: usize = AUTO_ALLOCATION_RECORD_SHARD_COUNT - 1;
 const AUTO_ALLOCATION_RECORD_TOMBSTONE_PTR: usize = usize::MAX;
 #[cfg(not(feature = "fixed_heap"))]
-const AUTO_ALLOCATION_RECORD_OVERFLOW_SLOTS: usize = 512;
+const AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY: usize = 512;
+#[cfg(not(feature = "fixed_heap"))]
+const AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_NUMERATOR: usize = 3;
+#[cfg(not(feature = "fixed_heap"))]
+const AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_DENOMINATOR: usize = 4;
 /// Same-thread compiler recovery is a TLS cache, not the full side table.
 ///
 /// Keep the hosted tier deliberately small (128 records, currently 8KiB on 64-bit targets)
@@ -3959,17 +3963,22 @@ impl AutoAllocationRecordLookup {
 }
 
 #[cfg(not(feature = "fixed_heap"))]
-struct AutoAllocationRecordPage {
-    next: *mut AutoAllocationRecordPage,
-    entries: [AutoAllocationRecord; AUTO_ALLOCATION_RECORD_OVERFLOW_SLOTS],
+#[derive(Clone, Copy)]
+struct AutoAllocationRecordOverflowTable {
+    slots: *mut AutoAllocationRecord,
+    capacity: usize,
+    live: usize,
+    tombstones: usize,
 }
 
 #[cfg(not(feature = "fixed_heap"))]
-impl AutoAllocationRecordPage {
+impl AutoAllocationRecordOverflowTable {
     const fn empty() -> Self {
         Self {
-            next: core::ptr::null_mut(),
-            entries: [AutoAllocationRecord::empty(); AUTO_ALLOCATION_RECORD_OVERFLOW_SLOTS],
+            slots: core::ptr::null_mut(),
+            capacity: 0,
+            live: 0,
+            tombstones: 0,
         }
     }
 }
@@ -3996,7 +4005,7 @@ struct GlobalAutoAllocationRecordTable {
     hot: GlobalAutoAllocationRecordHotSlot,
     live_count: usize,
     #[cfg(not(feature = "fixed_heap"))]
-    overflow: *mut AutoAllocationRecordPage,
+    overflow: AutoAllocationRecordOverflowTable,
 }
 
 impl GlobalAutoAllocationRecordTable {
@@ -4006,15 +4015,14 @@ impl GlobalAutoAllocationRecordTable {
             hot: GlobalAutoAllocationRecordHotSlot::empty(),
             live_count: 0,
             #[cfg(not(feature = "fixed_heap"))]
-            overflow: core::ptr::null_mut(),
+            overflow: AutoAllocationRecordOverflowTable::empty(),
         }
     }
 }
 
-// Each global compiler-allocation recovery shard owns overflow pages behind its
-// shard-local spin mutex.  The raw page pointer is only followed while that
-// shard mutex is held, so guarded transfer between threads is sound at this
-// bookkeeping layer.
+// Each global compiler-allocation recovery shard owns one mmap-backed overflow
+// table behind its shard-local spin mutex. Raw slot pointers never escape that
+// guard, so growth can transactionally rehash and replace the mapping.
 unsafe impl Send for GlobalAutoAllocationRecordTable {}
 
 static AUTO_ALLOCATION_RECORDS: [Mutex<GlobalAutoAllocationRecordTable>;
@@ -4035,12 +4043,20 @@ static TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE: AtomicUsize = AtomicUsize::new(0)
 static TEST_RECOVERY_RECORD_INSERT_PHASE: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 static TEST_IDENTITY_REBIND_RECOVERY_UPDATE_FAIL: AtomicBool = AtomicBool::new(false);
+#[cfg(all(test, not(feature = "fixed_heap")))]
+static TEST_GLOBAL_RECOVERY_OVERFLOW_PROBE_STEPS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(all(test, not(feature = "fixed_heap")))]
+static TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP: AtomicBool = AtomicBool::new(false);
+#[cfg(all(test, not(feature = "fixed_heap")))]
+static TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_REHASH: AtomicBool = AtomicBool::new(false);
 /// Bitset of global recovery shards with at least one live record.
 ///
 /// The count is still the source of truth for "does any recovery record exist?"
 /// This bitset is an exact-but-defensive lock-skipping hint for sparse sharded
-/// traffic: each insertion sets its shard bit before publishing the record, and
-/// removals clear the bit only after scanning that shard under the shard lock.
+/// traffic. The shard mutex serializes slot publication; insertion sets its
+/// shard bit before the new global live count becomes observable, and hosted
+/// lookup also forces the pointer's home shard into its probe set. Removals
+/// clear the bit only after updating that shard under the same lock.
 /// A removal never clears unrelated shard bits: legacy/test state may therefore
 /// leave a conservative stale bit until the next explicit table reset, but it
 /// cannot hide a record concurrently published in another shard.
@@ -4052,7 +4068,7 @@ static AUTO_ALLOCATION_RECORD_ACTIVE_SHARDS: AtomicUsize = AtomicUsize::new(0);
 /// Sticky hosted compatibility gate for recovery records installed outside
 /// their pointer-derived home shard.
 ///
-/// New hosted records stay home-affine and use the existing home overflow list,
+/// New hosted records stay home-affine and use one mmap-backed overflow table,
 /// which lets insertion and lookup take one shard lock. Older/test state may
 /// still contain an inline record in another shard. Every supported non-home
 /// installer publishes this bit before the record, so later operations retain
@@ -5075,88 +5091,322 @@ fn auto_allocation_record_for(
 }
 
 #[cfg(not(feature = "fixed_heap"))]
-unsafe fn allocate_auto_allocation_record_page() -> *mut AutoAllocationRecordPage {
-    let prot = system_alloc::prots::get_prot(true, true, false);
-    let page = system_alloc::mmap(size_of::<AutoAllocationRecordPage>(), prot)
-        as *mut AutoAllocationRecordPage;
-    if page.is_null() || page as usize == usize::MAX {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AutoAllocationRecordOverflowProbe {
+    Found(usize),
+    Vacant(usize),
+    Full,
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AutoAllocationRecordOverflowInsert {
+    Updated,
+    Inserted,
+    Full,
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn auto_allocation_record_overflow_mapping_size(capacity: usize) -> Option<usize> {
+    let size = capacity.checked_mul(size_of::<AutoAllocationRecord>())?;
+    if size > isize::MAX as usize {
+        None
+    } else {
+        Some(size)
+    }
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn auto_allocation_record_overflow_is_empty(overflow: &AutoAllocationRecordOverflowTable) -> bool {
+    overflow.slots.is_null()
+        && overflow.capacity == 0
+        && overflow.live == 0
+        && overflow.tombstones == 0
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn auto_allocation_record_overflow_is_mapped_valid(
+    overflow: &AutoAllocationRecordOverflowTable,
+) -> bool {
+    !overflow.slots.is_null()
+        && overflow.capacity.is_power_of_two()
+        && overflow.live.saturating_add(overflow.tombstones) <= overflow.capacity
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn auto_allocation_record_overflow_start(ptr_key: usize, capacity: usize) -> usize {
+    debug_assert!(capacity.is_power_of_two());
+    let hash = type_cache_avalanche(((ptr_key >> 4) as u64) ^ 0xa076_1d64_78bd_642f);
+    hash as usize & (capacity - 1)
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe fn allocate_auto_allocation_record_overflow_slots(
+    capacity: usize,
+) -> *mut AutoAllocationRecord {
+    if !capacity.is_power_of_two() || capacity == 0 {
         return core::ptr::null_mut();
     }
-    page.write(AutoAllocationRecordPage::empty());
-    page
+    #[cfg(test)]
+    if TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.swap(false, Ordering::AcqRel) {
+        return core::ptr::null_mut();
+    }
+    let mapping_size = match auto_allocation_record_overflow_mapping_size(capacity) {
+        Some(size) => size,
+        None => return core::ptr::null_mut(),
+    };
+    let prot = system_alloc::prots::get_prot(true, true, false);
+    let slots = system_alloc::mmap(mapping_size, prot) as *mut AutoAllocationRecord;
+    if slots.is_null() || slots as usize == usize::MAX {
+        return core::ptr::null_mut();
+    }
+    // Anonymous mappings are zero-filled. `ptr == 0` is the authoritative empty
+    // marker, so no allocator-recursive initialization pass is needed here.
+    slots
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe fn release_auto_allocation_record_overflow_slots(
+    slots: *mut AutoAllocationRecord,
+    capacity: usize,
+) {
+    if slots.is_null() {
+        return;
+    }
+    let mapping_size = auto_allocation_record_overflow_mapping_size(capacity)
+        .expect("live recovery overflow mapping size must remain representable");
+    system_alloc::munmap(slots as *mut u8, mapping_size);
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+fn probe_auto_allocation_record_overflow(
+    overflow: &AutoAllocationRecordOverflowTable,
+    ptr_key: usize,
+) -> AutoAllocationRecordOverflowProbe {
+    if !auto_allocation_record_overflow_is_mapped_valid(overflow) {
+        return AutoAllocationRecordOverflowProbe::Full;
+    }
+    debug_assert!(overflow.capacity.is_power_of_two());
+    let start = auto_allocation_record_overflow_start(ptr_key, overflow.capacity);
+    let mut first_tombstone = None;
+    let mut offset = 0usize;
+    while offset < overflow.capacity {
+        #[cfg(test)]
+        TEST_GLOBAL_RECOVERY_OVERFLOW_PROBE_STEPS.fetch_add(1, Ordering::Relaxed);
+        let idx = (start + offset) & (overflow.capacity - 1);
+        let record = unsafe { *overflow.slots.add(idx) };
+        if record.ptr == ptr_key {
+            return AutoAllocationRecordOverflowProbe::Found(idx);
+        }
+        if record.is_empty() {
+            return AutoAllocationRecordOverflowProbe::Vacant(first_tombstone.unwrap_or(idx));
+        }
+        if record.is_tombstone() && first_tombstone.is_none() {
+            first_tombstone = Some(idx);
+        }
+        offset += 1;
+    }
+    match first_tombstone {
+        Some(idx) => AutoAllocationRecordOverflowProbe::Vacant(idx),
+        None => AutoAllocationRecordOverflowProbe::Full,
+    }
 }
 
 #[cfg(not(feature = "fixed_heap"))]
 fn find_auto_allocation_record_in_overflow(
-    overflow: *mut AutoAllocationRecordPage,
+    overflow: &AutoAllocationRecordOverflowTable,
     ptr_key: usize,
 ) -> Option<*mut AutoAllocationRecord> {
-    let mut page = overflow;
-    while !page.is_null() {
-        let page_ref = unsafe { &mut *page };
-        let mut entry_idx = 0;
-        while entry_idx < AUTO_ALLOCATION_RECORD_OVERFLOW_SLOTS {
-            let entry = &mut page_ref.entries[entry_idx];
-            if entry.ptr == ptr_key {
-                return Some(entry as *mut AutoAllocationRecord);
-            }
-            entry_idx += 1;
+    match probe_auto_allocation_record_overflow(overflow, ptr_key) {
+        AutoAllocationRecordOverflowProbe::Found(idx) => Some(unsafe { overflow.slots.add(idx) }),
+        AutoAllocationRecordOverflowProbe::Vacant(_) | AutoAllocationRecordOverflowProbe::Full => {
+            None
         }
-        page = page_ref.next;
     }
-    None
 }
 
 #[cfg(not(feature = "fixed_heap"))]
-fn first_available_auto_allocation_record_in_overflow(
-    overflow: *mut AutoAllocationRecordPage,
-) -> *mut AutoAllocationRecord {
-    let mut page = overflow;
-    while !page.is_null() {
-        let page_ref = unsafe { &mut *page };
-        let mut entry_idx = 0;
-        while entry_idx < AUTO_ALLOCATION_RECORD_OVERFLOW_SLOTS {
-            let entry = &mut page_ref.entries[entry_idx];
-            if entry.is_available() {
-                return entry as *mut AutoAllocationRecord;
+unsafe fn rehash_auto_allocation_record_overflow(
+    shard_idx: usize,
+    overflow: &mut AutoAllocationRecordOverflowTable,
+    new_capacity: usize,
+) -> bool {
+    let old_is_empty = auto_allocation_record_overflow_is_empty(overflow);
+    let old_is_mapped = auto_allocation_record_overflow_is_mapped_valid(overflow);
+    if (!old_is_empty && !old_is_mapped)
+        || !new_capacity.is_power_of_two()
+        || new_capacity == 0
+        || new_capacity < overflow.live
+    {
+        return false;
+    }
+    #[cfg(test)]
+    if TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_REHASH.swap(false, Ordering::AcqRel) {
+        return false;
+    }
+    let new_slots = allocate_auto_allocation_record_overflow_slots(new_capacity);
+    if new_slots.is_null() {
+        return false;
+    }
+    let mut replacement = AutoAllocationRecordOverflowTable {
+        slots: new_slots,
+        capacity: new_capacity,
+        live: 0,
+        tombstones: 0,
+    };
+
+    let mut old_idx = 0usize;
+    let mut old_tombstones = 0usize;
+    while old_idx < overflow.capacity {
+        let record = *overflow.slots.add(old_idx);
+        if record.is_tombstone() {
+            old_tombstones += 1;
+        } else if !record.is_empty() {
+            if auto_allocation_record_shard(record.ptr as *mut u8) != shard_idx {
+                release_auto_allocation_record_overflow_slots(
+                    replacement.slots,
+                    replacement.capacity,
+                );
+                return false;
             }
-            entry_idx += 1;
+            match probe_auto_allocation_record_overflow(&replacement, record.ptr) {
+                AutoAllocationRecordOverflowProbe::Vacant(new_idx) => {
+                    *replacement.slots.add(new_idx) = record;
+                    replacement.live += 1;
+                }
+                AutoAllocationRecordOverflowProbe::Found(_)
+                | AutoAllocationRecordOverflowProbe::Full => {
+                    release_auto_allocation_record_overflow_slots(
+                        replacement.slots,
+                        replacement.capacity,
+                    );
+                    return false;
+                }
+            }
         }
-        page = page_ref.next;
+        old_idx += 1;
     }
-    core::ptr::null_mut()
+    if replacement.live != overflow.live || old_tombstones != overflow.tombstones {
+        release_auto_allocation_record_overflow_slots(replacement.slots, replacement.capacity);
+        return false;
+    }
+
+    let old = *overflow;
+    *overflow = replacement;
+    release_auto_allocation_record_overflow_slots(old.slots, old.capacity);
+    true
 }
 
 #[cfg(not(feature = "fixed_heap"))]
-fn auto_allocation_record_overflow_page_has_live_record(page: &AutoAllocationRecordPage) -> bool {
-    page.entries.iter().any(|entry| !entry.is_available())
-}
+unsafe fn insert_auto_allocation_record_overflow(
+    shard_idx: usize,
+    overflow: &mut AutoAllocationRecordOverflowTable,
+    record: AutoAllocationRecord,
+) -> AutoAllocationRecordOverflowInsert {
+    if auto_allocation_record_shard(record.ptr as *mut u8) != shard_idx {
+        return AutoAllocationRecordOverflowInsert::Full;
+    }
+    let mut probe = probe_auto_allocation_record_overflow(overflow, record.ptr);
+    if let AutoAllocationRecordOverflowProbe::Found(idx) = probe {
+        *overflow.slots.add(idx) = record;
+        return AutoAllocationRecordOverflowInsert::Updated;
+    }
 
-#[cfg(not(feature = "fixed_heap"))]
-unsafe fn release_empty_auto_allocation_record_overflow_pages(
-    head: &mut *mut AutoAllocationRecordPage,
-) {
-    let mut prev: *mut AutoAllocationRecordPage = core::ptr::null_mut();
-    let mut page = *head;
-
-    while !page.is_null() {
-        let next = (*page).next;
-        // Overflow chains are full scans, not linear-probe chains.  Tombstones
-        // only preserve reuse semantics inside the page, so a page with no live
-        // records can be unlinked and unmapped immediately after the record that
-        // made it empty is consumed.
-        if !auto_allocation_record_overflow_page_has_live_record(&*page) {
-            if prev.is_null() {
-                *head = next;
-            } else {
-                (*prev).next = next;
-            }
-            system_alloc::munmap(page as *mut u8, size_of::<AutoAllocationRecordPage>());
+    let occupied = overflow.live.saturating_add(overflow.tombstones);
+    let load_limit = overflow.capacity / AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_DENOMINATOR
+        * AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_NUMERATOR;
+    let rebuild_needed = overflow.capacity == 0 || occupied.saturating_add(1) > load_limit;
+    if rebuild_needed {
+        let new_capacity = if overflow.capacity == 0 {
+            Some(AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY)
         } else {
-            prev = page;
+            let live_after_insert = overflow.live.saturating_add(1);
+            if live_after_insert > load_limit {
+                overflow.capacity.checked_mul(2)
+            } else {
+                Some(overflow.capacity)
+            }
+        };
+        let new_capacity = match new_capacity {
+            Some(new_capacity) => new_capacity,
+            None => return AutoAllocationRecordOverflowInsert::Full,
+        };
+        if !rehash_auto_allocation_record_overflow(shard_idx, overflow, new_capacity) {
+            // Resource failures and invariant failures share one fail-closed
+            // result. The old descriptor remains byte-for-byte authoritative,
+            // and the new identity never becomes partially visible.
+            return AutoAllocationRecordOverflowInsert::Full;
         }
-        page = next;
+        probe = probe_auto_allocation_record_overflow(overflow, record.ptr);
+        if let AutoAllocationRecordOverflowProbe::Found(idx) = probe {
+            *overflow.slots.add(idx) = record;
+            return AutoAllocationRecordOverflowInsert::Updated;
+        }
     }
+
+    let idx = match probe {
+        AutoAllocationRecordOverflowProbe::Vacant(idx) => idx,
+        AutoAllocationRecordOverflowProbe::Found(idx) => {
+            *overflow.slots.add(idx) = record;
+            return AutoAllocationRecordOverflowInsert::Updated;
+        }
+        AutoAllocationRecordOverflowProbe::Full => {
+            return AutoAllocationRecordOverflowInsert::Full;
+        }
+    };
+    if (*overflow.slots.add(idx)).is_tombstone() {
+        overflow.tombstones = overflow.tombstones.saturating_sub(1);
+    }
+    *overflow.slots.add(idx) = record;
+    overflow.live = overflow.live.saturating_add(1);
+    AutoAllocationRecordOverflowInsert::Inserted
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+unsafe fn try_remove_auto_allocation_record_overflow_at(
+    shard_idx: usize,
+    overflow: &mut AutoAllocationRecordOverflowTable,
+    idx: usize,
+) -> bool {
+    if !auto_allocation_record_overflow_is_mapped_valid(overflow)
+        || idx >= overflow.capacity
+        || overflow.live == 0
+        || (*overflow.slots.add(idx)).is_available()
+    {
+        return false;
+    }
+    if overflow.live == 1 {
+        let mut actual_live = 0usize;
+        let mut actual_tombstones = 0usize;
+        let mut scan_idx = 0usize;
+        while scan_idx < overflow.capacity {
+            let record = *overflow.slots.add(scan_idx);
+            if record.is_tombstone() {
+                actual_tombstones += 1;
+            } else if !record.is_empty() {
+                actual_live += 1;
+                if auto_allocation_record_shard(record.ptr as *mut u8) != shard_idx {
+                    return false;
+                }
+            }
+            scan_idx += 1;
+        }
+        if actual_live != overflow.live || actual_tombstones != overflow.tombstones {
+            return false;
+        }
+        let old = *overflow;
+        *overflow = AutoAllocationRecordOverflowTable::empty();
+        release_auto_allocation_record_overflow_slots(old.slots, old.capacity);
+        return true;
+    }
+    *overflow.slots.add(idx) = AutoAllocationRecord::tombstone();
+    overflow.live -= 1;
+    overflow.tombstones = overflow.tombstones.saturating_add(1);
+    true
 }
 
 /// Destructively reset recovery bookkeeping for isolated tests.
@@ -5171,13 +5421,10 @@ fn clear_auto_allocation_records() {
         let mut table = table_lock.lock();
         #[cfg(not(feature = "fixed_heap"))]
         {
-            let mut page = table.overflow;
-            while !page.is_null() {
-                let next = unsafe { (*page).next };
-                unsafe {
-                    system_alloc::munmap(page as *mut u8, size_of::<AutoAllocationRecordPage>());
-                }
-                page = next;
+            let overflow = table.overflow;
+            table.overflow = AutoAllocationRecordOverflowTable::empty();
+            unsafe {
+                release_auto_allocation_record_overflow_slots(overflow.slots, overflow.capacity);
             }
         }
         *table = GlobalAutoAllocationRecordTable::empty();
@@ -5195,6 +5442,12 @@ fn clear_auto_allocation_records() {
     }
     #[cfg(test)]
     FAST_AUTO_ALLOCATION_RECORD_PROBE_STEPS.store(0, Ordering::Relaxed);
+    #[cfg(all(test, not(feature = "fixed_heap")))]
+    TEST_GLOBAL_RECOVERY_OVERFLOW_PROBE_STEPS.store(0, Ordering::Relaxed);
+    #[cfg(all(test, not(feature = "fixed_heap")))]
+    TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.store(false, Ordering::Release);
+    #[cfg(all(test, not(feature = "fixed_heap")))]
+    TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_REHASH.store(false, Ordering::Release);
     FAST_AUTO_ALLOCATION_RECORD_GLOBAL_COUNT.store(0, Ordering::Relaxed);
     semantic_slow_path_clear(SLOW_PATH_ALLOCATION_RECORDS);
 }
@@ -5642,7 +5895,7 @@ fn update_global_auto_allocation_record_in_shard(
 
     #[cfg(feature = "fixed_heap")]
     {
-        // fixed_heap builds do not have mmap-backed overflow pages.  Scan the
+        // fixed_heap builds do not have an mmap-backed overflow table. Scan the
         // rest of this shard after the bounded hot probe, then continue to
         // later shards so total inline capacity remains 4096 records.
         let mut slow_offset = AUTO_ALLOCATION_RECORD_PROBE_LIMIT;
@@ -5670,7 +5923,7 @@ fn update_global_auto_allocation_record_in_shard(
 
     #[cfg(not(feature = "fixed_heap"))]
     {
-        // Overflow pages are appended only to the pointer's home shard after
+        // The overflow table belongs only to the pointer's home shard after
         // every shard-local inline table is full.  Inline records may live in a
         // different shard to preserve the historical global inline capacity,
         // but overflow records do not migrate.  Skipping non-home overflow
@@ -5678,7 +5931,7 @@ fn update_global_auto_allocation_record_in_shard(
         // and prevents a corrupt impossible non-home overflow entry from
         // shadowing the authoritative home-shard record.
         if search_overflow {
-            if let Some(slot) = find_auto_allocation_record_in_overflow(table.overflow, ptr_key) {
+            if let Some(slot) = find_auto_allocation_record_in_overflow(&table.overflow, ptr_key) {
                 auto_allocation_record_mark_shard_active(shard_idx);
                 unsafe {
                     *slot = auto_allocation_record_for(ptr, layout, metadata);
@@ -5810,32 +6063,32 @@ unsafe fn record_global_auto_allocation_metadata_eligible_sharded(
 
     #[cfg(not(feature = "fixed_heap"))]
     {
-        // All shard-local inline probe windows were occupied.  Spill into the
-        // home shard's overflow list; lookup scans each shard's overflow list
-        // under the corresponding shard lock.
+        // All shard-local inline probe windows were occupied. Spill into the
+        // home shard's dynamically sized overflow table.
         let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
-        let mut overflow_slot = first_available_auto_allocation_record_in_overflow(table.overflow);
-        if overflow_slot.is_null() {
-            let page = allocate_auto_allocation_record_page();
-            if !page.is_null() {
-                (*page).next = table.overflow;
-                table.overflow = page;
-                overflow_slot = &mut (*page).entries[0] as *mut AutoAllocationRecord;
+        match insert_auto_allocation_record_overflow(
+            home_shard_idx,
+            &mut table.overflow,
+            auto_allocation_record_for(ptr, layout, metadata),
+        ) {
+            AutoAllocationRecordOverflowInsert::Updated => return true,
+            AutoAllocationRecordOverflowInsert::Inserted => {
+                increment_global_auto_allocation_record_shard_live_count(
+                    home_shard_idx,
+                    &mut *table,
+                );
+                AUTO_ALLOCATION_RECORD_COUNT.fetch_add(1, Ordering::Relaxed);
+                semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+                return true;
             }
-        }
-        if !overflow_slot.is_null() {
-            increment_global_auto_allocation_record_shard_live_count(home_shard_idx, &mut *table);
-            *overflow_slot = auto_allocation_record_for(ptr, layout, metadata);
-            AUTO_ALLOCATION_RECORD_COUNT.fetch_add(1, Ordering::Relaxed);
-            semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
-            return true;
+            AutoAllocationRecordOverflowInsert::Full => {}
         }
     }
     false
 }
 
 /// Install or update a hosted recovery record in its pointer-derived home
-/// shard. Hosted overflow pages are already shard-local and unbounded, so
+/// shard. The hosted overflow table is shard-local and dynamically sized, so
 /// spreading a record into foreign inline capacity only makes every normal
 /// insert and miss scan unrelated locks.
 #[cfg(not(feature = "fixed_heap"))]
@@ -5876,24 +6129,20 @@ unsafe fn record_home_auto_allocation_metadata_eligible(
         }
     }
 
-    let mut overflow_slot = first_available_auto_allocation_record_in_overflow(table.overflow);
-    if overflow_slot.is_null() {
-        let page = allocate_auto_allocation_record_page();
-        if !page.is_null() {
-            (*page).next = table.overflow;
-            table.overflow = page;
-            overflow_slot = &mut (*page).entries[0] as *mut AutoAllocationRecord;
+    match insert_auto_allocation_record_overflow(
+        home_shard_idx,
+        &mut table.overflow,
+        auto_allocation_record_for(ptr, layout, metadata),
+    ) {
+        AutoAllocationRecordOverflowInsert::Updated => true,
+        AutoAllocationRecordOverflowInsert::Inserted => {
+            increment_global_auto_allocation_record_shard_live_count(home_shard_idx, &mut *table);
+            AUTO_ALLOCATION_RECORD_COUNT.fetch_add(1, Ordering::Relaxed);
+            semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+            true
         }
+        AutoAllocationRecordOverflowInsert::Full => false,
     }
-    if overflow_slot.is_null() {
-        return false;
-    }
-
-    increment_global_auto_allocation_record_shard_live_count(home_shard_idx, &mut *table);
-    *overflow_slot = auto_allocation_record_for(ptr, layout, metadata);
-    AUTO_ALLOCATION_RECORD_COUNT.fetch_add(1, Ordering::Relaxed);
-    semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
-    true
 }
 
 #[inline]
@@ -6093,34 +6342,35 @@ fn lookup_global_auto_allocation_record_in_shard(
         // shard. The caller passes this explicitly so legacy foreign-shard
         // fallback never accepts a corrupt non-home overflow entry.
         if search_home_overflow {
-            if let Some(slot) = find_auto_allocation_record_in_overflow(table.overflow, ptr_key) {
-                let record = unsafe { *slot };
+            if let AutoAllocationRecordOverflowProbe::Found(idx) =
+                probe_auto_allocation_record_overflow(&table.overflow, ptr_key)
+            {
+                let record = unsafe { *table.overflow.slots.add(idx) };
                 if record.matches_allocation(ptr, layout) {
                     if remove {
-                        if atomic_saturating_decrement(&AUTO_ALLOCATION_RECORD_COUNT) == 0 {
-                            #[cfg(test)]
-                            pause_after_last_global_recovery_count_decrement_for_test();
-                            unsafe {
-                                *slot = AutoAllocationRecord::empty();
-                            }
-                            decrement_global_auto_allocation_record_shard_live_count(
+                        if !unsafe {
+                            try_remove_auto_allocation_record_overflow_at(
                                 shard_idx,
-                                &mut *table,
-                            );
-                            semantic_slow_path_clear(SLOW_PATH_ALLOCATION_RECORDS);
-                        } else {
-                            unsafe {
-                                *slot = AutoAllocationRecord::tombstone();
-                            }
-                            decrement_global_auto_allocation_record_shard_live_count(
-                                shard_idx,
-                                &mut *table,
+                                &mut table.overflow,
+                                idx,
+                            )
+                        } {
+                            return AutoAllocationRecordLookup::Mismatched(
+                                AutoAllocationRecordMismatch::from_record(record),
                             );
                         }
-                        unsafe {
-                            release_empty_auto_allocation_record_overflow_pages(
-                                &mut table.overflow,
-                            );
+                        let removed_last_global =
+                            atomic_saturating_decrement(&AUTO_ALLOCATION_RECORD_COUNT) == 0;
+                        if removed_last_global {
+                            #[cfg(test)]
+                            pause_after_last_global_recovery_count_decrement_for_test();
+                        }
+                        decrement_global_auto_allocation_record_shard_live_count(
+                            shard_idx,
+                            &mut *table,
+                        );
+                        if removed_last_global {
+                            semantic_slow_path_clear(SLOW_PATH_ALLOCATION_RECORDS);
                         }
                     }
                     return AutoAllocationRecordLookup::Exact(record.metadata);
@@ -17892,6 +18142,46 @@ mod tests {
         semantic_test_guard()
     }
 
+    #[cfg(not(feature = "fixed_heap"))]
+    unsafe fn auto_allocation_record_overflow_with_capacity_for_test(
+        records: &[AutoAllocationRecord],
+        capacity: usize,
+    ) -> AutoAllocationRecordOverflowTable {
+        assert!(capacity.is_power_of_two());
+        assert!(records.len() <= capacity);
+        let slots = allocate_auto_allocation_record_overflow_slots(capacity);
+        assert!(!slots.is_null(), "test recovery overflow mapping");
+        let mut overflow = AutoAllocationRecordOverflowTable {
+            slots,
+            capacity,
+            live: 0,
+            tombstones: 0,
+        };
+        for record in records.iter().copied() {
+            let idx = match probe_auto_allocation_record_overflow(&overflow, record.ptr) {
+                AutoAllocationRecordOverflowProbe::Vacant(idx) => idx,
+                other => panic!("test recovery overflow insert failed: {:?}", other),
+            };
+            *overflow.slots.add(idx) = record;
+            overflow.live += 1;
+        }
+        overflow
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    unsafe fn auto_allocation_record_overflow_for_test(
+        records: &[AutoAllocationRecord],
+    ) -> AutoAllocationRecordOverflowTable {
+        let mut capacity = AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY;
+        while records.len()
+            > capacity / AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_DENOMINATOR
+                * AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_NUMERATOR
+        {
+            capacity = capacity.checked_mul(2).expect("test overflow capacity");
+        }
+        auto_allocation_record_overflow_with_capacity_for_test(records, capacity)
+    }
+
     #[test]
     fn global_address_lifecycle_tracking_requires_explicit_authorization() {
         assert!(!global_address_lifecycle_tracking_feature_gate(
@@ -22246,7 +22536,7 @@ mod tests {
             );
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                find_auto_allocation_record_in_overflow(table.overflow, overflow_ptr as usize)
+                find_auto_allocation_record_in_overflow(&table.overflow, overflow_ptr as usize)
                     .is_some(),
                 "hosted recovery records beyond the home probe window should use home-shard overflow"
             );
@@ -22458,12 +22748,14 @@ mod tests {
         if seed_overflow {
             #[cfg(not(feature = "fixed_heap"))]
             unsafe {
-                let page = allocate_auto_allocation_record_page();
-                assert!(!page.is_null(), "hosted race test needs one overflow page");
-                (*page).entries[0] = auto_allocation_record_for(old_ptr, layout, old_metadata);
+                let overflow =
+                    auto_allocation_record_overflow_for_test(&[auto_allocation_record_for(
+                        old_ptr,
+                        layout,
+                        old_metadata,
+                    )]);
                 let mut table = AUTO_ALLOCATION_RECORDS[old_shard_idx].lock();
-                (*page).next = table.overflow;
-                table.overflow = page;
+                table.overflow = overflow;
                 table.live_count = 1;
                 AUTO_ALLOCATION_RECORD_COUNT.store(1, Ordering::Relaxed);
                 auto_allocation_record_mark_shard_active(old_shard_idx);
@@ -22803,7 +23095,7 @@ mod tests {
             );
             let home = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                find_auto_allocation_record_in_overflow(home.overflow, ptr as usize).is_some(),
+                find_auto_allocation_record_in_overflow(&home.overflow, ptr as usize).is_some(),
                 "the overflow record should remain in its pointer-derived home shard"
             );
         }
@@ -23138,6 +23430,242 @@ mod tests {
 
     #[cfg(not(feature = "fixed_heap"))]
     #[test]
+    fn hosted_recovery_overflow_insert_probe_work_is_bounded() {
+        const RECORDS: usize = 2_048;
+        const MAX_PROBES_PER_INSERT: usize = 64;
+
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let home_ptr = (0x2300_0000usize << 4) as *mut u8;
+        let home_shard_idx = auto_allocation_record_shard(home_ptr);
+        {
+            let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            for idx in 0..AUTO_ALLOCATION_RECORD_SHARD_SLOTS {
+                let ptr = ((0x2400_0000usize + idx) << 4) as *mut u8;
+                let metadata = AllocationMetadata::for_type(0xC002_0000 + idx as u64)
+                    .with_module(0xC0DE)
+                    .with_callsite(0xA110_0000 + idx as u64);
+                table.inline[idx] = auto_allocation_record_for(ptr, layout, metadata);
+            }
+            table.live_count = AUTO_ALLOCATION_RECORD_SHARD_SLOTS;
+        }
+        AUTO_ALLOCATION_RECORD_COUNT.store(AUTO_ALLOCATION_RECORD_SHARD_SLOTS, Ordering::Relaxed);
+        auto_allocation_record_mark_shard_active(home_shard_idx);
+        semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+        TEST_GLOBAL_RECOVERY_OVERFLOW_PROBE_STEPS.store(0, Ordering::Relaxed);
+
+        let mut inserted = 0usize;
+        let mut candidate = 0x2500_0000usize;
+        while inserted < RECORDS {
+            let ptr = (candidate << 4) as *mut u8;
+            candidate += 1;
+            if auto_allocation_record_shard(ptr) != home_shard_idx {
+                continue;
+            }
+            let metadata = AllocationMetadata::for_type(0xC003_0000 + inserted as u64)
+                .with_module(0xC0DE)
+                .with_callsite(0xA120_0000 + inserted as u64);
+            assert!(unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) });
+            inserted += 1;
+        }
+
+        let probes = TEST_GLOBAL_RECOVERY_OVERFLOW_PROBE_STEPS.load(Ordering::Relaxed);
+        assert!(
+            probes <= RECORDS * MAX_PROBES_PER_INSERT,
+            "hosted overflow insertion performed {} record probes for {} inserts; expected at most {} probes per insert",
+            probes,
+            RECORDS,
+            MAX_PROBES_PER_INSERT,
+        );
+
+        clear_auto_allocation_records();
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_rebuild_failures_are_transactional() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let shard_idx = 3usize;
+        let mut records = Vec::new();
+        let mut candidate = 0x2600_0000usize;
+        while records.len() <= 384 {
+            let ptr = (candidate << 4) as *mut u8;
+            candidate += 1;
+            if auto_allocation_record_shard(ptr) != shard_idx {
+                continue;
+            }
+            let metadata = AllocationMetadata::for_type(0xC004_0000 + records.len() as u64)
+                .with_module(0xC0DE)
+                .with_callsite(0xA130_0000 + records.len() as u64)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            records.push(auto_allocation_record_for(ptr, layout, metadata));
+        }
+
+        let mut overflow = AutoAllocationRecordOverflowTable::empty();
+        TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.store(true, Ordering::Release);
+        assert_eq!(
+            unsafe { insert_auto_allocation_record_overflow(shard_idx, &mut overflow, records[0]) },
+            AutoAllocationRecordOverflowInsert::Full
+        );
+        assert!(auto_allocation_record_overflow_is_empty(&overflow));
+
+        for record in records.iter().copied().take(384) {
+            assert_eq!(
+                unsafe { insert_auto_allocation_record_overflow(shard_idx, &mut overflow, record) },
+                AutoAllocationRecordOverflowInsert::Inserted
+            );
+        }
+        let before = (
+            overflow.slots as usize,
+            overflow.capacity,
+            overflow.live,
+            overflow.tombstones,
+        );
+        assert_eq!(before.1, AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY);
+
+        TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.store(true, Ordering::Release);
+        assert_eq!(
+            unsafe {
+                insert_auto_allocation_record_overflow(shard_idx, &mut overflow, records[384])
+            },
+            AutoAllocationRecordOverflowInsert::Full
+        );
+        assert_eq!(
+            (
+                overflow.slots as usize,
+                overflow.capacity,
+                overflow.live,
+                overflow.tombstones,
+            ),
+            before
+        );
+        assert!(find_auto_allocation_record_in_overflow(&overflow, records[0].ptr).is_some());
+        assert!(find_auto_allocation_record_in_overflow(&overflow, records[384].ptr).is_none());
+
+        TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_REHASH.store(true, Ordering::Release);
+        assert_eq!(
+            unsafe {
+                insert_auto_allocation_record_overflow(shard_idx, &mut overflow, records[384])
+            },
+            AutoAllocationRecordOverflowInsert::Full
+        );
+        assert_eq!(
+            (
+                overflow.slots as usize,
+                overflow.capacity,
+                overflow.live,
+                overflow.tombstones,
+            ),
+            before
+        );
+        assert!(find_auto_allocation_record_in_overflow(&overflow, records[0].ptr).is_some());
+        assert!(find_auto_allocation_record_in_overflow(&overflow, records[384].ptr).is_none());
+        unsafe {
+            release_auto_allocation_record_overflow_slots(overflow.slots, overflow.capacity);
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_roundtrips_ten_thousand_records() {
+        const RECORDS: usize = 10_000;
+
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let wrong_layout = Layout::from_size_align(128, align_of::<usize>()).unwrap();
+        let home_ptr = (0x2700_0000usize << 4) as *mut u8;
+        let home_shard_idx = auto_allocation_record_shard(home_ptr);
+        {
+            let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            for idx in 0..AUTO_ALLOCATION_RECORD_SHARD_SLOTS {
+                let ptr = ((0x2800_0000usize + idx) << 4) as *mut u8;
+                let metadata = AllocationMetadata::for_type(0xC005_0000 + idx as u64)
+                    .with_module(0xC0DE)
+                    .with_callsite(0xA140_0000 + idx as u64);
+                table.inline[idx] = auto_allocation_record_for(ptr, layout, metadata);
+            }
+            table.live_count = AUTO_ALLOCATION_RECORD_SHARD_SLOTS;
+        }
+        AUTO_ALLOCATION_RECORD_COUNT.store(AUTO_ALLOCATION_RECORD_SHARD_SLOTS, Ordering::Relaxed);
+        auto_allocation_record_mark_shard_active(home_shard_idx);
+        semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+
+        let mut expected = Vec::with_capacity(RECORDS);
+        let mut candidate = 0x2900_0000usize;
+        while expected.len() < RECORDS {
+            let ptr = (candidate << 4) as *mut u8;
+            candidate += 1;
+            if auto_allocation_record_shard(ptr) != home_shard_idx {
+                continue;
+            }
+            let metadata = AllocationMetadata::for_type(0xC006_0000 + expected.len() as u64)
+                .with_module(0xC0DE)
+                .with_callsite(0xA150_0000 + expected.len() as u64)
+                .with_flags(FLAG_TYPE_ISOLATED);
+            assert!(unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) });
+            expected.push((ptr, metadata));
+        }
+
+        {
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert_eq!(table.overflow.live, RECORDS);
+            assert!(table.overflow.capacity.is_power_of_two());
+            assert!(table.overflow.live * 4 <= table.overflow.capacity * 3);
+        }
+        let count_before_update = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        expected[0].1 = AllocationMetadata {
+            callsite: 0xA15F_FFFF,
+            ..expected[0].1
+        };
+        assert!(unsafe {
+            record_global_auto_allocation_metadata(expected[0].0, layout, expected[0].1)
+        });
+        assert_eq!(
+            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+            count_before_update,
+            "same-pointer replacement must remain count-neutral"
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(expected[0].0, wrong_layout),
+            None
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(expected[0].0, layout),
+            Some(expected[0].1),
+            "a layout mismatch must preserve the authoritative record"
+        );
+
+        for &(ptr, metadata) in &expected {
+            assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(metadata));
+        }
+        for (ptr, metadata) in expected {
+            assert_eq!(take_auto_deallocation_metadata(ptr, layout), Some(metadata));
+        }
+        {
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+            assert_eq!(table.live_count, AUTO_ALLOCATION_RECORD_SHARD_SLOTS);
+        }
+        assert_eq!(
+            AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed),
+            AUTO_ALLOCATION_RECORD_SHARD_SLOTS
+        );
+        clear_auto_allocation_records();
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
     fn compiler_auto_allocation_records_spill_to_overflow_when_global_table_is_full() {
         let _guard = test_guard();
         unsafe {
@@ -23193,11 +23721,11 @@ mod tests {
             let home_shard_idx = auto_allocation_record_shard(overflow_ptr);
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                !table.overflow.is_null(),
+                !table.overflow.slots.is_null(),
                 "overflow page should be allocated in the home shard for exact recovery records beyond the sharded inline table"
             );
             assert!(
-                find_auto_allocation_record_in_overflow(table.overflow, overflow_ptr as usize)
+                find_auto_allocation_record_in_overflow(&table.overflow, overflow_ptr as usize)
                     .is_some(),
                 "the spill record should be discoverable in overflow"
             );
@@ -23218,7 +23746,7 @@ mod tests {
             let home_shard_idx = auto_allocation_record_shard(overflow_ptr);
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                table.overflow.is_null(),
+                table.overflow.slots.is_null(),
                 "the last consumed overflow recovery record should release its cold mmap page"
             );
         }
@@ -23262,16 +23790,12 @@ mod tests {
             .with_lifetime_hint(0x22);
 
         unsafe {
-            let page = allocate_auto_allocation_record_page();
-            assert!(
-                !page.is_null(),
-                "hosted test needs one recovery overflow page"
-            );
-            (*page).entries[0] = auto_allocation_record_for(first_ptr, layout, first_metadata);
-            (*page).entries[1] = auto_allocation_record_for(second_ptr, layout, second_metadata);
+            let overflow = auto_allocation_record_overflow_for_test(&[
+                auto_allocation_record_for(first_ptr, layout, first_metadata),
+                auto_allocation_record_for(second_ptr, layout, second_metadata),
+            ]);
             let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
-            (*page).next = table.overflow;
-            table.overflow = page;
+            table.overflow = overflow;
             table.live_count = 2;
         }
         AUTO_ALLOCATION_RECORD_COUNT.store(2, Ordering::Relaxed);
@@ -23293,11 +23817,11 @@ mod tests {
         {
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                !table.overflow.is_null(),
+                !table.overflow.slots.is_null(),
                 "an overflow page with another live recovery record must not be unmapped"
             );
             assert!(
-                find_auto_allocation_record_in_overflow(table.overflow, second_ptr as usize)
+                find_auto_allocation_record_in_overflow(&table.overflow, second_ptr as usize)
                     .is_some(),
                 "the remaining live overflow record must stay recoverable"
             );
@@ -23311,7 +23835,7 @@ mod tests {
         {
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                table.overflow.is_null(),
+                table.overflow.slots.is_null(),
                 "the overflow page should be unmapped once its last live record is consumed"
             );
             assert_eq!(
@@ -23321,6 +23845,73 @@ mod tests {
         }
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
 
+        clear_auto_allocation_records();
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_rejects_understated_last_live_count() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let first_ptr = (0x2180_0000usize << 4) as *mut u8;
+        let home_shard_idx = auto_allocation_record_shard(first_ptr);
+        let mut second_key = 0x2180_0001usize;
+        while auto_allocation_record_shard((second_key << 4) as *mut u8) != home_shard_idx {
+            second_key += 1;
+        }
+        let second_ptr = (second_key << 4) as *mut u8;
+        let first_metadata = AllocationMetadata::for_type(0xC002_E101)
+            .with_module(0xC0DE)
+            .with_flags(FLAG_TYPE_ISOLATED);
+        let second_metadata = AllocationMetadata::for_type(0xC002_E102)
+            .with_module(0xC0DE)
+            .with_flags(FLAG_TYPE_ISOLATED);
+
+        let mapping_before;
+        unsafe {
+            let overflow = auto_allocation_record_overflow_for_test(&[
+                auto_allocation_record_for(first_ptr, layout, first_metadata),
+                auto_allocation_record_for(second_ptr, layout, second_metadata),
+            ]);
+            mapping_before = overflow.slots;
+            let mut table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            table.overflow = overflow;
+            table.overflow.live = 1;
+            table.live_count = 2;
+        }
+        AUTO_ALLOCATION_RECORD_COUNT.store(2, Ordering::Relaxed);
+        auto_allocation_record_mark_shard_active(home_shard_idx);
+        semantic_slow_path_set(SLOW_PATH_ALLOCATION_RECORDS);
+
+        assert_eq!(
+            take_auto_deallocation_metadata(first_ptr, layout),
+            None,
+            "an understated last-live descriptor must fail closed"
+        );
+        {
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert_eq!(table.overflow.slots, mapping_before);
+            assert_eq!(table.overflow.live, 1);
+            assert_eq!(table.live_count, 2);
+            assert!(
+                find_auto_allocation_record_in_overflow(&table.overflow, first_ptr as usize)
+                    .is_some()
+            );
+            assert!(
+                find_auto_allocation_record_in_overflow(&table.overflow, second_ptr as usize)
+                    .is_some()
+            );
+        }
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 2);
+        assert_eq!(
+            lookup_auto_allocation_metadata(first_ptr, layout),
+            Some(first_metadata)
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(second_ptr, layout),
+            Some(second_metadata)
+        );
         clear_auto_allocation_records();
     }
 
@@ -23346,15 +23937,11 @@ mod tests {
             .with_flags(FLAG_TYPE_ISOLATED | FLAG_METADATA_PROTECTION);
 
         unsafe {
-            let page = allocate_auto_allocation_record_page();
-            assert!(
-                !page.is_null(),
-                "hosted test needs one recovery overflow page"
-            );
-            (*page).entries[0] = auto_allocation_record_for(ptr, layout, metadata);
+            let overflow = auto_allocation_record_overflow_for_test(&[auto_allocation_record_for(
+                ptr, layout, metadata,
+            )]);
             let mut table = AUTO_ALLOCATION_RECORDS[non_home_shard_idx].lock();
-            (*page).next = table.overflow;
-            table.overflow = page;
+            table.overflow = overflow;
         }
         AUTO_ALLOCATION_RECORD_COUNT.store(1, Ordering::Relaxed);
         auto_allocation_record_mark_shard_active(non_home_shard_idx);
