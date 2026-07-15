@@ -267,6 +267,7 @@ fn main() {
         label: str,
         *,
         automatic: bool = False,
+        heap_automatic: bool = False,
         automatic_from_env: bool = False,
         actual_semantic_rewrite: bool = False,
         profile: Path | None = None,
@@ -284,6 +285,8 @@ fn main() {
         ]
         if automatic and not automatic_from_env:
             command.append("--unialloc-auto-lifetime-classifier")
+        if heap_automatic:
+            command.append("--unialloc-auto-heap-lifetime-inference")
         if actual_semantic_rewrite:
             command.append("--unialloc-actual-semantic-scope-rewrite")
         if profile is not None:
@@ -309,6 +312,7 @@ fn main() {
         )
         env = os.environ.copy()
         env.pop("UNIALLOC_AUTO_LIFETIME_CLASSIFIER", None)
+        env.pop("UNIALLOC_AUTO_HEAP_LIFETIME_INFERENCE", None)
         if automatic and automatic_from_env:
             env["UNIALLOC_AUTO_LIFETIME_CLASSIFIER"] = "1"
         library_path = str(self.sysroot / "lib")
@@ -555,6 +559,23 @@ fn main() {
             compiler_pass["automatic_lifetime_classifier_precedence"],
             "exact_profile>manual_global>automatic>Unknown",
         )
+
+    def test_heap_cleanup_unknown_cannot_be_upgraded_by_epoch_classifier(self) -> None:
+        audit = self.run_pass(
+            "heap-cleanup-precedes-epoch",
+            automatic=True,
+            heap_automatic=True,
+        )
+        allocation = self.assert_class(
+            audit,
+            "long_site",
+            hint=0,
+            confidence=0,
+            basis="automatic_heap_cleanup_or_unwind_unknown",
+            paired_drop=True,
+        )
+        features = allocation["lifetime_analysis_features"]
+        self.assertTrue(features["cleanup_drop_path"], allocation)
 
     def test_actual_rewrite_executes_short_and_long_hint_abis(self) -> None:
         audit = self.run_pass(

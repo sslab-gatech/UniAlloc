@@ -1090,15 +1090,10 @@ fn select_lifetime_hint_with_heap_inference(
                 selection
             };
         }
-        if matches!(
-            heap_decision,
-            Some(
-                AutomaticHeapLifetimeDecision::ExactLocalDrop
-                    | AutomaticHeapLifetimeDecision::ExactLocalMoveChainDrop
-            )
-        ) {
-            // Exact Drop is a feature fact only. The epoch classifier cannot
-            // upgrade eventual release into a short-duration placement hint.
+        if heap_decision.is_some() {
+            // Heap inference has higher precedence than the epoch classifier.
+            // Its Unknown decisions carry ownership, cleanup, and control-flow
+            // facts that a narrower epoch-boundary proof cannot discharge.
             return selection;
         }
         if !automatic_classifier_enabled {

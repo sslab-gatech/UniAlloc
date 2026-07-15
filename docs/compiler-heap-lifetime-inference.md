@@ -40,6 +40,12 @@ The compiler interface is:
 UNIALLOC_AUTO_HEAP_LIFETIME_INFERENCE=1
 ```
 
+When both automatic classifiers are enabled, every concrete heap-inference
+decision retains precedence, including Unknown. The epoch classifier runs only
+when heap inference produced no decision, so an owner-live cleanup or unwind
+edge cannot be upgraded into a placement hint by a narrower phase-boundary
+proof.
+
 No semantic epoch API is called by the fixture.
 
 ## Runtime policies and causal arms
