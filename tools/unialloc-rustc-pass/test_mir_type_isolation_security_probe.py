@@ -566,7 +566,7 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
         "rewrite_status": "semantic_scope_enter_exit_rewrite_planned",
         "replacement_resolution_status": "not_requested_dry_run",
         "metadata_pairing_contract": "semantic_scope_active_metadata",
-        "type_id_basis": "rustc_middle_ty_destination_or_argument_heap_object_type",
+        "type_id_basis": "rustc_type_id_hash_runtime_equivalent",
     }
     active_drop_rows = [
         row
@@ -591,10 +591,10 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
                 )
         if row.get("semantic_object_type") != row.get("destination_type"):
             errors.append(
-                f"{row_label} must preserve the exact textual destination owner identity"
+                f"{row_label} must preserve the exact destination owner audit display"
             )
         if int(row.get("type_id") or 0) == 0:
-            errors.append(f"{row_label} must emit a nonzero textual owner type_id")
+            errors.append(f"{row_label} must emit a nonzero compiler-derived owner type_id")
         paired_drops = [
             drop_row
             for drop_row in active_drop_rows
@@ -605,7 +605,7 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
             paired_owner_types.add(str(row.get("semantic_object_type") or ""))
         else:
             errors.append(
-                f"{row_label} has no textual-owner/type_id-matched active Drop row"
+                f"{row_label} has no compiler-owner/type_id-matched active Drop row"
             )
 
     summary = audit.get("summary") or {}
@@ -703,7 +703,7 @@ def validate_actual_refcounted_clone_classification(
         "lowering_kind": "semantic_scope_enter_exit_rewrite",
         "rewrite_status": "actual_semantic_scope_enter_exit_rewrite_applied",
         "metadata_pairing_contract": "semantic_scope_active_metadata",
-        "type_id_basis": "rustc_middle_ty_destination_or_argument_heap_object_type",
+        "type_id_basis": "rustc_type_id_hash_runtime_equivalent",
     }
     exact_type_ids: set[int] = set()
     exact_module_ids: set[int] = set()
