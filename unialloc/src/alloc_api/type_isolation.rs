@@ -62,7 +62,7 @@ const MAX_TYPE_CACHE_DEPTH: usize = 64;
 ///
 /// Two inline entries already cover the common alternating pair. Four cold
 /// entries per bucket retain bounded reuse without reserving eight full
-/// authenticated metadata records in every thread; excess frees safely bypass
+/// full metadata records in every thread; excess frees safely bypass
 /// the cache and return to the ordinary allocator.
 #[cfg(not(feature = "fixed_heap"))]
 const SEGREGATED_TYPE_CACHE_DEPTH: usize = 4;
@@ -76,7 +76,7 @@ const SEGREGATED_TYPE_CACHE_DOMAIN_HUGEPAGE: u8 = 1;
 /// Intrusive plain-cache nodes store only the next pointer in freed payload.
 /// Exact layout authorization lives in the owning `TypeCacheSlot`, so a
 /// word-sized object can use the fast exact-type tier without an out-of-line
-/// authenticated record.
+/// metadata record.
 const TYPE_CACHE_NODE_WORDS: usize = 1;
 const DELAYED_FREE_SLOTS: usize = 32;
 /// Process-visible ownership records for objects retained in per-thread quarantine rings.
@@ -239,12 +239,26 @@ const AUTO_ALLOCATION_RECORD_SHARD_SLOTS: usize =
 const AUTO_ALLOCATION_RECORD_PROBE_LIMIT: usize = 16;
 const AUTO_ALLOCATION_RECORD_SHARD_MASK: usize = AUTO_ALLOCATION_RECORD_SHARD_COUNT - 1;
 const AUTO_ALLOCATION_RECORD_TOMBSTONE_PTR: usize = usize::MAX;
+/// Global recovery records reserve the high alignment bit as an independently
+/// authoritative integrity-policy marker. Non-zero allocation layouts cannot
+/// use this bit because their padded size must remain within `isize::MAX`.
+const AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT: usize = 1usize << (usize::BITS - 1);
 #[cfg(not(feature = "fixed_heap"))]
 const AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY: usize = 512;
 #[cfg(not(feature = "fixed_heap"))]
 const AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_NUMERATOR: usize = 3;
 #[cfg(not(feature = "fixed_heap"))]
 const AUTO_ALLOCATION_RECORD_OVERFLOW_LOAD_DENOMINATOR: usize = 4;
+#[cfg(not(feature = "fixed_heap"))]
+/// Maximum empty recovery-overflow mapping retained by each shard.
+///
+/// Repeated compiler workloads refill the same cross-thread recovery shards.
+/// Keeping one zeroed high-water mapping per shard avoids rebuilding every OA
+/// growth level on the next burst while bounding process-wide retention to
+/// 8MiB across the eight shards. Larger tiers also need at least 25% use in
+/// the drained burst and survive one following shard phase; an inline-only
+/// following phase sheds the obsolete high-water mapping at quiescence.
+const AUTO_ALLOCATION_RECORD_OVERFLOW_RETAINED_MAPPING_MAX_BYTES: usize = 1024 * 1024;
 /// Same-thread compiler recovery is a TLS cache, not the full side table.
 ///
 /// Keep the hosted tier deliberately small (128 records, currently 8KiB on 64-bit targets)
@@ -3933,11 +3947,24 @@ impl AutoAllocationRecord {
     }
 
     #[inline]
+    fn recorded_align(self) -> usize {
+        self.align & !AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT
+    }
+
+    #[inline]
+    fn global_integrity_auth_required(self) -> bool {
+        self.align & AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT != 0
+            || metadata_integrity_required(self.metadata)
+            || self.auth != 0
+    }
+
+    #[inline]
     fn matches_allocation(self, ptr: *mut u8, layout: Layout) -> bool {
         self.ptr == ptr as usize
             && self.size == layout.size()
-            && self.align == layout.align()
-            && self.auth == derive_auto_allocation_record_auth(ptr, layout, self.metadata)
+            && self.recorded_align() == layout.align()
+            && (!self.global_integrity_auth_required()
+                || self.auth == derive_auto_allocation_record_auth(ptr, layout, self.metadata))
     }
 }
 
@@ -3953,7 +3980,7 @@ impl AutoAllocationRecordMismatch {
     fn from_record(record: AutoAllocationRecord) -> Self {
         Self {
             recorded_size: record.size,
-            recorded_align: record.align,
+            recorded_align: record.recorded_align(),
             recorded_metadata: record.metadata,
         }
     }
@@ -3982,12 +4009,21 @@ impl AutoAllocationRecordLookup {
 }
 
 #[cfg(not(feature = "fixed_heap"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AutoAllocationRecordOverflowRetention {
+    None,
+    Fresh,
+    Armed,
+}
+
+#[cfg(not(feature = "fixed_heap"))]
 #[derive(Clone, Copy)]
 struct AutoAllocationRecordOverflowTable {
     slots: *mut AutoAllocationRecord,
     capacity: usize,
     live: usize,
     tombstones: usize,
+    retention: AutoAllocationRecordOverflowRetention,
 }
 
 #[cfg(not(feature = "fixed_heap"))]
@@ -3998,6 +4034,7 @@ impl AutoAllocationRecordOverflowTable {
             capacity: 0,
             live: 0,
             tombstones: 0,
+            retention: AutoAllocationRecordOverflowRetention::None,
         }
     }
 }
@@ -4064,6 +4101,8 @@ static TEST_RECOVERY_RECORD_INSERT_PHASE: AtomicUsize = AtomicUsize::new(0);
 static TEST_IDENTITY_REBIND_RECOVERY_UPDATE_FAIL: AtomicBool = AtomicBool::new(false);
 #[cfg(all(test, not(feature = "fixed_heap")))]
 static TEST_GLOBAL_RECOVERY_OVERFLOW_PROBE_STEPS: AtomicUsize = AtomicUsize::new(0);
+#[cfg(all(test, not(feature = "fixed_heap")))]
+static TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS: AtomicUsize = AtomicUsize::new(0);
 #[cfg(all(test, not(feature = "fixed_heap")))]
 static TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP: AtomicBool = AtomicBool::new(false);
 #[cfg(all(test, not(feature = "fixed_heap")))]
@@ -4210,7 +4249,7 @@ pub(crate) fn without_auto_allocation_recovery_recording<R>(f: impl FnOnce() -> 
 /// Run `f` without consuming or synthesizing process-wide auto metadata.
 ///
 /// Compiler ownership-transfer helpers use this while they either preserve an
-/// authenticated source record or deliberately fall back to raw allocation.
+/// exact source record or deliberately fall back to raw allocation.
 /// Otherwise a rejected transfer could consume an unrelated compiler-stream
 /// entry or attach layout-derived metadata to the replacement allocation.
 fn without_auto_metadata_selection<R>(f: impl FnOnce() -> R) -> R {
@@ -5144,11 +5183,25 @@ fn auto_allocation_record_for(
     layout: Layout,
     metadata: AllocationMetadata,
 ) -> AutoAllocationRecord {
+    debug_assert_eq!(
+        layout.align() & AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT,
+        0,
+        "valid allocation alignment must leave the recovery integrity marker available"
+    );
     AutoAllocationRecord {
         ptr: ptr as usize,
         size: layout.size(),
-        align: layout.align(),
-        auth: derive_auto_allocation_record_auth(ptr, layout, metadata),
+        align: layout.align()
+            | if metadata_integrity_required(metadata) {
+                AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT
+            } else {
+                0
+            },
+        // Recovery metadata requests authenticated storage explicitly through
+        // the metadata-protection/PAC policy flags. Plain type isolation keeps
+        // the same private-table trust boundary as the TLS recovery tier and
+        // avoids hashing eight metadata fields twice per allocation lifetime.
+        auth: fast_auto_allocation_record_auth(ptr, layout, metadata),
         metadata,
     }
 }
@@ -5182,11 +5235,32 @@ fn auto_allocation_record_overflow_mapping_size(capacity: usize) -> Option<usize
 
 #[cfg(not(feature = "fixed_heap"))]
 #[inline]
+fn auto_allocation_record_overflow_mapping_is_retainable(capacity: usize) -> bool {
+    matches!(
+        auto_allocation_record_overflow_mapping_size(capacity),
+        Some(size) if size <= AUTO_ALLOCATION_RECORD_OVERFLOW_RETAINED_MAPPING_MAX_BYTES
+    )
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn auto_allocation_record_overflow_should_retain_after_drain(
+    capacity: usize,
+    occupied_before_drain: usize,
+) -> bool {
+    auto_allocation_record_overflow_mapping_is_retainable(capacity)
+        && (capacity == AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY
+            || occupied_before_drain >= capacity / 4)
+}
+
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
 fn auto_allocation_record_overflow_is_empty(overflow: &AutoAllocationRecordOverflowTable) -> bool {
     overflow.slots.is_null()
         && overflow.capacity == 0
         && overflow.live == 0
         && overflow.tombstones == 0
+        && overflow.retention == AutoAllocationRecordOverflowRetention::None
 }
 
 #[cfg(not(feature = "fixed_heap"))]
@@ -5197,6 +5271,8 @@ fn auto_allocation_record_overflow_is_mapped_valid(
     !overflow.slots.is_null()
         && overflow.capacity.is_power_of_two()
         && overflow.live.saturating_add(overflow.tombstones) <= overflow.capacity
+        && (overflow.retention == AutoAllocationRecordOverflowRetention::None
+            || (overflow.live == 0 && overflow.tombstones == 0))
 }
 
 #[cfg(not(feature = "fixed_heap"))]
@@ -5242,6 +5318,8 @@ unsafe fn release_auto_allocation_record_overflow_slots(
     }
     let mapping_size = auto_allocation_record_overflow_mapping_size(capacity)
         .expect("live recovery overflow mapping size must remain representable");
+    #[cfg(test)]
+    TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.fetch_add(1, Ordering::Relaxed);
     system_alloc::munmap(slots as *mut u8, mapping_size);
 }
 
@@ -5320,6 +5398,7 @@ unsafe fn rehash_auto_allocation_record_overflow(
         capacity: new_capacity,
         live: 0,
         tombstones: 0,
+        retention: AutoAllocationRecordOverflowRetention::None,
     };
 
     let mut old_idx = 0usize;
@@ -5376,6 +5455,7 @@ unsafe fn insert_auto_allocation_record_overflow(
     let mut probe = probe_auto_allocation_record_overflow(overflow, record.ptr);
     if let AutoAllocationRecordOverflowProbe::Found(idx) = probe {
         *overflow.slots.add(idx) = record;
+        overflow.retention = AutoAllocationRecordOverflowRetention::None;
         return AutoAllocationRecordOverflowInsert::Updated;
     }
 
@@ -5407,6 +5487,7 @@ unsafe fn insert_auto_allocation_record_overflow(
         probe = probe_auto_allocation_record_overflow(overflow, record.ptr);
         if let AutoAllocationRecordOverflowProbe::Found(idx) = probe {
             *overflow.slots.add(idx) = record;
+            overflow.retention = AutoAllocationRecordOverflowRetention::None;
             return AutoAllocationRecordOverflowInsert::Updated;
         }
     }
@@ -5415,6 +5496,7 @@ unsafe fn insert_auto_allocation_record_overflow(
         AutoAllocationRecordOverflowProbe::Vacant(idx) => idx,
         AutoAllocationRecordOverflowProbe::Found(idx) => {
             *overflow.slots.add(idx) = record;
+            overflow.retention = AutoAllocationRecordOverflowRetention::None;
             return AutoAllocationRecordOverflowInsert::Updated;
         }
         AutoAllocationRecordOverflowProbe::Full => {
@@ -5426,6 +5508,7 @@ unsafe fn insert_auto_allocation_record_overflow(
     }
     *overflow.slots.add(idx) = record;
     overflow.live = overflow.live.saturating_add(1);
+    overflow.retention = AutoAllocationRecordOverflowRetention::None;
     AutoAllocationRecordOverflowInsert::Inserted
 }
 
@@ -5461,9 +5544,30 @@ unsafe fn try_remove_auto_allocation_record_overflow_at(
         if actual_live != overflow.live || actual_tombstones != overflow.tombstones {
             return false;
         }
-        let old = *overflow;
-        *overflow = AutoAllocationRecordOverflowTable::empty();
-        release_auto_allocation_record_overflow_slots(old.slots, old.capacity);
+        if auto_allocation_record_overflow_should_retain_after_drain(
+            overflow.capacity,
+            actual_live.saturating_add(actual_tombstones),
+        ) {
+            let mapping_size = auto_allocation_record_overflow_mapping_size(overflow.capacity)
+                .expect("validated recovery overflow mapping size");
+            // Validate before mutation so a logical count or home-shard
+            // inconsistency remains byte-for-byte available for fail-closed
+            // diagnosis. The shard lock excludes concurrent probes while the
+            // retained mapping is reset for the next burst.
+            core::ptr::write_bytes(overflow.slots as *mut u8, 0, mapping_size);
+            overflow.live = 0;
+            overflow.tombstones = 0;
+            overflow.retention =
+                if overflow.capacity == AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY {
+                    AutoAllocationRecordOverflowRetention::None
+                } else {
+                    AutoAllocationRecordOverflowRetention::Fresh
+                };
+        } else {
+            let old = *overflow;
+            *overflow = AutoAllocationRecordOverflowTable::empty();
+            release_auto_allocation_record_overflow_slots(old.slots, old.capacity);
+        }
         return true;
     }
     *overflow.slots.add(idx) = AutoAllocationRecord::tombstone();
@@ -5586,6 +5690,37 @@ fn increment_global_auto_allocation_record_shard_live_count(
     }
 }
 
+#[cfg(not(feature = "fixed_heap"))]
+#[inline]
+fn advance_or_release_empty_retained_auto_allocation_record_overflow(
+    table: &mut GlobalAutoAllocationRecordTable,
+) {
+    if table.live_count != 0
+        || !auto_allocation_record_overflow_is_mapped_valid(&table.overflow)
+        || table.overflow.live != 0
+        || table.overflow.tombstones != 0
+    {
+        return;
+    }
+
+    match table.overflow.retention {
+        AutoAllocationRecordOverflowRetention::Fresh => {
+            // Preserve one recently useful high-water mapping for the next
+            // complete shard phase. A subsequent overflow insertion disarms
+            // this state; an inline-only phase advances it to release below.
+            table.overflow.retention = AutoAllocationRecordOverflowRetention::Armed;
+        }
+        AutoAllocationRecordOverflowRetention::Armed => {
+            let old = table.overflow;
+            table.overflow = AutoAllocationRecordOverflowTable::empty();
+            unsafe {
+                release_auto_allocation_record_overflow_slots(old.slots, old.capacity);
+            }
+        }
+        AutoAllocationRecordOverflowRetention::None => {}
+    }
+}
+
 #[inline]
 fn decrement_global_auto_allocation_record_shard_live_count(
     shard_idx: usize,
@@ -5594,6 +5729,8 @@ fn decrement_global_auto_allocation_record_shard_live_count(
     let becomes_empty = table.live_count <= 1;
     table.live_count = table.live_count.saturating_sub(1);
     if becomes_empty {
+        #[cfg(not(feature = "fixed_heap"))]
+        advance_or_release_empty_retained_auto_allocation_record_overflow(table);
         auto_allocation_record_clear_shard_active(shard_idx);
     }
 }
@@ -6561,7 +6698,8 @@ enum AutoAllocationRecordStorage {
     Global,
 }
 
-/// Locate one unambiguous, authenticated recovery record for an owned allocation.
+/// Locate one unambiguous, exact recovery record for an owned allocation.
+/// Integrity-policy records additionally require keyed authentication.
 ///
 /// A pointer must not be rebound while duplicate fast/global records exist. Even
 /// if both copies currently agree, changing only one copy could let a later
@@ -6886,8 +7024,8 @@ pub fn __unialloc_semantic_box_slice_into_vec<T, A: Allocator>(
 ///
 /// This compiler-lowering helper follows `String::into_bytes`, whose standard
 /// representation-preserving conversion keeps the allocation pointer, length,
-/// and capacity.  UniAlloc changes only the type component of one exact,
-/// authenticated recovery record and, when enabled, the matching authenticated
+/// and capacity.  UniAlloc changes only the type component of one exact
+/// recovery record and, when enabled, the matching authenticated
 /// memory-tag record. Missing, mismatched, duplicate, zero-sized, or incoherent
 /// records fail closed and retain their original identity.
 #[doc(hidden)]
@@ -6938,7 +7076,7 @@ pub fn __unialloc_semantic_string_into_bytes(
 ///
 /// `CString::into_bytes_with_nul` moves the exact `Box<[u8]>` backing storage
 /// into `Vec<u8, Global>` without changing its pointer, length, or capacity.
-/// UniAlloc changes only the `type_id` of one exact authenticated recovery
+/// UniAlloc changes only the `type_id` of one exact recovery
 /// record and its matching memory tag when present. Wrong, zero, same,
 /// missing, duplicated, or incoherent identities leave the source identity
 /// authoritative; the standard conversion still succeeds.
@@ -6989,7 +7127,7 @@ pub fn __unialloc_semantic_cstring_into_bytes_with_nul(
 ///
 /// `String::into_boxed_str` may shrink spare capacity before returning.  This
 /// helper therefore follows the same fail-closed contract as
-/// [`__unialloc_semantic_vec_into_boxed_slice`]: an exact authenticated source
+/// [`__unialloc_semantic_vec_into_boxed_slice`]: an exact source
 /// record supplies either target metadata for an accepted shrink or unchanged
 /// source metadata for a rejected one.  Missing or ambiguous source records run
 /// with unrelated outer scopes and process-wide auto metadata suppressed.  An
@@ -7082,8 +7220,8 @@ pub fn __unialloc_semantic_string_into_boxed_str(
 /// live type-isolation identity selected by the compiler.
 ///
 /// `Box<str>::into_string` preserves the allocation pointer and exact byte
-/// layout. UniAlloc therefore changes only the `type_id` of one exact,
-/// authenticated recovery record and its matching memory-tag record when
+/// layout. UniAlloc therefore changes only the `type_id` of one exact
+/// recovery record and its matching memory-tag record when
 /// present. Wrong, zero, same, missing, duplicated, or incoherent identities
 /// leave the source identity authoritative; the standard conversion still
 /// succeeds in every case.
@@ -7135,8 +7273,8 @@ pub fn __unialloc_semantic_boxed_str_into_string(
 ///
 /// `Vec::into_iter` transfers the allocation without reallocating it.  After
 /// verifying that the iterator still exposes the original unconsumed pointer
-/// and length, UniAlloc changes only the type component of one exact,
-/// authenticated recovery record and its matching memory tag when present.
+/// and length, UniAlloc changes only the type component of one exact
+/// recovery record and its matching memory tag when present.
 /// Wrong, zero, same, missing, duplicated, or incoherent identities leave the
 /// authoritative source record untouched; the standard conversion succeeds in
 /// every case.
@@ -7186,7 +7324,7 @@ pub fn __unialloc_semantic_vec_into_iter<T, A: Allocator>(
 /// compiler.
 ///
 /// `Vec::into_boxed_slice` may shrink the allocation before returning.  When
-/// an exact, authenticated source record exists, run that shrink under metadata
+/// an exact source record exists, run that shrink under metadata
 /// derived from the source record with only `type_id` changed.  A moved shrink
 /// then releases the old Vec identity and publishes the new Box identity through
 /// the ordinary split-reallocation path.  If no shrink occurs, update the exact
@@ -7232,7 +7370,7 @@ pub fn __unialloc_semantic_vec_into_boxed_slice<T, A: Allocator>(
         })
     });
 
-    // Always mask any unrelated outer scope.  An authenticated source record
+    // Always mask any unrelated outer scope.  An exact source record
     // is the conservative metadata for a rejected shrink; otherwise the
     // replacement must remain raw rather than inheriting an outer scope or
     // consuming process-wide auto metadata.
@@ -18270,6 +18408,7 @@ mod tests {
             capacity,
             live: 0,
             tombstones: 0,
+            retention: AutoAllocationRecordOverflowRetention::None,
         };
         for record in records.iter().copied() {
             let idx = match probe_auto_allocation_record_overflow(&overflow, record.ptr) {
@@ -20047,7 +20186,7 @@ mod tests {
         assert_eq!(
             lookup_auto_allocation_metadata(wrong_spare_new_ptr, layout),
             Some(plain_spare),
-            "a rejected moved shrink must preserve the authenticated source identity"
+            "a rejected moved shrink must preserve the exact source identity"
         );
         drop(wrong_spare_box);
 
@@ -23696,6 +23835,304 @@ mod tests {
 
     #[cfg(not(feature = "fixed_heap"))]
     #[test]
+    fn hosted_recovery_overflow_reuses_zeroed_mapping_after_last_remove() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let first_ptr = (0x2680_0000usize << 4) as *mut u8;
+        let shard_idx = auto_allocation_record_shard(first_ptr);
+        let mut second_key = 0x2680_0001usize;
+        while auto_allocation_record_shard((second_key << 4) as *mut u8) != shard_idx {
+            second_key += 1;
+        }
+        let second_ptr = (second_key << 4) as *mut u8;
+        let first = auto_allocation_record_for(
+            first_ptr,
+            layout,
+            AllocationMetadata::for_type(0xC004_8001).with_flags(FLAG_TYPE_ISOLATED),
+        );
+        let second = auto_allocation_record_for(
+            second_ptr,
+            layout,
+            AllocationMetadata::for_type(0xC004_8002).with_flags(FLAG_TYPE_ISOLATED),
+        );
+        assert_eq!(first.auth, 0);
+        assert_eq!(second.auth, 0);
+        assert!(first.matches_allocation(first_ptr, layout));
+        assert!(second.matches_allocation(second_ptr, layout));
+        let mut overflow = unsafe {
+            auto_allocation_record_overflow_with_capacity_for_test(
+                &[first, second],
+                AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY,
+            )
+        };
+        let retained_slots = overflow.slots;
+        let retained_capacity = overflow.capacity;
+        let unmaps_before = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
+
+        let first_idx = match probe_auto_allocation_record_overflow(&overflow, first.ptr) {
+            AutoAllocationRecordOverflowProbe::Found(idx) => idx,
+            other => panic!("first retained-mapping record missing: {:?}", other),
+        };
+        assert!(unsafe {
+            try_remove_auto_allocation_record_overflow_at(shard_idx, &mut overflow, first_idx)
+        });
+        assert_eq!(overflow.live, 1);
+        assert_eq!(overflow.tombstones, 1);
+
+        let second_idx = match probe_auto_allocation_record_overflow(&overflow, second.ptr) {
+            AutoAllocationRecordOverflowProbe::Found(idx) => idx,
+            other => panic!("second retained-mapping record missing: {:?}", other),
+        };
+        assert!(unsafe {
+            try_remove_auto_allocation_record_overflow_at(shard_idx, &mut overflow, second_idx)
+        });
+        assert_eq!(overflow.slots, retained_slots);
+        assert_eq!(overflow.capacity, retained_capacity);
+        assert_eq!(overflow.live, 0);
+        assert_eq!(overflow.tombstones, 0);
+        assert_eq!(
+            overflow.retention,
+            AutoAllocationRecordOverflowRetention::None,
+            "the bounded initial mapping remains the permanent reusable tier"
+        );
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before
+        );
+        for idx in 0..overflow.capacity {
+            assert!(unsafe { (*overflow.slots.add(idx)).is_empty() });
+        }
+
+        TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.store(true, Ordering::Release);
+        assert_eq!(
+            unsafe { insert_auto_allocation_record_overflow(shard_idx, &mut overflow, first) },
+            AutoAllocationRecordOverflowInsert::Inserted
+        );
+        assert!(
+            TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.swap(false, Ordering::AcqRel),
+            "reusing the retained mapping must not consume an mmap attempt"
+        );
+        assert_eq!(overflow.slots, retained_slots);
+        assert_eq!(overflow.capacity, retained_capacity);
+        assert_eq!(overflow.live, 1);
+        assert_eq!(overflow.tombstones, 0);
+        unsafe {
+            release_auto_allocation_record_overflow_slots(overflow.slots, overflow.capacity);
+        }
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_releases_mapping_above_retention_cap() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let ptr = (0x2690_0000usize << 4) as *mut u8;
+        let shard_idx = auto_allocation_record_shard(ptr);
+        let record = auto_allocation_record_for(
+            ptr,
+            layout,
+            AllocationMetadata::for_type(0xC004_9001).with_flags(FLAG_TYPE_ISOLATED),
+        );
+        let mut capacity = AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY;
+        while auto_allocation_record_overflow_mapping_is_retainable(capacity) {
+            capacity = capacity.checked_mul(2).expect("test overflow capacity");
+        }
+        let mut overflow =
+            unsafe { auto_allocation_record_overflow_with_capacity_for_test(&[record], capacity) };
+        let idx = match probe_auto_allocation_record_overflow(&overflow, record.ptr) {
+            AutoAllocationRecordOverflowProbe::Found(idx) => idx,
+            other => panic!("over-cap recovery record missing: {:?}", other),
+        };
+        let unmaps_before = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
+
+        assert!(unsafe {
+            try_remove_auto_allocation_record_overflow_at(shard_idx, &mut overflow, idx)
+        });
+        assert!(auto_allocation_record_overflow_is_empty(&overflow));
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before + 1
+        );
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_sheds_underused_large_retained_mapping() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let ptr = (0x2698_0000usize << 4) as *mut u8;
+        let shard_idx = auto_allocation_record_shard(ptr);
+        let record = auto_allocation_record_for(
+            ptr,
+            layout,
+            AllocationMetadata::for_type(0xC004_9801).with_flags(FLAG_TYPE_ISOLATED),
+        );
+        let mut capacity = AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY;
+        while let Some(next_capacity) = capacity.checked_mul(2) {
+            if !auto_allocation_record_overflow_mapping_is_retainable(next_capacity) {
+                break;
+            }
+            capacity = next_capacity;
+        }
+        assert!(capacity > AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY);
+        assert!(auto_allocation_record_overflow_mapping_is_retainable(
+            capacity
+        ));
+        assert!(!auto_allocation_record_overflow_should_retain_after_drain(
+            capacity, 1
+        ));
+        let mut overflow =
+            unsafe { auto_allocation_record_overflow_with_capacity_for_test(&[record], capacity) };
+        let idx = match probe_auto_allocation_record_overflow(&overflow, record.ptr) {
+            AutoAllocationRecordOverflowProbe::Found(idx) => idx,
+            other => panic!("underused high-water recovery record missing: {:?}", other),
+        };
+        let unmaps_before = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
+
+        assert!(unsafe {
+            try_remove_auto_allocation_record_overflow_at(shard_idx, &mut overflow, idx)
+        });
+        assert!(auto_allocation_record_overflow_is_empty(&overflow));
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before + 1
+        );
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_transitions_fresh_to_armed_then_reuses_in_place() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let ptr = (0x269a_0000usize << 4) as *mut u8;
+        let shard_idx = auto_allocation_record_shard(ptr);
+        let record = auto_allocation_record_for(
+            ptr,
+            layout,
+            AllocationMetadata::for_type(0xC004_9A01).with_flags(FLAG_TYPE_ISOLATED),
+        );
+        let mut capacity = AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY;
+        while let Some(next_capacity) = capacity.checked_mul(2) {
+            if !auto_allocation_record_overflow_mapping_is_retainable(next_capacity) {
+                break;
+            }
+            capacity = next_capacity;
+        }
+        assert!(capacity > AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY);
+        let mut table = GlobalAutoAllocationRecordTable::empty();
+        table.overflow =
+            unsafe { auto_allocation_record_overflow_with_capacity_for_test(&[], capacity) };
+        table.overflow.retention = AutoAllocationRecordOverflowRetention::Fresh;
+        table.live_count = 1;
+        let retained_slots = table.overflow.slots;
+        let unmaps_before = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
+        auto_allocation_record_mark_shard_active(shard_idx);
+
+        decrement_global_auto_allocation_record_shard_live_count(shard_idx, &mut table);
+        assert_eq!(table.live_count, 0);
+        assert_eq!(
+            table.overflow.retention,
+            AutoAllocationRecordOverflowRetention::Armed
+        );
+        assert_eq!(table.overflow.slots, retained_slots);
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before,
+            "the first shard quiescence must arm without unmapping"
+        );
+
+        TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.store(true, Ordering::Release);
+        assert_eq!(
+            unsafe {
+                insert_auto_allocation_record_overflow(shard_idx, &mut table.overflow, record)
+            },
+            AutoAllocationRecordOverflowInsert::Inserted
+        );
+        assert!(
+            TEST_FAIL_NEXT_GLOBAL_RECOVERY_OVERFLOW_MMAP.swap(false, Ordering::AcqRel),
+            "overflow reuse must not attempt mmap"
+        );
+        assert_eq!(table.overflow.slots, retained_slots);
+        assert_eq!(
+            table.overflow.retention,
+            AutoAllocationRecordOverflowRetention::None,
+            "a real overflow insertion must disarm the retained mapping"
+        );
+        unsafe {
+            release_auto_allocation_record_overflow_slots(
+                table.overflow.slots,
+                table.overflow.capacity,
+            );
+        }
+
+        clear_auto_allocation_records();
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn hosted_recovery_overflow_sheds_armed_high_water_after_inline_only_phase() {
+        let _guard = test_guard();
+        clear_auto_allocation_records();
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let ptr = (0x269c_0000usize << 4) as *mut u8;
+        let shard_idx = auto_allocation_record_shard(ptr);
+        let metadata = AllocationMetadata::for_type(0xC004_9C01)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let mut capacity = AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY;
+        while let Some(next_capacity) = capacity.checked_mul(2) {
+            if !auto_allocation_record_overflow_mapping_is_retainable(next_capacity) {
+                break;
+            }
+            capacity = next_capacity;
+        }
+        assert!(capacity > AUTO_ALLOCATION_RECORD_OVERFLOW_INITIAL_CAPACITY);
+        let mut retained =
+            unsafe { auto_allocation_record_overflow_with_capacity_for_test(&[], capacity) };
+        retained.retention = AutoAllocationRecordOverflowRetention::Armed;
+        let retained_slots = retained.slots;
+        {
+            let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+            assert_eq!(table.live_count, 0);
+            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+            table.overflow = retained;
+        }
+
+        assert!(unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) });
+        {
+            let table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+            assert_eq!(table.live_count, 1);
+            assert_eq!(table.overflow.slots, retained_slots);
+            assert_eq!(table.overflow.live, 0);
+            assert_eq!(table.overflow.tombstones, 0);
+            assert_eq!(
+                table.overflow.retention,
+                AutoAllocationRecordOverflowRetention::Armed
+            );
+        }
+
+        let unmaps_before = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
+        assert_eq!(take_auto_deallocation_metadata(ptr, layout), Some(metadata));
+        {
+            let table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+            assert_eq!(table.live_count, 0);
+            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+        }
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before + 1,
+            "an inline-only following phase must release the armed high-water mapping"
+        );
+
+        clear_auto_allocation_records();
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
     fn hosted_recovery_overflow_roundtrips_ten_thousand_records() {
         const RECORDS: usize = 10_000;
 
@@ -23773,7 +24210,19 @@ mod tests {
         }
         {
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
-            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+            assert!(auto_allocation_record_overflow_is_mapped_valid(
+                &table.overflow
+            ));
+            assert!(auto_allocation_record_overflow_mapping_is_retainable(
+                table.overflow.capacity
+            ));
+            assert_eq!(table.overflow.live, 0);
+            assert_eq!(table.overflow.tombstones, 0);
+            assert_eq!(
+                table.overflow.retention,
+                AutoAllocationRecordOverflowRetention::Fresh,
+                "a fully used high-water mapping should survive until shard quiescence"
+            );
             assert_eq!(table.live_count, AUTO_ALLOCATION_RECORD_SHARD_SLOTS);
         }
         assert_eq!(
@@ -23781,6 +24230,10 @@ mod tests {
             AUTO_ALLOCATION_RECORD_SHARD_SLOTS
         );
         clear_auto_allocation_records();
+        {
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+        }
     }
 
     #[cfg(not(feature = "fixed_heap"))]
@@ -23843,10 +24296,13 @@ mod tests {
                 !table.overflow.slots.is_null(),
                 "overflow page should be allocated in the home shard for exact recovery records beyond the sharded inline table"
             );
-            assert!(
+            let slot =
                 find_auto_allocation_record_in_overflow(&table.overflow, overflow_ptr as usize)
-                    .is_some(),
-                "the spill record should be discoverable in overflow"
+                    .expect("the spill record should be discoverable in overflow");
+            assert_ne!(
+                unsafe { (*slot).auth },
+                0,
+                "protected overflow recovery records must keep keyed authentication"
             );
         }
         assert_eq!(
@@ -23865,13 +24321,26 @@ mod tests {
             let home_shard_idx = auto_allocation_record_shard(overflow_ptr);
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                table.overflow.slots.is_null(),
-                "the last consumed overflow recovery record should release its cold mmap page"
+                auto_allocation_record_overflow_is_mapped_valid(&table.overflow),
+                "the last consumed bounded overflow mapping should remain reusable"
             );
+            assert_eq!(table.overflow.live, 0);
+            assert_eq!(table.overflow.tombstones, 0);
         }
 
+        let unmaps_before_clear = TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed);
         clear_auto_allocation_records();
+        assert_eq!(
+            TEST_GLOBAL_RECOVERY_OVERFLOW_UNMAP_CALLS.load(Ordering::Relaxed),
+            unmaps_before_clear + 1,
+            "explicit recovery reset must release the retained mapping"
+        );
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        {
+            let home_shard_idx = auto_allocation_record_shard(overflow_ptr);
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+        }
     }
 
     #[cfg(not(feature = "fixed_heap"))]
@@ -23954,9 +24423,11 @@ mod tests {
         {
             let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
             assert!(
-                table.overflow.slots.is_null(),
-                "the overflow page should be unmapped once its last live record is consumed"
+                auto_allocation_record_overflow_is_mapped_valid(&table.overflow),
+                "the bounded overflow mapping should remain reusable once its last live record is consumed"
             );
+            assert_eq!(table.overflow.live, 0);
+            assert_eq!(table.overflow.tombstones, 0);
             assert_eq!(
                 table.live_count, 0,
                 "release should not leave the recovery shard marked live"
@@ -23965,6 +24436,10 @@ mod tests {
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
 
         clear_auto_allocation_records();
+        {
+            let table = AUTO_ALLOCATION_RECORDS[home_shard_idx].lock();
+            assert!(auto_allocation_record_overflow_is_empty(&table.overflow));
+        }
     }
 
     #[cfg(not(feature = "fixed_heap"))]
@@ -24626,6 +25101,134 @@ mod tests {
             payload_preserved,
             "mismatched semantic realloc changed payload"
         );
+    }
+
+    #[test]
+    fn plain_global_recovery_record_skips_optional_auth_and_stays_layout_exact() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        let wrong_layout = Layout::from_size_align(128, align_of::<usize>()).unwrap();
+        let ptr = (0x4480usize << 4) as *mut u8;
+        let metadata = AllocationMetadata::for_type(0xC002_2480)
+            .with_module(0xC0DE)
+            .with_callsite(0xA110_C248)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_lifetime_hint(0x17)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+
+        assert!(unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) });
+        let (shard_idx, record_idx) = global_auto_allocation_record_location_for_test(ptr)
+            .expect("plain global recovery record");
+        {
+            let table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+            assert_eq!(table.inline[record_idx].auth, 0);
+            assert_eq!(
+                table.inline[record_idx].align & AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT,
+                0
+            );
+            assert_eq!(table.inline[record_idx].recorded_align(), layout.align());
+            assert!(table.inline[record_idx].matches_allocation(ptr, layout));
+        }
+        assert_eq!(lookup_auto_allocation_metadata(ptr, wrong_layout), None);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(metadata));
+        assert_eq!(take_auto_deallocation_metadata(ptr, layout), Some(metadata));
+        assert_eq!(take_auto_deallocation_metadata(ptr, layout), None);
+
+        clear_auto_allocation_records();
+    }
+
+    #[test]
+    fn protected_global_recovery_records_keep_keyed_authentication() {
+        let _guard = test_guard();
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        reset_metadata_auth_cookie_for_test();
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+
+        let layout = Layout::from_size_align(96, align_of::<usize>()).unwrap();
+        for (case_idx, integrity_flags) in IntoIterator::into_iter([
+            FLAG_POINTER_AUTH,
+            FLAG_METADATA_PROTECTION,
+            FLAG_POINTER_AUTH | FLAG_METADATA_PROTECTION,
+        ])
+        .enumerate()
+        {
+            let ptr = ((0x4490usize + case_idx) << 4) as *mut u8;
+            let metadata = AllocationMetadata::for_type(0xC002_2490 + case_idx as u64)
+                .with_module(0xC0DE)
+                .with_callsite(0xA110_C249 + case_idx as u64)
+                .with_flags(FLAG_TYPE_ISOLATED | integrity_flags)
+                .with_lifetime_hint(0x21 + case_idx as u16)
+                .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+            assert!(unsafe { record_global_auto_allocation_metadata(ptr, layout, metadata) });
+            let (shard_idx, record_idx) = global_auto_allocation_record_location_for_test(ptr)
+                .expect("protected global recovery record");
+            let (auth, encoded_align) = {
+                let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+                let auth = table.inline[record_idx].auth;
+                let encoded_align = table.inline[record_idx].align;
+                assert_ne!(auth, 0);
+                assert_ne!(
+                    encoded_align & AUTO_ALLOCATION_RECORD_INTEGRITY_ALIGN_BIT,
+                    0,
+                    "protected global records must carry an independent integrity marker"
+                );
+                assert_eq!(table.inline[record_idx].recorded_align(), layout.align());
+                assert_eq!(
+                    auth,
+                    derive_auto_allocation_record_auth(ptr, layout, metadata)
+                );
+                table.inline[record_idx].metadata = AllocationMetadata {
+                    callsite: metadata.callsite ^ 1,
+                    ..metadata
+                };
+                (auth, encoded_align)
+            };
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                None,
+                "tampered protected record must fail authentication"
+            );
+            {
+                let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+                assert_eq!(table.inline[record_idx].auth, auth);
+                table.inline[record_idx].metadata = metadata;
+            }
+
+            {
+                let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+                assert_eq!(table.inline[record_idx].align, encoded_align);
+                table.inline[record_idx].metadata = metadata.with_flags(FLAG_TYPE_ISOLATED);
+                table.inline[record_idx].auth = 0;
+            }
+            assert_eq!(
+                lookup_auto_allocation_metadata(ptr, layout),
+                None,
+                "clearing protected flags and auth must not downgrade a marked global record"
+            );
+            {
+                let mut table = AUTO_ALLOCATION_RECORDS[shard_idx].lock();
+                assert_eq!(table.inline[record_idx].align, encoded_align);
+                assert_eq!(table.inline[record_idx].auth, 0);
+                table.inline[record_idx].metadata = metadata;
+                table.inline[record_idx].auth = auth;
+            }
+            assert_eq!(take_auto_deallocation_metadata(ptr, layout), Some(metadata));
+        }
+
+        clear_auto_allocation_records();
     }
 
     #[test]
