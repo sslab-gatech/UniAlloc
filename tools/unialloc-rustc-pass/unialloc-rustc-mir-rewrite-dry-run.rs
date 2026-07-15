@@ -37,7 +37,7 @@ extern crate rustc_middle;
 extern crate rustc_span;
 
 #[cfg(unialloc_rustc_current)]
-use rustc_abi::Size;
+use rustc_abi::{Endian, Size};
 #[cfg(unialloc_rustc_current)]
 use rustc_data_structures::steal::Steal;
 #[cfg(unialloc_rustc_current)]
@@ -93,10 +93,11 @@ const PASS_NAME: &str = "unialloc-rustc-driver-mir-rewrite-dry-run";
 const LEGACY_UNIALLOC_LOWERING_MODULE_ID: u64 = 0xC002_DA00_0000_0001;
 const DEFAULT_LOWERING_POLICY_FLAGS: u32 = 0x1;
 const FNV1A64_OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+const RUNTIME_SEMANTIC_TYPE_ID_DOMAIN: &[u8] = b"rust-type-id-v2";
 const MODULE_ID_ALGORITHM: &str =
     "unialloc keeps legacy 0xC002_DA00_0000_0001; other crates use nonzero(fnv1a64(mir-crate-module-v1 NUL normalized crate name NUL rustc -C metadata disambiguator, or canonical primary input path when metadata is absent, or full rustc argv as a last-resort invocation identity))";
 const TYPE_ID_ALGORITHM: &str =
-    "direct: nonzero(fnv1a64(mir-rewrite-dry-run-v1 NUL callsite-key)) for unsolved alloc/alloc_zeroed calls; unsolved realloc/dealloc calls use an exact neutral type_id=0 recovery-delegated tuple and the conservative recovery-backed ABI; solved calls use nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved heap object type)) when MIR destination/argument, ShallowInitBox, Layout constructor/raw-pointer constructor provenance, size_of/align_of typed Layout reconstruction, Layout transformer provenance, projection-aware/packed composite Layout provenance, Result<Layout>::ok plus Option<Layout>::expect/unwrap passthrough provenance, same-source Layout size/align reconstruction, or canonicalized MIR place/ref/tuple projection provenance solves a heap object; semantic-scope/drop: nonzero(fnv1a64(mir-heap-object-type-v1 NUL solved rustc_middle heap object type)), so compiler-emitted allocation and Drop/deallocation metadata agree on allocator-visible type identity; receiver-mutating allocation/deallocation and explicit-drop semantic scopes attribute identity only from the first MIR argument receiver, including generic owned-buffer push::<...> calls such as PathBuf::push and OsString::push; exact Vec::with_capacity, alloc::vec::from_elem::<u8>, String::with_capacity, String::from(&str), <str as ToOwned>::to_owned, <[u8] as ToOwned>::to_owned, Copied<slice::Iter<u8>>::collect::<Vec<u8>>, Box::new, and Box<[u8]>::from(&[u8]) destinations and the capacity-only Vec receiver methods reserve/reserve_exact/try_reserve/try_reserve_exact/shrink_to/shrink_to_fit select the concrete direct outer identity because they can change or create only that backing allocation, while generic or non-u8 vec::from_elem, resize/extend/push/clone_from/Drop, and other element-affecting calls retain full owner-graph fail-closed classification; exact std::path::Path::to_path_buf and std::path::Path::join calls select the direct PathBuf identity only after exact std DefId/path and destination checks, and join accepts only immutable borrowed Path, OsStr, or str arguments with callback-free standard AsRef implementations; exact alloc::sync::Arc::new and alloc::rc::Rc::new calls select the direct destination Arc<T> or Rc<T> identity only after DefId/crate/path and destination-payload structural checks, without recursively treating nested owners inside T as owners of the ref-counted allocation; exact std::collections::HashMap::with_capacity and std::collections::HashSet::with_capacity calls likewise select the direct destination table identity only after exact std DefId/path, RandomState, optional Global allocator, and capacity-argument checks, without treating nested K/V/T owners as identities for the table allocation; exact std HashMap reserve/try_reserve/shrink calls remain callback-capable audit-only because rehash may execute user Hash/Eq code with unrelated allocations; constructor/factory scopes without an exact DefId/body allocation proof remain audit-only because a direct Vec/String/Result return type alone is not allocation provenance, regardless of whether the opaque callee is local, platform, or a third-party dependency; Result<T, E>/Option<T> candidates still select only the Ok/Some payload for hazard classification while Result Err owners remain fail-closed hazards; custom or aggregate destinations that merely contain a supported owner remain audit-only without an exact constructor matcher or sound callee-body allocation proof; for these shapes, remaining by-value argument owner graphs are merged as safety hazards: exact core slice Iter/IterMut and str Split/SplitInclusive wrappers are definite borrowing non-owners only in this hazard scan, identical owners deduplicate, borrowed/raw-pointer arguments are ignored, and conflicting or unresolved ownership fails closed; aggregate receiver/destination types with multiple supported heap owners fail closed outside the exact Vec/String/Box capacity/constructor, borrowed Path factory, Arc::new, Rc::new, std HashMap::with_capacity, and std HashSet::with_capacity exceptions; unsolved non-generic heap-object candidates are audited but not lowered as semantic scopes; generic Drop<T> cleanup in generic MIR is classified separately and skipped until monomorphized type evidence exists";
+    "every allocator-authorizing nonzero type_id is derived from one exact resolved rustc_middle Ty: tcx.type_id_hash(owner_ty) supplies core TypeId's stable Hash128, core hashes the second target-native-endian u64 word, and UniAlloc applies nonzero(FNV-1a-64(rust-type-id-v2 || that u64 in target-native-endian bytes)); semantic_object_type and all callee/type debug strings are audit display only and never authorize reuse; exact canonical semantic allocation scopes carry a compiler-derived numeric id, while exact Global Box scopes use the monomorphized generic runtime helper that computes the same semantic_type_id<T>; ownership transfers carry exact old/new Ty values and abstain unless both compiler-derived ids resolve; owner scans and ambiguity dedup key each supported owner by compiler-derived id plus display text, preserving distinct same-display nominal types; unresolved types, aliases, inference/placeholder/escaping-variable types, text-only Layout provenance, and composite/reconstructed Layouts use neutral type_id=0 and recovery-backed metadata; every direct allocator call remains neutral and recovery-backed until a CFG-proven exact owner link exists; Layout provenance remains audit-only because the current block-order map is not a CFG reaching-definition proof; built-in owners and methods remain authenticated against compiler lang/diagnostic items and canonical core/alloc/std CrateNums; hashbrown/indexmap and callback-capable receiver calls remain audit-only; exact Clone lowering remains limited to compiler-authenticated alloc String and Vec<u8, Global>; effectful owner, wrapper-owned, and dropful Box Drops stay unwrapped and recover identity from authenticated allocation records; the pinned rustc TypeId algorithm, the 64-bit runtime identity width, and the unique unialloc replacement-ABI CrateNum are explicit compiler/build provenance trust boundaries";
 const UNKNOWN_HEAP_OBJECT_TYPE: &str = "<unknown-heap-object-type>";
 const PLACEMENT_HINT_CROSS_THREAD_RECOVERY: u16 = 1 << 15;
 const LIFETIME_PROFILE_FORMAT_V1: &str = "unialloc-lifetime-profile-v1";
@@ -368,6 +369,8 @@ struct DirectAllocatorReplacementAbis {
     layout_alloc_zeroed: Option<AllocMetadataAbi>,
     layout_realloc: Option<AllocMetadataAbi>,
     layout_dealloc: Option<AllocMetadataAbi>,
+    recovery_backed_layout_alloc: Option<AllocMetadataAbi>,
+    recovery_backed_layout_alloc_zeroed: Option<AllocMetadataAbi>,
     recovery_backed_layout_realloc: Option<AllocMetadataAbi>,
     recovery_backed_layout_dealloc: Option<AllocMetadataAbi>,
 }
@@ -382,7 +385,6 @@ struct DirectAllocatorCandidate {
     destination_place: String,
     destination_type: String,
     semantic_object_type: String,
-    type_id_basis: &'static str,
     source_span: String,
     fn_span: Span,
 }
@@ -404,6 +406,7 @@ struct DirectLocalSizeAlignPairingCounts {
 #[derive(Clone, Copy, Debug)]
 struct SemanticScopeAbi {
     push_def_id: DefId,
+    generic_push_def_id: Option<DefId>,
     pop_def_id: DefId,
     push_symbol: &'static str,
     supports_hints: bool,
@@ -456,6 +459,8 @@ enum SemanticOwnershipTransferCallShape<'tcx> {
 struct SemanticOwnershipTransferProof<'tcx> {
     element_ty: Ty<'tcx>,
     allocator_ty: Ty<'tcx>,
+    old_owner_ty: Ty<'tcx>,
+    new_owner_ty: Ty<'tcx>,
     old_owner_type: String,
     new_owner_type: String,
 }
@@ -472,6 +477,7 @@ struct SemanticOwnershipTransferCandidate<'tcx> {
     kind: SemanticOwnershipTransferKind,
     call_shape: SemanticOwnershipTransferCallShape<'tcx>,
     proof: SemanticOwnershipTransferProof<'tcx>,
+    expected_old_owner_ty: Ty<'tcx>,
     expected_old_owner_type: String,
     expected_old_owner_basis: &'static str,
     source_span: String,
@@ -500,6 +506,39 @@ fn semantic_scope_push_symbol(local_no_recovery: bool) -> &'static str {
         (false, true) => "__unialloc_semantic_scope_push_local",
         (true, false) => "__unialloc_semantic_scope_push_hints",
         (false, false) => "__unialloc_semantic_scope_push",
+    }
+}
+
+fn generic_semantic_scope_push_symbol(local_no_recovery: bool) -> &'static str {
+    match (lowering_metadata_hints_requested(), local_no_recovery) {
+        (true, true) => "__unialloc_semantic_scope_push_for_rust_type_hints_local",
+        (false, true) => "__unialloc_semantic_scope_push_for_rust_type_local",
+        (true, false) => "__unialloc_semantic_scope_push_for_rust_type_hints",
+        (false, false) => "__unialloc_semantic_scope_push_for_rust_type",
+    }
+}
+
+fn generic_semantic_scope_resolution_status(
+    supports_hints: bool,
+    local_no_recovery: bool,
+) -> &'static str {
+    match (supports_hints, local_no_recovery) {
+        (true, true) => "resolved_unialloc_semantic_scope_push_for_rust_type_hints_local_pop",
+        (false, true) => "resolved_unialloc_semantic_scope_push_for_rust_type_local_pop",
+        (true, false) => "resolved_unialloc_semantic_scope_push_for_rust_type_hints_pop",
+        (false, false) => "resolved_unialloc_semantic_scope_push_for_rust_type_pop",
+    }
+}
+
+fn generic_semantic_scope_unresolved_status(
+    supports_hints: bool,
+    local_no_recovery: bool,
+) -> &'static str {
+    match (supports_hints, local_no_recovery) {
+        (true, true) => "unialloc_semantic_scope_push_for_rust_type_hints_local_pop_not_resolved",
+        (false, true) => "unialloc_semantic_scope_push_for_rust_type_local_pop_not_resolved",
+        (true, false) => "unialloc_semantic_scope_push_for_rust_type_hints_pop_not_resolved",
+        (false, false) => "unialloc_semantic_scope_push_for_rust_type_pop_not_resolved",
     }
 }
 
@@ -598,6 +637,8 @@ struct SemanticScopeCandidate<'tcx> {
     destination_place: String,
     destination_type: String,
     semantic_object_type: String,
+    compiler_type_id: Option<u64>,
+    runtime_identity_owner_ty: Option<Ty<'tcx>>,
     plain_clone_heap_class: PlainCloneHeapClass,
     non_plain_heap_class: Option<SemanticScopeHeapClass>,
     original_target: Option<BasicBlock>,
@@ -618,6 +659,10 @@ struct SemanticDropCandidate<'tcx> {
     drop_place: String,
     drop_type: String,
     semantic_object_type: String,
+    compiler_type_id: Option<u64>,
+    runtime_identity_owner_ty: Option<Ty<'tcx>>,
+    recovery_only_exact_box_drop: bool,
+    recovery_only_effectful_owner_drop: bool,
     drop_type_has_generic_param: bool,
     drop_type_has_multiple_heap_owners: bool,
     original_target: BasicBlock,
@@ -1736,6 +1781,42 @@ fn nonzero_fnv1a64_text(text: &str) -> u64 {
     nonzero_fnv1a64(fnv1a64_text(text))
 }
 
+#[cfg(unialloc_rustc_current)]
+fn runtime_semantic_type_id_from_rustc_hash(type_id_hash: u128, endian: Endian) -> u64 {
+    // `core::any::TypeId::Hash` hashes the second native-endian u64 word of
+    // its internal Hash128. Select and hash that word in the compilation
+    // target's endianness; rustc_driver itself may run on a host with a
+    // different byte order.
+    let bytes = match endian {
+        Endian::Little => type_id_hash.to_le_bytes(),
+        Endian::Big => type_id_hash.to_be_bytes(),
+    };
+    let mut bytes_to_hash =
+        Vec::with_capacity(RUNTIME_SEMANTIC_TYPE_ID_DOMAIN.len() + std::mem::size_of::<u64>());
+    bytes_to_hash.extend_from_slice(RUNTIME_SEMANTIC_TYPE_ID_DOMAIN);
+    bytes_to_hash.extend_from_slice(&bytes[8..16]);
+    nonzero_fnv1a64(fnv1a64(&bytes_to_hash))
+}
+
+#[cfg(unialloc_rustc_current)]
+fn compiler_semantic_type_id<'tcx>(tcx: TyCtxt<'tcx>, owner_ty: Ty<'tcx>) -> Option<u64> {
+    if clone_result_has_unresolved_params(owner_ty) || owner_ty.has_aliases() {
+        return None;
+    }
+    Some(runtime_semantic_type_id_from_rustc_hash(
+        tcx.type_id_hash(owner_ty).as_u128(),
+        tcx.data_layout.endian,
+    ))
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn compiler_semantic_type_id<'tcx>(_tcx: TyCtxt<'tcx>, _owner_ty: Ty<'tcx>) -> Option<u64> {
+    // Compatibility rustc surfaces do not expose the pinned stable TypeId
+    // query. They retain audit/recovery behavior and never synthesize an
+    // allocator-authorizing identity from type debug text.
+    None
+}
+
 fn lowering_module_id_from_rustc_args(args: &[String]) -> u64 {
     let crate_name = rustc_crate_name(args)
         .map(normalized_target_crate_name)
@@ -2384,6 +2465,61 @@ fn direct_allocator_call_kind(callee: &str) -> DirectAllocatorCallKind {
     DirectAllocatorCallKind::Unsupported
 }
 
+fn authenticated_direct_allocator_call_kind(
+    tcx: TyCtxt<'_>,
+    def_id: DefId,
+) -> DirectAllocatorCallKind {
+    let normalized = strip_rustc_crate_disambiguators(&tcx.def_path_str(def_id));
+    if exact_alloc_crate_def_id(tcx, def_id) {
+        return match normalized.as_str() {
+            "alloc::alloc::exchange_malloc" | "std::alloc::exchange_malloc" => {
+                DirectAllocatorCallKind::SizeAlignAlloc
+            }
+            "alloc::alloc::alloc" | "std::alloc::alloc" => DirectAllocatorCallKind::LayoutAlloc,
+            "alloc::alloc::alloc_zeroed" | "std::alloc::alloc_zeroed" => {
+                DirectAllocatorCallKind::LayoutAllocZeroed
+            }
+            "alloc::alloc::realloc" | "std::alloc::realloc" => {
+                DirectAllocatorCallKind::LayoutRealloc
+            }
+            "alloc::alloc::dealloc" | "std::alloc::dealloc" => {
+                DirectAllocatorCallKind::LayoutDealloc
+            }
+            _ => DirectAllocatorCallKind::Unsupported,
+        };
+    }
+
+    let trait_item_def_id = tcx.trait_item_of(def_id).unwrap_or(def_id);
+    let Some(trait_def_id) = tcx.trait_of_assoc(trait_item_def_id) else {
+        return DirectAllocatorCallKind::Unsupported;
+    };
+    if !exact_core_crate_def_id(tcx, trait_item_def_id)
+        || !exact_core_crate_def_id(tcx, trait_def_id)
+        || !matches!(
+            strip_rustc_crate_disambiguators(&tcx.def_path_str(trait_def_id)).as_str(),
+            "core::alloc::global::GlobalAlloc" | "std::alloc::GlobalAlloc"
+        )
+    {
+        return DirectAllocatorCallKind::Unsupported;
+    }
+    match strip_rustc_crate_disambiguators(&tcx.def_path_str(trait_item_def_id)).as_str() {
+        "core::alloc::global::GlobalAlloc::alloc" | "std::alloc::GlobalAlloc::alloc" => {
+            DirectAllocatorCallKind::GlobalAllocLayoutAlloc
+        }
+        "core::alloc::global::GlobalAlloc::alloc_zeroed"
+        | "std::alloc::GlobalAlloc::alloc_zeroed" => {
+            DirectAllocatorCallKind::GlobalAllocLayoutAllocZeroed
+        }
+        "core::alloc::global::GlobalAlloc::realloc" | "std::alloc::GlobalAlloc::realloc" => {
+            DirectAllocatorCallKind::GlobalAllocLayoutRealloc
+        }
+        "core::alloc::global::GlobalAlloc::dealloc" | "std::alloc::GlobalAlloc::dealloc" => {
+            DirectAllocatorCallKind::GlobalAllocLayoutDealloc
+        }
+        _ => DirectAllocatorCallKind::Unsupported,
+    }
+}
+
 fn global_alloc_callee_contains_method(callee: &str, method: &str) -> bool {
     let callee = strip_rustc_crate_disambiguators(callee);
     let trait_path = format!("GlobalAlloc::{}", method);
@@ -2466,20 +2602,36 @@ fn direct_allocator_required_arg_count(kind: DirectAllocatorCallKind) -> usize {
 }
 
 fn direct_allocator_global_receiver_supported<'tcx>(
+    tcx: TyCtxt<'tcx>,
     call_kind: DirectAllocatorCallKind,
+    callee_def_id: DefId,
+    trusted_unialloc_crate: Option<DefId>,
     argument_tys: &[Ty<'tcx>],
 ) -> bool {
     if !direct_allocator_is_global_receiver_call(call_kind) {
         return true;
     }
 
-    argument_tys
-        .get(0)
-        .map(|receiver_ty| {
-            let receiver_ty = format!("{:?}", receiver_ty);
-            receiver_ty.contains("RustAllocator") || receiver_ty.contains("UniAlloc")
-        })
-        .unwrap_or(false)
+    let trusted_unialloc_crate = match trusted_unialloc_crate {
+        Some(crate_root) if crate_root.krate == callee_def_id.krate => crate_root,
+        _ => return false,
+    };
+    let mut receiver_ty = match argument_tys.first() {
+        Some(receiver_ty) => *receiver_ty,
+        None => return false,
+    };
+    while let ty::Ref(_, inner, _) = receiver_ty.kind() {
+        receiver_ty = *inner;
+    }
+    match receiver_ty.kind() {
+        ty::Adt(def, args) => {
+            args.is_empty()
+                && def.did().krate == trusted_unialloc_crate.krate
+                && strip_rustc_crate_disambiguators(&tcx.def_path_str(def.did()))
+                    == "unialloc::cache::RustAllocator"
+        }
+        _ => false,
+    }
 }
 
 #[inline]
@@ -2502,6 +2654,18 @@ fn direct_allocator_recovery_backed_replacement_symbol(
 ) -> &'static str {
     let kind = direct_allocator_layout_abi_kind(kind).unwrap_or(kind);
     match (kind, lowering_metadata_hints_requested()) {
+        (DirectAllocatorCallKind::SizeAlignAlloc, false) => "__unialloc_alloc_with_metadata",
+        (DirectAllocatorCallKind::SizeAlignAlloc, true) => "__unialloc_alloc_with_metadata_hints",
+        (DirectAllocatorCallKind::LayoutAlloc, false) => "__unialloc_alloc_layout_with_metadata",
+        (DirectAllocatorCallKind::LayoutAlloc, true) => {
+            "__unialloc_alloc_layout_with_metadata_hints"
+        }
+        (DirectAllocatorCallKind::LayoutAllocZeroed, false) => {
+            "__unialloc_alloc_zeroed_layout_with_metadata"
+        }
+        (DirectAllocatorCallKind::LayoutAllocZeroed, true) => {
+            "__unialloc_alloc_zeroed_layout_with_metadata_hints"
+        }
         (DirectAllocatorCallKind::LayoutRealloc, false) => {
             "__unialloc_realloc_layout_with_metadata"
         }
@@ -2514,7 +2678,8 @@ fn direct_allocator_recovery_backed_replacement_symbol(
         (DirectAllocatorCallKind::LayoutDealloc, true) => {
             "__unialloc_dealloc_layout_with_metadata_hints"
         }
-        _ => direct_allocator_default_replacement_symbol(kind),
+        (DirectAllocatorCallKind::Unsupported, _) => "<unsupported-direct-allocator-call>",
+        _ => unreachable!("GlobalAlloc call kinds are mapped to Layout ABI call kinds"),
     }
 }
 
@@ -2969,19 +3134,6 @@ fn heap_type_marker_matches(value: &str) -> bool {
     })
 }
 
-fn direct_heap_type_marker_matches(value: &str) -> bool {
-    let normalized = strip_reference_type_prefix(value);
-    HEAP_OBJECT_SUPPORT.iter().any(|support| {
-        support.type_markers.iter().any(|marker| {
-            if marker.ends_with('<') {
-                normalized.starts_with(marker)
-            } else {
-                normalized == *marker || normalized.starts_with(&format!("{}<", marker))
-            }
-        })
-    })
-}
-
 fn direct_supported_heap_object_destination<'tcx>(tcx: TyCtxt<'tcx>, mut ty: Ty<'tcx>) -> bool {
     while let ty::Ref(_, inner, _) = ty.kind() {
         ty = *inner;
@@ -2990,20 +3142,18 @@ fn direct_supported_heap_object_destination<'tcx>(tcx: TyCtxt<'tcx>, mut ty: Ty<
         // Use the rustc DefId path, not textual type markers: a custom ADT
         // name can contain `Vec`/`Box` without itself being the allocation
         // owner that an exact constructor creates.
-        ty::Adt(adt, _) => {
-            let def_path = tcx.def_path_str(adt.did());
-            supported_heap_adt_def_path(&def_path)
-                // rustc can report these alloc-owned ADTs through their stable
-                // std re-export paths.  Keep the aliases explicit and exact;
-                // never fall back to substring matching on a custom ADT name.
-                || exact_alloc_box_def_path(&def_path)
-                || exact_alloc_vec_def_path(&def_path)
-                || exact_alloc_arc_def_path(&def_path)
-                || exact_alloc_string_def_path(&def_path)
-                || exact_alloc_cstring_def_path(&def_path)
-                || exact_std_hash_map_def_path(&def_path)
-        }
+        ty::Adt(adt, _) => supported_heap_adt_def_id(tcx, adt.did()),
         _ => false,
+    }
+}
+
+fn direct_supported_heap_owner_ty<'tcx>(tcx: TyCtxt<'tcx>, mut ty: Ty<'tcx>) -> Option<Ty<'tcx>> {
+    while let ty::Ref(_, inner, _) = ty.kind() {
+        ty = *inner;
+    }
+    match ty.kind() {
+        ty::Adt(adt, _) if supported_heap_adt_def_id(tcx, adt.did()) => Some(ty),
+        _ => None,
     }
 }
 
@@ -3030,6 +3180,126 @@ fn supported_heap_adt_def_path(path: &str) -> bool {
     })
 }
 
+fn third_party_supported_heap_adt_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "hashbrown::map::HashMap"
+            | "hashbrown::set::HashSet"
+            | "indexmap::map::IndexMap"
+            | "indexmap::set::IndexSet"
+    )
+}
+
+fn supported_builtin_heap_adt_reexport_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "std::vec::Vec"
+            | "std::collections::VecDeque"
+            | "std::collections::BinaryHeap"
+            | "std::collections::BTreeMap"
+            | "std::collections::BTreeSet"
+            | "std::collections::LinkedList"
+            | "std::collections::HashMap"
+            | "std::collections::HashSet"
+            | "std::string::String"
+            | "std::boxed::Box"
+            | "std::rc::Rc"
+            | "std::sync::Arc"
+            | "std::ffi::CString"
+            | "std::ffi::c_str::CString"
+    )
+}
+
+fn supported_heap_adt_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    let def_path = tcx.def_path_str(def_id);
+    if !supported_heap_adt_def_path(&def_path)
+        && !supported_builtin_heap_adt_reexport_def_path(&def_path)
+    {
+        return false;
+    }
+    // rustc can spell an alloc-owned DefId through a stable std re-export.
+    // Authenticate the actual CrateNum anchor before interpreting that path.
+    if exact_alloc_crate_def_id(tcx, def_id) || exact_std_crate_def_id(tcx, def_id) {
+        return true;
+    }
+
+    if third_party_supported_heap_adt_def_path(&def_path) {
+        // External owner identity requires a pinned DefPathHash/allowlist. A
+        // crate name plus textual path is only a dependency-provenance trust
+        // boundary, so hashbrown/indexmap remain explicit audit-only inputs.
+        return false;
+    }
+    false
+}
+
+fn exact_global_allocator_ty<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    _owner_def_id: DefId,
+    allocator_ty: Ty<'tcx>,
+) -> bool {
+    match allocator_ty.kind() {
+        ty::Adt(def, args) => {
+            args.is_empty() && exact_alloc_adt_def_id(tcx, def.did(), exact_alloc_global_def_path)
+        }
+        _ => false,
+    }
+}
+
+fn supported_owner_uses_canonical_global_allocator<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    owner_ty: Ty<'tcx>,
+) -> bool {
+    let (owner_def, owner_args) = match owner_ty.kind() {
+        ty::Adt(def, args) if supported_heap_adt_def_id(tcx, def.did()) => (def, args),
+        _ => return false,
+    };
+    let normalized = strip_rustc_crate_disambiguators(&tcx.def_path_str(owner_def.did()));
+    let implicit_global_arity = match normalized.as_str() {
+        "alloc::vec::Vec"
+        | "std::vec::Vec"
+        | "alloc::collections::vec_deque::VecDeque"
+        | "std::collections::VecDeque"
+        | "alloc::collections::binary_heap::BinaryHeap"
+        | "std::collections::BinaryHeap"
+        | "alloc::collections::btree::set::BTreeSet"
+        | "std::collections::BTreeSet"
+        | "alloc::collections::linked_list::LinkedList"
+        | "std::collections::LinkedList"
+        | "alloc::boxed::Box"
+        | "std::boxed::Box"
+        | "alloc::rc::Rc"
+        | "std::rc::Rc"
+        | "alloc::sync::Arc"
+        | "std::sync::Arc" => 1,
+        "alloc::collections::btree::map::BTreeMap" | "std::collections::BTreeMap" => 2,
+        "std::collections::hash::map::HashMap" => 3,
+        "std::collections::hash::set::HashSet" => 2,
+        // These canonical owners expose no allocator type parameter. Their
+        // backing storage is fixed to the platform Global allocator.
+        "alloc::string::String"
+        | "std::string::String"
+        | "alloc::ffi::c_str::CString"
+        | "std::ffi::CString"
+        | "std::ffi::c_str::CString"
+        | "std::path::PathBuf"
+        | "std::ffi::os_str::OsString" => return owner_args.is_empty(),
+        _ => return false,
+    };
+    if owner_args.len() == implicit_global_arity {
+        // Legacy rustc surfaces omit an explicit default Global argument.
+        return true;
+    }
+    if owner_args.len() != implicit_global_arity + 1 {
+        return false;
+    }
+    owner_args
+        .get(implicit_global_arity)
+        .and_then(generic_arg_type)
+        .map_or(false, |allocator_ty| {
+            exact_global_allocator_ty(tcx, owner_def.did(), allocator_ty)
+        })
+}
+
 fn strip_type_indirection<'tcx>(mut ty: Ty<'tcx>) -> Ty<'tcx> {
     loop {
         match ty.kind() {
@@ -3047,9 +3317,26 @@ fn heap_object_type_from_ty<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<Str
     heap_object_type_from_ty_inner(tcx, ty, 0)
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct CompilerHeapOwner {
+    type_id: u64,
+    display: String,
+}
+
+fn compiler_heap_owner<'tcx>(tcx: TyCtxt<'tcx>, owner_ty: Ty<'tcx>) -> Option<CompilerHeapOwner> {
+    Some(CompilerHeapOwner {
+        type_id: compiler_semantic_type_id(tcx, owner_ty)?,
+        display: format!("{:?}", owner_ty),
+    })
+}
+
+fn compiler_heap_owner_displays(owners: &BTreeSet<CompilerHeapOwner>) -> Vec<String> {
+    owners.iter().map(|owner| owner.display.clone()).collect()
+}
+
 #[derive(Default)]
 struct HeapObjectTypeScan {
-    owners: BTreeSet<String>,
+    owners: BTreeSet<CompilerHeapOwner>,
     unresolved: bool,
     borrowed_slice_iterators_are_nonowners: bool,
     borrowed_str_iterators_are_nonowners: bool,
@@ -3075,7 +3362,11 @@ fn heap_object_type_hazard_scan_from_ty<'tcx>(
 }
 
 fn heap_object_types_from_ty<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> BTreeSet<String> {
-    heap_object_type_scan_from_ty(tcx, ty).owners
+    heap_object_type_scan_from_ty(tcx, ty)
+        .owners
+        .into_iter()
+        .map(|owner| owner.display)
+        .collect()
 }
 
 fn type_contains_generic_param<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
@@ -3158,10 +3449,7 @@ fn heap_object_type_from_ty_inner<'tcx>(
     let stripped = strip_type_indirection(ty);
     match stripped.kind() {
         ty::Adt(adt, substs) => {
-            let def_path = tcx.def_path_str(adt.did());
-            if supported_heap_adt_def_path(&def_path)
-                || direct_heap_type_marker_matches(&format!("{:?}", stripped))
-            {
+            if supported_heap_adt_def_id(tcx, adt.did()) {
                 Some(format!("{:?}", stripped))
             } else {
                 let from_args = substs
@@ -3184,9 +3472,7 @@ fn heap_object_type_from_ty_inner<'tcx>(
                         })
                     })
                 };
-                from_args
-                    .or(from_fields)
-                    .or_else(|| normalized_heap_object_type(&format!("{:?}", stripped)))
+                from_args.or(from_fields)
             }
         }
         ty::Tuple(fields) => fields
@@ -3262,11 +3548,12 @@ fn collect_heap_object_types_from_ty_inner<'tcx>(
             }
         }
         ty::Adt(adt, substs) => {
-            let def_path = tcx.def_path_str(adt.did());
-            let type_text = format!("{:?}", ty);
-            if supported_heap_adt_def_path(&def_path) || direct_heap_type_marker_matches(&type_text)
-            {
-                scan.owners.insert(type_text);
+            if supported_heap_adt_def_id(tcx, adt.did()) {
+                if let Some(owner) = compiler_heap_owner(tcx, ty) {
+                    scan.owners.insert(owner);
+                } else {
+                    scan.unresolved = true;
+                }
                 // A supported container owns both its backing allocation and
                 // any allocator-visible values stored in its generic payload.
                 // Keeping both identities makes mutating methods and Drop fail
@@ -3291,10 +3578,10 @@ fn collect_heap_object_types_from_ty_inner<'tcx>(
                 // the by-value hazard scan around an independently attributed
                 // destination/receiver. General and Drop scans remain fail
                 // closed.
-            } else if clone_known_no_supported_owner_adt(&def_path) {
+            } else if clone_known_no_supported_owner_adt_def_id(tcx, adt.did()) {
                 // PhantomData<T> does not store a T. In particular,
                 // PhantomData<Vec<_>> must not manufacture a Vec owner.
-            } else if clone_transparent_wrapper_def_path(&def_path) {
+            } else if clone_transparent_wrapper_def_id(tcx, adt.did()) {
                 // Option and Result store their generic arguments directly.
                 // Arbitrary custom ADTs do not: a generic can be phantom while
                 // a non-generic private field owns another allocation.
@@ -3386,7 +3673,7 @@ fn collect_heap_object_types_from_ty_inner<'tcx>(
 
 #[derive(Default)]
 struct PlainCloneHeapOwnerScan {
-    owners: BTreeSet<String>,
+    owners: BTreeSet<CompilerHeapOwner>,
     unresolved: bool,
 }
 
@@ -3409,13 +3696,35 @@ fn plain_clone_trait_call(callee: &str) -> bool {
     })
 }
 
+fn exact_core_clone_trait_item_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "core::clone::Clone::clone" | "std::clone::Clone::clone"
+    )
+}
+
+fn exact_core_crate_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.lang_items()
+        .sized_trait()
+        .map_or(false, |sized_trait| sized_trait.krate == def_id.krate)
+}
+
+fn exact_alloc_crate_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.lang_items()
+        .owned_box()
+        .map_or(false, |owned_box| owned_box.krate == def_id.krate)
+}
+
+fn exact_std_crate_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.get_diagnostic_item(sym::HashMap)
+        .map_or(false, |hash_map| hash_map.krate == def_id.krate)
+}
+
 #[cfg(unialloc_rustc_current)]
 fn plain_clone_trait_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
     let trait_item_def_id = tcx.trait_item_of(def_id).unwrap_or(def_id);
-    matches!(
-        tcx.def_path_str(trait_item_def_id).as_str(),
-        "core::clone::Clone::clone" | "std::clone::Clone::clone"
-    )
+    exact_core_crate_def_id(tcx, trait_item_def_id)
+        && exact_core_clone_trait_item_def_path(&tcx.def_path_str(trait_item_def_id))
 }
 
 #[cfg(not(unialloc_rustc_current))]
@@ -3443,7 +3752,7 @@ fn exact_alloc_slice_into_vec_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
     // is only a first filter; the structural proof below also binds the source
     // to the OwnedBox lang item and requires all three definitions to share
     // that exact CrateNum.
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
+    exact_alloc_crate_def_id(tcx, def_id)
         && exact_alloc_slice_into_vec_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3466,7 +3775,7 @@ fn exact_alloc_vec_into_boxed_slice_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_vec_into_boxed_slice_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
+    exact_alloc_crate_def_id(tcx, def_id)
         && exact_alloc_vec_into_boxed_slice_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3489,7 +3798,7 @@ fn exact_alloc_string_into_bytes_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_string_into_bytes_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
+    exact_alloc_crate_def_id(tcx, def_id)
         && exact_alloc_string_into_bytes_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3513,7 +3822,7 @@ fn exact_alloc_cstring_into_bytes_with_nul_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_cstring_into_bytes_with_nul_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
+    exact_alloc_crate_def_id(tcx, def_id)
         && exact_alloc_cstring_into_bytes_with_nul_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3536,7 +3845,7 @@ fn exact_alloc_string_into_boxed_str_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_string_into_boxed_str_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
+    exact_alloc_crate_def_id(tcx, def_id)
         && exact_alloc_string_into_boxed_str_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3562,7 +3871,7 @@ fn exact_alloc_str_into_string_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_str_into_string_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
+    exact_alloc_crate_def_id(tcx, def_id)
         && exact_alloc_str_into_string_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3576,8 +3885,9 @@ fn exact_core_into_iterator_into_iter_def_path(path: &str) -> bool {
 }
 
 fn exact_core_into_iterator_into_iter_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "core"
-        && exact_core_into_iterator_into_iter_def_path(&tcx.def_path_str(def_id))
+    let trait_item_def_id = tcx.trait_item_of(def_id).unwrap_or(def_id);
+    tcx.lang_items().into_iter_fn() == Some(trait_item_def_id)
+        && exact_core_into_iterator_into_iter_def_path(&tcx.def_path_str(trait_item_def_id))
 }
 
 fn exact_core_iterator_collect_def_path(path: &str) -> bool {
@@ -3590,8 +3900,12 @@ fn exact_core_iterator_collect_def_path(path: &str) -> bool {
 }
 
 fn exact_core_iterator_collect_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "core"
-        && exact_core_iterator_collect_def_path(&tcx.def_path_str(def_id))
+    let trait_item_def_id = tcx.trait_item_of(def_id).unwrap_or(def_id);
+    let Some(iterator_trait_def_id) = tcx.lang_items().iterator_trait() else {
+        return false;
+    };
+    tcx.trait_of_assoc(trait_item_def_id) == Some(iterator_trait_def_id)
+        && exact_core_iterator_collect_def_path(&tcx.def_path_str(trait_item_def_id))
 }
 
 fn exact_core_iterator_zip_def_path(path: &str) -> bool {
@@ -3604,8 +3918,12 @@ fn exact_core_iterator_zip_def_path(path: &str) -> bool {
 }
 
 fn exact_core_iterator_zip_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "core"
-        && exact_core_iterator_zip_def_path(&tcx.def_path_str(def_id))
+    let trait_item_def_id = tcx.trait_item_of(def_id).unwrap_or(def_id);
+    let Some(iterator_trait_def_id) = tcx.lang_items().iterator_trait() else {
+        return false;
+    };
+    tcx.trait_of_assoc(trait_item_def_id) == Some(iterator_trait_def_id)
+        && exact_core_iterator_zip_def_path(&tcx.def_path_str(trait_item_def_id))
 }
 
 #[cfg(unialloc_rustc_current)]
@@ -3639,7 +3957,9 @@ fn exact_core_borrowing_slice_iterator_def_path(path: &str) -> bool {
 }
 
 fn exact_core_borrowing_slice_iterator_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "core"
+    tcx.lang_items()
+        .iterator_trait()
+        .map_or(false, |iterator_trait| iterator_trait.krate == def_id.krate)
         && exact_core_borrowing_slice_iterator_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3651,7 +3971,9 @@ fn exact_core_slice_iter_mut_def_path(path: &str) -> bool {
 }
 
 fn exact_core_slice_iter_mut_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "core"
+    tcx.lang_items()
+        .iterator_trait()
+        .map_or(false, |iterator_trait| iterator_trait.krate == def_id.krate)
         && exact_core_slice_iter_mut_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3663,7 +3985,9 @@ fn exact_core_zip_def_path(path: &str) -> bool {
 }
 
 fn exact_core_zip_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "core"
+    tcx.lang_items()
+        .iterator_trait()
+        .map_or(false, |iterator_trait| iterator_trait.krate == def_id.krate)
         && exact_core_zip_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3675,7 +3999,9 @@ fn exact_core_copied_iterator_adapter_def_path(path: &str) -> bool {
 }
 
 fn exact_core_copied_iterator_adapter_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "core"
+    tcx.lang_items()
+        .iterator_trait()
+        .map_or(false, |iterator_trait| iterator_trait.krate == def_id.krate)
         && exact_core_copied_iterator_adapter_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3690,7 +4016,9 @@ fn exact_core_borrowing_str_iterator_def_path(path: &str) -> bool {
 }
 
 fn exact_core_borrowing_str_iterator_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "core"
+    tcx.lang_items()
+        .iterator_trait()
+        .map_or(false, |iterator_trait| iterator_trait.krate == def_id.krate)
         && exact_core_borrowing_str_iterator_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3702,7 +4030,7 @@ fn exact_result_destination_types<'tcx>(
         ty::Adt(adt, args) => (adt, args),
         _ => return None,
     };
-    if tcx.crate_name(adt.did().krate).as_str() != "core"
+    if !tcx.is_diagnostic_item(sym::Result, adt.did())
         || !exact_core_result_def_path(&tcx.def_path_str(adt.did()))
         || args.len() != 2
     {
@@ -3745,8 +4073,24 @@ fn exact_alloc_box_new_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_box_new_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
-        && exact_alloc_box_new_def_path(&tcx.def_path_str(def_id))
+    exact_alloc_crate_def_id(tcx, def_id) && exact_alloc_box_new_def_path(&tcx.def_path_str(def_id))
+}
+
+fn exact_core_drop_inert_wrapper_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "core::mem::maybe_uninit::MaybeUninit"
+            | "std::mem::MaybeUninit"
+            | "core::mem::manually_drop::ManuallyDrop"
+            | "std::mem::ManuallyDrop"
+            | "core::marker::PhantomData"
+            | "std::marker::PhantomData"
+    )
+}
+
+fn exact_core_drop_inert_wrapper_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    exact_core_crate_def_id(tcx, def_id)
+        && exact_core_drop_inert_wrapper_def_path(&tcx.def_path_str(def_id))
 }
 
 fn exact_alloc_vec_def_path(path: &str) -> bool {
@@ -3764,7 +4108,7 @@ fn exact_alloc_vec_from_elem_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_vec_from_elem_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
+    exact_alloc_crate_def_id(tcx, def_id)
         && exact_alloc_vec_from_elem_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -3800,7 +4144,7 @@ fn exact_alloc_vecdeque_method_def_path(path: &str, method: &str) -> bool {
 }
 
 fn exact_alloc_vecdeque_method_def_id(tcx: TyCtxt<'_>, def_id: DefId, method: &str) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
+    exact_alloc_crate_def_id(tcx, def_id)
         && exact_alloc_vecdeque_method_def_path(&tcx.def_path_str(def_id), method)
 }
 
@@ -3843,8 +4187,21 @@ fn exact_alloc_vec_with_capacity_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_vec_with_capacity_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
+    exact_alloc_crate_def_id(tcx, def_id)
         && exact_alloc_vec_with_capacity_def_path(&tcx.def_path_str(def_id))
+}
+
+fn exact_alloc_vec_capacity_only_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    if !exact_alloc_crate_def_id(tcx, def_id) || tcx.trait_item_of(def_id).is_some() {
+        return false;
+    }
+    let def_path = tcx.def_path_str(def_id);
+    VEC_CAPACITY_ONLY_METHODS.iter().any(|method| {
+        callee_contains_current_impl_method(&def_path, "alloc::vec", method)
+            || ["alloc::vec::Vec", "std::vec::Vec"]
+                .iter()
+                .any(|receiver| callee_contains_named_receiver_method(&def_path, receiver, method))
+    })
 }
 
 fn exact_alloc_arc_def_path(path: &str) -> bool {
@@ -3878,8 +4235,7 @@ fn exact_alloc_arc_new_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_arc_new_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
-        && exact_alloc_arc_new_def_path(&tcx.def_path_str(def_id))
+    exact_alloc_crate_def_id(tcx, def_id) && exact_alloc_arc_new_def_path(&tcx.def_path_str(def_id))
 }
 
 fn exact_alloc_rc_def_path(path: &str) -> bool {
@@ -3913,8 +4269,7 @@ fn exact_alloc_rc_new_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_rc_new_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
-        && exact_alloc_rc_new_def_path(&tcx.def_path_str(def_id))
+    exact_alloc_crate_def_id(tcx, def_id) && exact_alloc_rc_new_def_path(&tcx.def_path_str(def_id))
 }
 
 fn exact_std_path_def_path(path: &str) -> bool {
@@ -3946,7 +4301,7 @@ fn exact_std_dir_entry_method_def_path(path: &str, method: &str) -> bool {
 }
 
 fn exact_std_dir_entry_method_def_id(tcx: TyCtxt<'_>, def_id: DefId, method: &str) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "std"
+    exact_std_crate_def_id(tcx, def_id)
         && exact_std_dir_entry_method_def_path(&tcx.def_path_str(def_id), method)
 }
 
@@ -3974,7 +4329,7 @@ fn exact_std_path_method_def_path(path: &str, method: &str) -> bool {
 }
 
 fn exact_std_path_method_def_id(tcx: TyCtxt<'_>, def_id: DefId, method: &str) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "std"
+    exact_std_crate_def_id(tcx, def_id)
         && exact_std_path_method_def_path(&tcx.def_path_str(def_id), method)
 }
 
@@ -3987,7 +4342,7 @@ fn exact_std_hash_map_with_capacity_def_path(path: &str) -> bool {
 }
 
 fn exact_std_hash_map_with_capacity_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "std"
+    exact_std_crate_def_id(tcx, def_id)
         && exact_std_hash_map_with_capacity_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -4015,7 +4370,7 @@ fn exact_std_hash_map_method_def_path(path: &str, method: &str) -> bool {
 }
 
 fn exact_std_hash_map_capacity_only_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "std"
+    exact_std_crate_def_id(tcx, def_id)
         && ["reserve", "try_reserve", "shrink_to", "shrink_to_fit"]
             .iter()
             .any(|method| exact_std_hash_map_method_def_path(&tcx.def_path_str(def_id), method))
@@ -4030,7 +4385,7 @@ fn exact_std_hash_set_with_capacity_def_path(path: &str) -> bool {
 }
 
 fn exact_std_hash_set_with_capacity_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "std"
+    exact_std_crate_def_id(tcx, def_id)
         && exact_std_hash_set_with_capacity_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -4076,7 +4431,7 @@ fn exact_alloc_string_with_capacity_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_string_with_capacity_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
+    exact_alloc_crate_def_id(tcx, def_id)
         && exact_alloc_string_with_capacity_def_path(&tcx.def_path_str(def_id))
 }
 
@@ -4088,8 +4443,12 @@ fn exact_core_from_from_def_path(path: &str) -> bool {
 }
 
 fn exact_core_from_from_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "core"
-        && exact_core_from_from_def_path(&tcx.def_path_str(def_id))
+    let trait_item_def_id = tcx.trait_item_of(def_id).unwrap_or(def_id);
+    let Some(from_trait_def_id) = tcx.lang_items().from_trait() else {
+        return false;
+    };
+    tcx.trait_of_assoc(trait_item_def_id) == Some(from_trait_def_id)
+        && exact_core_from_from_def_path(&tcx.def_path_str(trait_item_def_id))
 }
 
 fn exact_alloc_to_owned_to_owned_def_path(path: &str) -> bool {
@@ -4100,8 +4459,9 @@ fn exact_alloc_to_owned_to_owned_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_to_owned_to_owned_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc"
-        && exact_alloc_to_owned_to_owned_def_path(&tcx.def_path_str(def_id))
+    let trait_item_def_id = tcx.trait_item_of(def_id).unwrap_or(def_id);
+    tcx.get_diagnostic_item(sym::to_owned_method) == Some(trait_item_def_id)
+        && exact_alloc_to_owned_to_owned_def_path(&tcx.def_path_str(trait_item_def_id))
 }
 
 fn exact_alloc_cstring_def_path(path: &str) -> bool {
@@ -4119,7 +4479,7 @@ fn exact_alloc_global_def_path(path: &str) -> bool {
 }
 
 fn exact_alloc_adt_def_id(tcx: TyCtxt<'_>, def_id: DefId, exact_path: fn(&str) -> bool) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "alloc" && exact_path(&tcx.def_path_str(def_id))
+    exact_alloc_crate_def_id(tcx, def_id) && exact_path(&tcx.def_path_str(def_id))
 }
 
 fn exact_box_slice_into_vec_transfer_proof<'tcx>(
@@ -4179,6 +4539,8 @@ fn exact_box_slice_into_vec_transfer_proof<'tcx>(
     Some(SemanticOwnershipTransferProof {
         element_ty: source_element_ty,
         allocator_ty: source_allocator_ty,
+        old_owner_ty: source_ty,
+        new_owner_ty: destination_ty,
         old_owner_type: format!("{:?}", source_ty),
         new_owner_type: format!("{:?}", destination_ty),
     })
@@ -4241,6 +4603,8 @@ fn exact_vec_into_boxed_slice_transfer_proof<'tcx>(
     Some(SemanticOwnershipTransferProof {
         element_ty: source_element_ty,
         allocator_ty: source_allocator_ty,
+        old_owner_ty: source_ty,
+        new_owner_ty: destination_ty,
         old_owner_type: format!("{:?}", source_ty),
         new_owner_type: format!("{:?}", destination_ty),
     })
@@ -4317,6 +4681,8 @@ fn exact_string_into_bytes_transfer_proof<'tcx>(
     Some(SemanticOwnershipTransferProof {
         element_ty: destination_element_ty,
         allocator_ty: destination_allocator_ty,
+        old_owner_ty: source_ty,
+        new_owner_ty: destination_ty,
         old_owner_type: format!("{:?}", source_ty),
         new_owner_type: format!("{:?}", destination_ty),
     })
@@ -4377,6 +4743,8 @@ fn exact_cstring_into_bytes_with_nul_transfer_proof<'tcx>(
     Some(SemanticOwnershipTransferProof {
         element_ty: destination_element_ty,
         allocator_ty: destination_allocator_ty,
+        old_owner_ty: source_ty,
+        new_owner_ty: destination_ty,
         old_owner_type: format!("{:?}", source_ty),
         new_owner_type: format!("{:?}", destination_ty),
     })
@@ -4438,6 +4806,8 @@ fn exact_string_into_boxed_str_transfer_proof<'tcx>(
     Some(SemanticOwnershipTransferProof {
         element_ty: destination_payload_ty,
         allocator_ty: destination_allocator_ty,
+        old_owner_ty: source_ty,
+        new_owner_ty: destination_ty,
         old_owner_type: format!("{:?}", source_ty),
         new_owner_type: format!("{:?}", destination_ty),
     })
@@ -4496,6 +4866,8 @@ fn exact_boxed_str_into_string_transfer_proof<'tcx>(
     Some(SemanticOwnershipTransferProof {
         element_ty: source_payload_ty,
         allocator_ty: source_allocator_ty,
+        old_owner_ty: source_ty,
+        new_owner_ty: destination_ty,
         old_owner_type: format!("{:?}", source_ty),
         new_owner_type: format!("{:?}", destination_ty),
     })
@@ -4555,6 +4927,8 @@ fn exact_vec_into_iter_transfer_proof<'tcx>(
     Some(SemanticOwnershipTransferProof {
         element_ty: source_element_ty,
         allocator_ty: source_allocator_ty,
+        old_owner_ty: source_ty,
+        new_owner_ty: destination_ty,
         old_owner_type: format!("{:?}", source_ty),
         new_owner_type: format!("{:?}", destination_ty),
     })
@@ -4649,6 +5023,8 @@ fn exact_vec_into_iter_via_zip_transfer_proof<'tcx>(
         SemanticOwnershipTransferProof {
             element_ty: source_element_ty,
             allocator_ty: source_allocator_ty,
+            old_owner_ty: source_ty,
+            new_owner_ty: into_iter_ty,
             old_owner_type: format!("{:?}", source_ty),
             new_owner_type: format!("{:?}", into_iter_ty),
         },
@@ -4667,7 +5043,7 @@ fn exact_vec_into_iter_via_zip_transfer_proof<'tcx>(
 fn exact_zip_iter_mut_u8_into_iter_drop_owner<'tcx>(
     tcx: TyCtxt<'tcx>,
     drop_ty: Ty<'tcx>,
-) -> Option<String> {
+) -> Option<Ty<'tcx>> {
     let (zip_def, zip_args) = match drop_ty.kind() {
         ty::Adt(def, args) => (def, args),
         _ => return None,
@@ -4707,7 +5083,7 @@ fn exact_zip_iter_mut_u8_into_iter_drop_owner<'tcx>(
     {
         return None;
     }
-    Some(format!("{:?}", into_iter_ty))
+    Some(into_iter_ty)
 }
 
 #[cfg(unialloc_rustc_current)]
@@ -4741,7 +5117,7 @@ fn exact_immediate_box_array_unsize_owner_type<'tcx>(
     argument: &Operand<'tcx>,
     nominal_box_slice_ty: Ty<'tcx>,
     proof: &SemanticOwnershipTransferProof<'tcx>,
-) -> Option<String> {
+) -> Option<Ty<'tcx>> {
     let argument_place = match argument {
         Operand::Move(place) if place.projection.is_empty() => *place,
         _ => return None,
@@ -4791,7 +5167,7 @@ fn exact_immediate_box_array_unsize_owner_type<'tcx>(
     if source_element_ty != proof.element_ty || source_allocator_ty != proof.allocator_ty {
         return None;
     }
-    Some(format!("{:?}", source_ty))
+    Some(source_ty)
 }
 
 fn clone_transparent_wrapper_def_path(path: &str) -> bool {
@@ -4801,11 +5177,21 @@ fn clone_transparent_wrapper_def_path(path: &str) -> bool {
         || path.ends_with("::core::result::Result")
 }
 
+fn clone_transparent_wrapper_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    exact_core_crate_def_id(tcx, def_id)
+        && clone_transparent_wrapper_def_path(&tcx.def_path_str(def_id))
+}
+
 fn clone_known_no_supported_owner_adt(path: &str) -> bool {
     path == "core::marker::PhantomData"
         || path.ends_with("::core::marker::PhantomData")
         || path == "core::time::Duration"
         || path.ends_with("::core::time::Duration")
+}
+
+fn clone_known_no_supported_owner_adt_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    exact_core_crate_def_id(tcx, def_id)
+        && clone_known_no_supported_owner_adt(&tcx.def_path_str(def_id))
 }
 
 fn clone_reference_counted_field_is_nonallocating(path: &str) -> bool {
@@ -4821,6 +5207,11 @@ fn clone_reference_counted_field_is_nonallocating(path: &str) -> bool {
         // no suffix/substring match is accepted.
         "alloc::sync::Arc" | "std::sync::Arc" | "alloc::rc::Rc" | "std::rc::Rc"
     )
+}
+
+fn clone_reference_counted_field_is_nonallocating_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    exact_alloc_crate_def_id(tcx, def_id)
+        && clone_reference_counted_field_is_nonallocating(&tcx.def_path_str(def_id))
 }
 
 #[cfg(unialloc_rustc_current)]
@@ -4888,25 +5279,26 @@ fn collect_plain_clone_heap_owners_inner<'tcx>(
             }
         }
         ty::Adt(adt, substs) => {
-            let def_path = tcx.def_path_str(adt.did());
-            let type_text = format!("{:?}", ty);
-            if clone_reference_counted_field_is_nonallocating(&def_path) {
+            if clone_reference_counted_field_is_nonallocating_def_id(tcx, adt.did()) {
                 // Do not inspect Arc<T>/Rc<T>'s generic argument: Clone copies
                 // the reference-counted handle and does not invoke T::clone.
                 return;
             }
-            if supported_heap_adt_def_path(&def_path) || direct_heap_type_marker_matches(&type_text)
-            {
-                scan.owners.insert(type_text);
+            if supported_heap_adt_def_id(tcx, adt.did()) {
+                if let Some(owner) = compiler_heap_owner(tcx, ty) {
+                    scan.owners.insert(owner);
+                } else {
+                    scan.unresolved = true;
+                }
                 return;
             }
-            if clone_known_no_supported_owner_adt(&def_path) {
+            if clone_known_no_supported_owner_adt_def_id(tcx, adt.did()) {
                 // Do not inspect PhantomData<T>'s generic argument: it is not a
                 // stored T and scanning it would make PhantomData<Vec<_>> look
                 // like an owned Vec.  Duration is likewise a trusted scalar.
                 return;
             }
-            if clone_transparent_wrapper_def_path(&def_path) {
+            if clone_transparent_wrapper_def_id(tcx, adt.did()) {
                 // Option and Result store their type arguments directly.  This
                 // is the only generic-argument recursion allowed here; arbitrary
                 // ADT arguments may be phantom or otherwise non-stored.
@@ -4978,6 +5370,73 @@ fn collect_plain_clone_heap_owners_inner<'tcx>(
     }
 }
 
+#[cfg(unialloc_rustc_current)]
+fn exact_core_clone_direct_owner<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: Option<DefId>,
+    callee_generic_types: &[Ty<'tcx>],
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<String> {
+    let callee_def_id = callee_def_id?;
+    let trait_item_def_id = tcx.trait_item_of(callee_def_id).unwrap_or(callee_def_id);
+    if tcx.lang_items().clone_fn() != Some(trait_item_def_id)
+        || !exact_core_crate_def_id(tcx, trait_item_def_id)
+        || !exact_core_clone_trait_item_def_path(&tcx.def_path_str(trait_item_def_id))
+        || callee_generic_types != [destination_ty]
+        || argument_tys.len() != 1
+    {
+        return None;
+    }
+    match argument_tys[0].kind() {
+        ty::Ref(_, self_ty, rustc_ast::Mutability::Not) if *self_ty == destination_ty => {}
+        _ => return None,
+    }
+
+    let (owner_def, owner_args) = match destination_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if exact_alloc_adt_def_id(tcx, owner_def.did(), exact_alloc_string_def_path)
+        && tcx.lang_items().string() == Some(owner_def.did())
+        && owner_args.is_empty()
+    {
+        return Some(format!("{:?}", destination_ty));
+    }
+    if !exact_alloc_adt_def_id(tcx, owner_def.did(), exact_alloc_vec_def_path)
+        || !tcx.is_diagnostic_item(sym::Vec, owner_def.did())
+        || owner_args.len() != 2
+        || generic_arg_type(owner_args.get(0)?)? != tcx.types.u8
+    {
+        return None;
+    }
+    let allocator_ty = generic_arg_type(owner_args.get(1)?)?;
+    let (allocator_def, allocator_args) = match allocator_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if allocator_def.did().krate != owner_def.did().krate
+        || !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path)
+        || !allocator_args.is_empty()
+    {
+        return None;
+    }
+    Some(format!("{:?}", destination_ty))
+}
+
+#[cfg(not(unialloc_rustc_current))]
+fn exact_core_clone_direct_owner<'tcx>(
+    _tcx: TyCtxt<'tcx>,
+    _callee_def_id: Option<DefId>,
+    _callee_generic_types: &[Ty<'tcx>],
+    _destination_ty: Ty<'tcx>,
+    _argument_tys: &[Ty<'tcx>],
+) -> Option<String> {
+    // The compatibility surface lacks the pinned rustc structural query
+    // contract used above, so every plain Clone call remains audit-only.
+    None
+}
+
 fn plain_clone_heap_class<'tcx>(
     tcx: TyCtxt<'tcx>,
     callee_def_id: Option<DefId>,
@@ -5002,8 +5461,10 @@ fn plain_clone_heap_class<'tcx>(
     let owners = scan.owners.into_iter().collect::<Vec<_>>();
     match owners.len() {
         0 => PlainCloneHeapClass::DefiniteNoSupportedOwner,
-        1 => PlainCloneHeapClass::Single(owners.into_iter().next().unwrap()),
-        _ => PlainCloneHeapClass::Ambiguous(owners),
+        1 => PlainCloneHeapClass::Single(owners.into_iter().next().unwrap().display),
+        _ => {
+            PlainCloneHeapClass::Ambiguous(owners.into_iter().map(|owner| owner.display).collect())
+        }
     }
 }
 
@@ -5020,7 +5481,7 @@ fn semantic_scope_argument_is_borrowed_or_raw(ty: Ty<'_>) -> bool {
 
 fn semantic_scope_heap_class_with_known_attribution_and_by_value_hazards<'tcx>(
     tcx: TyCtxt<'tcx>,
-    attributed_owner: String,
+    attributed_owner: CompilerHeapOwner,
     hazard_tys: &[Ty<'tcx>],
 ) -> SemanticScopeHeapClass {
     let mut owners = BTreeSet::from([attributed_owner.clone()]);
@@ -5039,9 +5500,9 @@ fn semantic_scope_heap_class_with_known_attribution_and_by_value_hazards<'tcx>(
     }
 
     if owners.len() == 1 {
-        SemanticScopeHeapClass::Single(attributed_owner)
+        SemanticScopeHeapClass::Single(attributed_owner.display)
     } else {
-        SemanticScopeHeapClass::Ambiguous(owners.into_iter().collect())
+        SemanticScopeHeapClass::Ambiguous(compiler_heap_owner_displays(&owners))
     }
 }
 
@@ -5059,7 +5520,7 @@ fn semantic_scope_heap_class_with_by_value_hazards<'tcx>(
         return SemanticScopeHeapClass::Unresolved;
     }
     if owners.len() > 1 {
-        return SemanticScopeHeapClass::Ambiguous(owners.into_iter().collect());
+        return SemanticScopeHeapClass::Ambiguous(compiler_heap_owner_displays(&owners));
     }
     let attributed_owner = owners.iter().next().cloned().unwrap();
     semantic_scope_heap_class_with_known_attribution_and_by_value_hazards(
@@ -5080,7 +5541,7 @@ fn semantic_scope_result_ok_heap_class<'tcx>(
         return SemanticScopeHeapClass::Unresolved;
     }
     if ok_scan.owners.len() > 1 {
-        return SemanticScopeHeapClass::Ambiguous(ok_scan.owners.into_iter().collect());
+        return SemanticScopeHeapClass::Ambiguous(compiler_heap_owner_displays(&ok_scan.owners));
     }
     let attributed_owner = ok_scan.owners.into_iter().next().unwrap();
     let mut hazard_tys = Vec::with_capacity(argument_tys.len() + 1);
@@ -5102,17 +5563,30 @@ fn direct_outer_vec_receiver_owner<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Opt
         return None;
     }
     let type_text = format!("{:?}", receiver_ty);
-    match receiver_ty.kind() {
-        ty::Adt(adt, _) => {
-            let def_path = strip_rustc_crate_disambiguators(&tcx.def_path_str(adt.did()));
-            if matches!(def_path.as_str(), "std::vec::Vec" | "alloc::vec::Vec") {
-                Some(type_text)
-            } else {
-                None
-            }
-        }
-        _ => None,
+    let (owner_def, owner_args) = match receiver_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, owner_def.did(), exact_alloc_vec_def_path)
+        || !tcx.is_diagnostic_item(sym::Vec, owner_def.did())
+        || !matches!(owner_args.len(), 1 | 2)
+    {
+        return None;
     }
+    if owner_args.len() == 2 {
+        let allocator_ty = generic_arg_type(owner_args.get(1)?)?;
+        let (allocator_def, allocator_args) = match allocator_ty.kind() {
+            ty::Adt(def, args) => (def, args),
+            _ => return None,
+        };
+        if !allocator_args.is_empty()
+            || allocator_def.did().krate != owner_def.did().krate
+            || !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path)
+        {
+            return None;
+        }
+    }
+    Some(type_text)
 }
 
 fn direct_outer_vec_destination_owner<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Option<String> {
@@ -5221,6 +5695,7 @@ fn direct_outer_box_new_destination_owner<'tcx>(
         _ => return None,
     };
     if !exact_alloc_adt_def_id(tcx, destination_def.did(), exact_alloc_box_def_path)
+        || tcx.lang_items().owned_box() != Some(destination_def.did())
         || destination_def.did().krate != callee_def_id.krate
         || destination_args.is_empty()
         || generic_arg_type(destination_args.get(0)?)? != argument_tys[0]
@@ -5246,6 +5721,113 @@ fn direct_outer_box_new_destination_owner<'tcx>(
     }
 
     Some(format!("{:?}", destination_ty))
+}
+
+fn exact_global_box_payload<'tcx>(tcx: TyCtxt<'tcx>, owner_ty: Ty<'tcx>) -> Option<Ty<'tcx>> {
+    let (owner_def, owner_args) = match owner_ty.kind() {
+        ty::Adt(def, args) => (def, args),
+        _ => return None,
+    };
+    if !exact_alloc_adt_def_id(tcx, owner_def.did(), exact_alloc_box_def_path)
+        || tcx.lang_items().owned_box() != Some(owner_def.did())
+        || !matches!(owner_args.len(), 1 | 2)
+    {
+        return None;
+    }
+    if owner_args.len() == 2 {
+        let allocator_ty = generic_arg_type(owner_args.get(1)?)?;
+        let (allocator_def, allocator_args) = match allocator_ty.kind() {
+            ty::Adt(def, args) => (def, args),
+            _ => return None,
+        };
+        if !exact_alloc_adt_def_id(tcx, allocator_def.did(), exact_alloc_global_def_path)
+            || allocator_def.did().krate != owner_def.did().krate
+            || !allocator_args.is_empty()
+        {
+            return None;
+        }
+    }
+    generic_arg_type(owner_args.get(0)?)
+}
+
+fn box_new_runtime_identity_owner_ty<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<Ty<'tcx>> {
+    // Route every exact Global Box::new through the same generic runtime ABI.
+    // Generic and already-concrete MIR therefore both evaluate UniAlloc's
+    // compiler TypeId contract after monomorphization instead of mixing that
+    // identity with the older textual rustc_middle hash.
+    if !exact_alloc_box_new_def_id(tcx, callee_def_id) || argument_tys.len() != 1 {
+        return None;
+    }
+    let payload_ty = exact_global_box_payload(tcx, destination_ty)?;
+    (payload_ty == argument_tys[0]).then_some(destination_ty)
+}
+
+fn type_is_structurally_drop_inert<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>, depth: usize) -> bool {
+    const MAX_DROP_INERT_DEPTH: usize = 8;
+    if depth > MAX_DROP_INERT_DEPTH {
+        return false;
+    }
+    match ty.kind() {
+        ty::Bool
+        | ty::Char
+        | ty::Int(_)
+        | ty::Uint(_)
+        | ty::Float(_)
+        | ty::Str
+        | ty::Never
+        | ty::FnDef(_, _)
+        | ty::FnPtr(..)
+        | ty::Ref(..) => true,
+        #[cfg(unialloc_rustc_current)]
+        ty::RawPtr(..) => true,
+        #[cfg(not(unialloc_rustc_current))]
+        ty::RawPtr(_) => true,
+        ty::Array(element, _) | ty::Slice(element) => {
+            type_is_structurally_drop_inert(tcx, *element, depth + 1)
+        }
+        ty::Tuple(fields) => fields
+            .iter()
+            .all(|field| type_is_structurally_drop_inert(tcx, field, depth + 1)),
+        ty::Adt(adt, args) => {
+            if adt.has_dtor(tcx) {
+                return false;
+            }
+            if exact_core_drop_inert_wrapper_def_id(tcx, adt.did()) {
+                return true;
+            }
+            adt.variants().iter().all(|variant| {
+                variant.fields.iter().all(|field| {
+                    #[cfg(unialloc_rustc_current)]
+                    let field_ty = field.ty(tcx, args).skip_norm_wip();
+                    #[cfg(not(unialloc_rustc_current))]
+                    let field_ty = field.ty(tcx, args);
+                    type_is_structurally_drop_inert(tcx, field_ty, depth + 1)
+                })
+            })
+        }
+        _ => false,
+    }
+}
+
+fn drop_inert_box_runtime_identity_owner_ty<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    owner_ty: Ty<'tcx>,
+) -> Option<Ty<'tcx>> {
+    let payload_ty = exact_global_box_payload(tcx, owner_ty)?;
+    type_is_structurally_drop_inert(tcx, payload_ty, 0).then_some(owner_ty)
+}
+
+fn exact_box_drop_requires_allocation_recovery<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    owner_ty: Ty<'tcx>,
+) -> bool {
+    exact_global_box_payload(tcx, owner_ty).is_some()
+        && drop_inert_box_runtime_identity_owner_ty(tcx, owner_ty).is_none()
 }
 
 fn direct_outer_string_with_capacity_destination_owner<'tcx>(
@@ -5293,6 +5875,9 @@ fn direct_outer_string_from_str_destination_owner<'tcx>(
     if !exact_alloc_adt_def_id(tcx, destination_def.did(), exact_alloc_string_def_path) {
         return None;
     }
+    if tcx.lang_items().string() != Some(destination_def.did()) {
+        return None;
+    }
 
     let source_is_str_ref = match argument_tys[0].kind() {
         ty::Ref(_, inner, rustc_ast::Mutability::Not) => matches!(inner.kind(), ty::Str),
@@ -5327,6 +5912,7 @@ fn direct_outer_string_from_str_to_owned_destination_owner<'tcx>(
         _ => return None,
     };
     if !exact_alloc_adt_def_id(tcx, destination_def.did(), exact_alloc_string_def_path)
+        || tcx.lang_items().string() != Some(destination_def.did())
         || destination_def.did().krate != callee_def_id.krate
     {
         return None;
@@ -5355,7 +5941,7 @@ fn immutable_ref_to_exact_std_path_component<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tc
     match inner.kind() {
         ty::Str => true,
         ty::Adt(def, args) if args.is_empty() => {
-            tcx.crate_name(def.did().krate).as_str() == "std"
+            exact_std_crate_def_id(tcx, def.did())
                 && (exact_std_path_def_path(&tcx.def_path_str(def.did()))
                     || exact_std_os_str_def_path(&tcx.def_path_str(def.did())))
         }
@@ -5377,7 +5963,7 @@ fn direct_outer_std_path_factory_destination_owner<'tcx>(
         ty::Adt(def, args) if args.is_empty() => def,
         _ => return None,
     };
-    if tcx.crate_name(destination_def.did().krate).as_str() != "std"
+    if !exact_std_crate_def_id(tcx, destination_def.did())
         || destination_def.did().krate != callee_def_id.krate
         || !exact_std_pathbuf_def_path(&tcx.def_path_str(destination_def.did()))
     {
@@ -5483,6 +6069,7 @@ fn direct_outer_vec_u8_from_u8_slice_to_owned_destination_owner<'tcx>(
         _ => return None,
     };
     if !exact_alloc_adt_def_id(tcx, destination_def.did(), exact_alloc_vec_def_path)
+        || !tcx.is_diagnostic_item(sym::Vec, destination_def.did())
         || destination_def.did().krate != callee_def_id.krate
         || !matches!(destination_args.len(), 1 | 2)
     {
@@ -5595,7 +6182,7 @@ fn direct_outer_vec_u8_from_copied_slice_iter_collect_destination_owner<'tcx>(
         _ => return None,
     };
     if !tcx.is_diagnostic_item(sym::Vec, destination_def.did())
-        || tcx.crate_name(destination_def.did().krate).as_str() != "alloc"
+        || !exact_alloc_crate_def_id(tcx, destination_def.did())
         || !matches!(destination_args.len(), 1 | 2)
         || !matches!(
             generic_arg_type(destination_args.get(0)?)?.kind(),
@@ -5630,7 +6217,7 @@ fn direct_outer_vec_u8_from_copied_slice_iter_collect_destination_owner<'tcx>(
         }
         _ => return None,
     };
-    if tcx.crate_name(copied_def.did().krate).as_str() != "core" {
+    if !exact_core_crate_def_id(tcx, copied_def.did()) {
         return None;
     }
     let copied_types = copied_args.types().collect::<Vec<_>>();
@@ -5641,7 +6228,7 @@ fn direct_outer_vec_u8_from_copied_slice_iter_collect_destination_owner<'tcx>(
         ty::Adt(def, args) => (def, args),
         _ => return None,
     };
-    if tcx.crate_name(iter_def.did().krate).as_str() != "core"
+    if !exact_core_crate_def_id(tcx, iter_def.did())
         || !matches!(
             strip_rustc_crate_disambiguators(&tcx.def_path_str(iter_def.did())).as_str(),
             "core::slice::iter::Iter" | "std::slice::Iter"
@@ -5835,7 +6422,7 @@ fn direct_outer_std_hash_map_with_capacity_destination_owner<'tcx>(
         ty::Adt(def, args) => (def, args),
         _ => return None,
     };
-    if tcx.crate_name(destination_def.did().krate).as_str() != "std"
+    if !exact_std_crate_def_id(tcx, destination_def.did())
         || destination_def.did().krate != callee_def_id.krate
         || !exact_std_hash_map_def_path(&tcx.def_path_str(destination_def.did()))
         || !matches!(destination_args.len(), 3 | 4)
@@ -5852,7 +6439,7 @@ fn direct_outer_std_hash_map_with_capacity_destination_owner<'tcx>(
         ty::Adt(def, args) if args.is_empty() => def,
         _ => return None,
     };
-    if tcx.crate_name(random_state_def.did().krate).as_str() != "std"
+    if !exact_std_crate_def_id(tcx, random_state_def.did())
         || random_state_def.did().krate != destination_def.did().krate
         || !exact_std_hash_map_random_state_def_path(&tcx.def_path_str(random_state_def.did()))
     {
@@ -5893,7 +6480,7 @@ fn direct_outer_std_hash_set_with_capacity_destination_owner<'tcx>(
         ty::Adt(def, args) => (def, args),
         _ => return None,
     };
-    if tcx.crate_name(destination_def.did().krate).as_str() != "std"
+    if !exact_std_crate_def_id(tcx, destination_def.did())
         || destination_def.did().krate != callee_def_id.krate
         || !exact_std_hash_set_def_path(&tcx.def_path_str(destination_def.did()))
         || !matches!(destination_args.len(), 2 | 3)
@@ -5910,7 +6497,7 @@ fn direct_outer_std_hash_set_with_capacity_destination_owner<'tcx>(
         ty::Adt(def, args) if args.is_empty() => def,
         _ => return None,
     };
-    if tcx.crate_name(random_state_def.did().krate).as_str() != "std"
+    if !exact_std_crate_def_id(tcx, random_state_def.did())
         || random_state_def.did().krate != destination_def.did().krate
         || !exact_std_hash_map_random_state_def_path(&tcx.def_path_str(random_state_def.did()))
     {
@@ -6121,14 +6708,21 @@ fn non_plain_semantic_scope_heap_class<'tcx>(
         // backing. Nested heap-owning element types are not allocated here.
         // Keep every by-value argument as a fail-closed safety hazard.
         match direct_outer_vec_destination_owner(tcx, destination_ty) {
-            Some(owner) => semantic_scope_heap_class_with_known_attribution_and_by_value_hazards(
-                tcx,
-                owner,
-                argument_tys,
-            ),
+            Some(owner) => compiler_heap_owner(tcx, destination_ty)
+                .filter(|identity| identity.display == owner)
+                .map(|identity| {
+                    semantic_scope_heap_class_with_known_attribution_and_by_value_hazards(
+                        tcx,
+                        identity,
+                        argument_tys,
+                    )
+                })
+                .unwrap_or(SemanticScopeHeapClass::Unresolved),
             None => SemanticScopeHeapClass::Unresolved,
         }
-    } else if semantic_scope_capacity_only_vec_receiver_call(callee) {
+    } else if callee_def_id.map_or(false, |def_id| {
+        exact_alloc_vec_capacity_only_def_id(tcx, def_id)
+    }) {
         // These methods can allocate, reallocate, or free only the direct Vec
         // backing buffer; they never clone/drop elements or run element code.
         // Keep the later by-value hazard gate, but do not make nested supported
@@ -6136,29 +6730,29 @@ fn non_plain_semantic_scope_heap_class<'tcx>(
         // outer buffer whose capacity is being changed.
         match argument_tys.first() {
             Some(receiver_ty) => match direct_outer_vec_receiver_owner(tcx, *receiver_ty) {
-                Some(owner) => {
-                    semantic_scope_heap_class_with_known_attribution_and_by_value_hazards(
-                        tcx,
-                        owner,
-                        &argument_tys[1..],
-                    )
-                }
+                Some(owner) => direct_supported_heap_owner_ty(tcx, *receiver_ty)
+                    .and_then(|owner_ty| compiler_heap_owner(tcx, owner_ty))
+                    .filter(|identity| identity.display == owner)
+                    .map(|identity| {
+                        semantic_scope_heap_class_with_known_attribution_and_by_value_hazards(
+                            tcx,
+                            identity,
+                            &argument_tys[1..],
+                        )
+                    })
+                    .unwrap_or(SemanticScopeHeapClass::Unresolved),
                 None => SemanticScopeHeapClass::Unresolved,
             },
             None => SemanticScopeHeapClass::Unresolved,
         }
     } else if semantic_scope_receiver_heap_owner_call(callee) {
-        // MIR keeps the receiver as argument zero, which remains the sole
-        // attribution source. Later by-value owners are safety hazards because
-        // the callee can consume/drop them under the receiver's active scope.
-        match argument_tys.first() {
-            Some(receiver_ty) => semantic_scope_heap_class_with_by_value_hazards(
-                tcx,
-                *receiver_ty,
-                &argument_tys[1..],
-            ),
-            None => SemanticScopeHeapClass::Unresolved,
-        }
+        // Generic receiver mutators/deallocators can invoke Iterator, Clone,
+        // AsRef, Hash/Eq, or element Drop code. Exact callback-free capacity
+        // operations are handled above; every broader whole-call candidate
+        // remains audit-only so unrelated callback allocations cannot inherit
+        // the receiver identity. This also rejects local same-name traits such
+        // as `EvilReserve::reserve(&mut Vec<_>)`.
+        SemanticScopeHeapClass::CallbackCapable
     } else if let Some((ok_ty, err_ty)) = exact_result_destination_types(tcx, destination_ty) {
         // A fallible factory returns the Ok payload.  The Err payload is not
         // an allocation identity for successful work inside the call, but it
@@ -6245,14 +6839,43 @@ fn semantic_heap_object_type_from_mir<'tcx>(
         .unwrap_or_else(|| UNKNOWN_HEAP_OBJECT_TYPE.to_string())
 }
 
-fn unknown_heap_object_solution() -> HeapObjectSolution {
-    HeapObjectSolution {
-        object_type: UNKNOWN_HEAP_OBJECT_TYPE.to_string(),
-        type_id_basis: "direct_allocator_callsite_key",
+fn exact_scope_owner_ty_for_display<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    semantic_object_type: &str,
+    destination_ty: Ty<'tcx>,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<Ty<'tcx>> {
+    if semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE {
+        return None;
+    }
+    let mut owners = Vec::new();
+    for candidate_ty in std::iter::once(destination_ty).chain(argument_tys.iter().copied()) {
+        let Some(owner_ty) = direct_supported_heap_owner_ty(tcx, candidate_ty) else {
+            continue;
+        };
+        if format!("{:?}", owner_ty) != semantic_object_type
+            || compiler_semantic_type_id(tcx, owner_ty).is_none()
+        {
+            continue;
+        }
+        if !owners.iter().any(|existing| *existing == owner_ty) {
+            owners.push(owner_ty);
+        }
+    }
+    match owners.as_slice() {
+        [owner_ty] => Some(*owner_ty),
+        _ => None,
     }
 }
 
-fn ty_heap_object_solution<'tcx>(
+fn unknown_heap_object_solution() -> HeapObjectSolution {
+    HeapObjectSolution {
+        object_type: UNKNOWN_HEAP_OBJECT_TYPE.to_string(),
+        type_id_basis: "direct_allocator_recovery_delegated",
+    }
+}
+
+fn ty_heap_object_audit_solution<'tcx>(
     tcx: TyCtxt<'tcx>,
     destination_ty: Ty<'tcx>,
     argument_tys: &[Ty<'tcx>],
@@ -6264,7 +6887,7 @@ fn ty_heap_object_solution<'tcx>(
     } else {
         Some(HeapObjectSolution {
             object_type,
-            type_id_basis: "rustc_middle_ty_destination_or_argument_heap_object_type",
+            type_id_basis: "rustc_middle_ty_destination_or_argument_audit_only",
         })
     }
 }
@@ -6449,6 +7072,38 @@ mod tests {
             0xA110_C002_DA11_0001
         );
         assert_ne!(nonzero_fnv1a64_text("compiler-generated-id"), 0);
+    }
+
+    #[test]
+    fn rustc_hash_mapping_matches_runtime_semantic_type_ids() {
+        assert_eq!(
+            runtime_semantic_type_id_from_rustc_hash(
+                0x1e23_2110_29f6_f504_2b2d_e51d_27aa_ed2au128,
+                Endian::Little,
+            ),
+            9_887_144_619_654_301_271,
+        );
+        assert_eq!(
+            runtime_semantic_type_id_from_rustc_hash(
+                0xec9d_afc1_6457_9586_1cd5_3ff6_d6ff_bf39u128,
+                Endian::Little,
+            ),
+            756_081_824_842_802_164,
+        );
+        assert_eq!(
+            runtime_semantic_type_id_from_rustc_hash(
+                0x1e23_2110_29f6_f504_2b2d_e51d_27aa_ed2au128,
+                Endian::Big,
+            ),
+            4_938_801_762_559_584_019,
+        );
+        assert_eq!(
+            runtime_semantic_type_id_from_rustc_hash(
+                0xec9d_afc1_6457_9586_1cd5_3ff6_d6ff_bf39u128,
+                Endian::Big,
+            ),
+            15_752_639_195_746_882_450,
+        );
     }
 
     #[test]
@@ -6724,6 +7379,20 @@ mod tests {
 
     #[test]
     fn plain_clone_matcher_is_trait_exact_and_excludes_clone_from() {
+        assert!(exact_core_clone_trait_item_def_path(
+            "core[53a3]::clone::Clone::clone"
+        ));
+        // Current rustc prints the std re-export spelling for this core-owned
+        // trait-item DefId; the exact DefId check also requires crate `core`.
+        assert!(exact_core_clone_trait_item_def_path(
+            "std::clone::Clone::clone"
+        ));
+        assert!(!exact_core_clone_trait_item_def_path(
+            "my_crate::core::clone::Clone::clone"
+        ));
+        assert!(!exact_core_clone_trait_item_def_path(
+            "core::clone::Clone::clone_from"
+        ));
         assert!(plain_clone_trait_call(
             "Val(ZeroSized, FnDef(DefId(2:1 ~ core[2f33]::clone::Clone::clone), [u64]))"
         ));
@@ -7292,57 +7961,40 @@ mod tests {
     }
 
     #[test]
-    fn unresolved_realloc_and_dealloc_delegate_recovery_but_alloc_stays_typed() {
+    fn unresolved_direct_allocator_calls_delegate_recovery() {
+        let (type_id, basis) = direct_allocator_type_id();
+        assert_eq!(type_id, 0, "direct calls stay neutral without a CFG proof");
+        assert_eq!(basis, "direct_allocator_recovery_delegated");
+
+        let previous_direct_local = unsafe { DIRECT_LOCAL_METADATA_ABI };
+        let previous_size_align_pairing = unsafe { DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP };
+        unsafe {
+            DIRECT_LOCAL_METADATA_ABI = true;
+            DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP = false;
+        }
         for kind in [
+            DirectAllocatorCallKind::SizeAlignAlloc,
+            DirectAllocatorCallKind::LayoutAlloc,
+            DirectAllocatorCallKind::LayoutAllocZeroed,
             DirectAllocatorCallKind::LayoutRealloc,
             DirectAllocatorCallKind::LayoutDealloc,
+            DirectAllocatorCallKind::GlobalAllocLayoutAlloc,
+            DirectAllocatorCallKind::GlobalAllocLayoutAllocZeroed,
             DirectAllocatorCallKind::GlobalAllocLayoutRealloc,
             DirectAllocatorCallKind::GlobalAllocLayoutDealloc,
         ] {
-            let (type_id, basis) = direct_allocator_type_id(
-                kind,
-                UNKNOWN_HEAP_OBJECT_TYPE,
-                "test_solved_basis",
-                "same-callsite",
-            );
-            assert_eq!(type_id, 0);
-            assert_eq!(basis, "direct_allocator_recovery_delegated");
             let symbol = direct_allocator_recovery_backed_replacement_symbol(kind);
-            assert!(symbol.contains("_layout_with_metadata"));
+            assert!(symbol.contains("_with_metadata"));
             assert!(
                 !symbol.ends_with("_local"),
                 "delegated recovery must never select the no-recovery local ABI: {}",
                 symbol
             );
         }
-
-        for kind in [
-            DirectAllocatorCallKind::LayoutAlloc,
-            DirectAllocatorCallKind::LayoutAllocZeroed,
-            DirectAllocatorCallKind::GlobalAllocLayoutAlloc,
-            DirectAllocatorCallKind::GlobalAllocLayoutAllocZeroed,
-        ] {
-            let (type_id, basis) = direct_allocator_type_id(
-                kind,
-                UNKNOWN_HEAP_OBJECT_TYPE,
-                "test_solved_basis",
-                "same-callsite",
-            );
-            assert_ne!(
-                type_id, 0,
-                "unresolved alloc must create a recoverable identity"
-            );
-            assert_eq!(basis, "direct_allocator_callsite_key");
+        unsafe {
+            DIRECT_LOCAL_METADATA_ABI = previous_direct_local;
+            DIRECT_LOCAL_SIZE_ALIGN_WITH_SEMANTIC_DROP = previous_size_align_pairing;
         }
-
-        let (solved_type_id, solved_basis) = direct_allocator_type_id(
-            DirectAllocatorCallKind::LayoutRealloc,
-            "alloc::vec::Vec<u8>",
-            "rustc_middle_test_basis",
-            "same-callsite",
-        );
-        assert_ne!(solved_type_id, 0);
-        assert_eq!(solved_basis, "rustc_middle_test_basis");
     }
 
     #[test]
@@ -7616,6 +8268,28 @@ fn callee_mentions_rust_layout_impl_method(callee: &str, method: &str) -> bool {
     callee_contains_normalized(callee, &marker)
 }
 
+fn exact_core_layout_method_def_id(tcx: TyCtxt<'_>, def_id: Option<DefId>, method: &str) -> bool {
+    def_id.map_or(false, |def_id| {
+        exact_core_crate_def_id(tcx, def_id)
+            && callee_mentions_rust_layout_impl_method(&tcx.def_path_str(def_id), method)
+    })
+}
+
+fn exact_core_result_or_option_method_def_id(
+    tcx: TyCtxt<'_>,
+    def_id: Option<DefId>,
+    method: &str,
+) -> bool {
+    def_id.map_or(false, |def_id| {
+        if !exact_core_crate_def_id(tcx, def_id) {
+            return false;
+        }
+        let path = strip_rustc_crate_disambiguators(&tcx.def_path_str(def_id));
+        (path.starts_with("core::result::") || path.starts_with("core::option::"))
+            && callee_mentions_exact_method(&path, method)
+    })
+}
+
 fn extract_layout_angle_argument(callee: &str, method: &str) -> Option<String> {
     [
         format!("Layout::{}::<", method),
@@ -7671,9 +8345,12 @@ fn const_usize_operand_label(operand: &Operand<'_>) -> Option<String> {
     }
 }
 
-fn layout_constructor_heap_object_solution(
+fn layout_constructor_heap_object_solution<'tcx>(
+    _tcx: TyCtxt<'tcx>,
+    _callee_def_id: Option<DefId>,
     callee: &str,
-    args: &[Operand<'_>],
+    args: &[Operand<'tcx>],
+    _callee_generic_types: &[Ty<'tcx>],
 ) -> Option<HeapObjectSolution> {
     if let Some(element_ty) = extract_layout_angle_argument(callee, "array") {
         let len = args
@@ -7689,7 +8366,7 @@ fn layout_constructor_heap_object_solution(
     if let Some(value_ty) = extract_layout_angle_argument(callee, "new") {
         return Some(HeapObjectSolution {
             object_type: format!("std::alloc::Layout::new::<{}>", value_ty),
-            type_id_basis: "rustc_middle_mir_layout_constructor_heap_object_type",
+            type_id_basis: "rustc_middle_mir_layout_constructor_audit_only",
         });
     }
 
@@ -7699,21 +8376,26 @@ fn layout_constructor_heap_object_solution(
     if let Some(value_ty) = extract_layout_angle_argument(callee, "for_value_raw") {
         return Some(HeapObjectSolution {
             object_type: format!("std::alloc::Layout::for_value_raw::<{}>", value_ty),
-            type_id_basis: "rustc_middle_mir_layout_constructor_heap_object_type",
+            type_id_basis: "rustc_middle_mir_layout_constructor_audit_only",
         });
     }
 
     if let Some(value_ty) = extract_layout_angle_argument(callee, "for_value") {
         return Some(HeapObjectSolution {
             object_type: format!("std::alloc::Layout::for_value::<{}>", value_ty),
-            type_id_basis: "rustc_middle_mir_layout_constructor_heap_object_type",
+            type_id_basis: "rustc_middle_mir_layout_constructor_audit_only",
         });
     }
 
     None
 }
 
-fn layout_size_align_operand_heap_object_solution(callee: &str) -> Option<HeapObjectSolution> {
+fn layout_size_align_operand_heap_object_solution<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: Option<DefId>,
+    callee: &str,
+    callee_generic_types: &[Ty<'tcx>],
+) -> Option<HeapObjectSolution> {
     // Many allocators manually rebuild a `Layout` from
     // `size_of::<T>()`/`align_of::<T>()` instead of starting from
     // `Layout::new::<T>()`.  MIR preserves these calls, so keep a typed
@@ -7721,13 +8403,23 @@ fn layout_size_align_operand_heap_object_solution(callee: &str) -> Option<HeapOb
     // accept it only when both operands refer to the same `T`.
     extract_mem_angle_argument(callee, "size_of")
         .or_else(|| extract_mem_angle_argument(callee, "align_of"))
-        .map(|value_ty| HeapObjectSolution {
-            object_type: format!("std::mem::layout_of::<{}>", value_ty),
-            type_id_basis: "rustc_middle_mir_layout_size_align_operand_heap_object_type",
+        .map(|value_ty| {
+            let exact_method = if extract_mem_angle_argument(callee, "size_of").is_some() {
+                "size_of"
+            } else {
+                "align_of"
+            };
+            let _ = (tcx, callee_def_id, exact_method, callee_generic_types);
+            HeapObjectSolution {
+                object_type: format!("std::mem::layout_of::<{}>", value_ty),
+                type_id_basis: "rustc_middle_mir_layout_size_align_operand_audit_only",
+            }
         })
 }
 
 fn layout_transformer_heap_object_solution(
+    tcx: TyCtxt<'_>,
+    callee_def_id: Option<DefId>,
     callee: &str,
     args: &[Operand<'_>],
     provenance: &BTreeMap<String, HeapObjectSolution>,
@@ -7742,10 +8434,10 @@ fn layout_transformer_heap_object_solution(
     // they can be soundly enabled here.
     const LAYOUT_PRESERVING_TRANSFORMERS: &[&str] = &["align_to", "pad_to_align"];
 
-    if LAYOUT_PRESERVING_TRANSFORMERS
-        .iter()
-        .any(|method| callee_mentions_rust_layout_method(callee, method))
-    {
+    if LAYOUT_PRESERVING_TRANSFORMERS.iter().any(|method| {
+        callee_mentions_rust_layout_method(callee, method)
+            && exact_core_layout_method_def_id(tcx, callee_def_id, method)
+    }) {
         return args
             .get(0)
             .and_then(|arg| operand_heap_object_solution(arg, provenance))
@@ -7759,6 +8451,8 @@ fn layout_transformer_heap_object_solution(
 }
 
 fn layout_reconstructed_heap_object_solution(
+    tcx: TyCtxt<'_>,
+    callee_def_id: Option<DefId>,
     callee: &str,
     args: &[Operand<'_>],
     provenance: &BTreeMap<String, HeapObjectSolution>,
@@ -7771,7 +8465,10 @@ fn layout_reconstructed_heap_object_solution(
     // types can share a size while requiring different alignment/padding.
     let reconstructs_layout = callee_mentions_rust_layout_method(callee, "from_size_align")
         || callee_mentions_rust_layout_method(callee, "from_size_align_unchecked");
-    if !reconstructs_layout {
+    let exact_constructor = ["from_size_align", "from_size_align_unchecked"]
+        .iter()
+        .any(|method| exact_core_layout_method_def_id(tcx, callee_def_id, method));
+    if !reconstructs_layout || !exact_constructor {
         return None;
     }
 
@@ -7785,16 +8482,15 @@ fn layout_reconstructed_heap_object_solution(
         return None;
     }
 
-    if size_solution.type_id_basis == "rustc_middle_mir_layout_size_align_operand_heap_object_type"
-        && align_solution.type_id_basis
-            == "rustc_middle_mir_layout_size_align_operand_heap_object_type"
+    if size_solution.type_id_basis == "rustc_middle_mir_layout_size_align_operand_audit_only"
+        && align_solution.type_id_basis == "rustc_middle_mir_layout_size_align_operand_audit_only"
     {
         return Some(HeapObjectSolution {
             object_type: format!(
                 "std::alloc::Layout::from_size_align({})",
                 size_solution.object_type
             ),
-            type_id_basis: "rustc_middle_mir_layout_size_align_constructor_heap_object_type",
+            type_id_basis: "rustc_middle_mir_layout_size_align_constructor_audit_only",
         });
     }
 
@@ -7803,7 +8499,7 @@ fn layout_reconstructed_heap_object_solution(
             "std::alloc::Layout::from_size_align({})",
             size_solution.object_type
         ),
-        type_id_basis: "rustc_middle_mir_layout_reconstructed_heap_object_type",
+        type_id_basis: "rustc_middle_mir_layout_reconstructed_audit_only",
     })
 }
 
@@ -7945,11 +8641,17 @@ fn fallible_layout_passthrough_call(callee: &str) -> bool {
 }
 
 fn result_layout_unwrap_heap_object_solution<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: Option<DefId>,
     callee: &str,
     args: &[Operand<'tcx>],
     provenance: &BTreeMap<String, HeapObjectSolution>,
 ) -> Option<HeapObjectSolution> {
-    if result_layout_unwrap_call(callee) {
+    if result_layout_unwrap_call(callee)
+        && ["expect", "unwrap"]
+            .iter()
+            .any(|method| exact_core_result_or_option_method_def_id(tcx, callee_def_id, method))
+    {
         args.get(0)
             .and_then(|arg| operand_heap_object_solution(arg, provenance))
     } else {
@@ -7958,11 +8660,17 @@ fn result_layout_unwrap_heap_object_solution<'tcx>(
 }
 
 fn fallible_layout_passthrough_heap_object_solution<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: Option<DefId>,
     callee: &str,
     args: &[Operand<'tcx>],
     provenance: &BTreeMap<String, HeapObjectSolution>,
 ) -> Option<HeapObjectSolution> {
-    if !fallible_layout_passthrough_call(callee) {
+    if !fallible_layout_passthrough_call(callee)
+        || !["ok", "expect", "unwrap"]
+            .iter()
+            .any(|method| exact_core_result_or_option_method_def_id(tcx, callee_def_id, method))
+    {
         return None;
     }
     args.get(0)
@@ -7980,29 +8688,61 @@ fn fallible_layout_passthrough_heap_object_solution<'tcx>(
 }
 
 fn propagate_layout_like_call_provenance<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: Option<DefId>,
     callee: &str,
     args: &[Operand<'tcx>],
+    callee_generic_types: &[Ty<'tcx>],
     destination: &Place<'tcx>,
     provenance: &mut BTreeMap<String, HeapObjectSolution>,
 ) {
     let destination_key = place_text(destination);
-    let solved = layout_constructor_heap_object_solution(callee, args)
-        .or_else(|| layout_size_align_operand_heap_object_solution(callee))
-        .or_else(|| layout_transformer_heap_object_solution(callee, args, provenance))
-        .or_else(|| layout_reconstructed_heap_object_solution(callee, args, provenance))
-        .or_else(|| layout_composite_heap_object_solution(callee, args, provenance))
-        .or_else(|| fallible_layout_passthrough_heap_object_solution(callee, args, provenance))
-        .or_else(|| result_layout_unwrap_heap_object_solution(callee, args, provenance))
-        .or_else(|| {
-            if callee_mentions_rust_layout_method(callee, "size")
-                || callee_mentions_rust_layout_method(callee, "align")
-            {
-                args.get(0)
-                    .and_then(|arg| operand_heap_object_solution(arg, provenance))
-            } else {
-                None
-            }
+    let solved = layout_constructor_heap_object_solution(
+        tcx,
+        callee_def_id,
+        callee,
+        args,
+        callee_generic_types,
+    )
+    .or_else(|| {
+        layout_size_align_operand_heap_object_solution(
+            tcx,
+            callee_def_id,
+            callee,
+            callee_generic_types,
+        )
+    })
+    .or_else(|| {
+        layout_transformer_heap_object_solution(tcx, callee_def_id, callee, args, provenance)
+    })
+    .or_else(|| {
+        layout_reconstructed_heap_object_solution(tcx, callee_def_id, callee, args, provenance)
+    })
+    .or_else(|| layout_composite_heap_object_solution(callee, args, provenance))
+    .or_else(|| {
+        fallible_layout_passthrough_heap_object_solution(
+            tcx,
+            callee_def_id,
+            callee,
+            args,
+            provenance,
+        )
+    })
+    .or_else(|| {
+        result_layout_unwrap_heap_object_solution(tcx, callee_def_id, callee, args, provenance)
+    })
+    .or_else(|| {
+        let exact_preserving_query = ["size", "align"].iter().any(|method| {
+            callee_mentions_rust_layout_method(callee, method)
+                && exact_core_layout_method_def_id(tcx, callee_def_id, method)
         });
+        if exact_preserving_query {
+            args.get(0)
+                .and_then(|arg| operand_heap_object_solution(arg, provenance))
+        } else {
+            None
+        }
+    });
 
     if let Some(solution) = solved {
         provenance.insert(destination_key, solution);
@@ -8119,7 +8859,7 @@ fn direct_allocator_semantic_object_type<'tcx>(
     target: Option<BasicBlock>,
     layout_solution: Option<HeapObjectSolution>,
 ) -> HeapObjectSolution {
-    if let Some(solved) = ty_heap_object_solution(tcx, destination_ty, argument_tys, callee) {
+    if let Some(solved) = ty_heap_object_audit_solution(tcx, destination_ty, argument_tys, callee) {
         return solved;
     }
     if let Some(solved) = layout_solution {
@@ -8133,56 +8873,18 @@ fn direct_allocator_semantic_object_type<'tcx>(
     unknown_heap_object_solution()
 }
 
-fn semantic_scope_type_id(semantic_object_type: &str, callsite_key: &str) -> (u64, &'static str) {
-    if semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE {
-        (
-            nonzero_fnv1a64_text(&format!(
-                "mir-semantic-scope-callsite-fallback-v1\0{}",
-                callsite_key
-            )),
-            "rustc_middle_type_solver_failed_callsite_fallback",
-        )
-    } else {
-        (
-            nonzero_fnv1a64_text(&format!(
-                "mir-heap-object-type-v1\0{}",
-                semantic_object_type
-            )),
-            "rustc_middle_ty_destination_or_argument_heap_object_type",
-        )
-    }
+fn semantic_scope_type_id(compiler_type_id: Option<u64>) -> (u64, &'static str) {
+    compiler_type_id.map_or(
+        (0, "rustc_type_identity_unresolved_recovery_only"),
+        |type_id| (type_id, "rustc_type_id_hash_runtime_equivalent"),
+    )
 }
 
-fn direct_allocator_type_id(
-    call_kind: DirectAllocatorCallKind,
-    semantic_object_type: &str,
-    solved_type_id_basis: &'static str,
-    callsite_key: &str,
-) -> (u64, &'static str) {
-    if semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE {
-        if matches!(
-            call_kind,
-            DirectAllocatorCallKind::LayoutRealloc
-                | DirectAllocatorCallKind::LayoutDealloc
-                | DirectAllocatorCallKind::GlobalAllocLayoutRealloc
-                | DirectAllocatorCallKind::GlobalAllocLayoutDealloc
-        ) {
-            (0, "direct_allocator_recovery_delegated")
-        } else {
-            (
-                nonzero_fnv1a64_text(&format!("mir-rewrite-dry-run-v1\0{}", callsite_key)),
-                "direct_allocator_callsite_key",
-            )
-        }
-    } else {
-        (
-            nonzero_fnv1a64_text(&format!(
-                "mir-heap-object-type-v1\0{}",
-                semantic_object_type
-            )),
-            solved_type_id_basis,
-        )
-    }
+fn direct_allocator_type_id() -> (u64, &'static str) {
+    // Direct allocator calls do not yet have a CFG-proven exact owner link.
+    // Keep every such call neutral even when its audit-only display happens to
+    // expose a plausible owner type.
+    (0, "direct_allocator_recovery_delegated")
 }
 
 fn child_def_id_by_name<'tcx>(tcx: TyCtxt<'tcx>, module: DefId, name: &str) -> Option<DefId> {
@@ -8208,6 +8910,19 @@ fn child_def_id_in_alloc_api_or_type_isolation<'tcx>(
     })
 }
 
+fn unique_unialloc_crate<'tcx>(tcx: TyCtxt<'tcx>) -> Option<DefId> {
+    let mut matches = tcx
+        .crates(())
+        .iter()
+        .copied()
+        .filter(|krate| tcx.crate_name(*krate).as_str() == "unialloc");
+    let unique = matches.next()?;
+    if matches.next().is_some() {
+        return None;
+    }
+    Some(unique.as_def_id())
+}
+
 fn resolve_unialloc_alloc_metadata_abi_in_crate<'tcx>(
     tcx: TyCtxt<'tcx>,
     crate_root: DefId,
@@ -8230,18 +8945,11 @@ fn resolve_unialloc_alloc_metadata_abi<'tcx>(
     tcx: TyCtxt<'tcx>,
     allow_size_align_local: bool,
 ) -> Option<AllocMetadataAbi> {
-    for krate in tcx.crates(()).iter().copied() {
-        if tcx.crate_name(krate).as_str() == "unialloc" {
-            if let Some(abi) = resolve_unialloc_alloc_metadata_abi_in_crate(
-                tcx,
-                krate.as_def_id(),
-                allow_size_align_local,
-            ) {
-                return Some(abi);
-            }
-        }
-    }
-    None
+    resolve_unialloc_alloc_metadata_abi_in_crate(
+        tcx,
+        unique_unialloc_crate(tcx)?,
+        allow_size_align_local,
+    )
 }
 
 fn resolve_unialloc_layout_metadata_abi_in_crate<'tcx>(
@@ -8272,19 +8980,12 @@ fn resolve_unialloc_layout_metadata_abi<'tcx>(
     kind: DirectAllocatorCallKind,
     force_recovery_backed: bool,
 ) -> Option<AllocMetadataAbi> {
-    for krate in tcx.crates(()).iter().copied() {
-        if tcx.crate_name(krate).as_str() == "unialloc" {
-            if let Some(abi) = resolve_unialloc_layout_metadata_abi_in_crate(
-                tcx,
-                krate.as_def_id(),
-                kind,
-                force_recovery_backed,
-            ) {
-                return Some(abi);
-            }
-        }
-    }
-    None
+    resolve_unialloc_layout_metadata_abi_in_crate(
+        tcx,
+        unique_unialloc_crate(tcx)?,
+        kind,
+        force_recovery_backed,
+    )
 }
 
 fn resolve_unialloc_direct_allocator_abis<'tcx>(
@@ -8313,6 +9014,16 @@ fn resolve_unialloc_direct_allocator_abis<'tcx>(
             DirectAllocatorCallKind::LayoutDealloc,
             false,
         ),
+        recovery_backed_layout_alloc: resolve_unialloc_layout_metadata_abi(
+            tcx,
+            DirectAllocatorCallKind::LayoutAlloc,
+            true,
+        ),
+        recovery_backed_layout_alloc_zeroed: resolve_unialloc_layout_metadata_abi(
+            tcx,
+            DirectAllocatorCallKind::LayoutAllocZeroed,
+            true,
+        ),
         recovery_backed_layout_realloc: resolve_unialloc_layout_metadata_abi(
             tcx,
             DirectAllocatorCallKind::LayoutRealloc,
@@ -8334,8 +9045,17 @@ fn direct_allocator_replacement_abi(
 ) -> Option<AllocMetadataAbi> {
     let kind = direct_allocator_layout_abi_kind(kind).unwrap_or(kind);
     match kind {
+        DirectAllocatorCallKind::SizeAlignAlloc if force_recovery_backed => {
+            abis.conservative_size_align_alloc
+        }
         DirectAllocatorCallKind::SizeAlignAlloc if allow_size_align_local => abis.size_align_alloc,
         DirectAllocatorCallKind::SizeAlignAlloc => abis.conservative_size_align_alloc,
+        DirectAllocatorCallKind::LayoutAlloc if force_recovery_backed => {
+            abis.recovery_backed_layout_alloc
+        }
+        DirectAllocatorCallKind::LayoutAllocZeroed if force_recovery_backed => {
+            abis.recovery_backed_layout_alloc_zeroed
+        }
         DirectAllocatorCallKind::LayoutAlloc => abis.layout_alloc,
         DirectAllocatorCallKind::LayoutAllocZeroed => abis.layout_alloc_zeroed,
         DirectAllocatorCallKind::LayoutRealloc if force_recovery_backed => {
@@ -8349,6 +9069,14 @@ fn direct_allocator_replacement_abi(
         DirectAllocatorCallKind::Unsupported => None,
         _ => unreachable!("GlobalAlloc call kinds are mapped to Layout ABI call kinds"),
     }
+}
+
+fn trusted_unialloc_direct_allocator_crate(
+    abis: DirectAllocatorReplacementAbis,
+    kind: DirectAllocatorCallKind,
+) -> Option<DefId> {
+    direct_allocator_replacement_abi(abis, kind, false, false)
+        .map(|abi| abi.def_id.krate.as_def_id())
 }
 
 fn resolve_unialloc_semantic_scope_in_crate<'tcx>(
@@ -8367,6 +9095,11 @@ fn resolve_unialloc_semantic_scope_in_crate<'tcx>(
     child_def_id_in_alloc_api_or_type_isolation(tcx, crate_root, push_symbol).map(|push_def_id| {
         SemanticScopeAbi {
             push_def_id,
+            generic_push_def_id: child_def_id_in_alloc_api_or_type_isolation(
+                tcx,
+                crate_root,
+                generic_semantic_scope_push_symbol(local_no_recovery),
+            ),
             pop_def_id: pop,
             push_symbol,
             supports_hints,
@@ -8379,16 +9112,7 @@ fn resolve_unialloc_semantic_scope<'tcx>(
     tcx: TyCtxt<'tcx>,
     local_no_recovery: bool,
 ) -> Option<SemanticScopeAbi> {
-    for krate in tcx.crates(()).iter().copied() {
-        if tcx.crate_name(krate).as_str() == "unialloc" {
-            if let Some(def_ids) =
-                resolve_unialloc_semantic_scope_in_crate(tcx, krate.as_def_id(), local_no_recovery)
-            {
-                return Some(def_ids);
-            }
-        }
-    }
-    None
+    resolve_unialloc_semantic_scope_in_crate(tcx, unique_unialloc_crate(tcx)?, local_no_recovery)
 }
 
 fn resolve_unialloc_semantic_ownership_transfer_in_crate<'tcx>(
@@ -8444,20 +9168,12 @@ fn resolve_unialloc_semantic_ownership_transfer_in_crate<'tcx>(
 fn resolve_unialloc_semantic_ownership_transfer<'tcx>(
     tcx: TyCtxt<'tcx>,
 ) -> Option<SemanticOwnershipTransferAbi> {
-    for krate in tcx.crates(()).iter().copied() {
-        if tcx.crate_name(krate).as_str() == "unialloc" {
-            if let Some(abi) =
-                resolve_unialloc_semantic_ownership_transfer_in_crate(tcx, krate.as_def_id())
-            {
-                return Some(abi);
-            }
-        }
-    }
-    None
+    resolve_unialloc_semantic_ownership_transfer_in_crate(tcx, unique_unialloc_crate(tcx)?)
 }
 
 fn semantic_scope_candidate_for_mir<'tcx>(
     tcx: TyCtxt<'tcx>,
+    callee_def_id: Option<DefId>,
     callee: &str,
     destination_ty: Ty<'tcx>,
 ) -> bool {
@@ -8465,7 +9181,7 @@ fn semantic_scope_candidate_for_mir<'tcx>(
         return false;
     }
     if semantic_scope_explicit_drop_call(callee) {
-        return true;
+        return callee_def_id.map_or(false, |def_id| exact_core_mem_drop_def_id(tcx, def_id));
     }
     if semantic_scope_deallocation_like_call(callee) {
         return true;
@@ -8511,6 +9227,29 @@ fn semantic_scope_candidate_for_mir<'tcx>(
 
 fn semantic_scope_explicit_drop_call(callee: &str) -> bool {
     callee.contains("std::mem::drop") || callee.contains("core::mem::drop")
+}
+
+fn exact_core_mem_drop_def_path(path: &str) -> bool {
+    matches!(
+        strip_rustc_crate_disambiguators(path).as_str(),
+        "core::mem::drop" | "std::mem::drop"
+    )
+}
+
+fn exact_core_mem_drop_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
+    tcx.get_diagnostic_item(sym::mem_drop) == Some(def_id)
+        && exact_core_mem_drop_def_path(&tcx.def_path_str(def_id))
+}
+
+fn drop_inert_box_reclaim_call_runtime_identity_owner_ty<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    callee_def_id: DefId,
+    argument_tys: &[Ty<'tcx>],
+) -> Option<Ty<'tcx>> {
+    if !exact_core_mem_drop_def_id(tcx, callee_def_id) || argument_tys.len() != 1 {
+        return None;
+    }
+    drop_inert_box_runtime_identity_owner_ty(tcx, argument_tys[0])
 }
 
 fn semantic_scope_deallocation_like_call(callee: &str) -> bool {
@@ -8610,6 +9349,7 @@ const VEC_CAPACITY_ONLY_METHODS: &[&str] = &[
     "shrink_to_fit",
 ];
 
+#[cfg(test)]
 fn semantic_scope_capacity_only_vec_receiver_call(callee: &str) -> bool {
     VEC_CAPACITY_ONLY_METHODS.iter().any(|method| {
         callee_contains_current_impl_method(callee, "alloc::vec", method)
@@ -9288,6 +10028,22 @@ fn unialloc_function_handle_with_two_types<'tcx>(
     }
 }
 
+fn unialloc_function_handle_with_type<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: DefId,
+    owner: Ty<'tcx>,
+    span: Span,
+) -> Operand<'tcx> {
+    #[cfg(unialloc_rustc_current)]
+    {
+        Operand::function_handle(tcx, def_id, [owner.into()], span)
+    }
+    #[cfg(not(unialloc_rustc_current))]
+    {
+        Operand::function_handle(tcx, def_id, tcx.intern_substs(&[owner.into()]), span)
+    }
+}
+
 #[cfg(unialloc_rustc_current)]
 fn synthetic_call_source() -> MirCallSource {
     CallSource::Misc
@@ -9335,6 +10091,44 @@ fn call_terminator_kind<'tcx>(
     {
         TerminatorKind::Call {
             func: unialloc_function_handle(tcx, def_id, fn_span),
+            args: make_call_args(args, fn_span),
+            destination,
+            target,
+            cleanup: unwind,
+            from_hir_call,
+            fn_span,
+        }
+    }
+}
+
+fn call_terminator_kind_with_type<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def_id: DefId,
+    owner: Ty<'tcx>,
+    args: Vec<Operand<'tcx>>,
+    destination: Place<'tcx>,
+    target: Option<BasicBlock>,
+    unwind: MirUnwind,
+    from_hir_call: MirCallSource,
+    fn_span: Span,
+) -> TerminatorKind<'tcx> {
+    #[cfg(unialloc_rustc_current)]
+    {
+        let _ = from_hir_call;
+        TerminatorKind::Call {
+            func: unialloc_function_handle_with_type(tcx, def_id, owner, fn_span),
+            args: make_call_args(args, fn_span),
+            destination,
+            target,
+            unwind,
+            call_source: CallSource::Misc,
+            fn_span,
+        }
+    }
+    #[cfg(not(unialloc_rustc_current))]
+    {
+        TerminatorKind::Call {
+            func: unialloc_function_handle_with_type(tcx, def_id, owner, fn_span),
             args: make_call_args(args, fn_span),
             destination,
             target,
@@ -9842,14 +10636,6 @@ fn exact_core_mem_forget_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
         && matches!(
             strip_rustc_crate_disambiguators(&tcx.def_path_str(def_id)).as_str(),
             "core::mem::forget" | "std::mem::forget"
-        )
-}
-
-fn exact_core_mem_drop_def_id(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
-    tcx.crate_name(def_id.krate).as_str() == "core"
-        && matches!(
-            strip_rustc_crate_disambiguators(&tcx.def_path_str(def_id)).as_str(),
-            "core::mem::drop" | "std::mem::drop"
         )
 }
 
@@ -10976,7 +11762,7 @@ fn solved_semantic_drop_pairs<'tcx>(
                 return None;
             }
             Some((
-                scan.owners.into_iter().next().unwrap(),
+                scan.owners.into_iter().next().unwrap().display,
                 format!("{:?}", place),
             ))
         })
@@ -11013,7 +11799,12 @@ fn exact_semantic_local_ownership_proof<'tcx>(
             candidate.semantic_object_type.clone(),
             candidate.destination_place.clone(),
         );
+        let drop_requires_allocation_recovery = candidate
+            .runtime_identity_owner_ty
+            .map(|owner_ty| exact_box_drop_requires_allocation_recovery(tcx, owner_ty))
+            .unwrap_or(false);
         let local_abi_proven = !candidate.original_is_cleanup
+            && !drop_requires_allocation_recovery
             && candidate_has_linear_exact_drop(body, candidate)
             && solved_drop_pairs.contains(&key);
         *candidate_counts.entry(key.clone()).or_insert(0) += 1;
@@ -11116,6 +11907,8 @@ fn record_or_rewrite_candidates<'tcx>(
     records: &mut Vec<RewriteRecord>,
 ) {
     let function_name = tcx.def_path_str(def_id);
+    let authentication_abis =
+        replacement_abis.unwrap_or_else(|| resolve_unialloc_direct_allocator_abis(tcx));
     let cross_thread_escape = body_contains_cross_thread_escape_call(body);
     let cross_thread_escape_heap_object_types = if cross_thread_escape {
         body_cross_thread_escape_heap_object_types(tcx, body)
@@ -11145,7 +11938,13 @@ fn record_or_rewrite_candidates<'tcx>(
             _ => continue,
         };
         let callee = callee_text(func);
-        let call_kind = direct_allocator_call_kind(&callee);
+        let (callee_def_id, callee_generic_types) = match func.ty(&body.local_decls, tcx).kind() {
+            ty::FnDef(def_id, args) => (Some(*def_id), args.types().collect::<Vec<_>>()),
+            _ => (None, Vec::new()),
+        };
+        let call_kind = callee_def_id.map_or(DirectAllocatorCallKind::Unsupported, |def_id| {
+            authenticated_direct_allocator_call_kind(tcx, def_id)
+        });
         let arg_operands = call_arg_operands(args);
         let layout_solution = direct_allocator_layout_heap_object_solution(
             call_kind,
@@ -11159,13 +11958,21 @@ fn record_or_rewrite_candidates<'tcx>(
                 .iter()
                 .map(|arg| arg.ty(&body.local_decls, tcx))
                 .collect::<Vec<_>>();
-            if !direct_allocator_global_receiver_supported(call_kind, &argument_tys)
-                || (direct_allocator_is_global_receiver_call(call_kind)
-                    && layout_solution.is_none())
+            if !direct_allocator_global_receiver_supported(
+                tcx,
+                call_kind,
+                callee_def_id.expect("authenticated direct allocator call has a FnDef"),
+                trusted_unialloc_direct_allocator_crate(authentication_abis, call_kind),
+                &argument_tys,
+            ) || (direct_allocator_is_global_receiver_call(call_kind)
+                && layout_solution.is_none())
             {
                 propagate_layout_like_call_provenance(
+                    tcx,
+                    callee_def_id,
                     &callee,
                     &arg_operands,
+                    &callee_generic_types,
                     destination,
                     &mut layout_provenance,
                 );
@@ -11199,14 +12006,16 @@ fn record_or_rewrite_candidates<'tcx>(
                 destination_place,
                 destination_type: format!("{:?}", destination_ty),
                 semantic_object_type: solution.object_type,
-                type_id_basis: solution.type_id_basis,
                 source_span: tcx.sess.source_map().span_to_diagnostic_string(*fn_span),
                 fn_span: *fn_span,
             });
         }
         propagate_layout_like_call_provenance(
+            tcx,
+            callee_def_id,
             &callee,
             &arg_operands,
+            &callee_generic_types,
             destination,
             &mut layout_provenance,
         );
@@ -11221,7 +12030,6 @@ fn record_or_rewrite_candidates<'tcx>(
         destination_place,
         destination_type,
         semantic_object_type,
-        type_id_basis: solved_type_id_basis,
         source_span,
         fn_span,
     } in direct_candidates
@@ -11252,8 +12060,7 @@ fn record_or_rewrite_candidates<'tcx>(
             call_arguments.join("\0")
         );
         let callsite = nonzero_fnv1a64_text(&key);
-        let (type_id, type_id_basis) =
-            direct_allocator_type_id(call_kind, &semantic_object_type, solved_type_id_basis, &key);
+        let (type_id, type_id_basis) = direct_allocator_type_id();
         let recovery_delegated = type_id_basis == "direct_allocator_recovery_delegated";
         // Optimized MIR no longer exposes a sound owner link from a raw
         // size/align allocator destination to the eventual heap-owner Drop.
@@ -11722,7 +12529,8 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
         if kind == SemanticOwnershipTransferKind::VecIntoIterViaZip && data.is_cleanup {
             continue;
         }
-        let (expected_old_owner_type, expected_old_owner_basis) = match kind {
+        let (expected_old_owner_ty, expected_old_owner_type, expected_old_owner_basis) = match kind
+        {
             SemanticOwnershipTransferKind::BoxSliceIntoVec => {
                 match exact_immediate_box_array_unsize_owner_type(
                     tcx,
@@ -11732,31 +12540,53 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                     argument_tys[0],
                     &proof,
                 ) {
-                    Some(owner_type) => (owner_type, "exact_immediate_box_array_unsize"),
-                    None => (proof.old_owner_type.clone(), "exact_box_slice_argument"),
+                    Some(owner_ty) => (
+                        owner_ty,
+                        format!("{:?}", owner_ty),
+                        "exact_immediate_box_array_unsize",
+                    ),
+                    None => (
+                        proof.old_owner_ty,
+                        proof.old_owner_type.clone(),
+                        "exact_box_slice_argument",
+                    ),
                 }
             }
-            SemanticOwnershipTransferKind::VecIntoBoxedSlice => {
-                (proof.old_owner_type.clone(), "exact_vec_argument")
-            }
-            SemanticOwnershipTransferKind::StringIntoBytes => {
-                (proof.old_owner_type.clone(), "exact_string_argument")
-            }
-            SemanticOwnershipTransferKind::StringIntoBoxedStr => {
-                (proof.old_owner_type.clone(), "exact_string_argument")
-            }
-            SemanticOwnershipTransferKind::BoxedStrIntoString => {
-                (proof.old_owner_type.clone(), "exact_boxed_str_argument")
-            }
-            SemanticOwnershipTransferKind::CStringIntoBytesWithNul => {
-                (proof.old_owner_type.clone(), "exact_cstring_argument")
-            }
-            SemanticOwnershipTransferKind::VecIntoIter => {
-                (proof.old_owner_type.clone(), "exact_vec_argument")
-            }
-            SemanticOwnershipTransferKind::VecIntoIterViaZip => {
-                (proof.old_owner_type.clone(), "exact_vec_zip_argument")
-            }
+            SemanticOwnershipTransferKind::VecIntoBoxedSlice => (
+                proof.old_owner_ty,
+                proof.old_owner_type.clone(),
+                "exact_vec_argument",
+            ),
+            SemanticOwnershipTransferKind::StringIntoBytes => (
+                proof.old_owner_ty,
+                proof.old_owner_type.clone(),
+                "exact_string_argument",
+            ),
+            SemanticOwnershipTransferKind::StringIntoBoxedStr => (
+                proof.old_owner_ty,
+                proof.old_owner_type.clone(),
+                "exact_string_argument",
+            ),
+            SemanticOwnershipTransferKind::BoxedStrIntoString => (
+                proof.old_owner_ty,
+                proof.old_owner_type.clone(),
+                "exact_boxed_str_argument",
+            ),
+            SemanticOwnershipTransferKind::CStringIntoBytesWithNul => (
+                proof.old_owner_ty,
+                proof.old_owner_type.clone(),
+                "exact_cstring_argument",
+            ),
+            SemanticOwnershipTransferKind::VecIntoIter => (
+                proof.old_owner_ty,
+                proof.old_owner_type.clone(),
+                "exact_vec_argument",
+            ),
+            SemanticOwnershipTransferKind::VecIntoIterViaZip => (
+                proof.old_owner_ty,
+                proof.old_owner_type.clone(),
+                "exact_vec_zip_argument",
+            ),
         };
 
         candidates.push(SemanticOwnershipTransferCandidate {
@@ -11776,6 +12606,7 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             kind,
             call_shape,
             proof,
+            expected_old_owner_ty,
             expected_old_owner_type,
             expected_old_owner_basis,
             source_span: tcx.sess.source_map().span_to_diagnostic_string(*fn_span),
@@ -11797,8 +12628,13 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
             candidate.proof.new_owner_type,
         );
         let callsite = nonzero_fnv1a64_text(&key);
-        let (old_type_id, _) = semantic_scope_type_id(&candidate.expected_old_owner_type, &key);
-        let (new_type_id, _) = semantic_scope_type_id(&candidate.proof.new_owner_type, &key);
+        let Some(old_type_id) = compiler_semantic_type_id(tcx, candidate.expected_old_owner_ty)
+        else {
+            continue;
+        };
+        let Some(new_type_id) = compiler_semantic_type_id(tcx, candidate.proof.new_owner_ty) else {
+            continue;
+        };
         let module_id = lowering_module_id();
         let mut rewrite_status = "semantic_ownership_transfer_rewrite_planned";
         let mut replacement_resolution_status = "not_requested_dry_run";
@@ -11908,6 +12744,8 @@ fn record_or_rewrite_semantic_ownership_transfers<'tcx>(
                     proof.map_or(false, |proof| {
                         proof.element_ty == candidate.proof.element_ty
                             && proof.allocator_ty == candidate.proof.allocator_ty
+                            && proof.old_owner_ty == candidate.proof.old_owner_ty
+                            && proof.new_owner_ty == candidate.proof.new_owner_ty
                             && proof.old_owner_type == candidate.proof.old_owner_type
                             && proof.new_owner_type == candidate.proof.new_owner_type
                     })
@@ -12322,9 +13160,9 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 _ => continue,
             };
         let callee = callee_text(func);
-        let callee_def_id = match func.ty(&body.local_decls, tcx).kind() {
-            ty::FnDef(def_id, _) => Some(*def_id),
-            _ => None,
+        let (callee_def_id, callee_generic_types) = match func.ty(&body.local_decls, tcx).kind() {
+            ty::FnDef(def_id, args) => (Some(*def_id), args.types().collect::<Vec<Ty<'tcx>>>()),
+            _ => (None, Vec::new()),
         };
         let destination_ty = destination.ty(&body.local_decls, tcx).ty;
         let arg_operands = call_arg_operands(args);
@@ -12332,8 +13170,24 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             .iter()
             .map(|arg| arg.ty(&body.local_decls, tcx))
             .collect::<Vec<_>>();
-        let plain_clone_heap_class =
+        let mut plain_clone_heap_class =
             plain_clone_heap_class(tcx, callee_def_id, &callee, destination_ty);
+        if !matches!(&plain_clone_heap_class, PlainCloneHeapClass::NotPlainClone) {
+            // The pinned structural proof admits only core Clone::clone for
+            // exact Global-backed byte Vec and String. Their standard Clone
+            // implementations create at most the direct returned buffer and
+            // preserve the textual owner identity used by the matching Drop.
+            // Every broader/custom Clone surface stays explicit audit-only.
+            plain_clone_heap_class = exact_core_clone_direct_owner(
+                tcx,
+                callee_def_id,
+                &callee_generic_types,
+                destination_ty,
+                &argument_tys,
+            )
+            .map(PlainCloneHeapClass::Single)
+            .unwrap_or(PlainCloneHeapClass::Unresolved);
+        }
         let non_plain_heap_class =
             if matches!(&plain_clone_heap_class, PlainCloneHeapClass::NotPlainClone) {
                 Some(non_plain_semantic_scope_heap_class(
@@ -12346,9 +13200,23 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             } else {
                 None
             };
+        let runtime_identity_owner_ty = callee_def_id
+            .and_then(|def_id| {
+                box_new_runtime_identity_owner_ty(tcx, def_id, destination_ty, &argument_tys)
+            })
+            .or_else(|| {
+                callee_def_id.and_then(|def_id| {
+                    drop_inert_box_reclaim_call_runtime_identity_owner_ty(
+                        tcx,
+                        def_id,
+                        &argument_tys,
+                    )
+                })
+            });
         if target.is_none()
             || (matches!(&plain_clone_heap_class, PlainCloneHeapClass::NotPlainClone)
-                && !semantic_scope_candidate_for_mir(tcx, &callee, destination_ty))
+                && runtime_identity_owner_ty.is_none()
+                && !semantic_scope_candidate_for_mir(tcx, callee_def_id, &callee, destination_ty))
         {
             continue;
         }
@@ -12357,18 +13225,22 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             .iter()
             .map(|arg_ty| format!("{:?}", arg_ty))
             .collect::<Vec<_>>();
-        let semantic_object_type = match &plain_clone_heap_class {
-            PlainCloneHeapClass::Single(owner) => owner.clone(),
-            PlainCloneHeapClass::DefiniteNoSupportedOwner
-            | PlainCloneHeapClass::Ambiguous(_)
-            | PlainCloneHeapClass::Unresolved => UNKNOWN_HEAP_OBJECT_TYPE.to_string(),
-            PlainCloneHeapClass::NotPlainClone => match &non_plain_heap_class {
-                Some(SemanticScopeHeapClass::Single(owner)) => owner.clone(),
-                Some(SemanticScopeHeapClass::Ambiguous(_))
-                | Some(SemanticScopeHeapClass::CallbackCapable)
-                | Some(SemanticScopeHeapClass::Unresolved)
-                | None => UNKNOWN_HEAP_OBJECT_TYPE.to_string(),
-            },
+        let semantic_object_type = if let Some(owner_ty) = runtime_identity_owner_ty {
+            format!("{:?}", owner_ty)
+        } else {
+            match &plain_clone_heap_class {
+                PlainCloneHeapClass::Single(owner) => owner.clone(),
+                PlainCloneHeapClass::DefiniteNoSupportedOwner
+                | PlainCloneHeapClass::Ambiguous(_)
+                | PlainCloneHeapClass::Unresolved => UNKNOWN_HEAP_OBJECT_TYPE.to_string(),
+                PlainCloneHeapClass::NotPlainClone => match &non_plain_heap_class {
+                    Some(SemanticScopeHeapClass::Single(owner)) => owner.clone(),
+                    Some(SemanticScopeHeapClass::Ambiguous(_))
+                    | Some(SemanticScopeHeapClass::CallbackCapable)
+                    | Some(SemanticScopeHeapClass::Unresolved)
+                    | None => UNKNOWN_HEAP_OBJECT_TYPE.to_string(),
+                },
+            }
         };
         let receiver_owned_allocation =
             semantic_scope_receiver_mutating_allocation_like_call(&callee);
@@ -12379,6 +13251,16 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             &arg_operands,
             receiver_owned_allocation,
         );
+        let compiler_type_id = runtime_identity_owner_ty
+            .or_else(|| {
+                exact_scope_owner_ty_for_display(
+                    tcx,
+                    &semantic_object_type,
+                    destination_ty,
+                    &argument_tys,
+                )
+            })
+            .and_then(|owner_ty| compiler_semantic_type_id(tcx, owner_ty));
         candidate_blocks.push(SemanticScopeCandidate {
             bb,
             original_is_cleanup: data.is_cleanup,
@@ -12392,6 +13274,8 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             destination_place: format!("{:?}", destination),
             destination_type,
             semantic_object_type,
+            compiler_type_id,
+            runtime_identity_owner_ty,
             plain_clone_heap_class,
             non_plain_heap_class,
             original_target: *target,
@@ -12428,6 +13312,8 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
         destination_place,
         destination_type,
         semantic_object_type,
+        compiler_type_id,
+        runtime_identity_owner_ty,
         plain_clone_heap_class,
         non_plain_heap_class,
         original_target,
@@ -12453,7 +13339,15 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             call_arguments.join("\0")
         );
         let callsite = nonzero_fnv1a64_text(&key);
-        let (type_id, type_id_basis) = semantic_scope_type_id(&semantic_object_type, &key);
+        // Every exact Global Box constructor/reclaim route uses this runtime
+        // identity path. Generic definition-level MIR never hashes textual
+        // `K`/`V`/`T` placeholders, and concrete MIR cannot split the same Box
+        // into the older textual compiler-hash namespace.
+        let (type_id, type_id_basis) = if runtime_identity_owner_ty.is_some() {
+            (0, "monomorphized_compiler_type_id_runtime")
+        } else {
+            semantic_scope_type_id(compiler_type_id)
+        };
         let policy_flags = lowering_policy_flags();
         let module_id = lowering_module_id();
         let candidate_cross_thread_escape = semantic_object_needs_cross_thread_recovery_hint(
@@ -12490,7 +13384,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 destination_type,
                 call_arguments,
                 argument_types,
-                semantic_object_type,
+                semantic_object_type: semantic_object_type.clone(),
                 type_id_basis,
                 size_operand: None,
                 align_operand: None,
@@ -12541,7 +13435,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 destination_type,
                 call_arguments,
                 argument_types,
-                semantic_object_type,
+                semantic_object_type: semantic_object_type.clone(),
                 type_id_basis,
                 size_operand: None,
                 align_operand: None,
@@ -12571,7 +13465,9 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             });
             continue;
         }
-        if semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE {
+        if semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE
+            || (runtime_identity_owner_ty.is_none() && compiler_type_id.is_none())
+        {
             // Do not turn non-heap iterator/Bencher/helper calls into typed
             // allocation evidence.  Keep an explicit audit row so the solver
             // gap is visible instead of silently disappearing from reports.
@@ -12607,7 +13503,7 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 destination_type,
                 call_arguments,
                 argument_types,
-                semantic_object_type,
+                semantic_object_type: semantic_object_type.clone(),
                 type_id_basis,
                 size_operand: None,
                 align_operand: None,
@@ -12623,11 +13519,16 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 },
                 replacement_resolution_status: if callback_capable {
                     "exact_receiver_call_callback_capable_not_lowered"
+                } else if semantic_object_type != UNKNOWN_HEAP_OBJECT_TYPE {
+                    "rustc_exact_type_identity_not_solved"
                 } else {
                     "rustc_middle_heap_object_type_not_solved"
                 },
                 replacement_preview: if callback_capable {
                     "Skipped semantic-scope lowering because the exact receiver call may execute user callbacks with unrelated allocations"
+                        .to_string()
+                } else if semantic_object_type != UNKNOWN_HEAP_OBJECT_TYPE {
+                    "Skipped semantic-scope lowering because no exact compiler TypeId identity was recovered for the displayed heap owner"
                         .to_string()
                 } else {
                     "Skipped semantic-scope lowering because rustc_middle did not solve a supported heap object type"
@@ -12659,6 +13560,9 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             .automatic_heap_lifetime_decisions
             .get(&(semantic_object_type.clone(), destination_place.clone()))
             .copied();
+        // The CFG classifier does not depend on the numeric type-id namespace.
+        // Runtime compiler-TypeId scopes may therefore retain its result. An
+        // explicit profile remains fail-closed because type_id=0 cannot match.
         let lifetime_selection = lowering_lifetime_hint_for_site(
             callsite,
             type_id,
@@ -12670,8 +13574,12 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
         let lifetime_hint = lifetime_selection.hint;
         let lifetime_hint_confidence = lifetime_selection.confidence;
         let lifetime_hint_basis = lifetime_selection.basis;
+        let drop_requires_allocation_recovery = runtime_identity_owner_ty
+            .map(|owner_ty| exact_box_drop_requires_allocation_recovery(tcx, owner_ty))
+            .unwrap_or(false);
         let exact_local_pair = direct_local_size_align_with_semantic_drop_requested()
             && proven_local_pair
+            && !drop_requires_allocation_recovery
             && local_no_recovery_lifetime_source_safe();
         let selected_semantic_scope_abi = if exact_local_pair {
             semantic_scope_local_abi.or(semantic_scope_abi)
@@ -12686,7 +13594,11 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                 candidate_cross_thread_escape,
                 scope_uses_local_no_recovery,
             );
-        let mut rewrite_status = "semantic_scope_enter_exit_rewrite_planned";
+        let mut rewrite_status = if runtime_identity_owner_ty.is_some() {
+            "semantic_scope_generic_type_rewrite_planned"
+        } else {
+            "semantic_scope_enter_exit_rewrite_planned"
+        };
         let mut replacement_resolution_status = "not_requested_dry_run";
         let mut replacement_preview = format!(
             "Wrap {} with semantic scope metadata(type_id={}, module_id={}, flags={}, lifetime_hint={}, placement_hint={}, callsite={}) / __unialloc_semantic_scope_pop(); semantic_object_type={}",
@@ -12701,8 +13613,10 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
         );
         let mut semantic_scope_unwind_pop_inserted = false;
         if semantic_scope_rewrite {
-            if let (Some(scope_abi), Some(original_target)) =
-                (selected_semantic_scope_abi, original_target)
+            let resolved_scope_abi = selected_semantic_scope_abi.filter(|scope_abi| {
+                runtime_identity_owner_ty.is_none() || scope_abi.generic_push_def_id.is_some()
+            });
+            if let (Some(scope_abi), Some(original_target)) = (resolved_scope_abi, original_target)
             {
                 let push_unit_local = push_internal_local(body, unit_ty(tcx), fn_span);
                 let push_unit_place = Place::from(push_unit_local);
@@ -12762,28 +13676,56 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                     .basic_blocks_mut()
                     .push(basic_block_data(original_terminator, original_is_cleanup));
 
-                let mut push_args = vec![
-                    const_u64_operand(tcx, type_id, fn_span),
-                    const_u64_operand(tcx, lowering_module_id(), fn_span),
-                    const_u32_operand(tcx, policy_flags, fn_span),
-                ];
+                let mut push_args = Vec::new();
+                if runtime_identity_owner_ty.is_none() {
+                    push_args.push(const_u64_operand(tcx, type_id, fn_span));
+                }
+                push_args.push(const_u64_operand(tcx, lowering_module_id(), fn_span));
+                push_args.push(const_u32_operand(tcx, policy_flags, fn_span));
                 if scope_abi.supports_hints {
                     push_args.push(const_u16_operand(tcx, lifetime_hint, fn_span));
                     push_args.push(const_u16_operand(tcx, placement_hint, fn_span));
                 }
                 push_args.push(const_u64_operand(tcx, callsite, fn_span));
-                body[bb].terminator_mut().kind = call_terminator_kind(
-                    tcx,
-                    scope_abi.push_def_id,
-                    push_args,
-                    push_unit_place,
-                    Some(call_block),
-                    inserted_call_unwind(original_unwind, original_is_cleanup),
-                    original_from_hir_call,
-                    fn_span,
-                );
-                rewrite_status = "actual_semantic_scope_enter_exit_rewrite_applied";
-                replacement_resolution_status = semantic_scope_resolution_status(scope_abi);
+                body[bb].terminator_mut().kind = if let Some(owner_ty) = runtime_identity_owner_ty {
+                    call_terminator_kind_with_type(
+                        tcx,
+                        scope_abi
+                            .generic_push_def_id
+                            .expect("generic scope ABI prevalidated"),
+                        owner_ty,
+                        push_args,
+                        push_unit_place,
+                        Some(call_block),
+                        inserted_call_unwind(original_unwind, original_is_cleanup),
+                        original_from_hir_call,
+                        fn_span,
+                    )
+                } else {
+                    call_terminator_kind(
+                        tcx,
+                        scope_abi.push_def_id,
+                        push_args,
+                        push_unit_place,
+                        Some(call_block),
+                        inserted_call_unwind(original_unwind, original_is_cleanup),
+                        original_from_hir_call,
+                        fn_span,
+                    )
+                };
+                rewrite_status = if runtime_identity_owner_ty.is_some() {
+                    "actual_semantic_scope_generic_type_rewrite_applied"
+                } else {
+                    "actual_semantic_scope_enter_exit_rewrite_applied"
+                };
+                replacement_resolution_status = if runtime_identity_owner_ty.is_some() {
+                    generic_semantic_scope_resolution_status(
+                        scope_abi.supports_hints,
+                        scope_abi.local_no_recovery,
+                    )
+                } else {
+                    semantic_scope_resolution_status(scope_abi)
+                };
                 replacement_preview = if semantic_scope_unwind_pop_inserted {
                     format!(
                         "Inserted MIR {} block -> original call block -> pop block for {}; original unwind cleanup also passes through pop",
@@ -12796,9 +13738,19 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
                     )
                 };
             } else {
-                rewrite_status =
-                    "actual_semantic_scope_enter_exit_rewrite_requested_symbol_unresolved";
-                replacement_resolution_status = semantic_scope_unresolved_status(exact_local_pair);
+                rewrite_status = if runtime_identity_owner_ty.is_some() {
+                    "actual_semantic_scope_generic_type_rewrite_requested_symbol_unresolved"
+                } else {
+                    "actual_semantic_scope_enter_exit_rewrite_requested_symbol_unresolved"
+                };
+                replacement_resolution_status = if runtime_identity_owner_ty.is_some() {
+                    generic_semantic_scope_unresolved_status(
+                        lowering_metadata_hints_requested(),
+                        exact_local_pair,
+                    )
+                } else {
+                    semantic_scope_unresolved_status(exact_local_pair)
+                };
             }
         }
 
@@ -12827,13 +13779,29 @@ fn record_or_rewrite_semantic_scope_candidates<'tcx>(
             size_operand: None,
             align_operand: None,
             rewrite_status,
-            replacement_symbol: selected_semantic_scope_abi
-                .map(|abi| abi.push_symbol)
-                .unwrap_or_else(|| semantic_scope_push_symbol(exact_local_pair)),
+            replacement_symbol: if runtime_identity_owner_ty.is_some() {
+                generic_semantic_scope_push_symbol(
+                    selected_semantic_scope_abi
+                        .map(|abi| abi.local_no_recovery)
+                        .unwrap_or(exact_local_pair),
+                )
+            } else {
+                selected_semantic_scope_abi
+                    .map(|abi| abi.push_symbol)
+                    .unwrap_or_else(|| semantic_scope_push_symbol(exact_local_pair))
+            },
             replacement_resolution_status,
             replacement_preview,
             semantic_scope_unwind_pop_inserted,
-            metadata_pairing_contract: "semantic_scope_active_metadata",
+            metadata_pairing_contract: if runtime_identity_owner_ty.is_some()
+                && scope_uses_local_no_recovery
+            {
+                "semantic_scope_monomorphized_runtime_type_metadata_local_no_recovery"
+            } else if runtime_identity_owner_ty.is_some() {
+                "semantic_scope_monomorphized_runtime_type_metadata"
+            } else {
+                "semantic_scope_active_metadata"
+            },
             lowering_kind: "semantic_scope_enter_exit_rewrite",
             lifetime_analysis_features,
         });
@@ -12887,27 +13855,59 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
         let place_ty = place.ty(&body.local_decls, tcx).ty;
         let drop_place = format!("{:?}", place);
         let drop_type = format!("{:?}", place_ty);
+        let runtime_identity_owner_ty = drop_inert_box_runtime_identity_owner_ty(tcx, place_ty);
+        let recovery_only_exact_box_drop =
+            exact_box_drop_requires_allocation_recovery(tcx, place_ty);
         let exact_zip_owner = exact_zip_drop_pairs
             .contains(&(format!("{:?}", bb), drop_place.clone()))
             .then(|| exact_zip_iter_mut_u8_into_iter_drop_owner(tcx, place_ty))
             .flatten();
-        let (drop_owner_graph_unresolved, heap_owner_types) = match exact_zip_owner {
-            Some(owner) => (false, BTreeSet::from([owner])),
-            None => {
-                let heap_owner_scan = heap_object_type_scan_from_ty(tcx, place_ty);
-                (heap_owner_scan.unresolved, heap_owner_scan.owners)
-            }
-        };
+        let (drop_owner_graph_unresolved, heap_owner_types) =
+            if runtime_identity_owner_ty.is_some() || recovery_only_exact_box_drop {
+                // This exact Global Box is handled by the compiler-TypeId runtime
+                // helper below for both generic and concrete MIR. The owner graph
+                // therefore cannot introduce a second textual identity namespace.
+                (false, BTreeSet::new())
+            } else {
+                match exact_zip_owner {
+                    Some(owner_ty) => match compiler_heap_owner(tcx, owner_ty) {
+                        Some(owner) => (false, BTreeSet::from([owner])),
+                        None => (true, BTreeSet::new()),
+                    },
+                    None => {
+                        let heap_owner_scan = heap_object_type_scan_from_ty(tcx, place_ty);
+                        (heap_owner_scan.unresolved, heap_owner_scan.owners)
+                    }
+                }
+            };
+        let direct_supported_owner = direct_supported_heap_object_destination(tcx, place_ty);
+        let recovery_only_effectful_owner_drop = !recovery_only_exact_box_drop
+            && exact_zip_owner.is_none()
+            && !drop_owner_graph_unresolved
+            && heap_owner_types.len() == 1
+            && if direct_supported_owner {
+                !supported_owner_uses_canonical_global_allocator(tcx, place_ty)
+                    || direct_owner_generic_drop_glue_may_be_effectful(tcx, place_ty)
+            } else {
+                // A wrapper's own Drop implementation can run arbitrary code
+                // before releasing its single nested owner. Keep such scopes
+                // recovery-backed even when the nested owner graph is unique.
+                true
+            };
         let drop_type_has_multiple_heap_owners =
             !drop_owner_graph_unresolved && heap_owner_types.len() > 1;
-        let semantic_object_type = if drop_owner_graph_unresolved {
+        let semantic_object_type = if let Some(owner_ty) = runtime_identity_owner_ty {
+            format!("{:?}", owner_ty)
+        } else if recovery_only_exact_box_drop {
+            format!("{:?}", place_ty)
+        } else if drop_owner_graph_unresolved {
             UNKNOWN_HEAP_OBJECT_TYPE.to_string()
         } else if drop_type_has_multiple_heap_owners {
             format!(
                 "multiple_heap_owners({})",
                 heap_owner_types
                     .iter()
-                    .cloned()
+                    .map(|owner| owner.display.clone())
                     .collect::<Vec<_>>()
                     .join(",")
             )
@@ -12915,9 +13915,18 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             heap_owner_types
                 .iter()
                 .next()
-                .cloned()
+                .map(|owner| owner.display.clone())
                 .unwrap_or_else(|| UNKNOWN_HEAP_OBJECT_TYPE.to_string())
         };
+        let compiler_type_id = runtime_identity_owner_ty
+            .and_then(|owner_ty| compiler_semantic_type_id(tcx, owner_ty))
+            .or_else(|| {
+                (!recovery_only_exact_box_drop
+                    && !recovery_only_effectful_owner_drop
+                    && heap_owner_types.len() == 1)
+                    .then(|| heap_owner_types.iter().next().map(|owner| owner.type_id))
+                    .flatten()
+            });
         let drop_type_has_generic_param = type_contains_generic_param(tcx, place_ty);
         candidate_blocks.push(SemanticDropCandidate {
             bb,
@@ -12925,6 +13934,10 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             drop_place,
             drop_type,
             semantic_object_type,
+            compiler_type_id,
+            runtime_identity_owner_ty,
+            recovery_only_exact_box_drop,
+            recovery_only_effectful_owner_drop,
             drop_type_has_generic_param,
             drop_type_has_multiple_heap_owners,
             original_target: *target,
@@ -12940,6 +13953,10 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
         drop_place,
         drop_type,
         semantic_object_type,
+        compiler_type_id,
+        runtime_identity_owner_ty,
+        recovery_only_exact_box_drop,
+        recovery_only_effectful_owner_drop,
         drop_type_has_generic_param,
         drop_type_has_multiple_heap_owners,
         original_target,
@@ -12955,9 +13972,80 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             function_name, basic_block, source_span, drop_place, semantic_object_type
         );
         let callsite = nonzero_fnv1a64_text(&key);
-        let (type_id, type_id_basis) = semantic_scope_type_id(&semantic_object_type, &key);
+        let (type_id, type_id_basis) = if runtime_identity_owner_ty.is_some() {
+            (0, "monomorphized_compiler_type_id_runtime")
+        } else if recovery_only_exact_box_drop || recovery_only_effectful_owner_drop {
+            (0, "authenticated_allocation_recovery_record")
+        } else {
+            semantic_scope_type_id(compiler_type_id)
+        };
         let policy_flags = lowering_policy_flags();
         let module_id = lowering_module_id();
+        if recovery_only_exact_box_drop || recovery_only_effectful_owner_drop {
+            // A dropful payload or wrapper may execute arbitrary user code
+            // before the backing storage is reclaimed. Wrapping the entire
+            // Drop would tag inner frees with the outer owner identity. Leave
+            // the Drop unwrapped and use allocation-side pointer recovery.
+            let recovery_kind = if recovery_only_exact_box_drop {
+                "exact-box"
+            } else {
+                "effectful-owner"
+            };
+            records.push(RewriteRecord {
+                allocation_site_id: format!(
+                    "rustc-driver-mir-semantic-drop-{}-recovery:{:016x}",
+                    recovery_kind, callsite
+                ),
+                type_id,
+                module_id,
+                flags: policy_flags,
+                lifetime_hint: 0,
+                lifetime_hint_confidence: 0,
+                lifetime_hint_basis: "not_applicable_recovery_authoritative",
+                placement_hint: 0,
+                cross_thread_recovery_hint: false,
+                placement_hint_basis: "allocation_recovery_record_authoritative",
+                callsite,
+                mir_function: function_name.clone(),
+                basic_block,
+                source_span,
+                callee: "TerminatorKind::Drop".to_string(),
+                destination_place: drop_place,
+                destination_type: drop_type,
+                call_arguments: Vec::new(),
+                argument_types: Vec::new(),
+                semantic_object_type,
+                type_id_basis,
+                size_operand: None,
+                align_operand: None,
+                rewrite_status: if recovery_only_exact_box_drop {
+                    "semantic_scope_drop_rewrite_skipped_exact_box_recovery"
+                } else {
+                    "semantic_scope_drop_rewrite_skipped_effectful_owner_recovery"
+                },
+                replacement_symbol: "authenticated_allocation_recovery_record",
+                replacement_resolution_status: if recovery_only_exact_box_drop {
+                    "exact_box_drop_uses_authenticated_allocation_recovery"
+                } else {
+                    "effectful_owner_drop_uses_authenticated_allocation_recovery"
+                },
+                replacement_preview: if recovery_only_exact_box_drop {
+                    "Leave dropful exact Box Drop unwrapped; recover the outer allocation identity from its authenticated allocation record"
+                } else {
+                    "Leave effectful owner Drop unwrapped; recover backing allocations from authenticated allocation records"
+                }
+                .to_string(),
+                semantic_scope_unwind_pop_inserted: false,
+                metadata_pairing_contract: "allocation_scope_to_authenticated_recovery_record",
+                lowering_kind: if recovery_only_exact_box_drop {
+                    "semantic_scope_drop_exact_box_recovery_skipped"
+                } else {
+                    "semantic_scope_drop_effectful_owner_recovery_skipped"
+                },
+                lifetime_analysis_features: None,
+            });
+            continue;
+        }
         if drop_type_has_multiple_heap_owners {
             // An aggregate Drop may release several independent heap owners. A
             // single active metadata scope cannot represent all of them;
@@ -13019,7 +14107,9 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
         );
         let (placement_hint, cross_thread_recovery_hint, placement_hint_basis) =
             lowering_placement_hint_for_body(candidate_cross_thread_escape);
-        if semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE {
+        if semantic_object_type == UNKNOWN_HEAP_OBJECT_TYPE
+            || (runtime_identity_owner_ty.is_none() && compiler_type_id.is_none())
+        {
             let (
                 allocation_site_prefix,
                 rewrite_status,
@@ -13027,7 +14117,19 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                 replacement_preview,
                 metadata_pairing_contract,
                 lowering_kind,
-            ) = if drop_type_has_generic_param {
+            ) = if semantic_object_type != UNKNOWN_HEAP_OBJECT_TYPE {
+                (
+                    "rustc-driver-mir-semantic-drop-unresolved-identity",
+                    "semantic_scope_drop_rewrite_skipped_unresolved_type_identity",
+                    "rustc_exact_drop_type_identity_not_solved",
+                    format!(
+                        "Skipped drop-scope lowering for {} because no exact compiler TypeId identity was recovered for displayed owner `{}`",
+                        drop_place, semantic_object_type
+                    ),
+                    "audit_only_unresolved_drop_type_identity",
+                    "semantic_scope_drop_unresolved_type_identity_skipped",
+                )
+            } else if drop_type_has_generic_param {
                 (
                     "rustc-driver-mir-semantic-drop-generic",
                     "semantic_scope_drop_rewrite_skipped_generic_type_parameter",
@@ -13139,7 +14241,11 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                 candidate_cross_thread_escape,
                 scope_uses_local_no_recovery,
             );
-        let mut rewrite_status = "semantic_scope_drop_rewrite_planned";
+        let mut rewrite_status = if runtime_identity_owner_ty.is_some() {
+            "semantic_scope_drop_generic_type_rewrite_planned"
+        } else {
+            "semantic_scope_drop_rewrite_planned"
+        };
         let mut replacement_resolution_status = "not_requested_dry_run";
         let mut replacement_preview = format!(
             "Wrap Drop of {} with semantic scope metadata(type_id={}, module_id={}, flags={}, lifetime_hint={}, placement_hint={}, callsite={}) / __unialloc_semantic_scope_pop(); semantic_object_type={}",
@@ -13154,7 +14260,10 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
         );
         let mut semantic_scope_unwind_pop_inserted = false;
         if semantic_scope_rewrite {
-            if let Some(scope_abi) = selected_semantic_scope_abi {
+            let resolved_scope_abi = selected_semantic_scope_abi.filter(|scope_abi| {
+                runtime_identity_owner_ty.is_none() || scope_abi.generic_push_def_id.is_some()
+            });
+            if let Some(scope_abi) = resolved_scope_abi {
                 let push_unit_local = push_internal_local(body, unit_ty(tcx), fn_span);
                 let push_unit_place = Place::from(push_unit_local);
                 let source_info = body[bb].terminator().source_info;
@@ -13202,28 +14311,56 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                     .basic_blocks_mut()
                     .push(basic_block_data(original_terminator, original_is_cleanup));
 
-                let mut push_args = vec![
-                    const_u64_operand(tcx, type_id, fn_span),
-                    const_u64_operand(tcx, lowering_module_id(), fn_span),
-                    const_u32_operand(tcx, policy_flags, fn_span),
-                ];
+                let mut push_args = Vec::new();
+                if runtime_identity_owner_ty.is_none() {
+                    push_args.push(const_u64_operand(tcx, type_id, fn_span));
+                }
+                push_args.push(const_u64_operand(tcx, lowering_module_id(), fn_span));
+                push_args.push(const_u32_operand(tcx, policy_flags, fn_span));
                 if scope_abi.supports_hints {
                     push_args.push(const_u16_operand(tcx, lifetime_hint, fn_span));
                     push_args.push(const_u16_operand(tcx, placement_hint, fn_span));
                 }
                 push_args.push(const_u64_operand(tcx, callsite, fn_span));
-                body[bb].terminator_mut().kind = call_terminator_kind(
-                    tcx,
-                    scope_abi.push_def_id,
-                    push_args,
-                    push_unit_place,
-                    Some(drop_block),
-                    inserted_call_unwind(original_unwind, original_is_cleanup),
-                    synthetic_call_source(),
-                    fn_span,
-                );
-                rewrite_status = "actual_semantic_scope_drop_rewrite_applied";
-                replacement_resolution_status = semantic_scope_resolution_status(scope_abi);
+                body[bb].terminator_mut().kind = if let Some(owner_ty) = runtime_identity_owner_ty {
+                    call_terminator_kind_with_type(
+                        tcx,
+                        scope_abi
+                            .generic_push_def_id
+                            .expect("generic drop scope ABI prevalidated"),
+                        owner_ty,
+                        push_args,
+                        push_unit_place,
+                        Some(drop_block),
+                        inserted_call_unwind(original_unwind, original_is_cleanup),
+                        synthetic_call_source(),
+                        fn_span,
+                    )
+                } else {
+                    call_terminator_kind(
+                        tcx,
+                        scope_abi.push_def_id,
+                        push_args,
+                        push_unit_place,
+                        Some(drop_block),
+                        inserted_call_unwind(original_unwind, original_is_cleanup),
+                        synthetic_call_source(),
+                        fn_span,
+                    )
+                };
+                rewrite_status = if runtime_identity_owner_ty.is_some() {
+                    "actual_semantic_scope_drop_generic_type_rewrite_applied"
+                } else {
+                    "actual_semantic_scope_drop_rewrite_applied"
+                };
+                replacement_resolution_status = if runtime_identity_owner_ty.is_some() {
+                    generic_semantic_scope_resolution_status(
+                        scope_abi.supports_hints,
+                        scope_abi.local_no_recovery,
+                    )
+                } else {
+                    semantic_scope_resolution_status(scope_abi)
+                };
                 replacement_preview = if semantic_scope_unwind_pop_inserted {
                     format!(
                         "Inserted MIR {} block -> original Drop block -> pop block for {}; original unwind cleanup also passes through pop",
@@ -13236,8 +14373,19 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
                     )
                 };
             } else {
-                rewrite_status = "actual_semantic_scope_drop_rewrite_requested_symbol_unresolved";
-                replacement_resolution_status = semantic_scope_unresolved_status(exact_local_pair);
+                rewrite_status = if runtime_identity_owner_ty.is_some() {
+                    "actual_semantic_scope_drop_generic_type_rewrite_requested_symbol_unresolved"
+                } else {
+                    "actual_semantic_scope_drop_rewrite_requested_symbol_unresolved"
+                };
+                replacement_resolution_status = if runtime_identity_owner_ty.is_some() {
+                    generic_semantic_scope_unresolved_status(
+                        lowering_metadata_hints_requested(),
+                        exact_local_pair,
+                    )
+                } else {
+                    semantic_scope_unresolved_status(exact_local_pair)
+                };
             }
         }
 
@@ -13266,13 +14414,29 @@ fn record_or_rewrite_semantic_drop_candidates<'tcx>(
             size_operand: None,
             align_operand: None,
             rewrite_status,
-            replacement_symbol: selected_semantic_scope_abi
-                .map(|abi| abi.push_symbol)
-                .unwrap_or_else(|| semantic_scope_push_symbol(exact_local_pair)),
+            replacement_symbol: if runtime_identity_owner_ty.is_some() {
+                generic_semantic_scope_push_symbol(
+                    selected_semantic_scope_abi
+                        .map(|abi| abi.local_no_recovery)
+                        .unwrap_or(exact_local_pair),
+                )
+            } else {
+                selected_semantic_scope_abi
+                    .map(|abi| abi.push_symbol)
+                    .unwrap_or_else(|| semantic_scope_push_symbol(exact_local_pair))
+            },
             replacement_resolution_status,
             replacement_preview,
             semantic_scope_unwind_pop_inserted,
-            metadata_pairing_contract: "semantic_scope_drop_active_metadata",
+            metadata_pairing_contract: if runtime_identity_owner_ty.is_some()
+                && scope_uses_local_no_recovery
+            {
+                "semantic_scope_drop_monomorphized_runtime_type_metadata_local_no_recovery"
+            } else if runtime_identity_owner_ty.is_some() {
+                "semantic_scope_drop_monomorphized_runtime_type_metadata"
+            } else {
+                "semantic_scope_drop_active_metadata"
+            },
             lowering_kind: "semantic_scope_drop_rewrite",
             lifetime_analysis_features: None,
         });
@@ -13589,19 +14753,32 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let semantic_scope_rewrite_applied_count = records
         .iter()
         .filter(|record| {
-            record.rewrite_status == "actual_semantic_scope_enter_exit_rewrite_applied"
+            matches!(
+                record.rewrite_status,
+                "actual_semantic_scope_enter_exit_rewrite_applied"
+                    | "actual_semantic_scope_generic_type_rewrite_applied"
+            )
         })
         .count();
     let semantic_scope_deallocation_like_rewrite_applied_count = records
         .iter()
         .filter(|record| {
-            record.rewrite_status == "actual_semantic_scope_enter_exit_rewrite_applied"
-                && semantic_scope_deallocation_like_call(&record.callee)
+            matches!(
+                record.rewrite_status,
+                "actual_semantic_scope_enter_exit_rewrite_applied"
+                    | "actual_semantic_scope_generic_type_rewrite_applied"
+            ) && semantic_scope_deallocation_like_call(&record.callee)
         })
         .count();
     let semantic_scope_drop_rewrite_applied_count = records
         .iter()
-        .filter(|record| record.rewrite_status == "actual_semantic_scope_drop_rewrite_applied")
+        .filter(|record| {
+            matches!(
+                record.rewrite_status,
+                "actual_semantic_scope_drop_rewrite_applied"
+                    | "actual_semantic_scope_drop_generic_type_rewrite_applied"
+            )
+        })
         .count();
     let semantic_scope_unwind_pop_inserted_count = records
         .iter()
@@ -13808,6 +14985,8 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
                 record.rewrite_status,
                 "actual_semantic_scope_enter_exit_rewrite_applied"
                     | "actual_semantic_scope_drop_rewrite_applied"
+                    | "actual_semantic_scope_generic_type_rewrite_applied"
+                    | "actual_semantic_scope_drop_generic_type_rewrite_applied"
             ) && record.replacement_symbol.ends_with("_local")
         })
         .count();
@@ -13818,6 +14997,8 @@ fn write_json(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
                 record.rewrite_status,
                 "actual_semantic_scope_enter_exit_rewrite_applied"
                     | "actual_semantic_scope_drop_rewrite_applied"
+                    | "actual_semantic_scope_generic_type_rewrite_applied"
+                    | "actual_semantic_scope_drop_generic_type_rewrite_applied"
             ) && !record.replacement_symbol.ends_with("_local")
         })
         .count();
@@ -15043,19 +16224,32 @@ fn write_pass_log(cli: &Cli, records: &[RewriteRecord]) -> Result<(), String> {
     let semantic_scope_rewrite_applied_count = records
         .iter()
         .filter(|record| {
-            record.rewrite_status == "actual_semantic_scope_enter_exit_rewrite_applied"
+            matches!(
+                record.rewrite_status,
+                "actual_semantic_scope_enter_exit_rewrite_applied"
+                    | "actual_semantic_scope_generic_type_rewrite_applied"
+            )
         })
         .count();
     let semantic_scope_deallocation_like_rewrite_applied_count = records
         .iter()
         .filter(|record| {
-            record.rewrite_status == "actual_semantic_scope_enter_exit_rewrite_applied"
-                && semantic_scope_deallocation_like_call(&record.callee)
+            matches!(
+                record.rewrite_status,
+                "actual_semantic_scope_enter_exit_rewrite_applied"
+                    | "actual_semantic_scope_generic_type_rewrite_applied"
+            ) && semantic_scope_deallocation_like_call(&record.callee)
         })
         .count();
     let semantic_scope_drop_rewrite_applied_count = records
         .iter()
-        .filter(|record| record.rewrite_status == "actual_semantic_scope_drop_rewrite_applied")
+        .filter(|record| {
+            matches!(
+                record.rewrite_status,
+                "actual_semantic_scope_drop_rewrite_applied"
+                    | "actual_semantic_scope_drop_generic_type_rewrite_applied"
+            )
+        })
         .count();
     let semantic_scope_unwind_pop_inserted_count = records
         .iter()

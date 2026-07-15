@@ -39,7 +39,7 @@ C_ABI_LAYOUT_ASSERTIONS = r"""
 #define ASSERT_OFFSET(type, field, expected) \
     _Static_assert(offsetof(type, field) == (expected), #type "." #field " offset")
 
-_Static_assert(UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION == 3u, "stats ABI version");
+_Static_assert(UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION == 4u, "stats ABI version");
 _Static_assert(UNIALLOC_SEMANTIC_TYPE_STATS_SNAPSHOT_ABI_VERSION == 2u, "type stats ABI version");
 _Static_assert(UNIALLOC_SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION == 1u, "fallback ABI version");
 _Static_assert(UNIALLOC_SEMANTIC_METADATA_VALIDATION_SNAPSHOT_ABI_VERSION == 1u, "metadata ABI version");
@@ -47,7 +47,7 @@ _Static_assert(UNIALLOC_CONSTRAINED_BOOT_SAMPLE_ABI_VERSION == 2u, "boot sample 
 _Static_assert(sizeof(void *) == 8, "contract requires a 64-bit C data model");
 _Static_assert(sizeof(size_t) == 8, "contract requires 64-bit size_t");
 
-_Static_assert(sizeof(UniallocSemanticStatsSnapshot) == 192, "stats size");
+_Static_assert(sizeof(UniallocSemanticStatsSnapshot) == 256, "stats size");
 ASSERT_OFFSET(UniallocSemanticStatsSnapshot, total_allocations, 0);
 ASSERT_OFFSET(UniallocSemanticStatsSnapshot, typed_allocations, 8);
 ASSERT_OFFSET(UniallocSemanticStatsSnapshot, fallback_allocations, 16);
@@ -62,16 +62,24 @@ ASSERT_OFFSET(UniallocSemanticStatsSnapshot, coverage_basis_points, 80);
 ASSERT_OFFSET(UniallocSemanticStatsSnapshot, typed_cache_hits, 88);
 ASSERT_OFFSET(UniallocSemanticStatsSnapshot, typed_cache_inserts, 96);
 ASSERT_OFFSET(UniallocSemanticStatsSnapshot, typed_cache_bypasses, 104);
-ASSERT_OFFSET(UniallocSemanticStatsSnapshot, delayed_free_enqueues, 112);
-ASSERT_OFFSET(UniallocSemanticStatsSnapshot, delayed_free_flushes, 120);
-ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_auth_signs, 128);
-ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_auth_verifications, 136);
-ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_auth_failures, 144);
-ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_software_fallback_signs, 152);
-ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_software_fallback_verifications, 160);
-ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_software_fallback_failures, 168);
-ASSERT_OFFSET(UniallocSemanticStatsSnapshot, total_deallocations, 176);
-ASSERT_OFFSET(UniallocSemanticStatsSnapshot, semantic_type_stats_dropped_events, 184);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, typed_cache_wrong_identity_denials, 112);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, last_wrong_identity_requested_type_id, 120);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, last_wrong_identity_retained_type_id, 128);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, last_wrong_identity_requested_module_id, 136);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, last_wrong_identity_retained_module_id, 144);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, last_wrong_identity_requested_callsite, 152);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, last_wrong_identity_size, 160);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, last_wrong_identity_align, 168);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, delayed_free_enqueues, 176);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, delayed_free_flushes, 184);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_auth_signs, 192);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_auth_verifications, 200);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_auth_failures, 208);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_software_fallback_signs, 216);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_software_fallback_verifications, 224);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, metadata_pac_software_fallback_failures, 232);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, total_deallocations, 240);
+ASSERT_OFFSET(UniallocSemanticStatsSnapshot, semantic_type_stats_dropped_events, 248);
 
 _Static_assert(sizeof(UniallocSemanticTypeStatsSnapshot) == 112, "type stats size");
 ASSERT_OFFSET(UniallocSemanticTypeStatsSnapshot, type_id, 0);
@@ -235,7 +243,7 @@ def main() -> int:
             "c_compiler_target": c_compiler_target,
             "c_compiler_version": c_compiler_version,
             "abi_layout_records_checked": 5,
-            "abi_layout_field_offsets_checked_per_language": 75,
+            "abi_layout_field_offsets_checked_per_language": 83,
             "required_symbols": sorted(REQUIRED_SYMBOLS),
             "binary_sha256": hashlib.sha256(image).hexdigest(),
             "validated": True,

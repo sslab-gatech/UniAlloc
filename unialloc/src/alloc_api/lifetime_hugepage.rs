@@ -542,6 +542,12 @@ struct SlotGeometry {
 }
 
 #[derive(Clone, Copy)]
+struct AvailableRegion {
+    extent_idx: usize,
+    region_idx: usize,
+}
+
+#[derive(Clone, Copy)]
 struct ConfusionCounters {
     true_positive_objects: usize,
     true_positive_bytes: usize,
@@ -2660,9 +2666,10 @@ impl LifetimeArenaState {
         identity: ArenaIdentity,
         birth_epoch: usize,
         require_extent_cohort: bool,
-    ) -> Option<usize> {
+    ) -> Option<AvailableRegion> {
         let mut idx = self.available_heads[bucket];
-        let mut unassigned_fallback = NONE;
+        let mut matching_region = None;
+        let mut unassigned_fallback = None;
         let mut visited = 0usize;
         while idx != NONE {
             let extent = &self.extents[idx];
@@ -2671,20 +2678,24 @@ impl LifetimeArenaState {
             }
             let cohort_matches = !require_extent_cohort || extent.cohort_epoch == birth_epoch;
             let backing_matches = extent.requested_backing == Some(requested_backing);
-            if cohort_matches
-                && backing_matches
-                && extent
-                    .matching_region_with_space(identity, birth_epoch, require_extent_cohort)
-                    .is_some()
-            {
-                break;
-            }
-            if cohort_matches
-                && backing_matches
-                && unassigned_fallback == NONE
-                && extent.unassigned_region().is_some()
-            {
-                unassigned_fallback = idx;
+            if cohort_matches && backing_matches {
+                if let Some(region_idx) =
+                    extent.matching_region_with_space(identity, birth_epoch, require_extent_cohort)
+                {
+                    matching_region = Some(AvailableRegion {
+                        extent_idx: idx,
+                        region_idx,
+                    });
+                    break;
+                }
+                if unassigned_fallback.is_none() {
+                    if let Some(region_idx) = extent.unassigned_region() {
+                        unassigned_fallback = Some(AvailableRegion {
+                            extent_idx: idx,
+                            region_idx,
+                        });
+                    }
+                }
             }
             idx = extent.available_next;
             visited += 1;
@@ -2692,17 +2703,10 @@ impl LifetimeArenaState {
                 panic!("cyclic lifetime-arena available list");
             }
         }
-        let chosen = if idx != NONE {
-            idx
-        } else {
-            unassigned_fallback
-        };
-        if chosen == NONE {
-            return None;
-        }
-        if self.available_heads[bucket] != chosen {
-            self.remove_available(chosen);
-            self.add_available(chosen);
+        let chosen = matching_region.or(unassigned_fallback)?;
+        if self.available_heads[bucket] != chosen.extent_idx {
+            self.remove_available(chosen.extent_idx);
+            self.add_available(chosen.extent_idx);
         }
         Some(chosen)
     }
@@ -3012,41 +3016,38 @@ impl LifetimeArenaState {
 
     unsafe fn allocate_from_extent(
         &mut self,
-        idx: usize,
+        available: AvailableRegion,
         identity: ArenaIdentity,
         class: LifetimePlacementClass,
         birth_epoch: usize,
         require_epoch_match: bool,
         adaptive_record: Option<AdaptiveAllocationRecord>,
     ) -> *mut u8 {
-        debug_assert!(self.extents[idx].has_available_slot());
-        let region_idx = match self.extents[idx].matching_region_with_space(
-            identity,
-            birth_epoch,
-            require_epoch_match,
-        ) {
-            Some(region_idx) => region_idx,
-            None => {
-                let region_idx = self.extents[idx]
-                    .unassigned_region()
-                    .expect("available extent has no identity region");
-                self.extents[idx].regions[region_idx] = IdentityRegion {
-                    identity,
-                    birth_epoch,
-                    epoch_mixed: false,
-                    next_unused: 0,
-                    live: 0,
-                    free_head: NONE,
-                    assigned: true,
-                };
-                self.identity_region_assignments =
-                    self.identity_region_assignments.saturating_add(1);
-                self.current_identity_regions = self.current_identity_regions.saturating_add(1);
-                self.peak_identity_regions =
-                    core::cmp::max(self.peak_identity_regions, self.current_identity_regions);
-                region_idx
-            }
-        };
+        let idx = available.extent_idx;
+        let region_idx = available.region_idx;
+        let region = self.extents[idx].regions[region_idx];
+        if region.assigned
+            && (region.identity != identity
+                || (require_epoch_match && region.birth_epoch != birth_epoch)
+                || !region.has_available_slot(self.extents[idx].region_capacity))
+        {
+            panic!("lifetime arena selected an incompatible identity region");
+        }
+        if !region.assigned {
+            self.extents[idx].regions[region_idx] = IdentityRegion {
+                identity,
+                birth_epoch,
+                epoch_mixed: false,
+                next_unused: 0,
+                live: 0,
+                free_head: NONE,
+                assigned: true,
+            };
+            self.identity_region_assignments = self.identity_region_assignments.saturating_add(1);
+            self.current_identity_regions = self.current_identity_regions.saturating_add(1);
+            self.peak_identity_regions =
+                core::cmp::max(self.peak_identity_regions, self.current_identity_regions);
+        }
         if self.extents[idx].regions[region_idx].birth_epoch != birth_epoch {
             self.extents[idx].regions[region_idx].epoch_mixed = true;
         }
@@ -3068,7 +3069,10 @@ impl LifetimeArenaState {
         self.extents[idx].live += 1;
         self.extents[idx].regions[region_idx].live += 1;
         let slot_size = self.extents[idx].slot_size;
-        if !self.extents[idx].has_available_slot() {
+        if !self.extents[idx].regions[region_idx]
+            .has_available_slot(self.extents[idx].region_capacity)
+            && !self.extents[idx].has_available_slot()
+        {
             self.remove_available(idx);
         }
         self.routed_allocations = self.routed_allocations.saturating_add(1);
@@ -3921,14 +3925,14 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
     let identity = ArenaIdentity::from_metadata(metadata);
     let birth_epoch = state.current_epoch;
     let epoch_cohort = policy.separates_epoch_extents();
-    let idx = if let Some(idx) = state.find_available(
+    let available = if let Some(available) = state.find_available(
         geometry.bucket,
         requested_backing,
         identity,
         birth_epoch,
         epoch_cohort,
     ) {
-        idx
+        available
     } else {
         match state.create_extent(
             geometry,
@@ -3938,7 +3942,10 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
             birth_epoch,
             epoch_cohort,
         ) {
-            Some(idx) => idx,
+            Some(idx) => AvailableRegion {
+                extent_idx: idx,
+                region_idx: 0,
+            },
             None => {
                 state.allocation_fallbacks = state.allocation_fallbacks.saturating_add(1);
                 return None;
@@ -3971,8 +3978,9 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
             static_hint: static_class,
         }
     });
+    let allocated_extent_idx = available.extent_idx;
     let ptr = state.allocate_from_extent(
-        idx,
+        available,
         identity,
         class,
         birth_epoch,
@@ -3990,7 +3998,7 @@ pub(crate) unsafe fn try_allocate(layout: Layout, metadata: AllocationMetadata) 
         if policy == LifetimeHugepagePolicy::CompilerInferredHugepage
             && backend == LifetimePageBackend::TransparentHugepage
         {
-            state.promote_dense_compiler_inferred_extent(idx);
+            state.promote_dense_compiler_inferred_extent(allocated_extent_idx);
         }
     }
     Some(ptr)

@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION 3u
+#define UNIALLOC_SEMANTIC_STATS_SNAPSHOT_ABI_VERSION 4u
 #define UNIALLOC_SEMANTIC_TYPE_STATS_SNAPSHOT_ABI_VERSION 2u
 #define UNIALLOC_SEMANTIC_FALLBACK_ATTRIBUTION_SNAPSHOT_ABI_VERSION 1u
 #define UNIALLOC_SEMANTIC_METADATA_VALIDATION_SNAPSHOT_ABI_VERSION 1u
@@ -26,6 +26,14 @@ typedef struct UniallocSemanticStatsSnapshot {
     size_t typed_cache_hits;
     size_t typed_cache_inserts;
     size_t typed_cache_bypasses;
+    size_t typed_cache_wrong_identity_denials;
+    uint64_t last_wrong_identity_requested_type_id;
+    uint64_t last_wrong_identity_retained_type_id;
+    uint64_t last_wrong_identity_requested_module_id;
+    uint64_t last_wrong_identity_retained_module_id;
+    uint64_t last_wrong_identity_requested_callsite;
+    size_t last_wrong_identity_size;
+    size_t last_wrong_identity_align;
     size_t delayed_free_enqueues;
     size_t delayed_free_flushes;
     size_t metadata_pac_auth_signs;

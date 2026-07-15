@@ -84,7 +84,9 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
 
     def test_binary_reuse_requires_exact_build_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            output_binary = pathlib.Path(tmp) / "binaries" / "fd" / "typeiso_perf" / "fd"
+            output_binary = (
+                pathlib.Path(tmp) / "binaries" / "fd" / "typeiso_perf" / "fd"
+            )
             output_binary.parent.mkdir(parents=True)
             output_binary.write_bytes(b"recorded binary")
             binary_sha256 = matrix.sha256_file(output_binary)
@@ -217,9 +219,7 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
             "EXISTING": "kept",
         }
         enabled = matrix.allocator_runtime_environment(inherited, "mimalloc")
-        disabled = matrix.allocator_runtime_environment(
-            inherited, "mimalloc_no_thp"
-        )
+        disabled = matrix.allocator_runtime_environment(inherited, "mimalloc_no_thp")
         common = {
             "MIMALLOC_ALLOW_LARGE_OS_PAGES": "0",
             "MIMALLOC_RESERVE_HUGE_OS_PAGES": "0",
@@ -283,6 +283,7 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
             "unialloc_pthread_dtor": ("pthread_dtor",),
             "unialloc_hugepage": ("hugepage",),
             "unialloc_separate_sc": ("separate_sc_backend",),
+            "unialloc_reclaim_checks": ("reclaim_checks",),
             "unialloc_metadata_segregation": ("metadata_segregation",),
             "unialloc_type_isolation": ("type_isolation",),
             "unialloc_pac": ("pac",),
@@ -295,9 +296,7 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
                 for feature in selected_features:
                     self.assertIn(f'"{feature}"', dependency)
                 evidence = matrix.unialloc_build_evidence(variant)
-                self.assertEqual(
-                    evidence["unialloc_features"], list(selected_features)
-                )
+                self.assertEqual(evidence["unialloc_features"], list(selected_features))
                 self.assertFalse(evidence["default_features_enabled"])
                 self.assertTrue(matrix.uses_unialloc(variant))
                 self.assertIn("unialloc::UniAlloc", matrix.allocator_source(variant))
@@ -310,10 +309,14 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
         for variant in opt_in:
             self.assertIn(variant, matrix.VARIANTS)
             self.assertNotIn(variant, matrix.DEFAULT_VARIANTS)
-        parsed = matrix.parse_args(
-            ["--variants", ",".join(opt_in), "--apps", "oxipng"]
-        )
+        parsed = matrix.parse_args(["--variants", ",".join(opt_in), "--apps", "oxipng"])
         self.assertEqual(parsed.variants, opt_in)
+
+    def test_fd_is_an_explicit_diagnostic_app(self) -> None:
+        self.assertIn("fd", matrix.APP_SPECS)
+        self.assertNotIn("fd", matrix.DEFAULT_APPS)
+        self.assertEqual(matrix.DEFAULT_APPS, matrix.parse_args([]).apps)
+        self.assertEqual(("fd",), matrix.parse_args(["--apps", "fd"]).apps)
 
     def test_system_and_tcmalloc_are_explicit_realworld_variants(self) -> None:
         self.assertIn("system", matrix.VARIANTS)
@@ -347,7 +350,10 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
         self.assertEqual(aliased["allocator_route"], "system-api-ld-preload")
 
         prefix = matrix.allocator_runtime_prefix("tcmalloc", runtime)
-        self.assertEqual(prefix[:7], ["env", "-u", "HEAPPROFILE", "-u", "CPUPROFILE", "-u", "MALLOCSTATS"])
+        self.assertEqual(
+            prefix[:7],
+            ["env", "-u", "HEAPPROFILE", "-u", "CPUPROFILE", "-u", "MALLOCSTATS"],
+        )
         self.assertEqual(
             prefix[-1], "LD_PRELOAD=/tmp/libunialloc_google_tcmalloc.so"
         )
@@ -489,7 +495,12 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
         )
         matrix.validate_force_load_lock_targets(
             fd,
-            ROOT / "evaluation" / "external" / "_checkouts" / fd.checkout / "Cargo.lock",
+            ROOT
+            / "evaluation"
+            / "external"
+            / "_checkouts"
+            / fd.checkout
+            / "Cargo.lock",
         )
 
     def test_force_load_features_match_each_typeiso_variant(self) -> None:
@@ -508,7 +519,9 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
         with self.assertRaises(matrix.MatrixError):
             matrix.force_load_features_for_variant("unialloc")
 
-    def test_force_load_wrapper_only_adds_extern_to_selected_runtime_crates(self) -> None:
+    def test_force_load_wrapper_only_adds_extern_to_selected_runtime_crates(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             wrapper = matrix.ensure_force_load_wrapper(root / "force-wrapper")
@@ -664,9 +677,7 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
         )
         self.assertEqual(env["RUSTC_BOOTSTRAP"], "1")
         self.assertIn("-Ctarget-cpu=native", env["RUSTFLAGS"])
-        self.assertIn(
-            "-Zcrate-attr=feature(custom_inner_attributes)", env["RUSTFLAGS"]
-        )
+        self.assertIn("-Zcrate-attr=feature(custom_inner_attributes)", env["RUSTFLAGS"])
         self.assertEqual(env["EXISTING"], "kept")
         self.assertEqual(
             record["rustflags_added"],
@@ -686,17 +697,21 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
             (member / "src").mkdir(parents=True)
             member_manifest = member / "Cargo.toml"
             member_manifest.write_text(
-                '[package]\nname = "demo-lib"\nversion = "1.0.0"\n\n'
-                '[dependencies]\n',
+                '[package]\nname = "demo-lib"\nversion = "1.0.0"\n\n[dependencies]\n',
                 encoding="utf-8",
             )
             lib_rs = member / "src" / "lib.rs"
-            lib_rs.write_text("#![allow(dead_code)]\n\npub fn answer() -> u8 { 42 }\n", encoding="utf-8")
+            lib_rs.write_text(
+                "#![allow(dead_code)]\n\npub fn answer() -> u8 { 42 }\n",
+                encoding="utf-8",
+            )
 
             patched = matrix.inject_unialloc_workspace_crates(
                 checkout,
                 target_crates=("demo_app", "demo_lib"),
-                dependency=matrix.cargo_path_dependency(ROOT / "unialloc", ("type_isolation",)),
+                dependency=matrix.cargo_path_dependency(
+                    ROOT / "unialloc", ("type_isolation",)
+                ),
             )
 
             self.assertEqual(
@@ -732,14 +747,155 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
             {"typed_allocations": 7, "total_allocations": 9},
         )
 
+    def test_type_stats_parser_collects_complete_rows(self) -> None:
+        stderr = (
+            "diagnostic\n"
+            'UNIALLOC_REALWORLD_TYPE_STATS={"type_id": 11, "cache_bypasses": 4}\n'
+            "UNIALLOC_REALWORLD_TYPE_STATS={invalid}\n"
+            'UNIALLOC_REALWORLD_TYPE_STATS={"type_id": 22, "cache_hits": 7}\n'
+        )
+        self.assertEqual(
+            matrix.parse_type_stats_json(stderr),
+            [
+                {"type_id": 11, "cache_bypasses": 4},
+                {"type_id": 22, "cache_hits": 7},
+            ],
+        )
+
+    def test_depot_stats_parser_uses_last_complete_record(self) -> None:
+        stderr = (
+            "diagnostic\n"
+            'UNIALLOC_REALWORLD_DEPOT_STATS={"cache_admission_depot_hits_events": 3}\n'
+            "UNIALLOC_REALWORLD_DEPOT_STATS={invalid}\n"
+            'UNIALLOC_REALWORLD_DEPOT_STATS={"cache_admission_depot_hits_events": 9}\n'
+        )
+        self.assertEqual(
+            matrix.parse_depot_stats_json(stderr),
+            {"cache_admission_depot_hits_events": 9},
+        )
+
+    def test_depot_stats_validator_requires_complete_nonnegative_counters(self) -> None:
+        for metric in ("events", "rounded_bytes"):
+            self.assertIn(
+                f"cache_admission_depot_from_aggregate_entry_budget_{metric}",
+                matrix.DEPOT_STATS_REQUIRED_FIELDS,
+            )
+        complete = {field: 0 for field in matrix.DEPOT_STATS_REQUIRED_FIELDS}
+        matrix.validate_depot_stats(complete, "demo/typeiso_coverage")
+
+        with self.assertRaisesRegex(matrix.MatrixError, "incomplete depot stats"):
+            matrix.validate_depot_stats(
+                {"cache_admission_depot_hits_events": 9},
+                "demo/typeiso_coverage",
+            )
+
+        invalid = dict(complete)
+        invalid["cache_admission_depot_hits_events"] = -1
+        with self.assertRaisesRegex(matrix.MatrixError, "invalid depot stats"):
+            matrix.validate_depot_stats(invalid, "demo/typeiso_coverage")
+
     def test_performance_and_coverage_instrumentation_are_separate(self) -> None:
         perf_source = matrix.allocator_source("typeiso_perf")
         plain_source = matrix.allocator_source("typed_plain")
         coverage_source = matrix.allocator_source("typeiso_coverage")
         self.assertNotIn(matrix.STATS_PREFIX, perf_source)
         self.assertNotIn(matrix.STATS_PREFIX, plain_source)
+        self.assertNotIn(matrix.TYPE_STATS_PREFIX, perf_source)
+        self.assertNotIn(matrix.TYPE_STATS_PREFIX, plain_source)
+        self.assertNotIn(matrix.DEPOT_STATS_PREFIX, perf_source)
+        self.assertNotIn(matrix.DEPOT_STATS_PREFIX, plain_source)
         self.assertIn(matrix.STATS_PREFIX, coverage_source)
+        self.assertIn(matrix.TYPE_STATS_PREFIX, coverage_source)
+        self.assertIn(matrix.DEPOT_STATS_PREFIX, coverage_source)
         self.assertIn("semantic_stats_recording_enable", coverage_source)
+        self.assertIn("semantic_type_stats_snapshot", coverage_source)
+        self.assertIn(
+            "metadata_segregation_side_cache_snapshot", coverage_source
+        )
+        self.assertIn("type_cache_admission_stats_snapshot", coverage_source)
+        for field, access in (
+            ("side_cache_entries", "side_cache.occupied_entries"),
+            ("side_cache_retained_bytes", "side_cache.retained_bytes"),
+            (
+                "metadata_segregation_side_cache_entries",
+                "metadata_side_cache.occupied_entries",
+            ),
+            (
+                "metadata_segregation_side_cache_retained_bytes",
+                "metadata_side_cache.retained_bytes",
+            ),
+            (
+                "metadata_segregation_side_cache_corrupt_buckets",
+                "metadata_side_cache.corrupt_buckets",
+            ),
+        ):
+            self.assertIn(f'\\"{field}\\"', coverage_source)
+            self.assertIn(access, coverage_source)
+        for outcome in (
+            "admitted",
+            "rejected_too_small",
+            "rejected_too_large",
+            "rejected_metadata_ineligible",
+            "rejected_probe_window_full",
+            "rejected_slot_depth",
+            "rejected_slot_byte_budget",
+            "rejected_aggregate_byte_budget",
+            "rejected_aggregate_entry_budget",
+            "rejected_structural_or_alignment",
+            "rejected_segregated_capacity",
+            "rejected_registry_pressure",
+            "ownership_registry_full_failstop",
+            "tiny_side_inserts",
+            "tiny_side_hits",
+        ):
+            for metric in ("events", "rounded_bytes"):
+                field = f"cache_admission_{outcome}_{metric}"
+                self.assertIn(f'\\"{field}\\"', coverage_source)
+                self.assertIn(f"admission.{outcome}.{metric}", coverage_source)
+        self.assertIn('\\"cache_admission_terminal_events\\"', coverage_source)
+        self.assertIn("admission.terminal_events()", coverage_source)
+        for outcome in (
+            "depot_attempts",
+            "depot_inserts",
+            "depot_rescued_overflow",
+            "depot_hits",
+            "depot_hits_after_recorded_l1_bypass",
+            "depot_evictions",
+            "depot_rejected_capacity",
+            "depot_rejected_policy",
+            "depot_rejected_registry_headroom",
+            "depot_from_probe_window_full",
+            "depot_from_slot_depth",
+            "depot_from_slot_byte_budget",
+            "depot_from_aggregate_byte_budget",
+            "depot_from_aggregate_entry_budget",
+            "depot_from_segregated_capacity",
+            "depot_from_local_eviction",
+        ):
+            for metric in ("events", "rounded_bytes"):
+                field = f"cache_admission_{outcome}_{metric}"
+                self.assertIn(f'\\"{field}\\"', coverage_source)
+                self.assertIn(f"admission.{outcome}.{metric}", coverage_source)
+        for field in (
+            "depot_current_entries",
+            "depot_peak_entries",
+            "depot_current_rounded_bytes",
+            "depot_peak_rounded_bytes",
+        ):
+            self.assertIn(f'\\"cache_admission_{field}\\\"', coverage_source)
+            self.assertIn(f"admission.{field}", coverage_source)
+        for field in (
+            "typed_cache_wrong_identity_denials",
+            "last_wrong_identity_requested_type_id",
+            "last_wrong_identity_retained_type_id",
+            "last_wrong_identity_requested_module_id",
+            "last_wrong_identity_retained_module_id",
+            "last_wrong_identity_requested_callsite",
+            "last_wrong_identity_size",
+            "last_wrong_identity_align",
+        ):
+            self.assertIn(f'\\"{field}\\"', coverage_source)
+            self.assertIn(f"stats.{field}", coverage_source)
 
     def test_fd_jemalloc_routes_through_original_feature(self) -> None:
         fd = matrix.APP_SPECS["fd"]
@@ -790,7 +946,9 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
         self.assertEqual(audit["semantic_rewrites_applied"], 7)
         self.assertEqual(audit["total_compiler_rewrites_applied"], 14)
         matrix.validate_typeiso_audits(audit, ("rg",))
-        matrix.validate_typeiso_coverage(audit, {"typed_allocations": 1, "total_allocations": 2})
+        matrix.validate_typeiso_coverage(
+            audit, {"typed_allocations": 1, "total_allocations": 2}
+        )
         with self.assertRaises(matrix.MatrixError):
             matrix.validate_typeiso_audits(audit, ("rg", "ignore"))
         with self.assertRaises(matrix.MatrixError):
@@ -799,8 +957,9 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
                 {"typed_allocations": 1, "total_allocations": 2},
             )
         with self.assertRaises(matrix.MatrixError):
-            matrix.validate_typeiso_coverage(audit, {"typed_allocations": 0, "total_allocations": 2})
-
+            matrix.validate_typeiso_coverage(
+                audit, {"typed_allocations": 0, "total_allocations": 2}
+            )
 
     def test_structural_audit_presence_accepts_zero_rewrite_target_audit(self) -> None:
         audit = {
@@ -871,7 +1030,9 @@ class RealWorldTypeIsolationMatrixTests(unittest.TestCase):
     def test_measurement_order_rotates_variants(self) -> None:
         variants = ("native", "jemalloc", "mimalloc")
         self.assertEqual(matrix.rotated_order(variants, 0), variants)
-        self.assertEqual(matrix.rotated_order(variants, 1), ("jemalloc", "mimalloc", "native"))
+        self.assertEqual(
+            matrix.rotated_order(variants, 1), ("jemalloc", "mimalloc", "native")
+        )
 
     def test_summary_exposes_isolation_cost_against_typed_plain(self) -> None:
         common = {

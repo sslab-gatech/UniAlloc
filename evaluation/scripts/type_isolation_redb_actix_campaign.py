@@ -2,11 +2,12 @@
 """Run exact-pin redb and Actix Web Type Isolation campaigns.
 
 The adapter fails closed on source pins, allocator activation, actual-MIR
-compiler provenance, correctness, or incomplete primary five-round pairing. Raw build,
+compiler provenance, correctness, or incomplete primary three-round pairing. Raw build,
 audit, command, stdout, stderr, and GNU time artifacts remain under the selected
 raw directory. A compiler-route miss retains the complete target as an explicit
 attribution limit rather than discarding otherwise eligible measurements.
-Current-working-tree diagnostics may select three paired rounds.
+Each campaign runs one warmup plus three paired measured rounds and reports
+median point estimates.
 """
 
 from __future__ import annotations
@@ -73,8 +74,11 @@ CORE_REQUIRED_GATES = tuple(
     gate for gate in REQUIRED_GATES if gate != "compiler_route_equivalent"
 )
 RESULT_PREFIX = "UNIALLOC_REDB_ACTIX_RESULT="
-ROUNDS = 5
-DIAGNOSTIC_ROUNDS = 3
+ROUNDS = 3
+# Artifact readers retain compatibility with completed five-round campaigns;
+# every scheduling path below accepts ROUNDS only.
+LEGACY_ROUNDS = 5
+PUBLISHABLE_ROUND_COUNTS = frozenset((ROUNDS, LEGACY_ROUNDS))
 BASELINE_FORCE_WRAPPER_SOURCE = r'''#!/usr/bin/env python3
 """Force-load a baseline UniAlloc rlib into selected Cargo rustc invocations."""
 
@@ -408,6 +412,50 @@ ACTIX_BENCHES = {
         pathlib.Path("actix-router/benches/router.rs"),
     ),
 }
+
+ACTIX_GET_BODY_BURST_SOURCE = """\
+                let burst = (0..iters).map(|_| client.send());
+                let resps = join_all(burst).await;
+
+                let elapsed = start.elapsed();
+
+                // if there are failed requests that might be an issue
+                let failed = resps.iter().filter(|r| r.is_err()).count();
+                if failed > 0 {
+                    eprintln!("failed {} requests (might be bench timeout)", failed);
+                };
+"""
+
+ACTIX_GET_BODY_BOUNDED_SOURCE = """\
+                const MAX_IN_FLIGHT_REQUESTS: u64 = 8;
+                let mut remaining = iters;
+                while remaining > 0 {
+                    let batch_size = remaining.min(MAX_IN_FLIGHT_REQUESTS);
+                    let responses =
+                        join_all((0..batch_size).map(|_| client.send())).await;
+                    for response in responses {
+                        let mut response =
+                            response.expect("get_body_async_burst request failed");
+                        assert!(
+                            response.status().is_success(),
+                            "get_body_async_burst returned {}",
+                            response.status()
+                        );
+                        let body = response
+                            .body()
+                            .await
+                            .expect("get_body_async_burst body read failed");
+                        assert_eq!(
+                            body.as_ref(),
+                            STR.as_bytes(),
+                            "response body mismatch"
+                        );
+                    }
+                    remaining -= batch_size;
+                }
+
+                let elapsed = start.elapsed();
+"""
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -1653,7 +1701,39 @@ def build_redb_variant(
     return record
 
 
-def append_actix_instrumentation(worktree: pathlib.Path) -> list[dict[str, Any]]:
+def patch_actix_get_body_benchmark(worktree: pathlib.Path) -> dict[str, Any]:
+    source = pathlib.Path("actix-web/benches/server.rs")
+    path = worktree / source
+    original = path.read_bytes()
+    text = original.decode("utf-8")
+    occurrences = text.count(ACTIX_GET_BODY_BURST_SOURCE)
+    if occurrences != 1:
+        raise CampaignError(
+            "Actix get_body_async_burst source drift: expected one unbounded "
+            f"request block, found {occurrences}"
+        )
+    path.write_text(
+        text.replace(
+            ACTIX_GET_BODY_BURST_SOURCE,
+            ACTIX_GET_BODY_BOUNDED_SOURCE,
+            1,
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "path": source.as_posix(),
+        "patch": "bounded_get_body_async_burst",
+        "max_in_flight_requests": 8,
+        "upstream_sha256": sha256_bytes(original),
+        "patched_sha256": sha256_file(path),
+    }
+
+
+def append_actix_instrumentation(
+    worktree: pathlib.Path,
+    source_patches: Sequence[dict[str, Any]] = (),
+) -> list[dict[str, Any]]:
+    patches_by_path = {str(row["path"]): row for row in source_patches}
     rows: list[dict[str, Any]] = []
     for source in sorted({value[3] for value in ACTIX_BENCHES.values()}):
         path = worktree / source
@@ -1661,16 +1741,25 @@ def append_actix_instrumentation(worktree: pathlib.Path) -> list[dict[str, Any]]
         text = original.decode("utf-8")
         if "UNIALLOC_REDB_ACTIX_ALLOCATOR_MARKER" in text:
             raise CampaignError(f"Actix instrumentation already exists: {source}")
+        patch = patches_by_path.get(source.as_posix())
+        if patch and patch.get("patched_sha256") != sha256_bytes(original):
+            raise CampaignError(f"Actix patch audit mismatch: {source}")
         path.write_text(
             text.rstrip() + "\n" + allocator_marker_source(), encoding="utf-8"
         )
-        rows.append(
-            {
+        row = (
+            dict(patch)
+            if patch
+            else {
                 "path": source.as_posix(),
                 "upstream_sha256": sha256_bytes(original),
-                "instrumented_sha256": sha256_file(path),
             }
         )
+        row["instrumented_sha256"] = sha256_file(path)
+        rows.append(row)
+    unknown_patches = set(patches_by_path).difference(row["path"] for row in rows)
+    if unknown_patches:
+        raise CampaignError(f"Actix patch audit has unknown sources: {unknown_patches}")
     return rows
 
 
@@ -1705,7 +1794,8 @@ def build_actix_variant(
 ) -> dict[str, Any]:
     worktree = raw_dir / "build-work" / spec.id / variant
     matrix.copy_checkout(checkout, worktree)
-    source_audit = append_actix_instrumentation(worktree)
+    source_patches = [patch_actix_get_body_benchmark(worktree)]
+    source_audit = append_actix_instrumentation(worktree, source_patches)
     target_dir = raw_dir / "targets" / spec.id / variant
     shutil.rmtree(target_dir, ignore_errors=True)
     temp_dir = raw_dir / "tmp" / spec.id / variant
@@ -2488,8 +2578,8 @@ def mark_diagnostic_current_worktree(
     required_cpus: str | None,
     measured_rounds: int,
 ) -> None:
-    if measured_rounds not in {DIAGNOSTIC_ROUNDS, ROUNDS}:
-        raise CampaignError("working-tree diagnostics require three or five rounds")
+    if measured_rounds != ROUNDS:
+        raise CampaignError("working-tree diagnostics require three measured rounds")
     manifest = verify_implementation_snapshot(implementation)
     if manifest.get("source_kind") != "working_tree":
         raise CampaignError("diagnostic result does not use a working-tree snapshot")
@@ -2521,7 +2611,7 @@ def primary_publication_allowed(
         not diagnostic_current_worktree
         and record.get("campaign_classification") != "diagnostic_current_worktree"
         and record.get("primary_eligible") is not False
-        and record.get("measured_rounds") == ROUNDS
+        and record.get("measured_rounds") in PUBLISHABLE_ROUND_COUNTS
         and record.get("status") in {"complete", "complete_with_attribution_limits"}
     )
 
@@ -2545,13 +2635,10 @@ def run_target(
     required_cpus: str | None = None,
     measured_rounds: int = ROUNDS,
 ) -> dict[str, Any]:
-    if diagnostic_current_worktree and measured_rounds not in {
-        DIAGNOSTIC_ROUNDS,
-        ROUNDS,
-    }:
-        raise CampaignError("working-tree diagnostics require three or five rounds")
+    if diagnostic_current_worktree and measured_rounds != ROUNDS:
+        raise CampaignError("working-tree diagnostics require three measured rounds")
     if not diagnostic_current_worktree and measured_rounds != ROUNDS:
-        raise CampaignError("primary results require exactly five measured rounds")
+        raise CampaignError("primary results require exactly three measured rounds")
     result = empty_target_result(spec, raw_dir)
     result["source"] = source_record
     result.update(
@@ -2734,7 +2821,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--rounds",
         type=int,
         default=ROUNDS,
-        help="paired rounds: five primary; three or five working-tree diagnostic",
+        help="one warmup, exactly three paired rounds, and median point estimates",
     )
     parser.add_argument(
         "--required-cpus",
@@ -2762,11 +2849,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         )
     if args.jobs < 1:
         parser.error("--jobs must be positive")
-    if args.current_working_tree:
-        if args.rounds not in {DIAGNOSTIC_ROUNDS, ROUNDS}:
-            parser.error("working-tree diagnostics require three or five rounds")
-    elif args.rounds != ROUNDS:
-        parser.error("the primary campaign requires exactly five rounds")
+    if args.rounds != ROUNDS:
+        parser.error("the campaign requires exactly three measured rounds")
     return args
 
 

@@ -346,6 +346,11 @@ fn main() {
     assert!(stats.typed_deallocations >= OBJECTS * 3, "{:?}", stats);
     assert!(stats.typed_cache_hits >= OBJECTS, "{:?}", stats);
     assert!(stats.typed_cache_inserts >= OBJECTS * 2, "{:?}", stats);
+    assert!(
+        stats.typed_cache_wrong_identity_denials >= OBJECTS,
+        "{:?}",
+        stats
+    );
     assert_eq!(stats.semantic_type_stats_dropped_events, 0, "{:?}", stats);
     // The foreign Box drop has no matching active compiler scope after drop
     // glue lowering, so recovery correctly uses the allocation-side record
@@ -386,6 +391,14 @@ fn main() {
             "\"typed_cache_hits\":{},",
             "\"typed_cache_inserts\":{},",
             "\"typed_cache_bypasses\":{},",
+            "\"typed_cache_wrong_identity_denials\":{},",
+            "\"last_wrong_identity_requested_type_id\":{},",
+            "\"last_wrong_identity_retained_type_id\":{},",
+            "\"last_wrong_identity_requested_module_id\":{},",
+            "\"last_wrong_identity_retained_module_id\":{},",
+            "\"last_wrong_identity_requested_callsite\":{},",
+            "\"last_wrong_identity_size\":{},",
+            "\"last_wrong_identity_align\":{},",
             "\"generic_drop_typed_deallocations_delta\":{},",
             "\"generic_drop_fallback_deallocations_delta\":{},",
             "\"generic_drop_typed_cache_inserts_delta\":{},",
@@ -413,6 +426,14 @@ fn main() {
         stats.typed_cache_hits,
         stats.typed_cache_inserts,
         stats.typed_cache_bypasses,
+        stats.typed_cache_wrong_identity_denials,
+        stats.last_wrong_identity_requested_type_id,
+        stats.last_wrong_identity_retained_type_id,
+        stats.last_wrong_identity_requested_module_id,
+        stats.last_wrong_identity_retained_module_id,
+        stats.last_wrong_identity_requested_callsite,
+        stats.last_wrong_identity_size,
+        stats.last_wrong_identity_align,
         evidence.generic_drop_typed_deallocations_delta,
         evidence.generic_drop_fallback_deallocations_delta,
         evidence.generic_drop_typed_cache_inserts_delta,

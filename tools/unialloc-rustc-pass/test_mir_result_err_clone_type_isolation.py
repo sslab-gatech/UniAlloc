@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove Err-side Result<u8, Vec<T>>::clone preserves typed isolation."""
+"""Prove Err-side Result<u8, Vec<T>>::clone stays audit-only and falls back."""
 
 from __future__ import annotations
 
@@ -73,6 +73,7 @@ unialloc = {{ path = {unialloc_path}, features = ["stats", "type_isolation"] }}
 ''',
         encoding="utf-8",
     )
+    shutil.copy2(ROOT / "Cargo.lock", app / "Cargo.lock")
     (app / "src/main.rs").write_text(
         r'''use std::fmt::Write as _;
 use std::mem::{align_of, size_of};
@@ -461,6 +462,29 @@ def unique_scope(rows: list[dict[str, object]], label: str) -> dict[str, object]
     return row
 
 
+def unique_audit_only_clone(
+    rows: list[dict[str, object]], label: str
+) -> dict[str, object]:
+    assert len(rows) == 1, f"{label} must have exactly one audit row, got {rows!r}"
+    row = rows[0]
+    assert row.get("lowering_kind") == "semantic_scope_unsolved_heap_object_candidate", (
+        label,
+        row,
+    )
+    assert row.get("rewrite_status") == (
+        "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
+    ), (label, row)
+    assert row.get("replacement_resolution_status") == (
+        "rustc_middle_heap_object_type_not_solved"
+    ), (label, row)
+    assert row.get("metadata_pairing_contract") == (
+        "audit_only_unresolved_heap_object_type"
+    ), (label, row)
+    assert row.get("semantic_object_type") == "<unknown-heap-object-type>", (label, row)
+    assert row.get("semantic_scope_unwind_pop_inserted") is False, (label, row)
+    return row
+
+
 def result_clone_rows(audit: dict[str, object]) -> list[dict[str, object]]:
     rows = audit.get("rewrite_candidates") or []
     return [
@@ -473,7 +497,6 @@ def result_clone_rows(audit: dict[str, object]) -> list[dict[str, object]]:
         and "Result" in str(row.get("destination_type") or "")
         and "ProducerPayload" in str(row.get("destination_type") or "")
         and "u8" in str(row.get("destination_type") or "")
-        and "Vec<ProducerPayload" in str(row.get("semantic_object_type") or "")
     ]
 
 
@@ -484,7 +507,9 @@ def validate_audit(audit: dict[str, object]) -> dict[str, object]:
     assert summary.get("body_clone_returned_to_rustc") is True
     assert summary.get("actual_semantic_scope_rewrite") is True
 
-    result_row = unique_scope(result_clone_rows(audit), "Err-side Result clone scope")
+    result_row = unique_audit_only_clone(
+        result_clone_rows(audit), "Err-side Result Clone"
+    )
     assert "src/main.rs" in str(result_row.get("source_span") or ""), result_row
 
     producer_rows = [
@@ -502,12 +527,8 @@ def validate_audit(audit: dict[str, object]) -> dict[str, object]:
         for function_name in (CONSUMER_SEED_HELPER, CONSUMER_RECOVERY_HELPER)
     ]
 
-    producer_type_ids = {
-        int(row.get("type_id") or 0) for row in (result_row, *producer_rows)
-    }
-    producer_module_ids = {
-        int(row.get("module_id") or 0) for row in (result_row, *producer_rows)
-    }
+    producer_type_ids = {int(row.get("type_id") or 0) for row in producer_rows}
+    producer_module_ids = {int(row.get("module_id") or 0) for row in producer_rows}
     consumer_type_ids = {int(row.get("type_id") or 0) for row in consumer_rows}
     consumer_module_ids = {int(row.get("module_id") or 0) for row in consumer_rows}
     assert len(producer_type_ids) == 1, producer_type_ids
@@ -524,12 +545,15 @@ def validate_audit(audit: dict[str, object]) -> dict[str, object]:
     assert result_callsite != 0, result_row
 
     return {
-        "result_clone_type_id": producer_type_id,
+        "producer_type_id": producer_type_id,
         "consumer_type_id": consumer_type_id,
         "module_id": producer_module_id,
         "result_clone_callsite": result_callsite,
         "result_clone_source_span": result_row.get("source_span"),
         "result_clone_basic_block": result_row.get("basic_block"),
+        "result_clone_rewrite_status": result_row.get("rewrite_status"),
+        "result_clone_audit_only": True,
+        "zero_result_clone_rewrites": True,
         "producer_control_scopes": len(producer_rows),
         "consumer_control_scopes": len(consumer_rows),
     }
@@ -605,8 +629,8 @@ def validate_runtime(
         )
     )
     assert len({source_pointer, producer_seed, consumer_seed}) == 3
-    assert runtime.get("producer_exact_reuse") is True
-    assert cloned_pointer == producer_seed
+    assert runtime.get("producer_exact_reuse") is False
+    assert cloned_pointer != producer_seed
     assert runtime.get("consumer_exact_reuse") is True
     assert consumer_recovery == consumer_seed
     assert runtime.get("clone_avoided_consumer_storage") is True
@@ -614,17 +638,17 @@ def validate_runtime(
 
     for field, expected in (
         ("total_allocations", 2),
-        ("typed_allocations", 2),
-        ("typed_allocated_bytes", 512),
+        ("typed_allocations", 1),
+        ("typed_allocated_bytes", 256),
         ("total_deallocations", 0),
         ("typed_deallocations", 0),
-        ("typed_cache_hits", 2),
+        ("typed_cache_hits", 1),
         ("typed_cache_inserts", 0),
         ("typed_cache_bypasses", 0),
-        ("fallback_allocations", 0),
+        ("fallback_allocations", 1),
         ("fallback_deallocations", 0),
-        ("raw_alloc_no_metadata", 0),
-        ("raw_alloc_no_metadata_bytes", 0),
+        ("raw_alloc_no_metadata", 1),
+        ("raw_alloc_no_metadata_bytes", 256),
         ("raw_dealloc_no_metadata", 0),
         ("raw_realloc_no_metadata", 0),
         ("raw_realloc_no_metadata_bytes", 0),
@@ -640,12 +664,16 @@ def validate_runtime(
         assert int(runtime.get(field) or 0) == expected, (field, runtime)
 
     module_id = int(audit_evidence["module_id"])
-    producer = aggregate_type_rows(
-        runtime,
-        type_id=int(audit_evidence["result_clone_type_id"]),
-        module_id=module_id,
-        rows_field="type_rows",
-    )
+    producer_type_id = int(audit_evidence["producer_type_id"])
+    allocation_rows = runtime.get("type_rows")
+    assert isinstance(allocation_rows, list), runtime
+    assert not [
+        row
+        for row in allocation_rows
+        if isinstance(row, dict)
+        and int(row.get("type_id") or 0) == producer_type_id
+        and int(row.get("module_id") or 0) == module_id
+    ], allocation_rows
     consumer = aggregate_type_rows(
         runtime,
         type_id=int(audit_evidence["consumer_type_id"]),
@@ -664,7 +692,6 @@ def validate_runtime(
         "observed_dealloc_size": 0,
         "observed_dealloc_align": 0,
     }
-    assert producer == expected_row, producer
     assert consumer == expected_row, consumer
 
     for field, expected in (
@@ -672,15 +699,15 @@ def validate_runtime(
         ("cleanup_typed_allocations", 0),
         ("cleanup_typed_allocated_bytes", 0),
         ("cleanup_total_deallocations", 3),
-        ("cleanup_typed_deallocations", 3),
+        ("cleanup_typed_deallocations", 2),
         ("cleanup_typed_cache_hits", 0),
-        ("cleanup_typed_cache_inserts", 3),
+        ("cleanup_typed_cache_inserts", 2),
         ("cleanup_typed_cache_bypasses", 0),
         ("cleanup_fallback_allocations", 0),
-        ("cleanup_fallback_deallocations", 0),
+        ("cleanup_fallback_deallocations", 1),
         ("cleanup_raw_alloc_no_metadata", 0),
         ("cleanup_raw_alloc_no_metadata_bytes", 0),
-        ("cleanup_raw_dealloc_no_metadata", 0),
+        ("cleanup_raw_dealloc_no_metadata", 1),
         ("cleanup_raw_realloc_no_metadata", 0),
         ("cleanup_raw_realloc_no_metadata_bytes", 0),
         ("cleanup_raw_realloc_moved_dealloc_no_metadata", 0),
@@ -695,7 +722,7 @@ def validate_runtime(
 
     cleanup_producer = aggregate_type_rows(
         runtime,
-        type_id=int(audit_evidence["result_clone_type_id"]),
+        type_id=producer_type_id,
         module_id=module_id,
         rows_field="cleanup_type_rows",
     )
@@ -708,9 +735,9 @@ def validate_runtime(
     assert cleanup_producer == {
         "allocations": 0,
         "allocated_bytes": 0,
-        "deallocations": 2,
+        "deallocations": 1,
         "cache_hits": 0,
-        "cache_inserts": 2,
+        "cache_inserts": 1,
         "cache_bypasses": 0,
         "observed_alloc_size": 0,
         "observed_alloc_align": 0,
@@ -732,15 +759,17 @@ def validate_runtime(
     return {
         "result_variant": "Err",
         "source_and_clone_lengths": [4, 4],
-        "producer_runtime": producer,
+        "producer_allocation_rows": 0,
         "consumer_runtime": consumer,
         "cleanup_producer_runtime": cleanup_producer,
         "cleanup_consumer_runtime": cleanup_consumer,
         "normal_drop_cleanup": {
-            "typed_deallocations": 3,
-            "typed_cache_inserts": 3,
+            "typed_deallocations": 2,
+            "typed_cache_inserts": 2,
+            "fallback_deallocations": 1,
         },
-        "producer_exact_reuse": True,
+        "result_clone_used_fallback": True,
+        "producer_typed_entry_preserved": True,
         "consumer_same_layout_non_reuse": True,
         "fallback_raw_mismatch_corrupt_dropped": 0,
     }
@@ -769,31 +798,32 @@ def expect_rejected(
 def validator_negative_controls(
     audit: dict[str, object], runtime: dict[str, object]
 ) -> dict[str, object]:
-    scope_not_applied = copy.deepcopy(audit)
-    mutated_rows = result_clone_rows(scope_not_applied)
+    broad_clone_rewritten = copy.deepcopy(audit)
+    mutated_rows = result_clone_rows(broad_clone_rewritten)
     assert len(mutated_rows) == 1, mutated_rows
     mutated_rows[0]["rewrite_status"] = "semantic_scope_enter_exit_rewrite_planned"
+    mutated_rows[0]["lowering_kind"] = "semantic_scope_enter_exit_rewrite"
 
     wrong_type_reuse = copy.deepcopy(runtime)
     wrong_type_reuse["cloned_pointer"] = wrong_type_reuse["consumer_seed_pointer"]
     wrong_type_reuse["producer_exact_reuse"] = False
     wrong_type_reuse["clone_avoided_consumer_storage"] = False
 
-    fallback_event = copy.deepcopy(runtime)
-    fallback_event["fallback_allocations"] = 1
+    missing_fallback = copy.deepcopy(runtime)
+    missing_fallback["fallback_allocations"] = 0
 
     missing_cleanup = copy.deepcopy(runtime)
-    missing_cleanup["cleanup_typed_deallocations"] = 2
+    missing_cleanup["cleanup_typed_deallocations"] = 1
 
     return {
-        "scope_not_actually_applied_rejected": expect_rejected(
-            scope_not_applied, runtime, "non-applied Result clone scope"
+        "broad_clone_rewrite_rejected": expect_rejected(
+            broad_clone_rewritten, runtime, "applied Result Clone scope"
         ),
         "same_layout_wrong_type_reuse_rejected": expect_rejected(
             audit, wrong_type_reuse, "same-layout Consumer reuse"
         ),
-        "fallback_event_rejected": expect_rejected(
-            audit, fallback_event, "fallback allocation"
+        "missing_fallback_event_rejected": expect_rejected(
+            audit, missing_fallback, "missing fallback allocation"
         ),
         "missing_normal_drop_cleanup_rejected": expect_rejected(
             audit, missing_cleanup, "missing typed deallocation"
@@ -927,10 +957,11 @@ def main() -> int:
                 "validator_negative_controls": negative_controls,
                 "evidence": evidence,
                 "boundaries": [
-                    "Functional actual-RUSTC_WRAPPER regression for one ordinary Err(Result<u8, Vec<ProducerPayload>>) Clone path; no universal Result/Clone coverage claim.",
+                    "Functional actual-RUSTC_WRAPPER regression for one ordinary Err(Result<u8, Vec<ProducerPayload>>) audit-only Clone path; no universal Result/Clone coverage claim.",
                     "The generated Rust application uses ordinary Result::clone and Vec APIs and no manual metadata allocation ABI.",
-                    "Applied compiler audit identity plus exact Producer cache reuse and same-layout Consumer non-reuse establish the bounded allocator-visible type-isolation oracle.",
-                    "All fallback, raw, mismatch, corrupt-slot, and dropped type-stat counters are zero; no benchmark or performance claim is made.",
+                    "The broad Result Clone remains an exact unresolved audit-only row with zero applied scope rewrites.",
+                    "Runtime counters prove one raw fallback allocation/deallocation while protected Producer and same-layout Consumer typed-cache entries remain unavailable to the fallback path.",
+                    "Identity mismatches, corrupt slots, and dropped type-stat counters remain zero; no benchmark or performance claim is made.",
                 ],
             },
             sort_keys=True,

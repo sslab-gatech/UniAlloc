@@ -105,7 +105,7 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
 
     def test_compiler_route_gate_uses_paired_median_and_declared_bounds(self) -> None:
         rows = []
-        for round_number, ratio in enumerate((0.86, 0.90, 1.00, 1.10, 1.14), 1):
+        for round_number, ratio in enumerate((0.86, 1.00, 1.14), 1):
             rows.extend(
                 (
                     {
@@ -165,7 +165,7 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
             ]
         )
         self.assertEqual(IMPLEMENTATION_REVISION, args.implementation_revision)
-        self.assertEqual(5, args.rounds)
+        self.assertEqual(3, args.rounds)
 
     def test_primary_implementation_requires_preregistered_f5_pin(self) -> None:
         self.runner.validate_primary_implementation(
@@ -185,7 +185,7 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
         legacy = self.runner.parse_args(["--targets", "collections"])
         self.assertTrue(legacy.diagnostic_current_worktree)
         self.assertIsNone(legacy.implementation_revision)
-        self.assertEqual(5, legacy.rounds)
+        self.assertEqual(3, legacy.rounds)
 
         with (
             mock.patch.object(
@@ -303,15 +303,26 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
                     "--current-working-tree",
                 ]
             )
+        primary = self.runner.parse_args(
+            [
+                "--implementation-revision",
+                IMPLEMENTATION_REVISION,
+                "--rounds",
+                "3",
+            ]
+        )
+        self.assertEqual(3, primary.rounds)
         with self.assertRaises(SystemExit):
             self.runner.parse_args(
                 [
                     "--implementation-revision",
                     IMPLEMENTATION_REVISION,
                     "--rounds",
-                    "3",
+                    "5",
                 ]
             )
+        with self.assertRaises(SystemExit):
+            self.runner.parse_args(["--current-working-tree", "--rounds", "5"])
         with self.assertRaises(SystemExit):
             self.runner.parse_args(
                 ["--current-working-tree", "--rounds", "4"]
@@ -387,7 +398,7 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
                     "performance": 1.0,
                     "peak_rss_mib": 2.0,
                 }
-                for round_number in range(1, 6)
+                for round_number in range(1, 4)
                 for variant in self.runner.VARIANTS
             ]
             for harness in spec.harnesses
@@ -438,7 +449,7 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
                     "performance": 2.0 if variant == "typed_plain" else 1.0,
                     "peak_rss_mib": 2.0,
                 }
-                for round_number in range(1, 6)
+                for round_number in range(1, 4)
                 for variant in self.runner.VARIANTS
             ]
             for harness in spec.harnesses
@@ -482,48 +493,67 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
 
     def test_campaign_publication_validates_every_target_before_writing(self) -> None:
         def record(
-            target_id: str, *, eligible: bool, evidence_root: Path
+            target_id: str,
+            *,
+            eligible: bool,
+            evidence_root: Path,
+            measured_rounds: int = 3,
         ) -> dict[str, object]:
-            path = evidence_root / target_id / "example" / "warmup.json"
-            path.parent.mkdir(parents=True, exist_ok=True)
-            entries: dict[str, list[dict[str, str]]] = {}
-            for variant in self.runner.VARIANTS:
-                value = path.with_name(f"{variant}.json")
-                value.write_text(
-                    json.dumps(
+            spec = self.runner.TARGETS[target_id]
+            harnesses: list[dict[str, object]] = []
+            for harness in spec.harnesses:
+                path = evidence_root / target_id / harness.id / "warmup.json"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                entries: dict[str, list[dict[str, str]]] = {}
+                for variant in self.runner.VARIANTS:
+                    value = path.with_name(f"{variant}.json")
+                    value.write_text(
+                        json.dumps(
+                            {
+                                "target_id": target_id,
+                                "harness_id": harness.id,
+                                "variant": variant,
+                                "phase": "warmup",
+                                "round": 0,
+                                "performance": 1.0,
+                                "peak_rss_mib": 1.0,
+                            }
+                        ),
+                        encoding="utf-8",
+                    )
+                    entries[variant] = [
                         {
-                            "target_id": target_id,
-                            "harness_id": "example",
-                            "variant": variant,
-                            "phase": "warmup",
-                            "round": 0,
-                            "performance": 1.0,
-                            "peak_rss_mib": 1.0,
+                            "record_path": str(value.resolve()),
+                            "sha256": hashlib.sha256(value.read_bytes()).hexdigest(),
                         }
-                    ),
-                    encoding="utf-8",
-                )
-                entries[variant] = [
+                    ]
+                harnesses.append(
                     {
-                        "record_path": str(value.resolve()),
-                        "sha256": hashlib.sha256(value.read_bytes()).hexdigest(),
-                    }
-                ]
-            return {
-                "schema_version": 1,
-                "target_id": target_id,
-                "measured_rounds": 5,
-                "implementation_revision": IMPLEMENTATION_REVISION,
-                "implementation_sha256": IMPLEMENTATION_SHA256,
-                "harnesses": [
-                    {
-                        "id": "example",
+                        "id": harness.id,
                         "gates": {
                             gate: eligible for gate in self.runner.CORE_REQUIRED_GATES
                         },
                         "warmup_evidence": entries,
+                        "measurements": [
+                            {
+                                "round": round_number,
+                                "variant": variant,
+                                "performance": 1.0,
+                                "peak_rss_mib": 1.0,
+                            }
+                            for round_number in range(1, measured_rounds + 1)
+                            for variant in self.runner.VARIANTS
+                        ],
                     }
-                ],
+                )
+            return {
+                "schema_version": 1,
+                "target_id": target_id,
+                "status": "complete",
+                "measured_rounds": measured_rounds,
+                "implementation_revision": IMPLEMENTATION_REVISION,
+                "implementation_sha256": IMPLEMENTATION_SHA256,
+                "harnesses": harnesses,
             }
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -575,12 +605,36 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
                     (first, second), destination=destination
                 )
 
-            three_round = record(
+            for invalid_status in (None, "preflight_passed"):
+                incomplete = record(
+                    "collections", eligible=True, evidence_root=root / "warmups"
+                )
+                if invalid_status is None:
+                    incomplete.pop("status")
+                else:
+                    incomplete["status"] = invalid_status
+                first.write_text(json.dumps(incomplete), encoding="utf-8")
+                with self.assertRaisesRegex(self.runner.CampaignError, "complete status"):
+                    self.runner.publish_target_results(
+                        (first, second), destination=destination
+                    )
+
+            incomplete = record(
                 "collections", eligible=True, evidence_root=root / "warmups"
             )
-            three_round["measured_rounds"] = 3
-            first.write_text(json.dumps(three_round), encoding="utf-8")
-            with self.assertRaisesRegex(self.runner.CampaignError, "five measured"):
+            incomplete["harnesses"][0]["measurements"].pop()
+            first.write_text(json.dumps(incomplete), encoding="utf-8")
+            with self.assertRaisesRegex(self.runner.CampaignError, "complete paired"):
+                self.runner.publish_target_results(
+                    (first, second), destination=destination
+                )
+
+            unsupported = record(
+                "collections", eligible=True, evidence_root=root / "warmups"
+            )
+            unsupported["measured_rounds"] = 4
+            first.write_text(json.dumps(unsupported), encoding="utf-8")
+            with self.assertRaisesRegex(self.runner.CampaignError, "three measured"):
                 self.runner.publish_target_results(
                     (first, second), destination=destination
                 )
@@ -631,7 +685,12 @@ class CollectionsOxipngPrimaryCampaignTests(unittest.TestCase):
 
             second.write_text(
                 json.dumps(
-                    record("oxipng", eligible=True, evidence_root=root / "warmups")
+                    record(
+                        "oxipng",
+                        eligible=True,
+                        evidence_root=root / "warmups",
+                        measured_rounds=self.runner.LEGACY_PRIMARY_ROUNDS,
+                    )
                 ),
                 encoding="utf-8",
             )

@@ -40,7 +40,7 @@ fn emit_events(benchmark: &str, workload_category: &str) {
     );
 }
 
-fn scoped_iter<T, F>(
+fn scoped_iter<T: 'static, F>(
     b: &mut Bencher,
     benchmark: &str,
     workload_category: &str,

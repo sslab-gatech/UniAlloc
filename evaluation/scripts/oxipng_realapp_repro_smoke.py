@@ -432,7 +432,7 @@ fn unialloc_type_rows_json(
     semantic_stats_recording_disable();
     let type_rows_json = unialloc_type_rows_json(&rows, row_count);
     eprintln!(
-        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"raw_alloc_no_metadata\":{},\"raw_dealloc_no_metadata\":{},\"raw_realloc_no_metadata\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"coverage_basis_points\":{},\"recovery_identity_matches\":{},\"recovery_identity_mismatches\":{},\"last_mismatch_requested_type_id\":{},\"last_mismatch_recorded_type_id\":{},\"last_mismatch_requested_module_id\":{},\"last_mismatch_recorded_module_id\":{},\"last_mismatch_requested_callsite\":{},\"last_mismatch_recorded_callsite\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{},\"semantic_ownership_transfer\":{{\"source\":\"instrumented-oxipng-workload-window\",\"before\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"after\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"delta\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"accounting_complete\":{},\"dynamic_execution_observed\":{},\"execution_status\":\"{}\"}},\"address_oracle\":{{\"source\":\"injected-oxipng-type-isolation-address-oracle\",\"producer_first_address\":{},\"wrong_type_address\":{},\"producer_recovery_address\":{},\"element_size\":{},\"element_align\":{},\"capacity\":{},\"allocation_size\":{},\"wrong_type_not_reused\":{},\"same_type_reused\":{},\"recovery_identity_mismatches_before\":{},\"recovery_identity_mismatches_after\":{},\"corrupt_slots_after\":{}}},\"type_rows\":{}}}",
+        "UNIALLOC_STATS_JSON={{\"source\":\"instrumented-oxipng\",\"total_allocations\":{},\"typed_allocations\":{},\"fallback_allocations\":{},\"typed_deallocations\":{},\"fallback_deallocations\":{},\"raw_alloc_no_metadata\":{},\"raw_dealloc_no_metadata\":{},\"raw_realloc_no_metadata\":{},\"typed_cache_hits\":{},\"typed_cache_inserts\":{},\"typed_cache_bypasses\":{},\"typed_cache_wrong_identity_denials\":{},\"last_wrong_identity_requested_type_id\":{},\"last_wrong_identity_retained_type_id\":{},\"last_wrong_identity_requested_module_id\":{},\"last_wrong_identity_retained_module_id\":{},\"last_wrong_identity_requested_callsite\":{},\"last_wrong_identity_size\":{},\"last_wrong_identity_align\":{},\"coverage_basis_points\":{},\"recovery_identity_matches\":{},\"recovery_identity_mismatches\":{},\"last_mismatch_requested_type_id\":{},\"last_mismatch_recorded_type_id\":{},\"last_mismatch_requested_module_id\":{},\"last_mismatch_recorded_module_id\":{},\"last_mismatch_requested_callsite\":{},\"last_mismatch_recorded_callsite\":{},\"type_stats_rows\":{},\"type_stats_dropped_events\":{},\"type_isolation_inline_occupied\":{},\"type_isolation_occupied_slots\":{},\"type_isolation_occupied_entries\":{},\"type_isolation_corrupt_slots\":{},\"semantic_ownership_transfer\":{{\"source\":\"instrumented-oxipng-workload-window\",\"before\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"after\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"delta\":{{\"attempted\":{},\"applied\":{},\"rejected\":{}}},\"accounting_complete\":{},\"dynamic_execution_observed\":{},\"execution_status\":\"{}\"}},\"address_oracle\":{{\"source\":\"injected-oxipng-type-isolation-address-oracle\",\"producer_first_address\":{},\"wrong_type_address\":{},\"producer_recovery_address\":{},\"element_size\":{},\"element_align\":{},\"capacity\":{},\"allocation_size\":{},\"wrong_type_not_reused\":{},\"same_type_reused\":{},\"recovery_identity_mismatches_before\":{},\"recovery_identity_mismatches_after\":{},\"corrupt_slots_after\":{}}},\"type_rows\":{}}}",
         stats.total_allocations,
         stats.typed_allocations,
         stats.fallback_allocations,
@@ -444,6 +444,14 @@ fn unialloc_type_rows_json(
         stats.typed_cache_hits,
         stats.typed_cache_inserts,
         stats.typed_cache_bypasses,
+        stats.typed_cache_wrong_identity_denials,
+        stats.last_wrong_identity_requested_type_id,
+        stats.last_wrong_identity_retained_type_id,
+        stats.last_wrong_identity_requested_module_id,
+        stats.last_wrong_identity_retained_module_id,
+        stats.last_wrong_identity_requested_callsite,
+        stats.last_wrong_identity_size,
+        stats.last_wrong_identity_align,
         stats.coverage_basis_points,
         metadata_validation.recovery_identity_matches,
         metadata_validation.recovery_identity_mismatches,

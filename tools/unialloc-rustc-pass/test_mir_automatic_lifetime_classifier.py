@@ -23,7 +23,6 @@ ESCAPE_UNKNOWN_BASIS = "automatic_nonlinear_control_flow_unknown"
 ALIAS_UNKNOWN_BASIS = "automatic_alias_or_escape_unknown"
 CALL_UNKNOWN_BASIS = "automatic_intervening_call_may_advance_epoch_unknown"
 CLEANUP_UNKNOWN_BASIS = "automatic_cleanup_before_boundary_unknown"
-UNSUPPORTED_UNKNOWN_BASIS = "automatic_unsupported_site_unknown"
 EFFECTFUL_DROP_UNKNOWN_BASIS = "automatic_effectful_drop_glue_unknown"
 
 
@@ -377,6 +376,23 @@ fn main() {
             and row.get("lowering_kind") == "semantic_scope_drop_rewrite"
         ]
 
+    def matching_recovery_drop_rows(
+        self, audit: dict[str, object], allocation: dict[str, object]
+    ) -> list[dict[str, object]]:
+        return [
+            row
+            for row in audit.get("rewrite_candidates", [])  # type: ignore[union-attr]
+            if isinstance(row, dict)
+            and row.get("mir_function") == allocation.get("mir_function")
+            and row.get("semantic_object_type") == allocation.get("semantic_object_type")
+            and row.get("destination_place") == allocation.get("destination_place")
+            and row.get("lowering_kind")
+            in {
+                "semantic_scope_drop_exact_box_recovery_skipped",
+                "semantic_scope_drop_effectful_owner_recovery_skipped",
+            }
+        ]
+
     def receiver_drain_row(self, audit: dict[str, object]) -> dict[str, object]:
         rows = [
             row
@@ -385,23 +401,10 @@ fn main() {
             and str(row.get("mir_function") or "").endswith(
                 "receiver_temporary_is_not_the_owner"
             )
-            and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
             and "::drain" in str(row.get("callee") or "")
         ]
         self.assertEqual(len(rows), 1, rows)
         return rows[0]
-
-    def multi_owner_drop_rows(
-        self, audit: dict[str, object], function: str
-    ) -> list[dict[str, object]]:
-        return [
-            row
-            for row in audit.get("rewrite_candidates", [])  # type: ignore[union-attr]
-            if isinstance(row, dict)
-            and str(row.get("mir_function") or "").endswith(function)
-            and row.get("lowering_kind")
-            == "semantic_scope_drop_multiple_heap_owners_skipped"
-        ]
 
     def direct_layout_rows(
         self, audit: dict[str, object], function: str
@@ -459,12 +462,47 @@ fn main() {
         return allocation
 
     def assert_recovery_hint_scope(self, row: dict[str, object]) -> None:
-        self.assertEqual(
+        self.assertIn(
             row.get("replacement_symbol"),
-            "__unialloc_semantic_scope_push_hints",
+            {
+                "__unialloc_semantic_scope_push_hints",
+                "__unialloc_semantic_scope_push_for_rust_type_hints",
+            },
             row,
         )
         self.assertFalse(str(row.get("replacement_symbol") or "").endswith("_local"), row)
+        self.assertEqual(row.get("placement_hint"), 0x8000, row)
+        self.assertTrue(row.get("cross_thread_recovery_hint"), row)
+        self.assertEqual(
+            row.get("placement_hint_basis"),
+            "default_recovery_backed_semantic_scope",
+            row,
+        )
+
+    def assert_recovery_delegated_drop(
+        self, audit: dict[str, object], allocation: dict[str, object]
+    ) -> None:
+        self.assertFalse(self.matching_drop_rows(audit, allocation), allocation)
+        recovery_rows = self.matching_recovery_drop_rows(audit, allocation)
+        self.assertEqual(len(recovery_rows), 1, recovery_rows)
+        recovery = recovery_rows[0]
+        self.assertEqual(recovery["lifetime_hint"], 0, recovery)
+        self.assertEqual(recovery["lifetime_hint_confidence"], 0, recovery)
+        self.assertEqual(
+            recovery["lifetime_hint_basis"],
+            "not_applicable_recovery_authoritative",
+            recovery,
+        )
+        self.assertEqual(
+            recovery["replacement_symbol"],
+            "authenticated_allocation_recovery_record",
+            recovery,
+        )
+        self.assertEqual(
+            recovery["metadata_pairing_contract"],
+            "allocation_scope_to_authenticated_recovery_record",
+            recovery,
+        )
 
     def test_exact_linear_drop_classifies_around_exact_phase_boundary(self) -> None:
         audit = self.run_pass("automatic", automatic=True)
@@ -529,7 +567,17 @@ fn main() {
         self.assertEqual(receiver_drain["lifetime_hint_confidence"], 0, receiver_drain)
         self.assertEqual(
             receiver_drain["lifetime_hint_basis"],
-            UNSUPPORTED_UNKNOWN_BASIS,
+            "not_applicable_skipped_candidate",
+            receiver_drain,
+        )
+        self.assertEqual(
+            receiver_drain["lowering_kind"],
+            "semantic_scope_callback_capable_receiver_skipped",
+            receiver_drain,
+        )
+        self.assertEqual(
+            receiver_drain["replacement_resolution_status"],
+            "exact_receiver_call_callback_capable_not_lowered",
             receiver_drain,
         )
         self.assert_class(
@@ -618,14 +666,7 @@ fn main() {
             EFFECTFUL_DROP_UNKNOWN_BASIS,
             allocation,
         )
-        drops = self.matching_drop_rows(audit, allocation)
-        self.assertTrue(drops, allocation)
-        for drop in drops:
-            self.assertEqual(drop["lifetime_hint"], 0, drop)
-            self.assertEqual(drop["lifetime_hint_confidence"], 0, drop)
-            self.assertEqual(
-                drop["lifetime_hint_basis"], EFFECTFUL_DROP_UNKNOWN_BASIS, drop
-            )
+        self.assert_recovery_delegated_drop(audit, allocation)
 
     def test_implicit_effectful_guard_drop_before_owner_abstains(self) -> None:
         audit = self.run_pass("intervening-effectful-guard-drop", automatic=True)
@@ -681,24 +722,7 @@ fn main() {
         self.assertIn("Box<", str(allocation.get("semantic_object_type") or ""))
         self.assert_recovery_hint_scope(allocation)
 
-        skipped_drops = self.multi_owner_drop_rows(
-            audit, "nested_multi_owner_uses_recovery"
-        )
-        self.assertTrue(skipped_drops, allocation)
-        for drop in skipped_drops:
-            self.assertEqual(
-                drop.get("rewrite_status"),
-                "semantic_scope_drop_rewrite_skipped_multiple_heap_owners",
-                drop,
-            )
-            self.assertEqual(
-                drop.get("replacement_resolution_status"),
-                "rustc_middle_drop_multiple_heap_owners_not_lowered",
-                drop,
-            )
-            self.assertFalse(
-                str(drop.get("replacement_symbol") or "").endswith("_local"), drop
-            )
+        self.assert_recovery_delegated_drop(audit, allocation)
 
     def test_partial_profile_forces_recovery_abi_for_all_pair_members(self) -> None:
         seed = self.run_pass("partial-profile-seed", automatic=True)
@@ -784,9 +808,9 @@ fn main() {
         deallocation = rows["dealloc"]
 
         self.assertEqual(allocation["callsite"], seed_allocation["callsite"])
-        self.assertEqual(allocation["lifetime_hint"], 2, allocation)
-        self.assertEqual(allocation["lifetime_hint_confidence"], 93, allocation)
-        self.assertEqual(allocation["lifetime_hint_basis"], "profile_exact_match", allocation)
+        self.assertTrue(audit["compiler_pass"]["lifetime_profile_format_valid"])
+        self.assertEqual(audit["compiler_pass"]["lifetime_profile_invalid_line_count"], 1)
+        self.assertEqual(audit["compiler_pass"]["lifetime_profile_match_count"], 0)
         self.assertEqual(
             allocation["replacement_symbol"],
             "__unialloc_alloc_layout_with_metadata_hints",
@@ -794,17 +818,33 @@ fn main() {
         )
 
         self.assertEqual(deallocation["callsite"], seed_rows["dealloc"]["callsite"])
-        self.assertEqual(deallocation["lifetime_hint"], 0, deallocation)
-        self.assertEqual(deallocation["lifetime_hint_confidence"], 0, deallocation)
-        self.assertEqual(
-            deallocation["lifetime_hint_basis"], "profile_missing_entry", deallocation
-        )
         self.assertEqual(
             deallocation["replacement_symbol"],
             "__unialloc_dealloc_layout_with_metadata_hints",
             deallocation,
         )
         for row in rows.values():
+            self.assertEqual(row["type_id"], 0, row)
+            self.assertEqual(row["module_id"], 0, row)
+            self.assertEqual(row["flags"], 0, row)
+            self.assertEqual(row["type_id_basis"], "direct_allocator_recovery_delegated", row)
+            self.assertEqual(row["lifetime_hint"], 0, row)
+            self.assertEqual(row["lifetime_hint_confidence"], 0, row)
+            self.assertEqual(
+                row["lifetime_hint_basis"],
+                "direct_allocator_recovery_delegated_neutral",
+                row,
+            )
+            self.assertEqual(
+                row["placement_hint_basis"],
+                "direct_allocator_recovery_delegated_neutral",
+                row,
+            )
+            self.assertEqual(
+                row["metadata_pairing_contract"],
+                "recovery_backed_layout_metadata_abi",
+                row,
+            )
             self.assertFalse(
                 str(row.get("replacement_symbol") or "").endswith("_local"), row
             )

@@ -41,31 +41,46 @@ SOURCE_BINDING_PATHS = (
     RUNNER_SOURCE.relative_to(ROOT),
 )
 
-CALL_CLASSIFICATION_KINDS = {
-    "semantic_scope_enter_exit_rewrite",
-    "semantic_scope_non_heap_object_skipped",
-    "semantic_scope_unsolved_heap_object_candidate",
-}
-NON_HEAP_CLONE_FUNCTIONS = (
+EXPECTED_CLONE_FIXTURE_ROW_COUNT = 23
+EXPECTED_EXACT_DIRECT_CLONE_ROW_COUNT = 7
+EXPECTED_AUDIT_ONLY_CLONE_ROW_COUNT = 16
+GENERIC_BOX_SCOPE_STATUS = "actual_semantic_scope_generic_type_rewrite_applied"
+GENERIC_BOX_TYPE_ID_BASIS = "monomorphized_compiler_type_id_runtime"
+GENERIC_BOX_PAIRING_CONTRACT = "semantic_scope_monomorphized_runtime_type_metadata"
+GENERIC_BOX_SCOPE_SYMBOL = "__unialloc_semantic_scope_push_for_rust_type_hints"
+GENERIC_BOX_RESOLUTION = (
+    "resolved_unialloc_semantic_scope_push_for_rust_type_hints_pop"
+)
+CLONE_FIXTURE_FUNCTIONS = (
+    "clone_single_heap",
     "clone_nonheap_token",
     "clone_nonheap_option",
     "clone_nonheap_result",
     "clone_nonowning_reference",
-    "clone_standalone_arc",
-    "clone_standalone_rc",
-)
-NESTED_HEAP_CLONE_FUNCTION = "clone_nested_vec_owner"
-REFCOUNTED_SINGLE_OWNER_CLONE_FUNCTIONS = (
+    "clone_ambiguous_result",
+    "clone_nested_vec_owner",
     "clone_arc_vec_owner",
     "clone_rc_vec_owner",
+    "clone_standalone_arc",
+    "clone_standalone_rc",
+    "clone_multi_owner_headers",
+    "clone_raw_pointer_wrapper",
+    "clone_const_generic",
 )
-REFCOUNTED_NO_OWNER_CLONE_FUNCTIONS = (
+EXACT_DIRECT_CLONE_FUNCTIONS = (
+    "clone_exact_vec_u8",
+    "clone_exact_string",
+)
+RUNTIME_CLONE_FUNCTIONS = (
+    "clone_arc_vec_owner",
+    "clone_rc_vec_owner",
     "clone_standalone_arc",
     "clone_standalone_rc",
 )
-MULTI_OWNER_HEADERS_CLONE_FUNCTION = "clone_multi_owner_headers"
-RAW_POINTER_CLONE_FUNCTION = "clone_raw_pointer_wrapper"
-CONST_GENERIC_CLONE_FUNCTION = "clone_const_generic"
+RUNTIME_EXACT_DIRECT_CLONE_FUNCTIONS = (
+    "<ArcVecCloneOwner as std::clone::Clone>::clone",
+    "<RcVecCloneOwner as std::clone::Clone>::clone",
+)
 MULTI_OWNER_DROP_FUNCTIONS = (
     "drop_multi_owner_struct",
     "drop_multi_owner_enum",
@@ -288,14 +303,31 @@ def load_runtime_event(stdout_path: Path) -> Dict[str, Any]:
 
 
 def applied_type_rows(audit: Dict[str, Any], marker: str) -> List[Dict[str, Any]]:
-    return [
+    rows = [
         row
         for row in audit.get("rewrite_candidates", [])
         if isinstance(row, dict)
         and marker in str(row.get("semantic_object_type") or "")
         and row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
-        and row.get("rewrite_status") == "actual_semantic_scope_enter_exit_rewrite_applied"
+        and "applied" in str(row.get("rewrite_status") or "")
     ]
+    for row in rows:
+        assert_monomorphized_runtime_type_scope(row)
+    return rows
+
+
+def assert_monomorphized_runtime_type_scope(row: Dict[str, Any]) -> None:
+    assert row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite", row
+    assert row.get("rewrite_status") == GENERIC_BOX_SCOPE_STATUS, row
+    assert int(row.get("type_id") or 0) == 0, row
+    assert row.get("type_id_basis") == GENERIC_BOX_TYPE_ID_BASIS, row
+    assert row.get("metadata_pairing_contract") == GENERIC_BOX_PAIRING_CONTRACT, row
+    assert row.get("replacement_symbol") == GENERIC_BOX_SCOPE_SYMBOL, row
+    assert row.get("replacement_resolution_status") == GENERIC_BOX_RESOLUTION, row
+    assert int(row.get("module_id") or 0) != 0, row
+    assert int(row.get("flags") or 0) & TYPE_ISOLATED, row
+    assert int(row.get("placement_hint") or 0) & CROSS_THREAD_RECOVERY, row
+    assert row.get("placement_hint_basis") == "manual_cross_thread_recovery_hint", row
 
 
 def callee_mentions_exact_function(callee: Any, function_name: str) -> bool:
@@ -369,21 +401,6 @@ def validate_fail_closed_factory_provenance(audit: Dict[str, Any]) -> Dict[str, 
     }
 
 
-def clone_classification_rows(
-    audit: Dict[str, Any], function_name: str
-) -> List[Dict[str, Any]]:
-    return [
-        row
-        for row in audit.get("rewrite_candidates", [])
-        if isinstance(row, dict)
-        and (
-            str(row.get("mir_function") or "") == function_name
-            or str(row.get("mir_function") or "").endswith(f"::{function_name}")
-        )
-        and row.get("lowering_kind") in CALL_CLASSIFICATION_KINDS
-    ]
-
-
 def drop_classification_rows(
     audit: Dict[str, Any], function_name: str
 ) -> List[Dict[str, Any]]:
@@ -399,205 +416,199 @@ def drop_classification_rows(
     ]
 
 
-def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, Any]:
-    errors: List[str] = []
+def is_plain_clone_row(row: Dict[str, Any]) -> bool:
+    callee = str(row.get("callee") or "")
+    return re.search(r"::clone::Clone::clone(?=[),>\s])", callee) is not None
 
-    single_heap_rows = clone_classification_rows(audit, "clone_single_heap")
-    if len(single_heap_rows) != 1:
-        errors.append(
-            f"clone_single_heap expected one call-classification row, got {len(single_heap_rows)}"
-        )
-    else:
-        row = single_heap_rows[0]
-        if row.get("lowering_kind") != "semantic_scope_enter_exit_rewrite":
-            errors.append(
-                "clone_single_heap was not classified as a semantic-scope rewrite"
-            )
-        if row.get("rewrite_status") != "semantic_scope_enter_exit_rewrite_planned":
-            errors.append("clone_single_heap did not remain a planned audit-only rewrite")
-        semantic_object_type = str(row.get("semantic_object_type") or "")
-        if "std::vec::Vec<u8" not in semantic_object_type:
-            errors.append(
-                "clone_single_heap did not resolve the sole nested Vec heap owner"
-            )
 
-    non_heap_counts: Dict[str, int] = {}
-    for function_name in NON_HEAP_CLONE_FUNCTIONS:
-        rows = clone_classification_rows(audit, function_name)
-        non_heap_counts[function_name] = len(rows)
-        if len(rows) != 1:
-            errors.append(
-                f"{function_name} expected one call-classification row, got {len(rows)}"
-            )
-            continue
-        row = rows[0]
-        if row.get("lowering_kind") != "semantic_scope_non_heap_object_skipped":
-            errors.append(f"{function_name} was not classified as a non-heap skip")
-        if row.get("rewrite_status") != "semantic_scope_rewrite_skipped_non_heap_object_type":
-            errors.append(f"{function_name} did not record the non-heap skip status")
+def is_exact_direct_clone_destination(row: Dict[str, Any]) -> bool:
+    return str(row.get("destination_type") or "") in {
+        "std::string::String",
+        "std::vec::Vec<u8, std::alloc::Global>",
+    }
 
-    reference_rows = clone_classification_rows(audit, "clone_nonowning_reference")
-    if len(reference_rows) == 1:
-        destination_type = str(reference_rows[0].get("destination_type") or "")
-        if not destination_type.startswith("&") or "std::vec::Vec<u8" not in destination_type:
-            errors.append(
-                "clone_nonowning_reference did not preserve the borrowed Vec destination type"
-            )
 
-    nested_heap_rows = clone_classification_rows(audit, NESTED_HEAP_CLONE_FUNCTION)
-    if len(nested_heap_rows) != 1:
-        errors.append(
-            f"{NESTED_HEAP_CLONE_FUNCTION} expected one call-classification row, "
-            f"got {len(nested_heap_rows)}"
-        )
-    else:
-        row = nested_heap_rows[0]
-        if row.get("lowering_kind") != "semantic_scope_enter_exit_rewrite":
-            errors.append(
-                f"{NESTED_HEAP_CLONE_FUNCTION} did not resolve its stored Vec owner"
-            )
-        if "std::vec::Vec<u8" not in str(row.get("semantic_object_type") or ""):
-            errors.append(
-                f"{NESTED_HEAP_CLONE_FUNCTION} omitted its stored Vec owner type"
-            )
+def mir_function_matches(row: Dict[str, Any], function_name: str) -> bool:
+    mir_function = str(row.get("mir_function") or "")
+    return mir_function == function_name or mir_function.endswith(f"::{function_name}")
 
-    refcounted_single_owner_counts: Dict[str, int] = {}
-    for function_name in REFCOUNTED_SINGLE_OWNER_CLONE_FUNCTIONS:
-        rows = clone_classification_rows(audit, function_name)
-        refcounted_single_owner_counts[function_name] = len(rows)
-        if len(rows) != 1:
-            errors.append(
-                f"{function_name} expected one call-classification row, got {len(rows)}"
-            )
-            continue
-        row = rows[0]
-        if row.get("lowering_kind") != "semantic_scope_enter_exit_rewrite":
-            errors.append(
-                f"{function_name} did not resolve the Vec field as its sole allocation owner"
-            )
-        if row.get("rewrite_status") != "semantic_scope_enter_exit_rewrite_planned":
-            errors.append(f"{function_name} did not remain a planned fixture rewrite")
-        semantic_object_type = str(row.get("semantic_object_type") or "")
-        if "std::vec::Vec<u8" not in semantic_object_type:
-            errors.append(f"{function_name} omitted its sole Vec allocation owner")
-        if "Arc<" in semantic_object_type or "Rc<" in semantic_object_type:
-            errors.append(
-                f"{function_name} incorrectly treated its reference-counted field as a new owner"
-            )
 
-    for function_name, marker in (
-        ("clone_standalone_arc", "Arc<"),
-        ("clone_standalone_rc", "Rc<"),
-    ):
-        rows = clone_classification_rows(audit, function_name)
-        if len(rows) != 1:
-            continue
-        row = rows[0]
-        if row.get("replacement_resolution_status") != "rustc_middle_no_supported_heap_owner_not_lowered":
-            errors.append(f"{function_name} omitted the exact no-owner resolution")
-        if row.get("metadata_pairing_contract") != "audit_only_no_supported_heap_owner":
-            errors.append(f"{function_name} omitted the audit-only no-owner contract")
-        if marker not in str(row.get("destination_type") or ""):
-            errors.append(f"{function_name} omitted its reference-counted destination type")
-
-    raw_pointer_rows = clone_classification_rows(audit, RAW_POINTER_CLONE_FUNCTION)
-    if len(raw_pointer_rows) != 1:
-        errors.append(
-            f"{RAW_POINTER_CLONE_FUNCTION} expected one call-classification row, "
-            f"got {len(raw_pointer_rows)}"
-        )
-    else:
-        row = raw_pointer_rows[0]
-        if row.get("lowering_kind") != "semantic_scope_unsolved_heap_object_candidate":
-            errors.append(
-                f"{RAW_POINTER_CLONE_FUNCTION} must remain fail-closed as unresolved"
-            )
-        if (
-            row.get("rewrite_status")
-            != "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
-        ):
-            errors.append(
-                f"{RAW_POINTER_CLONE_FUNCTION} omitted the unresolved-owner status"
-            )
-
-    const_generic_rows = clone_classification_rows(audit, CONST_GENERIC_CLONE_FUNCTION)
-    if len(const_generic_rows) != 1:
-        errors.append(
-            f"{CONST_GENERIC_CLONE_FUNCTION} expected one call-classification row, "
-            f"got {len(const_generic_rows)}"
-        )
-    else:
-        row = const_generic_rows[0]
-        if row.get("lowering_kind") != "semantic_scope_unsolved_heap_object_candidate":
-            errors.append(
-                f"{CONST_GENERIC_CLONE_FUNCTION} must remain fail-closed as unresolved"
-            )
-        if (
-            row.get("rewrite_status")
-            != "semantic_scope_rewrite_skipped_unresolved_heap_object_type"
-        ):
-            errors.append(
-                f"{CONST_GENERIC_CLONE_FUNCTION} omitted the unresolved-parameter status"
-            )
-        destination_type = str(row.get("destination_type") or "")
-        if "ConstGenericClone" not in destination_type:
-            errors.append(
-                f"{CONST_GENERIC_CLONE_FUNCTION} omitted its const-generic destination"
-            )
-
-    ambiguous_rows = clone_classification_rows(audit, "clone_ambiguous_result")
-    if len(ambiguous_rows) != 1:
-        errors.append(
-            f"clone_ambiguous_result expected one call-classification row, got {len(ambiguous_rows)}"
-        )
-    else:
-        row = ambiguous_rows[0]
-        if row.get("lowering_kind") != "semantic_scope_unsolved_heap_object_candidate":
-            errors.append("clone_ambiguous_result was not kept fail-closed as unsolved")
-        if row.get("rewrite_status") != "semantic_scope_rewrite_skipped_ambiguous_heap_object_type":
-            errors.append("clone_ambiguous_result did not record the ambiguous skip status")
-        if (
-            row.get("replacement_resolution_status")
-            != "rustc_middle_multiple_heap_object_types_not_lowered"
-        ):
-            errors.append("clone_ambiguous_result did not record the multiple-owner reason")
-        row_text = json.dumps(row, sort_keys=True)
-        for owner in ("std::vec::Vec<u8", "std::string::String"):
-            if owner not in row_text:
-                errors.append(f"clone_ambiguous_result omitted owner {owner}")
-
-    headers_rows = clone_classification_rows(
-        audit, MULTI_OWNER_HEADERS_CLONE_FUNCTION
+def validate_plain_clone_audit_only(
+    audit: Dict[str, Any],
+    *,
+    label: str,
+    required_functions: Iterable[str],
+    expected_row_count: int | None = None,
+    rows_override: Iterable[Dict[str, Any]] | None = None,
+) -> Dict[str, Any]:
+    rows = (
+        list(rows_override)
+        if rows_override is not None
+        else [
+            row
+            for row in audit.get("rewrite_candidates", [])
+            if isinstance(row, dict) and is_plain_clone_row(row)
+        ]
     )
-    if len(headers_rows) != 1:
+    errors: List[str] = []
+    if expected_row_count is not None and len(rows) != expected_row_count:
         errors.append(
-            f"{MULTI_OWNER_HEADERS_CLONE_FUNCTION} expected one call-classification row, "
-            f"got {len(headers_rows)}"
+            f"{label} expected {expected_row_count} plain Clone rows, got {len(rows)}"
         )
-    else:
-        row = headers_rows[0]
-        if row.get("lowering_kind") != "semantic_scope_unsolved_heap_object_candidate":
+
+    required_function_counts: Dict[str, int] = {}
+    for function_name in required_functions:
+        count = sum(1 for row in rows if mir_function_matches(row, function_name))
+        required_function_counts[function_name] = count
+        if count != 1:
             errors.append(
-                f"{MULTI_OWNER_HEADERS_CLONE_FUNCTION} was not kept fail-closed"
+                f"{label} function {function_name} expected one plain Clone row, got {count}"
             )
-        if row.get("rewrite_status") != "semantic_scope_rewrite_skipped_ambiguous_heap_object_type":
-            errors.append(
-                f"{MULTI_OWNER_HEADERS_CLONE_FUNCTION} omitted the ambiguous-owner status"
-            )
-        row_text = json.dumps(row, sort_keys=True)
-        for owner in ("std::vec::Vec<u8", "std::string::String"):
-            if owner not in row_text:
+
+    expected_fields = {
+        "lowering_kind": "semantic_scope_unsolved_heap_object_candidate",
+        "rewrite_status": "semantic_scope_rewrite_skipped_unresolved_heap_object_type",
+        "replacement_resolution_status": "rustc_middle_heap_object_type_not_solved",
+        "metadata_pairing_contract": "audit_only_unresolved_heap_object_type",
+        "semantic_object_type": "<unknown-heap-object-type>",
+        "type_id_basis": "rustc_type_identity_unresolved_recovery_only",
+    }
+    for index, row in enumerate(rows):
+        row_label = (
+            f"{label} row {index} "
+            f"({row.get('mir_function')} {row.get('basic_block')})"
+        )
+        for field, expected in expected_fields.items():
+            actual = row.get(field)
+            if actual != expected:
                 errors.append(
-                    f"{MULTI_OWNER_HEADERS_CLONE_FUNCTION} omitted owner {owner}"
+                    f"{row_label} {field} expected {expected!r}, got {actual!r}"
                 )
 
-    summary = audit.get("summary") or {}
-    non_heap_skipped = sum(
-        1
-        for function_name in NON_HEAP_CLONE_FUNCTIONS
-        for row in clone_classification_rows(audit, function_name)
-        if row.get("lowering_kind") == "semantic_scope_non_heap_object_skipped"
+    rewrite_rows = [
+        row
+        for row in rows
+        if row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite"
+        or "rewrite_applied" in str(row.get("rewrite_status") or "")
+        or row.get("rewrite_status") == "semantic_scope_enter_exit_rewrite_planned"
+    ]
+    if rewrite_rows:
+        errors.append(
+            f"{label} expected zero plain Clone rewrite rows, got {len(rewrite_rows)}"
+        )
+
+    if errors:
+        raise AssertionError(
+            f"{label} plain Clone audit-only contract failed:\n- "
+            + "\n- ".join(errors)
+        )
+    return {
+        "plain_clone_row_count": len(rows),
+        "plain_clone_rewrite_row_count": len(rewrite_rows),
+        "required_function_rows": required_function_counts,
+        "rewrite_status": expected_fields["rewrite_status"],
+        "replacement_resolution_status": expected_fields[
+            "replacement_resolution_status"
+        ],
+        "metadata_pairing_contract": expected_fields["metadata_pairing_contract"],
+    }
+
+
+def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, Any]:
+    all_clone_rows = [
+        row
+        for row in audit.get("rewrite_candidates", [])
+        if isinstance(row, dict) and is_plain_clone_row(row)
+    ]
+    exact_direct_rows = [
+        row for row in all_clone_rows if is_exact_direct_clone_destination(row)
+    ]
+    audit_only_rows = [
+        row for row in all_clone_rows if not is_exact_direct_clone_destination(row)
+    ]
+    clone_contract = validate_plain_clone_audit_only(
+        audit,
+        label="clone classification fixture",
+        required_functions=CLONE_FIXTURE_FUNCTIONS,
+        expected_row_count=EXPECTED_AUDIT_ONLY_CLONE_ROW_COUNT,
+        rows_override=audit_only_rows,
     )
+    errors: List[str] = []
+
+    if len(all_clone_rows) != EXPECTED_CLONE_FIXTURE_ROW_COUNT:
+        errors.append(
+            "clone classification fixture expected "
+            f"{EXPECTED_CLONE_FIXTURE_ROW_COUNT} total plain Clone rows, "
+            f"got {len(all_clone_rows)}"
+        )
+    if len(exact_direct_rows) != EXPECTED_EXACT_DIRECT_CLONE_ROW_COUNT:
+        errors.append(
+            "clone classification fixture expected "
+            f"{EXPECTED_EXACT_DIRECT_CLONE_ROW_COUNT} exact String/Vec<u8, Global> "
+            f"Clone rewrites, got {len(exact_direct_rows)}"
+        )
+
+    exact_direct_function_counts: Dict[str, int] = {}
+    for function_name in EXACT_DIRECT_CLONE_FUNCTIONS:
+        count = sum(
+            1
+            for row in exact_direct_rows
+            if mir_function_matches(row, function_name)
+        )
+        exact_direct_function_counts[function_name] = count
+        if count != 1:
+            errors.append(
+                f"{function_name} expected one exact direct Clone rewrite row, got {count}"
+            )
+
+    exact_expected_fields = {
+        "lowering_kind": "semantic_scope_enter_exit_rewrite",
+        "rewrite_status": "semantic_scope_enter_exit_rewrite_planned",
+        "replacement_resolution_status": "not_requested_dry_run",
+        "metadata_pairing_contract": "semantic_scope_active_metadata",
+        "type_id_basis": "rustc_type_id_hash_runtime_equivalent",
+    }
+    active_drop_rows = [
+        row
+        for row in audit.get("rewrite_candidates", [])
+        if isinstance(row, dict)
+        and str(row.get("lowering_kind") or "").startswith("semantic_scope_drop")
+        and row.get("rewrite_status") == "semantic_scope_drop_rewrite_planned"
+        and row.get("metadata_pairing_contract")
+        == "semantic_scope_drop_active_metadata"
+    ]
+    paired_owner_types: set[str] = set()
+    for index, row in enumerate(exact_direct_rows):
+        row_label = (
+            f"exact direct Clone row {index} "
+            f"({row.get('mir_function')} {row.get('basic_block')})"
+        )
+        for field, expected in exact_expected_fields.items():
+            if row.get(field) != expected:
+                errors.append(
+                    f"{row_label} {field} expected {expected!r}, "
+                    f"got {row.get(field)!r}"
+                )
+        if row.get("semantic_object_type") != row.get("destination_type"):
+            errors.append(
+                f"{row_label} must preserve the exact destination owner audit display"
+            )
+        if int(row.get("type_id") or 0) == 0:
+            errors.append(f"{row_label} must emit a nonzero compiler-derived owner type_id")
+        paired_drops = [
+            drop_row
+            for drop_row in active_drop_rows
+            if drop_row.get("semantic_object_type") == row.get("semantic_object_type")
+            and drop_row.get("type_id") == row.get("type_id")
+        ]
+        if paired_drops:
+            paired_owner_types.add(str(row.get("semantic_object_type") or ""))
+        else:
+            errors.append(
+                f"{row_label} has no compiler-owner/type_id-matched active Drop row"
+            )
+
+    summary = audit.get("summary") or {}
     unsolved_rows = [
         row
         for row in audit.get("rewrite_candidates", [])
@@ -606,11 +617,6 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
         == "semantic_scope_unsolved_heap_object_candidate"
     ]
     unsolved = int(summary.get("semantic_scope_unsolved_candidate_count") or 0)
-    if non_heap_skipped != len(NON_HEAP_CLONE_FUNCTIONS):
-        errors.append(
-            "non-heap skipped row count "
-            f"expected {len(NON_HEAP_CLONE_FUNCTIONS)}, got {non_heap_skipped}"
-        )
     if unsolved != len(unsolved_rows):
         errors.append(
             "semantic_scope_unsolved_candidate_count does not match row-level "
@@ -649,19 +655,12 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
             "clone candidate classification failed:\n- " + "\n- ".join(errors)
         )
     return {
-        "single_heap_scope_rows": len(single_heap_rows),
-        "nested_heap_scope_rows": len(nested_heap_rows),
-        "refcounted_single_owner_rows_by_function": refcounted_single_owner_counts,
-        "refcounted_no_owner_rows_by_function": {
-            function_name: len(clone_classification_rows(audit, function_name))
-            for function_name in REFCOUNTED_NO_OWNER_CLONE_FUNCTIONS
-        },
-        "non_heap_rows_by_function": non_heap_counts,
-        "non_heap_skipped_count": non_heap_skipped,
-        "ambiguous_unsolved_count": len(ambiguous_rows),
-        "headers_multi_owner_unsolved_count": len(headers_rows),
-        "raw_pointer_unresolved_count": len(raw_pointer_rows),
-        "const_generic_unresolved_count": len(const_generic_rows),
+        **clone_contract,
+        "total_plain_clone_row_count": len(all_clone_rows),
+        "exact_direct_clone_row_count": len(exact_direct_rows),
+        "exact_direct_clone_rows_by_function": exact_direct_function_counts,
+        "exact_direct_clone_type_id_basis": exact_expected_fields["type_id_basis"],
+        "exact_direct_clone_drop_paired_owner_types": sorted(paired_owner_types),
         "total_unsolved_count": unsolved,
         "multi_owner_drop_rows_by_function": multi_owner_drop_counts,
     }
@@ -670,58 +669,103 @@ def validate_clone_candidate_classification(audit: Dict[str, Any]) -> Dict[str, 
 def validate_actual_refcounted_clone_classification(
     audit: Dict[str, Any],
 ) -> Dict[str, Any]:
+    all_clone_rows = [
+        row
+        for row in audit.get("rewrite_candidates", [])
+        if isinstance(row, dict) and is_plain_clone_row(row)
+    ]
+    exact_direct_rows = [
+        row for row in all_clone_rows if is_exact_direct_clone_destination(row)
+    ]
+    audit_only_rows = [
+        row for row in all_clone_rows if not is_exact_direct_clone_destination(row)
+    ]
+    audit_only = validate_plain_clone_audit_only(
+        audit,
+        label="runtime security probe",
+        required_functions=RUNTIME_CLONE_FUNCTIONS,
+        expected_row_count=6,
+        rows_override=audit_only_rows,
+    )
     errors: List[str] = []
-    applied_counts: Dict[str, int] = {}
-    for function_name in REFCOUNTED_SINGLE_OWNER_CLONE_FUNCTIONS:
-        rows = clone_classification_rows(audit, function_name)
-        applied_counts[function_name] = len(rows)
-        if len(rows) != 1:
+    if len(all_clone_rows) != 8:
+        errors.append(
+            f"runtime security probe expected 8 total plain Clone rows, got {len(all_clone_rows)}"
+        )
+    if len(exact_direct_rows) != 2:
+        errors.append(
+            "runtime security probe expected two exact Vec<u8, Global> field Clone "
+            f"rewrites, got {len(exact_direct_rows)}"
+        )
+
+    exact_function_counts: Dict[str, int] = {}
+    expected_fields = {
+        "lowering_kind": "semantic_scope_enter_exit_rewrite",
+        "rewrite_status": "actual_semantic_scope_enter_exit_rewrite_applied",
+        "metadata_pairing_contract": "semantic_scope_active_metadata",
+        "type_id_basis": "rustc_type_id_hash_runtime_equivalent",
+    }
+    exact_type_ids: set[int] = set()
+    exact_module_ids: set[int] = set()
+    for function_name in RUNTIME_EXACT_DIRECT_CLONE_FUNCTIONS:
+        count = sum(
+            1
+            for row in exact_direct_rows
+            if str(row.get("mir_function") or "") == function_name
+        )
+        exact_function_counts[function_name] = count
+        if count != 1:
             errors.append(
-                f"actual {function_name} expected one call-classification row, got {len(rows)}"
-            )
-            continue
-        row = rows[0]
-        if row.get("lowering_kind") != "semantic_scope_enter_exit_rewrite":
-            errors.append(f"actual {function_name} was not a semantic-scope rewrite")
-        if row.get("rewrite_status") != "actual_semantic_scope_enter_exit_rewrite_applied":
-            errors.append(f"actual {function_name} did not apply the MIR rewrite")
-        if not str(row.get("replacement_resolution_status") or "").startswith("resolved_unialloc_"):
-            errors.append(f"actual {function_name} did not resolve the UniAlloc scope ABI")
-        semantic_object_type = str(row.get("semantic_object_type") or "")
-        if "std::vec::Vec<u8" not in semantic_object_type:
-            errors.append(f"actual {function_name} omitted its sole Vec owner")
-        if "Arc<" in semantic_object_type or "Rc<" in semantic_object_type:
-            errors.append(
-                f"actual {function_name} forged a reference-counted allocation owner"
+                f"runtime security probe {function_name} expected one exact Vec field Clone row, got {count}"
             )
 
-    skipped_counts: Dict[str, int] = {}
-    for function_name in REFCOUNTED_NO_OWNER_CLONE_FUNCTIONS:
-        rows = clone_classification_rows(audit, function_name)
-        skipped_counts[function_name] = len(rows)
-        if len(rows) != 1:
-            errors.append(
-                f"actual {function_name} expected one call-classification row, got {len(rows)}"
-            )
-            continue
-        row = rows[0]
-        if row.get("lowering_kind") != "semantic_scope_non_heap_object_skipped":
-            errors.append(f"actual {function_name} was not an audit-only no-owner row")
-        if row.get("rewrite_status") != "semantic_scope_rewrite_skipped_non_heap_object_type":
-            errors.append(f"actual {function_name} did not skip semantic-scope lowering")
-        if row.get("replacement_resolution_status") != "rustc_middle_no_supported_heap_owner_not_lowered":
-            errors.append(f"actual {function_name} omitted the no-owner resolution")
-        if row.get("metadata_pairing_contract") != "audit_only_no_supported_heap_owner":
-            errors.append(f"actual {function_name} omitted the audit-only contract")
+    for index, row in enumerate(exact_direct_rows):
+        row_label = (
+            f"runtime exact direct Clone row {index} "
+            f"({row.get('mir_function')} {row.get('basic_block')})"
+        )
+        for field, expected in expected_fields.items():
+            if row.get(field) != expected:
+                errors.append(
+                    f"{row_label} {field} expected {expected!r}, got {row.get(field)!r}"
+                )
+        if row.get("destination_type") != "std::vec::Vec<u8, std::alloc::Global>":
+            errors.append(f"{row_label} widened beyond exact Vec<u8, Global>")
+        if row.get("semantic_object_type") != row.get("destination_type"):
+            errors.append(f"{row_label} did not preserve exact destination owner identity")
+        if not str(row.get("replacement_resolution_status") or "").startswith(
+            "resolved_unialloc_semantic_scope"
+        ):
+            errors.append(f"{row_label} did not resolve the UniAlloc scope ABI")
+        type_id = int(row.get("type_id") or 0)
+        module_id = int(row.get("module_id") or 0)
+        if type_id == 0 or module_id == 0:
+            errors.append(f"{row_label} emitted a zero compiler identity")
+        exact_type_ids.add(type_id)
+        exact_module_ids.add(module_id)
+        if not int(row.get("flags") or 0) & TYPE_ISOLATED:
+            errors.append(f"{row_label} omitted TYPE_ISOLATED")
 
+    if len(exact_type_ids) != 1:
+        errors.append(
+            f"runtime exact Vec field Clone rows must share one type identity: {exact_type_ids}"
+        )
+    if len(exact_module_ids) != 1:
+        errors.append(
+            f"runtime exact Vec field Clone rows must share one module identity: {exact_module_ids}"
+        )
     if errors:
         raise AssertionError(
-            "actual reference-counted Clone classification failed:\n- "
+            "runtime refcounted Clone classification failed:\n- "
             + "\n- ".join(errors)
         )
     return {
-        "actual_single_owner_rows_by_function": applied_counts,
-        "actual_no_owner_rows_by_function": skipped_counts,
+        **audit_only,
+        "total_plain_clone_row_count": len(all_clone_rows),
+        "exact_direct_clone_row_count": len(exact_direct_rows),
+        "exact_direct_clone_rows_by_function": exact_function_counts,
+        "exact_direct_clone_type_ids": sorted(exact_type_ids),
+        "exact_direct_clone_module_ids": sorted(exact_module_ids),
     }
 
 
@@ -756,18 +800,7 @@ def validate_allocation_side_recovery_requirement(
     for marker in ("ProducerPayload", "ConsumerPayload"):
         rows = target_drop_or_deallocation_rows(audit, marker)
         for row in rows:
-            assert row.get("lowering_kind") == "semantic_scope_enter_exit_rewrite", row
-            assert row.get("rewrite_status") == (
-                "actual_semantic_scope_enter_exit_rewrite_applied"
-            ), row
-            assert row.get("metadata_pairing_contract") in {
-                "semantic_scope_active_metadata",
-                "semantic_scope_drop_active_metadata",
-            }, row
-            assert int(row.get("type_id") or 0) != 0, row
-            assert int(row.get("module_id") or 0) != 0, row
-            assert int(row.get("flags") or 0) & TYPE_ISOLATED, row
-            assert int(row.get("placement_hint") or 0) & CROSS_THREAD_RECOVERY, row
+            assert_monomorphized_runtime_type_scope(row)
         target_counts[marker] = len(rows)
     matches = int(runtime.get("recovery_identity_matches") or 0)
     mismatches = int(runtime.get("recovery_identity_mismatches") or 0)
@@ -781,10 +814,10 @@ def validate_allocation_side_recovery_requirement(
         mechanism = "allocation_side_recovery"
     else:
         assert matches == target_scope_count, (
-            "every applied target drop/deallocation scope must produce one exact "
-            "requested-identity recovery match"
+            "every applied runtime-typed target drop/deallocation scope must produce "
+            "one exact requested-identity recovery match"
         )
-        mechanism = "exact_requested_identity"
+        mechanism = "monomorphized_runtime_type_identity"
     return {
         "pairing_mechanism": mechanism,
         "allocation_side_recovery_required": target_scope_count == 0,
@@ -970,6 +1003,49 @@ def unique_int(rows: List[Dict[str, Any]], field: str, label: str) -> int:
     return value
 
 
+def exact_box_new_scope(
+    rows: List[Dict[str, Any]], function_name: str
+) -> Dict[str, Any]:
+    matching = [
+        row
+        for row in rows
+        if mir_function_matches(row, function_name)
+        and "::boxed::" in str(row.get("callee") or "")
+        and re.search(r"::new(?=[),>\s])", str(row.get("callee") or ""))
+    ]
+    assert len(matching) == 1, (
+        f"{function_name} must have one exact applied Box::new scope, got {matching}"
+    )
+    return matching[0]
+
+
+def runtime_type_id_for_scope(
+    runtime_rows: List[Dict[str, Any]],
+    scope: Dict[str, Any],
+    label: str,
+) -> int:
+    callsite = int(scope.get("callsite") or 0)
+    assert callsite != 0, f"{label} Box::new scope must have a nonzero callsite"
+    matching = [
+        row
+        for row in runtime_rows
+        if isinstance(row, dict)
+        and int(row.get("callsite") or 0) == callsite
+        and int(row.get("allocations") or 0) > 0
+    ]
+    assert len(matching) == 1, (
+        f"{label} Box::new callsite must bind one runtime allocation row, got {matching}"
+    )
+    row = matching[0]
+    type_id = int(row.get("type_id") or 0)
+    assert type_id != 0, f"{label} runtime compiler type identity must be nonzero"
+    assert int(row.get("module_id") or 0) == int(scope.get("module_id") or 0), row
+    assert int(row.get("policy_flags_seen") or 0) & TYPE_ISOLATED, row
+    assert int(row.get("observed_alloc_size") or 0) == 64, row
+    assert int(row.get("observed_alloc_align") or 0) == 8, row
+    return type_id
+
+
 def aggregate_runtime_type(rows: List[Dict[str, Any]], type_id: int) -> Dict[str, int]:
     matching = [row for row in rows if int(row.get("type_id") or 0) == type_id]
     assert matching, f"runtime type rows omit compiler type_id {type_id}"
@@ -1014,16 +1090,20 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     consumer_rows = applied_type_rows(audit, "ConsumerPayload")
     assert producer_rows, "audit has no applied ProducerPayload semantic scope"
     assert consumer_rows, "audit has no applied ConsumerPayload semantic scope"
-    producer_type_id = unique_int(producer_rows, "type_id", "ProducerPayload")
-    consumer_type_id = unique_int(consumer_rows, "type_id", "ConsumerPayload")
-    assert producer_type_id != consumer_type_id
     producer_module_id = unique_int(producer_rows, "module_id", "ProducerPayload")
     consumer_module_id = unique_int(consumer_rows, "module_id", "ConsumerPayload")
     assert producer_module_id == consumer_module_id
-    for row in producer_rows + consumer_rows:
-        assert int(row.get("flags") or 0) & TYPE_ISOLATED
-        assert int(row.get("placement_hint") or 0) & CROSS_THREAD_RECOVERY
-        assert row.get("placement_hint_basis") == "manual_cross_thread_recovery_hint", row
+    runtime_rows = runtime.get("type_rows") or []
+    assert isinstance(runtime_rows, list)
+    producer_box_scope = exact_box_new_scope(producer_rows, "producer_box")
+    consumer_box_scope = exact_box_new_scope(consumer_rows, "consumer_box")
+    producer_type_id = runtime_type_id_for_scope(
+        runtime_rows, producer_box_scope, "ProducerPayload"
+    )
+    consumer_type_id = runtime_type_id_for_scope(
+        runtime_rows, consumer_box_scope, "ConsumerPayload"
+    )
+    assert producer_type_id != consumer_type_id
     # These exact Box::new scopes live inside opaque wrapper functions. The
     # wrapper calls are deliberately fail-closed above, so the thread escape is
     # not an interprocedural proof for their bodies. Depending on rustc MIR
@@ -1051,11 +1131,43 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
     assert int(runtime.get("typed_deallocations") or 0) >= 12
     assert int(runtime.get("typed_cache_hits") or 0) >= 4
     assert int(runtime.get("typed_cache_inserts") or 0) >= 8
+    wrong_identity_denials = int(
+        runtime.get("typed_cache_wrong_identity_denials") or 0
+    )
+    assert wrong_identity_denials >= 4
+    assert (
+        int(runtime.get("last_wrong_identity_requested_type_id") or 0)
+        == consumer_type_id
+    )
+    assert (
+        int(runtime.get("last_wrong_identity_retained_type_id") or 0)
+        == producer_type_id
+    )
+    assert (
+        int(runtime.get("last_wrong_identity_requested_module_id") or 0)
+        == consumer_module_id
+    )
+    assert (
+        int(runtime.get("last_wrong_identity_retained_module_id") or 0)
+        == producer_module_id
+    )
+    denial_callsite = int(
+        runtime.get("last_wrong_identity_requested_callsite") or 0
+    )
+    assert denial_callsite == int(consumer_box_scope.get("callsite") or 0)
+    assert int(runtime.get("last_wrong_identity_size") or 0) == 64
+    assert int(runtime.get("last_wrong_identity_align") or 0) == int(
+        runtime.get("same_layout_align") or 0
+    )
+    denial_site_rows = [
+        row
+        for row in consumer_rows
+        if int(row.get("callsite") or 0) == denial_callsite
+    ]
+    assert len(denial_site_rows) == 1, denial_site_rows
     assert int(runtime.get("semantic_type_stats_dropped_events") or 0) == 0
     assert int(runtime.get("side_cache_corrupt_slots") or 0) == 0
 
-    runtime_rows = runtime.get("type_rows") or []
-    assert isinstance(runtime_rows, list)
     producer_runtime = aggregate_runtime_type(runtime_rows, producer_type_id)
     consumer_runtime = aggregate_runtime_type(runtime_rows, consumer_type_id)
     assert producer_runtime["allocations"] >= 8
@@ -1075,6 +1187,11 @@ def validate(audit: Dict[str, Any], runtime: Dict[str, Any]) -> Dict[str, Any]:
         "module_id": producer_module_id,
         "producer_applied_scope_rows": len(producer_rows),
         "consumer_applied_scope_rows": len(consumer_rows),
+        "wrong_identity_denials": wrong_identity_denials,
+        "last_denial_requested_type_id": consumer_type_id,
+        "last_denial_retained_type_id": producer_type_id,
+        "last_denial_requested_callsite": denial_callsite,
+        "last_denial_site_id": denial_site_rows[0].get("allocation_site_id"),
         "semantic_scope_rewrite_applied_count": int(
             summary.get("semantic_scope_rewrite_applied_count") or 0
         ),

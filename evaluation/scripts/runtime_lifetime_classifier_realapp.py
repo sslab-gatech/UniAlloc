@@ -383,18 +383,14 @@ def adaptive_allocator_source(variant: str) -> str:
             "        let stats = unialloc::semantic_stats_snapshot();",
             1,
         )
-        report_marker = (
-            "            side_cache.corrupt_slots,\n"
-            "        );\n"
-            "    }\n\n"
-            '    extern "C" fn initialize() {'
-        )
+        # Anchor on the report/initializer boundary rather than the final field
+        # of the report.  The coverage report grows as allocator counters are
+        # added, while this function boundary remains the insertion contract.
+        report_marker = '\n    }\n\n    extern "C" fn initialize() {'
         if report_marker not in source:
             raise matrix.MatrixError("coverage report injection marker changed")
         source = source.replace(
             report_marker,
-            "            side_cache.corrupt_slots,\n"
-            "        );\n"
             f"{RUNTIME_REPORT_RUST}"
             "    }\n\n"
             '    extern "C" fn initialize() {',

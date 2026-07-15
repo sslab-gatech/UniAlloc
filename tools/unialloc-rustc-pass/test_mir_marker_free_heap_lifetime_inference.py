@@ -102,6 +102,22 @@ pub mod alloc_api {
     pub extern "C" fn __unialloc_semantic_scope_push_hints_local(
         _: u64, _: u64, _: u32, lifetime: u16, _: u16, _: u64,
     ) { super::record(lifetime); }
+    #[inline]
+    pub fn __unialloc_semantic_scope_push_for_rust_type<T: 'static>(
+        _: u64, _: u32, _: u64,
+    ) { super::record(0); }
+    #[inline]
+    pub fn __unialloc_semantic_scope_push_for_rust_type_local<T: 'static>(
+        _: u64, _: u32, _: u64,
+    ) { super::record(0); }
+    #[inline]
+    pub fn __unialloc_semantic_scope_push_for_rust_type_hints<T: 'static>(
+        _: u64, _: u32, lifetime: u16, _: u16, _: u64,
+    ) { super::record(lifetime); }
+    #[inline]
+    pub fn __unialloc_semantic_scope_push_for_rust_type_hints_local<T: 'static>(
+        _: u64, _: u32, lifetime: u16, _: u16, _: u64,
+    ) { super::record(lifetime); }
     #[no_mangle]
     pub extern "C" fn __unialloc_semantic_scope_pop() {}
 }
@@ -808,7 +824,10 @@ fn main() {
             manual, "box_local_drop", 2, 100, "manual_global_lifetime_hint"
         )
 
-        seed_row = self.allocation_row(environment, "box_local_drop")
+        seed_row = self.receiver_allocation_row(
+            environment, "receiver_owned_reserve_then_release"
+        )
+        self.assertNotEqual(seed_row["type_id"], 0, seed_row)
         profile = self.tmp / "rust-prior-precedence.profile"
         profile.write_text(
             "\n".join(
@@ -828,8 +847,13 @@ fn main() {
             fixture=self.release_box_fixture,
             panic_abort=True,
         )
-        self.assert_hint(
-            profiled, "box_local_drop", 2, 99, "profile_exact_match"
+        profiled_row = self.receiver_allocation_row(
+            profiled, "receiver_owned_reserve_then_release"
+        )
+        self.assertEqual(profiled_row["lifetime_hint"], 2, profiled_row)
+        self.assertEqual(profiled_row["lifetime_hint_confidence"], 99, profiled_row)
+        self.assertEqual(
+            profiled_row["lifetime_hint_basis"], "profile_exact_match", profiled_row
         )
 
     def test_rust_lifetime_prior_uses_owner_live_ranges_and_carriers(self) -> None:

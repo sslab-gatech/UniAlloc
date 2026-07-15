@@ -25,7 +25,29 @@ fn release_semantic_allocation_requires_type_isolation_feature() {
     );
 }
 
-#[cfg(not(feature = "stats"))]
+#[test]
+fn release_rust_scope_push_rejection_preserves_depth() {
+    let before = unialloc::semantic_scope_depth_snapshot();
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        unialloc::alloc_api::type_isolation::__unialloc_semantic_scope_push_for_rust_type::<u64>(
+            0xC0DE,
+            unialloc::FLAG_TYPE_ISOLATED,
+            0xA116,
+        );
+    }));
+
+    assert!(
+        result.is_err(),
+        "release builds must reject Rust semantic scope activation without type isolation"
+    );
+    assert_eq!(
+        unialloc::semantic_scope_depth_snapshot(),
+        before,
+        "rejected Rust scope activation must not mutate TLS depth"
+    );
+}
+
+#[cfg(not(any(feature = "stats", feature = "reclaim_checks")))]
 mod raw_only_global_alloc {
     use super::*;
     use core::alloc::GlobalAlloc;
@@ -135,26 +157,30 @@ mod raw_only_global_alloc {
 
     #[test]
     fn release_scoped_metadata_activation_fails_before_publishing_state() {
-        let metadata = AllocationMetadata::for_type(0xC002_0001);
-        let result = catch_unwind(AssertUnwindSafe(|| unsafe {
-            unialloc::alloc_api::set_active_metadata(metadata)
-        }));
+        for metadata in [
+            AllocationMetadata::for_type(0xC002_0001).with_flags(0),
+            AllocationMetadata::for_type(0xC002_0002),
+        ] {
+            let result = catch_unwind(AssertUnwindSafe(|| unsafe {
+                unialloc::alloc_api::set_active_metadata(metadata)
+            }));
 
-        if result.is_ok() {
-            unsafe {
-                unialloc::alloc_api::restore_active_metadata(AllocationMetadata::unknown());
+            if result.is_ok() {
+                unsafe {
+                    unialloc::alloc_api::restore_active_metadata(AllocationMetadata::unknown());
+                }
             }
-        }
 
-        assert!(
-            result.is_err(),
-            "raw-only release builds must reject scoped metadata activation immediately"
-        );
-        assert_eq!(
-            active_allocation_metadata(),
-            None,
-            "rejected scoped metadata activation must leave TLS state empty"
-        );
+            assert!(
+                result.is_err(),
+                "raw-only release builds must reject flags-zero and policy-bearing scoped metadata immediately"
+            );
+            assert_eq!(
+                active_allocation_metadata(),
+                None,
+                "rejected scoped metadata activation must leave TLS state empty"
+            );
+        }
         assert_raw_global_alloc_still_works();
     }
 
@@ -202,12 +228,20 @@ mod raw_only_global_alloc {
                         0xA115,
                     );
                 }
+                "scope_transport" => {
+                    unialloc::alloc_api::__unialloc_semantic_scope_push(
+                        0xC002_0005,
+                        0xC0DE,
+                        0,
+                        0xA116,
+                    );
+                }
                 _ => panic!("unknown FFI activation child case: {}", case),
             }
             return;
         }
 
-        for case in ["layout", "compiler", "stream", "scope"] {
+        for case in ["layout", "compiler", "stream", "scope", "scope_transport"] {
             let output = std::process::Command::new(std::env::current_exe().unwrap())
                 .arg("--exact")
                 .arg(TEST_NAME)
@@ -231,5 +265,43 @@ mod raw_only_global_alloc {
             );
         }
         assert_raw_global_alloc_still_works();
+    }
+}
+
+#[cfg(feature = "reclaim_checks")]
+mod reclaim_checks_global_alloc {
+    use super::*;
+    use core::alloc::GlobalAlloc;
+
+    fn ensure_allocator_ready() {
+        #[cfg(feature = "fixed_heap")]
+        super::fixed_heap_probe_global::ensure_initialized_for_probe();
+    }
+
+    #[test]
+    fn release_reclaim_checks_preserve_legal_global_realloc() {
+        ensure_allocator_ready();
+        let allocator = UniAlloc::new();
+        let old_layout = Layout::from_size_align(64, 8).unwrap();
+        let new_layout = Layout::from_size_align(513, old_layout.align()).unwrap();
+        let ptr = unsafe { GlobalAlloc::alloc(&allocator, old_layout) };
+        assert!(!ptr.is_null());
+        for offset in 0..old_layout.size() {
+            unsafe {
+                ptr.add(offset).write((offset as u8).wrapping_mul(17));
+            }
+        }
+
+        let grown = unsafe { GlobalAlloc::realloc(&allocator, ptr, old_layout, new_layout.size()) };
+        assert!(!grown.is_null());
+        for offset in 0..old_layout.size() {
+            assert_eq!(
+                unsafe { grown.add(offset).read() },
+                (offset as u8).wrapping_mul(17)
+            );
+        }
+        unsafe {
+            GlobalAlloc::dealloc(&allocator, grown, new_layout);
+        }
     }
 }
