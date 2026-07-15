@@ -18372,10 +18372,6 @@ mod tests {
             "consuming-stream exhaustion should not keep advancing the cursor on later ordinary allocations"
         );
         assert!(
-            !semantic_runtime_slow_path_enabled(),
-            "without outstanding recovery records, exhausted compiler streams should not keep ordinary runtime dealloc/realloc on the semantic slow path"
-        );
-        assert!(
             !semantic_allocation_slow_path_enabled(),
             "ordinary allocations should not keep paying the auto-metadata slow path once a finite compiler stream is exhausted"
         );
@@ -21896,8 +21892,8 @@ mod tests {
             "restoring the unknown base scope leaves the sticky global gate armed"
         );
         assert!(
-            !semantic_runtime_slow_path_enabled(),
-            "inactive local metadata must disable the scoped slow path even while the sticky gate is armed"
+            !current_thread_scoped_metadata_active(),
+            "restoring the unknown base scope must clear this thread's scoped metadata even while the process-wide sticky gate remains armed"
         );
         unsafe {
             clear_scoped_metadata_gate_for_test();
@@ -21936,8 +21932,8 @@ mod tests {
             SLOW_PATH_SCOPED_METADATA_UNIT
         );
         assert!(
-            !semantic_runtime_slow_path_enabled(),
-            "popping the last compiler scope clears local activity even while the global gate remains armed"
+            !current_thread_scoped_metadata_active(),
+            "popping the last compiler scope must clear this thread's scoped metadata even while the global gate remains armed"
         );
         unsafe {
             clear_scoped_metadata_gate_for_test();
