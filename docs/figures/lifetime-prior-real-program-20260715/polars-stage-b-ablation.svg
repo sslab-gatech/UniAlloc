@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="chart-title chart-description">
+  <title id="chart-title">Polars production-clock lifetime/THP ablation</title>
+  <desc id="chart-description">Five fixed-work arms and six paired comparisons over 4 repeats. Campaign status: THP CAUSAL CLAIM BLOCKED. THP backing: no resident AnonHugePages in measured samples (8 measured runs); THP allocator activity: allocator THP activity is zero: adaptive_long_routed_allocations (8 measured runs); THP allocator activity: allocator THP activity is zero: thp_advice_attempts (8 measured runs); THP allocator activity: allocator THP activity is zero: thp_advice_successes (8 measured runs); THP allocator activity: allocator THP activity is zero: thp_extent_mappings (8 measured runs); Runtime THP / Runtime ordinary: diagnostic gate failed; Compiler prior / Runtime THP: diagnostic gate failed; Compiler THP / Compiler ordinary: diagnostic gate failed; Compiler THP / Default: diagnostic gate failed</desc>
+  <style>text { font-family: Arial, Helvetica, sans-serif; }</style>
+  <rect id="background" x="0" y="0" width="1600" height="900" fill="#FFFFFF"/>
+  <text x="55.0" y="58.0" font-size="32.0" font-weight="700" text-anchor="start" fill="#17202A">Polars production-clock lifetime/THP ablation</text>
+  <text x="55.0" y="93.0" font-size="17.0" font-weight="400" text-anchor="start" fill="#566573">Fixed work | 4 paired repeats | lower time and RSS are better | production clock</text>
+  <rect x="1165" y="30" width="385" height="48" rx="8" fill="#C0392B"/>
+  <text x="1357.5" y="61.0" font-size="15.5" font-weight="700" text-anchor="middle" fill="#FFFFFF">THP CAUSAL CLAIM BLOCKED</text>
+  <rect id="stage-b-endpoints" x="45.0" y="125.0" width="720.0" height="580.0" rx="12" fill="#FAFBFC" stroke="#D5DBDB"/>
+  <text x="70.0" y="163.0" font-size="22.0" font-weight="700" text-anchor="start" fill="#17202A">A | Five-arm endpoint</text>
+  <text x="735.0" y="163.0" font-size="13.5" font-weight="400" text-anchor="end" fill="#566573">median and every repeat; Default = 100</text>
+  <rect id="stage-b-paired-effects" x="790.0" y="125.0" width="765.0" height="580.0" rx="12" fill="#FAFBFC" stroke="#D5DBDB"/>
+  <text x="815.0" y="163.0" font-size="22.0" font-weight="700" text-anchor="start" fill="#17202A">B | Registered paired effects</text>
+  <text x="1525.0" y="163.0" font-size="13.5" font-weight="400" text-anchor="end" fill="#566573">positive means improvement / reduction</text>
+  <line x1="275.0" y1="188" x2="275.0" y2="650" stroke="#D5DBDB"/>
+  <text x="275.0" y="675.0" font-size="11.5" font-weight="400" text-anchor="middle" fill="#566573">97.0</text>
+  <line x1="487.5" y1="188" x2="487.5" y2="650" stroke="#D5DBDB"/>
+  <text x="487.5" y="675.0" font-size="11.5" font-weight="400" text-anchor="middle" fill="#566573">100.5</text>
+  <line x1="700.0" y1="188" x2="700.0" y2="650" stroke="#D5DBDB"/>
+  <text x="700.0" y="675.0" font-size="11.5" font-weight="400" text-anchor="middle" fill="#566573">104.0</text>
+  <line x1="457.1" y1="188" x2="457.1" y2="650" stroke="#2C3E50" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="70.0" y="235.0" font-size="14.5" font-weight="700" text-anchor="start" fill="#17202A">Default</text>
+  <line x1="275.0" y1="230.0" x2="700.0" y2="230.0" stroke="#E5E7E9" stroke-width="5"/>
+  <circle class="endpoint-sample" cx="457.51" cy="230.0" r="4" fill="#7F8C8D" opacity="0.38"><title>repeat 0: 100.006; 19.827 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="470.09" cy="230.0" r="4" fill="#7F8C8D" opacity="0.38"><title>repeat 1: 100.213; 19.868 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="456.77" cy="230.0" r="4" fill="#7F8C8D" opacity="0.38"><title>repeat 2: 99.994; 19.825 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="438.87" cy="230.0" r="4" fill="#7F8C8D" opacity="0.38"><title>repeat 3: 99.699; 19.766 ms/work</title></circle>
+  <circle class="endpoint-median" cx="457.14" cy="230.0" r="8" fill="#7F8C8D" stroke="#FFFFFF" stroke-width="2"><title>Default median 100.000; 19.826 ms/work</title></circle>
+  <text x="735.0" y="235.0" font-size="12.0" font-weight="400" text-anchor="end" fill="#17202A">100.00 | 19.826 ms/work</text>
+  <text x="70.0" y="321.0" font-size="14.5" font-weight="700" text-anchor="start" fill="#17202A">Runtime learning / ordinary</text>
+  <line x1="275.0" y1="316.0" x2="700.0" y2="316.0" stroke="#E5E7E9" stroke-width="5"/>
+  <circle class="endpoint-sample" cx="567.37" cy="316.0" r="4" fill="#56B4E9" opacity="0.38"><title>repeat 0: 101.816; 20.186 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="447.19" cy="316.0" r="4" fill="#56B4E9" opacity="0.38"><title>repeat 1: 99.836; 19.794 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="439.91" cy="316.0" r="4" fill="#56B4E9" opacity="0.38"><title>repeat 2: 99.716; 19.770 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="546.60" cy="316.0" r="4" fill="#56B4E9" opacity="0.38"><title>repeat 3: 101.473; 20.118 ms/work</title></circle>
+  <circle class="endpoint-median" cx="496.89" cy="316.0" r="8" fill="#56B4E9" stroke="#FFFFFF" stroke-width="2"><title>Runtime learning / ordinary median 100.655; 19.956 ms/work</title></circle>
+  <text x="735.0" y="321.0" font-size="12.0" font-weight="400" text-anchor="end" fill="#17202A">100.65 | 19.956 ms/work</text>
+  <text x="70.0" y="407.0" font-size="14.5" font-weight="700" text-anchor="start" fill="#17202A">Compiler prior / ordinary</text>
+  <line x1="275.0" y1="402.0" x2="700.0" y2="402.0" stroke="#E5E7E9" stroke-width="5"/>
+  <circle class="endpoint-sample" cx="462.99" cy="402.0" r="4" fill="#009E73" opacity="0.38"><title>repeat 0: 100.096; 19.845 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="462.12" cy="402.0" r="4" fill="#009E73" opacity="0.38"><title>repeat 1: 100.082; 19.842 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="434.44" cy="402.0" r="4" fill="#009E73" opacity="0.38"><title>repeat 2: 99.626; 19.752 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="435.88" cy="402.0" r="4" fill="#009E73" opacity="0.38"><title>repeat 3: 99.650; 19.757 ms/work</title></circle>
+  <circle class="endpoint-median" cx="449.00" cy="402.0" r="8" fill="#009E73" stroke="#FFFFFF" stroke-width="2"><title>Compiler prior / ordinary median 99.866; 19.800 ms/work</title></circle>
+  <text x="735.0" y="407.0" font-size="12.0" font-weight="400" text-anchor="end" fill="#17202A">99.87 | 19.800 ms/work</text>
+  <text x="70.0" y="493.0" font-size="14.5" font-weight="700" text-anchor="start" fill="#17202A">Runtime learning / selective THP</text>
+  <line x1="275.0" y1="488.0" x2="700.0" y2="488.0" stroke="#E5E7E9" stroke-width="5"/>
+  <circle class="endpoint-sample" cx="469.14" cy="488.0" r="4" fill="#E69F00" opacity="0.38"><title>repeat 0: 100.198; 19.865 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="438.22" cy="488.0" r="4" fill="#E69F00" opacity="0.38"><title>repeat 1: 99.688; 19.764 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="440.95" cy="488.0" r="4" fill="#E69F00" opacity="0.38"><title>repeat 2: 99.733; 19.773 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="443.60" cy="488.0" r="4" fill="#E69F00" opacity="0.38"><title>repeat 3: 99.777; 19.782 ms/work</title></circle>
+  <circle class="endpoint-median" cx="442.28" cy="488.0" r="8" fill="#E69F00" stroke="#FFFFFF" stroke-width="2"><title>Runtime learning / selective THP median 99.755; 19.778 ms/work</title></circle>
+  <text x="735.0" y="493.0" font-size="12.0" font-weight="400" text-anchor="end" fill="#17202A">99.76 | 19.778 ms/work</text>
+  <text x="70.0" y="579.0" font-size="14.5" font-weight="700" text-anchor="start" fill="#17202A">Compiler prior / selective THP</text>
+  <line x1="275.0" y1="574.0" x2="700.0" y2="574.0" stroke="#E5E7E9" stroke-width="5"/>
+  <circle class="endpoint-sample" cx="449.05" cy="574.0" r="4" fill="#D55E00" opacity="0.38"><title>repeat 0: 99.867; 19.800 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="454.48" cy="574.0" r="4" fill="#D55E00" opacity="0.38"><title>repeat 1: 99.956; 19.817 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="439.82" cy="574.0" r="4" fill="#D55E00" opacity="0.38"><title>repeat 2: 99.715; 19.770 ms/work</title></circle>
+  <circle class="endpoint-sample" cx="445.21" cy="574.0" r="4" fill="#D55E00" opacity="0.38"><title>repeat 3: 99.803; 19.787 ms/work</title></circle>
+  <circle class="endpoint-median" cx="447.13" cy="574.0" r="8" fill="#D55E00" stroke="#FFFFFF" stroke-width="2"><title>Compiler prior / selective THP median 99.835; 19.793 ms/work</title></circle>
+  <text x="735.0" y="579.0" font-size="12.0" font-weight="400" text-anchor="end" fill="#17202A">99.84 | 19.793 ms/work</text>
+  <line x1="1110.0" y1="188" x2="1110.0" y2="650" stroke="#D5DBDB" stroke-width="1.0"/>
+  <text x="1110.0" y="675.0" font-size="11.5" font-weight="400" text-anchor="middle" fill="#566573">-5%</text>
+  <line x1="1310.0" y1="188" x2="1310.0" y2="650" stroke="#17202A" stroke-width="1.5"/>
+  <text x="1310.0" y="675.0" font-size="11.5" font-weight="400" text-anchor="middle" fill="#566573">+0%</text>
+  <line x1="1510.0" y1="188" x2="1510.0" y2="650" stroke="#D5DBDB" stroke-width="1.0"/>
+  <text x="1510.0" y="675.0" font-size="11.5" font-weight="400" text-anchor="middle" fill="#566573">+5%</text>
+  <text x="825.0" y="195.0" font-size="12.5" font-weight="700" text-anchor="start" fill="#009E73">Speed</text>
+  <text x="900.0" y="195.0" font-size="12.5" font-weight="700" text-anchor="start" fill="#CC79A7">Peak RSS</text>
+  <text x="815.0" y="235.0" font-size="13.5" font-weight="700" text-anchor="start" fill="#17202A">Runtime ordinary / Default</text>
+  <text x="815.0" y="253.0" font-size="10.5" font-weight="700" text-anchor="start" fill="#009E73">CLAIM ELIGIBLE</text>
+  <circle class="paired-speed-sample" cx="1237.63" cy="227.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 0: speed -1.81%</title></circle>
+  <rect class="paired-rss-sample" x="1307.21" y="240.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 0: peak RSS +0.02%</title></rect>
+  <circle class="paired-speed-sample" cx="1325.06" cy="227.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 1: speed +0.38%</title></circle>
+  <rect class="paired-rss-sample" x="1297.26" y="240.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 1: peak RSS -0.23%</title></rect>
+  <circle class="paired-speed-sample" cx="1321.11" cy="227.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 2: speed +0.28%</title></circle>
+  <rect class="paired-rss-sample" x="1293.41" y="240.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 2: peak RSS -0.33%</title></rect>
+  <circle class="paired-speed-sample" cx="1238.81" cy="227.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 3: speed -1.78%</title></circle>
+  <rect class="paired-rss-sample" x="1302.33" y="240.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 3: peak RSS -0.10%</title></rect>
+  <circle class="paired-speed-median" cx="1279.96" cy="227.0" r="6" fill="#009E73" stroke="#FFFFFF" stroke-width="1.5"><title>median speed -0.75%</title></circle>
+  <rect class="paired-rss-median" x="1297.79" y="238.5" width="11" height="11" fill="#CC79A7" stroke="#FFFFFF" stroke-width="1.5"><title>median peak RSS -0.17%</title></rect>
+  <text x="1515.0" y="239.0" font-size="11.5" font-weight="400" text-anchor="end" fill="#17202A">speed -0.75% | RSS -0.17%</text>
+  <text x="815.0" y="302.0" font-size="13.5" font-weight="700" text-anchor="start" fill="#17202A">Compiler prior / Runtime ordinary</text>
+  <text x="815.0" y="320.0" font-size="10.5" font-weight="700" text-anchor="start" fill="#009E73">CLAIM ELIGIBLE</text>
+  <circle class="paired-speed-sample" cx="1377.54" cy="294.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 0: speed +1.69%</title></circle>
+  <rect class="paired-rss-sample" x="1293.29" y="307.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 0: peak RSS -0.33%</title></rect>
+  <circle class="paired-speed-sample" cx="1300.15" cy="294.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 1: speed -0.25%</title></circle>
+  <rect class="paired-rss-sample" x="1303.97" y="307.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 1: peak RSS -0.06%</title></rect>
+  <circle class="paired-speed-sample" cx="1313.61" cy="294.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 2: speed +0.09%</title></circle>
+  <rect class="paired-rss-sample" x="1312.67" y="307.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 2: peak RSS +0.15%</title></rect>
+  <circle class="paired-speed-sample" cx="1381.88" cy="294.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 3: speed +1.80%</title></circle>
+  <rect class="paired-rss-sample" x="1298.68" y="307.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 3: peak RSS -0.20%</title></rect>
+  <circle class="paired-speed-median" cx="1345.58" cy="294.0" r="6" fill="#009E73" stroke="#FFFFFF" stroke-width="1.5"><title>median speed +0.89%</title></circle>
+  <rect class="paired-rss-median" x="1299.32" y="305.5" width="11" height="11" fill="#CC79A7" stroke="#FFFFFF" stroke-width="1.5"><title>median peak RSS -0.13%</title></rect>
+  <text x="1515.0" y="306.0" font-size="11.5" font-weight="400" text-anchor="end" fill="#17202A">speed +0.89% | RSS -0.13%</text>
+  <text x="815.0" y="369.0" font-size="13.5" font-weight="700" text-anchor="start" fill="#17202A">Runtime THP / Runtime ordinary</text>
+  <text x="815.0" y="387.0" font-size="10.5" font-weight="700" text-anchor="start" fill="#C0392B">BLOCKED</text>
+  <circle class="paired-speed-sample" cx="1373.56" cy="361.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 0: speed +1.59%</title></circle>
+  <rect class="paired-rss-sample" x="1298.27" y="374.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 0: peak RSS -0.21%</title></rect>
+  <circle class="paired-speed-sample" cx="1315.92" cy="361.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 1: speed +0.15%</title></circle>
+  <rect class="paired-rss-sample" x="1310.35" y="374.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 1: peak RSS +0.10%</title></rect>
+  <circle class="paired-speed-sample" cx="1309.32" cy="361.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 2: speed -0.02%</title></circle>
+  <rect class="paired-rss-sample" x="1314.59" y="374.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 2: peak RSS +0.20%</title></rect>
+  <circle class="paired-speed-sample" cx="1376.87" cy="361.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 3: speed +1.67%</title></circle>
+  <rect class="paired-rss-sample" x="1299.09" y="374.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 3: peak RSS -0.19%</title></rect>
+  <text x="1515.0" y="373.0" font-size="11.5" font-weight="400" text-anchor="end" fill="#17202A">speed blocked | RSS blocked</text>
+  <text x="815.0" y="436.0" font-size="13.5" font-weight="700" text-anchor="start" fill="#17202A">Compiler prior / Runtime THP</text>
+  <text x="815.0" y="454.0" font-size="10.5" font-weight="700" text-anchor="start" fill="#C0392B">BLOCKED</text>
+  <circle class="paired-speed-sample" cx="1323.21" cy="428.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 0: speed +0.33%</title></circle>
+  <rect class="paired-rss-sample" x="1302.24" y="441.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 0: peak RSS -0.11%</title></rect>
+  <circle class="paired-speed-sample" cx="1299.25" cy="428.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 1: speed -0.27%</title></circle>
+  <rect class="paired-rss-sample" x="1302.34" y="441.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 1: peak RSS -0.10%</title></rect>
+  <circle class="paired-speed-sample" cx="1310.74" cy="428.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 2: speed +0.02%</title></circle>
+  <rect class="paired-rss-sample" x="1305.89" y="441.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 2: peak RSS -0.02%</title></rect>
+  <circle class="paired-speed-sample" cx="1308.94" cy="428.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 3: speed -0.03%</title></circle>
+  <rect class="paired-rss-sample" x="1302.24" y="441.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 3: peak RSS -0.11%</title></rect>
+  <text x="1515.0" y="440.0" font-size="11.5" font-weight="400" text-anchor="end" fill="#17202A">speed blocked | RSS blocked</text>
+  <text x="815.0" y="503.0" font-size="13.5" font-weight="700" text-anchor="start" fill="#17202A">Compiler THP / Compiler ordinary</text>
+  <text x="815.0" y="521.0" font-size="10.5" font-weight="700" text-anchor="start" fill="#C0392B">BLOCKED</text>
+  <circle class="paired-speed-sample" cx="1319.18" cy="495.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 0: speed +0.23%</title></circle>
+  <rect class="paired-rss-sample" x="1307.21" y="508.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 0: peak RSS +0.02%</title></rect>
+  <circle class="paired-speed-sample" cx="1315.03" cy="495.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 1: speed +0.13%</title></circle>
+  <rect class="paired-rss-sample" x="1308.73" y="508.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 1: peak RSS +0.06%</title></rect>
+  <circle class="paired-speed-sample" cx="1306.44" cy="495.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 2: speed -0.09%</title></circle>
+  <rect class="paired-rss-sample" x="1307.82" y="508.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 2: peak RSS +0.03%</title></rect>
+  <circle class="paired-speed-sample" cx="1303.83" cy="495.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 3: speed -0.15%</title></circle>
+  <rect class="paired-rss-sample" x="1302.65" y="508.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 3: peak RSS -0.10%</title></rect>
+  <text x="1515.0" y="507.0" font-size="11.5" font-weight="400" text-anchor="end" fill="#17202A">speed blocked | RSS blocked</text>
+  <text x="815.0" y="570.0" font-size="13.5" font-weight="700" text-anchor="start" fill="#17202A">Compiler THP / Default</text>
+  <text x="815.0" y="588.0" font-size="10.5" font-weight="700" text-anchor="start" fill="#C0392B">BLOCKED</text>
+  <circle class="paired-speed-sample" cx="1315.58" cy="562.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 0: speed +0.14%</title></circle>
+  <rect class="paired-rss-sample" x="1294.71" y="575.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 0: peak RSS -0.29%</title></rect>
+  <circle class="paired-speed-sample" cx="1320.26" cy="562.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 1: speed +0.26%</title></circle>
+  <rect class="paired-rss-sample" x="1296.95" y="575.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 1: peak RSS -0.24%</title></rect>
+  <circle class="paired-speed-sample" cx="1321.17" cy="562.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 2: speed +0.28%</title></circle>
+  <rect class="paired-rss-sample" x="1300.92" y="575.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 2: peak RSS -0.14%</title></rect>
+  <circle class="paired-speed-sample" cx="1305.81" cy="562.0" r="3.5" fill="#009E73" opacity="0.35"><title>repeat 3: speed -0.10%</title></circle>
+  <rect class="paired-rss-sample" x="1290.64" y="575.5" width="7" height="7" fill="#CC79A7" opacity="0.35"><title>repeat 3: peak RSS -0.40%</title></rect>
+  <text x="1515.0" y="574.0" font-size="11.5" font-weight="400" text-anchor="end" fill="#17202A">speed blocked | RSS blocked</text>
+  <rect id="stage-b-claim-gate" x="45.0" y="725.0" width="1510.0" height="120.0" rx="12" fill="#FAFBFC" stroke="#D5DBDB"/>
+  <text x="70.0" y="760.0" font-size="19.0" font-weight="700" text-anchor="start" fill="#C0392B">Claim gate: THP CAUSAL CLAIM BLOCKED</text>
+  <text x="70.0" y="790.0" font-size="12.5" font-weight="400" text-anchor="start" fill="#566573">THP backing: no resident AnonHugePages in measured samples (8 measured runs)</text>
+  <text x="70.0" y="813.0" font-size="12.5" font-weight="400" text-anchor="start" fill="#566573">THP allocator activity: allocator THP activity is zero: adaptive_long_routed_allocations (8 measured runs)</text>
+  <text x="1515.0" y="813.0" font-size="12.0" font-weight="400" text-anchor="end" fill="#566573">+7 additional reasons in CSV and SVG description</text>
+  <text x="800.0" y="870.0" font-size="12.5" font-weight="400" text-anchor="middle" fill="#566573">Production eligible-site payload-capacity clock; force tracking disabled. AnonHugePages is process-level backing correlated with positive UniAlloc activity; allocator-VMA attribution is unmeasured.</text>
+  <metadata>source-sha256=a84c328c3e50bcb24e67b2e8046bb5b992a0d408b595978fa472dcfab0ca697b; stage=stage-b; status=THP CAUSAL CLAIM BLOCKED; blocked-reasons=[&quot;THP backing: no resident AnonHugePages in measured samples (8 measured runs)&quot;,&quot;THP allocator activity: allocator THP activity is zero: adaptive_long_routed_allocations (8 measured runs)&quot;,&quot;THP allocator activity: allocator THP activity is zero: thp_advice_attempts (8 measured runs)&quot;,&quot;THP allocator activity: allocator THP activity is zero: thp_advice_successes (8 measured runs)&quot;,&quot;THP allocator activity: allocator THP activity is zero: thp_extent_mappings (8 measured runs)&quot;,&quot;Runtime THP / Runtime ordinary: diagnostic gate failed&quot;,&quot;Compiler prior / Runtime THP: diagnostic gate failed&quot;,&quot;Compiler THP / Compiler ordinary: diagnostic gate failed&quot;,&quot;Compiler THP / Default: diagnostic gate failed&quot;]</metadata>
+</svg>
