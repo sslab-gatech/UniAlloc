@@ -440,6 +440,77 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                 campaign.SCREENING_ARM, summary, ("execution",)
             )
 
+    def test_reuse_refreshes_evaluator_derived_compiler_site_export(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            audit_root = root / "audits"
+            write_audit(
+                audit_root,
+                enabled=True,
+                basis="automatic_rust_lifetime_prior_return_long",
+                hint=2,
+                confidence=70,
+                crate_name="execution",
+                rewrite_status=campaign.GENERIC_REWRITE_STATUS,
+                runtime_key={
+                    "callsite": 101,
+                    "type_id": 0,
+                    "module_id": 103,
+                    "requested_size_bytes": 4096,
+                    "requested_align_bytes": 8,
+                },
+            )
+            compiler_audit = campaign.summarize_compiler_prior_audits(audit_root)
+            build_dir = root / "build"
+            build_dir.mkdir()
+            compiler_sites_path = build_dir / "compiler-sites.json"
+            compiler_sites_path.write_text(
+                json.dumps(
+                    {"source": "unialloc-compiler-runtime-exact-site-export-v1"}
+                ),
+                encoding="utf-8",
+            )
+            record_path = build_dir / "build.json"
+            cached = {
+                "audit_dir": str(audit_root),
+                "compiler_sites_path": str(compiler_sites_path),
+                "compiler_sites_sha256": campaign.sha256_file(
+                    compiler_sites_path
+                ),
+                "compiler_sites": {"source": "stale-v1"},
+                "compiler_audit": compiler_audit,
+            }
+            campaign.write_json(record_path, cached)
+
+            self.assertTrue(
+                campaign.refresh_cached_compiler_site_export(
+                    cached, record_path=record_path
+                )
+            )
+            exported = json.loads(compiler_sites_path.read_text(encoding="utf-8"))
+            persisted = json.loads(record_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                campaign.COMPILER_SITE_EXPORT_SOURCE, exported["source"]
+            )
+            self.assertEqual(1, exported["generic_site_count"])
+            self.assertEqual(1, exported["generic_resolution_key_complete_count"])
+            self.assertEqual(
+                campaign.COMPILER_SITE_EXPORT_SOURCE,
+                persisted["compiler_sites"]["source"],
+            )
+            self.assertEqual(
+                campaign.sha256_file(compiler_sites_path),
+                persisted["compiler_sites_sha256"],
+            )
+            self.assertTrue(
+                persisted["compiler_sites_derivation"][
+                    "regenerated_during_reuse"
+                ]
+            )
+            self.assertFalse(
+                persisted["compiler_sites_derivation"]["binary_rebuilt"]
+            )
+
     def test_compiler_audit_rejects_missing_or_mixed_prior_provenance(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -133,6 +133,21 @@ GENERIC_RESOLUTION_KEY_FIELDS = (
     "requested_size",
     "align",
 )
+COMPILER_SITE_EXPORT_SOURCE = "unialloc-compiler-runtime-exact-site-export-v2"
+COMPILER_SITE_EXPORT_SUMMARY_FIELDS = (
+    "source",
+    "runtime_join_key",
+    "generic_resolution_key",
+    "claim_scope",
+    "site_count",
+    "numeric_site_count",
+    "generic_site_count",
+    "complete_join_key_count",
+    "audit_complete_join_key_count",
+    "numeric_exact_key_complete_count",
+    "generic_resolution_key_complete_count",
+    "applied_prior_hinted_count",
+)
 RUNTIME_OUTCOME_AGGREGATE_FIELDS = (
     "allocation_count",
     "allocation_requested_bytes",
@@ -2567,7 +2582,7 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
         row for row in rows if row["identity_mode"] == "generic_runtime_type"
     ]
     return {
-        "source": "unialloc-compiler-runtime-exact-site-export-v2",
+        "source": COMPILER_SITE_EXPORT_SOURCE,
         "runtime_join_key": list(runtime_lifetime.RUNTIME_SITE_KEY_FIELDS),
         "generic_resolution_key": list(GENERIC_RESOLUTION_KEY_FIELDS),
         "claim_scope": {
@@ -2607,6 +2622,49 @@ def export_compiler_site_features(audit_root: Path) -> dict[str, Any]:
         ),
         "rows": rows,
     }
+
+
+def compiler_site_export_summary(export: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: export[key] for key in COMPILER_SITE_EXPORT_SUMMARY_FIELDS}
+
+
+def refresh_cached_compiler_site_export(
+    cached: dict[str, Any], *, record_path: Path
+) -> bool:
+    """Regenerate evaluator-derived site rows without rebuilding the binary."""
+    audit_root = Path(str(cached.get("audit_dir", "")))
+    compiler_sites_path = Path(str(cached.get("compiler_sites_path", "")))
+    compiler_audit = cached.get("compiler_audit")
+    if (
+        not audit_root.is_dir()
+        or not compiler_sites_path.parent.is_dir()
+        or not isinstance(compiler_audit, dict)
+    ):
+        return False
+    current_audit = summarize_compiler_prior_audits(audit_root)
+    if current_audit.get("audit_digest") != compiler_audit.get("audit_digest"):
+        raise CampaignContractError(
+            "cached compiler audit digest changed before site-export refresh"
+        )
+    export = export_compiler_site_features(audit_root)
+    if export["applied_prior_hinted_count"] != compiler_audit.get(
+        "applied_prior_hinted_candidate_count"
+    ):
+        raise CampaignContractError(
+            "cached compiler audit and regenerated applied-prior rows disagree"
+        )
+    write_json(compiler_sites_path, export)
+    cached["compiler_sites"] = compiler_site_export_summary(export)
+    cached["compiler_sites_sha256"] = sha256_file(compiler_sites_path)
+    cached["compiler_sites_derivation"] = {
+        "source": COMPILER_SITE_EXPORT_SOURCE,
+        "audit_digest": compiler_audit.get("audit_digest"),
+        "evaluator_script_sha256": sha256_file(Path(__file__).resolve()),
+        "regenerated_during_reuse": True,
+        "binary_rebuilt": False,
+    }
+    write_json(record_path, cached)
+    return True
 
 
 def _compiler_build_environment(
@@ -2779,6 +2837,11 @@ def build_stage_a_binary(
         retained_inputs_valid = validate_retained_post_injection_build_inputs(
             cached.get("post_injection_build_inputs", {})
         )
+        compiler_sites_refresh_valid = False
+        if audit_valid:
+            compiler_sites_refresh_valid = refresh_cached_compiler_site_export(
+                cached, record_path=record_path
+            )
         if (
             cached.get("success") is True
             and cached.get("implementation_sha256")
@@ -2810,6 +2873,7 @@ def build_stage_a_binary(
             and compiler_sites_path.is_file()
             and cached.get("compiler_sites_sha256")
             == sha256_file(compiler_sites_path)
+            and compiler_sites_refresh_valid
             and audit_valid
             and retained_inputs_valid
             and runtime_reuse_valid
@@ -2959,25 +3023,16 @@ def build_stage_a_binary(
         "binary_sha256": sha256_file(binary),
         "activation": activation,
         "compiler_audit": audit,
-        "compiler_sites": {
-            key: compiler_sites[key]
-            for key in (
-                "source",
-                "runtime_join_key",
-                "generic_resolution_key",
-                "claim_scope",
-                "site_count",
-                "numeric_site_count",
-                "generic_site_count",
-                "complete_join_key_count",
-                "audit_complete_join_key_count",
-                "numeric_exact_key_complete_count",
-                "generic_resolution_key_complete_count",
-                "applied_prior_hinted_count",
-            )
-        },
+        "compiler_sites": compiler_site_export_summary(compiler_sites),
         "compiler_sites_path": str((build_dir / "compiler-sites.json").resolve()),
         "compiler_sites_sha256": sha256_file(build_dir / "compiler-sites.json"),
+        "compiler_sites_derivation": {
+            "source": COMPILER_SITE_EXPORT_SOURCE,
+            "audit_digest": audit.get("audit_digest"),
+            "evaluator_script_sha256": sha256_file(Path(__file__).resolve()),
+            "regenerated_during_reuse": False,
+            "binary_rebuilt": True,
+        },
         "audit_dir": str(audit_dir.resolve()),
         "pass_log_dir": str(pass_log_dir.resolve()),
         "runtime_cwd": str(runtime_cwd.resolve()) if runtime_cwd is not None else None,
