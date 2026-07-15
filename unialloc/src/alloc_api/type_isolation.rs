@@ -4542,10 +4542,7 @@ fn allocator_metadata_is_effective(metadata: AllocationMetadata) -> bool {
 fn lifetime_metadata_policy_is_effective(metadata: AllocationMetadata) -> bool {
     #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
     {
-        metadata.callsite != 0
-            && metadata.has_type()
-            && super::lifetime_hugepage::lifetime_hugepage_policy()
-                != super::lifetime_hugepage::LifetimeHugepagePolicy::Disabled
+        super::lifetime_hugepage::flags_zero_exact_scope_is_effective(metadata)
     }
     #[cfg(not(all(feature = "lifetime_hugepage", not(feature = "fixed_heap"))))]
     {
@@ -7691,6 +7688,10 @@ pub fn active_allocation_metadata() -> Option<AllocationMetadata> {
 pub(crate) enum ActiveAllocatorMetadata {
     Inactive,
     TransportOnly(AllocationMetadata),
+    /// A flags-zero exact compiler scope admitted solely by the active
+    /// lifetime policy. Arena storage is self-identifying, so this path avoids
+    /// recovery records and leaves allocator fallbacks on the ordinary path.
+    LifetimePolicy(AllocationMetadata),
     Policy(AllocationMetadata),
 }
 
@@ -7704,6 +7705,15 @@ pub(crate) enum ActiveAllocatorMetadata {
 #[inline]
 pub(crate) fn active_allocator_metadata() -> ActiveAllocatorMetadata {
     match active_allocation_metadata() {
+        Some(metadata)
+            if metadata.flags == 0
+                && !semantic_stats_any_recording_enabled()
+                && !cfg!(feature = "quarantine")
+                && !cfg!(feature = "reclaim_checks")
+                && lifetime_metadata_policy_is_effective(metadata) =>
+        {
+            ActiveAllocatorMetadata::LifetimePolicy(metadata)
+        }
         Some(metadata) if allocator_metadata_is_effective(metadata) => {
             // Statistics promote transport metadata for accounting. Mandatory
             // compiled policy is composed without changing its typed identity.

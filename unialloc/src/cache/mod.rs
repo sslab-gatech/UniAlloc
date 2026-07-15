@@ -639,6 +639,30 @@ impl RustAllocator {
         self.dealloc_raw_backend(ptr, layout)
     }
 
+    /// Route a flags-zero exact compiler scope through lifetime placement
+    /// without attaching typed-cache or pointer-recovery policy to an ordinary
+    /// fallback. Arena pointers carry their own deallocation/reallocation
+    /// provenance; a bypass therefore remains indistinguishable from a raw
+    /// allocation after the compiler scope ends.
+    #[inline]
+    unsafe fn alloc_with_lifetime_scope_metadata(
+        &self,
+        layout: Layout,
+        metadata: AllocationMetadata,
+    ) -> *mut u8 {
+        if layout.size() == 0 {
+            return dangling_ptr_for_layout(layout);
+        }
+        #[cfg(all(feature = "lifetime_hugepage", not(feature = "fixed_heap")))]
+        if let Some(ptr) = crate::alloc_api::lifetime_hugepage::try_allocate(layout, metadata) {
+            accept_raw_allocation_return(ptr);
+            return ptr;
+        }
+        #[cfg(not(all(feature = "lifetime_hugepage", not(feature = "fixed_heap"))))]
+        let _ = metadata;
+        self.alloc_raw(layout)
+    }
+
     #[cfg_attr(
         not(any(
             test,
@@ -653,6 +677,9 @@ impl RustAllocator {
     unsafe fn alloc_semantic_slow(&self, layout: Layout) -> *mut u8 {
         let active_selection = active_allocator_metadata();
         match active_selection {
+            ActiveAllocatorMetadata::LifetimePolicy(metadata) => {
+                return self.alloc_with_lifetime_scope_metadata(layout, metadata);
+            }
             ActiveAllocatorMetadata::Policy(metadata) => {
                 if active_allocation_metadata_requires_recovery_record(metadata) {
                     return self.alloc_with_recovery_metadata(layout, metadata);
@@ -724,7 +751,9 @@ impl RustAllocator {
                     reclaim_observation,
                 );
             }
-            ActiveAllocatorMetadata::TransportOnly(_) | ActiveAllocatorMetadata::Inactive => {}
+            ActiveAllocatorMetadata::LifetimePolicy(_)
+            | ActiveAllocatorMetadata::TransportOnly(_)
+            | ActiveAllocatorMetadata::Inactive => {}
         }
         match checked_recorded_reallocation_old_metadata(ptr, layout) {
             AutoAllocationRecordLookup::Exact(metadata) => {
@@ -863,6 +892,17 @@ impl RustAllocator {
         layout: Layout,
         new_layout: Layout,
     ) -> *mut u8 {
+        self.realloc_raw_from_admission_with_lifetime_scope(admission, layout, new_layout, None)
+    }
+
+    #[inline]
+    unsafe fn realloc_raw_from_admission_with_lifetime_scope(
+        &self,
+        admission: GlobalRawReclaimAdmission,
+        layout: Layout,
+        new_layout: Layout,
+        lifetime_metadata: Option<AllocationMetadata>,
+    ) -> *mut u8 {
         let ptr = admission.ptr();
         let new_size = new_layout.size();
         if new_size == 0 {
@@ -877,7 +917,10 @@ impl RustAllocator {
                 finish_global_raw_reclaim_in_place(admission);
                 return ptr;
             }
-            let new_ptr = self.alloc_raw(new_layout);
+            let new_ptr = match lifetime_metadata {
+                Some(metadata) => self.alloc_with_lifetime_scope_metadata(new_layout, metadata),
+                None => self.alloc_raw(new_layout),
+            };
             if !new_ptr.is_null() {
                 copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
                 let _ = release_global_raw_reclaim(self, layout, admission);
@@ -887,7 +930,10 @@ impl RustAllocator {
             return new_ptr;
         }
         if layout_uses_over_page_alignment(layout) || layout_uses_over_page_alignment(new_layout) {
-            let new_ptr = self.alloc_raw(new_layout);
+            let new_ptr = match lifetime_metadata {
+                Some(metadata) => self.alloc_with_lifetime_scope_metadata(new_layout, metadata),
+                None => self.alloc_raw(new_layout),
+            };
             if !new_ptr.is_null() {
                 copy_reallocated_prefix(ptr, new_ptr, layout.size(), new_size);
                 let _ = release_global_raw_reclaim(self, layout, admission);
@@ -903,7 +949,10 @@ impl RustAllocator {
             finish_global_raw_reclaim_in_place(admission);
             ptr
         } else {
-            let new_ptr = self.alloc_raw(new_layout);
+            let new_ptr = match lifetime_metadata {
+                Some(metadata) => self.alloc_with_lifetime_scope_metadata(new_layout, metadata),
+                None => self.alloc_raw(new_layout),
+            };
             if !new_ptr.is_null() {
                 ptr::copy_nonoverlapping(ptr, new_ptr, core::cmp::min(layout.size(), new_size));
                 let _ = release_global_raw_reclaim(self, layout, admission);
@@ -938,6 +987,21 @@ impl RustAllocator {
         crate::alloc_api::type_isolation::pause_reallocation_after_recovery_lookup_for_test(
             old_recovery,
         );
+        if let (
+            ActiveAllocatorMetadata::LifetimePolicy(metadata),
+            AutoAllocationRecordLookup::Missing,
+        ) = (active_metadata, old_recovery)
+        {
+            let admission = begin_global_raw_reclaim_from_observation(reclaim_observation);
+            let new_ptr = self.alloc_with_lifetime_scope_metadata(new_layout, metadata);
+            if new_ptr.is_null() {
+                rollback_global_raw_reclaim(admission);
+                return new_ptr;
+            }
+            copy_reallocated_prefix(ptr, new_ptr, old_layout.size(), new_layout.size());
+            let _ = release_global_raw_reclaim(self, old_layout, admission);
+            return new_ptr;
+        }
         let release_metadata = match old_recovery {
             AutoAllocationRecordLookup::Exact(metadata) => Some((metadata, true)),
             AutoAllocationRecordLookup::Missing => match active_metadata {
@@ -947,7 +1011,8 @@ impl RustAllocator {
                     Some((metadata, false))
                 }
                 ActiveAllocatorMetadata::Policy(_) => None,
-                ActiveAllocatorMetadata::TransportOnly(_) => {
+                ActiveAllocatorMetadata::LifetimePolicy(_)
+                | ActiveAllocatorMetadata::TransportOnly(_) => {
                     #[cfg(feature = "quarantine")]
                     {
                         Some((COMPILED_QUARANTINE_METADATA, false))
@@ -983,7 +1048,8 @@ impl RustAllocator {
                 let record_recovery = active_allocation_metadata_requires_recovery_record(metadata);
                 Some((metadata, record_recovery, !record_recovery))
             }
-            ActiveAllocatorMetadata::TransportOnly(_) => match old_recovery {
+            ActiveAllocatorMetadata::LifetimePolicy(_)
+            | ActiveAllocatorMetadata::TransportOnly(_) => match old_recovery {
                 AutoAllocationRecordLookup::Exact(metadata) => Some((metadata, true, false)),
                 AutoAllocationRecordLookup::Missing => None,
                 AutoAllocationRecordLookup::Mismatched(_) => unreachable!(),
@@ -1196,6 +1262,9 @@ unsafe impl GlobalAlloc for RustAllocator {
             }
             let active_selection = active_allocator_metadata();
             match active_selection {
+                ActiveAllocatorMetadata::LifetimePolicy(metadata) => {
+                    return self.alloc_with_lifetime_scope_metadata(new_layout, metadata);
+                }
                 ActiveAllocatorMetadata::Policy(metadata) => {
                     if active_allocation_metadata_requires_recovery_record(metadata) {
                         return with_auto_allocation_recovery_recording(|| {
@@ -1275,9 +1344,24 @@ unsafe impl GlobalAlloc for RustAllocator {
             // mutation so a correct-layout retry remains possible.
             return core::ptr::null_mut();
         }
+        if let (
+            ActiveAllocatorMetadata::LifetimePolicy(metadata),
+            AutoAllocationRecordLookup::Missing,
+        ) = (active_selection, old_recovery)
+        {
+            let admission = begin_global_raw_reclaim_from_observation(reclaim_observation);
+            return self.realloc_raw_from_admission_with_lifetime_scope(
+                admission,
+                layout,
+                new_layout,
+                Some(metadata),
+            );
+        }
         let active_metadata = match active_selection {
             ActiveAllocatorMetadata::Policy(metadata) => Some(metadata),
-            ActiveAllocatorMetadata::TransportOnly(_) | ActiveAllocatorMetadata::Inactive => None,
+            ActiveAllocatorMetadata::LifetimePolicy(_)
+            | ActiveAllocatorMetadata::TransportOnly(_)
+            | ActiveAllocatorMetadata::Inactive => None,
         };
         let preflight_metadata = match old_recovery {
             AutoAllocationRecordLookup::Exact(recorded_metadata) => {

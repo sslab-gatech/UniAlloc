@@ -3506,6 +3506,36 @@ pub fn lifetime_hugepage_policy() -> LifetimeHugepagePolicy {
     LifetimeHugepagePolicy::from_usize(POLICY.load(Ordering::Acquire))
 }
 
+/// Decide whether a flags-zero compiler scope carries enough exact lifetime
+/// evidence to enter the lifetime allocator path under the active policy.
+///
+/// Adaptive policies need every exact site, including `Unknown`, so runtime
+/// outcomes can train the classifier. Compiler-inferred policies accept only
+/// the bounded process-long oracle. The older static policies accept the two
+/// legacy routable classes while preserving `Unknown` as a raw bypass.
+#[inline]
+pub(crate) fn flags_zero_exact_scope_is_effective(metadata: AllocationMetadata) -> bool {
+    if metadata.callsite == 0 || !metadata.has_type() {
+        return false;
+    }
+    match LifetimeHugepagePolicy::from_usize(POLICY.load(Ordering::Acquire)) {
+        LifetimeHugepagePolicy::Disabled => false,
+        LifetimeHugepagePolicy::AdaptiveRuntimeHugepage
+        | LifetimeHugepagePolicy::AdaptiveRuntimeOrdinary => true,
+        LifetimeHugepagePolicy::CompilerInferredHugepage
+        | LifetimeHugepagePolicy::CompilerInferredOrdinary => {
+            compiler_bounded_lifetime_placement_class(metadata.lifetime_hint)
+                == LifetimePlacementClass::LongLived
+        }
+        LifetimeHugepagePolicy::SegregatedOrdinary
+        | LifetimeHugepagePolicy::LongLivedHugepage
+        | LifetimeHugepagePolicy::SegregatedHugepage
+        | LifetimeHugepagePolicy::EpochCohortHugepage => {
+            lifetime_placement_class(metadata.lifetime_hint) != LifetimePlacementClass::Unknown
+        }
+    }
+}
+
 pub fn lifetime_hugepage_backend() -> LifetimePageBackend {
     LifetimePageBackend::from_usize(BACKEND.load(Ordering::Acquire))
 }
