@@ -1,0 +1,698 @@
+{
+  "generated_at": "2026-07-15T13:49:32.023280+00:00",
+  "input_hashes": {
+    "/tmp/unialloc-default-hotpath-ab-20260715.tsv": "8eece6e8961e36d8854e723d556faf9080a23833fd643cbfb221cc52c5963e88",
+    "/tmp/unialloc-feature-hotpath-acqrel-ab-20260715.tsv": "29f9bcf9a77ff3425971ea3689c9dbcb5349f97fa6a24f5ef0f4c9807d7a940e",
+    "/tmp/unialloc-lifetime-region-only-ab-20260715.tsv": "86fe7262982bff27ce2f49f19e98bedbd1a45d05e223c07a8d4aafa132b1ff4a"
+  },
+  "lifetime_region_handoff": {
+    "region_only_n5": {
+      "routed_late_region": {
+        "baseline": {
+          "max_ns_per_iter": 174.948,
+          "median_ns_per_iter": 169.92,
+          "min_ns_per_iter": 166.731,
+          "samples_ns_per_iter": [
+            167.917,
+            174.948,
+            170.045,
+            166.731,
+            169.92
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 138.625,
+          "median_ns_per_iter": 135.52,
+          "min_ns_per_iter": 135.13,
+          "samples_ns_per_iter": [
+            135.13,
+            138.625,
+            135.52,
+            135.451,
+            137.802
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.797552,
+        "runtime_delta_percent": -20.244821
+      },
+      "routed_same_region": {
+        "baseline": {
+          "max_ns_per_iter": 106.411,
+          "median_ns_per_iter": 102.402,
+          "min_ns_per_iter": 101.889,
+          "samples_ns_per_iter": [
+            101.889,
+            104.888,
+            102.402,
+            106.411,
+            101.971
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 117.284,
+          "median_ns_per_iter": 102.87,
+          "min_ns_per_iter": 101.548,
+          "samples_ns_per_iter": [
+            117.284,
+            103.518,
+            102.525,
+            102.87,
+            101.548
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.00457,
+        "runtime_delta_percent": 0.457022
+      },
+      "unknown_bypass": {
+        "baseline": {
+          "max_ns_per_iter": 121.251,
+          "median_ns_per_iter": 98.144,
+          "min_ns_per_iter": 97.845,
+          "samples_ns_per_iter": [
+            98.144,
+            121.251,
+            97.845,
+            98.317,
+            97.888
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 99.991,
+          "median_ns_per_iter": 98.854,
+          "min_ns_per_iter": 98.165,
+          "samples_ns_per_iter": [
+            98.298,
+            99.991,
+            98.984,
+            98.165,
+            98.854
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.007234,
+        "runtime_delta_percent": 0.723427
+      }
+    },
+    "rejected_early_bypass_n5": {
+      "routed_same_region": {
+        "baseline": {
+          "max_ns_per_iter": 121.851,
+          "median_ns_per_iter": 102.175,
+          "min_ns_per_iter": 101.787,
+          "samples_ns_per_iter": [
+            121.851,
+            101.787,
+            102.319,
+            102.102,
+            102.175
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 103.088,
+          "median_ns_per_iter": 102.737,
+          "min_ns_per_iter": 102.045,
+          "samples_ns_per_iter": [
+            102.722,
+            102.045,
+            102.737,
+            102.787,
+            103.088
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.0055,
+        "runtime_delta_percent": 0.550037
+      },
+      "unknown_bypass": {
+        "baseline": {
+          "max_ns_per_iter": 97.049,
+          "median_ns_per_iter": 96.888,
+          "min_ns_per_iter": 96.665,
+          "samples_ns_per_iter": [
+            96.936,
+            97.049,
+            96.665,
+            96.742,
+            96.888
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 99.911,
+          "median_ns_per_iter": 99.719,
+          "min_ns_per_iter": 98.975,
+          "samples_ns_per_iter": [
+            99.719,
+            98.975,
+            99.853,
+            99.136,
+            99.911
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.029219,
+        "runtime_delta_percent": 2.92193
+      }
+    },
+    "verdict": "Keep the region-index handoff. Drop the pre-lock Unknown-policy bypass because it regressed the common control."
+  },
+  "metric_convention": "runtime_delta_percent = (candidate / baseline - 1) * 100; negative is faster",
+  "protocol": {
+    "alternating_order": true,
+    "cpu": 22,
+    "fresh_process_per_variant": true,
+    "measured_repetitions": 5,
+    "numa_node": 0,
+    "summary_statistic": "median",
+    "warmup_repetitions": 1
+  },
+  "repeated_over_30_percent_regressions": {
+    "slice::sort_large_descending": {
+      "attribution": "The benchmark allocates a clone, while descending stable sort dominates the timed work and is linked-code-layout sensitive.",
+      "baseline_median_ns_per_iter": 5628.38,
+      "baseline_samples_ns_per_iter": [
+        5643.84,
+        5628.38,
+        5615.99,
+        5629.91,
+        5621.02
+      ],
+      "candidate_median_ns_per_iter": 8151.67,
+      "candidate_samples_ns_per_iter": [
+        8144.62,
+        8140.78,
+        8151.67,
+        8191.3,
+        8153.24
+      ],
+      "classification": {
+        "basis": "source-audited timed closure allocates, reallocates, or deallocates",
+        "kind": "allocation-sensitive",
+        "layout_confounded": true,
+        "layout_evidence": "timed non-allocator hot loop or shared machine function is sensitive to linked instruction placement"
+      },
+      "decision": "Retain as a layout-confounded control; exclude from the allocator-path merge gate.",
+      "runtime_delta_percent": 44.8316,
+      "source": "unialloc/benches/slice.rs:241-248,302-303"
+    },
+    "vec_deque::bench_mut_iter_1000": {
+      "attribution": "The VecDeque is allocated before timing; the timed closure only iterates and sums, with zero allocator calls.",
+      "baseline_median_ns_per_iter": 369.32,
+      "baseline_samples_ns_per_iter": [
+        369.59,
+        369.08,
+        369.32,
+        369.75,
+        369.19
+      ],
+      "candidate_median_ns_per_iter": 537.56,
+      "candidate_samples_ns_per_iter": [
+        536.14,
+        538.92,
+        537.56,
+        540.32,
+        535.82
+      ],
+      "classification": {
+        "basis": "source-audited timed closure has no heap allocation",
+        "kind": "layout/control",
+        "layout_confounded": true,
+        "layout_evidence": "timed non-allocator hot loop or shared machine function is sensitive to linked instruction placement"
+      },
+      "decision": "Retain as an allocator-free layout control; exclude from the allocator-path merge gate.",
+      "runtime_delta_percent": 45.554,
+      "source": "unialloc/benches/vec_deque.rs:39-48"
+    }
+  },
+  "schema_version": 1,
+  "source": {
+    "integrated_head_commit": "eda4a22",
+    "lifetime_baseline_commit": "df933a6",
+    "lifetime_measured_candidate_commit": "77ed0c23daa7d65fbdad7bf9c15f1ac3967594d4",
+    "raw_regression_source": "benchmark-results/unialloc-raw-release-roi-20260715.json",
+    "type_isolation_baseline_commit": "ecafa3d795106c1637d320907d3662f923a0db53",
+    "type_isolation_candidate_commit": "835a4c14695dfff73bac710581763a4441ce006a"
+  },
+  "type_isolation_pointer_filter": {
+    "default_feature_off_control_n5": {
+      "raw": {
+        "baseline": {
+          "max_ns_per_iter": 18.75,
+          "median_ns_per_iter": 15.998,
+          "min_ns_per_iter": 15.975,
+          "samples_ns_per_iter": [
+            15.998,
+            15.999,
+            15.976,
+            15.975,
+            18.75
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 16.05,
+          "median_ns_per_iter": 16.019,
+          "min_ns_per_iter": 15.995,
+          "samples_ns_per_iter": [
+            16.05,
+            16.019,
+            15.995,
+            16.023,
+            16.019
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.001313,
+        "runtime_delta_percent": 0.131266
+      },
+      "raw64": {
+        "baseline": {
+          "max_ns_per_iter": 16.537,
+          "median_ns_per_iter": 16.494,
+          "min_ns_per_iter": 16.463,
+          "samples_ns_per_iter": [
+            16.463,
+            16.496,
+            16.494,
+            16.484,
+            16.537
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 16.776,
+          "median_ns_per_iter": 16.76,
+          "min_ns_per_iter": 16.74,
+          "samples_ns_per_iter": [
+            16.748,
+            16.74,
+            16.76,
+            16.776,
+            16.76
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.016127,
+        "runtime_delta_percent": 1.612708
+      }
+    },
+    "hotpath_n5": {
+      "conservative_same": {
+        "baseline": {
+          "max_ns_per_iter": 126.61,
+          "median_ns_per_iter": 125.998,
+          "min_ns_per_iter": 125.068,
+          "samples_ns_per_iter": [
+            126.61,
+            125.186,
+            125.998,
+            125.068,
+            126.571
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 131.848,
+          "median_ns_per_iter": 129.328,
+          "min_ns_per_iter": 129.064,
+          "samples_ns_per_iter": [
+            131.848,
+            129.064,
+            129.328,
+            129.306,
+            130.331
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.026429,
+        "runtime_delta_percent": 2.642899
+      },
+      "conservative_split": {
+        "baseline": {
+          "max_ns_per_iter": 133.995,
+          "median_ns_per_iter": 132.907,
+          "min_ns_per_iter": 132.413,
+          "samples_ns_per_iter": [
+            133.995,
+            133.851,
+            132.907,
+            132.808,
+            132.413
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 137.317,
+          "median_ns_per_iter": 136.723,
+          "min_ns_per_iter": 136.594,
+          "samples_ns_per_iter": [
+            136.594,
+            137.317,
+            136.702,
+            136.927,
+            136.723
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.028712,
+        "runtime_delta_percent": 2.871181
+      },
+      "conservative_unscoped_drop": {
+        "baseline": {
+          "max_ns_per_iter": 114.465,
+          "median_ns_per_iter": 114.363,
+          "min_ns_per_iter": 113.094,
+          "samples_ns_per_iter": [
+            114.234,
+            114.434,
+            113.094,
+            114.363,
+            114.465
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 123.197,
+          "median_ns_per_iter": 119.905,
+          "min_ns_per_iter": 119.186,
+          "samples_ns_per_iter": [
+            119.548,
+            122.379,
+            119.905,
+            123.197,
+            119.186
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.04846,
+        "runtime_delta_percent": 4.845973
+      },
+      "local_same": {
+        "baseline": {
+          "max_ns_per_iter": 79.453,
+          "median_ns_per_iter": 79.099,
+          "min_ns_per_iter": 78.058,
+          "samples_ns_per_iter": [
+            78.058,
+            78.984,
+            79.358,
+            79.099,
+            79.453
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 77.707,
+          "median_ns_per_iter": 75.998,
+          "min_ns_per_iter": 75.812,
+          "samples_ns_per_iter": [
+            75.998,
+            75.95,
+            77.184,
+            77.707,
+            75.812
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.960796,
+        "runtime_delta_percent": -3.920404
+      },
+      "raw": {
+        "baseline": {
+          "max_ns_per_iter": 23.437,
+          "median_ns_per_iter": 18.615,
+          "min_ns_per_iter": 18.366,
+          "samples_ns_per_iter": [
+            18.366,
+            18.59,
+            23.437,
+            18.615,
+            19.855
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 19.56,
+          "median_ns_per_iter": 18.9,
+          "min_ns_per_iter": 18.652,
+          "samples_ns_per_iter": [
+            18.652,
+            18.9,
+            19.56,
+            18.998,
+            18.843
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.01531,
+        "runtime_delta_percent": 1.531023
+      },
+      "raw64": {
+        "baseline": {
+          "max_ns_per_iter": 19.253,
+          "median_ns_per_iter": 19.189,
+          "min_ns_per_iter": 19.14,
+          "samples_ns_per_iter": [
+            19.154,
+            19.25,
+            19.253,
+            19.14,
+            19.189
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 19.943,
+          "median_ns_per_iter": 19.228,
+          "min_ns_per_iter": 19.167,
+          "samples_ns_per_iter": [
+            19.167,
+            19.178,
+            19.228,
+            19.532,
+            19.943
+          ]
+        },
+        "candidate_to_baseline_ratio": 1.002032,
+        "runtime_delta_percent": 0.203241
+      },
+      "raw64_under_global_recovery": {
+        "baseline": {
+          "max_ns_per_iter": 59.263,
+          "median_ns_per_iter": 59.176,
+          "min_ns_per_iter": 59.121,
+          "samples_ns_per_iter": [
+            59.123,
+            59.176,
+            59.121,
+            59.223,
+            59.263
+          ]
+        },
+        "candidate": {
+          "max_ns_per_iter": 39.901,
+          "median_ns_per_iter": 21.688,
+          "min_ns_per_iter": 21.604,
+          "samples_ns_per_iter": [
+            21.688,
+            21.608,
+            21.604,
+            21.832,
+            39.901
+          ]
+        },
+        "candidate_to_baseline_ratio": 0.3665,
+        "runtime_delta_percent": -63.350007
+      }
+    },
+    "semantic_std_n3": {
+      "geometric_mean_runtime_delta_percent": -4.719964,
+      "leaf_count": 12,
+      "leaves": {
+        "scoped_binary_heap_churn": {
+          "baseline_median_ns_per_iter": 1542.71,
+          "baseline_samples_ns_per_iter": [
+            1542.71,
+            1535.63,
+            1550.8
+          ],
+          "candidate_median_ns_per_iter": 1501.66,
+          "candidate_samples_ns_per_iter": [
+            1501.66,
+            1501.38,
+            1503.55
+          ],
+          "runtime_delta_percent": -2.660902
+        },
+        "scoped_boxed_slice": {
+          "baseline_median_ns_per_iter": 245.42,
+          "baseline_samples_ns_per_iter": [
+            245.42,
+            239.4,
+            252.92
+          ],
+          "candidate_median_ns_per_iter": 226.75,
+          "candidate_samples_ns_per_iter": [
+            230.59,
+            226.75,
+            223.75
+          ],
+          "runtime_delta_percent": -7.607367
+        },
+        "scoped_btree_map_churn": {
+          "baseline_median_ns_per_iter": 38603.4,
+          "baseline_samples_ns_per_iter": [
+            38392.83,
+            38989.09,
+            38603.4
+          ],
+          "candidate_median_ns_per_iter": 38078.22,
+          "candidate_samples_ns_per_iter": [
+            38048.84,
+            38078.22,
+            38106.79
+          ],
+          "runtime_delta_percent": -1.36045
+        },
+        "scoped_btree_set_churn": {
+          "baseline_median_ns_per_iter": 47061.1,
+          "baseline_samples_ns_per_iter": [
+            46971.33,
+            47155.29,
+            47061.1
+          ],
+          "candidate_median_ns_per_iter": 46235.39,
+          "candidate_samples_ns_per_iter": [
+            46225.98,
+            46235.39,
+            46285.18
+          ],
+          "runtime_delta_percent": -1.754549
+        },
+        "scoped_linked_list_churn": {
+          "baseline_median_ns_per_iter": 98889.35,
+          "baseline_samples_ns_per_iter": [
+            98178.19,
+            99517.47,
+            98889.35
+          ],
+          "candidate_median_ns_per_iter": 90430.55,
+          "candidate_samples_ns_per_iter": [
+            90430.55,
+            91611.17,
+            90134.69
+          ],
+          "runtime_delta_percent": -8.553803
+        },
+        "scoped_mixed_compiler_surface": {
+          "baseline_median_ns_per_iter": 46942.62,
+          "baseline_samples_ns_per_iter": [
+            46971.38,
+            46762.4,
+            46942.62
+          ],
+          "candidate_median_ns_per_iter": 44520.28,
+          "candidate_samples_ns_per_iter": [
+            44520.28,
+            45444.79,
+            44361.9
+          ],
+          "runtime_delta_percent": -5.160215
+        },
+        "scoped_string_build": {
+          "baseline_median_ns_per_iter": 4270.35,
+          "baseline_samples_ns_per_iter": [
+            4377.81,
+            4223.35,
+            4270.35
+          ],
+          "candidate_median_ns_per_iter": 3871.15,
+          "candidate_samples_ns_per_iter": [
+            3871.15,
+            3968.65,
+            3862.41
+          ],
+          "runtime_delta_percent": -9.34818
+        },
+        "scoped_string_insert_lossy_surface": {
+          "baseline_median_ns_per_iter": 1228.1,
+          "baseline_samples_ns_per_iter": [
+            1200.79,
+            1228.1,
+            1238.79
+          ],
+          "candidate_median_ns_per_iter": 1128.44,
+          "candidate_samples_ns_per_iter": [
+            1143.35,
+            1126.6,
+            1128.44
+          ],
+          "runtime_delta_percent": -8.114974
+        },
+        "scoped_vec_clone_extend_surface": {
+          "baseline_median_ns_per_iter": 5929.39,
+          "baseline_samples_ns_per_iter": [
+            5929.63,
+            5929.39,
+            5916.35
+          ],
+          "candidate_median_ns_per_iter": 5849.75,
+          "candidate_samples_ns_per_iter": [
+            5853.22,
+            5842.42,
+            5849.75
+          ],
+          "runtime_delta_percent": -1.34314
+        },
+        "scoped_vec_deque_churn": {
+          "baseline_median_ns_per_iter": 656.77,
+          "baseline_samples_ns_per_iter": [
+            656.77,
+            656.89,
+            650.02
+          ],
+          "candidate_median_ns_per_iter": 629.24,
+          "candidate_samples_ns_per_iter": [
+            628.58,
+            629.24,
+            630.12
+          ],
+          "runtime_delta_percent": -4.191726
+        },
+        "scoped_vec_deque_wraparound_surface": {
+          "baseline_median_ns_per_iter": 804.93,
+          "baseline_samples_ns_per_iter": [
+            886.9,
+            804.93,
+            800.44
+          ],
+          "candidate_median_ns_per_iter": 765.01,
+          "candidate_samples_ns_per_iter": [
+            772.67,
+            765.01,
+            763.59
+          ],
+          "runtime_delta_percent": -4.959437
+        },
+        "scoped_vec_growth": {
+          "baseline_median_ns_per_iter": 4337.11,
+          "baseline_samples_ns_per_iter": [
+            4332.85,
+            4337.11,
+            4366.64
+          ],
+          "candidate_median_ns_per_iter": 4292.58,
+          "candidate_samples_ns_per_iter": [
+            4282.54,
+            4292.58,
+            4315.89
+          ],
+          "runtime_delta_percent": -1.026721
+        }
+      },
+      "measured_repetitions": 3
+    },
+    "static_memory": {
+      "baseline_bss_bytes": 401170,
+      "candidate_bss_bytes": 533618,
+      "delta_bss_bytes": 132448,
+      "delta_bss_kib": 129.34375,
+      "microbenchmark_max_rss_kib": 2048
+    },
+    "verdict": "Keep. It removes global recovery-table work from unrelated raw reclaim and materially improves the recovery-active path. Synthetic conservative-scope loops add 2.6-4.8%, while all 12 semantic std leaves improve."
+  },
+  "validation": {
+    "clippy": "passed with 168 pre-existing warnings",
+    "combined_features": "927/927 passed",
+    "diff_check": "passed",
+    "fmt": "passed",
+    "lifetime_integration": "20/20 passed",
+    "lifetime_lib": "927/927 passed",
+    "no_default_lifetime_check": "passed",
+    "type_isolation_fixed_heap": "744/744 passed",
+    "type_isolation_hosted": "914/914 passed",
+    "type_isolation_reclaim_checks": "911/911 passed",
+    "workspace": "passed; std_bench 468/468 included"
+  }
+}
