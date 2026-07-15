@@ -37,6 +37,7 @@ def write_audit(
     body_clone_returned: bool = True,
     actual_semantic_rewrite: bool = True,
     runtime_key: dict[str, int] | None = None,
+    rewrite_candidates: list[dict[str, object]] | None = None,
 ) -> None:
     root.mkdir(parents=True, exist_ok=True)
     candidate = {
@@ -66,7 +67,11 @@ def write_audit(
                     "body_clone_returned_to_rustc": body_clone_returned,
                     "continue_compilation": True,
                 },
-                "rewrite_candidates": [candidate],
+                "rewrite_candidates": (
+                    rewrite_candidates
+                    if rewrite_candidates is not None
+                    else [candidate]
+                ),
             }
         ),
         encoding="utf-8",
@@ -393,6 +398,64 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
                     campaign.SCREENING_ARM, summary, ("execution",)
                 )
 
+    def test_polars_shaped_audits_allow_zero_and_drop_only_crates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_audit(
+                root / "runner",
+                enabled=True,
+                basis="automatic_rust_lifetime_prior_return_long",
+                hint=2,
+                confidence=70,
+                crate_name="polars_unialloc_primary",
+            )
+            write_audit(
+                root / "zero",
+                enabled=True,
+                basis="default_unknown",
+                hint=0,
+                crate_name="polars",
+                actual_semantic_rewrite=False,
+                rewrite_candidates=[],
+            )
+            write_audit(
+                root / "drop",
+                enabled=True,
+                basis="default_unknown",
+                hint=0,
+                crate_name="polars_core",
+                actual_semantic_rewrite=False,
+                rewrite_candidates=[
+                    {
+                        "lifetime_hint_basis": "default_unknown",
+                        "lifetime_hint": 0,
+                        "lifetime_hint_confidence": 0,
+                        "rewrite_status": (
+                            "actual_semantic_scope_drop_rewrite_applied"
+                        ),
+                    }
+                ],
+            )
+            summary = campaign.summarize_compiler_prior_audits(root)
+            self.assertTrue(summary["actual_rewrite_provenance_valid"])
+            self.assertEqual(1, summary["applied_allocation_candidate_count"])
+            self.assertEqual(1, summary["classified_candidate_count"])
+            self.assertEqual(1, summary["applied_prior_hinted_candidate_count"])
+            zero = summary["crate_provenance"]["polars"]
+            drop = summary["crate_provenance"]["polars_core"]
+            runner = summary["crate_provenance"]["polars_unialloc_primary"]
+            self.assertEqual(1, zero["base_valid_file_count"])
+            self.assertEqual(0, zero["applied_allocation_file_count"])
+            self.assertEqual(1, drop["base_valid_file_count"])
+            self.assertEqual(0, drop["applied_allocation_file_count"])
+            self.assertEqual(1, runner["applied_allocation_file_count"])
+            self.assertEqual(1, runner["valid_applied_allocation_file_count"])
+            campaign.validate_build_audit_for_arm(
+                campaign.SCREENING_ARM,
+                summary,
+                ("polars_unialloc_primary", "polars", "polars_core"),
+            )
+
     def test_exact_join_rejects_duplicate_tuples_and_marks_zero_coverage(self) -> None:
         runtime = {
             field: index + 1
@@ -508,6 +571,59 @@ class LifetimePriorSixProgramCampaignTests(unittest.TestCase):
         self.assertEqual("not-measured", state["measurement_status"])
         self.assertEqual("complete-static-coverage-not-measured", state["status"])
         self.assertFalse(state["claim_eligible"])
+
+    def test_runtime_hook_smoke_requires_an_admitted_exact_site(self) -> None:
+        stats = {
+            "adaptive_force_track_all_admitted_allocations": 1,
+            "adaptive_force_track_all_admitted_requested_bytes": 4096,
+        }
+        long_site = {
+            "allocation_count": 1,
+            "long_outcomes": 1,
+            "long_requested_bytes": 4096,
+            "maximum_completed_age_bytes": campaign.RUNTIME_LONG_AGE_BYTES,
+        }
+        admission = campaign.validate_runtime_hook_smoke_admission(
+            stats, [long_site]
+        )
+        self.assertEqual(1, admission["admitted_allocations"])
+        self.assertEqual(4096, admission["admitted_requested_bytes"])
+        self.assertEqual(1, admission["runtime_exact_site_count"])
+        self.assertEqual(1, admission["decisive_long_outcome_count"])
+        for rejected_stats, rejected_sites in (
+            (
+                {
+                    "adaptive_force_track_all_admitted_allocations": 0,
+                    "adaptive_force_track_all_admitted_requested_bytes": 0,
+                },
+                [],
+            ),
+            (stats, []),
+            (
+                stats,
+                [{**long_site, "allocation_count": 0}],
+            ),
+            (
+                stats,
+                [{**long_site, "long_outcomes": 0, "long_requested_bytes": 0}],
+            ),
+            (
+                stats,
+                [
+                    {
+                        **long_site,
+                        "maximum_completed_age_bytes": (
+                            campaign.RUNTIME_LONG_AGE_BYTES - 1
+                        ),
+                    }
+                ],
+            ),
+        ):
+            with self.subTest(stats=rejected_stats, sites=rejected_sites):
+                with self.assertRaises(campaign.BuildBlocked):
+                    campaign.validate_runtime_hook_smoke_admission(
+                        rejected_stats, rejected_sites
+                    )
 
     def test_fragmentation_parser_requires_complete_accounting(self) -> None:
         row = {field: 0 for field in campaign.REQUIRED_FRAGMENTATION_FIELDS}

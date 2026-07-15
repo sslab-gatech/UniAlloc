@@ -62,6 +62,7 @@ DEFAULT_PERFORMANCE_MAX_SECONDS = 300.0
 HARD_PROCESS_CAP_SECONDS = 600.0
 DEFAULT_LONG_COHORT_BYTES = 2 * MIB
 DEFAULT_CONFIRMED_SHORT_BYTES = 8 * MIB
+RUNTIME_LONG_AGE_BYTES = 8 * MIB
 AUTO_PRIOR_ENV = "UNIALLOC_AUTO_RUST_LIFETIME_PRIOR"
 RELEASE_STRIP_ENV = "CARGO_PROFILE_RELEASE_STRIP"
 RUNTIME_ARM_ENV = "UNIALLOC_LIFETIME_EXPERIMENT_ARM"
@@ -706,6 +707,13 @@ def summarize_compiler_prior_audits(root: Path) -> dict[str, Any]:
         actual_rewrite = compiler_pass.get("actual_semantic_scope_rewrite")
         body_clone = compiler_pass.get("body_clone_returned_to_rustc")
         continue_compilation = compiler_pass.get("continue_compilation")
+        candidates = document["rewrite_candidates"]
+        if any(not isinstance(raw, dict) for raw in candidates):
+            raise CampaignContractError(f"audit candidate is invalid: {path}")
+        file_applied_allocation_candidates = sum(
+            int(str(raw.get("rewrite_status") or "") in APPLIED_ALLOCATION_SCOPE_STATUSES)
+            for raw in candidates
+        )
         rustc_args = document.get("rustc_args")
         crate_name = ""
         if isinstance(rustc_args, list):
@@ -716,12 +724,16 @@ def summarize_compiler_prior_audits(root: Path) -> dict[str, Any]:
                 elif isinstance(value, str) and value.startswith("--crate-name="):
                     crate_name = value.split("=", 1)[1].replace("-", "_")
                     audited_crates.add(crate_name)
-        provenance_valid = (
+        base_provenance_valid = (
             actual_requested is True
-            and actual_rewrite is True
             and body_clone is True
             and continue_compilation is True
         )
+        allocation_rewrite_required = file_applied_allocation_candidates > 0
+        allocation_rewrite_valid = (
+            not allocation_rewrite_required or actual_rewrite is True
+        )
+        provenance_valid = base_provenance_valid and allocation_rewrite_valid
         if not provenance_valid:
             provenance_failures.append(
                 {
@@ -731,14 +743,33 @@ def summarize_compiler_prior_audits(root: Path) -> dict[str, Any]:
                     "actual_semantic_scope_rewrite": actual_rewrite,
                     "body_clone_returned_to_rustc": body_clone,
                     "continue_compilation": continue_compilation,
+                    "base_provenance_valid": base_provenance_valid,
+                    "allocation_rewrite_required": allocation_rewrite_required,
+                    "allocation_rewrite_valid": allocation_rewrite_valid,
+                    "applied_allocation_candidate_count": (
+                        file_applied_allocation_candidates
+                    ),
                 }
             )
         if crate_name:
             state = crate_provenance.setdefault(
                 crate_name,
-                {"audit_file_count": 0, "valid_file_count": 0},
+                {
+                    "audit_file_count": 0,
+                    "base_valid_file_count": 0,
+                    "applied_allocation_file_count": 0,
+                    "valid_applied_allocation_file_count": 0,
+                    "valid_file_count": 0,
+                },
             )
             state["audit_file_count"] += 1
+            state["base_valid_file_count"] += int(base_provenance_valid)
+            state["applied_allocation_file_count"] += int(
+                allocation_rewrite_required
+            )
+            state["valid_applied_allocation_file_count"] += int(
+                allocation_rewrite_required and allocation_rewrite_valid
+            )
             state["valid_file_count"] += int(provenance_valid)
         files.append(
             {
@@ -746,9 +777,7 @@ def summarize_compiler_prior_audits(root: Path) -> dict[str, Any]:
                 "sha256": sha256_file(path),
             }
         )
-        for raw in document["rewrite_candidates"]:
-            if not isinstance(raw, dict):
-                raise CampaignContractError(f"audit candidate is invalid: {path}")
+        for raw in candidates:
             basis = str(raw.get("lifetime_hint_basis") or "")
             hint = raw.get("lifetime_hint", 0)
             confidence = raw.get("lifetime_hint_confidence", 0)
@@ -860,7 +889,10 @@ def validate_build_audit_for_arm(
         crate
         for crate in expected
         if not isinstance(crate_provenance.get(crate), dict)
-        or crate_provenance[crate].get("valid_file_count", 0) <= 0
+        or crate_provenance[crate].get("base_valid_file_count", 0)
+        != crate_provenance[crate].get("audit_file_count", 0)
+        or crate_provenance[crate].get("valid_applied_allocation_file_count", 0)
+        != crate_provenance[crate].get("applied_allocation_file_count", 0)
     )
     if invalid_crates:
         raise CampaignContractError(
@@ -3239,6 +3271,64 @@ fn main() {
     )
 
 
+def validate_runtime_hook_smoke_admission(
+    stats: Mapping[str, Any], sites: Sequence[Mapping[str, Any]]
+) -> dict[str, int]:
+    admitted = _nonnegative_integer(
+        stats, "adaptive_force_track_all_admitted_allocations"
+    )
+    admitted_requested_bytes = _nonnegative_integer(
+        stats, "adaptive_force_track_all_admitted_requested_bytes"
+    )
+    exact_site_allocations = sum(
+        _nonnegative_integer(row, "allocation_count") for row in sites
+    )
+    decisive_long_rows = [
+        row
+        for row in sites
+        if _nonnegative_integer(row, "long_outcomes") > 0
+        and _nonnegative_integer(row, "long_requested_bytes") > 0
+        and _nonnegative_integer(row, "maximum_completed_age_bytes")
+        >= RUNTIME_LONG_AGE_BYTES
+    ]
+    decisive_long_outcomes = sum(
+        _nonnegative_integer(row, "long_outcomes") for row in decisive_long_rows
+    )
+    decisive_long_requested_bytes = sum(
+        _nonnegative_integer(row, "long_requested_bytes")
+        for row in decisive_long_rows
+    )
+    maximum_completed_age_bytes = max(
+        (
+            _nonnegative_integer(row, "maximum_completed_age_bytes")
+            for row in decisive_long_rows
+        ),
+        default=0,
+    )
+    if (
+        admitted == 0
+        or admitted_requested_bytes == 0
+        or not sites
+        or exact_site_allocations == 0
+        or not decisive_long_rows
+        or decisive_long_outcomes == 0
+    ):
+        raise BuildBlocked(
+            "runtime-hook smoke captured no admitted exact Long lifetime site"
+        )
+    return {
+        "admitted_allocations": admitted,
+        "admitted_requested_bytes": admitted_requested_bytes,
+        "runtime_exact_site_count": len(sites),
+        "runtime_exact_site_allocation_count": exact_site_allocations,
+        "decisive_long_site_count": len(decisive_long_rows),
+        "decisive_long_outcome_count": decisive_long_outcomes,
+        "decisive_long_requested_bytes": decisive_long_requested_bytes,
+        "minimum_long_age_bytes": RUNTIME_LONG_AGE_BYTES,
+        "maximum_completed_age_bytes": maximum_completed_age_bytes,
+    }
+
+
 def compile_run_runtime_hook_smoke(
     *,
     raw_dir: Path,
@@ -3254,11 +3344,21 @@ def compile_run_runtime_hook_smoke(
     source_sha256 = hashlib.sha256(source.encode()).hexdigest()
     if reuse and record_path.is_file():
         cached = json.loads(record_path.read_text(encoding="utf-8"))
+        cached_admission = cached.get("runtime_exact_site_admission", {})
         if (
             cached.get("success") is True
             and cached.get("source_sha256") == source_sha256
             and cached.get("implementation_sha256")
             == snapshot["unialloc_implementation_sha256"]
+            and cached.get("runtime_site_count", 0) > 0
+            and cached_admission.get("admitted_allocations", 0) > 0
+            and cached_admission.get("admitted_requested_bytes", 0) > 0
+            and cached_admission.get("runtime_exact_site_count", 0) > 0
+            and cached_admission.get("runtime_exact_site_allocation_count", 0) > 0
+            and cached_admission.get("decisive_long_site_count", 0) > 0
+            and cached_admission.get("decisive_long_outcome_count", 0) > 0
+            and cached_admission.get("maximum_completed_age_bytes", 0)
+            >= RUNTIME_LONG_AGE_BYTES
         ):
             return cached
     shutil.rmtree(smoke_root, ignore_errors=True)
@@ -3349,6 +3449,7 @@ def compile_run_runtime_hook_smoke(
     validate_runtime_evidence(
         ARM_BY_NAME["force-track-all-unknown-diagnostic"], stats, sites
     )
+    admission = validate_runtime_hook_smoke_admission(stats, sites)
     fragmentation = parse_fragmentation(stderr)
     record = {
         "schema_version": 1,
@@ -3363,6 +3464,7 @@ def compile_run_runtime_hook_smoke(
         "runtime_policy": stats["policy"],
         "force_track_all": stats["adaptive_force_track_all"],
         "runtime_site_count": len(sites),
+        "runtime_exact_site_admission": admission,
         "fragmentation": fragmentation,
         "compiler_audit": summarize_compiler_prior_audits(audit_dir),
     }
