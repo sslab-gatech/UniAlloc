@@ -3,7 +3,7 @@
     "/home/hanqing/.local/share/uv/python/cpython-3.13.7-linux-x86_64-gnu/bin/python3.13",
     "/home/hanqing/alloc/UniAlloc-heap-lifetime-inference-20260715/evaluation/scripts/cross_allocator_large_page_experiment.py",
     "--output-dir",
-    "/tmp/unialloc-modern-tcmalloc-cross-20260715-bazel842-final",
+    "/tmp/unialloc-modern-tcmalloc-cross-20260715-bazel842-rebased",
     "--repeats",
     "5",
     "--warmup-blocks",
@@ -32,7 +32,7 @@
   ],
   "bootstrap_resamples": 2000,
   "cpu": 21,
-  "git_head": "8aa40a3c8272a96d1c193efa8f7cd243075787b2",
+  "git_head": "1313d9dc9eaa445140e265d417ef2898c2d7aad9",
   "git_status": "",
   "google_tcmalloc_temeraire": {
     "allocator_identity": "Google TCMalloc",

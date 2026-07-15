@@ -16,7 +16,7 @@ This package preserves the corrected modern baseline campaign.
 
 `google-tcmalloc-provenance.json` records the pinned checkout, implementation-file hashes, exact build command, strong `malloc` symbol, HPAA symbols, smoke checksum, and binary hashes. `google-tcmalloc-bazel-actions.textproto` preserves the compile/link action graph. The runner fails closed when this verified identity is unavailable. It never falls back to gperftools.
 
-The neutral Google TCMalloc executable has SHA-256 `18243dd7a07a54356b8996fcc48cc6296cc2e723af4f77f9c384fe44f1fe1ac1`. The final campaign started from clean Git commit `8aa40a3c8272a96d1c193efa8f7cd243075787b2`, used one warmup plus five measured blocks, pinned CPU 21 and NUMA node 0, and ran 32,768 objects with eight touch passes. The portable provenance retains the original action-graph execution path and binds the preserved local copy by SHA-256.
+The neutral Google TCMalloc executable has SHA-256 `18243dd7a07a54356b8996fcc48cc6296cc2e723af4f77f9c384fe44f1fe1ac1`. The final campaign started from clean Git commit `1313d9dc9eaa445140e265d417ef2898c2d7aad9`, used one warmup plus five measured blocks, pinned CPU 21 and NUMA node 0, and ran 32,768 objects with eight touch passes. The portable provenance retains the original action-graph execution path and binds the preserved local copy by SHA-256.
 
 The repository's authenticated real-application DSO contract uses `libunialloc_google_tcmalloc.so` with SHA-256 `5f99dcf644a7e1e138439fed5d42216c5313ad28e2557f936a250643e0f42081` and additionally validates live HPAA stats, the active malloc provider, the mapped library, and a per-target marker. This neutral probe records an independent link-time identity proof at the same revision and Bazel version.
 

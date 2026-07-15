@@ -1,4 +1,4 @@
-captured_at=2026-07-15T03:06:04-0400
+captured_at=2026-07-15T03:20:40-0400
 
 uname=Linux swoop 6.8.0-111-generic #111-Ubuntu SMP PREEMPT_DYNAMIC Sat Apr 11 23:16:02 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
 
@@ -18,7 +18,7 @@ Core(s) per socket:                      32
 Socket(s):                               2
 Stepping:                                1
 Frequency boost:                         enabled
-CPU(s) scaling MHz:                      54%
+CPU(s) scaling MHz:                      63%
 CPU max MHz:                             3800.2410
 CPU min MHz:                             1500.0000
 BogoMIPS:                                6490.53
@@ -50,7 +50,7 @@ Vulnerability Tsx async abort:           Not affected
 Vulnerability Vmscape:                   Mitigation; IBPB before exit to userspace
 
 meminfo:
-MemAvailable:   734511012 kB
+MemAvailable:   736604884 kB
 AnonHugePages:      2048 kB
 ShmemHugePages:        0 kB
 FileHugePages:         0 kB
