@@ -1,0 +1,1266 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="2946" viewBox="0 0 1480 2946" role="img" aria-label="UniAlloc raw-path ROI benchmark report">
+<title>UniAlloc raw-path ROI benchmark report</title>
+<desc>Repeated A/B medians and ranges plus a single-observation 468-leaf smoke heatmap.</desc>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<style>text{font-family:Inter,Segoe UI,Arial,sans-serif}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}</style>
+<text x="60.0" y="58.0" font-size="30" font-weight="750" fill="#17212b" text-anchor="start">UniAlloc raw-path ROI</text>
+<text x="60.0" y="87.0" font-size="15" font-weight="400" fill="#52606d" text-anchor="start">Repeated A/B medians with paired min–max ranges; positive values mean faster</text>
+<rect x="60.0" y="112.0" width="325.0" height="105.0" rx="8.0" fill="#f5f7f9" stroke="#d9e0e6"/>
+<text x="78.0" y="140.0" font-size="13" font-weight="650" fill="#52606d" text-anchor="start">Repeated leaves</text>
+<text x="78.0" y="175.0" font-size="25" font-weight="750" fill="#17212b" text-anchor="start">62</text>
+<text x="78.0" y="200.0" font-size="12" font-weight="400" fill="#52606d" text-anchor="start">median +0.8%</text>
+<rect x="410.0" y="112.0" width="325.0" height="105.0" rx="8.0" fill="#f5f7f9" stroke="#d9e0e6"/>
+<text x="428.0" y="140.0" font-size="13" font-weight="650" fill="#52606d" text-anchor="start">Unconfounded allocator path</text>
+<text x="428.0" y="175.0" font-size="25" font-weight="750" fill="#17212b" text-anchor="start">+1.3%</text>
+<text x="428.0" y="200.0" font-size="12" font-weight="400" fill="#52606d" text-anchor="start">n=37 · range -1%…+19%</text>
+<rect x="760.0" y="112.0" width="325.0" height="105.0" rx="8.0" fill="#f5f7f9" stroke="#d9e0e6"/>
+<text x="778.0" y="140.0" font-size="13" font-weight="650" fill="#52606d" text-anchor="start">Layout / control</text>
+<text x="778.0" y="175.0" font-size="25" font-weight="750" fill="#17212b" text-anchor="start">+0.1%</text>
+<text x="778.0" y="200.0" font-size="12" font-weight="400" fill="#52606d" text-anchor="start">n=21</text>
+<rect x="1110.0" y="112.0" width="325.0" height="105.0" rx="8.0" fill="#f5f7f9" stroke="#d9e0e6"/>
+<text x="1128.0" y="140.0" font-size="13" font-weight="650" fill="#52606d" text-anchor="start">Full floor-filtered (&gt;=100 ns)</text>
+<text x="1128.0" y="175.0" font-size="25" font-weight="750" fill="#17212b" text-anchor="start">+0.0%</text>
+<text x="1128.0" y="200.0" font-size="12" font-weight="400" fill="#52606d" text-anchor="start">n=239 · raw -41%…+1346%</text>
+<rect x="60.0" y="235.0" width="1360.0" height="82.0" rx="7.0" fill="#fff5d6" stroke="#e1b84b"/>
+<text x="78.0" y="262.0" font-size="13" font-weight="750" fill="#805b00" text-anchor="start">PROMINENT LIMIT</text>
+<text x="78.0" y="285.0" font-size="14" font-weight="600" fill="#684b00" text-anchor="start">The complete 468-leaf sweep contains one reported observation per binary and leaf. It serves as a completeness and gross-regression smoke screen; repeated panels provide claim-grade estimates.</text>
+<text x="78.0" y="305.0" font-size="13" font-weight="400" fill="#684b00" text-anchor="start">Rows marked [layout] have source/disassembly evidence of linked-placement sensitivity.</text>
+<text x="60.0" y="365.0" font-size="23" font-weight="750" fill="#17212b" text-anchor="start">Repeated evidence</text>
+<text x="1405.0" y="365.0" font-size="12" font-weight="400" fill="#6b7785" text-anchor="end">scale clipped at ±50%</text>
+<text x="610.0" y="390.0" font-size="11" font-weight="400" fill="#9b3434" text-anchor="start">slower</text>
+<text x="860.0" y="390.0" font-size="11" font-weight="400" fill="#6b7785" text-anchor="middle">0</text>
+<text x="1110.0" y="390.0" font-size="11" font-weight="400" fill="#18794e" text-anchor="end">faster</text>
+<rect x="60.0" y="406.0" width="1360.0" height="28.0" rx="4.0" fill="#eaf0f4" stroke="none"/>
+<text x="72.0" y="426.0" font-size="14" font-weight="750" fill="#17212b" text-anchor="start">Allocation-sensitive timed closures</text>
+<text x="1405.0" y="426.0" font-size="12" font-weight="400" fill="#52606d" text-anchor="end">n=41 · median +1.3%</text>
+<g><title>slice::sort_large_descending: linked-placement-sensitive</title>
+<text x="72.0" y="445.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::sort_large_descending [layout]</text>
+<rect x="610.0" y="435.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="433.0" x2="860.0" y2="445.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="703.7" y1="439.0" x2="706.5" y2="439.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="705.2" y="436.0" width="154.8" height="6.0" rx="2.0" fill="#ca6869" stroke="none"/>
+<circle cx="705.2" cy="439.0" r="3.2" fill="#ca6869" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="445.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-31.0%  [-31.3%, -30.7%]</text>
+<text x="1365.0" y="445.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">confirmatory n5</text>
+</g>
+<rect x="60.0" y="452.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>vec::bench_chain_extend_ref</title>
+<text x="72.0" y="469.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_chain_extend_ref</text>
+<rect x="610.0" y="459.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="457.0" x2="860.0" y2="469.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="848.6" y1="463.0" x2="860.4" y2="463.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="854.5" y="460.0" width="5.5" height="6.0" rx="2.0" fill="#e7dfe1" stroke="none"/>
+<circle cx="854.5" cy="463.0" r="3.2" fill="#e7dfe1" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="469.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-1.1%  [-2.3%, +0.1%]</text>
+<text x="1365.0" y="469.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">confirmatory n5</text>
+</g>
+<g><title>btree::set::clone_100_and_drain_half</title>
+<text x="72.0" y="493.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">btree::set::clone_100_and_drain_half</text>
+<rect x="610.0" y="483.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="481.0" x2="860.0" y2="493.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="854.6" y1="487.0" x2="858.7" y2="487.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="856.6" y="484.0" width="3.4" height="6.0" rx="2.0" fill="#e8e3e5" stroke="none"/>
+<circle cx="856.6" cy="487.0" r="3.2" fill="#e8e3e5" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="493.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-0.7%  [-1.1%, -0.3%]</text>
+<text x="1365.0" y="493.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="500.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>slice::sort_large_big</title>
+<text x="72.0" y="517.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::sort_large_big</text>
+<rect x="610.0" y="507.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="505.0" x2="860.0" y2="517.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="857.3" y1="511.0" x2="863.3" y2="511.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="858.8" y="508.0" width="1.5" height="6.0" rx="2.0" fill="#eae8ea" stroke="none"/>
+<circle cx="858.8" cy="511.0" r="3.2" fill="#eae8ea" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="517.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-0.2%  [-0.5%, +0.7%]</text>
+<text x="1365.0" y="517.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>btree::set::clone_10k_and_remove_half</title>
+<text x="72.0" y="541.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">btree::set::clone_10k_and_remove_half</text>
+<rect x="610.0" y="531.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="529.0" x2="860.0" y2="541.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="854.1" y1="535.0" x2="872.0" y2="535.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="859.3" y="532.0" width="1.5" height="6.0" rx="2.0" fill="#eaeaec" stroke="none"/>
+<circle cx="859.3" cy="535.0" r="3.2" fill="#eaeaec" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="541.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-0.1%  [-1.2%, +2.4%]</text>
+<text x="1365.0" y="541.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="548.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>binary_heap::bench_find_smallest_1000</title>
+<text x="72.0" y="565.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">binary_heap::bench_find_smallest_1000</text>
+<rect x="610.0" y="555.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="553.0" x2="860.0" y2="565.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="857.8" y1="559.0" x2="862.1" y2="559.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="859.4" y="556.0" width="1.5" height="6.0" rx="2.0" fill="#eaeaec" stroke="none"/>
+<circle cx="859.4" cy="559.0" r="3.2" fill="#eaeaec" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="565.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-0.1%  [-0.4%, +0.4%]</text>
+<text x="1365.0" y="565.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>vec::bench_flat_map_collect</title>
+<text x="72.0" y="589.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_flat_map_collect</text>
+<rect x="610.0" y="579.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="577.0" x2="860.0" y2="589.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="854.4" y1="583.0" x2="862.3" y2="583.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="859.4" y="580.0" width="1.5" height="6.0" rx="2.0" fill="#eaebec" stroke="none"/>
+<circle cx="859.4" cy="583.0" r="3.2" fill="#eaebec" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="589.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-0.1%  [-1.1%, +0.5%]</text>
+<text x="1365.0" y="589.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="596.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>slice::sort_unstable_large_mostly_descending</title>
+<text x="72.0" y="613.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::sort_unstable_large_mostly_descending</text>
+<rect x="610.0" y="603.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="601.0" x2="860.0" y2="613.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="859.7" y1="607.0" x2="860.7" y2="607.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="604.0" width="1.5" height="6.0" rx="2.0" fill="#eaedef" stroke="none"/>
+<circle cx="860.1" cy="607.0" r="3.2" fill="#eaedef" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="613.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.0%  [-0.1%, +0.1%]</text>
+<text x="1365.0" y="613.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>string::bench_push_char_one_byte</title>
+<text x="72.0" y="637.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">string::bench_push_char_one_byte</text>
+<rect x="610.0" y="627.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="625.0" x2="860.0" y2="637.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="856.9" y1="631.0" x2="867.3" y2="631.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="628.0" width="1.5" height="6.0" rx="2.0" fill="#e8ecee" stroke="none"/>
+<circle cx="860.4" cy="631.0" r="3.2" fill="#e8ecee" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="637.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.1%  [-0.6%, +1.5%]</text>
+<text x="1365.0" y="637.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="644.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>binary_heap::bench_into_sorted_vec</title>
+<text x="72.0" y="661.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">binary_heap::bench_into_sorted_vec</text>
+<rect x="610.0" y="651.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="649.0" x2="860.0" y2="661.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="858.9" y1="655.0" x2="862.2" y2="655.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="652.0" width="1.5" height="6.0" rx="2.0" fill="#e5ebeb" stroke="none"/>
+<circle cx="861.2" cy="655.0" r="3.2" fill="#e5ebeb" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="661.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.2%  [-0.2%, +0.4%]</text>
+<text x="1365.0" y="661.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>string::bench_push_str_one_byte</title>
+<text x="72.0" y="685.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">string::bench_push_str_one_byte</text>
+<rect x="610.0" y="675.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="673.0" x2="860.0" y2="685.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="861.0" y1="679.0" x2="862.7" y2="679.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="676.0" width="1.7" height="6.0" rx="2.0" fill="#e3eaea" stroke="none"/>
+<circle cx="861.7" cy="679.0" r="3.2" fill="#e3eaea" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="685.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.3%  [+0.2%, +0.5%]</text>
+<text x="1365.0" y="685.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="692.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>slice::concat: linked-placement-sensitive</title>
+<text x="72.0" y="709.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::concat [layout]</text>
+<rect x="610.0" y="699.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="697.0" x2="860.0" y2="709.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="808.8" y1="703.0" x2="875.1" y2="703.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="700.0" width="2.2" height="6.0" rx="2.0" fill="#e2e9e9" stroke="none"/>
+<circle cx="862.2" cy="703.0" r="3.2" fill="#e2e9e9" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="709.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.4%  [-10.2%, +3.0%]</text>
+<text x="1365.0" y="709.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<g><title>vec::bench_map_regular</title>
+<text x="72.0" y="733.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_map_regular</text>
+<rect x="610.0" y="723.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="721.0" x2="860.0" y2="733.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="855.0" y1="727.0" x2="881.2" y2="727.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="724.0" width="3.0" height="6.0" rx="2.0" fill="#dfe8e7" stroke="none"/>
+<circle cx="863.0" cy="727.0" r="3.2" fill="#dfe8e7" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="733.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.6%  [-1.0%, +4.2%]</text>
+<text x="1365.0" y="733.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="740.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>string::bench_push_char_two_bytes</title>
+<text x="72.0" y="757.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">string::bench_push_char_two_bytes</text>
+<rect x="610.0" y="747.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="745.0" x2="860.0" y2="757.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="860.6" y1="751.0" x2="879.7" y2="751.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="748.0" width="3.1" height="6.0" rx="2.0" fill="#dfe8e7" stroke="none"/>
+<circle cx="863.1" cy="751.0" r="3.2" fill="#dfe8e7" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="757.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.6%  [+0.1%, +3.9%]</text>
+<text x="1365.0" y="757.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>vec::bench_in_place_xu32_1000_i0</title>
+<text x="72.0" y="781.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_in_place_xu32_1000_i0</text>
+<rect x="610.0" y="771.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="769.0" x2="860.0" y2="781.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="861.2" y1="775.0" x2="864.6" y2="775.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="772.0" width="3.7" height="6.0" rx="2.0" fill="#dee7e6" stroke="none"/>
+<circle cx="863.7" cy="775.0" r="3.2" fill="#dee7e6" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="781.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.7%  [+0.2%, +0.9%]</text>
+<text x="1365.0" y="781.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="788.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>vec::bench_chain_collect</title>
+<text x="72.0" y="805.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_chain_collect</text>
+<rect x="610.0" y="795.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="793.0" x2="860.0" y2="805.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="848.7" y1="799.0" x2="875.9" y2="799.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="796.0" width="4.2" height="6.0" rx="2.0" fill="#dde6e5" stroke="none"/>
+<circle cx="864.2" cy="799.0" r="3.2" fill="#dde6e5" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="805.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.8%  [-2.3%, +3.2%]</text>
+<text x="1365.0" y="805.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">confirmatory n5</text>
+</g>
+<g><title>btree::map::clone_fat_val_100_and_remove_half</title>
+<text x="72.0" y="829.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">btree::map::clone_fat_val_100_and_remove_half</text>
+<rect x="610.0" y="819.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="817.0" x2="860.0" y2="829.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="847.1" y1="823.0" x2="897.7" y2="823.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="820.0" width="4.4" height="6.0" rx="2.0" fill="#dce6e4" stroke="none"/>
+<circle cx="864.4" cy="823.0" r="3.2" fill="#dce6e4" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="829.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.9%  [-2.6%, +7.5%]</text>
+<text x="1365.0" y="829.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="836.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>vec::bench_clone_from_10_1000_0100</title>
+<text x="72.0" y="853.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_clone_from_10_1000_0100</text>
+<rect x="610.0" y="843.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="841.0" x2="860.0" y2="853.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="786.5" y1="847.0" x2="867.2" y2="847.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="844.0" width="4.6" height="6.0" rx="2.0" fill="#dce6e4" stroke="none"/>
+<circle cx="864.6" cy="847.0" r="3.2" fill="#dce6e4" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="853.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.9%  [-14.7%, +1.4%]</text>
+<text x="1365.0" y="853.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>vec::bench_clone_from_10_0100_1000</title>
+<text x="72.0" y="877.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_clone_from_10_0100_1000</text>
+<rect x="610.0" y="867.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="865.0" x2="860.0" y2="877.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="864.1" y1="871.0" x2="866.7" y2="871.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="868.0" width="4.9" height="6.0" rx="2.0" fill="#dbe6e4" stroke="none"/>
+<circle cx="864.9" cy="871.0" r="3.2" fill="#dbe6e4" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="877.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+1.0%  [+0.8%, +1.3%]</text>
+<text x="1365.0" y="877.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="884.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>slice::sort_unstable_large_big</title>
+<text x="72.0" y="901.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::sort_unstable_large_big</text>
+<rect x="610.0" y="891.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="889.0" x2="860.0" y2="901.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="854.4" y1="895.0" x2="870.3" y2="895.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="892.0" width="5.5" height="6.0" rx="2.0" fill="#dae5e3" stroke="none"/>
+<circle cx="865.5" cy="895.0" r="3.2" fill="#dae5e3" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="901.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+1.1%  [-1.1%, +2.1%]</text>
+<text x="1365.0" y="901.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>btree::map::insert_seq_10_000</title>
+<text x="72.0" y="925.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">btree::map::insert_seq_10_000</text>
+<rect x="610.0" y="915.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="913.0" x2="860.0" y2="925.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="865.3" y1="919.0" x2="869.2" y2="919.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="916.0" width="6.5" height="6.0" rx="2.0" fill="#d8e4e1" stroke="none"/>
+<circle cx="866.5" cy="919.0" r="3.2" fill="#d8e4e1" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="925.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+1.3%  [+1.1%, +1.8%]</text>
+<text x="1365.0" y="925.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="932.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>slice::random_inserts</title>
+<text x="72.0" y="949.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::random_inserts</text>
+<rect x="610.0" y="939.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="937.0" x2="860.0" y2="949.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="863.6" y1="943.0" x2="869.8" y2="943.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="940.0" width="6.8" height="6.0" rx="2.0" fill="#d7e4e1" stroke="none"/>
+<circle cx="866.8" cy="943.0" r="3.2" fill="#d7e4e1" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="949.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+1.4%  [+0.7%, +2.0%]</text>
+<text x="1365.0" y="949.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<g><title>vec_deque::bench_grow_1025</title>
+<text x="72.0" y="973.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec_deque::bench_grow_1025</text>
+<rect x="610.0" y="963.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="961.0" x2="860.0" y2="973.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="833.4" y1="967.0" x2="872.9" y2="967.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="964.0" width="7.4" height="6.0" rx="2.0" fill="#d6e3e0" stroke="none"/>
+<circle cx="867.4" cy="967.0" r="3.2" fill="#d6e3e0" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="973.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+1.5%  [-5.3%, +2.6%]</text>
+<text x="1365.0" y="973.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="980.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>slice::sort_by_cached_key_lexicographic</title>
+<text x="72.0" y="997.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::sort_by_cached_key_lexicographic</text>
+<rect x="610.0" y="987.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="985.0" x2="860.0" y2="997.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="860.3" y1="991.0" x2="898.3" y2="991.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="988.0" width="10.4" height="6.0" rx="2.0" fill="#d1e0dc" stroke="none"/>
+<circle cx="870.4" cy="991.0" r="3.2" fill="#d1e0dc" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="997.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+2.1%  [+0.1%, +7.7%]</text>
+<text x="1365.0" y="997.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<g><title>str::bench_join</title>
+<text x="72.0" y="1021.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">str::bench_join</text>
+<rect x="610.0" y="1011.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1009.0" x2="860.0" y2="1021.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="868.0" y1="1015.0" x2="874.4" y2="1015.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1012.0" width="11.6" height="6.0" rx="2.0" fill="#cfdfdb" stroke="none"/>
+<circle cx="871.6" cy="1015.0" r="3.2" fill="#cfdfdb" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1021.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+2.3%  [+1.6%, +2.9%]</text>
+<text x="1365.0" y="1021.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="1028.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>string::from_utf8_lossy_100_invalid</title>
+<text x="72.0" y="1045.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">string::from_utf8_lossy_100_invalid</text>
+<rect x="610.0" y="1035.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1033.0" x2="860.0" y2="1045.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="874.5" y1="1039.0" x2="875.8" y2="1039.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1036.0" width="15.1" height="6.0" rx="2.0" fill="#caddd6" stroke="none"/>
+<circle cx="875.1" cy="1039.0" r="3.2" fill="#caddd6" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1045.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+3.0%  [+2.9%, +3.2%]</text>
+<text x="1365.0" y="1045.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>slice::sort_small_big</title>
+<text x="72.0" y="1069.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::sort_small_big</text>
+<rect x="610.0" y="1059.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1057.0" x2="860.0" y2="1069.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="876.7" y1="1063.0" x2="884.2" y2="1063.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1060.0" width="18.2" height="6.0" rx="2.0" fill="#c6dad3" stroke="none"/>
+<circle cx="878.2" cy="1063.0" r="3.2" fill="#c6dad3" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1069.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+3.6%  [+3.3%, +4.8%]</text>
+<text x="1365.0" y="1069.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="1076.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>slice::join</title>
+<text x="72.0" y="1093.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::join</text>
+<rect x="610.0" y="1083.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1081.0" x2="860.0" y2="1093.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="864.1" y1="1087.0" x2="904.4" y2="1087.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1084.0" width="18.4" height="6.0" rx="2.0" fill="#c6dad3" stroke="none"/>
+<circle cx="878.4" cy="1087.0" r="3.2" fill="#c6dad3" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1093.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+3.7%  [+0.8%, +8.9%]</text>
+<text x="1365.0" y="1093.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<g><title>vec::bench_extend_from_slice_1000_1000</title>
+<text x="72.0" y="1117.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_extend_from_slice_1000_1000</text>
+<rect x="610.0" y="1107.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1105.0" x2="860.0" y2="1117.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="876.0" y1="1111.0" x2="891.8" y2="1111.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1108.0" width="23.2" height="6.0" rx="2.0" fill="#bfd7ce" stroke="none"/>
+<circle cx="883.2" cy="1111.0" r="3.2" fill="#bfd7ce" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1117.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+4.6%  [+3.2%, +6.4%]</text>
+<text x="1365.0" y="1117.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="1124.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>vec::bench_with_capacity_0010</title>
+<text x="72.0" y="1141.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_with_capacity_0010</text>
+<rect x="610.0" y="1131.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1129.0" x2="860.0" y2="1141.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="874.4" y1="1135.0" x2="891.8" y2="1135.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1132.0" width="26.7" height="6.0" rx="2.0" fill="#bbd5cb" stroke="none"/>
+<circle cx="886.7" cy="1135.0" r="3.2" fill="#bbd5cb" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1141.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+5.3%  [+2.9%, +6.4%]</text>
+<text x="1365.0" y="1141.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<g><title>vec::bench_with_capacity_0100</title>
+<text x="72.0" y="1165.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_with_capacity_0100</text>
+<rect x="610.0" y="1155.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1153.0" x2="860.0" y2="1165.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="873.2" y1="1159.0" x2="890.6" y2="1159.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1156.0" width="27.4" height="6.0" rx="2.0" fill="#bbd4ca" stroke="none"/>
+<circle cx="887.4" cy="1159.0" r="3.2" fill="#bbd4ca" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1165.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+5.5%  [+2.6%, +6.1%]</text>
+<text x="1365.0" y="1165.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="1172.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>vec_deque::bench_into_iter_fold</title>
+<text x="72.0" y="1189.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec_deque::bench_into_iter_fold</text>
+<rect x="610.0" y="1179.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1177.0" x2="860.0" y2="1189.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="889.4" y1="1183.0" x2="894.6" y2="1183.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1180.0" width="31.2" height="6.0" rx="2.0" fill="#b6d2c7" stroke="none"/>
+<circle cx="891.2" cy="1183.0" r="3.2" fill="#b6d2c7" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1189.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+6.2%  [+5.9%, +6.9%]</text>
+<text x="1365.0" y="1189.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>binary_heap::bench_from_vec: linked-placement-sensitive</title>
+<text x="72.0" y="1213.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">binary_heap::bench_from_vec [layout]</text>
+<rect x="610.0" y="1203.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1201.0" x2="860.0" y2="1213.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="691.6" y1="1207.0" x2="932.3" y2="1207.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1204.0" width="35.7" height="6.0" rx="2.0" fill="#b1d0c3" stroke="none"/>
+<circle cx="895.7" cy="1207.0" r="3.2" fill="#b1d0c3" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1213.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+7.1%  [-33.7%, +14.5%]</text>
+<text x="1365.0" y="1213.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="1220.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>linked_list::bench_push_front_pop_front</title>
+<text x="72.0" y="1237.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">linked_list::bench_push_front_pop_front</text>
+<rect x="610.0" y="1227.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1225.0" x2="860.0" y2="1237.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="893.4" y1="1231.0" x2="1032.8" y2="1231.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1228.0" width="36.4" height="6.0" rx="2.0" fill="#b1cfc3" stroke="none"/>
+<circle cx="896.4" cy="1231.0" r="3.2" fill="#b1cfc3" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1237.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+7.3%  [+6.7%, +34.6%]</text>
+<text x="1365.0" y="1237.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<g><title>vec::bench_in_place_u128_1000_i0</title>
+<text x="72.0" y="1261.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_in_place_u128_1000_i0</text>
+<rect x="610.0" y="1251.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1249.0" x2="860.0" y2="1261.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="899.0" y1="1255.0" x2="904.6" y2="1255.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1252.0" width="40.6" height="6.0" rx="2.0" fill="#accdc0" stroke="none"/>
+<circle cx="900.6" cy="1255.0" r="3.2" fill="#accdc0" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1261.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+8.1%  [+7.8%, +8.9%]</text>
+<text x="1365.0" y="1261.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="1268.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>vec::bench_with_capacity_1000</title>
+<text x="72.0" y="1285.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_with_capacity_1000</text>
+<rect x="610.0" y="1275.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1273.0" x2="860.0" y2="1285.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="899.9" y1="1279.0" x2="904.6" y2="1279.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1276.0" width="43.1" height="6.0" rx="2.0" fill="#aaccbe" stroke="none"/>
+<circle cx="903.1" cy="1279.0" r="3.2" fill="#aaccbe" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1285.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+8.6%  [+8.0%, +8.9%]</text>
+<text x="1365.0" y="1285.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<g><title>linked_list::bench_collect_into</title>
+<text x="72.0" y="1309.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">linked_list::bench_collect_into</text>
+<rect x="610.0" y="1299.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1297.0" x2="860.0" y2="1309.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="910.5" y1="1303.0" x2="950.0" y2="1303.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1300.0" width="62.2" height="6.0" rx="2.0" fill="#98c2b0" stroke="none"/>
+<circle cx="922.2" cy="1303.0" r="3.2" fill="#98c2b0" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1309.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+12.4%  [+10.1%, +18.0%]</text>
+<text x="1365.0" y="1309.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="1316.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>string::bench_insert_str_long</title>
+<text x="72.0" y="1333.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">string::bench_insert_str_long</text>
+<rect x="610.0" y="1323.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1321.0" x2="860.0" y2="1333.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="916.1" y1="1327.0" x2="1024.3" y2="1327.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1324.0" width="66.2" height="6.0" rx="2.0" fill="#95c0ad" stroke="none"/>
+<circle cx="926.2" cy="1327.0" r="3.2" fill="#95c0ad" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1333.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+13.2%  [+11.2%, +32.9%]</text>
+<text x="1365.0" y="1333.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>string::bench_from_str</title>
+<text x="72.0" y="1357.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">string::bench_from_str</text>
+<rect x="610.0" y="1347.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1345.0" x2="860.0" y2="1357.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="931.2" y1="1351.0" x2="941.3" y2="1351.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1348.0" width="77.2" height="6.0" rx="2.0" fill="#8cbca6" stroke="none"/>
+<circle cx="937.2" cy="1351.0" r="3.2" fill="#8cbca6" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1357.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+15.4%  [+14.2%, +16.3%]</text>
+<text x="1365.0" y="1357.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="1364.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>string::bench_with_capacity</title>
+<text x="72.0" y="1381.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">string::bench_with_capacity</text>
+<rect x="610.0" y="1371.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1369.0" x2="860.0" y2="1381.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="948.3" y1="1375.0" x2="959.4" y2="1375.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1372.0" width="96.1" height="6.0" rx="2.0" fill="#7db49b" stroke="none"/>
+<circle cx="956.1" cy="1375.0" r="3.2" fill="#7db49b" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1381.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+19.2%  [+17.7%, +19.9%]</text>
+<text x="1365.0" y="1381.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<g><title>slice::sort_unstable_large_ascending: linked-placement-sensitive</title>
+<text x="72.0" y="1405.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::sort_unstable_large_ascending [layout]</text>
+<rect x="610.0" y="1395.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1393.0" x2="860.0" y2="1405.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="1110.0" y1="1399.0" x2="1110.0" y2="1399.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1396.0" width="250.0" height="6.0" rx="2.0" fill="#1f8252" stroke="none"/>
+<circle cx="1110.0" cy="1399.0" r="3.2" fill="#1f8252" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1405.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+65.3%  [+65.2%, +65.9%]</text>
+<text x="1365.0" y="1405.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">confirmatory n5</text>
+</g>
+<rect x="60.0" y="1430.0" width="1360.0" height="28.0" rx="4.0" fill="#eaf0f4" stroke="none"/>
+<text x="72.0" y="1450.0" font-size="14" font-weight="750" fill="#17212b" text-anchor="start">Layout / control timed closures</text>
+<text x="1405.0" y="1450.0" font-size="12" font-weight="400" fill="#52606d" text-anchor="end">n=21 · median +0.1%</text>
+<g><title>vec_deque::bench_mut_iter_1000: linked-placement-sensitive</title>
+<text x="72.0" y="1469.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec_deque::bench_mut_iter_1000 [layout]</text>
+<rect x="610.0" y="1459.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1457.0" x2="860.0" y2="1469.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="702.2" y1="1463.0" x2="704.7" y2="1463.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="703.5" y="1460.0" width="156.5" height="6.0" rx="2.0" fill="#ca6768" stroke="none"/>
+<circle cx="703.5" cy="1463.0" r="3.2" fill="#ca6768" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1469.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-31.3%  [-31.6%, -31.1%]</text>
+<text x="1365.0" y="1469.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="1476.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>vec::bench_dedup_slice_truncate_100000</title>
+<text x="72.0" y="1493.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_dedup_slice_truncate_100000</text>
+<rect x="610.0" y="1483.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1481.0" x2="860.0" y2="1493.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="841.7" y1="1487.0" x2="868.0" y2="1487.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="854.2" y="1484.0" width="5.8" height="6.0" rx="2.0" fill="#e7dee0" stroke="none"/>
+<circle cx="854.2" cy="1487.0" r="3.2" fill="#e7dee0" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1493.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-1.2%  [-3.7%, +1.6%]</text>
+<text x="1365.0" y="1493.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<g><title>btree::map::iter_10k</title>
+<text x="72.0" y="1517.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">btree::map::iter_10k</text>
+<rect x="610.0" y="1507.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1505.0" x2="860.0" y2="1517.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="857.3" y1="1511.0" x2="859.3" y2="1511.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="858.5" y="1508.0" width="1.5" height="6.0" rx="2.0" fill="#e9e7e9" stroke="none"/>
+<circle cx="858.5" cy="1511.0" r="3.2" fill="#e9e7e9" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1517.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-0.3%  [-0.5%, -0.1%]</text>
+<text x="1365.0" y="1517.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="1524.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>str::rsplitn_space_char::long_lorem_ipsum</title>
+<text x="72.0" y="1541.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">str::rsplitn_space_char::long_lorem_ipsum</text>
+<rect x="610.0" y="1531.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1529.0" x2="860.0" y2="1541.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="857.7" y1="1535.0" x2="861.1" y2="1535.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="859.5" y="1532.0" width="1.5" height="6.0" rx="2.0" fill="#eaebed" stroke="none"/>
+<circle cx="859.5" cy="1535.0" r="3.2" fill="#eaebed" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1541.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-0.1%  [-0.5%, +0.2%]</text>
+<text x="1365.0" y="1541.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>linked_list::bench_iter</title>
+<text x="72.0" y="1565.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">linked_list::bench_iter</text>
+<rect x="610.0" y="1555.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1553.0" x2="860.0" y2="1565.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="859.3" y1="1559.0" x2="860.2" y2="1559.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="859.8" y="1556.0" width="1.5" height="6.0" rx="2.0" fill="#ebecee" stroke="none"/>
+<circle cx="859.8" cy="1559.0" r="3.2" fill="#ebecee" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1565.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-0.0%  [-0.1%, +0.0%]</text>
+<text x="1365.0" y="1565.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="1572.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>str::ends_with_unichar::long_lorem_ipsum</title>
+<text x="72.0" y="1589.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">str::ends_with_unichar::long_lorem_ipsum</text>
+<rect x="610.0" y="1579.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1577.0" x2="860.0" y2="1589.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="859.2" y1="1583.0" x2="860.7" y2="1583.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="859.8" y="1580.0" width="1.5" height="6.0" rx="2.0" fill="#ebecee" stroke="none"/>
+<circle cx="859.8" cy="1583.0" r="3.2" fill="#ebecee" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1589.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-0.0%  [-0.2%, +0.1%]</text>
+<text x="1365.0" y="1589.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>slice::rotate_medium_by727_bytes</title>
+<text x="72.0" y="1613.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::rotate_medium_by727_bytes</text>
+<rect x="610.0" y="1603.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1601.0" x2="860.0" y2="1613.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="859.1" y1="1607.0" x2="861.3" y2="1607.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="859.9" y="1604.0" width="1.5" height="6.0" rx="2.0" fill="#ebedef" stroke="none"/>
+<circle cx="859.9" cy="1607.0" r="3.2" fill="#ebedef" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1613.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">-0.0%  [-0.2%, +0.3%]</text>
+<text x="1365.0" y="1613.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="1620.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>linked_list::bench_iter_mut_rev</title>
+<text x="72.0" y="1637.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">linked_list::bench_iter_mut_rev</text>
+<rect x="610.0" y="1627.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1625.0" x2="860.0" y2="1637.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="859.0" y1="1631.0" x2="860.5" y2="1631.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1628.0" width="1.5" height="6.0" rx="2.0" fill="#eaeeef" stroke="none"/>
+<circle cx="860.0" cy="1631.0" r="3.2" fill="#eaeeef" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1637.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.0%  [-0.2%, +0.1%]</text>
+<text x="1365.0" y="1637.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>str::starts_with_str::short_ascii</title>
+<text x="72.0" y="1661.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">str::starts_with_str::short_ascii</text>
+<rect x="610.0" y="1651.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1649.0" x2="860.0" y2="1661.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="859.7" y1="1655.0" x2="860.9" y2="1655.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1652.0" width="1.5" height="6.0" rx="2.0" fill="#e9edee" stroke="none"/>
+<circle cx="860.2" cy="1655.0" r="3.2" fill="#e9edee" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1661.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.0%  [-0.1%, +0.2%]</text>
+<text x="1365.0" y="1661.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="1668.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>linked_list::bench_iter_rev</title>
+<text x="72.0" y="1685.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">linked_list::bench_iter_rev</text>
+<rect x="610.0" y="1675.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1673.0" x2="860.0" y2="1685.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="858.0" y1="1679.0" x2="861.0" y2="1679.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1676.0" width="1.5" height="6.0" rx="2.0" fill="#e9edee" stroke="none"/>
+<circle cx="860.2" cy="1679.0" r="3.2" fill="#e9edee" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1685.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.0%  [-0.4%, +0.2%]</text>
+<text x="1365.0" y="1685.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>vec_deque::bench_into_iter_try_fold</title>
+<text x="72.0" y="1709.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec_deque::bench_into_iter_try_fold</text>
+<rect x="610.0" y="1699.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1697.0" x2="860.0" y2="1709.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="851.2" y1="1703.0" x2="860.9" y2="1703.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1700.0" width="1.5" height="6.0" rx="2.0" fill="#e7eced" stroke="none"/>
+<circle cx="860.6" cy="1703.0" r="3.2" fill="#e7eced" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1709.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.1%  [-1.8%, +0.2%]</text>
+<text x="1365.0" y="1709.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="1716.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>vec_deque::bench_into_iter</title>
+<text x="72.0" y="1733.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec_deque::bench_into_iter</text>
+<rect x="610.0" y="1723.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1721.0" x2="860.0" y2="1733.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="860.2" y1="1727.0" x2="861.3" y2="1727.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1724.0" width="1.5" height="6.0" rx="2.0" fill="#e6ebec" stroke="none"/>
+<circle cx="860.8" cy="1727.0" r="3.2" fill="#e6ebec" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1733.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.2%  [+0.0%, +0.3%]</text>
+<text x="1365.0" y="1733.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>str::ends_with_ascii_char::long_lorem_ipsum</title>
+<text x="72.0" y="1757.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">str::ends_with_ascii_char::long_lorem_ipsum</text>
+<rect x="610.0" y="1747.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1745.0" x2="860.0" y2="1757.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="859.0" y1="1751.0" x2="861.6" y2="1751.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1748.0" width="1.5" height="6.0" rx="2.0" fill="#e5ebeb" stroke="none"/>
+<circle cx="861.1" cy="1751.0" r="3.2" fill="#e5ebeb" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1757.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.2%  [-0.2%, +0.3%]</text>
+<text x="1365.0" y="1757.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="1764.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>binary_heap::bench_pop</title>
+<text x="72.0" y="1781.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">binary_heap::bench_pop</text>
+<rect x="610.0" y="1771.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1769.0" x2="860.0" y2="1781.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="857.2" y1="1775.0" x2="862.1" y2="1775.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1772.0" width="1.6" height="6.0" rx="2.0" fill="#e3eaea" stroke="none"/>
+<circle cx="861.6" cy="1775.0" r="3.2" fill="#e3eaea" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1781.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.3%  [-0.6%, +0.4%]</text>
+<text x="1365.0" y="1781.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>btree::map::find_seq_100</title>
+<text x="72.0" y="1805.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">btree::map::find_seq_100</text>
+<rect x="610.0" y="1795.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1793.0" x2="860.0" y2="1805.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="862.9" y1="1799.0" x2="865.1" y2="1799.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1796.0" width="3.6" height="6.0" rx="2.0" fill="#dee7e6" stroke="none"/>
+<circle cx="863.6" cy="1799.0" r="3.2" fill="#dee7e6" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1805.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.7%  [+0.6%, +1.0%]</text>
+<text x="1365.0" y="1805.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<rect x="60.0" y="1812.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>slice::rotate_huge_by1234577_big</title>
+<text x="72.0" y="1829.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">slice::rotate_huge_by1234577_big</text>
+<rect x="610.0" y="1819.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1817.0" x2="860.0" y2="1829.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="840.9" y1="1823.0" x2="875.8" y2="1823.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1820.0" width="4.2" height="6.0" rx="2.0" fill="#dde6e5" stroke="none"/>
+<circle cx="864.2" cy="1823.0" r="3.2" fill="#dde6e5" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1829.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+0.8%  [-3.8%, +3.2%]</text>
+<text x="1365.0" y="1829.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">targeted n5</text>
+</g>
+<g><title>vec_deque::bench_into_iter_next_chunk</title>
+<text x="72.0" y="1853.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec_deque::bench_into_iter_next_chunk</text>
+<rect x="610.0" y="1843.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1841.0" x2="860.0" y2="1853.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="862.5" y1="1847.0" x2="1110.0" y2="1847.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1844.0" width="6.5" height="6.0" rx="2.0" fill="#d8e4e1" stroke="none"/>
+<circle cx="866.5" cy="1847.0" r="3.2" fill="#d8e4e1" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1853.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+1.3%  [+0.5%, +51.0%]</text>
+<text x="1365.0" y="1853.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="1860.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>str::split_space_char::long_lorem_ipsum</title>
+<text x="72.0" y="1877.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">str::split_space_char::long_lorem_ipsum</text>
+<rect x="610.0" y="1867.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1865.0" x2="860.0" y2="1877.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="864.7" y1="1871.0" x2="874.3" y2="1871.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1868.0" width="11.0" height="6.0" rx="2.0" fill="#d0e0db" stroke="none"/>
+<circle cx="871.0" cy="1871.0" r="3.2" fill="#d0e0db" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1877.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+2.2%  [+0.9%, +2.9%]</text>
+<text x="1365.0" y="1877.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>binary_heap::bench_push</title>
+<text x="72.0" y="1901.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">binary_heap::bench_push</text>
+<rect x="610.0" y="1891.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1889.0" x2="860.0" y2="1901.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="903.5" y1="1895.0" x2="918.9" y2="1895.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1892.0" width="56.4" height="6.0" rx="2.0" fill="#9ec5b4" stroke="none"/>
+<circle cx="916.4" cy="1895.0" r="3.2" fill="#9ec5b4" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1901.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+11.3%  [+8.7%, +11.8%]</text>
+<text x="1365.0" y="1901.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<rect x="60.0" y="1908.0" width="1360.0" height="24.0" rx="0.0" fill="#fafbfc" stroke="none"/>
+<g><title>btree::set::intersection_staggered_100_vs_100</title>
+<text x="72.0" y="1925.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">btree::set::intersection_staggered_100_vs_100</text>
+<rect x="610.0" y="1915.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1913.0" x2="860.0" y2="1925.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="928.9" y1="1919.0" x2="991.2" y2="1919.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1916.0" width="72.7" height="6.0" rx="2.0" fill="#90bea9" stroke="none"/>
+<circle cx="932.7" cy="1919.0" r="3.2" fill="#90bea9" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1925.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+14.5%  [+13.8%, +26.2%]</text>
+<text x="1365.0" y="1925.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">stratified n4</text>
+</g>
+<g><title>vec::bench_retain_100000</title>
+<text x="72.0" y="1949.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_retain_100000</text>
+<rect x="610.0" y="1939.0" width="500.0" height="8.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="860.0" y1="1937.0" x2="860.0" y2="1949.0" stroke="#8b96a0" stroke-width="1"/>
+<line x1="1058.1" y1="1943.0" x2="1061.6" y2="1943.0" stroke="#263746" stroke-width="1.4"/>
+<rect x="860.0" y="1940.0" width="200.3" height="6.0" rx="2.0" fill="#3a9067" stroke="none"/>
+<circle cx="1060.3" cy="1943.0" r="3.2" fill="#3a9067" stroke="#ffffff" stroke-width="1"/>
+<text x="1130.0" y="1949.0" font-size="11" font-weight="600" fill="#17212b" text-anchor="start">+40.1%  [+39.6%, +40.3%]</text>
+<text x="1365.0" y="1949.0" font-size="10" font-weight="400" fill="#6b7785" text-anchor="end">confirmatory n5</text>
+</g>
+<text x="60.0" y="2010.0" font-size="23" font-weight="750" fill="#17212b" text-anchor="start">Full 468-leaf single-observation smoke</text>
+<text x="60.0" y="2040.0" font-size="15" font-weight="700" fill="#17212b" text-anchor="start">Floor-filtered family median speedup (both &gt;=100 ns/iter)</text>
+<text x="72.0" y="2066.0" font-size="12" font-weight="400" fill="#17212b" text-anchor="start">binary_heap</text>
+<text x="225.0" y="2066.0" font-size="9" font-weight="400" fill="#6b7785" text-anchor="end">n=6</text>
+<rect x="245.0" y="2056.0" width="420.0" height="9.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="455.0" y1="2054.0" x2="455.0" y2="2067.0" stroke="#8b96a0"/>
+<line x1="407.8" y1="2060.0" x2="501.7" y2="2060.0" stroke="#263746" stroke-width="1.2"/>
+<rect x="454.6" y="2057.0" width="1.5" height="7.0" rx="2.0" fill="#eaebed" stroke="none"/>
+<text x="675.0" y="2066.0" font-size="10" font-weight="650" fill="#17212b" text-anchor="start">-0.1% [-11.2%, +11.1%]</text>
+<text x="72.0" y="2093.0" font-size="12" font-weight="400" fill="#17212b" text-anchor="start">btree::map</text>
+<text x="225.0" y="2093.0" font-size="9" font-weight="400" fill="#6b7785" text-anchor="end">n=41</text>
+<rect x="245.0" y="2083.0" width="420.0" height="9.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="455.0" y1="2081.0" x2="455.0" y2="2094.0" stroke="#8b96a0"/>
+<line x1="402.7" y1="2087.0" x2="529.5" y2="2087.0" stroke="#263746" stroke-width="1.2"/>
+<rect x="454.5" y="2084.0" width="1.5" height="7.0" rx="2.0" fill="#eaebed" stroke="none"/>
+<text x="675.0" y="2093.0" font-size="10" font-weight="650" fill="#17212b" text-anchor="start">-0.1% [-12.4%, +17.7%]</text>
+<text x="72.0" y="2120.0" font-size="12" font-weight="400" fill="#17212b" text-anchor="start">btree::set</text>
+<text x="225.0" y="2120.0" font-size="9" font-weight="400" fill="#6b7785" text-anchor="end">n=33</text>
+<rect x="245.0" y="2110.0" width="420.0" height="9.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="455.0" y1="2108.0" x2="455.0" y2="2121.0" stroke="#8b96a0"/>
+<line x1="371.7" y1="2114.0" x2="581.3" y2="2114.0" stroke="#263746" stroke-width="1.2"/>
+<rect x="452.9" y="2111.0" width="2.1" height="7.0" rx="2.0" fill="#e9e5e7" stroke="none"/>
+<text x="675.0" y="2120.0" font-size="10" font-weight="650" fill="#17212b" text-anchor="start">-0.5% [-19.8%, +30.1%]</text>
+<text x="72.0" y="2147.0" font-size="12" font-weight="400" fill="#17212b" text-anchor="start">linked_list</text>
+<text x="225.0" y="2147.0" font-size="9" font-weight="400" fill="#6b7785" text-anchor="end">n=3</text>
+<rect x="245.0" y="2137.0" width="420.0" height="9.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="455.0" y1="2135.0" x2="455.0" y2="2148.0" stroke="#8b96a0"/>
+<line x1="452.2" y1="2141.0" x2="507.8" y2="2141.0" stroke="#263746" stroke-width="1.2"/>
+<rect x="455.0" y="2138.0" width="1.5" height="7.0" rx="2.0" fill="#e6ebec" stroke="none"/>
+<text x="675.0" y="2147.0" font-size="10" font-weight="650" fill="#17212b" text-anchor="start">+0.2% [-0.7%, +12.6%]</text>
+<text x="72.0" y="2174.0" font-size="12" font-weight="400" fill="#17212b" text-anchor="start">slice</text>
+<text x="225.0" y="2174.0" font-size="9" font-weight="400" fill="#6b7785" text-anchor="end">n=51</text>
+<rect x="245.0" y="2164.0" width="420.0" height="9.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="455.0" y1="2162.0" x2="455.0" y2="2175.0" stroke="#8b96a0"/>
+<line x1="323.3" y1="2168.0" x2="665.0" y2="2168.0" stroke="#263746" stroke-width="1.2"/>
+<rect x="455.0" y="2165.0" width="1.5" height="7.0" rx="2.0" fill="#e4eaeb" stroke="none"/>
+<text x="675.0" y="2174.0" font-size="10" font-weight="650" fill="#17212b" text-anchor="start">+0.3% [-31.3%, +65.1%]</text>
+<text x="72.0" y="2201.0" font-size="12" font-weight="400" fill="#17212b" text-anchor="start">str</text>
+<text x="225.0" y="2201.0" font-size="9" font-weight="400" fill="#6b7785" text-anchor="end">n=45</text>
+<rect x="245.0" y="2191.0" width="420.0" height="9.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="455.0" y1="2189.0" x2="455.0" y2="2202.0" stroke="#8b96a0"/>
+<line x1="413.4" y1="2195.0" x2="502.2" y2="2195.0" stroke="#263746" stroke-width="1.2"/>
+<rect x="455.0" y="2192.0" width="1.5" height="7.0" rx="2.0" fill="#eaedef" stroke="none"/>
+<text x="675.0" y="2201.0" font-size="10" font-weight="650" fill="#17212b" text-anchor="start">+0.0% [-9.9%, +11.2%]</text>
+<text x="72.0" y="2228.0" font-size="12" font-weight="400" fill="#17212b" text-anchor="start">string</text>
+<text x="225.0" y="2228.0" font-size="9" font-weight="400" fill="#6b7785" text-anchor="end">n=4</text>
+<rect x="245.0" y="2218.0" width="420.0" height="9.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="455.0" y1="2216.0" x2="455.0" y2="2229.0" stroke="#8b96a0"/>
+<line x1="452.3" y1="2222.0" x2="465.3" y2="2222.0" stroke="#263746" stroke-width="1.2"/>
+<rect x="455.0" y="2219.0" width="1.5" height="7.0" rx="2.0" fill="#e4eaeb" stroke="none"/>
+<text x="675.0" y="2228.0" font-size="10" font-weight="650" fill="#17212b" text-anchor="start">+0.3% [-0.6%, +2.5%]</text>
+<text x="72.0" y="2255.0" font-size="12" font-weight="400" fill="#17212b" text-anchor="start">vec</text>
+<text x="225.0" y="2255.0" font-size="9" font-weight="400" fill="#6b7785" text-anchor="end">n=49</text>
+<rect x="245.0" y="2245.0" width="420.0" height="9.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="455.0" y1="2243.0" x2="455.0" y2="2256.0" stroke="#8b96a0"/>
+<line x1="371.4" y1="2249.0" x2="665.0" y2="2249.0" stroke="#263746" stroke-width="1.2"/>
+<rect x="455.0" y="2246.0" width="1.5" height="7.0" rx="2.0" fill="#e4eaeb" stroke="none"/>
+<text x="675.0" y="2255.0" font-size="10" font-weight="650" fill="#17212b" text-anchor="start">+0.3% [-19.9%, +1345.7%]</text>
+<text x="72.0" y="2282.0" font-size="12" font-weight="400" fill="#17212b" text-anchor="start">vec_deque</text>
+<text x="225.0" y="2282.0" font-size="9" font-weight="400" fill="#6b7785" text-anchor="end">n=7</text>
+<rect x="245.0" y="2272.0" width="420.0" height="9.0" rx="3.0" fill="#edf0f2" stroke="none"/>
+<line x1="455.0" y1="2270.0" x2="455.0" y2="2283.0" stroke="#8b96a0"/>
+<line x1="324.1" y1="2276.0" x2="483.3" y2="2276.0" stroke="#263746" stroke-width="1.2"/>
+<rect x="455.0" y="2273.0" width="1.5" height="7.0" rx="2.0" fill="#e4eaeb" stroke="none"/>
+<text x="675.0" y="2282.0" font-size="10" font-weight="650" fill="#17212b" text-anchor="start">+0.3% [-31.2%, +6.7%]</text>
+<text x="815.0" y="2040.0" font-size="15" font-weight="700" fill="#17212b" text-anchor="start">468-leaf heatmap (alphabetical; one observation each)</text>
+<rect x="815.0" y="2064.0" width="22" height="17" rx="2" fill="#e2e9e9"><title>binary_heap::bench_find_smallest_1000: +0.39%</title></rect>
+<rect x="839.0" y="2064.0" width="22" height="17" rx="2" fill="#daa9aa"><title>binary_heap::bench_from_vec: -11.24%</title></rect>
+<rect x="863.0" y="2064.0" width="22" height="17" rx="2" fill="#e9e7e9"><title>binary_heap::bench_into_sorted_vec: -0.30%</title></rect>
+<rect x="887.0" y="2064.0" width="22" height="17" rx="2" fill="#e9e8ea"><title>binary_heap::bench_peek_mut_deref_mut: -0.28%</title></rect>
+<rect x="911.0" y="2064.0" width="22" height="17" rx="2" fill="#e8ecee"><title>binary_heap::bench_pop: +0.08%</title></rect>
+<rect x="935.0" y="2064.0" width="22" height="17" rx="2" fill="#9ec5b5"><title>binary_heap::bench_push: +11.12%</title></rect>
+<rect x="959.0" y="2064.0" width="22" height="17" rx="2" fill="#e7dddf"><title>btree::map::clone_fat_val_100: -1.26%</title></rect>
+<rect x="983.0" y="2064.0" width="22" height="17" rx="2" fill="#e9e4e6"><title>btree::map::clone_fat_val_100_and_clear: -0.55%</title></rect>
+<rect x="1007.0" y="2064.0" width="22" height="17" rx="2" fill="#e2cbcc"><title>btree::map::clone_fat_val_100_and_drain_all: -3.98%</title></rect>
+<rect x="1031.0" y="2064.0" width="22" height="17" rx="2" fill="#e3cdcf"><title>btree::map::clone_fat_val_100_and_drain_half: -3.55%</title></rect>
+<rect x="1055.0" y="2064.0" width="22" height="17" rx="2" fill="#e9e4e6"><title>btree::map::clone_fat_val_100_and_into_iter: -0.58%</title></rect>
+<rect x="1079.0" y="2064.0" width="22" height="17" rx="2" fill="#e6ebec"><title>btree::map::clone_fat_val_100_and_pop_all: +0.17%</title></rect>
+<rect x="1103.0" y="2064.0" width="22" height="17" rx="2" fill="#d7e3e1"><title>btree::map::clone_fat_val_100_and_remove_all: +1.39%</title></rect>
+<rect x="1127.0" y="2064.0" width="22" height="17" rx="2" fill="#e8ecee"><title>btree::map::clone_fat_val_100_and_remove_half: +0.08%</title></rect>
+<rect x="1151.0" y="2064.0" width="22" height="17" rx="2" fill="#83b79f"><title>btree::map::clone_slim_100: +17.73%</title></rect>
+<rect x="1175.0" y="2064.0" width="22" height="17" rx="2" fill="#93bfab"><title>btree::map::clone_slim_100_and_clear: +13.83%</title></rect>
+<rect x="1199.0" y="2064.0" width="22" height="17" rx="2" fill="#bed6cd"><title>btree::map::clone_slim_100_and_drain_all: +4.92%</title></rect>
+<rect x="1223.0" y="2064.0" width="22" height="17" rx="2" fill="#8cbca6"><title>btree::map::clone_slim_100_and_drain_half: +15.50%</title></rect>
+<rect x="1247.0" y="2064.0" width="22" height="17" rx="2" fill="#8abaa5"><title>btree::map::clone_slim_100_and_into_iter: +16.04%</title></rect>
+<rect x="1271.0" y="2064.0" width="22" height="17" rx="2" fill="#e0c2c3"><title>btree::map::clone_slim_100_and_pop_all: -5.67%</title></rect>
+<rect x="1295.0" y="2064.0" width="22" height="17" rx="2" fill="#e5d7d8"><title>btree::map::clone_slim_100_and_remove_all: -2.11%</title></rect>
+<rect x="1319.0" y="2064.0" width="22" height="17" rx="2" fill="#c9dcd5"><title>btree::map::clone_slim_100_and_remove_half: +3.25%</title></rect>
+<rect x="1343.0" y="2064.0" width="22" height="17" rx="2" fill="#cfdfdb"><title>btree::map::clone_slim_10k: +2.30%</title></rect>
+<rect x="1367.0" y="2064.0" width="22" height="17" rx="2" fill="#c7dbd4"><title>btree::map::clone_slim_10k_and_clear: +3.50%</title></rect>
+<rect x="1391.0" y="2064.0" width="22" height="17" rx="2" fill="#d0e0db"><title>btree::map::clone_slim_10k_and_drain_all: +2.24%</title></rect>
+<rect x="1415.0" y="2064.0" width="22" height="17" rx="2" fill="#e6ecec"><title>btree::map::clone_slim_10k_and_drain_half: +0.15%</title></rect>
+<rect x="815.0" y="2083.0" width="22" height="17" rx="2" fill="#cdded9"><title>btree::map::clone_slim_10k_and_into_iter: +2.63%</title></rect>
+<rect x="839.0" y="2083.0" width="22" height="17" rx="2" fill="#dfbec0"><title>btree::map::clone_slim_10k_and_pop_all: -6.37%</title></rect>
+<rect x="863.0" y="2083.0" width="22" height="17" rx="2" fill="#e0c0c1"><title>btree::map::clone_slim_10k_and_remove_all: -6.01%</title></rect>
+<rect x="887.0" y="2083.0" width="22" height="17" rx="2" fill="#b2d0c4"><title>btree::map::clone_slim_10k_and_remove_half: +6.98%</title></rect>
+<rect x="911.0" y="2083.0" width="22" height="17" rx="2" fill="#eaeaec"><title>btree::map::find_rand_100: -0.15%</title></rect>
+<rect x="935.0" y="2083.0" width="22" height="17" rx="2" fill="#e9e5e7"><title>btree::map::find_rand_10_000: -0.51%</title></rect>
+<rect x="959.0" y="2083.0" width="22" height="17" rx="2" fill="#eaeaec"><title>btree::map::find_seq_100: -0.14%</title></rect>
+<rect x="983.0" y="2083.0" width="22" height="17" rx="2" fill="#e7dddf"><title>btree::map::find_seq_10_000: -1.26%</title></rect>
+<rect x="1007.0" y="2083.0" width="22" height="17" rx="2" fill="#ebeef0"><title>btree::map::first_and_last_0_nightly: +0.00%</title></rect>
+<rect x="1031.0" y="2083.0" width="22" height="17" rx="2" fill="#e3eaea"><title>btree::map::first_and_last_0_stable: +0.35%</title></rect>
+<rect x="1055.0" y="2083.0" width="22" height="17" rx="2" fill="#eaecee"><title>btree::map::first_and_last_100_nightly: -0.06%</title></rect>
+<rect x="1079.0" y="2083.0" width="22" height="17" rx="2" fill="#e9edee"><title>btree::map::first_and_last_100_stable: +0.04%</title></rect>
+<rect x="1103.0" y="2083.0" width="22" height="17" rx="2" fill="#ebeef0"><title>btree::map::first_and_last_10k_nightly: +0.00%</title></rect>
+<rect x="1127.0" y="2083.0" width="22" height="17" rx="2" fill="#d5e3df"><title>btree::map::first_and_last_10k_stable: +1.59%</title></rect>
+<rect x="1151.0" y="2083.0" width="22" height="17" rx="2" fill="#cedfda"><title>btree::map::from_iter_rand_100: +2.45%</title></rect>
+<rect x="1175.0" y="2083.0" width="22" height="17" rx="2" fill="#cbddd7"><title>btree::map::from_iter_rand_10_000: +2.87%</title></rect>
+<rect x="1199.0" y="2083.0" width="22" height="17" rx="2" fill="#e7dfe1"><title>btree::map::from_iter_seq_100: -1.08%</title></rect>
+<rect x="1223.0" y="2083.0" width="22" height="17" rx="2" fill="#8ebda8"><title>btree::map::from_iter_seq_10_000: +15.02%</title></rect>
+<rect x="1247.0" y="2083.0" width="22" height="17" rx="2" fill="#cfdfdb"><title>btree::map::insert_rand_100: +2.31%</title></rect>
+<rect x="1271.0" y="2083.0" width="22" height="17" rx="2" fill="#c2d8d0"><title>btree::map::insert_rand_10_000: +4.27%</title></rect>
+<rect x="1295.0" y="2083.0" width="22" height="17" rx="2" fill="#e2c8ca"><title>btree::map::insert_seq_100: -4.42%</title></rect>
+<rect x="1319.0" y="2083.0" width="22" height="17" rx="2" fill="#d8e4e1"><title>btree::map::insert_seq_10_000: +1.33%</title></rect>
+<rect x="1343.0" y="2083.0" width="22" height="17" rx="2" fill="#ebeef0"><title>btree::map::iter_0: +0.00%</title></rect>
+<rect x="1367.0" y="2083.0" width="22" height="17" rx="2" fill="#e7eced"><title>btree::map::iter_1: +0.12%</title></rect>
+<rect x="1391.0" y="2083.0" width="22" height="17" rx="2" fill="#eaebed"><title>btree::map::iter_100: -0.11%</title></rect>
+<rect x="1415.0" y="2083.0" width="22" height="17" rx="2" fill="#eae9eb"><title>btree::map::iter_10k: -0.18%</title></rect>
+<rect x="815.0" y="2102.0" width="22" height="17" rx="2" fill="#e9e5e7"><title>btree::map::iter_1m: -0.45%</title></rect>
+<rect x="839.0" y="2102.0" width="22" height="17" rx="2" fill="#e9edee"><title>btree::map::iteration_1000: +0.05%</title></rect>
+<rect x="863.0" y="2102.0" width="22" height="17" rx="2" fill="#e7dfe1"><title>btree::map::iteration_100000: -1.08%</title></rect>
+<rect x="887.0" y="2102.0" width="22" height="17" rx="2" fill="#e2e9e9"><title>btree::map::iteration_20: +0.42%</title></rect>
+<rect x="911.0" y="2102.0" width="22" height="17" rx="2" fill="#e9e6e7"><title>btree::map::iteration_mut_1000: -0.44%</title></rect>
+<rect x="935.0" y="2102.0" width="22" height="17" rx="2" fill="#e6d9db"><title>btree::map::iteration_mut_100000: -1.78%</title></rect>
+<rect x="959.0" y="2102.0" width="22" height="17" rx="2" fill="#e8ecee"><title>btree::map::iteration_mut_20: +0.07%</title></rect>
+<rect x="983.0" y="2102.0" width="22" height="17" rx="2" fill="#e7dcde"><title>btree::map::range_included_excluded: -1.41%</title></rect>
+<rect x="1007.0" y="2102.0" width="22" height="17" rx="2" fill="#d9a4a5"><title>btree::map::range_included_included: -12.44%</title></rect>
+<rect x="1031.0" y="2102.0" width="22" height="17" rx="2" fill="#e5d4d6"><title>btree::map::range_included_unbounded: -2.45%</title></rect>
+<rect x="1055.0" y="2102.0" width="22" height="17" rx="2" fill="#e7e0e1"><title>btree::map::range_unbounded_unbounded: -1.00%</title></rect>
+<rect x="1079.0" y="2102.0" width="22" height="17" rx="2" fill="#e9e6e7"><title>btree::map::range_unbounded_vs_iter: -0.44%</title></rect>
+<rect x="1103.0" y="2102.0" width="22" height="17" rx="2" fill="#c4d9d2"><title>btree::set::clone_100: +3.91%</title></rect>
+<rect x="1127.0" y="2102.0" width="22" height="17" rx="2" fill="#e0c0c2"><title>btree::set::clone_100_and_clear: -5.96%</title></rect>
+<rect x="1151.0" y="2102.0" width="22" height="17" rx="2" fill="#d7e3e1"><title>btree::set::clone_100_and_drain_all: +1.39%</title></rect>
+<rect x="1175.0" y="2102.0" width="22" height="17" rx="2" fill="#e7dcde"><title>btree::set::clone_100_and_drain_half: -1.39%</title></rect>
+<rect x="1199.0" y="2102.0" width="22" height="17" rx="2" fill="#e0c1c3"><title>btree::set::clone_100_and_into_iter: -5.72%</title></rect>
+<rect x="1223.0" y="2102.0" width="22" height="17" rx="2" fill="#7bb299"><title>btree::set::clone_100_and_pop_all: +19.99%</title></rect>
+<rect x="1247.0" y="2102.0" width="22" height="17" rx="2" fill="#7bb399"><title>btree::set::clone_100_and_remove_all: +19.88%</title></rect>
+<rect x="1271.0" y="2102.0" width="22" height="17" rx="2" fill="#e7dcde"><title>btree::set::clone_100_and_remove_half: -1.38%</title></rect>
+<rect x="1295.0" y="2102.0" width="22" height="17" rx="2" fill="#afcec2"><title>btree::set::clone_10k: +7.52%</title></rect>
+<rect x="1319.0" y="2102.0" width="22" height="17" rx="2" fill="#e9e5e7"><title>btree::set::clone_10k_and_clear: -0.51%</title></rect>
+<rect x="1343.0" y="2102.0" width="22" height="17" rx="2" fill="#ebecee"><title>btree::set::clone_10k_and_drain_all: -0.03%</title></rect>
+<rect x="1367.0" y="2102.0" width="22" height="17" rx="2" fill="#e9e5e7"><title>btree::set::clone_10k_and_drain_half: -0.50%</title></rect>
+<rect x="1391.0" y="2102.0" width="22" height="17" rx="2" fill="#e3cdcf"><title>btree::set::clone_10k_and_into_iter: -3.50%</title></rect>
+<rect x="1415.0" y="2102.0" width="22" height="17" rx="2" fill="#d2e1dd"><title>btree::set::clone_10k_and_pop_all: +1.92%</title></rect>
+<rect x="815.0" y="2121.0" width="22" height="17" rx="2" fill="#e6dbdd"><title>btree::set::clone_10k_and_remove_all: -1.56%</title></rect>
+<rect x="839.0" y="2121.0" width="22" height="17" rx="2" fill="#e3cdce"><title>btree::set::clone_10k_and_remove_half: -3.65%</title></rect>
+<rect x="863.0" y="2121.0" width="22" height="17" rx="2" fill="#d28a8b"><title>btree::set::difference_random_100_vs_100: -19.84%</title></rect>
+<rect x="887.0" y="2121.0" width="22" height="17" rx="2" fill="#58a07e"><title>btree::set::difference_random_100_vs_10k: +30.08%</title></rect>
+<rect x="911.0" y="2121.0" width="22" height="17" rx="2" fill="#e2cbcd"><title>btree::set::difference_random_10k_vs_100: -3.87%</title></rect>
+<rect x="935.0" y="2121.0" width="22" height="17" rx="2" fill="#d49191"><title>btree::set::difference_random_10k_vs_10k: -17.79%</title></rect>
+<rect x="959.0" y="2121.0" width="22" height="17" rx="2" fill="#d8a1a2"><title>btree::set::difference_staggered_100_vs_100: -13.29%</title></rect>
+<rect x="983.0" y="2121.0" width="22" height="17" rx="2" fill="#8bbba6"><title>btree::set::difference_staggered_100_vs_10k: +15.64%</title></rect>
+<rect x="1007.0" y="2121.0" width="22" height="17" rx="2" fill="#d8a0a1"><title>btree::set::difference_staggered_10k_vs_10k: -13.47%</title></rect>
+<rect x="1031.0" y="2121.0" width="22" height="17" rx="2" fill="#e7dfe0"><title>btree::set::intersection_100_neg_vs_100_pos: -1.12%</title></rect>
+<rect x="1055.0" y="2121.0" width="22" height="17" rx="2" fill="#ddb3b5"><title>btree::set::intersection_100_neg_vs_10k_pos: -8.70%</title></rect>
+<rect x="1079.0" y="2121.0" width="22" height="17" rx="2" fill="#e2c8c9"><title>btree::set::intersection_100_pos_vs_100_neg: -4.52%</title></rect>
+<rect x="1103.0" y="2121.0" width="22" height="17" rx="2" fill="#c96566"><title>btree::set::intersection_100_pos_vs_10k_neg: -32.00%</title></rect>
+<rect x="1127.0" y="2121.0" width="22" height="17" rx="2" fill="#e6d8da"><title>btree::set::intersection_10k_neg_vs_100_pos: -1.92%</title></rect>
+<rect x="1151.0" y="2121.0" width="22" height="17" rx="2" fill="#d8a2a3"><title>btree::set::intersection_10k_neg_vs_10k_pos: -12.94%</title></rect>
+<rect x="1175.0" y="2121.0" width="22" height="17" rx="2" fill="#cd7374"><title>btree::set::intersection_10k_pos_vs_100_neg: -27.00%</title></rect>
+<rect x="1199.0" y="2121.0" width="22" height="17" rx="2" fill="#dbaeaf"><title>btree::set::intersection_10k_pos_vs_10k_neg: -10.01%</title></rect>
+<rect x="1223.0" y="2121.0" width="22" height="17" rx="2" fill="#78b197"><title>btree::set::intersection_random_100_vs_100: +20.65%</title></rect>
+<rect x="1247.0" y="2121.0" width="22" height="17" rx="2" fill="#eaedef"><title>btree::set::intersection_random_100_vs_10k: +0.02%</title></rect>
+<rect x="1271.0" y="2121.0" width="22" height="17" rx="2" fill="#a1c7b6"><title>btree::set::intersection_random_10k_vs_100: +10.61%</title></rect>
+<rect x="1295.0" y="2121.0" width="22" height="17" rx="2" fill="#94c0ad"><title>btree::set::intersection_random_10k_vs_10k: +13.44%</title></rect>
+<rect x="1319.0" y="2121.0" width="22" height="17" rx="2" fill="#91beaa"><title>btree::set::intersection_staggered_100_vs_100: +14.31%</title></rect>
+<rect x="1343.0" y="2121.0" width="22" height="17" rx="2" fill="#e7dfe1"><title>btree::set::intersection_staggered_100_vs_10k: -1.07%</title></rect>
+<rect x="1367.0" y="2121.0" width="22" height="17" rx="2" fill="#d9a5a6"><title>btree::set::intersection_staggered_10k_vs_10k: -12.20%</title></rect>
+<rect x="1391.0" y="2121.0" width="22" height="17" rx="2" fill="#dfbfc1"><title>btree::set::is_subset_100_vs_100: -6.16%</title></rect>
+<rect x="1415.0" y="2121.0" width="22" height="17" rx="2" fill="#e9e5e7"><title>btree::set::is_subset_100_vs_10k: -0.48%</title></rect>
+<rect x="815.0" y="2140.0" width="22" height="17" rx="2" fill="#ebeef0"><title>btree::set::is_subset_10k_vs_100: +0.00%</title></rect>
+<rect x="839.0" y="2140.0" width="22" height="17" rx="2" fill="#dfbcbe"><title>btree::set::is_subset_10k_vs_10k: -6.74%</title></rect>
+<rect x="863.0" y="2140.0" width="22" height="17" rx="2" fill="#98c2b0"><title>linked_list::bench_collect_into: +12.56%</title></rect>
+<rect x="887.0" y="2140.0" width="22" height="17" rx="2" fill="#eaecee"><title>linked_list::bench_iter: -0.06%</title></rect>
+<rect x="911.0" y="2140.0" width="22" height="17" rx="2" fill="#e7eced"><title>linked_list::bench_iter_mut: +0.11%</title></rect>
+<rect x="935.0" y="2140.0" width="22" height="17" rx="2" fill="#e6ebec"><title>linked_list::bench_iter_mut_rev: +0.18%</title></rect>
+<rect x="959.0" y="2140.0" width="22" height="17" rx="2" fill="#e8e3e5"><title>linked_list::bench_iter_rev: -0.67%</title></rect>
+<rect x="983.0" y="2140.0" width="22" height="17" rx="2" fill="#dee7e6"><title>linked_list::bench_push_back: +0.73%</title></rect>
+<rect x="1007.0" y="2140.0" width="22" height="17" rx="2" fill="#4c9a75"><title>linked_list::bench_push_back_pop_back: +34.21%</title></rect>
+<rect x="1031.0" y="2140.0" width="22" height="17" rx="2" fill="#c5dad2"><title>linked_list::bench_push_front: +3.80%</title></rect>
+<rect x="1055.0" y="2140.0" width="22" height="17" rx="2" fill="#4b9974"><title>linked_list::bench_push_front_pop_front: +34.45%</title></rect>
+<rect x="1079.0" y="2140.0" width="22" height="17" rx="2" fill="#e7dfe1"><title>slice::concat: -1.09%</title></rect>
+<rect x="1103.0" y="2140.0" width="22" height="17" rx="2" fill="#dfe7e6"><title>slice::contains_last_element: +0.67%</title></rect>
+<rect x="1127.0" y="2140.0" width="22" height="17" rx="2" fill="#dbadae"><title>slice::ends_with_diff_one_element_at_beginning: -10.15%</title></rect>
+<rect x="1151.0" y="2140.0" width="22" height="17" rx="2" fill="#ebeef0"><title>slice::ends_with_same_vector: +0.00%</title></rect>
+<rect x="1175.0" y="2140.0" width="22" height="17" rx="2" fill="#ebeef0"><title>slice::ends_with_single_element: +0.00%</title></rect>
+<rect x="1199.0" y="2140.0" width="22" height="17" rx="2" fill="#e4d2d3"><title>slice::iterator: -2.82%</title></rect>
+<rect x="1223.0" y="2140.0" width="22" height="17" rx="2" fill="#e3cdce"><title>slice::join: -3.63%</title></rect>
+<rect x="1247.0" y="2140.0" width="22" height="17" rx="2" fill="#e6ecec"><title>slice::mut_iterator: +0.15%</title></rect>
+<rect x="1271.0" y="2140.0" width="22" height="17" rx="2" fill="#ebeef0"><title>slice::push: +0.00%</title></rect>
+<rect x="1295.0" y="2140.0" width="22" height="17" rx="2" fill="#e5d7d9"><title>slice::random_inserts: -2.05%</title></rect>
+<rect x="1319.0" y="2140.0" width="22" height="17" rx="2" fill="#d9a4a5"><title>slice::random_removes: -12.49%</title></rect>
+<rect x="1343.0" y="2140.0" width="22" height="17" rx="2" fill="#d6e3e0"><title>slice::reverse_simd_f64x4: +1.48%</title></rect>
+<rect x="1367.0" y="2140.0" width="22" height="17" rx="2" fill="#d7e4e1"><title>slice::reverse_u128: +1.38%</title></rect>
+<rect x="1391.0" y="2140.0" width="22" height="17" rx="2" fill="#dee7e6"><title>slice::reverse_u16: +0.71%</title></rect>
+<rect x="1415.0" y="2140.0" width="22" height="17" rx="2" fill="#d7e4e1"><title>slice::reverse_u32: +1.36%</title></rect>
+<rect x="815.0" y="2159.0" width="22" height="17" rx="2" fill="#d8e4e1"><title>slice::reverse_u64: +1.31%</title></rect>
+<rect x="839.0" y="2159.0" width="22" height="17" rx="2" fill="#e8e0e2"><title>slice::reverse_u8: -0.96%</title></rect>
+<rect x="863.0" y="2159.0" width="22" height="17" rx="2" fill="#eaeaec"><title>slice::reverse_u8x3: -0.15%</title></rect>
+<rect x="887.0" y="2159.0" width="22" height="17" rx="2" fill="#b4d1c6"><title>slice::rotate_huge_by1: +6.57%</title></rect>
+<rect x="911.0" y="2159.0" width="22" height="17" rx="2" fill="#bad4ca"><title>slice::rotate_huge_by1234577_big: +5.51%</title></rect>
+<rect x="935.0" y="2159.0" width="22" height="17" rx="2" fill="#c8dbd5"><title>slice::rotate_huge_by1234577_bytes: +3.31%</title></rect>
+<rect x="959.0" y="2159.0" width="22" height="17" rx="2" fill="#cadcd6"><title>slice::rotate_huge_by1234577_strings: +3.08%</title></rect>
+<rect x="983.0" y="2159.0" width="22" height="17" rx="2" fill="#d6e3df"><title>slice::rotate_huge_by1234577_u64: +1.56%</title></rect>
+<rect x="1007.0" y="2159.0" width="22" height="17" rx="2" fill="#d3e1dd"><title>slice::rotate_huge_by9199_big: +1.88%</title></rect>
+<rect x="1031.0" y="2159.0" width="22" height="17" rx="2" fill="#d7e3e0"><title>slice::rotate_huge_by9199_bytes: +1.43%</title></rect>
+<rect x="1055.0" y="2159.0" width="22" height="17" rx="2" fill="#d7e3e0"><title>slice::rotate_huge_by9199_strings: +1.45%</title></rect>
+<rect x="1079.0" y="2159.0" width="22" height="17" rx="2" fill="#caddd7"><title>slice::rotate_huge_by9199_u64: +2.97%</title></rect>
+<rect x="1103.0" y="2159.0" width="22" height="17" rx="2" fill="#e6d9db"><title>slice::rotate_huge_half: -1.75%</title></rect>
+<rect x="1127.0" y="2159.0" width="22" height="17" rx="2" fill="#eaeaec"><title>slice::rotate_huge_half_plus_one: -0.15%</title></rect>
+<rect x="1151.0" y="2159.0" width="22" height="17" rx="2" fill="#e9edee"><title>slice::rotate_medium_by1: +0.04%</title></rect>
+<rect x="1175.0" y="2159.0" width="22" height="17" rx="2" fill="#eae8ea"><title>slice::rotate_medium_by727_bytes: -0.25%</title></rect>
+<rect x="1199.0" y="2159.0" width="22" height="17" rx="2" fill="#ebedef"><title>slice::rotate_medium_by727_strings: -0.02%</title></rect>
+<rect x="1223.0" y="2159.0" width="22" height="17" rx="2" fill="#e5ebeb"><title>slice::rotate_medium_by727_u64: +0.23%</title></rect>
+<rect x="1247.0" y="2159.0" width="22" height="17" rx="2" fill="#e9e8ea"><title>slice::rotate_medium_half: -0.28%</title></rect>
+<rect x="1271.0" y="2159.0" width="22" height="17" rx="2" fill="#e4d2d4"><title>slice::rotate_medium_half_plus_one: -2.72%</title></rect>
+<rect x="1295.0" y="2159.0" width="22" height="17" rx="2" fill="#ca6768"><title>slice::rotate_tiny_by1: -31.21%</title></rect>
+<rect x="1319.0" y="2159.0" width="22" height="17" rx="2" fill="#e8e3e5"><title>slice::rotate_tiny_half: -0.67%</title></rect>
+<rect x="1343.0" y="2159.0" width="22" height="17" rx="2" fill="#e4d3d4"><title>slice::rotate_tiny_half_plus_one: -2.66%</title></rect>
+<rect x="1367.0" y="2159.0" width="22" height="17" rx="2" fill="#e0e8e7"><title>slice::sort_by_cached_key_lexicographic: +0.57%</title></rect>
+<rect x="1391.0" y="2159.0" width="22" height="17" rx="2" fill="#d3e1de"><title>slice::sort_by_key_lexicographic: +1.83%</title></rect>
+<rect x="1415.0" y="2159.0" width="22" height="17" rx="2" fill="#539d7a"><title>slice::sort_large_ascending: +31.90%</title></rect>
+<rect x="815.0" y="2178.0" width="22" height="17" rx="2" fill="#92bfab"><title>slice::sort_large_big: +13.90%</title></rect>
+<rect x="839.0" y="2178.0" width="22" height="17" rx="2" fill="#ca6767"><title>slice::sort_large_descending: -31.35%</title></rect>
+<rect x="863.0" y="2178.0" width="22" height="17" rx="2" fill="#eaeaec"><title>slice::sort_large_expensive: -0.16%</title></rect>
+<rect x="887.0" y="2178.0" width="22" height="17" rx="2" fill="#e9e6e8"><title>slice::sort_large_mostly_ascending: -0.39%</title></rect>
+<rect x="911.0" y="2178.0" width="22" height="17" rx="2" fill="#e9e6e8"><title>slice::sort_large_mostly_descending: -0.43%</title></rect>
+<rect x="935.0" y="2178.0" width="22" height="17" rx="2" fill="#e6dbdd"><title>slice::sort_large_random: -1.53%</title></rect>
+<rect x="959.0" y="2178.0" width="22" height="17" rx="2" fill="#e4eaeb"><title>slice::sort_large_strings: +0.26%</title></rect>
+<rect x="983.0" y="2178.0" width="22" height="17" rx="2" fill="#e8e3e5"><title>slice::sort_medium_random: -0.68%</title></rect>
+<rect x="1007.0" y="2178.0" width="22" height="17" rx="2" fill="#66a789"><title>slice::sort_small_ascending: +25.95%</title></rect>
+<rect x="1031.0" y="2178.0" width="22" height="17" rx="2" fill="#c5dad3"><title>slice::sort_small_big: +3.75%</title></rect>
+<rect x="1055.0" y="2178.0" width="22" height="17" rx="2" fill="#e6dbdd"><title>slice::sort_small_descending: -1.48%</title></rect>
+<rect x="1079.0" y="2178.0" width="22" height="17" rx="2" fill="#accdbf"><title>slice::sort_small_random: +8.22%</title></rect>
+<rect x="1103.0" y="2178.0" width="22" height="17" rx="2" fill="#d7e3e1"><title>slice::sort_unstable_by_key_lexicographic: +1.39%</title></rect>
+<rect x="1127.0" y="2178.0" width="22" height="17" rx="2" fill="#1f8252"><title>slice::sort_unstable_large_ascending: +65.09%</title></rect>
+<rect x="1151.0" y="2178.0" width="22" height="17" rx="2" fill="#d8e4e1"><title>slice::sort_unstable_large_big: +1.31%</title></rect>
+<rect x="1175.0" y="2178.0" width="22" height="17" rx="2" fill="#e8ecee"><title>slice::sort_unstable_large_descending: +0.08%</title></rect>
+<rect x="1199.0" y="2178.0" width="22" height="17" rx="2" fill="#e3eaea"><title>slice::sort_unstable_large_expensive: +0.36%</title></rect>
+<rect x="1223.0" y="2178.0" width="22" height="17" rx="2" fill="#ebeef0"><title>slice::sort_unstable_large_mostly_ascending: +0.00%</title></rect>
+<rect x="1247.0" y="2178.0" width="22" height="17" rx="2" fill="#eaecee"><title>slice::sort_unstable_large_mostly_descending: -0.05%</title></rect>
+<rect x="1271.0" y="2178.0" width="22" height="17" rx="2" fill="#e5ebec"><title>slice::sort_unstable_large_random: +0.20%</title></rect>
+<rect x="1295.0" y="2178.0" width="22" height="17" rx="2" fill="#dee7e6"><title>slice::sort_unstable_large_strings: +0.69%</title></rect>
+<rect x="1319.0" y="2178.0" width="22" height="17" rx="2" fill="#e9e5e6"><title>slice::sort_unstable_medium_random: -0.52%</title></rect>
+<rect x="1343.0" y="2178.0" width="22" height="17" rx="2" fill="#81b69e"><title>slice::sort_unstable_small_ascending: +18.23%</title></rect>
+<rect x="1367.0" y="2178.0" width="22" height="17" rx="2" fill="#cadcd6"><title>slice::sort_unstable_small_big: +3.05%</title></rect>
+<rect x="1391.0" y="2178.0" width="22" height="17" rx="2" fill="#e6d9da"><title>slice::sort_unstable_small_descending: -1.85%</title></rect>
+<rect x="1415.0" y="2178.0" width="22" height="17" rx="2" fill="#b2d0c4"><title>slice::sort_unstable_small_random: +7.00%</title></rect>
+<rect x="815.0" y="2197.0" width="22" height="17" rx="2" fill="#e5ebec"><title>slice::starts_with_diff_one_element_at_end: +0.20%</title></rect>
+<rect x="839.0" y="2197.0" width="22" height="17" rx="2" fill="#ebeef0"><title>slice::starts_with_same_vector: +0.00%</title></rect>
+<rect x="863.0" y="2197.0" width="22" height="17" rx="2" fill="#ebeef0"><title>slice::starts_with_single_element: +0.00%</title></rect>
+<rect x="887.0" y="2197.0" width="22" height="17" rx="2" fill="#caddd7"><title>slice::zero_1kb_from_elem: +2.98%</title></rect>
+<rect x="911.0" y="2197.0" width="22" height="17" rx="2" fill="#cadcd6"><title>slice::zero_1kb_loop_set: +3.07%</title></rect>
+<rect x="935.0" y="2197.0" width="22" height="17" rx="2" fill="#dae5e3"><title>slice::zero_1kb_mut_iter: +1.09%</title></rect>
+<rect x="959.0" y="2197.0" width="22" height="17" rx="2" fill="#dee7e6"><title>slice::zero_1kb_set_memory: +0.73%</title></rect>
+<rect x="983.0" y="2197.0" width="22" height="17" rx="2" fill="#e6d9db"><title>str::bench_contains_16b_in_long: -1.79%</title></rect>
+<rect x="1007.0" y="2197.0" width="22" height="17" rx="2" fill="#e6d9db"><title>str::bench_contains_2b_repeated_long: -1.77%</title></rect>
+<rect x="1031.0" y="2197.0" width="22" height="17" rx="2" fill="#d5e2df"><title>str::bench_contains_32b_in_long: +1.66%</title></rect>
+<rect x="1055.0" y="2197.0" width="22" height="17" rx="2" fill="#e6ebec"><title>str::bench_contains_bad_naive: +0.16%</title></rect>
+<rect x="1079.0" y="2197.0" width="22" height="17" rx="2" fill="#d9e4e2"><title>str::bench_contains_bad_simd: +1.20%</title></rect>
+<rect x="1103.0" y="2197.0" width="22" height="17" rx="2" fill="#d9a5a6"><title>str::bench_contains_equal: -12.24%</title></rect>
+<rect x="1127.0" y="2197.0" width="22" height="17" rx="2" fill="#d6999a"><title>str::bench_contains_short_long: -15.35%</title></rect>
+<rect x="1151.0" y="2197.0" width="22" height="17" rx="2" fill="#ebeef0"><title>str::bench_contains_short_short: +0.00%</title></rect>
+<rect x="1175.0" y="2197.0" width="22" height="17" rx="2" fill="#c6dad3"><title>str::bench_join: +3.62%</title></rect>
+<rect x="1199.0" y="2197.0" width="22" height="17" rx="2" fill="#e2e9e9"><title>str::char_indicesator: +0.43%</title></rect>
+<rect x="1223.0" y="2197.0" width="22" height="17" rx="2" fill="#e6ebec"><title>str::char_indicesator_rev: +0.17%</title></rect>
+<rect x="1247.0" y="2197.0" width="22" height="17" rx="2" fill="#e7eced"><title>str::char_iterator: +0.14%</title></rect>
+<rect x="1271.0" y="2197.0" width="22" height="17" rx="2" fill="#ebeef0"><title>str::char_iterator_ascii: +0.00%</title></rect>
+<rect x="1295.0" y="2197.0" width="22" height="17" rx="2" fill="#d08182"><title>str::char_iterator_for: -22.43%</title></rect>
+<rect x="1319.0" y="2197.0" width="22" height="17" rx="2" fill="#d38c8d"><title>str::char_iterator_rev: -19.00%</title></rect>
+<rect x="1343.0" y="2197.0" width="22" height="17" rx="2" fill="#e9edee"><title>str::char_iterator_rev_for: +0.04%</title></rect>
+<rect x="1367.0" y="2197.0" width="22" height="17" rx="2" fill="#eaebed"><title>str::chars_count::long_lorem_ipsum: -0.09%</title></rect>
+<rect x="1391.0" y="2197.0" width="22" height="17" rx="2" fill="#e7eced"><title>str::chars_count::short_ascii: +0.13%</title></rect>
+<rect x="1415.0" y="2197.0" width="22" height="17" rx="2" fill="#ebeef0"><title>str::chars_count::short_mixed: +0.00%</title></rect>
+<rect x="815.0" y="2216.0" width="22" height="17" rx="2" fill="#ebeef0"><title>str::chars_count::short_pile_of_poo: +0.00%</title></rect>
+<rect x="839.0" y="2216.0" width="22" height="17" rx="2" fill="#eaeaeb"><title>str::contains_bang_char::long_lorem_ipsum: -0.17%</title></rect>
+<rect x="863.0" y="2216.0" width="22" height="17" rx="2" fill="#d4e2de"><title>str::contains_bang_char::short_ascii: +1.72%</title></rect>
+<rect x="887.0" y="2216.0" width="22" height="17" rx="2" fill="#e9e7e9"><title>str::contains_bang_char::short_mixed: -0.31%</title></rect>
+<rect x="911.0" y="2216.0" width="22" height="17" rx="2" fill="#debabb"><title>str::contains_bang_char::short_pile_of_poo: -7.25%</title></rect>
+<rect x="935.0" y="2216.0" width="22" height="17" rx="2" fill="#eaedef"><title>str::contains_bang_str::long_lorem_ipsum: +0.01%</title></rect>
+<rect x="959.0" y="2216.0" width="22" height="17" rx="2" fill="#e3cdce"><title>str::contains_bang_str::short_ascii: -3.65%</title></rect>
+<rect x="983.0" y="2216.0" width="22" height="17" rx="2" fill="#cf7b7c"><title>str::contains_bang_str::short_mixed: -24.38%</title></rect>
+<rect x="1007.0" y="2216.0" width="22" height="17" rx="2" fill="#e8e4e5"><title>str::contains_bang_str::short_pile_of_poo: -0.61%</title></rect>
+<rect x="1031.0" y="2216.0" width="22" height="17" rx="2" fill="#eae9eb"><title>str::ends_with_ascii_char::long_lorem_ipsum: -0.20%</title></rect>
+<rect x="1055.0" y="2216.0" width="22" height="17" rx="2" fill="#eaedef"><title>str::ends_with_ascii_char::short_ascii: +0.02%</title></rect>
+<rect x="1079.0" y="2216.0" width="22" height="17" rx="2" fill="#ebecee"><title>str::ends_with_ascii_char::short_mixed: -0.04%</title></rect>
+<rect x="1103.0" y="2216.0" width="22" height="17" rx="2" fill="#e9edee"><title>str::ends_with_ascii_char::short_pile_of_poo: +0.05%</title></rect>
+<rect x="1127.0" y="2216.0" width="22" height="17" rx="2" fill="#eaecee"><title>str::ends_with_str::long_lorem_ipsum: -0.06%</title></rect>
+<rect x="1151.0" y="2216.0" width="22" height="17" rx="2" fill="#e7eced"><title>str::ends_with_str::short_ascii: +0.10%</title></rect>
+<rect x="1175.0" y="2216.0" width="22" height="17" rx="2" fill="#e8ecee"><title>str::ends_with_str::short_mixed: +0.08%</title></rect>
+<rect x="1199.0" y="2216.0" width="22" height="17" rx="2" fill="#dbaeaf"><title>str::ends_with_str::short_pile_of_poo: -9.91%</title></rect>
+<rect x="1223.0" y="2216.0" width="22" height="17" rx="2" fill="#e9edef"><title>str::ends_with_unichar::long_lorem_ipsum: +0.03%</title></rect>
+<rect x="1247.0" y="2216.0" width="22" height="17" rx="2" fill="#e3eaea"><title>str::ends_with_unichar::short_ascii: +0.33%</title></rect>
+<rect x="1271.0" y="2216.0" width="22" height="17" rx="2" fill="#e8edee"><title>str::ends_with_unichar::short_mixed: +0.06%</title></rect>
+<rect x="1295.0" y="2216.0" width="22" height="17" rx="2" fill="#ebeef0"><title>str::ends_with_unichar::short_pile_of_poo: -0.01%</title></rect>
+<rect x="1319.0" y="2216.0" width="22" height="17" rx="2" fill="#ebeef0"><title>str::find_underscore_char::long_lorem_ipsum: +0.00%</title></rect>
+<rect x="1343.0" y="2216.0" width="22" height="17" rx="2" fill="#e4eaeb"><title>str::find_underscore_char::short_ascii: +0.27%</title></rect>
+<rect x="1367.0" y="2216.0" width="22" height="17" rx="2" fill="#e8e3e5"><title>str::find_underscore_char::short_mixed: -0.66%</title></rect>
+<rect x="1391.0" y="2216.0" width="22" height="17" rx="2" fill="#e7dddf"><title>str::find_underscore_char::short_pile_of_poo: -1.32%</title></rect>
+<rect x="1415.0" y="2216.0" width="22" height="17" rx="2" fill="#e6dbdc"><title>str::find_underscore_str::long_lorem_ipsum: -1.59%</title></rect>
+<rect x="815.0" y="2235.0" width="22" height="17" rx="2" fill="#eae8ea"><title>str::find_underscore_str::short_ascii: -0.23%</title></rect>
+<rect x="839.0" y="2235.0" width="22" height="17" rx="2" fill="#dae5e3"><title>str::find_underscore_str::short_mixed: +1.13%</title></rect>
+<rect x="863.0" y="2235.0" width="22" height="17" rx="2" fill="#e8e2e3"><title>str::find_underscore_str::short_pile_of_poo: -0.80%</title></rect>
+<rect x="887.0" y="2235.0" width="22" height="17" rx="2" fill="#ebedef"><title>str::find_zzz_char::long_lorem_ipsum: -0.01%</title></rect>
+<rect x="911.0" y="2235.0" width="22" height="17" rx="2" fill="#e8e2e4"><title>str::find_zzz_char::short_ascii: -0.77%</title></rect>
+<rect x="935.0" y="2235.0" width="22" height="17" rx="2" fill="#d3e1dd"><title>str::find_zzz_char::short_mixed: +1.87%</title></rect>
+<rect x="959.0" y="2235.0" width="22" height="17" rx="2" fill="#e9e5e7"><title>str::find_zzz_char::short_pile_of_poo: -0.50%</title></rect>
+<rect x="983.0" y="2235.0" width="22" height="17" rx="2" fill="#eaedef"><title>str::find_zzz_str::long_lorem_ipsum: +0.02%</title></rect>
+<rect x="1007.0" y="2235.0" width="22" height="17" rx="2" fill="#e5d4d6"><title>str::find_zzz_str::short_ascii: -2.46%</title></rect>
+<rect x="1031.0" y="2235.0" width="22" height="17" rx="2" fill="#e5d4d6"><title>str::find_zzz_str::short_mixed: -2.45%</title></rect>
+<rect x="1055.0" y="2235.0" width="22" height="17" rx="2" fill="#e5d7d9"><title>str::find_zzz_str::short_pile_of_poo: -2.05%</title></rect>
+<rect x="1079.0" y="2235.0" width="22" height="17" rx="2" fill="#e8e1e3"><title>str::match_indices_a_str::long_lorem_ipsum: -0.85%</title></rect>
+<rect x="1103.0" y="2235.0" width="22" height="17" rx="2" fill="#e7dcde"><title>str::match_indices_a_str::short_ascii: -1.43%</title></rect>
+<rect x="1127.0" y="2235.0" width="22" height="17" rx="2" fill="#99c2b0"><title>str::match_indices_a_str::short_mixed: +12.39%</title></rect>
+<rect x="1151.0" y="2235.0" width="22" height="17" rx="2" fill="#e5ebec"><title>str::match_indices_a_str::short_pile_of_poo: +0.20%</title></rect>
+<rect x="1175.0" y="2235.0" width="22" height="17" rx="2" fill="#e9edee"><title>str::rfind_underscore_char::long_lorem_ipsum: +0.05%</title></rect>
+<rect x="1199.0" y="2235.0" width="22" height="17" rx="2" fill="#b4d1c5"><title>str::rfind_underscore_char::short_ascii: +6.65%</title></rect>
+<rect x="1223.0" y="2235.0" width="22" height="17" rx="2" fill="#e9e4e6"><title>str::rfind_underscore_char::short_mixed: -0.58%</title></rect>
+<rect x="1247.0" y="2235.0" width="22" height="17" rx="2" fill="#e7e0e1"><title>str::rfind_underscore_char::short_pile_of_poo: -1.01%</title></rect>
+<rect x="1271.0" y="2235.0" width="22" height="17" rx="2" fill="#ebedef"><title>str::rfind_zzz_char::long_lorem_ipsum: -0.02%</title></rect>
+<rect x="1295.0" y="2235.0" width="22" height="17" rx="2" fill="#a1c7b6"><title>str::rfind_zzz_char::short_ascii: +10.59%</title></rect>
+<rect x="1319.0" y="2235.0" width="22" height="17" rx="2" fill="#aecec1"><title>str::rfind_zzz_char::short_mixed: +7.72%</title></rect>
+<rect x="1343.0" y="2235.0" width="22" height="17" rx="2" fill="#78b197"><title>str::rfind_zzz_char::short_pile_of_poo: +20.69%</title></rect>
+<rect x="1367.0" y="2235.0" width="22" height="17" rx="2" fill="#eaeaec"><title>str::rsplitn_space_char::long_lorem_ipsum: -0.14%</title></rect>
+<rect x="1391.0" y="2235.0" width="22" height="17" rx="2" fill="#e9e8ea"><title>str::rsplitn_space_char::short_ascii: -0.27%</title></rect>
+<rect x="1415.0" y="2235.0" width="22" height="17" rx="2" fill="#e2e9e9"><title>str::rsplitn_space_char::short_mixed: +0.42%</title></rect>
+<rect x="815.0" y="2254.0" width="22" height="17" rx="2" fill="#dcb1b3"><title>str::rsplitn_space_char::short_pile_of_poo: -9.15%</title></rect>
+<rect x="839.0" y="2254.0" width="22" height="17" rx="2" fill="#e7dddf"><title>str::split_a_str::long_lorem_ipsum: -1.25%</title></rect>
+<rect x="863.0" y="2254.0" width="22" height="17" rx="2" fill="#e7eced"><title>str::split_a_str::short_ascii: +0.10%</title></rect>
+<rect x="887.0" y="2254.0" width="22" height="17" rx="2" fill="#e6d9da"><title>str::split_a_str::short_mixed: -1.83%</title></rect>
+<rect x="911.0" y="2254.0" width="22" height="17" rx="2" fill="#e7dfe1"><title>str::split_a_str::short_pile_of_poo: -1.08%</title></rect>
+<rect x="935.0" y="2254.0" width="22" height="17" rx="2" fill="#e5ebeb"><title>str::split_ad_str::long_lorem_ipsum: +0.23%</title></rect>
+<rect x="959.0" y="2254.0" width="22" height="17" rx="2" fill="#c34d4d"><title>str::split_ad_str::short_ascii: -41.17%</title></rect>
+<rect x="983.0" y="2254.0" width="22" height="17" rx="2" fill="#e4ebeb"><title>str::split_ad_str::short_mixed: +0.25%</title></rect>
+<rect x="1007.0" y="2254.0" width="22" height="17" rx="2" fill="#d6e3e0"><title>str::split_ad_str::short_pile_of_poo: +1.54%</title></rect>
+<rect x="1031.0" y="2254.0" width="22" height="17" rx="2" fill="#e5d6d8"><title>str::split_ascii: -2.15%</title></rect>
+<rect x="1055.0" y="2254.0" width="22" height="17" rx="2" fill="#c75d5d"><title>str::split_closure: -35.11%</title></rect>
+<rect x="1079.0" y="2254.0" width="22" height="17" rx="2" fill="#c65858"><title>str::split_extern_fn: -36.78%</title></rect>
+<rect x="1103.0" y="2254.0" width="22" height="17" rx="2" fill="#eaedef"><title>str::split_slice: +0.03%</title></rect>
+<rect x="1127.0" y="2254.0" width="22" height="17" rx="2" fill="#c5dad3"><title>str::split_space_char::long_lorem_ipsum: +3.71%</title></rect>
+<rect x="1151.0" y="2254.0" width="22" height="17" rx="2" fill="#e9e6e8"><title>str::split_space_char::short_ascii: -0.43%</title></rect>
+<rect x="1175.0" y="2254.0" width="22" height="17" rx="2" fill="#e8e3e5"><title>str::split_space_char::short_mixed: -0.64%</title></rect>
+<rect x="1199.0" y="2254.0" width="22" height="17" rx="2" fill="#e7eced"><title>str::split_space_char::short_pile_of_poo: +0.13%</title></rect>
+<rect x="1223.0" y="2254.0" width="22" height="17" rx="2" fill="#e3ced0"><title>str::split_space_str::long_lorem_ipsum: -3.35%</title></rect>
+<rect x="1247.0" y="2254.0" width="22" height="17" rx="2" fill="#e3ced0"><title>str::split_space_str::short_ascii: -3.37%</title></rect>
+<rect x="1271.0" y="2254.0" width="22" height="17" rx="2" fill="#e8e3e5"><title>str::split_space_str::short_mixed: -0.64%</title></rect>
+<rect x="1295.0" y="2254.0" width="22" height="17" rx="2" fill="#d7e4e1"><title>str::split_space_str::short_pile_of_poo: +1.36%</title></rect>
+<rect x="1319.0" y="2254.0" width="22" height="17" rx="2" fill="#cedfda"><title>str::split_terminator_space_char::long_lorem_ipsum: +2.45%</title></rect>
+<rect x="1343.0" y="2254.0" width="22" height="17" rx="2" fill="#dce6e4"><title>str::split_terminator_space_char::short_ascii: +0.93%</title></rect>
+<rect x="1367.0" y="2254.0" width="22" height="17" rx="2" fill="#e6dadb"><title>str::split_terminator_space_char::short_mixed: -1.70%</title></rect>
+<rect x="1391.0" y="2254.0" width="22" height="17" rx="2" fill="#ebeef0"><title>str::split_terminator_space_char::short_pile_of_poo: +0.00%</title></rect>
+<rect x="1415.0" y="2254.0" width="22" height="17" rx="2" fill="#dbe6e4"><title>str::split_unicode_ascii: +0.96%</title></rect>
+<rect x="815.0" y="2273.0" width="22" height="17" rx="2" fill="#dfbcbe"><title>str::splitn_space_char::long_lorem_ipsum: -6.75%</title></rect>
+<rect x="839.0" y="2273.0" width="22" height="17" rx="2" fill="#d1e0dc"><title>str::splitn_space_char::short_ascii: +2.15%</title></rect>
+<rect x="863.0" y="2273.0" width="22" height="17" rx="2" fill="#bbd5cb"><title>str::splitn_space_char::short_mixed: +5.32%</title></rect>
+<rect x="887.0" y="2273.0" width="22" height="17" rx="2" fill="#e5d5d7"><title>str::splitn_space_char::short_pile_of_poo: -2.33%</title></rect>
+<rect x="911.0" y="2273.0" width="22" height="17" rx="2" fill="#ebecee"><title>str::starts_with_ascii_char::long_lorem_ipsum: -0.04%</title></rect>
+<rect x="935.0" y="2273.0" width="22" height="17" rx="2" fill="#e9e8ea"><title>str::starts_with_ascii_char::short_ascii: -0.27%</title></rect>
+<rect x="959.0" y="2273.0" width="22" height="17" rx="2" fill="#ebedef"><title>str::starts_with_ascii_char::short_mixed: -0.03%</title></rect>
+<rect x="983.0" y="2273.0" width="22" height="17" rx="2" fill="#ebecee"><title>str::starts_with_ascii_char::short_pile_of_poo: -0.03%</title></rect>
+<rect x="1007.0" y="2273.0" width="22" height="17" rx="2" fill="#9ec5b4"><title>str::starts_with_str::long_lorem_ipsum: +11.17%</title></rect>
+<rect x="1031.0" y="2273.0" width="22" height="17" rx="2" fill="#a3c8b9"><title>str::starts_with_str::short_ascii: +9.98%</title></rect>
+<rect x="1055.0" y="2273.0" width="22" height="17" rx="2" fill="#9ec5b4"><title>str::starts_with_str::short_mixed: +11.23%</title></rect>
+<rect x="1079.0" y="2273.0" width="22" height="17" rx="2" fill="#eaedef"><title>str::starts_with_str::short_pile_of_poo: +0.02%</title></rect>
+<rect x="1103.0" y="2273.0" width="22" height="17" rx="2" fill="#eaedef"><title>str::starts_with_unichar::long_lorem_ipsum: +0.03%</title></rect>
+<rect x="1127.0" y="2273.0" width="22" height="17" rx="2" fill="#eaedef"><title>str::starts_with_unichar::short_ascii: +0.02%</title></rect>
+<rect x="1151.0" y="2273.0" width="22" height="17" rx="2" fill="#e9edef"><title>str::starts_with_unichar::short_mixed: +0.03%</title></rect>
+<rect x="1175.0" y="2273.0" width="22" height="17" rx="2" fill="#e9edee"><title>str::starts_with_unichar::short_pile_of_poo: +0.05%</title></rect>
+<rect x="1199.0" y="2273.0" width="22" height="17" rx="2" fill="#dbe5e4"><title>str::to_lowercase::long_lorem_ipsum: +1.00%</title></rect>
+<rect x="1223.0" y="2273.0" width="22" height="17" rx="2" fill="#a7cabc"><title>str::to_lowercase::short_ascii: +9.17%</title></rect>
+<rect x="1247.0" y="2273.0" width="22" height="17" rx="2" fill="#e1e9e8"><title>str::to_lowercase::short_mixed: +0.47%</title></rect>
+<rect x="1271.0" y="2273.0" width="22" height="17" rx="2" fill="#cbddd7"><title>str::to_lowercase::short_pile_of_poo: +2.90%</title></rect>
+<rect x="1295.0" y="2273.0" width="22" height="17" rx="2" fill="#e5ebeb"><title>str::trim_ascii_char::long_lorem_ipsum: +0.23%</title></rect>
+<rect x="1319.0" y="2273.0" width="22" height="17" rx="2" fill="#e7eced"><title>str::trim_ascii_char::short_ascii: +0.11%</title></rect>
+<rect x="1343.0" y="2273.0" width="22" height="17" rx="2" fill="#e8ecee"><title>str::trim_ascii_char::short_mixed: +0.07%</title></rect>
+<rect x="1367.0" y="2273.0" width="22" height="17" rx="2" fill="#ebeef0"><title>str::trim_ascii_char::short_pile_of_poo: +0.00%</title></rect>
+<rect x="1391.0" y="2273.0" width="22" height="17" rx="2" fill="#e5ebec"><title>str::trim_end_ascii_char::long_lorem_ipsum: +0.20%</title></rect>
+<rect x="1415.0" y="2273.0" width="22" height="17" rx="2" fill="#ebeef0"><title>str::trim_end_ascii_char::short_ascii: +0.00%</title></rect>
+<rect x="815.0" y="2292.0" width="22" height="17" rx="2" fill="#e9edee"><title>str::trim_end_ascii_char::short_mixed: +0.04%</title></rect>
+<rect x="839.0" y="2292.0" width="22" height="17" rx="2" fill="#e0e8e8"><title>str::trim_end_ascii_char::short_pile_of_poo: +0.54%</title></rect>
+<rect x="863.0" y="2292.0" width="22" height="17" rx="2" fill="#eae9eb"><title>str::trim_start_ascii_char::long_lorem_ipsum: -0.18%</title></rect>
+<rect x="887.0" y="2292.0" width="22" height="17" rx="2" fill="#ca6869"><title>str::trim_start_ascii_char::short_ascii: -30.89%</title></rect>
+<rect x="911.0" y="2292.0" width="22" height="17" rx="2" fill="#ebeef0"><title>str::trim_start_ascii_char::short_mixed: +0.00%</title></rect>
+<rect x="935.0" y="2292.0" width="22" height="17" rx="2" fill="#ebeef0"><title>str::trim_start_ascii_char::short_pile_of_poo: +0.00%</title></rect>
+<rect x="959.0" y="2292.0" width="22" height="17" rx="2" fill="#95c0ad"><title>string::bench_exact_size_shrink_to_fit: +13.26%</title></rect>
+<rect x="983.0" y="2292.0" width="22" height="17" rx="2" fill="#85b8a1"><title>string::bench_from: +17.22%</title></rect>
+<rect x="1007.0" y="2292.0" width="22" height="17" rx="2" fill="#7bb39a"><title>string::bench_from_str: +19.75%</title></rect>
+<rect x="1031.0" y="2292.0" width="22" height="17" rx="2" fill="#5ba281"><title>string::bench_insert_char_long: +29.11%</title></rect>
+<rect x="1055.0" y="2292.0" width="22" height="17" rx="2" fill="#569f7c"><title>string::bench_insert_char_short: +30.95%</title></rect>
+<rect x="1079.0" y="2292.0" width="22" height="17" rx="2" fill="#59a17f"><title>string::bench_insert_str_long: +29.88%</title></rect>
+<rect x="1103.0" y="2292.0" width="22" height="17" rx="2" fill="#57a07e"><title>string::bench_insert_str_short: +30.45%</title></rect>
+<rect x="1127.0" y="2292.0" width="22" height="17" rx="2" fill="#e8e3e5"><title>string::bench_push_char_one_byte: -0.64%</title></rect>
+<rect x="1151.0" y="2292.0" width="22" height="17" rx="2" fill="#e5ebeb"><title>string::bench_push_char_two_bytes: +0.22%</title></rect>
+<rect x="1175.0" y="2292.0" width="22" height="17" rx="2" fill="#c2d9d1"><title>string::bench_push_str: +4.17%</title></rect>
+<rect x="1199.0" y="2292.0" width="22" height="17" rx="2" fill="#e4eaea"><title>string::bench_push_str_one_byte: +0.29%</title></rect>
+<rect x="1223.0" y="2292.0" width="22" height="17" rx="2" fill="#d28788"><title>string::bench_to_string: -20.65%</title></rect>
+<rect x="1247.0" y="2292.0" width="22" height="17" rx="2" fill="#69a98c"><title>string::bench_with_capacity: +24.88%</title></rect>
+<rect x="1271.0" y="2292.0" width="22" height="17" rx="2" fill="#1f8252"><title>string::from_utf8_lossy_100_ascii: +84.01%</title></rect>
+<rect x="1295.0" y="2292.0" width="22" height="17" rx="2" fill="#cedfda"><title>string::from_utf8_lossy_100_invalid: +2.45%</title></rect>
+<rect x="1319.0" y="2292.0" width="22" height="17" rx="2" fill="#7bb399"><title>string::from_utf8_lossy_100_multibyte: +19.95%</title></rect>
+<rect x="1343.0" y="2292.0" width="22" height="17" rx="2" fill="#81b69e"><title>string::from_utf8_lossy_invalid: +18.18%</title></rect>
+<rect x="1367.0" y="2292.0" width="22" height="17" rx="2" fill="#1f8252"><title>vec::bench_chain_chain_collect: +1343.30%</title></rect>
+<rect x="1391.0" y="2292.0" width="22" height="17" rx="2" fill="#1f8252"><title>vec::bench_chain_collect: +1342.68%</title></rect>
+<rect x="1415.0" y="2292.0" width="22" height="17" rx="2" fill="#1f8252"><title>vec::bench_chain_extend_ref: +1345.74%</title></rect>
+<rect x="815.0" y="2311.0" width="22" height="17" rx="2" fill="#1f8252"><title>vec::bench_chain_extend_value: +1339.01%</title></rect>
+<rect x="839.0" y="2311.0" width="22" height="17" rx="2" fill="#c55555"><title>vec::bench_clone_0000: -37.93%</title></rect>
+<rect x="863.0" y="2311.0" width="22" height="17" rx="2" fill="#b0cfc2"><title>vec::bench_clone_0010: +7.38%</title></rect>
+<rect x="887.0" y="2311.0" width="22" height="17" rx="2" fill="#c2d8d0"><title>vec::bench_clone_0100: +4.20%</title></rect>
+<rect x="911.0" y="2311.0" width="22" height="17" rx="2" fill="#e8e2e4"><title>vec::bench_clone_1000: -0.79%</title></rect>
+<rect x="935.0" y="2311.0" width="22" height="17" rx="2" fill="#eaebed"><title>vec::bench_clone_from_01_0000_0000: -0.08%</title></rect>
+<rect x="959.0" y="2311.0" width="22" height="17" rx="2" fill="#dbe5e4"><title>vec::bench_clone_from_01_0000_0010: +1.01%</title></rect>
+<rect x="983.0" y="2311.0" width="22" height="17" rx="2" fill="#c0d7cf"><title>vec::bench_clone_from_01_0000_0100: +4.50%</title></rect>
+<rect x="1007.0" y="2311.0" width="22" height="17" rx="2" fill="#dbabad"><title>vec::bench_clone_from_01_0000_1000: -10.58%</title></rect>
+<rect x="1031.0" y="2311.0" width="22" height="17" rx="2" fill="#cfdfda"><title>vec::bench_clone_from_01_0010_0000: +2.39%</title></rect>
+<rect x="1055.0" y="2311.0" width="22" height="17" rx="2" fill="#e6dbdd"><title>vec::bench_clone_from_01_0010_0010: -1.49%</title></rect>
+<rect x="1079.0" y="2311.0" width="22" height="17" rx="2" fill="#a2c7b7"><title>vec::bench_clone_from_01_0010_0100: +10.34%</title></rect>
+<rect x="1103.0" y="2311.0" width="22" height="17" rx="2" fill="#c5dad2"><title>vec::bench_clone_from_01_0100_0010: +3.80%</title></rect>
+<rect x="1127.0" y="2311.0" width="22" height="17" rx="2" fill="#bdd6cd"><title>vec::bench_clone_from_01_0100_0100: +5.02%</title></rect>
+<rect x="1151.0" y="2311.0" width="22" height="17" rx="2" fill="#daa8a9"><title>vec::bench_clone_from_01_0100_1000: -11.40%</title></rect>
+<rect x="1175.0" y="2311.0" width="22" height="17" rx="2" fill="#dcafb1"><title>vec::bench_clone_from_01_1000_0100: -9.62%</title></rect>
+<rect x="1199.0" y="2311.0" width="22" height="17" rx="2" fill="#e9e4e6"><title>vec::bench_clone_from_01_1000_1000: -0.56%</title></rect>
+<rect x="1223.0" y="2311.0" width="22" height="17" rx="2" fill="#eae8ea"><title>vec::bench_clone_from_10_0000_0000: -0.23%</title></rect>
+<rect x="1247.0" y="2311.0" width="22" height="17" rx="2" fill="#ebecee"><title>vec::bench_clone_from_10_0000_0010: -0.04%</title></rect>
+<rect x="1271.0" y="2311.0" width="22" height="17" rx="2" fill="#dbe5e3"><title>vec::bench_clone_from_10_0000_0100: +1.03%</title></rect>
+<rect x="1295.0" y="2311.0" width="22" height="17" rx="2" fill="#eae9eb"><title>vec::bench_clone_from_10_0000_1000: -0.21%</title></rect>
+<rect x="1319.0" y="2311.0" width="22" height="17" rx="2" fill="#e5ebec"><title>vec::bench_clone_from_10_0010_0000: +0.20%</title></rect>
+<rect x="1343.0" y="2311.0" width="22" height="17" rx="2" fill="#bfd6ce"><title>vec::bench_clone_from_10_0010_0010: +4.80%</title></rect>
+<rect x="1367.0" y="2311.0" width="22" height="17" rx="2" fill="#ccddd8"><title>vec::bench_clone_from_10_0010_0100: +2.80%</title></rect>
+<rect x="1391.0" y="2311.0" width="22" height="17" rx="2" fill="#e4eaea"><title>vec::bench_clone_from_10_0100_0010: +0.29%</title></rect>
+<rect x="1415.0" y="2311.0" width="22" height="17" rx="2" fill="#d9e5e2"><title>vec::bench_clone_from_10_0100_0100: +1.17%</title></rect>
+<rect x="815.0" y="2330.0" width="22" height="17" rx="2" fill="#dfe7e6"><title>vec::bench_clone_from_10_0100_1000: +0.67%</title></rect>
+<rect x="839.0" y="2330.0" width="22" height="17" rx="2" fill="#eae9eb"><title>vec::bench_clone_from_10_1000_0100: -0.18%</title></rect>
+<rect x="863.0" y="2330.0" width="22" height="17" rx="2" fill="#e9e7e9"><title>vec::bench_clone_from_10_1000_1000: -0.35%</title></rect>
+<rect x="887.0" y="2330.0" width="22" height="17" rx="2" fill="#e9edee"><title>vec::bench_dedup_all_100: +0.05%</title></rect>
+<rect x="911.0" y="2330.0" width="22" height="17" rx="2" fill="#eaebed"><title>vec::bench_dedup_all_1000: -0.10%</title></rect>
+<rect x="935.0" y="2330.0" width="22" height="17" rx="2" fill="#8cbca7"><title>vec::bench_dedup_all_10000: +15.37%</title></rect>
+<rect x="959.0" y="2330.0" width="22" height="17" rx="2" fill="#deb9ba"><title>vec::bench_dedup_all_100000: -7.46%</title></rect>
+<rect x="983.0" y="2330.0" width="22" height="17" rx="2" fill="#e4d2d4"><title>vec::bench_dedup_none_100: -2.78%</title></rect>
+<rect x="1007.0" y="2330.0" width="22" height="17" rx="2" fill="#e8edee"><title>vec::bench_dedup_none_1000: +0.07%</title></rect>
+<rect x="1031.0" y="2330.0" width="22" height="17" rx="2" fill="#e3cccd"><title>vec::bench_dedup_none_10000: -3.80%</title></rect>
+<rect x="1055.0" y="2330.0" width="22" height="17" rx="2" fill="#e1c6c8"><title>vec::bench_dedup_none_100000: -4.78%</title></rect>
+<rect x="1079.0" y="2330.0" width="22" height="17" rx="2" fill="#e5d6d8"><title>vec::bench_dedup_random_100: -2.18%</title></rect>
+<rect x="1103.0" y="2330.0" width="22" height="17" rx="2" fill="#61a585"><title>vec::bench_dedup_random_1000: +27.28%</title></rect>
+<rect x="1127.0" y="2330.0" width="22" height="17" rx="2" fill="#99c3b1"><title>vec::bench_dedup_random_10000: +12.27%</title></rect>
+<rect x="1151.0" y="2330.0" width="22" height="17" rx="2" fill="#d79c9d"><title>vec::bench_dedup_random_100000: -14.59%</title></rect>
+<rect x="1175.0" y="2330.0" width="22" height="17" rx="2" fill="#59a17f"><title>vec::bench_dedup_slice_truncate_100: +29.95%</title></rect>
+<rect x="1199.0" y="2330.0" width="22" height="17" rx="2" fill="#489771"><title>vec::bench_dedup_slice_truncate_1000: +35.55%</title></rect>
+<rect x="1223.0" y="2330.0" width="22" height="17" rx="2" fill="#529d7a"><title>vec::bench_dedup_slice_truncate_10000: +32.07%</title></rect>
+<rect x="1247.0" y="2330.0" width="22" height="17" rx="2" fill="#e2cacc"><title>vec::bench_dedup_slice_truncate_100000: -4.06%</title></rect>
+<rect x="1271.0" y="2330.0" width="22" height="17" rx="2" fill="#ebeef0"><title>vec::bench_extend_0000_0000: +0.00%</title></rect>
+<rect x="1295.0" y="2330.0" width="22" height="17" rx="2" fill="#9fc6b5"><title>vec::bench_extend_0000_0010: +10.91%</title></rect>
+<rect x="1319.0" y="2330.0" width="22" height="17" rx="2" fill="#b8d3c9"><title>vec::bench_extend_0000_0100: +5.84%</title></rect>
+<rect x="1343.0" y="2330.0" width="22" height="17" rx="2" fill="#e6d9da"><title>vec::bench_extend_0000_1000: -1.84%</title></rect>
+<rect x="1367.0" y="2330.0" width="22" height="17" rx="2" fill="#9ac3b2"><title>vec::bench_extend_0010_0010: +11.98%</title></rect>
+<rect x="1391.0" y="2330.0" width="22" height="17" rx="2" fill="#98c2af"><title>vec::bench_extend_0100_0100: +12.61%</title></rect>
+<rect x="1415.0" y="2330.0" width="22" height="17" rx="2" fill="#d1e0dc"><title>vec::bench_extend_1000_1000: +2.04%</title></rect>
+<rect x="815.0" y="2349.0" width="22" height="17" rx="2" fill="#ebeef0"><title>vec::bench_extend_from_slice_0000_0000: +0.00%</title></rect>
+<rect x="839.0" y="2349.0" width="22" height="17" rx="2" fill="#bed6cd"><title>vec::bench_extend_from_slice_0000_0010: +4.91%</title></rect>
+<rect x="863.0" y="2349.0" width="22" height="17" rx="2" fill="#abccbf"><title>vec::bench_extend_from_slice_0000_0100: +8.37%</title></rect>
+<rect x="887.0" y="2349.0" width="22" height="17" rx="2" fill="#e3eaea"><title>vec::bench_extend_from_slice_0000_1000: +0.33%</title></rect>
+<rect x="911.0" y="2349.0" width="22" height="17" rx="2" fill="#a8cabc"><title>vec::bench_extend_from_slice_0010_0010: +9.09%</title></rect>
+<rect x="935.0" y="2349.0" width="22" height="17" rx="2" fill="#9cc4b3"><title>vec::bench_extend_from_slice_0100_0100: +11.56%</title></rect>
+<rect x="959.0" y="2349.0" width="22" height="17" rx="2" fill="#c5dad3"><title>vec::bench_extend_from_slice_1000_1000: +3.76%</title></rect>
+<rect x="983.0" y="2349.0" width="22" height="17" rx="2" fill="#d9e5e2"><title>vec::bench_extend_recycle: +1.17%</title></rect>
+<rect x="1007.0" y="2349.0" width="22" height="17" rx="2" fill="#d0e0db"><title>vec::bench_flat_map_collect: +2.19%</title></rect>
+<rect x="1031.0" y="2349.0" width="22" height="17" rx="2" fill="#ebeef0"><title>vec::bench_from_elem_0000: +0.00%</title></rect>
+<rect x="1055.0" y="2349.0" width="22" height="17" rx="2" fill="#a1c7b7"><title>vec::bench_from_elem_0010: +10.43%</title></rect>
+<rect x="1079.0" y="2349.0" width="22" height="17" rx="2" fill="#d49293"><title>vec::bench_from_elem_0100: -17.39%</title></rect>
+<rect x="1103.0" y="2349.0" width="22" height="17" rx="2" fill="#deb8b9"><title>vec::bench_from_elem_1000: -7.64%</title></rect>
+<rect x="1127.0" y="2349.0" width="22" height="17" rx="2" fill="#c96464"><title>vec::bench_from_fn_0000: -32.50%</title></rect>
+<rect x="1151.0" y="2349.0" width="22" height="17" rx="2" fill="#94c0ad"><title>vec::bench_from_fn_0010: +13.38%</title></rect>
+<rect x="1175.0" y="2349.0" width="22" height="17" rx="2" fill="#cedfda"><title>vec::bench_from_fn_0100: +2.46%</title></rect>
+<rect x="1199.0" y="2349.0" width="22" height="17" rx="2" fill="#e4eaeb"><title>vec::bench_from_fn_1000: +0.26%</title></rect>
+<rect x="1223.0" y="2349.0" width="22" height="17" rx="2" fill="#4e9b77"><title>vec::bench_from_iter_0000: +33.33%</title></rect>
+<rect x="1247.0" y="2349.0" width="22" height="17" rx="2" fill="#9ec5b4"><title>vec::bench_from_iter_0010: +11.19%</title></rect>
+<rect x="1271.0" y="2349.0" width="22" height="17" rx="2" fill="#dee7e6"><title>vec::bench_from_iter_0100: +0.75%</title></rect>
+<rect x="1295.0" y="2349.0" width="22" height="17" rx="2" fill="#e7dcde"><title>vec::bench_from_iter_1000: -1.40%</title></rect>
+<rect x="1319.0" y="2349.0" width="22" height="17" rx="2" fill="#248556"><title>vec::bench_from_slice_0000: +48.15%</title></rect>
+<rect x="1343.0" y="2349.0" width="22" height="17" rx="2" fill="#8fbda9"><title>vec::bench_from_slice_0010: +14.66%</title></rect>
+<rect x="1367.0" y="2349.0" width="22" height="17" rx="2" fill="#b6d2c7"><title>vec::bench_from_slice_0100: +6.23%</title></rect>
+<rect x="1391.0" y="2349.0" width="22" height="17" rx="2" fill="#e7dee0"><title>vec::bench_from_slice_1000: -1.15%</title></rect>
+<rect x="1415.0" y="2349.0" width="22" height="17" rx="2" fill="#e9e6e8"><title>vec::bench_in_place_collect_droppable: -0.41%</title></rect>
+<rect x="815.0" y="2368.0" width="22" height="17" rx="2" fill="#cadcd6"><title>vec::bench_in_place_recycle: +3.09%</title></rect>
+<rect x="839.0" y="2368.0" width="22" height="17" rx="2" fill="#99c2b0"><title>vec::bench_in_place_u128_0010_i0: +12.34%</title></rect>
+<rect x="863.0" y="2368.0" width="22" height="17" rx="2" fill="#b2d0c4"><title>vec::bench_in_place_u128_0010_i1: +7.11%</title></rect>
+<rect x="887.0" y="2368.0" width="22" height="17" rx="2" fill="#eaeaec"><title>vec::bench_in_place_u128_0100_i0: -0.15%</title></rect>
+<rect x="911.0" y="2368.0" width="22" height="17" rx="2" fill="#e2e9e9"><title>vec::bench_in_place_u128_0100_i1: +0.42%</title></rect>
+<rect x="935.0" y="2368.0" width="22" height="17" rx="2" fill="#b3d0c5"><title>vec::bench_in_place_u128_1000_i0: +6.84%</title></rect>
+<rect x="959.0" y="2368.0" width="22" height="17" rx="2" fill="#e8e2e4"><title>vec::bench_in_place_u128_1000_i1: -0.74%</title></rect>
+<rect x="983.0" y="2368.0" width="22" height="17" rx="2" fill="#76b096"><title>vec::bench_in_place_xu32_0010_i0: +21.14%</title></rect>
+<rect x="1007.0" y="2368.0" width="22" height="17" rx="2" fill="#72ae92"><title>vec::bench_in_place_xu32_0010_i1: +22.38%</title></rect>
+<rect x="1031.0" y="2368.0" width="22" height="17" rx="2" fill="#adcdc0"><title>vec::bench_in_place_xu32_0100_i0: +7.93%</title></rect>
+<rect x="1055.0" y="2368.0" width="22" height="17" rx="2" fill="#94c0ad"><title>vec::bench_in_place_xu32_0100_i1: +13.42%</title></rect>
+<rect x="1079.0" y="2368.0" width="22" height="17" rx="2" fill="#e8e3e5"><title>vec::bench_in_place_xu32_1000_i0: -0.62%</title></rect>
+<rect x="1103.0" y="2368.0" width="22" height="17" rx="2" fill="#d1e0dc"><title>vec::bench_in_place_xu32_1000_i1: +2.11%</title></rect>
+<rect x="1127.0" y="2368.0" width="22" height="17" rx="2" fill="#7eb49b"><title>vec::bench_in_place_xxu8_0010_i0: +19.18%</title></rect>
+<rect x="1151.0" y="2368.0" width="22" height="17" rx="2" fill="#7fb59c"><title>vec::bench_in_place_xxu8_0010_i1: +18.90%</title></rect>
+<rect x="1175.0" y="2368.0" width="22" height="17" rx="2" fill="#abccbf"><title>vec::bench_in_place_xxu8_0100_i0: +8.34%</title></rect>
+<rect x="1199.0" y="2368.0" width="22" height="17" rx="2" fill="#afcec2"><title>vec::bench_in_place_xxu8_0100_i1: +7.61%</title></rect>
+<rect x="1223.0" y="2368.0" width="22" height="17" rx="2" fill="#b5d2c6"><title>vec::bench_in_place_xxu8_1000_i0: +6.42%</title></rect>
+<rect x="1247.0" y="2368.0" width="22" height="17" rx="2" fill="#b6d2c7"><title>vec::bench_in_place_xxu8_1000_i1: +6.24%</title></rect>
+<rect x="1271.0" y="2368.0" width="22" height="17" rx="2" fill="#e4d0d1"><title>vec::bench_in_place_zip_iter_mut: -3.15%</title></rect>
+<rect x="1295.0" y="2368.0" width="22" height="17" rx="2" fill="#ebeef0"><title>vec::bench_in_place_zip_recycle: +0.00%</title></rect>
+<rect x="1319.0" y="2368.0" width="22" height="17" rx="2" fill="#e5d6d8"><title>vec::bench_map_fast: -2.20%</title></rect>
+<rect x="1343.0" y="2368.0" width="22" height="17" rx="2" fill="#e7dfe0"><title>vec::bench_map_regular: -1.12%</title></rect>
+<rect x="1367.0" y="2368.0" width="22" height="17" rx="2" fill="#1f8252"><title>vec::bench_nest_chain_chain_collect: +1344.49%</title></rect>
+<rect x="1391.0" y="2368.0" width="22" height="17" rx="2" fill="#bdd6cd"><title>vec::bench_new: +5.00%</title></rect>
+<rect x="1415.0" y="2368.0" width="22" height="17" rx="2" fill="#e2e9e9"><title>vec::bench_next_chunk: +0.42%</title></rect>
+<rect x="815.0" y="2387.0" width="22" height="17" rx="2" fill="#afcec2"><title>vec::bench_range_map_collect: +7.53%</title></rect>
+<rect x="839.0" y="2387.0" width="22" height="17" rx="2" fill="#3f936b"><title>vec::bench_retain_100000: +38.36%</title></rect>
+<rect x="863.0" y="2387.0" width="22" height="17" rx="2" fill="#d2898a"><title>vec::bench_retain_iter_100000: -19.91%</title></rect>
+<rect x="887.0" y="2387.0" width="22" height="17" rx="2" fill="#e7eced"><title>vec::bench_retain_whole_100000: +0.12%</title></rect>
+<rect x="911.0" y="2387.0" width="22" height="17" rx="2" fill="#c5dad3"><title>vec::bench_rev_1: +3.76%</title></rect>
+<rect x="935.0" y="2387.0" width="22" height="17" rx="2" fill="#e8e0e2"><title>vec::bench_rev_2: -0.96%</title></rect>
+<rect x="959.0" y="2387.0" width="22" height="17" rx="2" fill="#ebeef0"><title>vec::bench_transmute: +0.00%</title></rect>
+<rect x="983.0" y="2387.0" width="22" height="17" rx="2" fill="#248556"><title>vec::bench_with_capacity_0000: +48.15%</title></rect>
+<rect x="1007.0" y="2387.0" width="22" height="17" rx="2" fill="#5fa483"><title>vec::bench_with_capacity_0010: +28.07%</title></rect>
+<rect x="1031.0" y="2387.0" width="22" height="17" rx="2" fill="#a0c6b6"><title>vec::bench_with_capacity_0100: +10.70%</title></rect>
+<rect x="1055.0" y="2387.0" width="22" height="17" rx="2" fill="#9ac3b2"><title>vec::bench_with_capacity_1000: +11.97%</title></rect>
+<rect x="1079.0" y="2387.0" width="22" height="17" rx="2" fill="#c3d9d1"><title>vec_deque::bench_extend_bytes: +4.04%</title></rect>
+<rect x="1103.0" y="2387.0" width="22" height="17" rx="2" fill="#debabb"><title>vec_deque::bench_extend_chained_bytes: -7.26%</title></rect>
+<rect x="1127.0" y="2387.0" width="22" height="17" rx="2" fill="#e8edee"><title>vec_deque::bench_extend_chained_trustedlen: +0.06%</title></rect>
+<rect x="1151.0" y="2387.0" width="22" height="17" rx="2" fill="#e9e5e6"><title>vec_deque::bench_extend_trustedlen: -0.53%</title></rect>
+<rect x="1175.0" y="2387.0" width="22" height="17" rx="2" fill="#a7cabb"><title>vec_deque::bench_extend_vec: +9.26%</title></rect>
+<rect x="1199.0" y="2387.0" width="22" height="17" rx="2" fill="#e6dbdd"><title>vec_deque::bench_from_array_1000: -1.51%</title></rect>
+<rect x="1223.0" y="2387.0" width="22" height="17" rx="2" fill="#d9e4e2"><title>vec_deque::bench_grow_1025: +1.21%</title></rect>
+<rect x="1247.0" y="2387.0" width="22" height="17" rx="2" fill="#e6ebec"><title>vec_deque::bench_into_iter: +0.18%</title></rect>
+<rect x="1271.0" y="2387.0" width="22" height="17" rx="2" fill="#b9d3c9"><title>vec_deque::bench_into_iter_fold: +5.83%</title></rect>
+<rect x="1295.0" y="2387.0" width="22" height="17" rx="2" fill="#b4d1c5"><title>vec_deque::bench_into_iter_next_chunk: +6.74%</title></rect>
+<rect x="1319.0" y="2387.0" width="22" height="17" rx="2" fill="#e4eaeb"><title>vec_deque::bench_into_iter_try_fold: +0.28%</title></rect>
+<rect x="1343.0" y="2387.0" width="22" height="17" rx="2" fill="#ca6768"><title>vec_deque::bench_iter_1000: -31.16%</title></rect>
+<rect x="1367.0" y="2387.0" width="22" height="17" rx="2" fill="#ca6868"><title>vec_deque::bench_mut_iter_1000: -31.10%</title></rect>
+<rect x="1391.0" y="2387.0" width="22" height="17" rx="2" fill="#dbadae"><title>vec_deque::bench_new: -10.17%</title></rect>
+<rect x="1415.0" y="2387.0" width="22" height="17" rx="2" fill="#e9e6e8"><title>vec_deque::bench_try_fold: -0.38%</title></rect>
+<rect x="815.0" y="2423.0" width="18.0" height="12.0" rx="2.0" fill="#be3737" stroke="none"/>
+<text x="839.0" y="2434.0" font-size="10" font-weight="400" fill="#52606d" text-anchor="start">-50%</text>
+<rect x="890.0" y="2423.0" width="18.0" height="12.0" rx="2.0" fill="#ce797a" stroke="none"/>
+<text x="914.0" y="2434.0" font-size="10" font-weight="400" fill="#52606d" text-anchor="start">-25%</text>
+<rect x="965.0" y="2423.0" width="18.0" height="12.0" rx="2.0" fill="#ebeef0" stroke="none"/>
+<text x="989.0" y="2434.0" font-size="10" font-weight="400" fill="#52606d" text-anchor="start">+0%</text>
+<rect x="1040.0" y="2423.0" width="18.0" height="12.0" rx="2.0" fill="#69a98b" stroke="none"/>
+<text x="1064.0" y="2434.0" font-size="10" font-weight="400" fill="#52606d" text-anchor="start">+25%</text>
+<rect x="1115.0" y="2423.0" width="18.0" height="12.0" rx="2.0" fill="#1f8252" stroke="none"/>
+<text x="1139.0" y="2434.0" font-size="10" font-weight="400" fill="#52606d" text-anchor="start">+50%</text>
+<text x="60.0" y="2483.0" font-size="18" font-weight="750" fill="#17212b" text-anchor="start">Raw single-pass extremes (diagnostic only)</text>
+<text x="72.0" y="2508.0" font-size="13" font-weight="700" fill="#9b3434" text-anchor="start">Worst</text>
+<text x="755.0" y="2508.0" font-size="13" font-weight="700" fill="#18794e" text-anchor="start">Best</text>
+<text x="72.0" y="2529.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">str::split_ad_str::short_ascii</text>
+<text x="700.0" y="2529.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">-41.2%</text>
+<text x="755.0" y="2529.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_chain_extend_ref</text>
+<text x="1385.0" y="2529.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">+1345.7%</text>
+<text x="72.0" y="2553.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_clone_0000</text>
+<text x="700.0" y="2553.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">-37.9%</text>
+<text x="755.0" y="2553.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_nest_chain_chain_collect</text>
+<text x="1385.0" y="2553.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">+1344.5%</text>
+<text x="72.0" y="2577.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">str::split_extern_fn</text>
+<text x="700.0" y="2577.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">-36.8%</text>
+<text x="755.0" y="2577.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_chain_chain_collect</text>
+<text x="1385.0" y="2577.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">+1343.3%</text>
+<text x="72.0" y="2601.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">str::split_closure</text>
+<text x="700.0" y="2601.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">-35.1%</text>
+<text x="755.0" y="2601.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_chain_collect</text>
+<text x="1385.0" y="2601.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">+1342.7%</text>
+<text x="72.0" y="2625.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_from_fn_0000</text>
+<text x="700.0" y="2625.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">-32.5%</text>
+<text x="755.0" y="2625.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">vec::bench_chain_extend_value</text>
+<text x="1385.0" y="2625.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">+1339.0%</text>
+<text x="72.0" y="2649.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">btree::set::intersection_100_pos_vs_10k_neg</text>
+<text x="700.0" y="2649.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">-32.0%</text>
+<text x="755.0" y="2649.0" font-size="11" font-weight="400" fill="#17212b" text-anchor="start">string::from_utf8_lossy_100_ascii</text>
+<text x="1385.0" y="2649.0" font-size="11" font-weight="700" fill="#17212b" text-anchor="end">+84.0%</text>
+<rect x="60.0" y="2691.0" width="1360.0" height="112.0" rx="6.0" fill="#f5f7f9" stroke="#d9e0e6"/>
+<text x="75.0" y="2713.0" font-size="13" font-weight="750" fill="#17212b" text-anchor="start">Provenance</text>
+<text x="75.0" y="2738.0" font-size="10" font-weight="400" fill="#52606d" text-anchor="start">baseline SHA-256  5ea5b762f5f58723fcfa9f7a59c762baafbfd7648062dbda2840ee2234293248</text>
+<text x="75.0" y="2759.0" font-size="10" font-weight="400" fill="#52606d" text-anchor="start">candidate SHA-256 90bc825b5de2a5eba019dfdafd68873ff8c4d299c79dda3e7b4a3bee740c74f9</text>
+<text x="75.0" y="2781.0" font-size="10" font-weight="400" fill="#52606d" text-anchor="start">input hashes: stratified_n4 9badbd8b3606… · targeted_n5 408f84b439b5… · confirmatory_n5 00341eb4d916… · full_468_single_pass 203d029bc5cb… · rebased_validation e9273544aed4…</text>
+<text x="75.0" y="2801.0" font-size="10" font-weight="400" fill="#52606d" text-anchor="start">Classification describes whether the timed closure performs heap allocation. Attribution requires source or disassembly evidence; full-only leaves use a conservative name-based heuristic.</text>
+</svg>

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "baseline_source_commit": "0d117f6f5d887bdfab432db20f2ccfa8f596f6f8",
+  "candidate_source_commit": "2060313812b2369fc0c82761d10606c1d7a20a6d",
+  "verdict": "Normal-path executable code and primary immutable/mutable data sections are byte-identical to the measured binaries after the final rebase.",
+  "baseline": {
+    "measured_whole_elf_sha256": "5ea5b762f5f58723fcfa9f7a59c762baafbfd7648062dbda2840ee2234293248",
+    "rebased_whole_elf_sha256": "0b282b57009ef9a3a1985e7a90b83dc4e170d9fe3ff28c18d7bef637337197a0",
+    "sections": {
+      ".text": "3221fa6510d3285d09d5519b7ba3b93b1e52a378f200800b81912d1f3b5bf927",
+      ".rodata": "a06c2b785462f6bb6b8fc4f63ad9f9db2d8700addd2284f21953f2c78c8b04a6",
+      ".data": "c8e98ff9754fd188a8cf73b1397c4f405793ad3508746b0811cfc97f0286126b"
+    },
+    "data_rel_ro": {
+      "measured_sha256": "d0ab312d371c2732de63a55156530b65e234ab926a0d3a7fcfcd71996a49d5ee",
+      "rebased_sha256": "f8e654b859255362acaa60df591b0400bad75ad274e6a9dc7eb016533ee891b5",
+      "differing_bytes": 54
+    }
+  },
+  "candidate": {
+    "measured_whole_elf_sha256": "90bc825b5de2a5eba019dfdafd68873ff8c4d299c79dda3e7b4a3bee740c74f9",
+    "rebased_whole_elf_sha256": "72a052d689745949580a00ab75f3b7e6be46bfee654e698875c4ae6b19f1a8a2",
+    "sections": {
+      ".text": "64117e3c759e6976afcd3d599bb4f43f0b8733fe04e86576aaaca18addd330c5",
+      ".rodata": "5c683db4ee20cdcc67abc90e71215e143dccb9d7a161623e50a15a650b491ed9",
+      ".data": "0e8a507903ed8a9da25a0ab578a82882ccb9ca6c290a0a1d21dda2300e506797"
+    },
+    "data_rel_ro": {
+      "measured_sha256": "198031c34b737032b0ceb9277971774ccf2a12a6b77e56baceeac5f1b36f4bf0",
+      "rebased_sha256": "b8148828905ecde66dfc6d040949ab6ec935db5725bdc6b64c63440e4661cb79",
+      "differing_bytes": 4
+    }
+  },
+  "metadata_boundary": "The final rebase refactors an inlined semantic helper and adjusts tests. It preserves .text, .rodata, .data, section sizes, and BSS sizes. Whole-ELF build IDs and source-location records change; .data.rel.ro differences are confined to 54 baseline bytes and 4 candidate bytes in source-location entries.",
+  "benchmark_reuse_basis": "The timed normal paths execute identical instructions against identical primary data sections, so the completed A/B campaigns remain applicable to the final rebased source."
+}
