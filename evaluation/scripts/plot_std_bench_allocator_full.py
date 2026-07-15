@@ -41,7 +41,8 @@ from matplotlib.ticker import FuncFormatter
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 CAMPAIGN_ID = "std-bench-allocator-full-20260714"
-DEFAULT_RAW_DIR = REPOSITORY_ROOT / "evaluation" / "raw" / CAMPAIGN_ID
+RAW_CAMPAIGN_ID = "std-bench-allocator-full-optimized-20260714"
+DEFAULT_RAW_DIR = REPOSITORY_ROOT / "evaluation" / "raw" / RAW_CAMPAIGN_ID
 DEFAULT_SUMMARY = DEFAULT_RAW_DIR / "summary.json"
 DEFAULT_RECORDS = DEFAULT_RAW_DIR / "records.jsonl"
 DEFAULT_RESULT_JSON = REPOSITORY_ROOT / "benchmark-results" / f"{CAMPAIGN_ID}.json"

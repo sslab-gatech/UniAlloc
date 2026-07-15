@@ -1,0 +1,1549 @@
+{
+  "binary_artifacts": {
+    "focused": {
+      "baseline": {
+        "bytes": 3314096,
+        "path": "/tmp/unialloc-heatmap-opt-baseline-target/release/deps/std_bench-9742587db21b17ee",
+        "retained_at_measurement_time": true,
+        "sha256": "ca381775f1e858c6a590308049d64a7830e74df16e9482cfc830dd0fbe0430dc"
+      },
+      "optimized": {
+        "bytes": 3315072,
+        "path": "/tmp/unialloc-heatmap-opt-final-target/release/deps/std_bench-9742587db21b17ee",
+        "retained_at_measurement_time": true,
+        "sha256": "4afa0bcff9a154d6a00e300f5f0ec033bda5f680de8a196c37942e23452a2f3d"
+      }
+    },
+    "pss_probe": {
+      "baseline": {
+        "bytes": 848856,
+        "path": "/tmp/unialloc-warm-probe-baseline-target/release/unialloc-warm-probe-baseline",
+        "retained_at_measurement_time": true,
+        "sha256": "fb0d91ea0faf72c640da82df814049b667a4c3e4c1a2c0a6fe409d8f9277e7e8"
+      },
+      "optimized": {
+        "bytes": 848480,
+        "path": "/tmp/unialloc-warm-probe-optimized-target/release/unialloc-warm-probe-optimized",
+        "retained_at_measurement_time": true,
+        "sha256": "be4b82805820cd869e78d381d207f653155f0420685a73cb24b17bea451411b2"
+      }
+    }
+  },
+  "boundaries": [
+    "The full 468-by-7 matrix has three measured fresh processes per complete cell and remains a shared-host current-toolchain diagnostic.",
+    "Full-matrix before/after ratios compare separate shared-host three-process campaigns; focused n=5 confirmation exists only for the seven selected optimization and control leaves.",
+    "The full baseline source 071c4f06426ea06a66419e4ffd208a3cb7c2bb7f and optimized source 1c8ff12d5b618c7b8f9ae0365d8791e1e558d815 also differ in benchmark literals and lifetime code, so full-matrix before/after ratios are confounded cross-campaign sensitivity observations.",
+    "The focused n=5 baseline db49c0fcc80b19b32f440a2c41e37dd60fb11b10 is the direct parent of optimized source 1c8ff12d5b618c7b8f9ae0365d8791e1e558d815, and their diff is limited to unialloc/src/cache/thread_cache.rs and unialloc/src/freelist/mod.rs.",
+    "The focused before/after panel has five measured fresh processes per variant and reports descriptive medians and ranges.",
+    "The PSS probe performs fixed page allocations, touches every page, and samples five independent processes at named checkpoints.",
+    "Warm-run retention applies only to the default hosted intrusive backend and is bounded by per-run, slot-count, and aggregate-byte limits.",
+    "Two descending-sort leaves are link-layout sensitive: a seven-process same-source audit shifted optimized commit 1c8ff12 .text forward 16 bytes, restored their old fetch-block alignment and medians, and left ascending controls within 0.21%. Allocator-specific claims exclude these leaves."
+  ],
+  "claim_grade": false,
+  "focused_n5": {
+    "baseline_source_commit": "db49c0fcc80b19b32f440a2c41e37dd60fb11b10",
+    "baseline_unialloc_tree": "a6533a09904a5e1a3c57247b700e99cb510d855a",
+    "benchmarks": {
+      "linked_list::bench_collect_into": {
+        "baseline": {
+          "max_ns_per_iter": 1258.77,
+          "median_minor_faults": 378,
+          "median_ns_per_iter": 1257.1,
+          "median_peak_rss_kib": 3072,
+          "median_system_seconds": 0.0,
+          "median_user_seconds": 0.68,
+          "median_wall_seconds": 0.68,
+          "min_ns_per_iter": 1255.71,
+          "minor_fault_samples": [
+            375,
+            378,
+            378,
+            378,
+            377
+          ],
+          "samples_ns_per_iter": [
+            1255.71,
+            1258.77,
+            1257.44,
+            1257.1,
+            1256.64
+          ]
+        },
+        "optimized": {
+          "max_ns_per_iter": 1172.21,
+          "median_minor_faults": 380,
+          "median_ns_per_iter": 1158.24,
+          "median_peak_rss_kib": 3072,
+          "median_system_seconds": 0.0,
+          "median_user_seconds": 0.55,
+          "median_wall_seconds": 0.55,
+          "min_ns_per_iter": 1155.21,
+          "minor_fault_samples": [
+            380,
+            381,
+            377,
+            380,
+            380
+          ],
+          "samples_ns_per_iter": [
+            1168.53,
+            1156.33,
+            1158.24,
+            1172.21,
+            1155.21
+          ]
+        },
+        "optimized_vs_baseline_ratio": 0.9213586826823642,
+        "speedup": 1.0853536400055255
+      },
+      "slice::sort_by_cached_key_lexicographic": {
+        "baseline": {
+          "max_ns_per_iter": 1810467.7,
+          "median_minor_faults": 544,
+          "median_ns_per_iter": 1803070.2,
+          "median_peak_rss_kib": 4096,
+          "median_system_seconds": 0.0,
+          "median_user_seconds": 3.8,
+          "median_wall_seconds": 3.8,
+          "min_ns_per_iter": 1772752.05,
+          "minor_fault_samples": [
+            544,
+            545,
+            540,
+            547,
+            542
+          ],
+          "samples_ns_per_iter": [
+            1803909.7,
+            1772752.05,
+            1803070.2,
+            1810467.7,
+            1796313.27
+          ]
+        },
+        "optimized": {
+          "max_ns_per_iter": 2173177.4,
+          "median_minor_faults": 545,
+          "median_ns_per_iter": 1796222.15,
+          "median_peak_rss_kib": 4096,
+          "median_system_seconds": 0.0,
+          "median_user_seconds": 1.63,
+          "median_wall_seconds": 1.63,
+          "min_ns_per_iter": 1769542.7,
+          "minor_fault_samples": [
+            547,
+            545,
+            544,
+            544,
+            547
+          ],
+          "samples_ns_per_iter": [
+            2173177.4,
+            1769542.7,
+            1795876.82,
+            1805232.3,
+            1796222.15
+          ]
+        },
+        "optimized_vs_baseline_ratio": 0.9962020058897318,
+        "speedup": 1.0038124738635474
+      },
+      "slice::sort_by_key_lexicographic": {
+        "baseline": {
+          "max_ns_per_iter": 8147651.1,
+          "median_minor_faults": 445,
+          "median_ns_per_iter": 8092815.4,
+          "median_peak_rss_kib": 3072,
+          "median_system_seconds": 0.0,
+          "median_user_seconds": 2.45,
+          "median_wall_seconds": 2.45,
+          "min_ns_per_iter": 8089278.2,
+          "minor_fault_samples": [
+            440,
+            445,
+            447,
+            443,
+            446
+          ],
+          "samples_ns_per_iter": [
+            8091448.0,
+            8147651.1,
+            8138577.6,
+            8092815.4,
+            8089278.2
+          ]
+        },
+        "optimized": {
+          "max_ns_per_iter": 7704247.5,
+          "median_minor_faults": 444,
+          "median_ns_per_iter": 7605091.1,
+          "median_peak_rss_kib": 3072,
+          "median_system_seconds": 0.0,
+          "median_user_seconds": 2.32,
+          "median_wall_seconds": 2.32,
+          "min_ns_per_iter": 7572672.9,
+          "minor_fault_samples": [
+            440,
+            444,
+            443,
+            445,
+            444
+          ],
+          "samples_ns_per_iter": [
+            7572672.9,
+            7605091.1,
+            7576687.2,
+            7615002.4,
+            7704247.5
+          ]
+        },
+        "optimized_vs_baseline_ratio": 0.9397336679643031,
+        "speedup": 1.0641312896304425
+      },
+      "slice::sort_large_big": {
+        "baseline": {
+          "max_ns_per_iter": 1657787.88,
+          "median_minor_faults": 564724,
+          "median_ns_per_iter": 1636497.42,
+          "median_peak_rss_kib": 7168,
+          "median_system_seconds": 0.85,
+          "median_user_seconds": 0.64,
+          "median_wall_seconds": 1.5,
+          "min_ns_per_iter": 1628413.15,
+          "minor_fault_samples": [
+            564722,
+            564723,
+            1315921,
+            1315922,
+            564724
+          ],
+          "samples_ns_per_iter": [
+            1634117.25,
+            1628413.15,
+            1657787.88,
+            1636497.42,
+            1638034.75
+          ]
+        },
+        "optimized": {
+          "max_ns_per_iter": 627676.8,
+          "median_minor_faults": 1323,
+          "median_ns_per_iter": 618260.05,
+          "median_peak_rss_kib": 7168,
+          "median_system_seconds": 0.0,
+          "median_user_seconds": 0.55,
+          "median_wall_seconds": 0.56,
+          "min_ns_per_iter": 615453.8,
+          "minor_fault_samples": [
+            1323,
+            1323,
+            1325,
+            1323,
+            1324
+          ],
+          "samples_ns_per_iter": [
+            615453.8,
+            627676.8,
+            618260.05,
+            619122.35,
+            617170.95
+          ]
+        },
+        "optimized_vs_baseline_ratio": 0.3777946988758467,
+        "speedup": 2.646940264052319
+      },
+      "slice::sort_unstable_by_key_lexicographic": {
+        "baseline": {
+          "max_ns_per_iter": 7931328.1,
+          "median_minor_faults": 420,
+          "median_ns_per_iter": 7862503.8,
+          "median_peak_rss_kib": 3072,
+          "median_system_seconds": 0.0,
+          "median_user_seconds": 2.36,
+          "median_wall_seconds": 2.37,
+          "min_ns_per_iter": 7851224.8,
+          "minor_fault_samples": [
+            419,
+            418,
+            421,
+            420,
+            421
+          ],
+          "samples_ns_per_iter": [
+            7860263.2,
+            7862503.8,
+            7851224.8,
+            7895882.6,
+            7931328.1
+          ]
+        },
+        "optimized": {
+          "max_ns_per_iter": 7479665.4,
+          "median_minor_faults": 418,
+          "median_ns_per_iter": 7422831.75,
+          "median_peak_rss_kib": 3072,
+          "median_system_seconds": 0.0,
+          "median_user_seconds": 2.27,
+          "median_wall_seconds": 2.28,
+          "min_ns_per_iter": 7352454.0,
+          "minor_fault_samples": [
+            421,
+            418,
+            421,
+            416,
+            418
+          ],
+          "samples_ns_per_iter": [
+            7433977.1,
+            7479665.4,
+            7418950.15,
+            7352454.0,
+            7422831.75
+          ]
+        },
+        "optimized_vs_baseline_ratio": 0.9440798934812598,
+        "speedup": 1.05923238796299
+      },
+      "slice::sort_unstable_large_big": {
+        "baseline": {
+          "max_ns_per_iter": 1092316.0,
+          "median_minor_faults": 94912,
+          "median_ns_per_iter": 1087984.2,
+          "median_peak_rss_kib": 5120,
+          "median_system_seconds": 0.16,
+          "median_user_seconds": 0.18,
+          "median_wall_seconds": 0.33,
+          "min_ns_per_iter": 1060475.75,
+          "minor_fault_samples": [
+            94909,
+            94912,
+            282708,
+            282711,
+            94911
+          ],
+          "samples_ns_per_iter": [
+            1087984.2,
+            1088965.9,
+            1060475.75,
+            1062483.25,
+            1092316.0
+          ]
+        },
+        "optimized": {
+          "max_ns_per_iter": 556596.3,
+          "median_minor_faults": 1009,
+          "median_ns_per_iter": 555770.95,
+          "median_peak_rss_kib": 5120,
+          "median_system_seconds": 0.0,
+          "median_user_seconds": 0.5,
+          "median_wall_seconds": 0.5,
+          "min_ns_per_iter": 555193.15,
+          "minor_fault_samples": [
+            1010,
+            1008,
+            1009,
+            1012,
+            1008
+          ],
+          "samples_ns_per_iter": [
+            555754.0,
+            555193.15,
+            555770.95,
+            556419.5,
+            556596.3
+          ]
+        },
+        "optimized_vs_baseline_ratio": 0.5108263061173131,
+        "speedup": 1.9576125740289234
+      },
+      "vec::bench_flat_map_collect": {
+        "baseline": {
+          "max_ns_per_iter": 907023.6,
+          "median_minor_faults": 148059,
+          "median_ns_per_iter": 902895.3,
+          "median_peak_rss_kib": 7168,
+          "median_system_seconds": 0.22,
+          "median_user_seconds": 0.05,
+          "median_wall_seconds": 0.27,
+          "min_ns_per_iter": 900733.05,
+          "minor_fault_samples": [
+            148059,
+            148059,
+            148058,
+            441459,
+            148058
+          ],
+          "samples_ns_per_iter": [
+            901374.9,
+            902895.3,
+            903763.5,
+            900733.05,
+            907023.6
+          ]
+        },
+        "optimized": {
+          "max_ns_per_iter": 122626.06,
+          "median_minor_faults": 1359,
+          "median_ns_per_iter": 122240.73,
+          "median_peak_rss_kib": 7168,
+          "median_system_seconds": 0.0,
+          "median_user_seconds": 0.55,
+          "median_wall_seconds": 0.55,
+          "min_ns_per_iter": 120446.26,
+          "minor_fault_samples": [
+            1358,
+            1357,
+            1361,
+            1359,
+            1359
+          ],
+          "samples_ns_per_iter": [
+            122537.3,
+            120446.26,
+            120607.27,
+            122240.73,
+            122626.06
+          ]
+        },
+        "optimized_vs_baseline_ratio": 0.13538749177230183,
+        "speedup": 7.386206708680487
+      }
+    },
+    "cpu": 8,
+    "measured_processes_per_variant": 5,
+    "numa_node": 0,
+    "optimized_source_commit": "1c8ff12d5b618c7b8f9ae0365d8791e1e558d815",
+    "optimized_unialloc_tree": "3c7f20a10210a1a6d06794c976ba979330d85b02",
+    "warmup_processes_per_variant": 1
+  },
+  "full_matrix": {
+    "baseline_robust_distribution": [
+      {
+        "allocator": "unialloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 1.0,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 1.0,
+          "btree": 1.0,
+          "linked_list": 1.0,
+          "slice": 1.0,
+          "str": 1.0,
+          "string": 1.0,
+          "vec": 1.0,
+          "vec_deque": 1.0
+        },
+        "feature": "bench_ourself",
+        "label": "UniAlloc",
+        "leaf_geomean": 1.0,
+        "maximum": {
+          "benchmark": "binary_heap::bench_find_smallest_1000",
+          "family": "binary_heap",
+          "ratio_vs_unialloc": 1.0
+        },
+        "minimum": {
+          "benchmark": "binary_heap::bench_find_smallest_1000",
+          "family": "binary_heap",
+          "ratio_vs_unialloc": 1.0
+        },
+        "quantiles": {
+          "p05": 1.0,
+          "p25": 1.0,
+          "p50": 1.0,
+          "p75": 1.0,
+          "p95": 1.0
+        }
+      },
+      {
+        "allocator": "ptmalloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 0.9401944565793812,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 1.016919864643632,
+          "btree": 0.9842848928102734,
+          "linked_list": 0.797708884647043,
+          "slice": 1.0218055542194047,
+          "str": 0.9935489435504333,
+          "string": 0.937585144665202,
+          "vec": 0.9490326812474665,
+          "vec_deque": 0.846525606512475
+        },
+        "feature": "bench_ptmalloc",
+        "label": "ptmalloc",
+        "leaf_geomean": 0.97954832621073,
+        "maximum": {
+          "benchmark": "slice::sort_large_ascending",
+          "family": "slice",
+          "ratio_vs_unialloc": 3.4029933894622997
+        },
+        "minimum": {
+          "benchmark": "vec::bench_flat_map_collect",
+          "family": "vec",
+          "ratio_vs_unialloc": 0.13534797712777363
+        },
+        "quantiles": {
+          "p05": 0.7599588522779274,
+          "p25": 0.9732856108410566,
+          "p50": 0.9995378102696602,
+          "p75": 1.0162679063386153,
+          "p95": 1.1607668194626939
+        }
+      },
+      {
+        "allocator": "jemalloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 0.9313224077305244,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 0.9801731644324555,
+          "btree": 1.0286720865953956,
+          "linked_list": 0.7839693537747642,
+          "slice": 0.9437017063573369,
+          "str": 1.0044996549777463,
+          "string": 0.9519950318963784,
+          "vec": 0.9540669615178344,
+          "vec_deque": 0.8316172663006638
+        },
+        "feature": "bench_jemalloc",
+        "label": "jemalloc",
+        "leaf_geomean": 0.9779404596490476,
+        "maximum": {
+          "benchmark": "str::trim_ascii_char::long_lorem_ipsum",
+          "family": "str",
+          "ratio_vs_unialloc": 1.991424375917768
+        },
+        "minimum": {
+          "benchmark": "vec::bench_flat_map_collect",
+          "family": "vec",
+          "ratio_vs_unialloc": 0.13583552838420185
+        },
+        "quantiles": {
+          "p05": 0.6892096167673374,
+          "p25": 0.9765566937550096,
+          "p50": 0.9992728261289854,
+          "p75": 1.0227566934079213,
+          "p95": 1.1982044126323876
+        }
+      },
+      {
+        "allocator": "mimalloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 0.8885475261746657,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 1.0001594322189287,
+          "btree": 0.9793137217919854,
+          "linked_list": 0.586108456020938,
+          "slice": 0.9280150235515567,
+          "str": 0.9298384853610234,
+          "string": 0.9587809975273348,
+          "vec": 0.8791059594183747,
+          "vec_deque": 0.9305786153628177
+        },
+        "feature": "bench_mimalloc",
+        "label": "mimalloc",
+        "leaf_geomean": 0.9302302305768728,
+        "maximum": {
+          "benchmark": "vec::bench_retain_100000",
+          "family": "vec",
+          "ratio_vs_unialloc": 1.7956493282945765
+        },
+        "minimum": {
+          "benchmark": "vec::bench_flat_map_collect",
+          "family": "vec",
+          "ratio_vs_unialloc": 0.13738305868812428
+        },
+        "quantiles": {
+          "p05": 0.5551537407815281,
+          "p25": 0.9332688258154451,
+          "p50": 0.9927252164185094,
+          "p75": 1.0022571167585768,
+          "p95": 1.1198725866993944
+        }
+      },
+      {
+        "allocator": "tcmalloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 0.9098610429312377,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 1.0098354985605758,
+          "btree": 0.9960611245351586,
+          "linked_list": 0.6878424431652223,
+          "slice": 0.9252880015779609,
+          "str": 0.9867314835871313,
+          "string": 0.9550815241971786,
+          "vec": 0.9389636927316976,
+          "vec_deque": 0.8291055270798295
+        },
+        "feature": "bench_tcmalloc",
+        "label": "TCMalloc",
+        "leaf_geomean": 0.9567202120728567,
+        "maximum": {
+          "benchmark": "vec::bench_dedup_none_1000",
+          "family": "vec",
+          "ratio_vs_unialloc": 1.9780479692523747
+        },
+        "minimum": {
+          "benchmark": "vec::bench_flat_map_collect",
+          "family": "vec",
+          "ratio_vs_unialloc": 0.1373152463363666
+        },
+        "quantiles": {
+          "p05": 0.719810997827249,
+          "p25": 0.9545585579114273,
+          "p50": 0.9982550223623248,
+          "p75": 1.0019603952276723,
+          "p95": 1.1262416164749218
+        }
+      },
+      {
+        "allocator": "snmalloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 0.8724889925920641,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 1.0067174142787287,
+          "btree": 0.9846863828638259,
+          "linked_list": 0.591309636536591,
+          "slice": 0.915897613343797,
+          "str": 0.9135478044903115,
+          "string": 0.9048355403298274,
+          "vec": 0.9149132520129053,
+          "vec_deque": 0.8270493187132542
+        },
+        "feature": "bench_snmalloc",
+        "label": "snmalloc",
+        "leaf_geomean": 0.9296470194068667,
+        "maximum": {
+          "benchmark": "btree::map::iter_10k",
+          "family": "btree",
+          "ratio_vs_unialloc": 1.4405701936719744
+        },
+        "minimum": {
+          "benchmark": "vec::bench_flat_map_collect",
+          "family": "vec",
+          "ratio_vs_unialloc": 0.13657179899370203
+        },
+        "quantiles": {
+          "p05": 0.6453291645845616,
+          "p25": 0.9295698016593592,
+          "p50": 0.9916396518178758,
+          "p75": 1.001989244239252,
+          "p95": 1.1183107158928136
+        }
+      },
+      {
+        "allocator": "scudo",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 1.064504954767654,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 1.0004211730258035,
+          "btree": 1.4704967315053095,
+          "linked_list": 1.220387883977377,
+          "slice": 1.0212764383580206,
+          "str": 1.0094636247606952,
+          "string": 1.022538239452277,
+          "vec": 1.0096704026965542,
+          "vec_deque": 0.8628662887780444
+        },
+        "feature": "bench_scudo",
+        "label": "Scudo",
+        "leaf_geomean": 1.134419826433152,
+        "maximum": {
+          "benchmark": "btree::map::clone_fat_val_100_and_clear",
+          "family": "btree",
+          "ratio_vs_unialloc": 18.213970579220504
+        },
+        "minimum": {
+          "benchmark": "str::trim_start_ascii_char::long_lorem_ipsum",
+          "family": "str",
+          "ratio_vs_unialloc": 0.5029499068256645
+        },
+        "quantiles": {
+          "p05": 0.8191543779014987,
+          "p25": 0.9965335753463644,
+          "p50": 1.0077744381013989,
+          "p75": 1.1419479065210614,
+          "p95": 1.8317684281395166
+        }
+      }
+    ],
+    "comparable_benchmarks": 466,
+    "coverage": {
+      "allocator_feature_variants": 7,
+      "cells": 3276,
+      "censored_cells": 8,
+      "complete_cells": 3268
+    },
+    "optimized_robust_distribution": [
+      {
+        "allocator": "unialloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 1.0,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 1.0,
+          "btree": 1.0,
+          "linked_list": 1.0,
+          "slice": 1.0,
+          "str": 1.0,
+          "string": 1.0,
+          "vec": 1.0,
+          "vec_deque": 1.0
+        },
+        "feature": "bench_ourself",
+        "label": "UniAlloc",
+        "leaf_geomean": 1.0,
+        "maximum": {
+          "benchmark": "binary_heap::bench_find_smallest_1000",
+          "family": "binary_heap",
+          "ratio_vs_unialloc": 1.0
+        },
+        "minimum": {
+          "benchmark": "binary_heap::bench_find_smallest_1000",
+          "family": "binary_heap",
+          "ratio_vs_unialloc": 1.0
+        },
+        "quantiles": {
+          "p05": 1.0,
+          "p25": 1.0,
+          "p50": 1.0,
+          "p75": 1.0,
+          "p95": 1.0
+        }
+      },
+      {
+        "allocator": "ptmalloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 0.9714971396057253,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 1.003729101892102,
+          "btree": 0.9605852510896132,
+          "linked_list": 0.8065882292336692,
+          "slice": 1.0470330749952292,
+          "str": 1.0092677816468665,
+          "string": 0.9352202689518762,
+          "vec": 1.0288067303074784,
+          "vec_deque": 1.0034907685679344
+        },
+        "feature": "bench_ptmalloc",
+        "label": "ptmalloc",
+        "leaf_geomean": 1.0013444066074444,
+        "maximum": {
+          "benchmark": "slice::sort_large_ascending",
+          "family": "slice",
+          "ratio_vs_unialloc": 3.3831183478323554
+        },
+        "minimum": {
+          "benchmark": "vec::bench_extend_from_slice_1000_1000",
+          "family": "vec",
+          "ratio_vs_unialloc": 0.41918445377323166
+        },
+        "quantiles": {
+          "p05": 0.779053066694395,
+          "p25": 0.9685808992287747,
+          "p50": 0.9993722186354121,
+          "p75": 1.0219909095315534,
+          "p95": 1.2318735358110906
+        }
+      },
+      {
+        "allocator": "jemalloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 0.9723479501071558,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 0.9649170068344569,
+          "btree": 1.007672470111412,
+          "linked_list": 0.7825710292494469,
+          "slice": 0.9667579068914969,
+          "str": 1.0189749610649341,
+          "string": 0.9889559292265322,
+          "vec": 1.0370266699887363,
+          "vec_deque": 1.0394231696889284
+        },
+        "feature": "bench_jemalloc",
+        "label": "jemalloc",
+        "leaf_geomean": 1.0031277153916665,
+        "maximum": {
+          "benchmark": "str::trim_ascii_char::long_lorem_ipsum",
+          "family": "str",
+          "ratio_vs_unialloc": 1.9881601312935933
+        },
+        "minimum": {
+          "benchmark": "slice::sort_by_cached_key_lexicographic",
+          "family": "slice",
+          "ratio_vs_unialloc": 0.4783938848544081
+        },
+        "quantiles": {
+          "p05": 0.7963718047474448,
+          "p25": 0.9694315003039283,
+          "p50": 0.9999724792497682,
+          "p75": 1.0252448554852904,
+          "p95": 1.2209087153546792
+        }
+      },
+      {
+        "allocator": "mimalloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 0.9222256071060029,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 0.9859387275368072,
+          "btree": 0.9627298713135385,
+          "linked_list": 0.5969724865320776,
+          "slice": 0.9497424900076683,
+          "str": 0.9450847384086778,
+          "string": 0.9801975177909937,
+          "vec": 0.9572712981877414,
+          "vec_deque": 1.096385977796931
+        },
+        "feature": "bench_mimalloc",
+        "label": "mimalloc",
+        "leaf_geomean": 0.9540771128733219,
+        "maximum": {
+          "benchmark": "slice::sort_unstable_large_ascending",
+          "family": "slice",
+          "ratio_vs_unialloc": 1.6449784779635463
+        },
+        "minimum": {
+          "benchmark": "linked_list::bench_collect_into",
+          "family": "linked_list",
+          "ratio_vs_unialloc": 0.21165832447245347
+        },
+        "quantiles": {
+          "p05": 0.7657182932565675,
+          "p25": 0.9519375867113544,
+          "p50": 0.9956159187368958,
+          "p75": 1.0016241100489398,
+          "p95": 1.0679002203371613
+        }
+      },
+      {
+        "allocator": "tcmalloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 0.941660827689739,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 0.9869948324663089,
+          "btree": 0.9769019375752637,
+          "linked_list": 0.6970233192126533,
+          "slice": 0.9405265656437142,
+          "str": 1.00076147883495,
+          "string": 0.9758285388502055,
+          "vec": 1.0200249417426464,
+          "vec_deque": 0.9818766329858788
+        },
+        "feature": "bench_tcmalloc",
+        "label": "TCMalloc",
+        "leaf_geomean": 0.9781190780294997,
+        "maximum": {
+          "benchmark": "vec::bench_dedup_none_100000",
+          "family": "vec",
+          "ratio_vs_unialloc": 2.000497223271706
+        },
+        "minimum": {
+          "benchmark": "linked_list::bench_collect_into",
+          "family": "linked_list",
+          "ratio_vs_unialloc": 0.3486691390682677
+        },
+        "quantiles": {
+          "p05": 0.8199231365088904,
+          "p25": 0.9559848401475247,
+          "p50": 0.9928728967751272,
+          "p75": 1.0027192981521815,
+          "p95": 1.1174957098904221
+        }
+      },
+      {
+        "allocator": "snmalloc",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 0.9084905976399279,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 1.0019755657172094,
+          "btree": 0.959792440711821,
+          "linked_list": 0.6009523361028049,
+          "slice": 0.9402945245780822,
+          "str": 0.930315694650803,
+          "string": 0.942642950156488,
+          "vec": 0.9868337881465723,
+          "vec_deque": 0.9867417916917355
+        },
+        "feature": "bench_snmalloc",
+        "label": "snmalloc",
+        "leaf_geomean": 0.9509489638449959,
+        "maximum": {
+          "benchmark": "vec::bench_dedup_all_1000",
+          "family": "vec",
+          "ratio_vs_unialloc": 1.830674131848927
+        },
+        "minimum": {
+          "benchmark": "linked_list::bench_collect_into",
+          "family": "linked_list",
+          "ratio_vs_unialloc": 0.222957026893851
+        },
+        "quantiles": {
+          "p05": 0.7430830274025467,
+          "p25": 0.9529383032273488,
+          "p50": 0.9952041752842931,
+          "p75": 1.0009978658414056,
+          "p95": 1.0348932775505455
+        }
+      },
+      {
+        "allocator": "scudo",
+        "benchmark_count": 236,
+        "family_balanced_geomean": 1.11047032087486,
+        "family_count": 8,
+        "family_geomeans": {
+          "binary_heap": 0.9898030595090216,
+          "btree": 1.4382158866606378,
+          "linked_list": 1.2365859647809105,
+          "slice": 1.0461414476944366,
+          "str": 1.0253909512900101,
+          "string": 1.0396068122499387,
+          "vec": 1.1033146633777244,
+          "vec_deque": 1.0676036835306464
+        },
+        "feature": "bench_scudo",
+        "label": "Scudo",
+        "leaf_geomean": 1.1641786182120943,
+        "maximum": {
+          "benchmark": "btree::map::clone_fat_val_100_and_clear",
+          "family": "btree",
+          "ratio_vs_unialloc": 17.55544432249717
+        },
+        "minimum": {
+          "benchmark": "slice::sort_by_cached_key_lexicographic",
+          "family": "slice",
+          "ratio_vs_unialloc": 0.6304033859562216
+        },
+        "quantiles": {
+          "p05": 0.898963544514787,
+          "p25": 0.9985698772213165,
+          "p50": 1.0057486782753604,
+          "p75": 1.1514150819513027,
+          "p95": 1.995226169004999
+        }
+      }
+    ],
+    "robust_benchmarks": 236,
+    "selected_unialloc_cells": {
+      "linked_list::bench_collect_into": {
+        "baseline": {
+          "median_ns_per_iter": 1257.58,
+          "sample_ns_per_iter": [
+            1383.34,
+            1257.58,
+            1256.34
+          ]
+        },
+        "optimized": {
+          "median_ns_per_iter": 1156.77,
+          "sample_ns_per_iter": [
+            1168.7,
+            1155.41,
+            1156.77
+          ]
+        }
+      },
+      "slice::sort_by_cached_key_lexicographic": {
+        "baseline": {
+          "median_ns_per_iter": 1788616.7,
+          "sample_ns_per_iter": [
+            1778827.5,
+            1808465.8,
+            1788616.7
+          ]
+        },
+        "optimized": {
+          "median_ns_per_iter": 1787666.35,
+          "sample_ns_per_iter": [
+            1788592.8,
+            1787666.35,
+            1763000.95
+          ]
+        }
+      },
+      "slice::sort_by_key_lexicographic": {
+        "baseline": {
+          "median_ns_per_iter": 8113071.6,
+          "sample_ns_per_iter": [
+            8113071.6,
+            8088726.2,
+            8173782.0
+          ]
+        },
+        "optimized": {
+          "median_ns_per_iter": 7560826.6,
+          "sample_ns_per_iter": [
+            7560826.6,
+            7571810.2,
+            7552316.7
+          ]
+        }
+      },
+      "slice::sort_large_big": {
+        "baseline": {
+          "median_ns_per_iter": 1648993.85,
+          "sample_ns_per_iter": [
+            1649004.95,
+            1648993.85,
+            1637248.05
+          ]
+        },
+        "optimized": {
+          "median_ns_per_iter": 616711.6,
+          "sample_ns_per_iter": [
+            619050.7,
+            616359.0,
+            616711.6
+          ]
+        }
+      },
+      "slice::sort_unstable_by_key_lexicographic": {
+        "baseline": {
+          "median_ns_per_iter": 7880252.8,
+          "sample_ns_per_iter": [
+            7879901.5,
+            7880252.8,
+            7973410.8
+          ]
+        },
+        "optimized": {
+          "median_ns_per_iter": 7389611.8,
+          "sample_ns_per_iter": [
+            7331949.7,
+            7438238.5,
+            7389611.8
+          ]
+        }
+      },
+      "slice::sort_unstable_large_big": {
+        "baseline": {
+          "median_ns_per_iter": 1086893.9,
+          "sample_ns_per_iter": [
+            1092822.9,
+            1086893.9,
+            1062705.1
+          ]
+        },
+        "optimized": {
+          "median_ns_per_iter": 554013.15,
+          "sample_ns_per_iter": [
+            554575.1,
+            554013.15,
+            554005.65
+          ]
+        }
+      },
+      "vec::bench_flat_map_collect": {
+        "baseline": {
+          "median_ns_per_iter": 900131.0,
+          "sample_ns_per_iter": [
+            898614.7,
+            900131.0,
+            901888.7
+          ]
+        },
+        "optimized": {
+          "median_ns_per_iter": 121841.61,
+          "sample_ns_per_iter": [
+            121631.48,
+            121841.61,
+            121999.75
+          ]
+        }
+      }
+    },
+    "unialloc_before_after_robust_extrema": {
+      "benchmark_count": 236,
+      "largest_improvements": [
+        {
+          "baseline_median_ns_per_iter": 900131.0,
+          "baseline_samples_ns_per_iter": [
+            898614.7,
+            900131.0,
+            901888.7
+          ],
+          "benchmark": "vec::bench_flat_map_collect",
+          "optimized_median_ns_per_iter": 121841.61,
+          "optimized_samples_ns_per_iter": [
+            121631.48,
+            121841.61,
+            121999.75
+          ],
+          "optimized_vs_baseline_ratio": 0.13535986428642052
+        },
+        {
+          "baseline_median_ns_per_iter": 1648993.85,
+          "baseline_samples_ns_per_iter": [
+            1649004.95,
+            1648993.85,
+            1637248.05
+          ],
+          "benchmark": "slice::sort_large_big",
+          "optimized_median_ns_per_iter": 616711.6,
+          "optimized_samples_ns_per_iter": [
+            619050.7,
+            616359.0,
+            616711.6
+          ],
+          "optimized_vs_baseline_ratio": 0.3739926622528034
+        },
+        {
+          "baseline_median_ns_per_iter": 1357.67,
+          "baseline_samples_ns_per_iter": [
+            1357.98,
+            1357.01,
+            1357.67
+          ],
+          "benchmark": "str::trim_start_ascii_char::long_lorem_ipsum",
+          "optimized_median_ns_per_iter": 681.65,
+          "optimized_samples_ns_per_iter": [
+            682.14,
+            681.65,
+            681.57
+          ],
+          "optimized_vs_baseline_ratio": 0.5020734051720963
+        },
+        {
+          "baseline_median_ns_per_iter": 1086893.9,
+          "baseline_samples_ns_per_iter": [
+            1092822.9,
+            1086893.9,
+            1062705.1
+          ],
+          "benchmark": "slice::sort_unstable_large_big",
+          "optimized_median_ns_per_iter": 554013.15,
+          "optimized_samples_ns_per_iter": [
+            554575.1,
+            554013.15,
+            554005.65
+          ],
+          "optimized_vs_baseline_ratio": 0.5097214640729882
+        },
+        {
+          "baseline_median_ns_per_iter": 565.07,
+          "baseline_samples_ns_per_iter": [
+            565.07,
+            564.63,
+            566.37
+          ],
+          "benchmark": "vec::bench_dedup_all_1000",
+          "optimized_median_ns_per_iter": 308.99,
+          "optimized_samples_ns_per_iter": [
+            308.38,
+            308.99,
+            309.81
+          ],
+          "optimized_vs_baseline_ratio": 0.546817208487444
+        }
+      ],
+      "largest_regressions": [
+        {
+          "baseline_median_ns_per_iter": 5395.6,
+          "baseline_samples_ns_per_iter": [
+            5394.76,
+            5395.6,
+            5409.08
+          ],
+          "benchmark": "slice::sort_unstable_large_descending",
+          "optimized_median_ns_per_iter": 8034.92,
+          "optimized_samples_ns_per_iter": [
+            8031.12,
+            8035.17,
+            8034.92
+          ],
+          "optimized_vs_baseline_ratio": 1.4891615390318036
+        },
+        {
+          "baseline_median_ns_per_iter": 5618.96,
+          "baseline_samples_ns_per_iter": [
+            5617.45,
+            5618.96,
+            5876.3
+          ],
+          "benchmark": "slice::sort_large_descending",
+          "optimized_median_ns_per_iter": 8160.8,
+          "optimized_samples_ns_per_iter": [
+            8156.14,
+            8170.88,
+            8160.8
+          ],
+          "optimized_vs_baseline_ratio": 1.452368409812492
+        },
+        {
+          "baseline_median_ns_per_iter": 9255606.05,
+          "baseline_samples_ns_per_iter": [
+            9255606.05,
+            9247450.7,
+            11147652.4
+          ],
+          "benchmark": "btree::map::iter_10k",
+          "optimized_median_ns_per_iter": 13370841.0,
+          "optimized_samples_ns_per_iter": [
+            13315663.4,
+            13542418.7,
+            13370841.0
+          ],
+          "optimized_vs_baseline_ratio": 1.4446207982242285
+        },
+        {
+          "baseline_median_ns_per_iter": 33201.31,
+          "baseline_samples_ns_per_iter": [
+            33201.31,
+            33224.87,
+            33193.42
+          ],
+          "benchmark": "vec::bench_retain_100000",
+          "optimized_median_ns_per_iter": 46505.88,
+          "optimized_samples_ns_per_iter": [
+            47444.45,
+            46505.88,
+            46469.39
+          ],
+          "optimized_vs_baseline_ratio": 1.4007242485311573
+        },
+        {
+          "baseline_median_ns_per_iter": 435.03,
+          "baseline_samples_ns_per_iter": [
+            434.83,
+            441.53,
+            435.03
+          ],
+          "benchmark": "vec::bench_dedup_random_1000",
+          "optimized_median_ns_per_iter": 547.53,
+          "optimized_samples_ns_per_iter": [
+            547.09,
+            549.99,
+            547.53
+          ],
+          "optimized_vs_baseline_ratio": 1.258602854975519
+        }
+      ],
+      "rule": "leaves selected by the >=100 ns/iter robustness rule in both campaigns; descriptive unpaired cross-campaign median ratios"
+    }
+  },
+  "generated_utc": "2026-07-15T04:00:00Z",
+  "input_artifacts": {
+    "baseline_full_result": {
+      "bytes": 2083865,
+      "git_commit": "257c1d02dd9c46b08b797a18d99199fc575473cf",
+      "path": "benchmark-results/std-bench-allocator-full-20260714.json",
+      "raw_records": {
+        "bytes": 34593157,
+        "path": "evaluation/raw/std-bench-allocator-full-20260714/records.jsonl",
+        "sha256": "e5499bca4d7ebbf722ceeeff881bf905e7e2a2879f2c921fc481f3380a4e286f"
+      },
+      "raw_summary": {
+        "bytes": 2114612,
+        "path": "evaluation/raw/std-bench-allocator-full-20260714/summary.json",
+        "sha256": "9b224be377e1719031bdd907ee26fbed71b916fef6cc6b00b3f0fcde0d96cca9"
+      },
+      "sha256": "b738a192c71bda67ec2e2d989b0b90c33c94e225bcc53f4673c7467dd0c30eea",
+      "source_commit": "071c4f06426ea06a66419e4ffd208a3cb7c2bb7f",
+      "unialloc_tree": "a96b4143548598a65dfd9d85e3ed6e04f8922875"
+    },
+    "focused_n5": {
+      "bytes": 29049,
+      "path": "/tmp/unialloc-focused-final-cap.json",
+      "sha256": "4533cad14589c77775c81948c0a92a375333a2f0d3c79fbcecccf5480e21251c"
+    },
+    "optimized_full_result": {
+      "bytes": 2083226,
+      "path": "benchmark-results/std-bench-allocator-full-20260714.json",
+      "raw_records": {
+        "bytes": 34966892,
+        "path": "evaluation/raw/std-bench-allocator-full-optimized-20260714/records.jsonl",
+        "sha256": "4df329a33b469e5be3860a8f5275a8ac19a4564cbda2ad69ffaee61664cc06b4"
+      },
+      "raw_summary": {
+        "bytes": 2114133,
+        "path": "evaluation/raw/std-bench-allocator-full-optimized-20260714/summary.json",
+        "sha256": "3a9061d970bea1b022ddb5b303124b060b2ab929fd2ec7d2381e97ba87f0a4e2"
+      },
+      "sha256": "dfb2355e0fe24151a9ad12afe20b4b615a521f11bf5c33df2b3a2d5b984d5a2e",
+      "source_commit": "1c8ff12d5b618c7b8f9ae0365d8791e1e558d815",
+      "unialloc_tree": "3c7f20a10210a1a6d06794c976ba979330d85b02"
+    },
+    "pss_n5": {
+      "bytes": 13552,
+      "path": "/tmp/unialloc-warm-large-rss-final.json",
+      "sha256": "1d50d0d46d6f71261bf750dbd21931409926b5d6b39903581329fbcd3151764c"
+    }
+  },
+  "link_layout_sensitivity_n7": {
+    "benchmarks": {
+      "slice::sort_large_ascending": {
+        "normal_median_ns_per_iter": 4291.35,
+        "padded_median_ns_per_iter": 4282.54,
+        "padded_vs_normal_ratio": 0.997947032984958
+      },
+      "slice::sort_large_descending": {
+        "normal_median_ns_per_iter": 8151.74,
+        "padded_median_ns_per_iter": 5609.36,
+        "padded_vs_normal_ratio": 0.6881181195671108
+      },
+      "slice::sort_unstable_large_ascending": {
+        "normal_median_ns_per_iter": 4073.82,
+        "padded_median_ns_per_iter": 4073.38,
+        "padded_vs_normal_ratio": 0.9998919932643072
+      },
+      "slice::sort_unstable_large_descending": {
+        "normal_median_ns_per_iter": 8047.1,
+        "padded_median_ns_per_iter": 5405.22,
+        "padded_vs_normal_ratio": 0.6716978787389246
+      }
+    },
+    "claim_grade": false,
+    "cpu": 14,
+    "interpretation": "Treat the two descending leaves as linked-binary code-layout sensitivity and exclude them from allocator-specific attribution.",
+    "link_control": {
+      "normal_text_start": "0x592c0",
+      "padded_link_argument": "-Wl,--section-start=.text=0x592d0",
+      "padded_text_start": "0x592d0",
+      "text_shift_bytes": 16
+    },
+    "measured_processes_per_binary": 7,
+    "mechanism": "Normal and padded binaries have identical hot sort opcodes and startup-only syscall counts. The 16-byte placement change moves the descending scan/reverse loops back to their prior fetch-block alignment on AMD EPYC 9354 (Zen 4).",
+    "normal_binary_sha256": "4afa0bcff9a154d6a00e300f5f0ec033bda5f680de8a196c37942e23452a2f3d",
+    "padded_binary_sha256": "6ed4078664717f5a7a8546499cac264f87ce68c9be554014fb79c4aa809a8225",
+    "source_commit": "1c8ff12d5b618c7b8f9ae0365d8791e1e558d815"
+  },
+  "lower_ratio_is_faster": true,
+  "optimization": {
+    "commit": "1c8ff12d5b618c7b8f9ae0365d8791e1e558d815",
+    "thread_cache_small_class_fast_max_bytes": 8192,
+    "unialloc_tree": "3c7f20a10210a1a6d06794c976ba979330d85b02",
+    "warm_large_run_per_run_max_bytes": 2097152,
+    "warm_large_run_slots": 2,
+    "warm_large_run_total_max_bytes": 2621440
+  },
+  "pss_n5": {
+    "checkpoints": {
+      "flat_map_freed": {
+        "baseline": {
+          "median_private_dirty_kib": 208,
+          "median_pss_kib": 601,
+          "median_rollup_rss_kib": 2256,
+          "private_dirty_kib_samples": [
+            204,
+            208,
+            208,
+            208,
+            208
+          ],
+          "pss_kib_samples": [
+            597,
+            601,
+            601,
+            601,
+            601
+          ]
+        },
+        "optimized": {
+          "median_private_dirty_kib": 2164,
+          "median_pss_kib": 2553,
+          "median_rollup_rss_kib": 4208,
+          "private_dirty_kib_samples": [
+            2164,
+            2164,
+            2164,
+            2164,
+            2164
+          ],
+          "pss_kib_samples": [
+            2553,
+            2553,
+            2553,
+            2553,
+            2553
+          ]
+        },
+        "optimized_minus_baseline_private_dirty_kib": 1956,
+        "optimized_minus_baseline_pss_kib": 1952
+      },
+      "flat_map_live_after_sort": {
+        "baseline": {
+          "median_private_dirty_kib": 2160,
+          "median_pss_kib": 2553,
+          "median_rollup_rss_kib": 4208,
+          "private_dirty_kib_samples": [
+            2156,
+            2160,
+            2160,
+            2160,
+            2160
+          ],
+          "pss_kib_samples": [
+            2549,
+            2553,
+            2553,
+            2553,
+            2553
+          ]
+        },
+        "optimized": {
+          "median_private_dirty_kib": 4664,
+          "median_pss_kib": 5053,
+          "median_rollup_rss_kib": 6708,
+          "private_dirty_kib_samples": [
+            4664,
+            4664,
+            4664,
+            4664,
+            4664
+          ],
+          "pss_kib_samples": [
+            5053,
+            5053,
+            5053,
+            5053,
+            5053
+          ]
+        },
+        "optimized_minus_baseline_private_dirty_kib": 2504,
+        "optimized_minus_baseline_pss_kib": 2500
+      },
+      "sort_buffers_freed": {
+        "baseline": {
+          "median_private_dirty_kib": 200,
+          "median_pss_kib": 593,
+          "median_rollup_rss_kib": 2248,
+          "private_dirty_kib_samples": [
+            196,
+            200,
+            200,
+            200,
+            200
+          ],
+          "pss_kib_samples": [
+            589,
+            593,
+            593,
+            593,
+            593
+          ]
+        },
+        "optimized": {
+          "median_private_dirty_kib": 2704,
+          "median_pss_kib": 3093,
+          "median_rollup_rss_kib": 4748,
+          "private_dirty_kib_samples": [
+            2704,
+            2704,
+            2704,
+            2704,
+            2704
+          ],
+          "pss_kib_samples": [
+            3093,
+            3093,
+            3093,
+            3093,
+            3093
+          ]
+        },
+        "optimized_minus_baseline_private_dirty_kib": 2504,
+        "optimized_minus_baseline_pss_kib": 2500
+      },
+      "sort_buffers_live": {
+        "baseline": {
+          "median_private_dirty_kib": 2704,
+          "median_pss_kib": 3097,
+          "median_rollup_rss_kib": 4752,
+          "private_dirty_kib_samples": [
+            2700,
+            2704,
+            2704,
+            2704,
+            2704
+          ],
+          "pss_kib_samples": [
+            3093,
+            3097,
+            3097,
+            3097,
+            3097
+          ]
+        },
+        "optimized": {
+          "median_private_dirty_kib": 2704,
+          "median_pss_kib": 3093,
+          "median_rollup_rss_kib": 4748,
+          "private_dirty_kib_samples": [
+            2704,
+            2704,
+            2704,
+            2704,
+            2704
+          ],
+          "pss_kib_samples": [
+            3093,
+            3093,
+            3093,
+            3093,
+            3093
+          ]
+        },
+        "optimized_minus_baseline_private_dirty_kib": 0,
+        "optimized_minus_baseline_pss_kib": -4
+      },
+      "start": {
+        "baseline": {
+          "median_private_dirty_kib": 180,
+          "median_pss_kib": 573,
+          "median_rollup_rss_kib": 2224,
+          "private_dirty_kib_samples": [
+            180,
+            180,
+            180,
+            180,
+            180
+          ],
+          "pss_kib_samples": [
+            573,
+            573,
+            549,
+            573,
+            549
+          ]
+        },
+        "optimized": {
+          "median_private_dirty_kib": 180,
+          "median_pss_kib": 569,
+          "median_rollup_rss_kib": 2224,
+          "private_dirty_kib_samples": [
+            180,
+            180,
+            180,
+            180,
+            180
+          ],
+          "pss_kib_samples": [
+            569,
+            569,
+            569,
+            529,
+            557
+          ]
+        },
+        "optimized_minus_baseline_private_dirty_kib": 0,
+        "optimized_minus_baseline_pss_kib": -4
+      }
+    },
+    "cpu": 8,
+    "numa_node": 0,
+    "probe_source_sha256": "c82561aec4e43e1052ed20e2474c3d48448462cec22f3cc38347582439777ad0",
+    "processes_per_variant": 5
+  },
+  "schema_version": 1,
+  "source": "rust-std-bench-unialloc-optimization-before-after",
+  "success": true
+}
