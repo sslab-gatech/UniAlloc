@@ -2761,16 +2761,28 @@ static GLOBAL_RETAINED_OWNERSHIP_ARBITRATION: [Mutex<()>;
 
 #[inline]
 pub(crate) fn global_address_lifecycle_tracking_active() -> bool {
-    GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.load(Ordering::Acquire)
+    #[cfg(all(not(debug_assertions), not(feature = "type_isolation")))]
+    {
+        false
+    }
+    #[cfg(any(debug_assertions, feature = "type_isolation"))]
+    {
+        GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.load(Ordering::Acquire)
+    }
 }
 
 #[inline]
 fn activate_global_address_lifecycle_tracking() {
-    if !cfg!(any(debug_assertions, feature = "type_isolation")) {
-        semantic_lifecycle_feature_required();
-    }
+    require_semantic_lifecycle_feature();
     if !GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.load(Ordering::Relaxed) {
         GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.store(true, Ordering::Release);
+    }
+}
+
+#[inline]
+fn require_semantic_lifecycle_feature() {
+    if !cfg!(any(debug_assertions, feature = "type_isolation")) {
+        semantic_lifecycle_feature_required();
     }
 }
 
@@ -3303,6 +3315,7 @@ fn current_thread_fast_auto_allocation_records_active() -> bool {
 }
 
 fn scoped_metadata_activate() {
+    require_semantic_lifecycle_feature();
     if SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed) & SLOW_PATH_SCOPED_METADATA_MASK == 0 {
         semantic_slow_path_set(SLOW_PATH_SCOPED_METADATA_UNIT);
     }
@@ -3454,6 +3467,7 @@ pub fn semantic_auto_metadata_type_id_basis() -> &'static str {
 /// ORed with `FLAG_TYPE_ISOLATED` so the typed frontend is exercised. Scoped
 /// metadata on the current thread still takes precedence over this mode.
 pub fn semantic_auto_metadata_enable(module_id: u64, flags: u32, callsite: u64) {
+    require_semantic_lifecycle_feature();
     let normalized_flags = normalize_auto_metadata_flags(flags);
     let mut config = AUTO_METADATA_CONFIG.write();
     let generation = next_auto_metadata_config_generation(*config);
@@ -3486,6 +3500,7 @@ unsafe fn semantic_auto_compiler_metadata_enable_with_mode(
     if type_ids.is_null() || len == 0 {
         return false;
     }
+    require_semantic_lifecycle_feature();
     let normalized_flags = normalize_auto_metadata_flags(flags);
     let mut config = AUTO_METADATA_CONFIG.write();
     let generation = next_auto_metadata_config_generation(*config);

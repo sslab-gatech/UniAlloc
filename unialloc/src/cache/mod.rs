@@ -540,6 +540,17 @@ unsafe fn realloc_with_active_local_metadata(
 #[derive(Copy, Clone)]
 pub struct RustAllocator;
 
+// Release builds without semantic or statistics features reject every runtime
+// activation entry point before it can publish slow-path state.  Their
+// GlobalAlloc implementation can therefore compile directly to the raw backend
+// while development and feature-enabled builds retain the dynamic gates.
+const DYNAMIC_GLOBAL_ALLOC_SEMANTICS_SUPPORTED: bool = cfg!(any(
+    debug_assertions,
+    feature = "type_isolation",
+    feature = "quarantine",
+    feature = "stats"
+));
+
 impl RustAllocator {
     pub const fn new() -> Self {
         Self {}
@@ -775,6 +786,13 @@ impl RustAllocator {
         }
         if layout.size() == 0 {
             return self.alloc_raw(new_layout);
+        }
+        if !global_address_lifecycle_tracking_active() {
+            return self.realloc_raw_from_admission(
+                GlobalRawReclaimAdmission::Untracked(ptr),
+                layout,
+                new_layout,
+            );
         }
         let observation = observe_global_reclaim(ptr);
         self.realloc_raw_from_observation(observation, layout, new_layout)
@@ -1032,6 +1050,9 @@ unsafe impl GlobalAlloc for RustAllocator {
         if layout.size() == 0 {
             return dangling_ptr_for_layout(layout);
         }
+        if !DYNAMIC_GLOBAL_ALLOC_SEMANTICS_SUPPORTED {
+            return self.alloc_raw(layout);
+        }
         if !cfg!(feature = "quarantine") && !semantic_allocation_slow_path_enabled() {
             return self.alloc_raw(layout);
         }
@@ -1050,6 +1071,10 @@ unsafe impl GlobalAlloc for RustAllocator {
         if ptr.is_null() || layout.size() == 0 {
             return;
         }
+        if !DYNAMIC_GLOBAL_ALLOC_SEMANTICS_SUPPORTED {
+            let _ = self.dealloc_raw_backend(ptr, layout);
+            return;
+        }
         let semantic_slow_path = semantic_runtime_slow_path_enabled();
         if !cfg!(feature = "quarantine")
             && !semantic_slow_path
@@ -1062,6 +1087,9 @@ unsafe impl GlobalAlloc for RustAllocator {
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        if !DYNAMIC_GLOBAL_ALLOC_SEMANTICS_SUPPORTED {
+            return self.realloc_raw(ptr, layout, new_size);
+        }
         if ptr.is_null() && layout.size() != 0 {
             return core::ptr::null_mut();
         }
