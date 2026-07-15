@@ -3702,10 +3702,11 @@ static GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT: AtomicUsize = AtomicUsize::new(0);
 // Raw-only processes cannot have semantic retained or released generations to
 // arbitrate. Keep that common path out of the sharded lifecycle tables until a
 // semantic allocation path activates the process-wide, sticky contract.
-// Tests and explicitly opted-in feature builds start active so their
-// concurrency contract covers raw allocations that precede the first semantic
-// operation.
-const fn global_address_lifecycle_tracking_feature_gate(
+// Type-isolation builds support that transition without forcing transport-only
+// compiler metadata through the lifecycle tables. Tests start active to keep
+// their concurrency coverage deterministic, and reclaim checks remain active
+// process-wide by definition.
+const fn global_address_lifecycle_tracking_support_gate(
     test_build: bool,
     type_isolation: bool,
     reclaim_checks: bool,
@@ -3713,12 +3714,21 @@ const fn global_address_lifecycle_tracking_feature_gate(
     test_build || type_isolation || reclaim_checks
 }
 
-const GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL: bool =
-    global_address_lifecycle_tracking_feature_gate(
+const fn global_address_lifecycle_tracking_initial_gate(
+    test_build: bool,
+    reclaim_checks: bool,
+) -> bool {
+    test_build || reclaim_checks
+}
+
+const GLOBAL_ADDRESS_LIFECYCLE_TRACKING_SUPPORTED: bool =
+    global_address_lifecycle_tracking_support_gate(
         cfg!(test),
         cfg!(feature = "type_isolation"),
         cfg!(feature = "reclaim_checks"),
     );
+const GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL: bool =
+    global_address_lifecycle_tracking_initial_gate(cfg!(test), cfg!(feature = "reclaim_checks"));
 static GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE: AtomicBool =
     AtomicBool::new(GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL);
 #[cfg(test)]
@@ -3744,15 +3754,24 @@ static GLOBAL_RETAINED_OWNERSHIP_ARBITRATION: [Mutex<()>;
 
 #[inline]
 pub(crate) fn global_address_lifecycle_tracking_active() -> bool {
-    if !GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL {
+    if !GLOBAL_ADDRESS_LIFECYCLE_TRACKING_SUPPORTED {
         return false;
     }
     GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.load(Ordering::Acquire)
 }
 
+/// Return whether process-wide semantic address lifecycle tracking is active.
+///
+/// This read-only diagnostic lets release integration tests distinguish a
+/// supported-but-lazy Type Isolation build from a process-start policy.
+#[doc(hidden)]
+pub fn semantic_address_lifecycle_tracking_active_for_diagnostics() -> bool {
+    global_address_lifecycle_tracking_active()
+}
+
 #[inline]
 fn activate_global_address_lifecycle_tracking() {
-    if !GLOBAL_ADDRESS_LIFECYCLE_TRACKING_INITIAL {
+    if !GLOBAL_ADDRESS_LIFECYCLE_TRACKING_SUPPORTED {
         semantic_lifecycle_feature_required();
     }
     if !GLOBAL_ADDRESS_LIFECYCLE_TRACKING_ACTIVE.load(Ordering::Relaxed) {
@@ -4320,13 +4339,35 @@ fn scoped_metadata_is_active(metadata: AllocationMetadata) -> bool {
 }
 
 #[inline]
-fn current_thread_scoped_metadata_active() -> bool {
-    unsafe { scoped_metadata_is_active(ACTIVE_METADATA) }
+fn allocator_metadata_is_effective(metadata: AllocationMetadata) -> bool {
+    metadata.flags != 0 || semantic_stats_any_recording_enabled()
+}
+
+#[inline]
+fn scoped_metadata_requests_allocator_policy(metadata: AllocationMetadata) -> bool {
+    metadata.flags != 0
+}
+
+#[inline]
+fn compose_mandatory_allocator_policy(metadata: AllocationMetadata) -> AllocationMetadata {
+    #[cfg(feature = "quarantine")]
+    if metadata.flags == 0 {
+        return metadata.with_flags(metadata.flags | FLAG_DELAYED_FREE);
+    }
+    metadata
+}
+
+#[inline]
+fn current_thread_allocator_metadata_active() -> bool {
+    unsafe {
+        scoped_metadata_is_active(ACTIVE_METADATA)
+            && allocator_metadata_is_effective(ACTIVE_METADATA)
+    }
 }
 
 #[inline]
 fn scoped_metadata_slow_path_enabled(global_flags: usize) -> bool {
-    global_flags & SLOW_PATH_SCOPED_METADATA_MASK != 0 && current_thread_scoped_metadata_active()
+    global_flags & SLOW_PATH_SCOPED_METADATA_MASK != 0 && current_thread_allocator_metadata_active()
 }
 
 #[inline]
@@ -4336,11 +4377,16 @@ fn current_thread_fast_auto_allocation_records_active() -> bool {
     }
 }
 
-fn scoped_metadata_activate() {
-    activate_semantic_address_lifecycle_tracking();
+#[inline]
+fn scoped_metadata_publish_coarse_gate() {
     if SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed) & SLOW_PATH_SCOPED_METADATA_MASK == 0 {
         semantic_slow_path_set(SLOW_PATH_SCOPED_METADATA_UNIT);
     }
+}
+
+fn scoped_metadata_activate() {
+    activate_semantic_address_lifecycle_tracking();
+    scoped_metadata_publish_coarse_gate();
 }
 
 #[inline]
@@ -4348,10 +4394,37 @@ fn scoped_metadata_deactivate() {
     // The process-wide flag is only a coarse gate telling ordinary GlobalAlloc
     // calls that scoped metadata has been used in this process.  Exact activity
     // is thread-local (`ACTIVE_METADATA`), checked by
-    // `current_thread_scoped_metadata_active()`.  Keeping this bit sticky avoids
+    // `current_thread_allocator_metadata_active()`. Keeping this bit sticky avoids
     // an atomic decrement/CAS on every compiler-inserted scope pop; unrelated
     // threads still return false from the slow-path predicate because their TLS
     // active metadata is empty.
+}
+
+#[inline]
+fn prepare_active_metadata_transition(previous: AllocationMetadata, next: AllocationMetadata) {
+    let previous_active = scoped_metadata_is_active(previous);
+    let next_active = scoped_metadata_is_active(next);
+    if !previous_active && next_active {
+        // Transport-only metadata still uses the semantic ABI. Preserve the
+        // release-build feature boundary before publishing TLS or the coarse
+        // process gate, even though it does not activate allocator policy.
+        require_semantic_lifecycle_feature();
+        if scoped_metadata_requests_allocator_policy(next) {
+            scoped_metadata_activate();
+        } else {
+            scoped_metadata_publish_coarse_gate();
+        }
+    } else if previous_active
+        && next_active
+        && !scoped_metadata_requests_allocator_policy(previous)
+        && scoped_metadata_requests_allocator_policy(next)
+    {
+        // A nested policy scope must activate the lifecycle even when its
+        // transport-only outer scope already made ACTIVE_METADATA non-empty.
+        scoped_metadata_activate();
+    } else if previous_active && !next_active {
+        scoped_metadata_deactivate();
+    }
 }
 
 #[inline]
@@ -4381,24 +4454,14 @@ fn fast_auto_allocation_record_global_deactivate() {
 #[inline]
 unsafe fn replace_active_metadata(metadata: AllocationMetadata) -> AllocationMetadata {
     let previous = ACTIVE_METADATA;
-    let previous_active = scoped_metadata_is_active(previous);
-    let next_active = scoped_metadata_is_active(metadata);
-    if previous_active != next_active {
-        if next_active {
-            scoped_metadata_activate();
-        } else {
-            scoped_metadata_deactivate();
-        }
-    }
+    prepare_active_metadata_transition(previous, metadata);
     ACTIVE_METADATA = metadata;
     previous
 }
 
 #[inline(always)]
 unsafe fn set_semantic_scope_active_metadata(metadata: AllocationMetadata) {
-    if scoped_metadata_is_active(metadata) && !scoped_metadata_is_active(ACTIVE_METADATA) {
-        scoped_metadata_activate();
-    }
+    prepare_active_metadata_transition(ACTIVE_METADATA, metadata);
     ACTIVE_METADATA = metadata;
 }
 
@@ -7272,8 +7335,10 @@ pub fn take_auto_deallocation_metadata(ptr: *mut u8, layout: Layout) -> Option<A
 /// `GlobalAlloc` calls on this thread.
 ///
 /// Compiler instrumentation can use the scope-enter/scope-exit ABI below to
-/// make otherwise unmodified standard-library allocation sites flow through the
-/// semantic path. When no scope is active, normal `GlobalAlloc` calls remain
+/// transport exact metadata around otherwise unmodified standard-library
+/// allocation sites. Flags-zero scopes remain observable here while allocator
+/// operations stay raw unless statistics or mandatory compiled policy requires
+/// the semantic path. When no scope is active, normal `GlobalAlloc` calls remain
 /// fallback evidence for coverage denominators.
 pub fn active_allocation_metadata() -> Option<AllocationMetadata> {
     unsafe {
@@ -7283,6 +7348,55 @@ pub fn active_allocation_metadata() -> Option<AllocationMetadata> {
         } else {
             Some(metadata)
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ActiveAllocatorMetadata {
+    Inactive,
+    TransportOnly(AllocationMetadata),
+    Policy(AllocationMetadata),
+}
+
+/// Select the allocator meaning of the current compiler scope exactly once.
+///
+/// Flags-zero metadata proves compiler/runtime transport while deliberately
+/// suppressing both typed policy and process-wide auto metadata. Lifetime and
+/// placement hints remain visible through [`active_allocation_metadata`], but
+/// cannot independently authorize allocator behavior. Enabling aggregate or
+/// per-type statistics promotes the same metadata to `Policy` for accounting.
+#[inline]
+pub(crate) fn active_allocator_metadata() -> ActiveAllocatorMetadata {
+    match active_allocation_metadata() {
+        Some(metadata) if allocator_metadata_is_effective(metadata) => {
+            // Statistics promote transport metadata for accounting. Mandatory
+            // compiled policy is composed without changing its typed identity.
+            ActiveAllocatorMetadata::Policy(compose_mandatory_allocator_policy(metadata))
+        }
+        Some(metadata) => {
+            #[cfg(feature = "quarantine")]
+            {
+                // A flags-zero scope suppresses auto metadata while the
+                // compiled quarantine remains mandatory. Preserve the scoped
+                // type identity so conservative scopes can recover this exact
+                // delayed-free attribution after the scope has popped.
+                ActiveAllocatorMetadata::Policy(compose_mandatory_allocator_policy(metadata))
+            }
+            #[cfg(not(feature = "quarantine"))]
+            {
+                ActiveAllocatorMetadata::TransportOnly(metadata)
+            }
+        }
+        None => ActiveAllocatorMetadata::Inactive,
+    }
+}
+
+/// Activate lifecycle arbitration before an allocator path observes an address
+/// under policy-bearing or stats-accounted scoped metadata.
+#[inline]
+pub(crate) fn ensure_active_allocator_metadata_lifecycle(selection: ActiveAllocatorMetadata) {
+    if matches!(selection, ActiveAllocatorMetadata::Policy(_)) || cfg!(feature = "quarantine") {
+        activate_semantic_address_lifecycle_tracking();
     }
 }
 
@@ -18184,18 +18298,23 @@ mod tests {
 
     #[test]
     fn global_address_lifecycle_tracking_requires_explicit_authorization() {
-        assert!(!global_address_lifecycle_tracking_feature_gate(
+        assert!(!global_address_lifecycle_tracking_support_gate(
             false, false, false
         ));
-        assert!(global_address_lifecycle_tracking_feature_gate(
+        assert!(global_address_lifecycle_tracking_support_gate(
             true, false, false
         ));
-        assert!(global_address_lifecycle_tracking_feature_gate(
+        assert!(global_address_lifecycle_tracking_support_gate(
             false, true, false
         ));
-        assert!(global_address_lifecycle_tracking_feature_gate(
+        assert!(global_address_lifecycle_tracking_support_gate(
             false, false, true
         ));
+        assert!(!global_address_lifecycle_tracking_initial_gate(
+            false, false
+        ));
+        assert!(global_address_lifecycle_tracking_initial_gate(true, false));
+        assert!(global_address_lifecycle_tracking_initial_gate(false, true));
     }
 
     #[cfg(feature = "reclaim_checks")]
@@ -45706,8 +45825,709 @@ mod tests {
         }
     }
 
+    #[cfg(not(any(feature = "quarantine", feature = "reclaim_checks")))]
     #[test]
-    fn conservative_compiler_scope_survives_foreign_thread_deallocation() {
+    fn transport_only_scope_keeps_global_allocator_raw_without_stats() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+            clear_scoped_metadata_gate_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let old_layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let same_class_size = 63;
+        let same_class_layout =
+            Layout::from_size_align(same_class_size, old_layout.align()).unwrap();
+        let moved_size = 192;
+        let moved_layout = Layout::from_size_align(moved_size, old_layout.align()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_5107)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_lifetime_hint(0x51)
+            .with_placement_hint(0x27)
+            .with_callsite(0xA110_5107);
+        let cache_before = type_isolation_side_cache_snapshot();
+        let strict_before = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let probes_before = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
+        let admissions_before = TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.load(Ordering::Relaxed);
+
+        __unialloc_semantic_scope_push_hints(
+            metadata.type_id,
+            metadata.module_id,
+            metadata.flags,
+            metadata.lifetime_hint,
+            metadata.placement_hint,
+            metadata.callsite,
+        );
+        let active = active_allocation_metadata();
+        let allocation_slow_while_active = semantic_allocation_slow_path_enabled();
+        let runtime_slow_while_active = semantic_runtime_slow_path_enabled();
+        let lifecycle_while_active = global_address_lifecycle_tracking_active();
+
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, old_layout) };
+        assert!(!ptr.is_null());
+        unsafe {
+            for offset in 0..old_layout.size() {
+                ptr.add(offset).write((offset as u8).wrapping_mul(29));
+            }
+        }
+        let recovery_after_alloc = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+
+        let same_class =
+            unsafe { GlobalAlloc::realloc(&alloc, ptr, old_layout, same_class_layout.size()) };
+        assert_eq!(same_class, ptr);
+        for offset in 0..same_class_layout.size() {
+            assert_eq!(
+                unsafe { same_class.add(offset).read() },
+                (offset as u8).wrapping_mul(29)
+            );
+        }
+        let moved = unsafe {
+            GlobalAlloc::realloc(&alloc, same_class, same_class_layout, moved_layout.size())
+        };
+        assert!(!moved.is_null());
+        for offset in 0..same_class_layout.size() {
+            assert_eq!(
+                unsafe { moved.add(offset).read() },
+                (offset as u8).wrapping_mul(29)
+            );
+        }
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, moved, moved_layout);
+        }
+        let recovery_after_dealloc = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        let cache_after = type_isolation_side_cache_snapshot();
+        let strict_after = TEST_STRICT_ALLOCATION_PUBLICATIONS.load(Ordering::Relaxed);
+        let probes_after = TEST_GLOBAL_ADDRESS_LIFECYCLE_TABLE_PROBES.load(Ordering::Relaxed);
+        let admissions_after = TEST_GLOBAL_RAW_RECLAIM_ADMISSION_ENTRIES.load(Ordering::Relaxed);
+        let lifecycle_after_dealloc = global_address_lifecycle_tracking_active();
+        __unialloc_semantic_scope_pop();
+
+        assert_eq!(
+            active,
+            Some(metadata.with_placement_hint(
+                metadata.placement_hint | PLACEMENT_HINT_CROSS_THREAD_RECOVERY
+            )),
+            "transport metadata must remain visible to the compiler/runtime ABI"
+        );
+        assert!(!allocation_slow_while_active);
+        assert!(!runtime_slow_while_active);
+        assert!(!lifecycle_while_active);
+        assert_eq!(recovery_after_alloc, 0);
+        assert_eq!(recovery_after_dealloc, 0);
+        assert_eq!(cache_after, cache_before);
+        assert_eq!(strict_after, strict_before);
+        assert_eq!(probes_after, probes_before);
+        assert_eq!(admissions_after, admissions_before);
+        assert!(!lifecycle_after_dealloc);
+        assert_eq!(active_allocation_metadata(), None);
+        unsafe {
+            reset_semantic_scope_stack_for_test();
+            clear_scoped_metadata_gate_for_test();
+        }
+    }
+
+    #[test]
+    fn nested_transport_scope_activates_lifecycle_for_inner_policy() {
+        let _guard = test_guard();
+        unsafe {
+            reset_semantic_scope_stack_for_test();
+            clear_scoped_metadata_gate_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let transport = AllocationMetadata::for_type(0xC002_5108)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5108);
+        let policy = AllocationMetadata::for_type(0xC002_5109)
+            .with_module(0xC0DE)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_callsite(0xA110_5109);
+
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        let coarse_gate_after_transport =
+            SEMANTIC_SLOW_PATH_FLAGS.load(Ordering::Relaxed) & SLOW_PATH_SCOPED_METADATA_MASK;
+        let lifecycle_after_transport = global_address_lifecycle_tracking_active();
+        let allocation_slow_after_transport = semantic_allocation_slow_path_enabled();
+
+        __unialloc_semantic_scope_push(
+            policy.type_id,
+            policy.module_id,
+            policy.flags,
+            policy.callsite,
+        );
+        let lifecycle_with_policy = global_address_lifecycle_tracking_active();
+        let allocation_slow_with_policy = semantic_allocation_slow_path_enabled();
+        __unialloc_semantic_scope_pop();
+
+        let restored = active_allocation_metadata();
+        let lifecycle_after_policy_pop = global_address_lifecycle_tracking_active();
+        let allocation_slow_after_policy_pop = semantic_allocation_slow_path_enabled();
+        __unialloc_semantic_scope_pop();
+
+        assert_eq!(coarse_gate_after_transport, SLOW_PATH_SCOPED_METADATA_UNIT);
+        assert!(!lifecycle_after_transport);
+        assert!(!allocation_slow_after_transport);
+        assert!(lifecycle_with_policy);
+        assert!(allocation_slow_with_policy);
+        assert_eq!(
+            restored,
+            Some(transport.with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY))
+        );
+        assert!(
+            lifecycle_after_policy_pop,
+            "lifecycle activation must stay sticky"
+        );
+        assert!(!allocation_slow_after_policy_pop);
+        assert_eq!(active_allocation_metadata(), None);
+        unsafe {
+            reset_semantic_scope_stack_for_test();
+            clear_scoped_metadata_gate_for_test();
+        }
+    }
+
+    #[test]
+    fn transport_scope_suppresses_auto_compiler_stream_consumption() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let stream_ids = [0xC002_5201_u64, 0xC002_5202_u64];
+        let stream_module = 0xC0DE_5201;
+        let stream_callsite = 0xA110_5201;
+        assert!(unsafe {
+            semantic_auto_compiler_metadata_stream_enable(
+                stream_module,
+                FLAG_TYPE_ISOLATED,
+                stream_callsite,
+                stream_ids.as_ptr(),
+                stream_ids.len(),
+            )
+        });
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let zero_layout = Layout::from_size_align(0, layout.align()).unwrap();
+        let transport = AllocationMetadata::for_type(0xC002_5203)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_lifetime_hint(0x52)
+            .with_placement_hint(0x21)
+            .with_callsite(0xA110_5203);
+
+        __unialloc_semantic_scope_push_hints(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.lifetime_hint,
+            transport.placement_hint,
+            transport.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        let zero_realloc = unsafe {
+            GlobalAlloc::realloc(
+                &alloc,
+                semantic_zero_size_ptr(zero_layout),
+                zero_layout,
+                layout.size(),
+            )
+        };
+        let cursor_inside_transport = AUTO_COMPILER_TYPE_IDS_CURSOR.load(Ordering::Relaxed);
+        let recovery_inside_transport = AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed);
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+            GlobalAlloc::dealloc(&alloc, zero_realloc, layout);
+        }
+        __unialloc_semantic_scope_pop();
+
+        assert!(!ptr.is_null());
+        assert!(!zero_realloc.is_null());
+        assert_eq!(cursor_inside_transport, 0);
+        #[cfg(not(feature = "quarantine"))]
+        assert_eq!(recovery_inside_transport, 0);
+        #[cfg(feature = "quarantine")]
+        assert_eq!(recovery_inside_transport, 2);
+
+        let first_unscoped = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!first_unscoped.is_null());
+        let recovered = lookup_auto_allocation_metadata(first_unscoped, layout)
+            .expect("first unscoped allocation must consume stream id zero");
+        assert_eq!(recovered.type_id, stream_ids[0]);
+        assert_eq!(recovered.module_id, stream_module);
+        assert_eq!(recovered.callsite, stream_callsite);
+        assert_eq!(AUTO_COMPILER_TYPE_IDS_CURSOR.load(Ordering::Relaxed), 1);
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, first_unscoped, layout);
+            clear_type_cache_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn transport_scope_routes_allocator_when_aggregate_stats_are_enabled() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_510A)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_510A);
+
+        __unialloc_semantic_scope_push(
+            metadata.type_id,
+            metadata.module_id,
+            metadata.flags,
+            metadata.callsite,
+        );
+        assert!(semantic_allocation_slow_path_enabled());
+        assert!(
+            !global_address_lifecycle_tracking_active(),
+            "flags-zero scope entry must stay lifecycle-lazy even when stats are already enabled"
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(global_address_lifecycle_tracking_active());
+        __unialloc_semantic_scope_pop();
+        assert!(!ptr.is_null());
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        assert!(global_address_lifecycle_tracking_active());
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        let stats = semantic_stats_snapshot();
+        assert_eq!(stats.typed_allocations, 1);
+        assert_eq!(stats.typed_deallocations, 1);
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        unsafe {
+            clear_type_cache_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn transport_scope_routes_allocator_when_only_type_stats_are_enabled() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_reset();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_enable();
+        assert!(!semantic_stats_recording_enabled());
+        assert!(semantic_type_stats_recording_enabled());
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_510B)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_510B);
+
+        __unialloc_semantic_scope_push(
+            metadata.type_id,
+            metadata.module_id,
+            metadata.flags,
+            metadata.callsite,
+        );
+        assert!(semantic_allocation_slow_path_enabled());
+        assert!(
+            !global_address_lifecycle_tracking_active(),
+            "type-only accounting must stay lifecycle-lazy until the first allocator operation"
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(global_address_lifecycle_tracking_active());
+        __unialloc_semantic_scope_pop();
+        assert!(!ptr.is_null());
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 1);
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+
+        let mut rows = [empty_type_stats_row(); 4];
+        let row_count = semantic_type_stats_snapshot(&mut rows);
+        let row = rows
+            .iter()
+            .take(row_count)
+            .find(|row| row.type_id == metadata.type_id)
+            .expect("transport metadata must remain available to type-only accounting");
+        assert_eq!(row.allocations, 1);
+        assert_eq!(row.deallocations, 1);
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        unsafe {
+            clear_type_cache_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(feature = "stats")]
+    #[test]
+    fn mid_scope_stats_enable_activates_before_deallocation_observation() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let transport = AllocationMetadata::for_type(0xC002_5204)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5204);
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        assert!(!global_address_lifecycle_tracking_active());
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+
+        semantic_type_stats_recording_enable();
+        assert!(semantic_type_stats_recording_enabled());
+        assert!(
+            !global_address_lifecycle_tracking_active(),
+            "enabling accounting alone must not publish an address generation"
+        );
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        assert!(
+            global_address_lifecycle_tracking_active(),
+            "deallocation must activate lifecycle before observing the address"
+        );
+        __unialloc_semantic_scope_pop();
+        semantic_stats_recording_disable();
+        unsafe {
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(all(
+        feature = "stats",
+        not(feature = "quarantine"),
+        not(feature = "reclaim_checks")
+    ))]
+    #[test]
+    fn mid_scope_stats_enable_activates_before_reallocation_observation() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let alloc = RustAllocator::new();
+        let realloc_layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let grow_layout = Layout::from_size_align(80, align_of::<usize>()).unwrap();
+        let transport = AllocationMetadata::for_type(0xC002_5207)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5209);
+        let expected = transport.with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        let realloc_ptr = unsafe { GlobalAlloc::alloc(&alloc, realloc_layout) };
+        let grow_ptr = unsafe { GlobalAlloc::alloc(&alloc, grow_layout) };
+        assert!(!realloc_ptr.is_null());
+        assert!(!grow_ptr.is_null());
+        unsafe {
+            realloc_ptr.write(0xA7);
+            grow_ptr.write(0xB8);
+        }
+        assert!(!global_address_lifecycle_tracking_active());
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+
+        semantic_type_stats_recording_enable();
+        let realloc_new_layout = Layout::from_size_align(192, realloc_layout.align()).unwrap();
+        let reallocated = unsafe {
+            GlobalAlloc::realloc(
+                &alloc,
+                realloc_ptr,
+                realloc_layout,
+                realloc_new_layout.size(),
+            )
+        };
+        assert!(!reallocated.is_null());
+        assert_eq!(unsafe { reallocated.read() }, 0xA7);
+        assert_eq!(
+            lookup_auto_allocation_metadata(reallocated, realloc_new_layout),
+            Some(expected)
+        );
+
+        let grow_new_layout = Layout::from_size_align(320, 64).unwrap();
+        let grown = unsafe {
+            core::alloc::Allocator::grow(
+                &alloc,
+                core::ptr::NonNull::new(grow_ptr).unwrap(),
+                grow_layout,
+                grow_new_layout,
+            )
+        }
+        .expect("mid-scope stats alignment-changing grow");
+        let grown_ptr = grown.as_ptr() as *mut u8;
+        assert_eq!(grown_ptr as usize % grow_new_layout.align(), 0);
+        assert_eq!(unsafe { grown_ptr.read() }, 0xB8);
+        assert_eq!(
+            lookup_auto_allocation_metadata(grown_ptr, grow_new_layout),
+            Some(expected)
+        );
+        assert!(global_address_lifecycle_tracking_active());
+        __unialloc_semantic_scope_pop();
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, reallocated, realloc_new_layout);
+            core::alloc::Allocator::deallocate(
+                &alloc,
+                core::ptr::NonNull::new(grown_ptr).unwrap(),
+                grow_new_layout,
+            );
+        }
+        assert_eq!(
+            lookup_auto_allocation_metadata(reallocated, realloc_new_layout),
+            None
+        );
+        assert_eq!(
+            lookup_auto_allocation_metadata(grown_ptr, grow_new_layout),
+            None
+        );
+        semantic_stats_recording_disable();
+        unsafe {
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(feature = "quarantine")]
+    #[test]
+    fn transport_scope_suppresses_auto_metadata_but_keeps_compiled_quarantine() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        semantic_auto_metadata_disable();
+        semantic_auto_metadata_enable(0xC0DE_5205, FLAG_TYPE_ISOLATED, 0xA110_5205);
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let transport = AllocationMetadata::for_type(0xC002_5205)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5206);
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        let expected = transport
+            .with_flags(FLAG_DELAYED_FREE)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(expected));
+        __unialloc_semantic_scope_pop();
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        assert_eq!(AUTO_COMPILER_TYPE_IDS_CURSOR.load(Ordering::Relaxed), 0);
+        assert!(delayed_free_snapshot().occupied_slots >= 1);
+        semantic_auto_metadata_disable();
+        unsafe {
+            clear_delayed_free_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(all(feature = "quarantine", feature = "stats"))]
+    #[test]
+    fn transport_scope_stats_preserve_compiled_quarantine_across_pop() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_auto_metadata_enable(0xC0DE_5206, FLAG_TYPE_ISOLATED, 0xA110_5207);
+        semantic_stats_reset();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let transport = AllocationMetadata::for_type(0xC002_5206)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5208);
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        assert!(!ptr.is_null());
+        __unialloc_semantic_scope_pop();
+
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        let stats = semantic_stats_snapshot();
+        assert_eq!(stats.typed_allocations, 1);
+        assert_eq!(stats.typed_deallocations, 1);
+        assert_ne!(stats.policy_flags_seen & FLAG_DELAYED_FREE, 0);
+        assert!(delayed_free_snapshot().occupied_slots >= 1);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        unsafe {
+            clear_delayed_free_for_test();
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[test]
+    fn transport_only_scope_preserves_authoritative_recovery_identity() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let alloc = RustAllocator::new();
+        let layout = Layout::from_size_align(64, align_of::<usize>()).unwrap();
+        let wrong_layout = Layout::from_size_align(65, layout.align()).unwrap();
+        let policy = AllocationMetadata::for_type(0xC002_5110)
+            .with_module(0xC0DE)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_callsite(0xA110_5110);
+        let recorded = policy.with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let transport = AllocationMetadata::for_type(0xC002_5111)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5111);
+
+        __unialloc_semantic_scope_push(
+            policy.type_id,
+            policy.module_id,
+            policy.flags,
+            policy.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        __unialloc_semantic_scope_pop();
+        assert!(!ptr.is_null());
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), Some(recorded));
+
+        __unialloc_semantic_scope_push(
+            transport.type_id,
+            transport.module_id,
+            transport.flags,
+            transport.callsite,
+        );
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, wrong_layout);
+        }
+        let recovery_after_wrong_layout = lookup_auto_allocation_metadata(ptr, layout);
+        unsafe {
+            GlobalAlloc::dealloc(&alloc, ptr, layout);
+        }
+        __unialloc_semantic_scope_pop();
+
+        assert_eq!(recovery_after_wrong_layout, Some(recorded));
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        let retained = unsafe { pop_semantic_type_cache(layout, recorded) }
+            .expect("authoritative allocation identity must own the retained object");
+        assert_eq!(retained, ptr);
+        assert_eq!(unsafe { pop_semantic_type_cache(layout, transport) }, None);
+        unsafe {
+            alloc.dealloc_raw(retained, layout);
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[test]
+    fn conservative_policy_scope_survives_foreign_thread_deallocation() {
         let _guard = test_guard();
         unsafe {
             clear_type_cache_for_test();
@@ -45722,7 +46542,7 @@ mod tests {
         let layout = Layout::from_size_align(48, align_of::<usize>()).unwrap();
         let metadata = AllocationMetadata::for_type(0xC002_5107)
             .with_module(0xC0DE)
-            .with_flags(0)
+            .with_flags(FLAG_TYPE_ISOLATED)
             .with_callsite(0xA110_5107);
         let alloc = RustAllocator::new();
 
@@ -45754,6 +46574,58 @@ mod tests {
 
         assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
         assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        unsafe {
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+    }
+
+    #[cfg(not(any(feature = "quarantine", feature = "reclaim_checks")))]
+    #[test]
+    fn transport_only_scope_allocation_can_be_released_on_foreign_thread_raw() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+            reset_semantic_scope_stack_for_test();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+        let _tracking = LifecycleTrackingOverride::inactive();
+
+        let layout = Layout::from_size_align(48, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC002_5112)
+            .with_module(0xC0DE)
+            .with_flags(0)
+            .with_callsite(0xA110_5112);
+        let alloc = RustAllocator::new();
+
+        __unialloc_semantic_scope_push(
+            metadata.type_id,
+            metadata.module_id,
+            metadata.flags,
+            metadata.callsite,
+        );
+        let ptr = unsafe { GlobalAlloc::alloc(&alloc, layout) };
+        __unialloc_semantic_scope_pop();
+        assert!(!ptr.is_null());
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert!(!global_address_lifecycle_tracking_active());
+
+        let ptr_addr = ptr as usize;
+        thread::spawn(move || unsafe {
+            GlobalAlloc::dealloc(&RustAllocator::new(), ptr_addr as *mut u8, layout);
+        })
+        .join()
+        .expect("foreign-thread raw release for transport-only allocation");
+
+        assert_eq!(AUTO_ALLOCATION_RECORD_COUNT.load(Ordering::Relaxed), 0);
+        assert_eq!(lookup_auto_allocation_metadata(ptr, layout), None);
+        assert_eq!(type_isolation_side_cache_snapshot().occupied_entries, 0);
+        assert!(!global_address_lifecycle_tracking_active());
         unsafe {
             clear_auto_allocation_records();
             reset_semantic_scope_stack_for_test();

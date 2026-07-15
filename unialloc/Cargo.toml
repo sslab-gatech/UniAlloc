@@ -155,8 +155,11 @@ type_isolation = []
 # to the same default slab backend.  Keep the backend switch explicit and
 # additive: default builds still use efficient_sc, while this feature selects
 # the bitmap-backed separate_sc adapter used by C004 validation.
-# Semantic policy builds keep address-lifecycle tracking active from process
-# start so raw operations cannot race the first policy-bearing operation.
+# Type-isolation builds support lifecycle tracking and activate it permanently
+# before semantic allocator state is first published. Policy scope entries
+# activate eagerly; flags-zero accounting scopes activate on their first
+# allocator operation. Pure raw generations that predate or cross activation
+# remain legacy-untracked; reclaim_checks starts tracking process-wide.
 metadata_segregation = ["separate_sc_backend", "type_isolation"]
 pac = ["type_isolation"]
 mte = ["type_isolation"]

@@ -3,11 +3,11 @@ use crate::alloc_api::type_isolation::take_recorded_reallocation_old_metadata;
 #[cfg(feature = "quarantine")]
 use crate::alloc_api::type_isolation::FLAG_DELAYED_FREE;
 use crate::alloc_api::type_isolation::{
-    accept_raw_allocation_return, active_allocation_metadata,
-    active_allocation_metadata_requires_recovery_record, auto_allocation_metadata,
-    begin_global_raw_reclaim, begin_global_raw_reclaim_from_observation,
-    begin_global_tracked_reclaim_from_observation, checked_recorded_reallocation_old_metadata,
-    deallocation_metadata_after_recovery_record, finish_global_raw_reclaim_in_place,
+    accept_raw_allocation_return, active_allocation_metadata_requires_recovery_record,
+    active_allocator_metadata, auto_allocation_metadata, begin_global_raw_reclaim,
+    begin_global_raw_reclaim_from_observation, begin_global_tracked_reclaim_from_observation,
+    checked_recorded_reallocation_old_metadata, deallocation_metadata_after_recovery_record,
+    ensure_active_allocator_metadata_lifecycle, finish_global_raw_reclaim_in_place,
     global_address_lifecycle_tracking_active, observe_global_reclaim,
     preview_deallocation_metadata_after_recovery_record,
     record_recovery_deallocation_layout_mismatch, recorded_reallocation_old_metadata,
@@ -22,8 +22,9 @@ use crate::alloc_api::type_isolation::{
     semantic_realloc_can_reuse_in_place, semantic_runtime_slow_path_enabled,
     semantic_stats_recording_enabled, take_auto_deallocation_metadata,
     verify_memory_tagged_reallocation_source, with_auto_allocation_recovery_recording,
-    without_auto_allocation_recovery_recording, AllocationMetadata, AutoAllocationRecordLookup,
-    GlobalRawReclaimAdmission, GlobalReclaimObservation, SemanticAlloc, SEMANTIC_STATS,
+    without_auto_allocation_recovery_recording, ActiveAllocatorMetadata, AllocationMetadata,
+    AutoAllocationRecordLookup, GlobalRawReclaimAdmission, GlobalReclaimObservation, SemanticAlloc,
+    SEMANTIC_STATS,
 };
 use crate::mm::BackendAllocator as GlobalBackend;
 #[cfg(not(feature = "fixed_heap"))]
@@ -646,14 +647,24 @@ impl RustAllocator {
     )]
     #[inline(never)]
     unsafe fn alloc_semantic_slow(&self, layout: Layout) -> *mut u8 {
-        if let Some(metadata) = active_allocation_metadata() {
-            if active_allocation_metadata_requires_recovery_record(metadata) {
-                return self.alloc_with_recovery_metadata(layout, metadata);
+        let active_selection = active_allocator_metadata();
+        match active_selection {
+            ActiveAllocatorMetadata::Policy(metadata) => {
+                if active_allocation_metadata_requires_recovery_record(metadata) {
+                    return self.alloc_with_recovery_metadata(layout, metadata);
+                }
+                return self.alloc_with_metadata(layout, metadata);
             }
-            return self.alloc_with_metadata(layout, metadata);
-        }
-        if let Some(metadata) = auto_allocation_metadata(layout) {
-            return self.alloc_with_recovery_metadata(layout, metadata);
+            ActiveAllocatorMetadata::TransportOnly(_) => {
+                // A flags-zero compiler scope deliberately dominates the
+                // process auto-metadata mode. Continue to the compiled
+                // quarantine/raw fallback without synthesizing policy.
+            }
+            ActiveAllocatorMetadata::Inactive => {
+                if let Some(metadata) = auto_allocation_metadata(layout) {
+                    return self.alloc_with_recovery_metadata(layout, metadata);
+                }
+            }
         }
 
         #[cfg(feature = "quarantine")]
@@ -683,27 +694,32 @@ impl RustAllocator {
     )]
     #[inline(never)]
     unsafe fn dealloc_semantic_slow(&self, ptr: *mut u8, layout: Layout, semantic_slow_path: bool) {
+        let active_selection = active_allocator_metadata();
+        ensure_active_allocator_metadata_lifecycle(active_selection);
         let reclaim_observation = observe_global_reclaim(ptr);
         reject_known_retained_or_released_from_observation(&reclaim_observation);
         if !cfg!(feature = "quarantine") && !semantic_slow_path {
             return self.dealloc_raw_from_observation(layout, reclaim_observation);
         }
-        if let Some(metadata) = active_allocation_metadata() {
-            if !active_allocation_metadata_requires_recovery_record(metadata) {
-                let _ = self.dealloc_with_metadata_from_observation(
+        match active_selection {
+            ActiveAllocatorMetadata::Policy(metadata) => {
+                if !active_allocation_metadata_requires_recovery_record(metadata) {
+                    let _ = self.dealloc_with_metadata_from_observation(
+                        layout,
+                        metadata,
+                        reclaim_observation,
+                    );
+                    return;
+                }
+                return dealloc_with_active_or_recorded_metadata_from_observation(
+                    self,
+                    ptr,
                     layout,
                     metadata,
                     reclaim_observation,
                 );
-                return;
             }
-            return dealloc_with_active_or_recorded_metadata_from_observation(
-                self,
-                ptr,
-                layout,
-                metadata,
-                reclaim_observation,
-            );
+            ActiveAllocatorMetadata::TransportOnly(_) | ActiveAllocatorMetadata::Inactive => {}
         }
         match checked_recorded_reallocation_old_metadata(ptr, layout) {
             AutoAllocationRecordLookup::Exact(metadata) => {
@@ -727,7 +743,9 @@ impl RustAllocator {
 
         #[cfg(feature = "quarantine")]
         {
-            if semantic_auto_metadata_enabled() {
+            if matches!(active_selection, ActiveAllocatorMetadata::Inactive)
+                && semantic_auto_metadata_enabled()
+            {
                 dealloc_raw_with_fallback_attribution_from_observation(
                     self,
                     layout,
@@ -898,6 +916,8 @@ impl RustAllocator {
         old_layout: Layout,
         new_layout: Layout,
     ) -> *mut u8 {
+        let active_metadata = active_allocator_metadata();
+        ensure_active_allocator_metadata_lifecycle(active_metadata);
         let reclaim_observation = observe_global_reclaim(ptr);
         let old_recovery = checked_recorded_reallocation_old_metadata(ptr, old_layout);
         if matches!(old_recovery, AutoAllocationRecordLookup::Mismatched(_)) {
@@ -913,17 +933,26 @@ impl RustAllocator {
         crate::alloc_api::type_isolation::pause_reallocation_after_recovery_lookup_for_test(
             old_recovery,
         );
-        let active_metadata = active_allocation_metadata();
         let release_metadata = match old_recovery {
             AutoAllocationRecordLookup::Exact(metadata) => Some((metadata, true)),
             AutoAllocationRecordLookup::Missing => match active_metadata {
-                Some(metadata)
+                ActiveAllocatorMetadata::Policy(metadata)
                     if !active_allocation_metadata_requires_recovery_record(metadata) =>
                 {
                     Some((metadata, false))
                 }
-                Some(_) => None,
-                None => {
+                ActiveAllocatorMetadata::Policy(_) => None,
+                ActiveAllocatorMetadata::TransportOnly(_) => {
+                    #[cfg(feature = "quarantine")]
+                    {
+                        Some((COMPILED_QUARANTINE_METADATA, false))
+                    }
+                    #[cfg(not(feature = "quarantine"))]
+                    {
+                        None
+                    }
+                }
+                ActiveAllocatorMetadata::Inactive => {
                     #[cfg(feature = "quarantine")]
                     {
                         if semantic_auto_metadata_enabled() {
@@ -944,24 +973,35 @@ impl RustAllocator {
             verify_memory_tagged_reallocation_source(ptr, old_layout, metadata);
         }
         let admission = begin_reallocation_reclaim_from_observation(reclaim_observation);
-        let selected_metadata = if let Some(metadata) = active_metadata {
-            let record_recovery = active_allocation_metadata_requires_recovery_record(metadata);
-            Some((metadata, record_recovery, !record_recovery))
-        } else {
-            // Preserve the distinction between "no auto policy configured"
-            // and a consuming compiler stream that deliberately yielded no
-            // identity for this event (UNKNOWN/exhausted).
-            let (auto_policy_enabled, auto_metadata) = select_auto_allocation_metadata(new_layout);
-            if let Some(metadata) = auto_metadata {
-                Some((metadata, true, false))
-            } else if !auto_policy_enabled {
-                match old_recovery {
-                    AutoAllocationRecordLookup::Exact(metadata) => Some((metadata, true, false)),
-                    AutoAllocationRecordLookup::Missing => None,
-                    AutoAllocationRecordLookup::Mismatched(_) => unreachable!(),
+        let selected_metadata = match active_metadata {
+            ActiveAllocatorMetadata::Policy(metadata) => {
+                let record_recovery = active_allocation_metadata_requires_recovery_record(metadata);
+                Some((metadata, record_recovery, !record_recovery))
+            }
+            ActiveAllocatorMetadata::TransportOnly(_) => match old_recovery {
+                AutoAllocationRecordLookup::Exact(metadata) => Some((metadata, true, false)),
+                AutoAllocationRecordLookup::Missing => None,
+                AutoAllocationRecordLookup::Mismatched(_) => unreachable!(),
+            },
+            ActiveAllocatorMetadata::Inactive => {
+                // Preserve the distinction between "no auto policy configured"
+                // and a consuming compiler stream that deliberately yielded no
+                // identity for this event (UNKNOWN/exhausted).
+                let (auto_policy_enabled, auto_metadata) =
+                    select_auto_allocation_metadata(new_layout);
+                if let Some(metadata) = auto_metadata {
+                    Some((metadata, true, false))
+                } else if !auto_policy_enabled {
+                    match old_recovery {
+                        AutoAllocationRecordLookup::Exact(metadata) => {
+                            Some((metadata, true, false))
+                        }
+                        AutoAllocationRecordLookup::Missing => None,
+                        AutoAllocationRecordLookup::Mismatched(_) => unreachable!(),
+                    }
+                } else {
+                    None
                 }
-            } else {
-                None
             }
         };
 
@@ -1121,20 +1161,33 @@ unsafe impl GlobalAlloc for RustAllocator {
             if new_size == 0 {
                 return dangling_ptr_for_layout(new_layout);
             }
-            if let Some(metadata) = active_allocation_metadata() {
-                if active_allocation_metadata_requires_recovery_record(metadata) {
-                    return with_auto_allocation_recovery_recording(|| {
+            let active_selection = active_allocator_metadata();
+            match active_selection {
+                ActiveAllocatorMetadata::Policy(metadata) => {
+                    if active_allocation_metadata_requires_recovery_record(metadata) {
+                        return with_auto_allocation_recovery_recording(|| {
+                            self.realloc_with_split_metadata(
+                                ptr, layout, new_size, metadata, metadata,
+                            )
+                        });
+                    }
+                    return without_auto_allocation_recovery_recording(|| {
                         self.realloc_with_split_metadata(ptr, layout, new_size, metadata, metadata)
                     });
                 }
-                return without_auto_allocation_recovery_recording(|| {
-                    self.realloc_with_split_metadata(ptr, layout, new_size, metadata, metadata)
-                });
-            }
-            if let Some(metadata) = auto_allocation_metadata(new_layout) {
-                return with_auto_allocation_recovery_recording(|| {
-                    self.realloc_with_split_metadata(ptr, layout, new_size, metadata, metadata)
-                });
+                ActiveAllocatorMetadata::TransportOnly(_) => {
+                    // The compiler control scope suppresses process auto
+                    // metadata for this allocation event.
+                }
+                ActiveAllocatorMetadata::Inactive => {
+                    if let Some(metadata) = auto_allocation_metadata(new_layout) {
+                        return with_auto_allocation_recovery_recording(|| {
+                            self.realloc_with_split_metadata(
+                                ptr, layout, new_size, metadata, metadata,
+                            )
+                        });
+                    }
+                }
             }
             #[cfg(feature = "quarantine")]
             {
@@ -1168,6 +1221,8 @@ unsafe impl GlobalAlloc for RustAllocator {
                 new_layout,
             );
         }
+        let active_selection = active_allocator_metadata();
+        ensure_active_allocator_metadata_lifecycle(active_selection);
         let reclaim_observation = observe_global_reclaim(ptr);
         reject_known_retained_or_released_from_observation(&reclaim_observation);
         if !cfg!(feature = "quarantine") && !semantic_slow_path {
@@ -1184,7 +1239,10 @@ unsafe impl GlobalAlloc for RustAllocator {
             // mutation so a correct-layout retry remains possible.
             return core::ptr::null_mut();
         }
-        let active_metadata = active_allocation_metadata();
+        let active_metadata = match active_selection {
+            ActiveAllocatorMetadata::Policy(metadata) => Some(metadata),
+            ActiveAllocatorMetadata::TransportOnly(_) | ActiveAllocatorMetadata::Inactive => None,
+        };
         let preflight_metadata = match old_recovery {
             AutoAllocationRecordLookup::Exact(recorded_metadata) => {
                 if new_size == 0 {
@@ -1308,19 +1366,21 @@ unsafe impl GlobalAlloc for RustAllocator {
                 admission,
             );
         }
-        if let Some(alloc_metadata) = auto_allocation_metadata(new_layout) {
-            return with_auto_allocation_recovery_recording(|| {
-                realloc_with_auto_metadata(
-                    self,
-                    ptr,
-                    layout,
-                    new_layout,
-                    new_size,
-                    alloc_metadata,
-                    old_recovery,
-                    admission,
-                )
-            });
+        if matches!(active_selection, ActiveAllocatorMetadata::Inactive) {
+            if let Some(alloc_metadata) = auto_allocation_metadata(new_layout) {
+                return with_auto_allocation_recovery_recording(|| {
+                    realloc_with_auto_metadata(
+                        self,
+                        ptr,
+                        layout,
+                        new_layout,
+                        new_size,
+                        alloc_metadata,
+                        old_recovery,
+                        admission,
+                    )
+                });
+            }
         }
         match old_recovery {
             AutoAllocationRecordLookup::Exact(dealloc_metadata) => {

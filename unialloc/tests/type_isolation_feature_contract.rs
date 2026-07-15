@@ -157,26 +157,30 @@ mod raw_only_global_alloc {
 
     #[test]
     fn release_scoped_metadata_activation_fails_before_publishing_state() {
-        let metadata = AllocationMetadata::for_type(0xC002_0001);
-        let result = catch_unwind(AssertUnwindSafe(|| unsafe {
-            unialloc::alloc_api::set_active_metadata(metadata)
-        }));
+        for metadata in [
+            AllocationMetadata::for_type(0xC002_0001).with_flags(0),
+            AllocationMetadata::for_type(0xC002_0002),
+        ] {
+            let result = catch_unwind(AssertUnwindSafe(|| unsafe {
+                unialloc::alloc_api::set_active_metadata(metadata)
+            }));
 
-        if result.is_ok() {
-            unsafe {
-                unialloc::alloc_api::restore_active_metadata(AllocationMetadata::unknown());
+            if result.is_ok() {
+                unsafe {
+                    unialloc::alloc_api::restore_active_metadata(AllocationMetadata::unknown());
+                }
             }
-        }
 
-        assert!(
-            result.is_err(),
-            "raw-only release builds must reject scoped metadata activation immediately"
-        );
-        assert_eq!(
-            active_allocation_metadata(),
-            None,
-            "rejected scoped metadata activation must leave TLS state empty"
-        );
+            assert!(
+                result.is_err(),
+                "raw-only release builds must reject flags-zero and policy-bearing scoped metadata immediately"
+            );
+            assert_eq!(
+                active_allocation_metadata(),
+                None,
+                "rejected scoped metadata activation must leave TLS state empty"
+            );
+        }
         assert_raw_global_alloc_still_works();
     }
 
@@ -224,12 +228,20 @@ mod raw_only_global_alloc {
                         0xA115,
                     );
                 }
+                "scope_transport" => {
+                    unialloc::alloc_api::__unialloc_semantic_scope_push(
+                        0xC002_0005,
+                        0xC0DE,
+                        0,
+                        0xA116,
+                    );
+                }
                 _ => panic!("unknown FFI activation child case: {}", case),
             }
             return;
         }
 
-        for case in ["layout", "compiler", "stream", "scope"] {
+        for case in ["layout", "compiler", "stream", "scope", "scope_transport"] {
             let output = std::process::Command::new(std::env::current_exe().unwrap())
                 .arg("--exact")
                 .arg(TEST_NAME)
