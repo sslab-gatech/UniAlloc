@@ -1,13 +1,13 @@
 case,label,family,mechanism,samples,median_ns_per_touch,median_lifecycle_ns_per_allocation,median_max_effective_resident_kib,median_anon_huge_delta_kib,median_hugetlb_delta_kib
-glibc_default,glibc default,allocator-neutral,default,5,24.716392517,1224.828430176,134112.0,0.0,0.0
-google_tcmalloc_temeraire,Google TCMalloc / Temeraire HPAA,allocator-neutral,temeraire-hpaa,5,23.074913025,1272.942362467,140488.0,0.0,0.0
-jemalloc_thp_off,jemalloc THP off,allocator-neutral,allocator-wide-thp,5,22.681106567,1368.743123372,140840.0,0.0,0.0
-jemalloc_thp_on,jemalloc THP on,allocator-neutral,allocator-wide-thp,5,14.255531311,466.473124186,144896.0,129024.0,0.0
-mimalloc_thp_off,mimalloc THP off,allocator-neutral,process-wide-thp,5,23.058563232,1253.433329264,134312.0,0.0,0.0
-mimalloc_thp_on,mimalloc THP on,allocator-neutral,process-wide-thp,5,14.144897461,191.829793294,141416.0,135168.0,0.0
-snmalloc_default,snmalloc default eligibility,allocator-neutral,os-eligibility,5,23.106773376,1195.434366862,136820.0,0.0,0.0
-snmalloc_os_thp_off,snmalloc process THP disabled,allocator-neutral,os-eligibility,5,23.2085495,1209.783447266,136856.0,0.0,0.0
-unialloc_default,UniAlloc default,unialloc-semantic,allocator-default,5,22.381615,2109.9434204101562,137272.0,0.0,0.0
-unialloc_lifetime_thp_off,UniAlloc lifetime layout / THP off,unialloc-semantic,lifetime-layout-thp-disabled,5,21.435585,2286.5887451171875,136788.0,0.0,0.0
-unialloc_lifetime_thp_on,UniAlloc selective lifetime THP,unialloc-semantic,selective-lifetime-thp,5,14.152222,1435.0140686035156,138820.0,67584.0,0.0
-unialloc_ordinary,UniAlloc ordinary arenas,unialloc-semantic,lifetime-segregated-ordinary,5,21.534996,2287.0948791503906,136788.0,0.0,0.0
+glibc_default,glibc default,allocator-neutral,default,5,24.713111877,1237.633036296,134116.0,0.0,0.0
+google_tcmalloc_temeraire,Google TCMalloc / Temeraire HPAA,allocator-neutral,temeraire-hpaa,5,23.106468201,1270.942484538,140464.0,0.0,0.0
+jemalloc_thp_off,jemalloc THP off,allocator-neutral,allocator-wide-thp,5,22.690956116,1370.063232422,140832.0,0.0,0.0
+jemalloc_thp_on,jemalloc THP on,allocator-neutral,allocator-wide-thp,5,14.145202637,435.459452311,144856.0,129024.0,0.0
+mimalloc_thp_off,mimalloc THP off,allocator-neutral,process-wide-thp,5,22.915290833,1251.459513346,134312.0,0.0,0.0
+mimalloc_thp_on,mimalloc THP on,allocator-neutral,process-wide-thp,5,14.178359985,187.533569336,141416.0,135168.0,0.0
+snmalloc_default,snmalloc default eligibility,allocator-neutral,os-eligibility,5,22.865394592,1213.331278483,136856.0,0.0,0.0
+snmalloc_os_thp_off,snmalloc process THP disabled,allocator-neutral,os-eligibility,5,23.048248291,1209.699523926,136820.0,0.0,0.0
+unialloc_default,UniAlloc default,unialloc-semantic,allocator-default,5,22.464973,2139.060302734375,137236.0,0.0,0.0
+unialloc_lifetime_thp_off,UniAlloc lifetime layout / THP off,unialloc-semantic,lifetime-layout-thp-disabled,5,21.454224,2310.09326171875,136780.0,0.0,0.0
+unialloc_lifetime_thp_on,UniAlloc selective lifetime THP,unialloc-semantic,selective-lifetime-thp,5,14.149689,1446.4483947753906,138824.0,67584.0,0.0
+unialloc_ordinary,UniAlloc ordinary arenas,unialloc-semantic,lifetime-segregated-ordinary,5,21.49984,2317.4505615234375,136784.0,0.0,0.0

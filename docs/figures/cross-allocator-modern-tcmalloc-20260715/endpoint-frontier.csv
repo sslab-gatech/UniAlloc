@@ -1,9 +1,9 @@
 label,mechanism,ns_per_touch,max_effective_resident_mib,large_page_backing_mib,pair,mode
-glibc,default,24.716392517,130.96875,0.0,glibc,default
-Google TCMalloc / Temeraire,temeraire-hpaa,23.074913025,137.1953125,0.0,google-tcmalloc,default
-mimalloc off,process-wide-thp,23.058563232,131.1640625,0.0,mimalloc,off
-mimalloc THP,process-wide-thp,14.144897461,138.1015625,132.0,mimalloc,on
-jemalloc off,allocator-wide-thp,22.681106567,137.5390625,0.0,jemalloc,off
-jemalloc THP,allocator-wide-thp,14.255531311,141.5,126.0,jemalloc,on
-snmalloc eligible,os-eligibility,23.106773376,133.61328125,0.0,snmalloc,on
-snmalloc disabled,os-eligibility,23.2085495,133.6484375,0.0,snmalloc,off
+glibc,default,24.713111877,130.97265625,0.0,glibc,default
+Google TCMalloc / Temeraire,temeraire-hpaa,23.106468201,137.171875,0.0,google-tcmalloc,default
+mimalloc off,process-wide-thp,22.915290833,131.1640625,0.0,mimalloc,off
+mimalloc THP,process-wide-thp,14.178359985,138.1015625,132.0,mimalloc,on
+jemalloc off,allocator-wide-thp,22.690956116,137.53125,0.0,jemalloc,off
+jemalloc THP,allocator-wide-thp,14.145202637,141.4609375,126.0,jemalloc,on
+snmalloc eligible,os-eligibility,22.865394592,133.6484375,0.0,snmalloc,on
+snmalloc disabled,os-eligibility,23.048248291,133.61328125,0.0,snmalloc,off

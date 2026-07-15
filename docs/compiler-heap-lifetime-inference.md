@@ -245,10 +245,10 @@ matched allocator-specific THP toggles, the measured effects were:
 
 | Allocator toggle | Paired touch reduction | Effective-resident increase | Physical backing |
 |---|---:|---:|---:|
-| UniAlloc selective lifetime THP | 33.6% (95% CI 33.3% to 34.0%) | 1.49% (95% CI 1.42% to 1.55%) | 66 MiB median THP |
-| mimalloc THP | 38.6% | 5.29% | 132 MiB median THP |
-| jemalloc THP | 40.2% | 3.44% | 126 MiB median THP |
-| snmalloc OS eligibility | practically equivalent | practically equivalent | 0 MiB |
+| UniAlloc selective lifetime THP | 33.9% (95% CI 33.2% to 34.6%) | 1.50% (95% CI 1.44% to 1.56%) | 66 MiB median THP |
+| mimalloc THP | 38.3% (95% CI 37.7% to 39.1%) | 5.29% (95% CI 5.287% to 5.291%) | 132 MiB median THP |
+| jemalloc THP | 36.5% (95% CI 33.7% to 37.9%) | 3.16% (95% CI 2.85% to 3.75%) | 126 MiB median THP |
+| snmalloc OS eligibility | 0.52% (95% CI -0.56% to 1.51%); practically equivalent | 0.009% (95% CI -0.009% to 0.027%); practically equivalent | 0 MiB |
 
 These are within-allocator placement-potential results from a semantic probe.
 Real-program automatic-classifier gain remains unmeasured, and cross-family raw

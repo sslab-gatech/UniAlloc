@@ -33,42 +33,42 @@
     <text x="667.5" y="815" font-size="18" font-weight="600" text-anchor="middle">Nanoseconds per touch</text>
     <text x="0" y="0" font-size="18" font-weight="600" text-anchor="middle" transform="translate(42 450.0) rotate(-90)">Maximum effective resident memory (MiB)</text>
     <text x="163.0" y="717.0" font-size="14" font-weight="700" fill="#566573">preferred direction ↙</text>
-    <polyline points="433.76,427.14 1054.75,690.77" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: mimalloc</title></polyline>
-    <polyline points="441.47,298.00 1028.45,448.52" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: jemalloc</title></polyline>
-    <polyline points="1058.11,597.70 1065.20,596.36" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: snmalloc</title></polyline>
-    <polyline id="pareto-frontier" points="433.76,427.14 1028.45,448.52 1054.75,690.77 1170.24,698.19" fill="none" stroke="#4D4D4D" stroke-width="3" stroke-dasharray="10 6"><title>Pareto frontier</title></polyline>
-    <polygon points="1170.24,690.19 1178.24,698.19 1170.24,706.19 1162.24,698.19" fill="#0072B2" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>glibc: 24.72 ns/touch, 131.0 MiB resident, 0.0 MiB large-page backing; mode=default, pair=glibc</title></polygon>
-    <line x1="1170.24" y1="698.19" x2="1142.24" y2="704.00" stroke="#0072B2" stroke-opacity="0.38" stroke-width="1.5"/>
-    <text x="1138.24" y="709.00" font-size="14" font-weight="700" text-anchor="end" fill="#0072B2"><title>glibc</title>glibc</text>
-    <text x="1138.24" y="727.00" font-size="12" text-anchor="end" fill="#566573">24.72 ns/touch · 131.0 MiB</text>
-    <polygon points="1055.89,453.58 1063.89,461.58 1055.89,469.58 1047.89,461.58" fill="#D55E00" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>Google TCMalloc / Temeraire HPAA: 23.07 ns/touch, 137.2 MiB resident, 0.0 MiB large-page backing; mode=default, pair=google-tcmalloc</title></polygon>
-    <line x1="1055.89" y1="461.58" x2="1027.89" y2="481.58" stroke="#D55E00" stroke-opacity="0.38" stroke-width="1.5"/>
-    <text x="1023.89" y="486.58" font-size="14" font-weight="700" text-anchor="end" fill="#D55E00"><title>Google TCMalloc / Temeraire HPAA</title>Google TCMalloc / Temeraire…</text>
-    <text x="1023.89" y="504.58" font-size="12" text-anchor="end" fill="#566573">23.07 ns/touch · 137.2 MiB</text>
-    <rect x="1046.75" y="682.77" width="16.00" height="16.00" rx="2" fill="#009E73" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>mimalloc off: 23.06 ns/touch, 131.2 MiB resident, 0.0 MiB large-page backing; mode=off, pair=mimalloc</title></rect>
-    <line x1="1054.75" y1="690.77" x2="1026.75" y2="658.00" stroke="#009E73" stroke-opacity="0.38" stroke-width="1.5"/>
-    <text x="1022.75" y="663.00" font-size="14" font-weight="700" text-anchor="end" fill="#009E73"><title>mimalloc off</title>mimalloc off</text>
-    <text x="1022.75" y="681.00" font-size="12" text-anchor="end" fill="#566573">23.06 ns/touch · 131.2 MiB</text>
-    <circle cx="433.76" cy="427.14" r="18.00" fill="#009E73" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>mimalloc THP: 14.14 ns/touch, 138.1 MiB resident, 132.0 MiB large-page backing; mode=on, pair=mimalloc</title></circle>
-    <line x1="433.76" y1="427.14" x2="471.76" y2="447.14" stroke="#009E73" stroke-opacity="0.38" stroke-width="1.5"/>
-    <text x="475.76" y="452.14" font-size="14" font-weight="700" text-anchor="start" fill="#009E73"><title>mimalloc THP</title>mimalloc THP</text>
-    <text x="475.76" y="470.14" font-size="12" text-anchor="start" fill="#566573">14.14 ns/touch · 138.1 MiB</text>
-    <rect x="1020.45" y="440.52" width="16.00" height="16.00" rx="2" fill="#CC79A7" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>jemalloc off: 22.68 ns/touch, 137.5 MiB resident, 0.0 MiB large-page backing; mode=off, pair=jemalloc</title></rect>
-    <line x1="1028.45" y1="448.52" x2="1000.45" y2="432.52" stroke="#CC79A7" stroke-opacity="0.38" stroke-width="1.5"/>
-    <text x="996.45" y="437.52" font-size="14" font-weight="700" text-anchor="end" fill="#CC79A7"><title>jemalloc off</title>jemalloc off</text>
-    <text x="996.45" y="455.52" font-size="12" text-anchor="end" fill="#566573">22.68 ns/touch · 137.5 MiB</text>
-    <circle cx="441.47" cy="298.00" r="17.77" fill="#CC79A7" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>jemalloc THP: 14.26 ns/touch, 141.5 MiB resident, 126.0 MiB large-page backing; mode=on, pair=jemalloc</title></circle>
-    <line x1="441.47" y1="298.00" x2="479.24" y2="318.00" stroke="#CC79A7" stroke-opacity="0.38" stroke-width="1.5"/>
-    <text x="483.24" y="323.00" font-size="14" font-weight="700" text-anchor="start" fill="#CC79A7"><title>jemalloc THP</title>jemalloc THP</text>
-    <text x="483.24" y="341.00" font-size="12" text-anchor="start" fill="#566573">14.26 ns/touch · 141.5 MiB</text>
-    <circle cx="1058.11" cy="597.70" r="8.00" fill="#E69F00" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>snmalloc eligible: 23.11 ns/touch, 133.6 MiB resident, 0.0 MiB large-page backing; mode=on, pair=snmalloc</title></circle>
-    <line x1="1058.11" y1="597.70" x2="1030.11" y2="566.00" stroke="#E69F00" stroke-opacity="0.38" stroke-width="1.5"/>
-    <text x="1026.11" y="571.00" font-size="14" font-weight="700" text-anchor="end" fill="#E69F00"><title>snmalloc eligible</title>snmalloc eligible</text>
-    <text x="1026.11" y="589.00" font-size="12" text-anchor="end" fill="#566573">23.11 ns/touch · 133.6 MiB</text>
-    <rect x="1057.20" y="588.36" width="16.00" height="16.00" rx="2" fill="#E69F00" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>snmalloc disabled: 23.21 ns/touch, 133.6 MiB resident, 0.0 MiB large-page backing; mode=off, pair=snmalloc</title></rect>
-    <line x1="1065.20" y1="596.36" x2="1037.20" y2="612.00" stroke="#E69F00" stroke-opacity="0.38" stroke-width="1.5"/>
-    <text x="1033.20" y="617.00" font-size="14" font-weight="700" text-anchor="end" fill="#E69F00"><title>snmalloc disabled</title>snmalloc disabled</text>
-    <text x="1033.20" y="635.00" font-size="12" text-anchor="end" fill="#566573">23.21 ns/touch · 133.6 MiB</text>
+    <polyline points="436.09,427.14 1044.77,690.77" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: mimalloc</title></polyline>
+    <polyline points="433.78,299.48 1029.14,448.81" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: jemalloc</title></polyline>
+    <polyline points="1041.29,596.36 1054.03,597.70" fill="none" stroke="#AAB7B8" stroke-width="2" stroke-dasharray="5 5"><title>Matched pair: snmalloc</title></polyline>
+    <polyline id="pareto-frontier" points="433.78,299.48 436.09,427.14 1029.14,448.81 1041.29,596.36 1044.77,690.77 1170.01,698.04" fill="none" stroke="#4D4D4D" stroke-width="3" stroke-dasharray="10 6"><title>Pareto frontier</title></polyline>
+    <polygon points="1170.01,690.04 1178.01,698.04 1170.01,706.04 1162.01,698.04" fill="#0072B2" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>glibc: 24.71 ns/touch, 131.0 MiB resident, 0.0 MiB large-page backing; mode=default, pair=glibc</title></polygon>
+    <line x1="1170.01" y1="698.04" x2="1142.01" y2="704.00" stroke="#0072B2" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="1138.01" y="709.00" font-size="14" font-weight="700" text-anchor="end" fill="#0072B2"><title>glibc</title>glibc</text>
+    <text x="1138.01" y="727.00" font-size="12" text-anchor="end" fill="#566573">24.71 ns/touch · 131.0 MiB</text>
+    <polygon points="1058.08,454.47 1066.08,462.47 1058.08,470.47 1050.08,462.47" fill="#D55E00" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>Google TCMalloc / Temeraire HPAA: 23.11 ns/touch, 137.2 MiB resident, 0.0 MiB large-page backing; mode=default, pair=google-tcmalloc</title></polygon>
+    <line x1="1058.08" y1="462.47" x2="1030.08" y2="482.47" stroke="#D55E00" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="1026.08" y="487.47" font-size="14" font-weight="700" text-anchor="end" fill="#D55E00"><title>Google TCMalloc / Temeraire HPAA</title>Google TCMalloc / Temeraire…</text>
+    <text x="1026.08" y="505.47" font-size="12" text-anchor="end" fill="#566573">23.11 ns/touch · 137.2 MiB</text>
+    <rect x="1036.77" y="682.77" width="16.00" height="16.00" rx="2" fill="#009E73" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>mimalloc off: 22.92 ns/touch, 131.2 MiB resident, 0.0 MiB large-page backing; mode=off, pair=mimalloc</title></rect>
+    <line x1="1044.77" y1="690.77" x2="1016.77" y2="658.00" stroke="#009E73" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="1012.77" y="663.00" font-size="14" font-weight="700" text-anchor="end" fill="#009E73"><title>mimalloc off</title>mimalloc off</text>
+    <text x="1012.77" y="681.00" font-size="12" text-anchor="end" fill="#566573">22.92 ns/touch · 131.2 MiB</text>
+    <circle cx="436.09" cy="427.14" r="18.00" fill="#009E73" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>mimalloc THP: 14.18 ns/touch, 138.1 MiB resident, 132.0 MiB large-page backing; mode=on, pair=mimalloc</title></circle>
+    <line x1="436.09" y1="427.14" x2="474.09" y2="447.14" stroke="#009E73" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="478.09" y="452.14" font-size="14" font-weight="700" text-anchor="start" fill="#009E73"><title>mimalloc THP</title>mimalloc THP</text>
+    <text x="478.09" y="470.14" font-size="12" text-anchor="start" fill="#566573">14.18 ns/touch · 138.1 MiB</text>
+    <rect x="1021.14" y="440.81" width="16.00" height="16.00" rx="2" fill="#CC79A7" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>jemalloc off: 22.69 ns/touch, 137.5 MiB resident, 0.0 MiB large-page backing; mode=off, pair=jemalloc</title></rect>
+    <line x1="1029.14" y1="448.81" x2="1001.14" y2="432.81" stroke="#CC79A7" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="997.14" y="437.81" font-size="14" font-weight="700" text-anchor="end" fill="#CC79A7"><title>jemalloc off</title>jemalloc off</text>
+    <text x="997.14" y="455.81" font-size="12" text-anchor="end" fill="#566573">22.69 ns/touch · 137.5 MiB</text>
+    <circle cx="433.78" cy="299.48" r="17.77" fill="#CC79A7" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>jemalloc THP: 14.15 ns/touch, 141.5 MiB resident, 126.0 MiB large-page backing; mode=on, pair=jemalloc</title></circle>
+    <line x1="433.78" y1="299.48" x2="471.55" y2="319.48" stroke="#CC79A7" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="475.55" y="324.48" font-size="14" font-weight="700" text-anchor="start" fill="#CC79A7"><title>jemalloc THP</title>jemalloc THP</text>
+    <text x="475.55" y="342.48" font-size="12" text-anchor="start" fill="#566573">14.15 ns/touch · 141.5 MiB</text>
+    <circle cx="1041.29" cy="596.36" r="8.00" fill="#E69F00" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>snmalloc eligible: 22.87 ns/touch, 133.6 MiB resident, 0.0 MiB large-page backing; mode=on, pair=snmalloc</title></circle>
+    <line x1="1041.29" y1="596.36" x2="1013.29" y2="566.00" stroke="#E69F00" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="1009.29" y="571.00" font-size="14" font-weight="700" text-anchor="end" fill="#E69F00"><title>snmalloc eligible</title>snmalloc eligible</text>
+    <text x="1009.29" y="589.00" font-size="12" text-anchor="end" fill="#566573">22.87 ns/touch · 133.6 MiB</text>
+    <rect x="1046.03" y="589.70" width="16.00" height="16.00" rx="2" fill="#E69F00" fill-opacity="0.88" stroke="#FFFFFF" stroke-width="2"><title>snmalloc disabled: 23.05 ns/touch, 133.6 MiB resident, 0.0 MiB large-page backing; mode=off, pair=snmalloc</title></rect>
+    <line x1="1054.03" y1="597.70" x2="1026.03" y2="612.00" stroke="#E69F00" stroke-opacity="0.38" stroke-width="1.5"/>
+    <text x="1022.03" y="617.00" font-size="14" font-weight="700" text-anchor="end" fill="#E69F00"><title>snmalloc disabled</title>snmalloc disabled</text>
+    <text x="1022.03" y="635.00" font-size="12" text-anchor="end" fill="#566573">23.05 ns/touch · 133.6 MiB</text>
   </g>
   <g id="mechanism-legend">
     <text x="1240.0" y="180.0" font-size="18" font-weight="700">Mechanism</text>

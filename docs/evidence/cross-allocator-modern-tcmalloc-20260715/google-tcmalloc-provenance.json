@@ -1,6 +1,10 @@
 {
   "allocator_identity": "Google TCMalloc",
   "aquery_output_tail": [
+    "arguments: \"bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/_objs/malloc_hook/malloc_hook.pic.o\"",
+    "arguments: \"-Wl,--end-lib\"",
+    "arguments: \"-Wl,--start-lib\"",
+    "arguments: \"bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/hook_list/hook_list.pic.o\"",
     "arguments: \"-Wl,--end-lib\"",
     "arguments: \"-Wl,--start-lib\"",
     "arguments: \"bazel-out/k8-fastbuild/bin/external/tcmalloc+/tcmalloc/internal/_objs/page_size/page_size.pic.o\"",
@@ -82,10 +86,6 @@
     "arguments: \"-lm\"",
     "arguments: \"-Wl,--pop-state\"",
     "environment_variables {",
-    "  key: \"PATH\"",
-    "  value: \"/bin:/usr/bin:/usr/local/bin\"",
-    "}",
-    "environment_variables {",
     "  key: \"ZERO_AR_DATE\"",
     "  value: \"1\"",
     "}",
@@ -98,30 +98,34 @@
     "primary_output_id: 489",
     "execution_platform: \"@@platforms//host:host\"",
     "}",
-    "INFO: Elapsed time: 0.942s, Critical Path: 0.00s",
+    "INFO: Elapsed time: 0.326s, Critical Path: 0.00s",
     "INFO: 0 processes.",
     "INFO: Build completed successfully, 0 total actions"
   ],
   "bazel_action_graph": {
-    "bytes": 130563,
+    "bytes": 130056,
     "command": [
       "/tmp/unialloc-tools/bazelisk",
       "aquery",
       "--output=textproto",
       "mnemonic(\"(CppCompile|CppLink)\", set(//:cross_allocator_large_page_workload_system //:cross_allocator_large_page_workload_google_tcmalloc))"
     ],
-    "path": "/tmp/unialloc-google-tcmalloc-helper-20260715/evidence/bazel-actions.textproto",
+    "execution_path": "/tmp/unialloc-google-tcmalloc-helper-20260715-bazel842/evidence/bazel-actions.textproto",
+    "path": "google-tcmalloc-bazel-actions.textproto",
     "purpose": "authoritative compile/link action and selected toolchain evidence",
-    "sha256": "1d06aba5825a19928b57fdf6408dd4630355b8ed5e05fd7592dcb06a132fd0e8"
+    "sha256": "01d85e67616ad039b610178c334a24ce81d274f7cc1644eb5661ccbb098beadb"
   },
   "bazel_control_target": "//:cross_allocator_large_page_workload_system",
+  "bazel_environment": {
+    "USE_BAZEL_VERSION": "8.4.2"
+  },
   "bazel_executable": "/tmp/unialloc-tools/bazelisk",
   "bazel_target": "//:cross_allocator_large_page_workload_google_tcmalloc",
   "bazel_targets": [
     "//:cross_allocator_large_page_workload_system",
     "//:cross_allocator_large_page_workload_google_tcmalloc"
   ],
-  "bazel_version": "bazel 9.2.0",
+  "bazel_version": "bazel 8.4.2",
   "blocked_reasons": [],
   "build_command": [
     "/tmp/unialloc-tools/bazelisk",
@@ -139,47 +143,39 @@
   ],
   "build_output_tail": [
     "Computing main repo mapping: ",
-    "WARNING: For repository 'rules_cc', the root module requires module version rules_cc@0.1.5, but got rules_cc@0.2.17 in the resolved dependency graph. Please update the version in your MODULE.bazel or set --check_direct_dependencies=off",
     "Loading: ",
     "Loading: 0 packages loaded",
-    "Loading: 0 packages loaded",
-    "    currently loading: ",
-    "Analyzing: 2 targets (5 packages loaded, 6 targets configured)",
-    "Analyzing: 2 targets (5 packages loaded, 6 targets configured)",
+    "WARNING: Build options --compilation_mode, --cxxopt, and --strip have changed, discarding analysis cache (this can be expensive, see https://bazel.build/advanced/performance/iteration-speed).",
+    "Analyzing: 2 targets (1 packages loaded, 0 targets configured)",
+    "Analyzing: 2 targets (1 packages loaded, 0 targets configured)",
     "",
-    "Analyzing: 2 targets (83 packages loaded, 429 targets configured)",
-    "",
-    "INFO: Analyzed 2 targets (112 packages loaded, 1103 targets configured).",
-    "[10 / 176] Compiling tcmalloc/alloc_at_least.cc; 0s linux-sandbox ... (127 actions, 30 running)",
-    "[155 / 176] Compiling absl/strings/cord.cc; 1s linux-sandbox ... (19 actions running)",
-    "[170 / 176] Compiling tcmalloc/background.cc; 2s linux-sandbox ... (4 actions running)",
-    "[172 / 176] Compiling tcmalloc/tcmalloc.cc; 3s linux-sandbox ... (2 actions running)",
-    "[173 / 176] Compiling tcmalloc/tcmalloc.cc; 4s linux-sandbox",
+    "INFO: Analyzed 2 targets (100 packages loaded, 1187 targets configured).",
     "INFO: Found 2 targets...",
-    "INFO: Elapsed time: 9.770s, Critical Path: 5.20s",
-    "INFO: 176 processes: 9 internal, 167 linux-sandbox.",
-    "INFO: Build completed successfully, 176 total actions"
+    "INFO: Elapsed time: 0.749s, Critical Path: 0.01s",
+    "INFO: 1 process: 175 action cache hit, 1 internal.",
+    "INFO: Build completed successfully, 1 total action"
   ],
-  "build_root": "/tmp/unialloc-google-tcmalloc-helper-20260715",
-  "captured_at": "2026-07-15T02:00:39-0400",
-  "checkout_path": "/tmp/unialloc-google-tcmalloc-helper-20260715/google-tcmalloc",
+  "build_root": "/tmp/unialloc-google-tcmalloc-helper-20260715-bazel842",
+  "captured_at": "2026-07-15T03:04:10-0400",
+  "checkout_path": "/tmp/unialloc-google-tcmalloc-helper-20260715-bazel842/google-tcmalloc",
   "claim_eligible": true,
   "commit": "12f255231938d30493186b0a037feedd70f5a1c1",
+  "commit_date": "2025-09-26",
   "commit_subject": "Seed several APIs with nullability annotations.",
   "commit_time": "2025-09-26T08:48:02-07:00",
   "control_verification": {
-    "binary": "/tmp/unialloc-google-tcmalloc-helper-20260715/bin/cross_allocator_large_page_workload_system",
+    "binary": "/tmp/unialloc-google-tcmalloc-helper-20260715-bazel842/bin/cross_allocator_large_page_workload_system",
     "binary_sha256": "01a759665bcb81b0374ef19559f5878eb398655948e2e318a04813cc8a6e989d",
     "dynamic_gperftools_dependency": false,
     "hpaa_symbols_present": false,
     "ldd": [
-      "\tlinux-vdso.so.1 (0x00007ffdcf363000)",
-      "\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007ff3f8800000)",
-      "\t/lib64/ld-linux-x86-64.so.2 (0x00007ff3f8a36000)"
+      "\tlinux-vdso.so.1 (0x00007fff5491a000)",
+      "\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f9cc8000000)",
+      "\t/lib64/ld-linux-x86-64.so.2 (0x00007f9cc8322000)"
     ],
     "smoke_checksum": "eb396276c2e2be85",
     "smoke_command": [
-      "/tmp/unialloc-google-tcmalloc-helper-20260715/bin/cross_allocator_large_page_workload_system",
+      "/tmp/unialloc-google-tcmalloc-helper-20260715-bazel842/bin/cross_allocator_large_page_workload_system",
       "--objects",
       "1024",
       "--passes",
@@ -237,8 +233,9 @@
     "tcmalloc/huge_page_filler.h",
     "tcmalloc/huge_page_subrelease.h"
   ],
-  "malloc_target": "@com_google_tcmalloc//tcmalloc",
+  "malloc_target": "@com_google_tcmalloc//tcmalloc:tcmalloc",
   "official_integration": "Bazel cc_binary malloc attribute at link time",
+  "pin_policy": "tested 2025 compatibility pin; upstream-current tracking is separate",
   "pinned_module_release": "0.0.0-20250927-12f2552",
   "probe_copts": [
     "-std=c11",
@@ -250,27 +247,29 @@
     "-fno-builtin-malloc"
   ],
   "repository": "https://github.com/google/tcmalloc.git",
+  "required_bazel_version": "8.4.2",
+  "revision_role": "compatibility-pin-not-latest",
   "rules_cc_module_version": "0.1.5",
   "schema_version": 1,
   "source": "evaluation/probes/cross_allocator_large_page_workload.c",
   "source_sha256": "8fdfaf2eb138680374877a83e1a598e74b5b56dd5ea4387004bf76429da7f5b5",
   "status": "VERIFIED",
   "verification": {
-    "binary": "/tmp/unialloc-google-tcmalloc-helper-20260715/bin/cross_allocator_large_page_workload_google_tcmalloc",
+    "binary": "/tmp/unialloc-google-tcmalloc-helper-20260715-bazel842/bin/cross_allocator_large_page_workload_google_tcmalloc",
     "binary_sha256": "18243dd7a07a54356b8996fcc48cc6296cc2e723af4f77f9c384fe44f1fe1ac1",
     "dynamic_gperftools_dependency": false,
     "hpaa_symbols_present": true,
     "ldd": [
-      "\tlinux-vdso.so.1 (0x00007fff09da7000)",
-      "\tlibstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007f7f1dc00000)",
-      "\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f7f1df17000)",
-      "\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f7f1eb00000)",
-      "\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f7f1d800000)",
-      "\t/lib64/ld-linux-x86-64.so.2 (0x00007f7f1eb44000)"
+      "\tlinux-vdso.so.1 (0x00007ffc163b1000)",
+      "\tlibstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007f9eb5e00000)",
+      "\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f9eb6c58000)",
+      "\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f9eb61d2000)",
+      "\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f9eb5a00000)",
+      "\t/lib64/ld-linux-x86-64.so.2 (0x00007f9eb6d57000)"
     ],
     "smoke_checksum": "eb396276c2e2be85",
     "smoke_command": [
-      "/tmp/unialloc-google-tcmalloc-helper-20260715/bin/cross_allocator_large_page_workload_google_tcmalloc",
+      "/tmp/unialloc-google-tcmalloc-helper-20260715-bazel842/bin/cross_allocator_large_page_workload_google_tcmalloc",
       "--objects",
       "1024",
       "--passes",
@@ -289,16 +288,16 @@
   "workspace_files": [
     {
       "path": "MODULE.bazel",
-      "sha256": "d92e4519ac93b8128f6b987d6f41d9c80652d915da7370d0f1245784466e8102"
+      "sha256": "a48ca4dbf9be8d4fc9bd1dfd47468cc64aa765fc3f1189831d2923853cbf401b"
     },
     {
       "path": "BUILD.bazel",
-      "sha256": "c6301ac780f586f774941bbdcdecbd6d884af07d7d697a92b4e159ef41879ff2"
+      "sha256": "84e4f9b4ddc3cc91148aaba86ebcfbeeb7b8b796e30e57d0839cac97d67bbbf8"
     },
     {
       "path": "cross_allocator_large_page_workload.c",
       "sha256": "8fdfaf2eb138680374877a83e1a598e74b5b56dd5ea4387004bf76429da7f5b5"
     }
   ],
-  "workspace_path": "/tmp/unialloc-google-tcmalloc-helper-20260715/probe-workspace"
+  "workspace_path": "/tmp/unialloc-google-tcmalloc-helper-20260715-bazel842/probe-workspace"
 }
