@@ -1,0 +1,592 @@
+{
+  "binaries": {
+    "baseline": {
+      "path": "/home/hanqing/alloc/UniAlloc-roi-typeiso-filter-20260715/target/roi-typeiso-filter-bss-baseline/release/unialloc-roi-typeiso-filter-harness",
+      "sha256": "ee5bd42c876a51702543d5d022a776347ca6993fde3c2e4c1b92cb04fd15b55a",
+      "size_bytes": 1457240
+    },
+    "build": "release; RUSTFLAGS=-C target-cpu=native; type_isolation enabled",
+    "candidate": {
+      "path": "/home/hanqing/alloc/UniAlloc-roi-typeiso-filter-20260715/target/roi-typeiso-filter-bss-candidate/release/unialloc-roi-typeiso-filter-harness",
+      "sha256": "6886bc6956e6477380eb93f721f045b3ac7968207b55c7af11bba1d7d080ba06",
+      "size_bytes": 1457104
+    }
+  },
+  "decision": {
+    "basis": "The n5 all-scenario geomean is effectively flat, every scenario median stays within 0.66%, the recovery-active negative gate improves 0.62%, and hosted production BSS falls by exactly 64 KiB.",
+    "n3_outlier_resolution": "The n3 unscoped +3.13% median did not reproduce: n5 is +0.35% with a tighter candidate range than baseline.",
+    "verdict": "keep"
+  },
+  "generated_at": "2026-07-15T14:58:28.419460+00:00",
+  "metric_convention": "runtime_delta_percent = (candidate / baseline - 1) * 100; negative is faster",
+  "protocol": {
+    "counterbalanced_order": "AB/BA alternating by round",
+    "cpu": 22,
+    "fresh_process_per_variant": true,
+    "iterations_per_process": 2000000,
+    "numa_node": 0,
+    "scenarios": [
+      "raw",
+      "raw64",
+      "raw64_under_global_recovery",
+      "local_same",
+      "conservative_same",
+      "conservative_split",
+      "conservative_unscoped_drop"
+    ],
+    "smt_sibling_cpu": 86,
+    "summary_statistic": "median",
+    "warmup_processes_per_variant_scenario": 1
+  },
+  "remaining_risks": [
+    "The synthetic panel is single-threaded; combining domains may add cache-line contention when recovery and retained publications hit the same bucket concurrently.",
+    "The host used schedutil and showed isolated process outliers; medians and counterbalanced ordering bound the claim.",
+    "External allocator macro workloads were not rerun for this feature-gated, memory-focused change."
+  ],
+  "runs": {
+    "n3_prefilter": {
+      "environment": {
+        "baseline_sha256": "ee5bd42c876a51702543d5d022a776347ca6993fde3c2e4c1b92cb04fd15b55a",
+        "candidate_sha256": "6886bc6956e6477380eb93f721f045b3ac7968207b55c7af11bba1d7d080ba06",
+        "cpu": "22",
+        "finished_at": "2026-07-15T10:53:23-04:00",
+        "frequency_after_khz": "3797159",
+        "frequency_before_khz": "1500000",
+        "governor": "schedutil",
+        "kernel": "Linux 6.8.0-111-generic",
+        "load_after": " 10:53:23 up 69 days,  1:18, 12 users,  load average: 5.84, 7.25, 7.04",
+        "load_before": " 10:53:14 up 69 days,  1:18, 12 users,  load average: 6.26, 7.37, 7.08",
+        "numa_node": "0",
+        "rustc": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)",
+        "started_at": "2026-07-15T10:53:14-04:00"
+      },
+      "geometric_mean_runtime_delta_percent": {
+        "all_seven": 0.325176,
+        "common_raw": -0.01215,
+        "feature_on": 0.460425
+      },
+      "paired_candidate_wins_all_scenarios": 11,
+      "paired_rounds_all_scenarios": 21,
+      "raw_artifacts": {
+        "metadata_path": "/tmp/roi-typeiso-filter-ab-n3.meta",
+        "metadata_sha256": "d3e698bc310dba5ded3c16b16f1c5a0fb70f3df6442b895ccc710c6bcc319968",
+        "tsv_path": "/tmp/roi-typeiso-filter-ab-n3.tsv",
+        "tsv_sha256": "9ba9a6bc12aac93d65343e15f764f6f90f06ec194028041e64cb200ee2e98254"
+      },
+      "scenarios": {
+        "conservative_same": {
+          "baseline": {
+            "max_ns_per_iter": 129.987,
+            "median_ns_per_iter": 129.947,
+            "min_ns_per_iter": 129.596,
+            "samples_ns_per_iter": [
+              129.596,
+              129.947,
+              129.987
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 129.705,
+            "median_ns_per_iter": 128.98,
+            "min_ns_per_iter": 128.205,
+            "samples_ns_per_iter": [
+              128.205,
+              128.98,
+              129.705
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.992558505,
+          "paired_candidate_wins": 3,
+          "paired_rounds": 3,
+          "runtime_delta_percent": -0.74415
+        },
+        "conservative_split": {
+          "baseline": {
+            "max_ns_per_iter": 161.861,
+            "median_ns_per_iter": 136.307,
+            "min_ns_per_iter": 135.627,
+            "samples_ns_per_iter": [
+              136.307,
+              161.861,
+              135.627
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 177.017,
+            "median_ns_per_iter": 136.376,
+            "min_ns_per_iter": 135.31,
+            "samples_ns_per_iter": [
+              135.31,
+              177.017,
+              136.376
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.00050621,
+          "paired_candidate_wins": 1,
+          "paired_rounds": 3,
+          "runtime_delta_percent": 0.050621
+        },
+        "conservative_unscoped_drop": {
+          "baseline": {
+            "max_ns_per_iter": 119.608,
+            "median_ns_per_iter": 119.092,
+            "min_ns_per_iter": 118.468,
+            "samples_ns_per_iter": [
+              118.468,
+              119.092,
+              119.608
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 144.304,
+            "median_ns_per_iter": 122.815,
+            "min_ns_per_iter": 119.721,
+            "samples_ns_per_iter": [
+              122.815,
+              119.721,
+              144.304
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.031261546,
+          "paired_candidate_wins": 0,
+          "paired_rounds": 3,
+          "runtime_delta_percent": 3.126155
+        },
+        "local_same": {
+          "baseline": {
+            "max_ns_per_iter": 78.447,
+            "median_ns_per_iter": 78.098,
+            "min_ns_per_iter": 78.02,
+            "samples_ns_per_iter": [
+              78.02,
+              78.447,
+              78.098
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 78.238,
+            "median_ns_per_iter": 78.094,
+            "min_ns_per_iter": 77.782,
+            "samples_ns_per_iter": [
+              78.094,
+              78.238,
+              77.782
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.999948782,
+          "paired_candidate_wins": 2,
+          "paired_rounds": 3,
+          "runtime_delta_percent": -0.005122
+        },
+        "raw": {
+          "baseline": {
+            "max_ns_per_iter": 18.745,
+            "median_ns_per_iter": 18.635,
+            "min_ns_per_iter": 18.595,
+            "samples_ns_per_iter": [
+              18.745,
+              18.595,
+              18.635
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 18.614,
+            "median_ns_per_iter": 18.612,
+            "min_ns_per_iter": 18.603,
+            "samples_ns_per_iter": [
+              18.614,
+              18.603,
+              18.612
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.998765763,
+          "paired_candidate_wins": 2,
+          "paired_rounds": 3,
+          "runtime_delta_percent": -0.123424
+        },
+        "raw64": {
+          "baseline": {
+            "max_ns_per_iter": 19.246,
+            "median_ns_per_iter": 19.144,
+            "min_ns_per_iter": 19.107,
+            "samples_ns_per_iter": [
+              19.144,
+              19.107,
+              19.246
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 19.165,
+            "median_ns_per_iter": 19.163,
+            "min_ns_per_iter": 19.134,
+            "samples_ns_per_iter": [
+              19.163,
+              19.134,
+              19.165
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.000992478,
+          "paired_candidate_wins": 1,
+          "paired_rounds": 3,
+          "runtime_delta_percent": 0.099248
+        },
+        "raw64_under_global_recovery": {
+          "baseline": {
+            "max_ns_per_iter": 21.281,
+            "median_ns_per_iter": 21.259,
+            "min_ns_per_iter": 21.244,
+            "samples_ns_per_iter": [
+              21.281,
+              21.244,
+              21.259
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 21.279,
+            "median_ns_per_iter": 21.242,
+            "min_ns_per_iter": 21.24,
+            "samples_ns_per_iter": [
+              21.242,
+              21.24,
+              21.279
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.999200339,
+          "paired_candidate_wins": 2,
+          "paired_rounds": 3,
+          "runtime_delta_percent": -0.079966
+        }
+      }
+    },
+    "n5_confirmation": {
+      "environment": {
+        "baseline_sha256": "ee5bd42c876a51702543d5d022a776347ca6993fde3c2e4c1b92cb04fd15b55a",
+        "candidate_sha256": "6886bc6956e6477380eb93f721f045b3ac7968207b55c7af11bba1d7d080ba06",
+        "cpu": "22",
+        "finished_at": "2026-07-15T10:55:17-04:00",
+        "frequency_after_khz": "3796050",
+        "frequency_before_khz": "3787897",
+        "governor": "schedutil",
+        "kernel": "Linux 6.8.0-111-generic",
+        "load_after": " 10:55:17 up 69 days,  1:20, 12 users,  load average: 6.66, 6.98, 6.96",
+        "load_before": " 10:55:04 up 69 days,  1:19, 12 users,  load average: 6.62, 6.98, 6.96",
+        "numa_node": "0",
+        "rustc": "rustc 1.98.0-nightly (485ec3fbc 2026-06-10)",
+        "started_at": "2026-07-15T10:55:04-04:00"
+      },
+      "geometric_mean_runtime_delta_percent": {
+        "all_seven": 0.085114,
+        "common_raw": 0.023542,
+        "feature_on": 0.109754
+      },
+      "paired_candidate_wins_all_scenarios": 19,
+      "paired_rounds_all_scenarios": 35,
+      "raw_artifacts": {
+        "metadata_path": "/tmp/roi-typeiso-filter-ab-n5.meta",
+        "metadata_sha256": "d18663dfbce9f121e8d28192504d42619a7fc1d9c618e94eb1493f8f7afe3571",
+        "tsv_path": "/tmp/roi-typeiso-filter-ab-n5.tsv",
+        "tsv_sha256": "999661de9f4e2b297cc96bb4cbf678cebe7df890f4cdac349e3e3575b4e4f2da"
+      },
+      "scenarios": {
+        "conservative_same": {
+          "baseline": {
+            "max_ns_per_iter": 131.085,
+            "median_ns_per_iter": 129.574,
+            "min_ns_per_iter": 128.643,
+            "samples_ns_per_iter": [
+              129.462,
+              131.085,
+              129.574,
+              129.643,
+              128.643
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 141.357,
+            "median_ns_per_iter": 130.425,
+            "min_ns_per_iter": 128.995,
+            "samples_ns_per_iter": [
+              141.357,
+              130.425,
+              128.995,
+              129.228,
+              134.138
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.006567676,
+          "paired_candidate_wins": 3,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.656768
+        },
+        "conservative_split": {
+          "baseline": {
+            "max_ns_per_iter": 136.739,
+            "median_ns_per_iter": 136.377,
+            "min_ns_per_iter": 135.708,
+            "samples_ns_per_iter": [
+              136.377,
+              136.653,
+              135.708,
+              136.156,
+              136.739
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 143.662,
+            "median_ns_per_iter": 137.206,
+            "min_ns_per_iter": 135.686,
+            "samples_ns_per_iter": [
+              137.206,
+              137.747,
+              135.686,
+              143.662,
+              136.336
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.006078738,
+          "paired_candidate_wins": 2,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.607874
+        },
+        "conservative_unscoped_drop": {
+          "baseline": {
+            "max_ns_per_iter": 130.448,
+            "median_ns_per_iter": 119.721,
+            "min_ns_per_iter": 116.622,
+            "samples_ns_per_iter": [
+              116.622,
+              130.448,
+              119.721,
+              119.932,
+              119.129
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 120.846,
+            "median_ns_per_iter": 120.135,
+            "min_ns_per_iter": 119.594,
+            "samples_ns_per_iter": [
+              120.135,
+              120.62,
+              119.594,
+              119.824,
+              120.846
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.00345804,
+          "paired_candidate_wins": 3,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.345804
+        },
+        "local_same": {
+          "baseline": {
+            "max_ns_per_iter": 82.574,
+            "median_ns_per_iter": 78.614,
+            "min_ns_per_iter": 78.146,
+            "samples_ns_per_iter": [
+              82.574,
+              78.614,
+              78.516,
+              78.146,
+              78.878
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 78.598,
+            "median_ns_per_iter": 78.269,
+            "min_ns_per_iter": 78.042,
+            "samples_ns_per_iter": [
+              78.132,
+              78.394,
+              78.042,
+              78.269,
+              78.598
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.995611469,
+          "paired_candidate_wins": 4,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.438853
+        },
+        "raw": {
+          "baseline": {
+            "max_ns_per_iter": 18.867,
+            "median_ns_per_iter": 18.641,
+            "min_ns_per_iter": 18.635,
+            "samples_ns_per_iter": [
+              18.867,
+              18.641,
+              18.674,
+              18.641,
+              18.635
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 19.289,
+            "median_ns_per_iter": 18.678,
+            "min_ns_per_iter": 18.642,
+            "samples_ns_per_iter": [
+              18.678,
+              18.676,
+              18.817,
+              18.642,
+              19.289
+            ]
+          },
+          "candidate_to_baseline_ratio": 1.001984872,
+          "paired_candidate_wins": 1,
+          "paired_rounds": 5,
+          "runtime_delta_percent": 0.198487
+        },
+        "raw64": {
+          "baseline": {
+            "max_ns_per_iter": 19.233,
+            "median_ns_per_iter": 19.193,
+            "min_ns_per_iter": 19.151,
+            "samples_ns_per_iter": [
+              19.224,
+              19.193,
+              19.233,
+              19.152,
+              19.151
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 19.408,
+            "median_ns_per_iter": 19.164,
+            "min_ns_per_iter": 19.13,
+            "samples_ns_per_iter": [
+              19.212,
+              19.408,
+              19.132,
+              19.13,
+              19.164
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.998489032,
+          "paired_candidate_wins": 3,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.151097
+        },
+        "raw64_under_global_recovery": {
+          "baseline": {
+            "max_ns_per_iter": 23.301,
+            "median_ns_per_iter": 21.44,
+            "min_ns_per_iter": 21.288,
+            "samples_ns_per_iter": [
+              21.44,
+              21.51,
+              23.301,
+              21.331,
+              21.288
+            ]
+          },
+          "candidate": {
+            "max_ns_per_iter": 44.93,
+            "median_ns_per_iter": 21.308,
+            "min_ns_per_iter": 21.276,
+            "samples_ns_per_iter": [
+              21.276,
+              21.308,
+              21.313,
+              44.93,
+              21.295
+            ]
+          },
+          "candidate_to_baseline_ratio": 0.993843284,
+          "paired_candidate_wins": 3,
+          "paired_rounds": 5,
+          "runtime_delta_percent": -0.615672
+        }
+      }
+    }
+  },
+  "schema_version": 1,
+  "source": {
+    "baseline_commit": "e8fcc378c14442fe8993d29578f38eeb5df5acc9",
+    "branch": "codex/roi-typeiso-filter-20260715",
+    "candidate_code_diff_sha256": "167e8e35c45e1f0dc32cd9d73f521610b099f35201baa0c6144f19ac8dc54c66",
+    "repository": "/home/hanqing/alloc/UniAlloc-roi-typeiso-filter-20260715",
+    "scope": "Combine recovery and retained exact-count pointer filters without changing their publication or retirement ordering."
+  },
+  "static_memory": {
+    "fixed_heap_source_derived_bss_delta_bytes": -8192,
+    "hosted_filter_symbols": {
+      "baseline": [
+        {
+          "bytes": 65536,
+          "name": "GLOBAL_RECOVERY_POINTER_FILTER"
+        },
+        {
+          "bytes": 65536,
+          "name": "GLOBAL_RETAINED_POINTER_FILTER"
+        }
+      ],
+      "candidate": [
+        {
+          "bytes": 65536,
+          "name": "GLOBAL_SEMANTIC_POINTER_FILTER"
+        }
+      ]
+    },
+    "hosted_harness_sections_bytes": {
+      "baseline": {
+        "bss": 479330,
+        "data": 694144,
+        "text": 470424
+      },
+      "candidate": {
+        "bss": 413794,
+        "data": 694144,
+        "text": 470408
+      },
+      "delta": {
+        "bss": -65536,
+        "data": 0,
+        "text": -16
+      }
+    },
+    "prior_feature_overhead_projection": {
+      "combined_filter_delta_bss_bytes": 66912,
+      "combined_filter_delta_bss_kib": 65.34375,
+      "separate_filter_delta_bss_bytes": 132448,
+      "source": "benchmark-results/feature-on-fastpath-20260715.json"
+    }
+  },
+  "validation": {
+    "cargo_fmt_check": "passed",
+    "clippy": {
+      "fixed_heap_type_isolation": {
+        "log_sha256": "3dcc0988f55c9781d677eeec554646e901a32667f9c756668b7df57779c16817",
+        "result": "passed with 158 pre-existing warnings"
+      },
+      "hosted_combined": {
+        "log_sha256": "846cebc3fcff47552c1bb50cb3e9a4b87bd2435b9f14f75a25e0db0243234fed",
+        "result": "passed with 168 pre-existing warnings"
+      }
+    },
+    "git_diff_check": "passed",
+    "tests": {
+      "combined": {
+        "command": "cargo test -p unialloc --lib --features type_isolation,reclaim_checks -- --test-threads=1",
+        "log_sha256": "26020c6cf8e057eee8d5795d529aa02395ea4cc696e2ff6892bb46cbd95dcd40",
+        "result": "817 passed"
+      },
+      "fixed_heap_type_isolation": {
+        "command": "cargo test -p unialloc --lib --no-default-features --features fixed_heap,type_isolation -- --test-threads=1",
+        "log_sha256": "ef41809850fe73b82eb3f48b4dfbefede3775ae03b19d2273098763fbea446a9",
+        "result": "654 passed"
+      },
+      "reclaim_checks": {
+        "command": "cargo test -p unialloc --lib --features reclaim_checks -- --test-threads=1",
+        "log_sha256": "f72238bd8c85ca0056c02fda96bef9b571ba5f6f8c6aa7071ba34e0824588038",
+        "result": "817 passed"
+      },
+      "type_isolation": {
+        "command": "cargo test -p unialloc --lib --features type_isolation -- --test-threads=1",
+        "log_sha256": "b744007b63918c8342578699c01af608226b1ad15490ff089e778dcbf6b39052",
+        "result": "819 passed"
+      }
+    }
+  }
+}

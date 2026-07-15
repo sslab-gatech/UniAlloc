@@ -106,13 +106,13 @@ const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 64;
 #[cfg(feature = "fixed_heap")]
 const GLOBAL_TYPE_CACHE_OWNERSHIP_PROBE_LIMIT: usize = 32;
 const GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_MASK: usize = GLOBAL_TYPE_CACHE_OWNERSHIP_SHARD_COUNT - 1;
-/// Exact-count negative filters for process-visible semantic pointer state.
+/// Exact-count negative filter for process-visible semantic pointer state.
 ///
-/// Global recovery records and retained T/D ownership use separate arrays so
-/// test-only resets cannot erase the other domain. A zero counter proves that
-/// no pointer with the same full-address hash is present; a nonzero counter is
-/// only a conservative slow-path hint. Counters publish before their record and
-/// retire after it, so collisions can add work but can never hide an owner.
+/// Global recovery records and retained T/D ownership contribute to the same
+/// counter array. A zero counter proves that no pointer with the same
+/// full-address hash is present; a nonzero counter is only a conservative
+/// slow-path hint. Counters publish before their record and retire after it, so
+/// collisions can add work but can never hide an owner.
 #[cfg(not(feature = "fixed_heap"))]
 const GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS: usize = 8192;
 #[cfg(feature = "fixed_heap")]
@@ -4203,9 +4203,19 @@ static AUTO_ALLOCATION_RECORDS: [Mutex<GlobalAutoAllocationRecordTable>;
     Mutex::new(GlobalAutoAllocationRecordTable::empty()),
 ];
 static AUTO_ALLOCATION_RECORD_COUNT: AtomicUsize = AtomicUsize::new(0);
-static GLOBAL_RECOVERY_POINTER_FILTER: [AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
+static GLOBAL_SEMANTIC_POINTER_FILTER: [AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
     [const { AtomicUsize::new(0) }; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS];
-static GLOBAL_RETAINED_POINTER_FILTER: [AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
+// Isolated unit tests can reset one authority domain while intentionally
+// retaining fixtures from the other. Production has only the combined filter;
+// these shadows record each test domain's exact contribution so a reset can
+// subtract it without erasing the other domain.
+#[cfg(test)]
+static TEST_RECOVERY_POINTER_FILTER_CONTRIBUTIONS: [AtomicUsize;
+    GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
+    [const { AtomicUsize::new(0) }; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS];
+#[cfg(test)]
+static TEST_RETAINED_POINTER_FILTER_CONTRIBUTIONS: [AtomicUsize;
+    GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS] =
     [const { AtomicUsize::new(0) }; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS];
 #[cfg(test)]
 static TEST_LAST_GLOBAL_RECOVERY_REMOVE_PHASE: AtomicUsize = AtomicUsize::new(0);
@@ -4454,7 +4464,7 @@ unsafe fn current_thread_fast_recovery_maybe_tracks_pointer(ptr: *mut u8) -> boo
 /// Pointer-specific deallocation/reallocation gate.
 ///
 /// A positive result preserves the complete semantic path. A negative result
-/// requires every exact-count recovery/retained filter to be empty for this
+/// requires the exact-count recovery/retained filter to be empty for this
 /// address hash and is therefore safe for the ordinary raw backend path.
 #[inline]
 pub(crate) unsafe fn semantic_runtime_slow_path_enabled_for_pointer(ptr: *mut u8) -> bool {
@@ -5785,9 +5795,9 @@ fn clear_auto_allocation_records() {
         *table = GlobalAutoAllocationRecordTable::empty();
     }
     AUTO_ALLOCATION_RECORD_COUNT.store(0, Ordering::Relaxed);
-    for count in GLOBAL_RECOVERY_POINTER_FILTER.iter() {
-        count.store(0, Ordering::Release);
-    }
+    clear_semantic_pointer_filter_contributions_for_test(
+        &TEST_RECOVERY_POINTER_FILTER_CONTRIBUTIONS,
+    );
     AUTO_ALLOCATION_RECORD_ACTIVE_SHARDS.store(0, Ordering::Release);
     #[cfg(not(feature = "fixed_heap"))]
     AUTO_ALLOCATION_RECORD_LEGACY_NON_HOME_POSSIBLE.store(false, Ordering::Release);
@@ -12997,18 +13007,18 @@ fn global_semantic_pointer_filter_index(ptr: *mut u8) -> usize {
 }
 
 #[inline]
-fn increment_semantic_pointer_filter(
-    filter: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
-    ptr: *mut u8,
-) {
+fn increment_semantic_pointer_filter(ptr: *mut u8) {
     if ptr.is_null() {
         panic!("semantic pointer filter cannot publish null");
     }
-    // Every count corresponds to an authoritative recovery or retained-owner
-    // record. Hosted overflow mappings are bounded by `isize::MAX`, while the
-    // fixed-heap and retained-owner tables have much smaller hard capacities,
-    // so a valid live set cannot reach `usize::MAX`.
-    let previous = filter[global_semantic_pointer_filter_index(ptr)].fetch_add(1, Ordering::AcqRel);
+    // Every count corresponds to an authoritative recovery/retained-owner
+    // record or to its bounded pre-publication interval. Each of the eight
+    // hosted overflow mappings is capped at `isize::MAX` bytes and stores a
+    // multi-word AutoAllocationRecord, while inline/fixed-heap and retained
+    // tables have small fixed capacities. Even if every record hashes here,
+    // their combined valid live set cannot reach `usize::MAX`.
+    let previous = GLOBAL_SEMANTIC_POINTER_FILTER[global_semantic_pointer_filter_index(ptr)]
+        .fetch_add(1, Ordering::AcqRel);
     assert_ne!(
         previous,
         usize::MAX,
@@ -13017,35 +13027,102 @@ fn increment_semantic_pointer_filter(
 }
 
 #[inline]
-fn decrement_semantic_pointer_filter(
-    filter: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
-    ptr: *mut u8,
-) {
+fn decrement_semantic_pointer_filter(ptr: *mut u8) {
     if ptr.is_null() {
         panic!("semantic pointer filter cannot retire null");
     }
-    let previous = filter[global_semantic_pointer_filter_index(ptr)].fetch_sub(1, Ordering::AcqRel);
+    let previous = GLOBAL_SEMANTIC_POINTER_FILTER[global_semantic_pointer_filter_index(ptr)]
+        .fetch_sub(1, Ordering::AcqRel);
     assert_ne!(previous, 0, "semantic pointer filter count underflow");
+}
+
+#[cfg(test)]
+#[inline]
+fn increment_test_semantic_pointer_filter_contribution(
+    contributions: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
+    ptr: *mut u8,
+) {
+    let previous =
+        contributions[global_semantic_pointer_filter_index(ptr)].fetch_add(1, Ordering::Relaxed);
+    assert_ne!(
+        previous,
+        usize::MAX,
+        "test semantic pointer filter contribution exhausted"
+    );
+}
+
+#[cfg(test)]
+#[inline]
+fn decrement_test_semantic_pointer_filter_contribution(
+    contributions: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
+    ptr: *mut u8,
+) {
+    let previous =
+        contributions[global_semantic_pointer_filter_index(ptr)].fetch_sub(1, Ordering::Relaxed);
+    assert_ne!(
+        previous, 0,
+        "test semantic pointer filter contribution underflow"
+    );
+}
+
+#[cfg(test)]
+fn clear_semantic_pointer_filter_contributions_for_test(
+    contributions: &[AtomicUsize; GLOBAL_SEMANTIC_POINTER_FILTER_SLOTS],
+) {
+    for (combined, domain) in GLOBAL_SEMANTIC_POINTER_FILTER
+        .iter()
+        .zip(contributions.iter())
+    {
+        let contribution = domain.swap(0, Ordering::AcqRel);
+        if contribution == 0 {
+            continue;
+        }
+        let previous = combined.fetch_sub(contribution, Ordering::AcqRel);
+        assert!(
+            previous >= contribution,
+            "test semantic pointer filter reset underflow"
+        );
+    }
 }
 
 #[inline]
 fn increment_global_recovery_pointer_filter(ptr: *mut u8) {
-    increment_semantic_pointer_filter(&GLOBAL_RECOVERY_POINTER_FILTER, ptr);
+    increment_semantic_pointer_filter(ptr);
+    #[cfg(test)]
+    increment_test_semantic_pointer_filter_contribution(
+        &TEST_RECOVERY_POINTER_FILTER_CONTRIBUTIONS,
+        ptr,
+    );
 }
 
 #[inline]
 fn decrement_global_recovery_pointer_filter(ptr: *mut u8) {
-    decrement_semantic_pointer_filter(&GLOBAL_RECOVERY_POINTER_FILTER, ptr);
+    decrement_semantic_pointer_filter(ptr);
+    #[cfg(test)]
+    decrement_test_semantic_pointer_filter_contribution(
+        &TEST_RECOVERY_POINTER_FILTER_CONTRIBUTIONS,
+        ptr,
+    );
 }
 
 #[inline]
 fn increment_global_retained_pointer_filter(ptr: *mut u8) {
-    increment_semantic_pointer_filter(&GLOBAL_RETAINED_POINTER_FILTER, ptr);
+    increment_semantic_pointer_filter(ptr);
+    #[cfg(test)]
+    increment_test_semantic_pointer_filter_contribution(
+        &TEST_RETAINED_POINTER_FILTER_CONTRIBUTIONS,
+        ptr,
+    );
 }
 
 #[inline]
 fn decrement_global_retained_pointer_filter(ptr: *mut u8) {
-    decrement_semantic_pointer_filter(&GLOBAL_RETAINED_POINTER_FILTER, ptr);
+    decrement_semantic_pointer_filter(ptr);
+    #[cfg(test)]
+    decrement_test_semantic_pointer_filter_contribution(
+        &TEST_RETAINED_POINTER_FILTER_CONTRIBUTIONS,
+        ptr,
+    );
 }
 
 #[inline]
@@ -13054,8 +13131,7 @@ fn global_semantic_pointer_maybe_tracked(ptr: *mut u8) -> bool {
         return false;
     }
     let idx = global_semantic_pointer_filter_index(ptr);
-    GLOBAL_RECOVERY_POINTER_FILTER[idx].load(Ordering::Acquire) != 0
-        || GLOBAL_RETAINED_POINTER_FILTER[idx].load(Ordering::Acquire) != 0
+    GLOBAL_SEMANTIC_POINTER_FILTER[idx].load(Ordering::Acquire) != 0
 }
 
 #[inline]
@@ -13804,9 +13880,9 @@ fn clear_global_type_cache_ownership_for_test() {
         *GLOBAL_TYPE_CACHE_OWNERSHIP[shard_idx].lock() = GlobalTypeCacheOwnershipTable::empty();
         shard_idx += 1;
     }
-    for count in GLOBAL_RETAINED_POINTER_FILTER.iter() {
-        count.store(0, Ordering::Release);
-    }
+    clear_semantic_pointer_filter_contributions_for_test(
+        &TEST_RETAINED_POINTER_FILTER_CONTRIBUTIONS,
+    );
     GLOBAL_TYPE_CACHE_OWNERSHIP_COUNT.store(0, Ordering::Release);
 }
 
@@ -23339,6 +23415,83 @@ mod tests {
             Some(metadata)
         );
         assert!(!global_semantic_pointer_maybe_tracked(first));
+    }
+
+    #[test]
+    fn global_semantic_pointer_filter_refcounts_mixed_authority_colliders() {
+        let _guard = test_guard();
+        let _cleanup = SemanticStateCleanup;
+        unsafe {
+            clear_type_cache_for_test();
+            clear_delayed_free_for_test();
+            clear_auto_allocation_records();
+        }
+        semantic_auto_metadata_disable();
+        semantic_stats_recording_disable();
+        semantic_type_stats_recording_disable();
+
+        let layout =
+            Layout::from_size_align(MIN_TYPE_CACHE_OBJECT_SIZE, align_of::<usize>()).unwrap();
+        let metadata = AllocationMetadata::for_type(0xC003_F119)
+            .with_module(0xC0DE_F119)
+            .with_callsite(0xA110_F119)
+            .with_flags(FLAG_TYPE_ISOLATED)
+            .with_placement_hint(PLACEMENT_HINT_CROSS_THREAD_RECOVERY);
+        let recovery_ptr = 0x3000usize as *mut u8;
+        let filter_idx = global_semantic_pointer_filter_index(recovery_ptr);
+        let mut candidate = 0x3008usize;
+        let retained_ptr = loop {
+            let ptr = candidate as *mut u8;
+            if global_semantic_pointer_filter_index(ptr) == filter_idx {
+                break ptr;
+            }
+            candidate = candidate.checked_add(8).unwrap();
+        };
+        let combined_count = || GLOBAL_SEMANTIC_POINTER_FILTER[filter_idx].load(Ordering::Acquire);
+
+        assert_eq!(combined_count(), 0);
+        assert!(unsafe { record_global_auto_allocation_metadata(recovery_ptr, layout, metadata) });
+        assert_eq!(combined_count(), 1);
+        assert_eq!(
+            register_global_type_cache_ownership(retained_ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        assert_eq!(combined_count(), 2);
+
+        assert_eq!(
+            recover_global_auto_allocation_record_metadata(recovery_ptr, layout, true),
+            Some(metadata)
+        );
+        assert_eq!(combined_count(), 1);
+        assert!(global_semantic_pointer_maybe_tracked(recovery_ptr));
+
+        assert!(unsafe { record_global_auto_allocation_metadata(recovery_ptr, layout, metadata) });
+        assert_eq!(combined_count(), 2);
+        assert!(unregister_global_type_cache_ownership(retained_ptr));
+        assert_eq!(combined_count(), 1);
+        assert!(global_semantic_pointer_maybe_tracked(retained_ptr));
+
+        assert_eq!(
+            recover_global_auto_allocation_record_metadata(recovery_ptr, layout, true),
+            Some(metadata)
+        );
+        assert_eq!(combined_count(), 0);
+        assert!(!global_semantic_pointer_maybe_tracked(retained_ptr));
+
+        assert!(unsafe { record_global_auto_allocation_metadata(recovery_ptr, layout, metadata) });
+        assert_eq!(
+            register_global_type_cache_ownership(retained_ptr),
+            GlobalTypeCacheOwnershipRegistration::Inserted
+        );
+        assert_eq!(combined_count(), 2);
+        clear_auto_allocation_records();
+        assert_eq!(
+            combined_count(),
+            1,
+            "resetting recovery fixtures must preserve retained contributions"
+        );
+        clear_global_type_cache_ownership_for_test();
+        assert_eq!(combined_count(), 0);
     }
 
     #[test]
