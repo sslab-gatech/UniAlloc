@@ -2,14 +2,14 @@ use test::{black_box, Bencher};
 
 #[bench]
 fn char_iterator(b: &mut Bencher) {
-    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
 
     b.iter(|| s.chars().count());
 }
 
 #[bench]
 fn char_iterator_for(b: &mut Bencher) {
-    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
 
     b.iter(|| {
         for ch in s.chars() {
@@ -32,14 +32,14 @@ fn char_iterator_ascii(b: &mut Bencher) {
 
 #[bench]
 fn char_iterator_rev(b: &mut Bencher) {
-    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
 
     b.iter(|| s.chars().rev().count());
 }
 
 #[bench]
 fn char_iterator_rev_for(b: &mut Bencher) {
-    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
 
     b.iter(|| {
         for ch in s.chars().rev() {
@@ -50,7 +50,7 @@ fn char_iterator_rev_for(b: &mut Bencher) {
 
 #[bench]
 fn char_indicesator(b: &mut Bencher) {
-    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
     let len = s.chars().count();
 
     b.iter(|| assert_eq!(s.char_indices().count(), len));
@@ -58,7 +58,7 @@ fn char_indicesator(b: &mut Bencher) {
 
 #[bench]
 fn char_indicesator_rev(b: &mut Bencher) {
-    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
     let len = s.chars().count();
 
     b.iter(|| assert_eq!(s.char_indices().rev().count(), len));
@@ -66,7 +66,7 @@ fn char_indicesator_rev(b: &mut Bencher) {
 
 #[bench]
 fn split_unicode_ascii(b: &mut Bencher) {
-    let s = "ประเทศไทย中华Việt Namประเทศไทย中华Việt Nam";
+    let s = "ประเทศไทยทศViệt NamประเทศไทยทศViệt Nam";
 
     b.iter(|| assert_eq!(s.split('V').count(), 3));
 }
@@ -109,7 +109,7 @@ fn split_slice(b: &mut Bencher) {
 
 #[bench]
 fn bench_join(b: &mut Bencher) {
-    let s = "ศไทย中华Việt Nam; Mary had a little lamb, Little lamb";
+    let s = "ศไทยทศViệt Nam; Mary had a little lamb, Little lamb";
     let sep = "→";
     let v = vec![s, s, s, s, s, s, s, s, s, s];
     b.iter(|| {
@@ -269,7 +269,7 @@ macro_rules! make_test {
             make_test_inner!($s, $code, short_ascii,
                 "Mary had a little lamb, Little lamb Mary had a littl lamb, lamb!", $iters);
             make_test_inner!($s, $code, short_mixed,
-                "ศไทย中华Việt Nam; Mary had a little lamb, Little lam!", $iters);
+                "ศไทยทศViệt Nam; Mary had a little lamb, Little lam!", $iters);
             make_test_inner!($s, $code, short_pile_of_poo,
                 "💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩💩!", $iters);
             make_test_inner!($s, $code, long_lorem_ipsum,"\
