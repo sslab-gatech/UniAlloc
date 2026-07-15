@@ -49,6 +49,54 @@ fn concurrent_small_allocations_survive_thread_cache_cleanup() {
     assert_ne!(combined, 0);
 }
 
+#[cfg(not(feature = "fixed_heap"))]
+#[test]
+fn cross_thread_single_slot_free_reuses_locally_and_survives_teardown() {
+    use core::alloc::{GlobalAlloc, Layout};
+
+    let layout = Layout::from_size_align(16 * 1024, unialloc::PAGE_SIZE)
+        .expect("single-slot cross-thread layout should be valid");
+    let address = thread::spawn(move || unsafe {
+        let ptr = GlobalAlloc::alloc(&A, layout);
+        assert!(!ptr.is_null());
+        core::ptr::write_bytes(ptr, 0x5a, layout.size());
+        ptr as usize
+    })
+    .join()
+    .expect("producer should allocate the single-slot object");
+
+    thread::spawn(move || unsafe {
+        let ptr = address as *mut u8;
+        assert_eq!(*ptr, 0x5a);
+        assert_eq!(*ptr.add(layout.size() - 1), 0x5a);
+        GlobalAlloc::dealloc(&A, ptr, layout);
+
+        let retained = unialloc::thread_cache_footprint_snapshot();
+        assert!(retained.cache_initialized);
+        assert!(retained.accounting_matches_exact);
+        assert!(retained.exact_cached_object_bytes >= layout.size());
+
+        let reused = GlobalAlloc::alloc(&A, layout);
+        assert_eq!(
+            reused, ptr,
+            "the consumer thread should reuse its hot object"
+        );
+        GlobalAlloc::dealloc(&A, reused, layout);
+    })
+    .join()
+    .expect("consumer should free and reuse the cross-thread object");
+
+    // The consumer's TLS destructor returned its retained object to the slab.
+    // A fresh thread can allocate and release the same class after teardown.
+    thread::spawn(move || unsafe {
+        let ptr = GlobalAlloc::alloc(&A, layout);
+        assert!(!ptr.is_null());
+        GlobalAlloc::dealloc(&A, ptr, layout);
+    })
+    .join()
+    .expect("post-teardown single-slot allocation should succeed");
+}
+
 #[cfg(feature = "fixed_heap")]
 #[test]
 fn concurrent_direct_fixed_heap_allocations_serialize_the_process_cache() {

@@ -367,7 +367,7 @@ fn thread_cache_repeated_alignment_miss_keep_length(
 }
 
 #[inline]
-fn thread_cache_should_bypass_local_cache(idx: usize, rounded_size: usize) -> bool {
+fn thread_cache_is_single_slot_base_class(idx: usize, rounded_size: usize) -> bool {
     if idx == 0 || idx >= TOTAL_SIZE_CLASS || rounded_size == 0 {
         return false;
     }
@@ -720,9 +720,22 @@ impl ThreadCacheUnit {
         None
     }
 
-    fn deallocate_direct_to_slab(&mut self, idx: usize, ptr: NonNull<u8>) -> FlushDisposition {
+    fn deallocate_single_slot_with_hot_object(
+        &mut self,
+        idx: usize,
+        ptr: NonNull<u8>,
+    ) -> Option<FlushDisposition> {
         self.list.push_unchecked(ptr.as_ptr());
-        self.flush_suffix_to_slab(idx, 0, true)
+        if self.list.length <= 1 {
+            return None;
+        }
+
+        // Keep the newest object at the list head and return the displaced old
+        // object through the existing ownership-transfer path.  The blocking
+        // fallback preserves the one-object bound whenever the zone is live;
+        // a pre-transfer zone failure restores both nodes so ownership remains
+        // local and teardown can still reclaim them safely.
+        Some(self.flush_suffix_to_slab(idx, 1, true))
     }
 
     /// Return the cold suffix of a local free list to the owning slab.
@@ -1671,14 +1684,13 @@ impl ThreadCache {
             let before_count = Self::class_cached_object_count(&self.list[idx]);
             let disposition = {
                 let size_cache: &mut ThreadCacheUnit = &mut self.list[idx];
-                if thread_cache_should_bypass_local_cache(idx, rounded_size) {
-                    // Single-slot spans have no useful batching value in a
-                    // thread-local cache: one cached object pins an entire
-                    // empty slab/span that the slab layer is otherwise able to
-                    // recycle immediately.  Return it through the same batch
-                    // handoff path and only keep it locally if the zone is not
-                    // reachable before ownership transfer starts.
-                    Some(size_cache.deallocate_direct_to_slab(idx, ptr))
+                if thread_cache_is_single_slot_base_class(idx, rounded_size) {
+                    // A one-object hot set removes the slab round trip from
+                    // steady allocate/free loops while bounding retention to a
+                    // single span per affected class.  The second free returns
+                    // the displaced cold object through the normal slab batch
+                    // handoff, retaining the newest object for local reuse.
+                    size_cache.deallocate_single_slot_with_hot_object(idx, ptr)
                 } else {
                     size_cache.deallocate(idx, ptr, rounded_size)
                 }
@@ -2332,6 +2344,22 @@ mod tests {
         panic!("test needs a base size class backed by a single-slot span");
     }
 
+    #[cfg(not(feature = "fixed_heap"))]
+    fn largest_single_slot_base_size_class() -> (usize, usize) {
+        (1..TOTAL_SIZE_CLASS)
+            .rev()
+            .find_map(|idx| {
+                let rounded_size = get_rounded_size_by_idx(idx);
+                let pages = get_num_pages_by_idx(idx);
+                matches!(
+                    crate::sc::checked_size_class_geometry(rounded_size, pages),
+                    Some((1, _stride))
+                )
+                .then_some((idx, rounded_size))
+            })
+            .expect("test needs a base size class backed by a single-slot span")
+    }
+
     #[cfg(feature = "fixed_heap")]
     fn move_real_non_page_aligned_objects_to_cache(
         source_cache: &mut ThreadCacheUnit,
@@ -2434,28 +2462,94 @@ mod tests {
 
     #[cfg(not(feature = "fixed_heap"))]
     #[test]
-    fn thread_cache_deallocate_bypasses_local_cache_for_single_slot_base_class() {
+    fn thread_cache_single_slot_base_class_retains_exactly_one_hot_object() {
         let (idx, rounded_size) = real_single_slot_base_size_class();
         let layout = Layout::from_size_align(rounded_size, align_of::<usize>())
             .expect("size classes are word-aligned layouts");
         let mut cache = ThreadCache::new();
 
-        let ptr = cache
+        let first = cache
             .allocate(layout)
             .expect("thread cache should allocate a real single-slot slab object");
+        let second = cache
+            .allocate(layout)
+            .expect("thread cache should allocate a second real single-slot slab object");
         assert_eq!(cache.list[idx].list.length, 0);
         assert_eq!(cache.list[idx].bump_len(), 0);
 
-        cache.deallocate(ptr, layout);
+        cache.deallocate(first, layout);
 
         assert_eq!(
-            cache.list[idx].list.length, 0,
-            "single-slot base classes should go straight back to the slab instead of pinning one full span in a thread cache"
+            cache.list[idx].list.length, 1,
+            "the first returned single-slot object should remain hot for immediate local reuse"
         );
         assert_eq!(cache.list[idx].bump_len(), 0);
+        assert_eq!(cache.cached_object_bytes, rounded_size);
+        assert_eq!(cache.active_cached_class_count(), 1);
+        assert!(cache.active_cached_class_bits.is_present(idx));
+        assert!(cache.footprint_snapshot().accounting_matches_exact);
+
+        cache.deallocate(second, layout);
+
+        assert_eq!(
+            cache.list[idx].list.length, 1,
+            "a second returned single-slot object should displace the cold object through the slab path"
+        );
+        assert_eq!(cache.list[idx].bump_len(), 0);
+        assert_eq!(cache.cached_object_bytes, rounded_size);
+        assert_eq!(cache.active_cached_class_count(), 1);
+        assert!(cache.active_cached_class_bits.is_present(idx));
+        assert!(cache.footprint_snapshot().accounting_matches_exact);
+
+        let strict_layout = Layout::from_size_align(rounded_size, crate::PAGE_SIZE)
+            .expect("single-slot spans should support page alignment");
+        let reused = cache
+            .allocate(strict_layout)
+            .expect("the retained single-slot object should satisfy the next allocation");
+        assert_eq!(reused, second, "the newest returned object stays hot");
+        assert_eq!(reused.as_ptr() as usize % strict_layout.align(), 0);
         assert_eq!(cache.cached_object_bytes, 0);
         assert_eq!(cache.active_cached_class_count(), 0);
         assert!(!cache.active_cached_class_bits.is_present(idx));
+        assert!(cache.footprint_snapshot().accounting_matches_exact);
+
+        cache.deallocate(reused, strict_layout);
+        cache.cleanup_cache_unchecked();
+        assert_eq!(cache.list[idx].list.length, 0);
+        assert_eq!(cache.cached_object_bytes, 0);
+        assert_eq!(cache.active_cached_class_count(), 0);
+        assert!(!cache.active_cached_class_bits.is_present(idx));
+        assert!(cache.footprint_snapshot().accounting_matches_exact);
+    }
+
+    #[cfg(not(feature = "fixed_heap"))]
+    #[test]
+    fn thread_cache_single_slot_hot_set_has_a_bounded_hosted_footprint() {
+        let mut affected_classes = 0usize;
+        let mut retained_bytes = 0usize;
+        let mut largest_retained_class = 0usize;
+
+        for idx in 1..TOTAL_SIZE_CLASS {
+            let rounded_size = get_rounded_size_by_idx(idx);
+            if thread_cache_is_single_slot_base_class(idx, rounded_size) {
+                affected_classes += 1;
+                retained_bytes += rounded_size;
+                largest_retained_class = core::cmp::max(largest_retained_class, rounded_size);
+            }
+        }
+
+        assert_eq!(affected_classes, 9);
+        assert_eq!(retained_bytes, 157_056);
+        assert_eq!(largest_retained_class, 28_032);
+        assert!(retained_bytes < THREAD_CACHE_TOTAL_TARGET_BYTES);
+
+        let (_idx, largest_size) = largest_single_slot_base_size_class();
+        assert_eq!(largest_size, largest_retained_class);
+        assert_eq!(
+            thread_cache_alignment_miss_keep_length(1, largest_size),
+            0,
+            "a strict-alignment miss must be able to return the retained hot object"
+        );
     }
 
     #[test]
@@ -4008,7 +4102,7 @@ mod tests {
     }
 
     #[test]
-    fn thread_cache_small_class_bypass_fast_range_matches_full_geometry() {
+    fn thread_cache_small_class_single_slot_fast_range_matches_full_geometry() {
         for idx in 1..TOTAL_SIZE_CLASS {
             let rounded_size = get_rounded_size_by_idx(idx);
             let pages = get_num_pages_by_idx(idx);
@@ -4017,9 +4111,9 @@ mod tests {
                 Some((slot_count, _stride)) if slot_count <= 1
             );
             assert_eq!(
-                thread_cache_should_bypass_local_cache(idx, rounded_size),
+                thread_cache_is_single_slot_base_class(idx, rounded_size),
                 expected,
-                "local-cache bypass drifted for class {idx}, size {rounded_size}, pages {pages}"
+                "single-slot classification drifted for class {idx}, size {rounded_size}, pages {pages}"
             );
             if rounded_size <= THREAD_CACHE_MULTI_SLOT_FAST_MAX_BYTES {
                 assert!(
